@@ -14,9 +14,8 @@ while IFS=: read -r file line match; do
         127.*|0.0.0.0|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.0.2.*|198.51.100.*|203.0.113.*|255.*) continue ;;
         1.1.1.1|2.2.2.2|3.3.3.3|9.9.9.9|8.8.8.8) continue ;;
     esac
-    # version-like numbers (1.2.3.4 in pyproject) are not addresses when preceded by letters
     echo "$file:$line: public IPv4 '$match'"; bad=1
-done < <(grep -nEo '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' $FILES 2>/dev/null | grep -vE '^(pyproject.toml|CHANGELOG.md):' || true)
+done < <(grep -nEo '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' $FILES 2>/dev/null | grep -vE '^(\./)?(pyproject\.toml|CHANGELOG\.md|scripts/check_no_secrets\.sh):' || true)
 
 # our hostnames / providers (every file except this one)
 HOST_FILES=$(echo "$FILES" | grep -vE '^(\./)?scripts/check_no_secrets\.sh$' || true)
