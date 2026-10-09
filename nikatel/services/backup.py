@@ -83,7 +83,9 @@ def decrypt(data: bytes, passphrase: str) -> bytes:
     r = subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-pass", "stdin"], input=passphrase.encode() + b"\n" + data,
                        capture_output=True, check=False)
 
-    if r.returncode != 0:
+    # a wrong passphrase usually fails the padding check, but once in ~256 tries openssl returns
+    # garbage with exit 0 - so the result must also look like the gzip archive we wrote
+    if r.returncode != 0 or not r.stdout.startswith(b"\x1f\x8b"):
         raise RuntimeError("wrong passphrase or damaged file")
 
     return r.stdout
