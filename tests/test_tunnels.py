@@ -1,5 +1,5 @@
 from nikatel.models import Tunnel
-from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for
+from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for, settle
 
 IRAN_OK = """UNIT backhaul-iran-tcpmux-9443.service active
 UNIT nikatel-gre-x.service active
@@ -66,3 +66,28 @@ def test_plan_for_backhaul():
 def test_plan_for_backpack_and_chisel():
     assert plan_for(Tunnel(name="a", type="backpack")).foreign_units == ["backpack-a-kharej.service"]
     assert plan_for(Tunnel(name="a", type="chisel")).iran_units == ["chisel-a.service"]
+
+
+def test_small_loss_is_normal_big_loss_is_degraded():
+    # the Iran-abroad paths lose a few percent on a normal day: 1-2 of 20 pings is not an event
+    for pct in ("5", "10"):
+        lossy = IRAN_OK.replace("PEER 10.2.56.18 81.2 0", f"PEER 10.2.56.18 81.2 {pct}")
+        assert judge(_plan(), parse_side(lossy), parse_side(FOREIGN_OK)) == ("up", "")
+
+    lossy = IRAN_OK.replace("PEER 10.2.56.18 81.2 0", "PEER 10.2.56.18 81.2 15")
+    assert judge(_plan(), parse_side(lossy), parse_side(FOREIGN_OK))[0] == "degraded"
+
+
+def test_settle_needs_two_checks_for_up_degraded_flips():
+    st, streak = settle("up", "degraded", None)
+    assert st == "up" and streak == {"state": "degraded", "n": 1}        # one lossy check: still up
+    st, streak = settle("up", "degraded", streak)
+    assert st == "degraded" and streak["n"] == 2                          # confirmed
+    st, streak = settle("degraded", "up", streak)
+    assert st == "degraded"                                               # one clean check: still degraded
+    st, streak = settle("degraded", "up", streak)
+    assert st == "up"
+    # a stopped unit applies at once, in both directions
+    assert settle("up", "down", None)[0] == "down"
+    assert settle("down", "up", None)[0] == "up"
+    assert settle("unknown", "up", None)[0] == "up"

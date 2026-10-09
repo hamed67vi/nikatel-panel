@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 - 2026-10-09 - quieter tunnel health
+
+* The GRE peer check sends 20 pings instead of 5, so one lost packet is 5 %, not 20 %.
+* Loss under 15 % is normal for the Iran-abroad paths (measured 3-13 % on a normal day) and no longer makes a tunnel "degraded".
+* up ⇄ degraded flips need two consecutive checks that agree (`tunnels.settle`); a stopped unit still counts at once.
+
 ## 0.8.0 - 2026-10-09 - Milestone 5: configs and probe
 
 * Configs page: the probe's configs with status, ping, daily speed, 24 h history, grouped by subscription; add a link; edit field by field (v2rayN-style) or paste a new link; delete; speed test on demand (over SSH on the probe server); copy link.

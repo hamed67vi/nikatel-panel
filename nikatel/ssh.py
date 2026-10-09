@@ -60,7 +60,7 @@ if [ -n "@IFACE@" ]; then
   echo "IFACE @IFACE@ $(ip -o link show '@IFACE@' 2>/dev/null | grep -o 'state [A-Z]*' | head -1 | cut -d' ' -f2) $(cat /sys/class/net/@IFACE@/statistics/rx_bytes /sys/class/net/@IFACE@/statistics/tx_bytes 2>/dev/null | tr '\n' ' ')"
 fi
 if [ -n "@PEER@" ]; then
-  P=$(ping -c 5 -i 0.2 -W 1 -q '@PEER@' 2>/dev/null)
+  P=$(ping -c 20 -i 0.2 -W 1 -q '@PEER@' 2>/dev/null)
   echo "PEER @PEER@ $(echo "$P" | awk -F/ '/^rtt/{print $5}') $(echo "$P" | grep -o '[0-9]*% packet loss' | cut -d% -f1)"
 fi
 for p in @PORTS@; do echo "LISTEN $p $(ss -ltnH 2>/dev/null | grep -c ":$p ")"; done

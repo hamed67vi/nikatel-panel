@@ -30,6 +30,9 @@ log = get_logger("tunnels")
 
 KEEP_CHECKS_SECONDS = 14 * 86400
 GRACE_SECONDS = 180          # a tunnel younger than this is "starting", not "down"
+DEGRADED_LOSS = 15.0         # % loss over the GRE link (20 pings) that counts as degraded; the Iran-abroad
+                             # paths lose 3-10 % of packets on a normal day, that is not an event
+CONFIRM_CHECKS = 2           # up <-> degraded flips need this many consecutive checks that agree
 
 
 @dataclass
@@ -138,7 +141,7 @@ def judge(plan: Plan, iran: Side, foreign: Side) -> tuple[str, str]:
             if iran.loss_pct is None or iran.loss_pct >= 100:
                 return "down", "no answer from the foreign end over the GRE link"
 
-            if iran.loss_pct > 0:
+            if iran.loss_pct >= DEGRADED_LOSS:
                 return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
 
     closed = [p for p, ok in iran.listen.items() if not ok]
@@ -147,6 +150,28 @@ def judge(plan: Plan, iran: Side, foreign: Side) -> tuple[str, str]:
         return "degraded", "port " + ", ".join(str(p) for p in closed) + " is not listening on the Iran server"
 
     return "up", ""
+
+
+def settle(old_state: str, judged: str, streak: dict | None) -> tuple[str, dict]:
+    """Flapping control between up and degraded: the judged state must repeat CONFIRM_CHECKS times
+    before it replaces the stored one. down / unknown / starting apply at once (a stopped unit is
+    not noise), and so does the first state of a new tunnel. Pure, so the rule is testable."""
+    streak = dict(streak or {})
+
+    if streak.get("state") == judged:
+        streak["n"] = int(streak.get("n", 0)) + 1
+    else:
+        streak = {"state": judged, "n": 1}
+
+    if judged == old_state:
+        return old_state, streak
+
+    soft = {"up", "degraded"}
+
+    if old_state in soft and judged in soft and streak["n"] < CONFIRM_CHECKS:
+        return old_state, streak
+
+    return judged, streak
 
 
 def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
@@ -203,15 +228,21 @@ def check_tunnel(tunnel_id: int) -> None:
         if state in ("down", "unknown") and now - t.created_at < GRACE_SECONDS and old == "unknown":
             state = "starting"
 
+        judged = state
+        state, streak = settle(old, judged, prev.get("streak"))
+
+        if state != judged:
+            reason = ""          # not confirmed yet: the tunnel keeps its state and its reason
+
         t.last_check_at = now
-        t.last_error = reason[:300]
+        t.last_error = reason[:300] if state != "up" else ""
         t.rtt_ms = iran.rtt_ms
         t.rx_mbps, t.tx_mbps = rx, tx
         t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state,
                     "loss_pct": iran.loss_pct, "listen": {str(k): v for k, v in iran.listen.items()},
                     "rx_bytes": iran.rx_bytes, "tx_bytes": iran.tx_bytes, "now": iran.now,
-                    "iran_error": iran.error, "foreign_error": foreign.error}
-        db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=state == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
+                    "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak}
+        db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=judged == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
 
         if state != old:
             t.state = state
@@ -227,7 +258,7 @@ def check_tunnel(tunnel_id: int) -> None:
             elif state == "unknown":
                 emit(db, "warn", "tunnels", f"Tunnel {label} cannot be checked: {reason}", t.name)
 
-        log.info("check name=%s state=%s rtt=%s rx=%s tx=%s %s", t.name, state, iran.rtt_ms, rx, tx, reason)
+        log.info("check name=%s state=%s judged=%s loss=%s rtt=%s rx=%s tx=%s %s", t.name, state, judged, iran.loss_pct, iran.rtt_ms, rx, tx, reason)
 
 
 def check_all() -> None:
