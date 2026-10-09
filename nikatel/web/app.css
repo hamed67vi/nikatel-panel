@@ -182,8 +182,11 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
 #mode-btn { width: 36px; padding: 0; }
 /* the glass window */
 .overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center; padding: 48px 20px; background: rgba(4,6,18,.55); backdrop-filter: blur(6px); overflow: auto; animation: fade .2s var(--ease) both; }
-.modal { width: min(980px, 100%); max-height: calc(100vh - 96px); display: flex; flex-direction: column; border-radius: 22px; background: var(--glass-hi); border: 1px solid rgba(255,255,255,.2); backdrop-filter: var(--blur); box-shadow: 0 30px 80px rgba(0,0,0,.5), var(--edge); animation: rise .28s var(--ease) both; }
-.modal.wide { width: min(1240px, 100%); }
+.modal { width: min(840px, 100%); max-height: calc(100vh - 96px); display: flex; flex-direction: column; border-radius: 22px; background: var(--glass-hi); border: 1px solid rgba(255,255,255,.2); backdrop-filter: var(--blur); box-shadow: 0 30px 80px rgba(0,0,0,.5), var(--edge); animation: rise .28s var(--ease) both; }
+.modal.wide { width: min(960px, 100%); }
+/* balance: a window is a tall card, not a wide strip - stacked charts, two-column facts */
+.modal .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; } @media (max-width: 700px) { .modal .charts { grid-template-columns: 1fr; } } .modal .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
+.modal .frm-act { margin-top: 14px; flex-wrap: wrap; gap: 6px; } .modal .ob-inbounds { margin-top: 10px; }
 .modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 15px; } .modal-head .sp { flex: 1; } .modal-head .st::before { width: 10px; height: 10px; }
 .modal-body { padding: 14px 18px 18px; overflow: auto; }
 .tbl tr.click { cursor: pointer; }
