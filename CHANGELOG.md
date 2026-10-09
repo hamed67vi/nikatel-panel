@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0 - 2026-10-09 - Milestone 4, part 2: Iran gateway
+
+* Gateway page: a plain Xray on an Iran server, installed from the panel's cache over SSH (the server needs no internet); ports forward to foreign nodes; borrowed vless/vmess/trojan/ss configs as the way out during internet cuts, with modes auto (balancer + fallback) / borrowed / direct; exit test per config with IP and country; status, log, remove.
+* `scripts/fetch-xray.sh` keeps the latest Xray in `/var/lib/nikatel/engines`.
+
 ## 0.5.0 - 2026-10-09 - Milestone 4, part 1: build tunnels
 
 * Create a backhaul-over-GRE tunnel from the UI: preflight of both servers, free control port, path-MTU measurement, kernel tuning, GRE scripts + unit + health timer on both sides, two-way ping and a 10 s hold test, tuned backhaul configs, control-connection and data-path checks; a failed build removes what it created.

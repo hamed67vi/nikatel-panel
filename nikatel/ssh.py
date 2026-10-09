@@ -104,6 +104,21 @@ echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
     # the last log lines of a unit
     "unit_log": (r"""journalctl -u '@UNIT@' -n 8 --no-pager 2>/dev/null | cut -c1-180
 """, {"UNIT": r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}(\.service|\.timer)?$"}),
+
+    # the Iran gateway: service state, version, which of our ports listen, last log lines
+    "xgw_status": (r"""echo "ACTIVE $(systemctl is-active nikatel-xgw 2>/dev/null || echo none)"
+echo "VER $(/opt/nikatel-xgw/xray version 2>/dev/null | head -1)"
+for p in @PORTS@; do echo "LISTEN $p $(ss -ltnH 2>/dev/null | grep -c ":$p ")"; done
+echo LOG; tail -n 6 /opt/nikatel-xgw/error.log 2>/dev/null | cut -c1-200
+""", {"PORTS": _PORTS}),
+
+    # through every local test door of the gateway: alive, how fast, which exit IP / country
+    "xgw_test": (r"""for p in @PORTS@; do
+  r=$(curl -s -m 14 --socks5-hostname 127.0.0.1:$p -o /dev/null -w '%{http_code} %{time_total}' https://www.gstatic.com/generate_204 2>/dev/null)
+  t=$(curl -s -m 14 --socks5-hostname 127.0.0.1:$p https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep -E '^(ip|loc)=' | tr '\n' ' ')
+  echo "T $p $r | $t"
+done
+""", {"PORTS": _PORTS}),
 }
 
 
@@ -234,6 +249,42 @@ echo "TUNED cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null) qdisc=$(
     # a throw-away web server on 127.0.0.1 for 14 s, to prove the data path through a forwarded port
     "data_test_server": (r"""(timeout 14 python3 -m http.server '@PORT@' --bind 127.0.0.1 >/dev/null 2>&1 &); sleep 1; echo started
 """, {"PORT": r"^\d{1,5}$"}),
+
+    # the Iran gateway binary was copied to /opt/nikatel-xgw/xray.new by scp: make it the live one
+    "xgw_install_bin": (r"""set -e; cd /opt/nikatel-xgw; chmod 755 xray.new; ./xray.new version >/dev/null 2>&1; mv -f xray.new xray; echo "VER $(./xray version | head -1)"
+""", {}),
+
+    # apply a gateway config: test it, swap it in, (re)start the unit, open the ports; put the old one back when it does not start
+    "xgw_apply": (r"""set -e; cd /opt/nikatel-xgw
+echo '@B64@' | base64 -d > config.new.json
+if ! ./xray run -test -c config.new.json >/tmp/xgw-test.out 2>&1; then echo "REFUSED $(tail -n 2 /tmp/xgw-test.out | tr '\n' ' ')"; exit 0; fi
+cat > /etc/systemd/system/nikatel-xgw.service <<'EOF'
+[Unit]
+Description=Nikatel Xray gateway
+After=network-online.target
+
+[Service]
+ExecStart=/opt/nikatel-xgw/xray run -c /opt/nikatel-xgw/config.json
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+[ -f config.json ] && cp -f config.json config.prev.json; mv -f config.new.json config.json
+for p in @PORTS@; do if iptables -S INPUT 2>/dev/null | head -1 | grep -q DROP; then iptables -C INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport $p -j ACCEPT; fi; done
+systemctl daemon-reload; systemctl enable nikatel-xgw >/dev/null 2>&1; systemctl restart nikatel-xgw; sleep 2
+if systemctl is-active --quiet nikatel-xgw; then echo "ACTIVE"; else [ -f config.prev.json ] && cp -f config.prev.json config.json && systemctl restart nikatel-xgw; echo "FAILED $(tail -n 3 error.log 2>/dev/null | tr '\n' ' ')"; fi
+""", {"B64": _B64, "PORTS": _PORTS}),
+
+    # the gateway directory must exist before the binary is copied in
+    "xgw_mkdir": (r"""mkdir -p /opt/nikatel-xgw && chmod 755 /opt/nikatel-xgw && echo OK
+""", {}),
+
+    # remove the gateway completely (the list in the panel stays)
+    "xgw_remove": (r"""systemctl disable --now nikatel-xgw >/dev/null 2>&1 || true; rm -f /etc/systemd/system/nikatel-xgw.service; systemctl daemon-reload; rm -rf /opt/nikatel-xgw; echo REMOVED
+""", {}),
 }
 
 

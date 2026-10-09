@@ -31,6 +31,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (1, "initial schema", []),
     (2, "settings, alert_states, maintenance tables (created by create_all)", []),
     (3, "action_log table (created by create_all)", []),
+    (4, "gateways table (created by create_all)", []),
 ]
 
 

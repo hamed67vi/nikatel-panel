@@ -167,6 +167,21 @@ class ActionLog(Base):
     finished_at: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class Gateway(Base):
+    """The Xray gateway of one Iran server: ports -> foreign nodes, borrowed configs, mode."""
+    __tablename__ = "gateways"
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
+    mode: Mapped[str] = mapped_column(String(16), default="auto")          # auto | borrowed | direct
+    ports: Mapped[list] = mapped_column(JSON, default=list)                 # [{port, target_host, target_port, udp, enabled, note}]
+    borrowed: Mapped[list] = mapped_column(JSON, default=list)              # [{id, uri, note, enabled}]  (uri is a secret)
+    installed: Mapped[bool] = mapped_column(Boolean, default=False)
+    applied_at: Mapped[int] = mapped_column(Integer, default=0)
+    version: Mapped[str] = mapped_column(String(64), default="")
+
+    server: Mapped[Server] = relationship()
+
+
 class Job(Base):
     """Status of every background job, so nothing fails silently."""
     __tablename__ = "jobs"
