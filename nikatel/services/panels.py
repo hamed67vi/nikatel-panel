@@ -615,6 +615,85 @@ def users_bulk(c: dict, usernames: list, action: str, value=None) -> dict:
     return {"done": done, "failed": failed[:20], "failed_count": len(failed)}
 
 
+# ------------------------------------------------------------------ the panel's own test config on the probe
+TEST_USER_PREFIX = "nikatel-test-"
+
+
+def test_user(c: dict, panel_name: str, gb: int = 5, days: int = 30) -> dict:
+    """A small test user on the panel (created once, renewed when expired); returns {username, sub}."""
+    uname = (TEST_USER_PREFIX + re.sub(r"[^a-z0-9]+", "-", panel_name.lower()).strip("-"))[:32]
+    expire = int(time.time()) + days * 86400
+    u = None
+
+    try:
+        u = call(c, "GET", _upath(uname))
+    except PanelError as e:
+        if e.code != 404:
+            raise
+
+    if u is None:
+        body: dict = {"username": uname, "status": "active", "data_limit": gb * 1024 ** 3, "data_limit_reset_strategy": "month", "note": "test config made by the Nikatel panel; it is kept alive and measured on the probe"}
+
+        if c.get("type") == "pasarguard":
+            g = call(c, "GET", "/api/groups")
+            g = g.get("groups") if isinstance(g, dict) else g
+            body["group_ids"] = [x["id"] for x in (g or []) if isinstance(x, dict) and x.get("id") is not None][:1]
+            body["expire"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expire))
+        else:
+            ib = call(c, "GET", "/api/inbounds")
+            body["proxies"] = {proto: {} for proto in (ib or {}) if proto in ("vless", "vmess", "trojan", "shadowsocks")} or {"vless": {}}
+            body["inbounds"] = {proto: [i.get("tag") for i in lst if isinstance(i, dict) and i.get("tag")] for proto, lst in (ib or {}).items() if proto in body["proxies"]}
+            body["expire"] = expire
+
+        u = call(c, "POST", "/api/user", body=body) or {}
+    else:
+        exp = u.get("expire")
+        expired = (isinstance(exp, (int, float)) and 0 < exp < time.time()) or (isinstance(exp, str) and exp[:10] < time.strftime("%Y-%m-%d"))
+
+        if u.get("status") != "active" or expired:
+            call(c, "PUT", _upath(uname), body={"status": "active", "expire": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expire)) if isinstance(exp, str) else expire})
+            u = call(c, "GET", _upath(uname)) or u
+
+    sub = str(u.get("subscription_url") or "")
+
+    if sub.startswith("/"):
+        sub = c["url"] + sub
+
+    if not sub:
+        raise PanelError("the panel gave no subscription link for the test user")
+
+    return {"username": uname, "sub": sub}
+
+
+def test_config(panel_id: int) -> dict:
+    """Make sure the panel's test user exists and its subscription is imported on the probe as group <panel name>."""
+    from . import configs
+
+    with session() as db:
+        p = db.get(Panel, panel_id)
+
+        if p is None:
+            raise ValueError("panel not found")
+
+        c, name = _cred(p), p.name
+
+    tu = test_user(c, name)
+    res = configs.import_subscription(name, tu["sub"])
+
+    with session() as db:
+        p = db.get(Panel, panel_id)
+
+        if p is not None:
+            st = dict(p.stats or {})
+            st["test_user"] = tu["username"]
+            st["test_config_at"] = int(time.time())
+            p.stats = st
+
+        emit(db, "info", "panels", f"Test config of panel {name}: {len(res.get('added', []))} added, {len(res.get('skipped', []))} already there.", name)
+
+    return {"username": tu["username"], **res}
+
+
 # ------------------------------------------------------------------ hosts
 _HOST_TEXT = ("remark", "address", "sni", "host", "path", "alpn", "fingerprint")
 _HOST_BOOL = ("allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled")

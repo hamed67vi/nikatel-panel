@@ -11,6 +11,7 @@ Every fix, dry or real, is written to action_log with the full story. Limits:
 """
 from __future__ import annotations
 
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +23,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Tunnel
 from ..ssh import Node, SSHError, render_action, run_action
+from . import ai
 from . import settings as st
 from .events import emit
 from .tunnels import Plan, _query, check_tunnel, judge, plan_for
@@ -161,6 +163,28 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         return
 
     steps = _plan_steps(plan, iran, foreign)
+
+    # the AI assistant (when switched on in Settings) reads the same facts and may add a safe step
+    advice = ai.advise(json.dumps({"tunnel": {"name": name, "type": plan.iface and "backhaul-gre"}, "reason": reason, "state": state,
+                                   "iran": {"units": iran.units, "iface": iran.iface_state, "loss_pct": iran.loss_pct, "rtt_ms": iran.rtt_ms, "listen": iran.listen},
+                                   "foreign": {"units": foreign.units}}, ensure_ascii=False))
+
+    if advice:
+        _say(aid, "AI: " + (advice["diagnosis"] or "no diagnosis"))
+        gre_i = [u for u in plan.iran_units if u.startswith("nikatel-gre-")]
+        gre_f = [u for u in plan.foreign_units if u.startswith("nikatel-gre-")]
+
+        if ai.conf().get("actions"):
+            for a in advice["actions"]:
+                if a["action"] in ("restart_gre", "restart_both") and gre_i and not any(s_["units"] == gre_i for s_ in steps):
+                    steps.insert(0, {"action": "restart_units", "side": "iran", "units": gre_i, "why": "AI: " + a["reason"]})
+                    steps.insert(1, {"action": "restart_units", "side": "foreign", "units": gre_f, "why": "AI: " + a["reason"]})
+                elif a["action"] in ("restart_services", "restart_both"):
+                    for side, units in (("iran", [u for u in plan.iran_units if u not in gre_i]), ("foreign", [u for u in plan.foreign_units if u not in gre_f])):
+                        if units and not any(s_["units"] == units and s_["side"] == side for s_ in steps):
+                            steps.append({"action": "restart_units", "side": side, "units": units, "why": "AI: " + a["reason"]})
+                elif a["action"] in ("rebuild", "notify"):
+                    _say(aid, f"AI suggests {a['action']}: {a['reason']} (not done automatically)")
 
     if not steps:
         _say(aid, "No safe step applies to this problem. A human should look at it.", done=True, ok=False)

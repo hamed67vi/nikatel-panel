@@ -57,6 +57,11 @@ echo "TOP=$(ps -eo comm=,pcpu= --sort=-pcpu 2>/dev/null | head -1)"
 echo "ABUSE=$(iptables -S abuse-defender 2>/dev/null | grep -c DROP)"
 """, {}),
 
+    # versions of the tunnel cores on this server
+    "engine_versions": (r"""echo "ENGINE backhaul $([ -x /usr/local/bin/backhaul ] && /usr/local/bin/backhaul -v 2>&1 | head -1 || echo NONE)"
+echo "ENGINE xray $([ -x /opt/nikatel-xgw/xray ] && /opt/nikatel-xgw/xray version 2>&1 | head -1 || echo NONE)"
+""", {}),
+
     # 4 pings to a host (used from the Iran servers: is a foreign address reachable / filtered?)
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
@@ -342,6 +347,14 @@ except OSError: pass' '@PORT@' >/dev/null 2>&1 &); sleep 1; echo started
     "add_pubkey": (r"""umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys
 grep -qxF '@PUB@' ~/.ssh/authorized_keys || echo '@PUB@' >> ~/.ssh/authorized_keys; echo ADDED
 """, {"PUB": r"^ssh-(ed25519|rsa) [A-Za-z0-9+/=]{20,800}( [A-Za-z0-9@._-]{1,64})?$"}),
+
+    # swap a core binary that put_file left next to it (checksum verified there), restart its tunnel units
+    "engine_swap": (r"""set -e; NEW='@BIN@.nikatel.new'; [ -f "$NEW" ] || { echo NO_FILE; exit 2; }
+S=$(sha256sum "$NEW" | awk '{print $1}'); [ "$S" = '@SHA@' ] || { rm -f "$NEW"; echo BAD_SHA; exit 3; }
+chmod 755 "$NEW"; mv -f "$NEW" '@BIN@'
+U=$(systemctl list-units --all --no-legend --plain '@UNITS@' 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+for u in $U; do systemctl restart "$u" || true; done; echo "SWAPPED units=$U"
+""", {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "SHA": r"^[0-9a-f]{64}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$"}),
 
     # reboot the server (the tunnel units come back with systemd)
     "reboot": (r"""echo REBOOTING; (sleep 1; systemctl reboot) >/dev/null 2>&1 &

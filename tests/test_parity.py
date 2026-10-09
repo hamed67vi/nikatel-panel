@@ -1,0 +1,86 @@
+"""The old panel's features in the new one: AI advice, cores check, tunnel quality, the panel test config."""
+
+from nikatel.services import ai, engines, panels, tunnel_test
+from nikatel.services.panels import PanelError
+
+
+def test_ai_parse_advice_keeps_only_known_actions():
+    d = ai.parse_advice('noise {"diagnosis": "GRE link down", "actions": [{"action": "restart_gre", "reason": "iface missing"}, {"action": "format_disk", "reason": "x"}, {"action": "notify", "reason": "y"}, {"action": "rebuild"}]} tail')
+    assert d["diagnosis"] == "GRE link down" and [a["action"] for a in d["actions"]] == ["restart_gre", "notify"]
+    assert ai.parse_advice("not json") == {"diagnosis": "", "actions": []}
+    assert ai.advise("facts") is None                       # off by default
+
+
+def test_ai_settings_api_masks_key(client, monkeypatch):
+    r = client.put("/api/settings/ai", json={"enabled": True, "api_key": "sk-test-123", "model": "claude-sonnet-5-5", "actions": False})
+    assert r.status_code == 200 and r.json()["has_api_key"] is True and r.json()["api_key"] == "" and r.json()["actions"] is False
+    monkeypatch.setattr(ai, "ask", lambda *a, **k: "OK")
+    assert client.post("/api/settings/ai/test").json()["answer"] == "OK"
+    assert client.delete("/api/settings/ai/key").json()["has_api_key"] is False
+
+
+def test_engine_versions_parse():
+    v = engines.parse_versions("ENGINE backhaul backhaul version v0.6.5\nENGINE xray NONE\n")
+    assert v == {"backhaul": "v0.6.5", "xray": "none"}
+
+
+def test_engines_check_api(client, monkeypatch):
+    client.post("/api/servers", json={"name": "ir1", "host": "1.1.1.1", "role": "iran"})
+    monkeypatch.setattr(engines, "latest", lambda e: {"version": "v0.6.6", "url": "u", "page": "p", "digest": ""})
+    monkeypatch.setattr(engines, "run_script", lambda node, name, params=None, timeout=25: "ENGINE backhaul v0.6.5\nENGINE xray NONE\n")
+    d = client.post("/api/engines/check").json()["engines"]
+    assert d["backhaul"]["outdated"] == 1 and d["backhaul"]["nodes"][0]["state"] == "outdated"
+    assert d["xray"]["nodes"][0]["state"] == "not installed"
+    assert client.post("/api/engines/nope/update").status_code == 400
+
+
+def test_tunnel_quality(client, monkeypatch):
+    client.post("/api/servers", json={"name": "ir1", "host": "1.1.1.1", "role": "iran"})
+    client.post("/api/servers", json={"name": "fi1", "host": "2.2.2.2", "role": "foreign"})
+    from nikatel.db import session
+    from nikatel.models import Tunnel
+
+    with session() as db:
+        db.add(Tunnel(name="fi-ir1", type="backhaul", transport="tcpmux", iran_server_id=1, foreign_server_id=2, port=9900, iran_tunnel_ip="10.1.1.1", foreign_tunnel_ip="10.1.1.2"))
+
+    pings = "\n".join(f"64 bytes from 10.1.1.2: icmp_seq={i} ttl=64 time={80 + (i % 3)}.0 ms" for i in range(1, 31)) + "\n30 packets transmitted, 30 received, 0% packet loss\n"
+    monkeypatch.setattr(tunnel_test, "run_script", lambda node, name, params=None, timeout=45: pings)
+    r = client.post("/api/tunnels/1/quality").json()
+    assert r["loss_pct"] == 0 and 80 <= r["latency_ms"] <= 82 and r["score"] > 0
+    assert client.get("/api/tunnels").json()[0]["quality"]["score"] == r["score"]
+    assert len(client.post("/api/tunnels/quality-all").json()["results"]) == 1
+
+
+def test_panel_test_user_marzban(monkeypatch):
+    calls = []
+
+    def fake(c, method, path, **kw):
+        calls.append((method, path))
+
+        if method == "GET" and path.startswith("/api/user/"):
+            raise PanelError("HTTP 404", 404)
+        if path == "/api/inbounds":
+            return {"vless": [{"tag": "VLESS_WS"}], "vmess": [{"tag": "VMESS"}]}
+        if method == "POST" and path == "/api/user":
+            body = kw["body"]
+            assert body["username"].startswith("nikatel-test-") and body["proxies"] == {"vless": {}, "vmess": {}} and body["inbounds"]["vless"] == ["VLESS_WS"]
+            return {"username": body["username"], "subscription_url": "/sub/abc"}
+        raise PanelError("HTTP 404", 404)
+
+    monkeypatch.setattr(panels, "call", fake)
+    r = panels.test_user({"id": 1, "url": "https://p.example", "type": "marzban"}, "Shop One")
+    assert r["username"] == "nikatel-test-shop-one" and r["sub"] == "https://p.example/sub/abc"
+    assert ("POST", "/api/user") in calls
+
+
+def test_panel_test_config_imports_to_probe(client, monkeypatch):
+    from nikatel.services import configs
+
+    monkeypatch.setattr(panels, "_token", lambda c, fresh=False: "t")
+    monkeypatch.setattr(panels, "call", lambda c, m, p, **kw: {"version": "1", "total_user": 1} if p == "/api/system" else [] if p == "/api/nodes" else (_ for _ in ()).throw(PanelError("HTTP 404", 404)))
+    pid = client.post("/api/panels", json={"name": "shop", "type": "marzban", "url": "https://1.1.1.1", "username": "a", "password": "p"}).json()["panel"]["id"]
+    monkeypatch.setattr(panels, "test_user", lambda c, name: {"username": "nikatel-test-shop", "sub": "https://1.1.1.1/sub/x"})
+    monkeypatch.setattr(configs, "import_subscription", lambda name, url, picks=None: {"added": ["a", "b"], "skipped": [], "failed": []})
+    r = client.post(f"/api/panels/{pid}/test-config")
+    assert r.status_code == 200 and r.json()["added"] == ["a", "b"] and r.json()["username"] == "nikatel-test-shop"
+    assert client.get("/api/panels").json()["panels"][0]["stats"]["test_user"] == "nikatel-test-shop"

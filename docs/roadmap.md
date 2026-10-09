@@ -56,11 +56,11 @@ always installable; a milestone ends with a tag.
 ## M7 · Parity with the old panel (everything it could do, in the new structure)
 - [x] #33 Navigation like the old panel: Nodes (Iran / Foreign / Monitoring / Gateway / Events / Jobs / Logs), Tunnels (list / create / repairs), Settings tabs; liquid-glass look
 - [x] #34 Node tools: console with presets, connect with a password, add several servers at once, open in ssh / PuTTY / MobaXterm with your own key, Abuse-Defender, reboot, country lookup, "filtered in Iran?" check (manual + daily)
-- [ ] #35 Tunnel tools: quality test with score on an existing tunnel, edit forwarded ports, restart, build log, detect tunnels already on the servers, automatic choice of the Iran server
-- [ ] #36 Engines: check / update the tunnel cores (backhaul) and Xray on every server from the panel
-- [ ] #37 AI: Anthropic key in Settings, Ask AI, AI advice inside Fix
-- [ ] #38 Appearance: themes, day / night; About: version and update from GitHub with one click
-- [ ] #39 Dashboard like the old one: connectivity, reachable-from-Iran, last filter checks, ping and speed tests
+- [x] #35 Tunnel tools: quality test with score on an existing tunnel (Tunnel → Quality), pair test as its own tab; still open: edit forwarded ports, detect tunnels already on the servers, automatic choice of the Iran server
+- [x] #36 Engines: check / update the tunnel cores (backhaul) and Xray on every server from the panel (Tunnel → Core update)
+- [x] #37 AI: Anthropic key in Settings, AI advice and safe steps inside Fix
+- [x] #38 Appearance: themes (Aurora glass, Gold luxury, Cyber neon, Minimal), day / night, text size; About: version and one-click update from GitHub
+- [x] #39 Dashboard like the old one: infrastructure health rows, quick access; Configs page with stat tiles, bulk actions and grid / compact / list display; Panels inside Configs with a test config per panel on the probe
 - [ ] #40 Language switch (English / Persian)
 
 ## Rules

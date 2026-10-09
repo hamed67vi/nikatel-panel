@@ -45,6 +45,51 @@ def score(avg: float | None, jitter: float | None, loss: float | None, mbps: flo
     return round(sp * 0.40 + lat * 0.25 + jit * 0.10 + lo * 0.25)
 
 
+def quality(tunnel_id: int) -> dict:
+    """Latency / jitter / loss over the GRE link of an EXISTING tunnel (30 pings from the Iran side) and a
+    score. The speed is not measured here: that needs the temporary tunnel of the pair test, or a dedicated
+    test port. Stored in the tunnel record and shown in the list."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        if not t.foreign_tunnel_ip or t.type not in ("backhaul", "gre"):
+            raise ValueError("this tunnel has no GRE link to measure")
+
+        node, name, peer = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name, t.foreign_tunnel_ip
+
+    out = run_script(node, "gre_pings", {"IFACE": name, "PEER": peer}, timeout=45)
+    avg, jit, loss = jitter_from_pings(out)
+    q = {"latency_ms": avg, "jitter_ms": jit, "loss_pct": loss, "score": score(avg, jit, loss, None), "at": int(time.time())}
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is not None:
+            rec = dict(t.record or {})
+            rec["quality"] = q
+            t.record = rec
+
+    return {"name": name, **q}
+
+
+def quality_all() -> list[dict]:
+    with session() as db:
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
+
+    out = []
+
+    for tid in ids:
+        try:
+            out.append(quality(tid))
+        except (ValueError, SSHError) as e:
+            out.append({"id": tid, "error": str(e)[:120]})
+
+    return out
+
+
 def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
     """Validate and start; returns the action id of the test (the build has its own id in the story)."""
     with session() as db:

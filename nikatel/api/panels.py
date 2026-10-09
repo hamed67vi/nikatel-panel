@@ -64,6 +64,12 @@ def delete_panel(panel_id: int):
     return {"ok": True}
 
 
+@router.post("/panels/{panel_id}/test-config")
+def test_config(panel_id: int):
+    """A test user on the panel whose subscription is imported on the probe as the panel's group."""
+    return {"ok": True, **_wrap(panels.test_config, panel_id)}
+
+
 @router.post("/panels/{panel_id}/check")
 def check_panel(panel_id: int):
     c = _cred(panel_id)

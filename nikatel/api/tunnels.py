@@ -38,6 +38,26 @@ class TestIn(BaseModel):
     transport: str = Field("tcpmux", pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
 
 
+@router.post("/tunnels/{tunnel_id}/quality")
+def quality(tunnel_id: int):
+    from ..services import tunnel_test as tt
+    from ..ssh import SSHError
+
+    try:
+        return {"ok": True, **tt.quality(tunnel_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except SSHError as e:
+        raise HTTPException(502, str(e))
+
+
+@router.post("/tunnels/quality-all")
+def quality_all():
+    from ..services import tunnel_test as tt
+
+    return {"ok": True, "results": tt.quality_all()}
+
+
 @router.post("/tunnel-test", status_code=202)
 def tunnel_test(body: TestIn):
     from ..services import tunnel_test as tt
@@ -89,6 +109,7 @@ class TunnelOut(BaseModel):
     tx_mbps: float | None
     detail: dict
     units: dict
+    quality: dict = {}
 
 
 def _out(t: Tunnel) -> TunnelOut:
@@ -98,7 +119,7 @@ def _out(t: Tunnel) -> TunnelOut:
                      port=t.port, iran_tunnel_ip=t.iran_tunnel_ip, foreign_tunnel_ip=t.foreign_tunnel_ip,
                      forwarded_ports=t.forwarded_ports or [], enabled=t.enabled, created_at=t.created_at,
                      state=t.state, state_since=t.state_since, last_check_at=t.last_check_at, last_error=t.last_error,
-                     rtt_ms=t.rtt_ms, rx_mbps=t.rx_mbps, tx_mbps=t.tx_mbps, detail=t.detail or {},
+                     rtt_ms=t.rtt_ms, rx_mbps=t.rx_mbps, tx_mbps=t.tx_mbps, detail=t.detail or {}, quality=(t.record or {}).get("quality") or {},
                      units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface})
 
 

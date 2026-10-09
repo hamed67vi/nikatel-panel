@@ -70,11 +70,12 @@ const INFO = {
 };
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
-const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes"};
+const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
   nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW], ["events", "🕘 Events", "One plain sentence per thing that happened. Newest first."], ["jobs", "⚙ Jobs", "The background jobs of the panel and whether they succeed."], ["logs", "📜 Logs", "The panel's own log, newest first. Secrets are masked before they are written."]],
-  tunnels: [["list", "Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "Build a backhaul-over-GRE tunnel between two of your servers, or test a pair first."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  tunnels: [["list", "⇄ Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "GRE (local IPs) + Backhaul with the best settings between two of your servers."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["quality", "📊 Quality", "Latency, jitter, loss and a score measured through every existing tunnel."], ["engines", "🧩 Core update", "Cores never update by themselves. Check which version every server runs and update them from here."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
@@ -121,16 +122,31 @@ setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidde
 
 /* ---- dashboard */
 PAGES.dashboard = async () => {
-  const [o, ev] = await Promise.all([api("/api/overview"), api("/api/events?limit=40")]);
+  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=40"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
-  $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total;
+  $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const tile = (label, val, sub, cls) => `<div class="tile ${cls || ""}"><small>${label}</small><b>${val}</b><span>${sub}</span></div>`;
+  const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
+  const clean = checked.filter(s => s.extra.iran_filter.level === "clean"), bad = checked.filter(s => ["filtered", "blocked"].includes(s.extra.iran_filter.level));
+  const dot = cls => `<i class="dash-dot ${cls}"></i>`;
+  const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
+  const q = (icon, title, sub, page, subtab) => `<a class="dash-action" onclick="go('${page}')${subtab ? `;setSub('${page}','${subtab}')` : ""}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
   $("#page").innerHTML = `<div class="tiles">
       ${tile("Tunnels up", o.tunnels.up + " / " + o.tunnels.total, o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " degraded" : "all good"), o.tunnels.down ? "bad" : o.tunnels.degraded ? "warn" : "ok")}
       ${tile("Servers online", o.servers.online + " / " + o.servers.total, o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", o.servers.offline ? "bad" : "ok")}
-      ${tile("Unknown", o.tunnels.unknown, "tunnels not checked yet", o.tunnels.unknown ? "warn" : "")}
+      ${tile("Configs online", cUp + " / " + cfg.configs.length, cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from Iran", cfg.configs.length - cUp ? "bad" : "ok")}
       ${tile("Jobs", o.jobs.total, o.jobs.failing.length ? "failing: " + o.jobs.failing.join(", ") : o.jobs.stale.length ? "stale: " + o.jobs.stale.join(", ") : "all running", o.jobs.failing.length ? "bad" : o.jobs.stale.length ? "warn" : "ok")}
     </div>
+    <div class="dash-cols"><div class="card"><h3>Infrastructure health</h3>
+      ${hrow("VLESS / VMess connectivity", "configs the probe can use from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
+      ${hrow("SSH connected nodes", "servers that answered the last check", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
+      ${hrow("Reachable from Iran", "foreign servers whose last filter check was clean", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
+      ${hrow("Last “filtered in Iran?” checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 4).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet — run one from a foreign server", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
+      ${hrow("Iran ↔ Foreign", "tunnels carrying users right now", `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
+      <div class="dash-updated">updated ${new Date().toLocaleTimeString(undefined, {hour12: false})}</div></div>
+    <div class="card"><h3>Quick access</h3><div class="dash-actions">
+      ${q("⚡", "Ping and speed tests", "every config, from inside Iran", "configs", "configs")}${q("🛰", "Check filtering in Iran", "is a foreign server reachable?", "nodes", "foreign")}
+      ${q("🖥", "Manage Iran nodes", "resources, console, tools", "nodes", "iran")}${q("⇄", "Create and monitor", "tunnels between your servers", "tunnels", "list")}</div></div></div>
     <div class="card"><h3>Activity <span class="sp"></span><a onclick="go('events')" class="mut">all events →</a></h3>${eventsHtml(ev.events)}</div>`;
 };
 
@@ -275,9 +291,49 @@ PAGES.tunnels = async () => {
   renderSub();
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
+  if (s === "test") return PAGES.tunnelTest();
+  if (s === "quality") return PAGES.tunnelQuality();
+  if (s === "engines") return PAGES.engines();
   if (s === "create" && state.edit !== "newtunnel") state.edit = "newtunnel";
   return PAGES.tunnelsList();
 };
+PAGES.configs = async () => { renderSub(); return sub("configs") === "panels" ? PAGES.panels() : PAGES.configsList(); };
+PAGES.tunnelTest = async () => {
+  const servers = await api("/api/servers");
+  const opt = role => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
+  $("#page").innerHTML = `<div class="card"><h3>🧪 Tunnel test</h3><form class="frm" onsubmit="event.preventDefault();startTest(event);return false">
+      <label>Iran server<select name="iran_id" required>${opt("iran")}</select></label><label>Foreign server<select name="foreign_id" required>${opt("foreign")}</select></label>
+      <label>Transport<select name="transport"><option>tcpmux</option><option>tcp</option><option>wsmux</option><option>wssmux</option></select></label>
+      <div class="frm-act"><button class="pri" type="submit">Start test</button></div>
+      <small class="mut">A temporary backhaul-over-GRE tunnel is built between the two servers (control port 9900+, test door 39400), latency / jitter / loss over GRE and the real download speed through a forwarded port are measured, a 0-100 score is given, and everything is removed again. Nothing is added to your list; the result stays in Repairs.</small></form><div id="build-story" class="fix hidden"></div></div>`;
+};
+PAGES.tunnelQuality = async () => {
+  const list = await api("/api/tunnels");
+  const q = t => t.quality || {};
+  const cls = v => v == null ? "" : v >= 70 ? "gw-ok" : v >= 40 ? "" : "err";
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">Latency, jitter and loss over the GRE link of each tunnel (30 pings from the Iran side); speed is measured by the pair test.</span><span class="sp"></span><button class="pri" onclick="qualityAll()">Test all & compare</button></div>
+    <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:20%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col><col style="width:110px"></colgroup>
+      <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Score</th><th></th></tr></thead>
+      <tbody>${list.sort((a, b) => (q(b).score || 0) - (q(a).score || 0)).map(t => `<tr class="${t.state}"><td class="name">${esc(t.name)}</td><td><span class="st ${t.state}">${esc(t.state)}</span></td><td>${esc(t.iran_name)} <span class="mut">⇄</span> ${esc(t.foreign_name)}</td>
+        <td class="num">${q(t).latency_ms != null ? q(t).latency_ms + " ms" : "—"}</td><td class="num">${q(t).jitter_ms != null ? q(t).jitter_ms + " ms" : "—"}</td><td class="num ${(q(t).loss_pct || 0) >= 15 ? "err" : ""}">${q(t).loss_pct != null ? q(t).loss_pct + "%" : "—"}</td>
+        <td><b class="${cls(q(t).score)}">${q(t).score != null ? q(t).score + " / 100" : "not measured"}</b> <small class="mut">${q(t).at ? ago(q(t).at) + " ago" : ""}</small></td>
+        <td><button class="sm" onclick="qualityOne(${t.id})">Measure</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
+};
+window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); toast(`✓ ${r.results.filter(x => !x.error).length} measured`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+PAGES.engines = async () => {
+  const d = await api("/api/engines");
+  const eng = d.engines || {};
+  const block = (k, e) => `<div class="card"><h3>${esc(e.title)} <span class="sp"></span>${e.latest ? `<span class="pill ok">latest ${esc(e.latest)}</span>` : `<span class="pill err">${esc(e.error || "not checked")}</span>`}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener">release notes</a>` : ""}</h3>
+      <div class="mut" style="margin-bottom:8px">${e.current || 0} current · <b class="${e.outdated ? "err" : ""}">${e.outdated || 0} outdated</b> · ${(e.nodes || []).filter(n => n.state === "not installed").length} without it · ${(e.nodes || []).filter(n => n.state === "unreachable").length} unreachable</div>
+      <div class="ob-inbounds">${(e.nodes || []).map(n => `<span><b class="${n.state === "current" ? "gw-ok" : n.state === "outdated" ? "err" : "mut"}">${esc(n.name)}</b> <small class="mut">${esc(n.version || "—")} · ${esc(n.state)}</small></span>`).join("") || '<span class="mut">press Check</span>'}</div>
+      ${e.outdated ? `<div class="frm-act"><button class="pri" onclick="engineUpdate('${k}')">Update ${e.outdated} outdated server${e.outdated > 1 ? "s" : ""} to ${esc(e.latest)}</button><small class="mut">downloads the release, verifies its checksum, copies it to each server and restarts the tunnel units there — one server at a time of four</small></div>` : ""}</div>`;
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : "not checked yet"}</span><span class="sp"></span><button class="pri" onclick="engineCheck()">Check for updates</button></div>
+    ${Object.entries(eng).map(([k, e]) => block(k, e)).join("") || '<div class="empty">Press “Check for updates” to see which core every server runs.</div>'}
+    ${d.job ? `<div class="card"><h3>Last update: ${esc(d.job.engine)} ${esc(d.job.version || "")} ${d.job.done ? "" : "(running…)"}</h3>${d.job.error ? `<div class="err">${esc(d.job.error)}</div>` : ""}${(d.job.items || []).map(i => `<div class="ev ${i.state === "ok" ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.state)}</small><span><b>${esc(i.name)}</b> ${esc(i.detail || "")}</span></div>`).join("")}</div>` : ""}`;
+};
+window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.engineUpdate = async k => { if (!confirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
   const list = await api("/api/tunnels");
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
@@ -288,7 +344,7 @@ PAGES.tunnelsList = async () => {
       <td class="num">${t.port || "—"}</td>
       <td class="num">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</td>
       <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
-      <td class="mut" title="${esc(t.last_error)}">${t.last_error ? esc(t.last_error).slice(0, 48) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
+      <td class="mut" title="${esc(t.last_error)}">${t.quality && t.quality.score != null ? `<b class="${t.quality.score >= 70 ? "gw-ok" : t.quality.score >= 40 ? "" : "err"}" title="quality score">${t.quality.score}</b> · ` : ""}${t.last_error ? esc(t.last_error).slice(0, 44) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
       <td><button class="sm" onclick="toggleDetail(${t.id})">${state.open === t.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkTunnel(${t.id})">Check</button></td></tr>
       ${state.open === t.id ? detailRow(t) : ""}`;
   const creating = state.edit === "newtunnel";
@@ -312,7 +368,7 @@ function detailRow(t) {
       <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
       ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
     </div><div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
+    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><button class="sm" onclick="qualityOne(${t.id})" title="Latency, jitter, loss over the GRE link and a score">📊 Quality</button><span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
     <div id="fix-${t.id}" class="fix hidden"></div></td></tr>`;
 }
 async function loadTunnelCharts(id) {
@@ -414,7 +470,7 @@ window.checkTunnel = async id => { toast("Checking both servers…"); try { awai
 /* ---- configs (what the probe keeps alive and tests) */
 INFO.configs = ["Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
 const cf = {open: null, edit: null, sub: null, q: ""};
-PAGES.configs = async () => {
+PAGES.configsList = async () => {
   const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]);
   $("#n-configs").textContent = d.configs.length;
   const list = d.configs.filter(c => !cf.q || (c.name + c.group).toLowerCase().includes(cf.q));
@@ -428,15 +484,25 @@ PAGES.configs = async () => {
       <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 44) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
       <td><button class="sm" onclick="cfToggle(${c.id})">${cf.open === c.id ? "Hide" : "More"}</button> <button class="sm" onclick="cfEdit(${c.id})">Edit</button></td></tr>
       ${cf.open === c.id ? `<tr class="detail"><td colspan="7" id="cf-detail-${c.id}">${cf.edit === c.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(c)}</td></tr>` : ""}`;
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${d.configs.filter(c => c.status === "up").length} up · ${d.configs.filter(c => c.status === "down").length} down · probe: ${esc(d.probe.active || "none")}</span><span class="sp"></span>
-      <input id="cq" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)"><button onclick="cfSync()">↻ Sync with the probe</button><button onclick="cfNew()">+ Add config</button><button onclick="cfSubNew()">+ Subscription</button></div>
+  const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
+  cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
+  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${esc(c.name)}</b><span class="st ${c.status}">${esc(c.status)}</span></div><div class="cf-nums"><span>${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</span><span>${c.down_mbps != null ? "↓" + c.down_mbps.toFixed(0) + " ↑" + (c.up_mbps || 0).toFixed(0) + " Mb/s" : "no speed yet"}</span></div><small class="mut">${esc(c.group || "ungrouped")}${c.tunnel ? " · " + esc(c.tunnel) : ""} · ${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div>`;
+  $("#page").innerHTML = `<div class="tiles">
+      <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${[...new Set(d.configs.map(c => c.group || ""))].filter(Boolean).length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
+      <div class="tile ok"><small>Online</small><b>${up.length}</b><span>answer from inside Iran</span></div>
+      <div class="tile ${down.length ? "bad" : ""}"><small>Offline</small><b>${down.length}</b><span>${down.length ? down.slice(0, 3).map(c => esc(c.name)).join(", ") + (down.length > 3 ? "…" : "") : "none"}</span></div>
+      <div class="tile"><small>Average live ping</small><b>${pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) + " ms" : "—"}</b><span>over ${pings.length} online configs</span></div></div>
+    <div class="toolbar"><input id="cq" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)">
+      <button onclick="cfNew()">+ Add config</button><button onclick="cfSubNew()">+ Add subscription</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config on the probe, one after the other">⚡ Speed test all</button><button class="danger" onclick="cfDeleteAll()">🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
+      <span class="sp"></span><div class="tabs" title="Display">${[["grid", "▦"], ["compact", "▤"], ["list", "☰"]].map(([k, l]) => `<button class="${cf.view === k ? "on" : ""}" onclick="cfView('${k}')">${l}</button>`).join("")}</div></div>
     ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
     ${cf.sub ? cfSubHtml() : ""}
     ${subs.subscriptions.length ? `<div class="card"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}
-    ${groups.map(g => `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span></div>
-    <table class="tbl lift"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
+    ${groups.map(g => `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span>${g ? `<a class="mut" style="order:3;font-size:10.5px;font-weight:500;text-transform:none;letter-spacing:0" onclick="cfGroupDel('${esc(g)}')">delete group</a>` : ""}</div>
+    ${cf.view === "grid" ? `<div class="cf-grid">${list.filter(c => (c.group || "") === g).map(card).join("")}</div>${list.filter(c => (c.group || "") === g && c.id === cf.open).map(c => `<div class="card">${cf.edit === c.id ? '<div id="cf-detail-' + c.id + '" class="mut">loading the link…</div>' : '<div id="cf-detail-' + c.id + '">' + cfDetailHtml(c) + '</div>'}</div>`).join("")}`
+      : `<table class="tbl lift ${cf.view === "compact" ? "compact" : ""}"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
       <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed Mb/s</th><th>CDN port</th><th>Note</th><th></th></tr></thead>
-      <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No config yet. Add a link or import a subscription.</div>'}`;
+      <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`}`).join("") || '<div class="empty">No config yet. Add a link or import a subscription.</div>'}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (cf.open && cf.edit === cf.open) cfLoadEditor(cf.open);
   else if (cf.open) cfLoadChart(cf.open);
@@ -455,6 +521,10 @@ async function cfLoadChart(id) {
   box.innerHTML = `<div><small>Up / down · ${ups.length} checks${pct != null ? " · " + pct + "% up" : ""}</small>${strip(ups)}</div><div><small>Ping ms</small>${spark(col("ping_ms").map(v => v || null), {fmt: v => v.toFixed(0)})}</div>`;
 }
 window.cfQ = v => { cf.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
+window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refresh(); };
+window.cfSpeedAll = async () => { const d = await api("/api/configs"); const ids = d.configs.filter(c => c.enabled).map(c => c.id); if (!ids.length) return; if (!confirm(`Speed test all ${ids.length} configs one after the other? About a minute each — the page keeps working meanwhile.`)) return; let done = 0, bad = 0; for (const id of ids) { try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); done++; } catch (e) { bad++; } toast(`Speed tests: ${done} done, ${bad} failed, ${ids.length - done - bad} to go`); } toast(`✓ Speed tests finished: ${done} ok, ${bad} failed`, bad ? "bad" : "ok"); refresh(); };
+window.cfDeleteAll = async () => { const d = await api("/api/configs"); if (!d.configs.length) return; if (prompt(`Delete ALL ${d.configs.length} configs from the probe? Type DELETE to confirm:`) !== "DELETE") return; let n = 0; for (const c of d.configs) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); n++; } catch (e) { /* keep going */ } } toast(`✓ ${n} configs deleted`, "ok"); refresh(); };
+window.cfGroupDel = async g => { const d = await api("/api/configs"); const mine = d.configs.filter(c => (c.group || "") === g); if (!confirm(`Delete the group ${g} and its ${mine.length} configs from the probe?`)) return; for (const c of mine) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); } catch (e) { /* keep going */ } } toast("✓ Group deleted", "ok"); refresh(); };
 window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; refresh(); };
 window.cfNew = () => { cf.edit = "new"; cf.open = null; cf.sub = null; refresh(); };
 window.cfCancel = () => { cf.edit = null; cf.sub = null; refresh(); };
@@ -576,7 +646,7 @@ PAGES.panels = async () => {
       <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="pn.edit=false;refresh()">Cancel</button><span class="sp"></span><button type="button" class="danger" onclick="pnDel(${p.id}, '${esc(p.name)}')">Remove from the list</button></div></form></div>`;
   $("#page").innerHTML = `<div class="toolbar"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
       <span class="mut">${esc(p.version || "")}${p.checked_at ? " · checked " + ago(p.checked_at) + " ago" : ""}</span><span class="sp"></span>
-      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
+      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnTestConfig(${p.id}, '${esc(p.name)}')" title="A small test user on this panel whose subscription is kept and measured on the probe as the group ${esc(p.name)}">🧪 Test config on probe${s.test_user ? " ✓" : ""}</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
     ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
     <div class="tiles">
@@ -600,7 +670,8 @@ function pnNodesHtml(p) {
 window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.edit = pn.add = false; refresh(); };
 window.pnTab = t => { pn.tab = t; pn.user = null; pn.hostEdit = null; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added", "ok"); pn.add = false; pn.id = String(r.panel.id); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added — making its test config on the probe…", "ok"); pn.add = false; pn.id = String(r.panel.id); refresh(); pnTestConfig(r.panel.id, r.panel.name, true); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnTestConfig = async (id, name, quiet) => { if (!quiet) toast("Creating the test user and importing its subscription… (up to a minute)"); try { const r = await api(`/api/panels/${id}/test-config`, {method: "POST"}); toast(`✓ ${name}: ${r.added.length} configs added to the probe${r.skipped.length ? ", " + r.skipped.length + " already there" : ""} (user ${r.username})`, "ok"); refresh(); } catch (e) { toast("✕ test config of " + name + ": " + e.message, "bad"); } };
 window.pnEdit = async (e, id) => { e.preventDefault(); const f = new FormData(e.target); const body = {name: f.get("name").trim(), url: f.get("url").trim(), username: f.get("username").trim(), verify_tls: !!f.get("verify_tls"), enabled: !!f.get("enabled")}; if (f.get("password")) body.password = f.get("password"); try { await api(`/api/panels/${id}`, {method: "PATCH", body: JSON.stringify(body)}); toast("✓ Saved", "ok"); pn.edit = false; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnDel = async (id, name) => { if (!confirm(`Remove ${name} from this list? Nothing on the panel itself changes.`)) return; await api(`/api/panels/${id}`, {method: "DELETE"}); pn.id = ""; pn.edit = false; refresh(); };
 window.pnNodeReconnect = async (id, nid) => { try { await api(`/api/panels/${id}/nodes/${nid}/reconnect`, {method: "POST"}); toast("✓ Reconnect requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -855,7 +926,7 @@ let lqT; window.setLogQ = v => { state.logs.q = v.trim(); clearTimeout(lqT); lqT
 
 /* ---- settings */
 PAGES.settings = async () => {
-  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot")]);
+  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   $("#page").innerHTML = `<div class="grid2">
     <div class="card"><h3>Telegram <span class="sp"></span>${tg.has_token ? '<span class="pill">token saved</span>' : '<span class="pill">no token</span>'}</h3>
@@ -928,6 +999,27 @@ PAGES.settings = async () => {
         <label>Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form></div>
 
+    <div class="card"><h3>AI assistant <span class="sp"></span><span class="pill">${ai_.has_api_key ? "key saved" : "no key"}</span></h3>
+      <form class="frm one" onsubmit="return saveAi(event)">
+        <label class="chk"><input name="enabled" type="checkbox" ${ai_.enabled ? "checked" : ""}> use the AI to diagnose broken tunnels (inside Fix)</label>
+        <label class="chk"><input name="actions" type="checkbox" ${ai_.actions ? "checked" : ""}> let the AI add safe repair steps to the plan</label>
+        <label>Anthropic API key <small>(empty keeps the saved one)</small><input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off"></label>
+        <label>Model<input name="model" value="${esc(ai_.model)}"></label>
+        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testAi()">Test the key</button><button type="button" class="danger" onclick="forgetAi()">Remove the key</button></div></form></div>
+
+    <div class="card"><h3>Appearance</h3>
+      <div class="frm">
+        <label>Theme<select onchange="lookSet('theme', this.value)">${[["aurora", "🌌 Aurora glass"], ["gold", "✨ Gold luxury"], ["neon", "⚡ Cyber neon"], ["minimal", "▫ Minimal"]].map(([k, l]) => `<option value="${k}" ${LOOK.theme === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label>Day / night<select onchange="lookSet('mode', this.value)">${[["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]].map(([k, l]) => `<option value="${k}" ${LOOK.mode === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label>Text size<select onchange="lookSet('size', this.value)">${[["small", "Small"], ["normal", "Normal"], ["large", "Large"]].map(([k, l]) => `<option value="${k}" ${LOOK.size === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label>Animations<select onchange="lookSet('anim', this.value)">${[["on", "On"], ["off", "Off (calmer)"]].map(([k, l]) => `<option value="${k}" ${LOOK.anim === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <div class="frm-act"><button type="button" onclick="lookReset()">↺ Reset the look</button><small class="mut">kept in this browser</small></div></div></div>
+
+    <div class="card"><h3>About <span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
+      <div class="kv one" id="about-box"><div class="mut">checking GitHub…</div></div>
+      <div class="frm-act"><button class="pri" onclick="panelUpdate()">Update from GitHub</button><button onclick="aboutLoad()">↻ Check</button><small class="mut">pull, tests, restart, health check — rolls back by itself when the new version does not start</small></div>
+      <pre class="gl-out hidden" id="about-log"></pre></div>
+
     <div class="card"><h3>Password</h3>
       <form class="frm one" onsubmit="return changePassword(event)">
         <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
@@ -947,14 +1039,27 @@ PAGES.settings = async () => {
       <small class="mut">These come from <code>${esc(s.env_file)}</code> on the panel server (then <code>systemctl restart nikatel</code>). Read-only cannot be switched off from here on purpose.</small></div>
   </div>`;
   settingsTabs();
+  if (state.stab === "look") aboutLoad();
 };
+window.saveAi = e => put(e, "/api/settings/ai", formJson(e, [], ["enabled", "actions"]), "✓ AI settings saved");
+window.testAi = async () => { toast("Asking Anthropic…"); try { const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.forgetAi = async () => { if (!confirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
+window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = `<div><span>Installed</span> <b>${esc(u.installed || "?")}</b> · <span>newest on GitHub</span> <b>${esc(u.newest || "?")}</b> · ${u.up_to_date ? '<b class="gw-ok">up to date</b>' : '<b class="err">update available</b>'}</div>`; const lg = $("#about-log"); if (u.last_log) { lg.textContent = u.last_log; lg.classList.remove("hidden"); } } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
+window.panelUpdate = async () => { if (!confirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } toast("Updating… the page reloads in 40 s"); setTimeout(() => location.reload(), 40000); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* the look: theme, day/night, text size, animations - kept in this browser */
+const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "on"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
+function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; }
+window.lookSet = (k, v) => { LOOK[k] = v; localStorage.setItem("nk.look", JSON.stringify(LOOK)); lookApply(); };
+window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOOK, {theme: "aurora", mode: "dark", size: "normal", anim: "on"}); lookApply(); refresh(); };
+window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
+lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report"]],
-  repair: ["🩺 Repair & probe", "What the panel may change on its own, and the probe that tests configs from inside Iran.", ["Repairs", "Probe"]],
-  integrations: ["🔗 Integrations", "Other systems the panel manages: the shop bot server.", ["Shop bot"]],
-  backups: ["💾 Backups", "Encrypted copies of the panel's data, kept here and sent to Telegram.", ["Backups"]],
-  account: ["👤 Account", "Your password and the settings the service was started with.", ["Password", "Effective settings"]],
+  account: ["👤 Account", "Your password, the session and the settings the service was started with.", ["Password", "Effective settings"]],
+  alerts: ["✈ Telegram & backup", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report, and the encrypted backups.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report", "Backups"]],
+  probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
+  look: ["🎨 Appearance & about", "Theme, day / night, text size — and the version of this panel with one-click update from GitHub.", ["Appearance", "About"]],
+  ai: ["🤖 AI & automation", "The AI assistant inside Fix, automatic repairs, and the shop bot server the panel manages.", ["AI assistant", "Repairs", "Shop bot"]],
 };
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "alerts";

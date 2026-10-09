@@ -60,6 +60,54 @@ def settings_view():
             "env_file": "/etc/nikatel/nikatel.env"}
 
 
+def _git(*args: str) -> str:
+    import subprocess
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parent.parent.parent
+
+    try:
+        return subprocess.run(["git", "-C", str(src), *args], check=False, capture_output=True, text=True, timeout=40).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+@router.get("/system/update", dependencies=[Depends(current_user)])
+def update_status():
+    """Installed commit vs. the newest on GitHub, and the log of the last update run."""
+    from pathlib import Path
+
+    cur = _git("rev-parse", "--short", "HEAD")
+    remote = _git("ls-remote", "origin", "HEAD").split()
+    newest = remote[0][:7] if remote else ""
+    log_path = Path("/var/lib/nikatel/update.log")
+    tail = ""
+
+    if log_path.exists():
+        tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-12:])
+
+    return {"ok": True, "version": __version__, "installed": cur, "newest": newest, "up_to_date": bool(newest) and cur != "" and newest.startswith(cur[:7]), "last_log": tail}
+
+
+@router.post("/system/update", dependencies=[Depends(current_user)])
+def update_now():
+    """Pull the newest code and run deploy.sh (tests, restart, health check, rollback) in a transient unit,
+    so the panel can restart under it. Watch /system/update for the log."""
+    import subprocess
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parent.parent.parent
+    cmd = f"cd {src} && git pull -q --ff-only origin main && bash scripts/deploy.sh"
+
+    try:
+        subprocess.run(["systemd-run", "--no-block", "--unit", f"nikatel-update-{int(time.time())}", "--property=StandardOutput=append:/var/lib/nikatel/update.log",
+                        "--property=StandardError=append:/var/lib/nikatel/update.log", "bash", "-c", cmd], check=True, capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": "could not start the update: " + str(e)[:160]}
+
+    return {"ok": True, "started": True}
+
+
 @router.get("/logs", dependencies=[Depends(current_user)])
 def logs(lines: int = Query(300, ge=1, le=2000), level: str = "", domain: str = "", q: str = ""):
     """The tail of the panel's own log, newest first, filtered. Lines are already secret-masked."""

@@ -20,9 +20,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
     "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
+    # the AI assistant (Anthropic): advises inside Fix; `actions` lets its suggested steps be added to the plan
+    "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True},
 }
 
-SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",)}
+SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",)}
 
 
 def get(key: str) -> dict:
