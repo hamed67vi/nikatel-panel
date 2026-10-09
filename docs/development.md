@@ -1,0 +1,45 @@
+# Development
+
+## Loop
+
+```bash
+git clone git@github.com:hamed67vi/nikatel-panel.git && cd nikatel-panel
+python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]" ruff
+pytest -q && ruff check nikatel tests && bash scripts/check_no_secrets.sh
+NIKATEL_DATA_DIR=./data NIKATEL_TLS_CERT= NIKATEL_TLS_KEY= NIKATEL_LISTEN_PORT=8000 nikatel serve   # http://localhost:8000
+```
+
+Pick an issue → branch `issue-<n>-<slug>` → PR → CI green → merge → `scripts/deploy.sh` on the
+panel server. Small PRs; one issue each.
+
+## Where things go
+
+| You want to… | Edit |
+|---|---|
+| read something new from a server | `nikatel/ssh.py` → `SCRIPTS` (script + parameter regexes), then a parser in `services/` |
+| add a table or column | `models.py` + an entry in `db.MIGRATIONS` |
+| add an endpoint | `api/<resource>.py`; register in `api/__init__.py` |
+| add a page | `web/app.js` → `PAGES.<name>` + `INFO` + a nav link in `index.html`; styles in `app.css` |
+| add a background job | a function in `services/`, `jobs.register(...)` in `main._register_jobs` |
+| change a default | `config.py`; document it in `scripts/nikatel.env.example` |
+
+## Style
+
+* Python 3.10+, type hints, `ruff` clean. Functions small; names say what they do.
+* Pure logic first (strings → dataclasses → decision), I/O at the edge. Test the pure part.
+* Every network call has a timeout. Loops catch, log with `exc_info`, continue.
+* User-facing text: plain English sentences that say what happened and what to do.
+* No `print` - `log = get_logger("<domain>")`.
+* Never put a real address, hostname, token or password anywhere in the repo, including tests
+  and issues. Use `1.1.1.1 … 9.9.9.9` and names like `ir1`, `fi1` in tests.
+
+## Tests
+
+`tests/conftest.py` gives every test a fresh SQLite in a temp dir and a logged-in `client`.
+SSH is never real: test `parse_*` / `judge` with captured output strings, test the API with
+imported fixtures. A bug fix adds the failing case first.
+
+## Releases
+
+`nikatel/__init__.py` holds the version. A milestone ends with a `CHANGELOG.md` section and
+`git tag vX.Y.Z && git push --tags`.

@@ -1,0 +1,19 @@
+[Unit]
+Description=Nikatel panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/nikatel/nikatel.env
+WorkingDirectory=/opt/nikatel/src
+ExecStart=/opt/nikatel/venv/bin/nikatel serve
+Restart=always
+RestartSec=3
+ProtectSystem=full
+ReadWritePaths=/var/lib/nikatel
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

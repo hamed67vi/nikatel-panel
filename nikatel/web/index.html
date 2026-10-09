@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nikatel</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div id="login" class="login hidden">
+  <form id="login-form" class="login-box" autocomplete="on">
+    <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
+    <label>User<input name="user" value="admin" autocomplete="username"></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" autofocus></label>
+    <button class="pri" type="submit">Sign in</button>
+    <div id="login-err" class="err"></div>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="side">
+    <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
+    <nav id="nav">
+      <a data-page="dashboard" class="on">Dashboard</a>
+      <a data-page="servers">Servers <i id="n-servers"></i></a>
+      <a data-page="tunnels">Tunnels <i id="n-tunnels"></i></a>
+      <a data-page="events">Events</a>
+      <a data-page="jobs">Jobs</a>
+    </nav>
+    <div class="side-foot">
+      <span id="ro-badge" class="badge">read-only</span>
+      <span id="version" class="mut"></span>
+      <a id="logout">Sign out</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="head">
+      <div><h1 id="title">Dashboard</h1><p id="subtitle" class="mut"></p></div>
+      <div class="head-r"><span id="updated" class="mut"></span><button id="refresh">↻ Refresh</button></div>
+    </header>
+    <section id="page" class="page"></section>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
