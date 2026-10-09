@@ -17,19 +17,49 @@ class BuildIn(BaseModel):
     iran_id: int
     foreign_id: int
     ports: str = Field(min_length=1, max_length=300)
-    transport: str = Field("tcpmux", pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
+    kind: str = Field("backhaul", pattern=r"^(backhaul|backpack|backpack_direct|paqet|chisel)$")
+    transport: str = Field("tcpmux", pattern=r"^[a-z0-9:]{0,16}$")
     mtu: int = Field(0, ge=0, le=1476)
     keepalive: int = Field(75, ge=10, le=600)
+    opts: dict = Field(default_factory=dict)
 
 
 @router.post("/tunnels", status_code=202)
 def build(body: BuildIn):
     try:
-        aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive)
+        if body.kind == "backhaul":
+            if body.transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
+                raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
+
+            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive)
+        else:
+            from ..services import build_other
+
+            opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+            aid = build_other.start_build(body.iran_id, body.foreign_id, body.ports, body.kind, body.transport, opts, measure="full" if body.opts.get("measure") != "latency" else "latency")
     except ValueError as e:
         raise HTTPException(400, str(e))
 
     return {"ok": True, "id": aid}
+
+
+@router.get("/tunnels/kinds")
+def tunnel_kinds():
+    """What Create tunnel can build: the engines, their transports / carriers and the options each takes."""
+    from ..services import build_other as bo
+
+    return {"ok": True, "kinds": [
+        {"key": "backhaul", "title": "Backhaul over GRE", "note": "GRE link with local IPs, backhaul on top - like the existing tunnels", "direction": "reverse",
+         "transports": [{"key": k, "label": lbl, "note": n} for k, lbl, n in (("tcpmux", "TCP Mux", "many users, few connections (recommended)"), ("tcp", "TCP", "plain TCP"), ("wsmux", "WebSocket Mux", "clear-text WebSocket, multiplexed"), ("wssmux", "WebSocket TLS Mux", "TLS WebSocket, multiplexed"))]},
+        {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
+         "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
+        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI / xDi carriers", "direction": "direct",
+         "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_DIRECT.items()]},
+        {"key": "paqet", "title": "Paqet", "note": "KCP over raw sockets: the foreign server listens, the Iran server opens the ports", "direction": "direct",
+         "transports": [{"key": "kcp", "label": "KCP", "note": "modes normal / fast / fast2 / fast3"}]},
+        {"key": "chisel", "title": "Chisel", "note": "reverse tunnel over one WebSocket port on the Iran server", "direction": "reverse",
+         "transports": [{"key": "ws", "label": "HTTP WebSocket", "note": "clear text"}, {"key": "wss", "label": "TLS WebSocket", "note": "self-signed certificate, key pinned"}]},
+    ]}
 
 
 class TestIn(BaseModel):
@@ -116,7 +146,7 @@ class CompareIn(BaseModel):
 def test_kinds():
     from ..services import tunnel_test as tt
 
-    return {"ok": True, "kinds": [{"key": k, "label": lbl, "note": note} for k, lbl, note in tt.KINDS]}
+    return {"ok": True, "kinds": [{"key": k, "label": lbl, "note": note, "group": grp, "default": dflt} for k, lbl, note, grp, dflt in tt.KINDS]}
 
 
 @router.post("/tunnel-test/compare", status_code=202)

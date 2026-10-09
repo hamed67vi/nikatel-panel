@@ -55,10 +55,17 @@ def quality(tunnel_id: int) -> dict:
         if t is None:
             raise ValueError("tunnel not found")
 
-        if not t.foreign_tunnel_ip or t.type not in ("backhaul", "gre"):
-            raise ValueError("this tunnel has no GRE link to measure")
+        has_door = bool((t.record or {}).get("test_port") and (t.secrets or {}).get("test_key"))
+
+        if not has_door and (not t.foreign_tunnel_ip or t.type not in ("backhaul", "gre")):
+            raise ValueError("this tunnel has no GRE link or test door to measure")
 
         node, name, peer = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name, t.foreign_tunnel_ip
+
+    if has_door:   # BackPack / Paqet / Chisel: through the real tunnel, speed included
+        from . import build_other
+
+        return build_other.quality(tunnel_id)
 
     out = run_script(node, "gre_pings", {"IFACE": name, "PEER": peer}, timeout=45)
     avg, jit, loss = jitter_from_pings(out)
@@ -208,17 +215,117 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
 
 # ------------------------------------------------------------------ compare several transports, one after the other
 RESULTS: dict[int, dict] = {}
+# key, label, note, group, ticked by default
 KINDS = [
-    ("tcpmux", "Backhaul · TCP Mux", "many users over few connections (recommended)"),
-    ("tcp", "Backhaul · TCP", "plain TCP, one connection per user"),
-    ("wsmux", "Backhaul · WebSocket Mux", "clear-text WebSocket, multiplexed (CDN-able)"),
-    ("wssmux", "Backhaul · WebSocket TLS Mux", "TLS WebSocket, multiplexed"),
+    ("tcpmux", "Backhaul · TCP Mux", "over GRE, many users over few connections (recommended)", "Backhaul over GRE", True),
+    ("tcp", "Backhaul · TCP", "over GRE, plain TCP, one connection per user", "Backhaul over GRE", True),
+    ("wsmux", "Backhaul · WebSocket Mux", "over GRE, clear-text WebSocket, multiplexed", "Backhaul over GRE", False),
+    ("wssmux", "Backhaul · WebSocket TLS Mux", "over GRE, TLS WebSocket, multiplexed", "Backhaul over GRE", False),
+    ("bp:tcpmux", "BackPack · TCP Mux", "many users over few connections", "BackPack", True),
+    ("bp:tcp", "BackPack · TCP", "plain TCP", "BackPack", True),
+    ("bp:stealth", "BackPack · TCP + Stealth", "looks like random bytes", "BackPack", True),
+    ("bp:wss", "BackPack · WebSocket TLS", "TLS + decoy page", "BackPack", False),
+    ("bp:wssmux", "BackPack · WebSocket TLS Mux", "TLS WebSocket, multiplexed", "BackPack", True),
+    ("bp:ws", "BackPack · WebSocket", "clear-text WebSocket", "BackPack", False),
+    ("bp:wsmux", "BackPack · WebSocket Mux", "clear-text, multiplexed", "BackPack", False),
+    ("bp:kcp", "BackPack · UDP + KCP", "UDP must be open", "BackPack", False),
+    ("bp:quic", "BackPack · UDP + QUIC", "UDP must be open", "BackPack", False),
+    ("bp:pck", "BackPack · TCP + PCK", "raw TCP segments (root)", "BackPack", False),
+    ("bp:xdi", "BackPack · xDi (ICMP)", "slow, last resort", "BackPack", False),
+    ("bpd:udp", "BackPack Direct · UDP", "Iran dials, UDP", "BackPack Direct", True),
+    ("bpd:quic", "BackPack Direct · QUIC", "Iran dials, QUIC", "BackPack Direct", False),
+    ("bpd:pck", "BackPack Direct · PCK", "Iran dials, looks like TCP (root)", "BackPack Direct", True),
+    ("bpd:xdi", "BackPack Direct · xDi (ICMP)", "Iran dials, inside ping (root)", "BackPack Direct", False),
+    ("paqet", "Paqet · KCP raw sockets", "needs raw sockets", "Paqet", True),
+    ("chisel", "Chisel · WebSocket", "HTTP WebSocket, one inbound port", "Chisel", True),
+    ("chisel:tls", "Chisel · TLS WebSocket", "TLS WebSocket, one inbound port", "Chisel", False),
 ]
 _COMPARE: dict[str, dict] = {}
 
 
+def kind_parts(kind: str) -> tuple[str, str]:
+    """A test kind -> (builder kind, transport). Backhaul transports keep their bare key."""
+    if kind in ("tcpmux", "tcp", "wsmux", "wssmux"):
+        return "backhaul", kind
+
+    if kind.startswith("bp:"):
+        return "backpack", kind[3:]
+
+    if kind.startswith("bpd:"):
+        return "backpack_direct", kind[4:]
+
+    if kind == "paqet":
+        return "paqet", "kcp"
+
+    return "chisel", "wss" if kind == "chisel:tls" else "ws"
+
+
+def start_other(iran_id: int, foreign_id: int, kind: str) -> int:
+    """A temporary BackPack / Paqet / Chisel tunnel: built (which measures it), then removed. Returns the test's action id."""
+    from . import build_other
+
+    k, tr = kind_parts(kind)
+
+    with session() as db:
+        names = {t.name for t in db.scalars(select(Tunnel))}
+
+    n = 1
+
+    while f"nkt{n}" in names:
+        n += 1
+
+    name = f"nkt{n}"
+    build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name)
+
+    with session() as db:
+        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {kind} tunnel {name} is being built (build #{build_aid})…"])
+        db.add(entry)
+        db.flush()
+        aid = entry.id
+
+    threading.Thread(target=_other_worker, args=(aid, build_aid, name), name=f"tunnel-test-{name}", daemon=True).start()
+    return aid
+
+
+def _other_worker(aid: int, build_aid: int, name: str) -> None:
+    ok: bool | None = False
+    verdict = ""
+
+    try:
+        for _ in range(200):
+            time.sleep(3)
+
+            with session() as db:
+                b = db.get(ActionLog, build_aid)
+
+                if b is not None and b.finished_at:
+                    ok, story = b.ok, list(b.story or [])
+                    break
+        else:
+            raise RuntimeError("the build took too long")
+
+        if not ok:
+            verdict = "Build failed: " + (story[-1] if story else "unknown reason")
+        else:
+            with session() as db:
+                t = db.scalar(select(Tunnel).where(Tunnel.name == name))
+                q = dict((t.record or {}).get("quality") or {}) if t else {}
+
+            sc = int(q.get("score") or 0)
+            RESULTS[aid] = {"latency_ms": q.get("latency_ms"), "jitter_ms": q.get("jitter_ms"), "loss_pct": q.get("loss_pct"), "down_mbps": q.get("down_mbps"), "up_mbps": q.get("up_mbps"), "score": sc}
+            _say(aid, f"Built and measured: {q.get('latency_ms')} ms, jitter {q.get('jitter_ms')} ms, loss {q.get('loss_pct')}%, ↓{q.get('down_mbps')} ↑{q.get('up_mbps')} Mb/s")
+            ok = sc >= 50
+            verdict = f"Score {sc}/100 — {'excellent' if sc >= 75 else 'usable' if sc >= 50 else 'poor'}. Everything temporary was removed."
+    except Exception as e:  # thread boundary
+        log.exception("tunnel test #%s crashed", aid)
+        verdict, ok = f"Stopped: {str(e)[:160]}", False
+    finally:
+        _cleanup(aid, name)
+        _say(aid, verdict or "Finished.", done=True, ok=ok)
+
+
 def compare_start(iran_id: int, foreign_id: int, kinds: list[str]) -> str:
-    kinds = [k for k in kinds if k in {k_ for k_, _, _ in KINDS}] or ["tcpmux"]
+    kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
 
     if any(not j["done"] for j in _COMPARE.values()):
         raise RuntimeError("another tunnel test is still running")
@@ -243,7 +350,7 @@ def _compare_worker(job: dict) -> None:
             job["current"] = kind
 
             try:
-                aid = start(job["iran_id"], job["foreign_id"], kind)
+                aid = start(job["iran_id"], job["foreign_id"], kind) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind)
             except (ValueError, RuntimeError) as e:
                 job["results"].append({"kind": kind, "ok": False, "error": str(e)[:160]})
                 continue

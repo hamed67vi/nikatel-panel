@@ -70,7 +70,119 @@ echo "END"
     # versions of the tunnel cores on this server
     "engine_versions": (r"""echo "ENGINE backhaul $([ -x /usr/local/bin/backhaul ] && /usr/local/bin/backhaul -v 2>&1 | head -1 || echo NONE)"
 echo "ENGINE xray $([ -x /opt/nikatel-xgw/xray ] && /opt/nikatel-xgw/xray version 2>&1 | head -1 || echo NONE)"
+echo "ENGINE backpack $([ -x /usr/local/bin/backpack ] && /usr/local/bin/backpack -v 2>&1 | head -1 || echo NONE)"
+echo "ENGINE paqet $([ -x /usr/local/bin/paqet ] && /usr/local/bin/paqet version 2>&1 | head -1 || echo NONE)"
+echo "ENGINE chisel $([ -x /usr/local/bin/nikatel-chisel ] && /usr/local/bin/nikatel-chisel --version 2>&1 | head -1 || echo NONE)"
 """, {}),
+
+    # checksum of one core binary (is the same build installed as the one in the panel's cache?)
+    "engine_sha": (r"""if [ -x '@BIN@' ]; then echo "SHA=$(sha256sum '@BIN@' | awk '{print $1}')"; else echo SHA=none; fi
+""", {"BIN": r"^/usr/local/bin/[A-Za-z0-9._-]{1,40}$"}),
+
+    # what the BackPack / Paqet / Chisel builders must know about a server
+    "simple_facts": (r"""echo "LISTEN=$(ss -ltnH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
+echo "LISTENU=$(ss -lunH 2>/dev/null | awk '{print $5}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
+echo "UNITS=$(systemctl list-unit-files --no-legend 2>/dev/null | awk '{print $1}' | grep -E '^(backpack|paqet|chisel|nikatel-sink)' | tr '\n' ' ')"
+echo "IPS=$(ip -4 -o addr show 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
+echo "ARCH=$(uname -m)"
+echo "ID=$(id -u)"
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q "Status: active"; then echo "UFW=1"; else echo "UFW=0"; fi
+if command -v python3 >/dev/null 2>&1; then echo "PY=1"; else echo "PY=0"; fi
+""", {}),
+
+    # the default interface, its address and the gateway's MAC (Paqet sends raw frames through it)
+    "paqet_net": (r"""IF=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+IP=$(ip -4 -o addr show dev "$IF" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+GW=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
+ping -c1 -W1 "$GW" >/dev/null 2>&1 || true
+MAC=$(ip neigh show "$GW" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="lladdr") print $(i+1)}' | head -1)
+echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
+""", {}),
+
+    # the fingerprint the Chisel server printed when it started (the client pins it)
+    "chisel_fp": (r"""echo "FP=$(journalctl -u 'chisel-@NAME@.service' -n 60 --no-pager 2>/dev/null | grep -o 'Fingerprint [A-Za-z0-9+/=]*' | tail -1 | cut -d' ' -f2)"
+""", {"NAME": r"^[a-z0-9][a-z0-9-]{0,14}$"}),
+
+    # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door
+    # (runs on the Iran server, talks to the sink on the foreign server through the tunnel)
+    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' <<'__NK_PY__'
+import socket, threading, time, json, sys
+P = int(sys.argv[1]); SECS = float(sys.argv[2]); N = int(sys.argv[3]); PINGS = int(sys.argv[4]); KEY = sys.argv[5].encode()
+TO = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5
+out = {"port": P}
+rtts = []; lost = 0
+try:
+    s = socket.create_connection(("127.0.0.1", P), timeout=min(6, TO * 2 + 1))
+    s.sendall(KEY + b"E")
+    for i in range(PINGS):
+        t = time.time()
+        try:
+            s.settimeout(TO)
+            s.sendall(b"ping%03d" % i)
+            d = s.recv(16)
+            if d:
+                rtts.append((time.time() - t) * 1000)
+            else:
+                lost += 1
+        except Exception:
+            lost += 1
+        time.sleep(0.04)
+    s.close()
+except Exception as e:
+    out["error"] = str(e)[:120]
+if rtts:
+    rtts.sort()
+    avg = sum(rtts) / len(rtts)
+    out["latency_ms"] = round(avg, 1)
+    out["min_ms"] = round(rtts[0], 1)
+    out["p95_ms"] = round(rtts[int(len(rtts) * 0.95) - 1] if len(rtts) > 1 else rtts[0], 1)
+    out["jitter_ms"] = round(sum(abs(r - avg) for r in rtts) / len(rtts), 1)
+out["loss_pct"] = round(lost * 100.0 / max(PINGS, 1), 1)
+def run(mode, results, i):
+    rate = 0.0
+    try:
+        s = socket.create_connection(("127.0.0.1", P), timeout=6)
+        s.sendall(KEY + mode)
+        t0 = time.time()
+        if mode == b"D":
+            n = 0; nw = 0; warm = None
+            while time.time() - t0 < SECS:
+                d = s.recv(1 << 20)
+                if not d:
+                    break
+                now = time.time(); n += len(d)
+                if warm is None and now - t0 >= 0.7:
+                    warm = now; nw = n
+            end = time.time()
+            rate = (n - nw) * 8 / (end - warm) / 1e6 if (warm and end > warm) else n * 8 / max(end - t0, 0.2) / 1e6
+        else:
+            b = b"x" * 65536
+            while time.time() - t0 < SECS:
+                s.sendall(b)
+            s.settimeout(30)
+            buf = b""
+            while b"\n" not in buf:
+                d = s.recv(32)
+                if not d:
+                    break
+                buf += d
+            try:
+                rate = float(buf[1:].strip() or 0)
+            except ValueError:
+                rate = 0.0
+        s.close()
+    except Exception:
+        pass
+    results[i] = rate
+if SECS > 0 and "error" not in out:
+    for mode, key in ((b"D", "down_mbps"), (b"U", "up_mbps")):
+        res = [0.0] * N
+        th = [threading.Thread(target=run, args=(mode, res, i)) for i in range(N)]
+        [x.start() for x in th]; [x.join() for x in th]
+        out[key] = round(sum(res), 1)
+print("NKPROBE " + json.dumps(out))
+__NK_PY__
+""", {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$"}),
 
     # 4 pings to a host (used from the Iran servers: is a foreign address reachable / filtered?)
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
@@ -255,7 +367,7 @@ def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, t
 # Same shape as SCRIPTS. They run only when the panel is not read-only, only through services/actions.py.
 _UNIT1 = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}\.(service|timer)$"
 _B64 = r"^[A-Za-z0-9+/=]{0,200000}$"
-_PATH = r"^/(etc/(systemd/system|backhaul|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
+_PATH = r"^/(etc/(systemd/system|backhaul|paqet|nikatel-chisel|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
 _TNAME = r"^[a-z0-9][a-z0-9-]{0,14}$"
 
 ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
@@ -388,6 +500,114 @@ for u in $U; do systemctl restart "$u" || true; done; echo "SWAPPED units=$U"
     # reboot the server (the tunnel units come back with systemd)
     "reboot": (r"""echo REBOOTING; (sleep 1; systemctl reboot) >/dev/null 2>&1 &
 """, {}),
+
+    # the test sink of a tunnel (foreign server): a tiny python service behind the tunnel's test door
+    # that echoes pings and streams bytes both ways so the Iran side can measure the real tunnel
+    "sink_install": (r"""set -e; install -d /usr/local/sbin
+cat > /usr/local/sbin/nikatel-sink-@NAME@.py <<'__NK_SINK__'
+import socket, threading, time, sys
+P = int(sys.argv[1]); KEY = sys.argv[2].encode()
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind((sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1", P)); s.listen(256)
+def h(c):
+    try:
+        c.settimeout(15); need = len(KEY) + 1; buf = b""
+        while len(buf) < need:
+            d = c.recv(need - len(buf))
+            if not d:
+                return
+            buf += d
+        if buf[:len(KEY)] != KEY:
+            return
+        m = buf[len(KEY):]
+        if m == b"E":
+            while True:
+                d = c.recv(256)
+                if not d:
+                    break
+                c.sendall(d)
+        elif m == b"D":
+            b = b"x" * 65536; t = time.time()
+            while time.time() - t < 12:
+                c.sendall(b)
+        elif m == b"U":
+            t_first = None; n = 0; n1 = 0; t1 = None; tl = None
+            c.settimeout(2.0)
+            while True:
+                try:
+                    d = c.recv(1 << 20)
+                except socket.timeout:
+                    break
+                if not d:
+                    break
+                now = time.time()
+                if t_first is None:
+                    t_first = now
+                n += len(d); tl = now
+                if t1 is None and now - t_first >= 1.0:
+                    t1 = now; n1 = n
+            overall = (n * 8 / (tl - t_first) / 1e6) if (t_first and tl and tl > t_first) else 0.0
+            if t1 and tl and tl > t1 and n > n1:
+                rate = (n - n1) * 8 / (tl - t1) / 1e6
+                if overall and rate > 1.5 * overall:
+                    rate = overall * 1.2
+            else:
+                rate = overall
+            c.sendall(("K%.1f\n" % rate).encode())
+    except Exception:
+        pass
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+while True:
+    c, _ = s.accept()
+    threading.Thread(target=h, args=(c,), daemon=True).start()
+__NK_SINK__
+cat > /etc/systemd/system/nikatel-sink-@NAME@.service <<'__NK_UNIT__'
+[Unit]
+Description=Nikatel tunnel test sink @NAME@
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/sbin/nikatel-sink-@NAME@.py @PORT@ @KEY@ @BIND@
+Restart=always
+RestartSec=3
+DynamicUser=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
+__NK_UNIT__
+systemctl daemon-reload; systemctl enable nikatel-sink-@NAME@.service >/dev/null 2>&1; systemctl restart nikatel-sink-@NAME@.service; sleep 1
+systemctl is-active --quiet nikatel-sink-@NAME@.service && echo SINK_OK || echo SINK_DOWN
+""", {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "KEY": r"^[a-z0-9]{8,32}$", "BIND": r"^(0\.0\.0\.0)?$"}),
+
+    # open / close one port in ufw (only when ufw is active; otherwise a no-op)
+    "ufw_allow": (r"""command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q active && ufw allow '@PORT@/@PROTO@' >/dev/null 2>&1; echo UFW_DONE
+""", {"PORT": r"^\d{1,5}$", "PROTO": r"^(tcp|udp)$"}),
+
+    # Chisel server key (and a self-signed certificate for the TLS variant) on the Iran server
+    "chisel_prepare": (r"""set -e; B=/etc/nikatel-chisel; install -d -m 700 $B
+[ -f $B/@NAME@.key ] || /usr/local/bin/nikatel-chisel server --keygen $B/@NAME@.key >/dev/null 2>&1
+if [ '@TLS@' = 1 ]; then [ -f $B/@NAME@.crt ] || openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 -subj /CN=nikatel -keyout $B/@NAME@.tls.key -out $B/@NAME@.crt >/dev/null 2>&1; fi
+chmod 600 $B/@NAME@.*; echo PREPARED
+""", {"NAME": _TNAME, "TLS": r"^[01]$"}),
+
+    # remove everything a BackPack / Paqet / Chisel tunnel (and its test sink) left on a server
+    "other_remove": (r"""n='@NAME@'; k='@KIND@'; p='@PORT@'; pr='@PROTO@'
+case "$k" in
+  backpack) U="backpack-$n.service backpack-$n-kharej.service"; F="/etc/backpack/$n.toml /etc/backpack/$n-kharej.toml /etc/backpack/$n.metrics.json /etc/backpack/$n-kharej.metrics.json";;
+  paqet) U="paqet-$n.service"; F="/etc/paqet/$n.yaml";;
+  chisel) U="chisel-$n.service chisel-$n-kharej.service"; F="/etc/nikatel-chisel/$n.key /etc/nikatel-chisel/$n.crt /etc/nikatel-chisel/$n.tls.key /etc/nikatel-chisel/$n.srv.env /etc/nikatel-chisel/$n.cli.env";;
+esac
+for u in $U nikatel-sink-$n.service; do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; done
+for s in nikatel-bpfw-$n nikatel-paqet-fw-$n; do [ -x "/usr/local/sbin/$s" ] && "/usr/local/sbin/$s" down >/dev/null 2>&1 || true; rm -f "/usr/local/sbin/$s"; done
+rm -f $F "/usr/local/sbin/nikatel-sink-$n.py"
+[ "$p" != 0 ] && command -v ufw >/dev/null 2>&1 && ufw delete allow "$p/$pr" >/dev/null 2>&1 || true
+systemctl daemon-reload; echo "REMOVED $n"
+""", {"NAME": _TNAME, "KIND": r"^(backpack|paqet|chisel)$", "PORT": r"^\d{1,5}$", "PROTO": r"^(tcp|udp)$"}),
 
     # Abuse-Defender (foreign servers only): drop outgoing traffic to a public list of abused ranges,
     # the panel's own servers / tunnel links / DNS / gateway stay whitelisted; refreshed nightly by cron

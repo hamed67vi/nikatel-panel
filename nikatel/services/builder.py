@@ -670,19 +670,25 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False) -> list[str]:
 
         name, port, tr, label = t.name, int(t.port or 0), (t.transport or "tcpmux"), f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
         nodes = [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
+        other = (t.type or "").lower() in ("backpack", "paqet", "chisel")
         entry = ActionLog(ref=name, action="delete", source="manual", story=[f"Removing {label} from both servers"])
         db.add(entry)
         db.flush()
         aid = entry.id
+        results = []
 
-    results = []
+        if other:
+            from . import build_other
 
-    for side, node in nodes:
-        try:
-            run_action(node, "remove_tunnel_files", {"NAME": name, "PORT": str(port), "TRANSPORT": tr}, timeout=90)
-            results.append(f"{side}: removed")
-        except (SSHError, ValueError) as e:
-            results.append(f"{side}: not removed ({e})")
+            results = build_other.remove(t)
+
+    if not other:
+        for side, node in nodes:
+            try:
+                run_action(node, "remove_tunnel_files", {"NAME": name, "PORT": str(port), "TRANSPORT": tr if tr in ("tcp", "tcpmux", "wsmux", "wssmux") else "tcpmux"}, timeout=90)
+                results.append(f"{side}: removed")
+            except (SSHError, ValueError) as e:
+                results.append(f"{side}: not removed ({e})")
 
     with session() as db:
         if not keep_record:
@@ -711,12 +717,19 @@ def rebuild_tunnel(tunnel_id: int) -> int:
         if t is None:
             raise ValueError("tunnel not found")
 
-        name, iran_id, foreign_id = t.name, t.iran_server_id, t.foreign_server_id
-        ports_text = t.record.get("port_mapping") or ",".join(str(p) for p in (t.forwarded_ports or []))
-        transport, mtu, keepalive = t.transport or "tcpmux", int(t.record.get("mtu") or 0), int(t.record.get("keepalive") or 75)
+        name, iran_id, foreign_id, typ, rec = t.name, t.iran_server_id, t.foreign_server_id, (t.type or "").lower(), dict(t.record or {})
+        ports_text = rec.get("port_mapping") or ",".join(str(p) for p in (t.forwarded_ports or []))
+        transport, mtu, keepalive = t.transport or "tcpmux", int(rec.get("mtu") or 0), int(rec.get("keepalive") or 75)
 
     if not ports_text:
         raise ValueError("the saved record has no ports")
 
     delete_tunnel(tunnel_id)
+
+    if typ in ("backpack", "paqet", "chisel"):
+        from . import build_other
+
+        kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
+        return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), rec.get("opts") or {}, forced_name=name)
+
     return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name)

@@ -143,8 +143,12 @@ PAGES.dashboard = async () => {
       ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div>
-    <div class="card act"><h3>Activity</h3><div class="act-list">${eventsHtml(ev.events)}</div></div></div>`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3><div class="act-list">${eventsHtml(ev.events)}</div></div></div>`;
+  const h = $("#page .card.health"), a = $("#page .card.act");
+  if (h && a && !state.actBig) a.style.height = h.offsetHeight + "px";   // the log box lines up with the health box
 };
+state.actBig = localStorage.getItem("nk.actbig") === "1";
+window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
 function eventsHtml(list) {
   if (!list.length) return '<div class="empty">Nothing happened yet.</div>';
   return list.map(e => `<div class="ev ${e.level}"><time title="${when(e.ts)}">${ago(e.ts)} ago</time><i></i><small>${esc(e.domain)}</small><span>${esc(e.text)}</span></div>`).join("");
@@ -301,7 +305,7 @@ PAGES.tunnelTest = async () => {
   const opt = (role, cur) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
   const j = tt.job, running = j && !j.done;
   const row = r => { const sc = r.score == null ? null : r.score; return `<tr class="${r.ok ? "up" : "down"}"><td class="name">${esc((tt.kinds.find(k => k.key === r.kind) || {}).label || r.kind)}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor / failed"}</span></td>
-      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? r.down_mbps + " Mb/s" : "—"}</td>
+      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? "↓" + r.down_mbps + (r.up_mbps != null ? " ↑" + r.up_mbps : "") + " Mb/s" : "—"}</td>
       <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc + " / 100"}</b></td><td class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 60))}</td></tr>`; };
   const best = j && j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0];
   $("#page").innerHTML = `<div class="card"><h3>🧪 Tunnel test <span class="sp"></span>${running ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""}</h3>
@@ -310,8 +314,9 @@ PAGES.tunnelTest = async () => {
       <label>Foreign server<select id="tt-foreign" ${running ? "disabled" : ""} onchange="tt.foreign=this.value;localStorage.setItem('nk.tt.foreign',this.value)">${opt("foreign", tt.foreign)}</select></label>
       <div class="frm-act">${running ? `<button class="danger" onclick="ttStop()">Stop</button>` : `<button class="pri" onclick="ttStart()">Start test</button>`}<small class="mut">${running ? "the current transport finishes, then the test stops; everything temporary is removed" : "each ticked transport is built as a temporary tunnel, measured, and removed again — one after the other"}</small></div>
     </div>
-    <div class="ob-sec"><h4>Transports to try</h4><div class="ob-inbounds" id="tt-kinds">${tt.kinds.map(k => `<label><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.key === "tcpmux" || k.key === "tcp") ? "checked" : ""}> <b>${esc(k.label)}</b> <small class="mut">${esc(k.note)}</small></label>`).join("")}</div></div>
-    <small class="mut">What happens for every transport: a temporary backhaul-over-GRE tunnel between the two servers (control port 9900+, test door 39400), 30 pings over GRE for latency / jitter / loss, a real download through a forwarded port for the speed, a 0-100 score — then everything is removed. Nothing is added to your list; the full story of each run stays in Repairs.</small></div>
+    <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick a whole engine or single transports</small></h4>
+      ${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="ttg"><div class="ttg-head"><b>${esc(g)}</b><a onclick="ttGroup('${esc(g)}', true)">all</a><a onclick="ttGroup('${esc(g)}', false)">none</a></div><div class="ob-inbounds">${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> <b>${esc(k.label.replace(/^[^·]+· /, ""))}</b> <small class="mut">${esc(k.note)}</small></label>`).join("")}</div></div>`).join("")}</div>
+    <small class="mut">For every ticked transport the panel builds a temporary tunnel of that engine between the two servers, measures latency / jitter / loss and speed through it (Backhaul: 30 pings over GRE + a download; the others: through the tunnel's test door, both ways), gives a 0-100 score, and removes everything again. Nothing is added to your list; the full story of each run stays in Repairs.</small></div>
     ${j ? `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
       <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
         <thead><tr><th>Transport</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Download</th><th>Score</th><th>Verdict</th></tr></thead>
@@ -319,6 +324,7 @@ PAGES.tunnelTest = async () => {
       ${running && j.story && j.story.length ? `<div class="fix">${j.story.map(l => `<div class="fx-line"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div>` : ""}</div>` : ""}`;
   if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
 };
+window.ttGroup = (g, on) => document.querySelectorAll(`#tt-kinds label[data-g="${g}"] input`).forEach(x => { if (!x.disabled) x.checked = on; });
 window.ttStart = async () => {
   const kinds = [...document.querySelectorAll("#tt-kinds input:checked")].map(x => x.value);
   if (!kinds.length) { toast("Tick at least one transport", "bad"); return; }
@@ -396,7 +402,8 @@ function detailRow(t) {
   return `<div class="kv">
       <div><span>Iran</span> <b>${esc(t.iran_name)}</b> <span class="mono">${esc(t.iran_host)}</span></div>
       <div><span>Foreign</span> <b>${esc(t.foreign_name)}</b> <span class="mono">${esc(t.foreign_host)}</span></div>
-      <div><span>GRE</span> ${esc(u.iface || "—")} ${d.iface ? "· " + esc(d.iface) : ""} · ${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</div>
+      ${t.type === "backhaul" || t.type === "gre" ? `<div><span>GRE</span> ${esc(u.iface || "—")} ${d.iface ? "· " + esc(d.iface) : ""} · ${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</div>` : `<div><span>Engine</span> ${esc((t.record || {}).transport_label || t.type)} · ${esc((t.record || {}).direction || "")}${(t.record || {}).test_port ? " · test door " + (t.record || {}).test_port : ""}${t.iran_tunnel_ip ? " · " + esc(t.iran_tunnel_ip) + " ⇄ " + esc(t.foreign_tunnel_ip) : ""}</div>`}
+      ${t.quality && t.quality.score != null ? `<div><span>Quality</span> <b class="${t.quality.score >= 70 ? "gw-ok" : t.quality.score >= 40 ? "" : "err"}">${t.quality.score} / 100</b> · ${t.quality.latency_ms} ms · jitter ${t.quality.jitter_ms} · loss ${t.quality.loss_pct}%${t.quality.down_mbps != null ? " · ↓" + t.quality.down_mbps + " ↑" + t.quality.up_mbps + " Mb/s" : ""} <small class="mut">${t.quality.at ? ago(t.quality.at) + " ago" : ""}</small></div>` : ""}
       <div><span>Loss</span> ${d.loss_pct != null ? d.loss_pct + "%" : "—"} · <span>ports</span> ${(t.forwarded_ports || []).map(p => p + (d.listen && d.listen[p] === false ? " ✗" : "")).join(", ") || "—"}</div>
       ${(u.iran || []).map(n => unit("iran", n)).join("")}${(u.foreign || []).map(n => unit("foreign", n)).join("")}
       <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
@@ -415,34 +422,60 @@ async function loadTunnelCharts(id) {
     <div><small>RTT ms</small>${spark(col("rtt_ms"), {fmt: v => v.toFixed(0)})}</div>
     <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>`;
 }
+/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
+const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}};
+const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
 async function buildFormHtml() {
-  const servers = await api("/api/servers");
-  const opt = role => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
-  return `<form class="frm" onsubmit="return startBuild(event)">
-    <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran")}</select></label>
-    <label>Foreign server<select name="foreign_id" required>${opt("foreign")}</select></label>
-    <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072"></label>
-    <div id="auto-iran" class="mut" style="grid-column:1/-1"></div>
-    <label>Transport<select name="transport"><option>tcpmux</option><option>tcp</option><option>wsmux</option><option>wssmux</option></select></label>
-    <label>GRE MTU <small>(0 = measure)</small><input name="mtu" type="number" min="0" max="1476" value="0"></label>
-    <label>Keepalive (s)<input name="keepalive" type="number" min="10" max="600" value="75"></label>
-    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
-    <small class="mut">Backhaul over GRE, like the existing tunnels: the panel measures the MTU, tunes both kernels, brings the GRE link up and verifies it holds, then starts backhaul on both sides and tests the data path. A failed build removes everything it created. “Test this pair first” does the same with a temporary tunnel, measures latency / jitter / loss / speed, and removes it.</small>
+  const [servers, kd] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds")]);
+  bk.kinds = kd.kinds;
+  const K = bk.kinds.find(k => k.key === bk.kind) || bk.kinds[0]; bk.kind = K.key;
+  const tr = K.transports.find(t => t.key === bk.transport) || K.transports[0]; bk.transport = tr.key;
+  const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
+  const opt = (role, name) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
+  const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
+  const chk = (name, label, small) => `<label class="chk"><input name="${name}" type="checkbox" ${v[name] === "on" ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
+  let options = "";
+  if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600);
+  else if (K.key === "backpack") options = `<label>Preset<select name="preset">${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
+  else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>SNI domain <small>(a domain your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "") + (tr.key === "pck" || tr.key === "sni" ? num("mtu", "Carrier MTU", 1380, 1000, 1500) : "") + chk("accept_udp", "Forward UDP too");
+  else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode">${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
+  else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
+  return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
+    <div class="bsec"><h4><i>1</i> Servers and ports</h4><div class="bgrid">
+      <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran", "iran_id")}</select></label>
+      <label>Foreign server<select name="foreign_id" required>${opt("foreign", "foreign_id")}</select></label>
+      <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label></div>
+      <div id="auto-iran" class="mut"></div></div>
+    <div class="bsec"><h4><i>2</i> Engine</h4><div class="bkinds">${bk.kinds.map(k => `<label class="bkind ${k.key === K.key ? "on" : ""}"><input type="radio" name="kind" value="${k.key}" ${k.key === K.key ? "checked" : ""} onchange="bkKind(this.value)"><b>${BK_ICON[k.key] || "•"} ${esc(k.title)}</b><small>${esc(k.note)}</small><em>${k.direction === "direct" ? "Iran dials the foreign server" : "the foreign server dials Iran"}</em></label>`).join("")}</div></div>
+    <div class="bsec"><h4><i>3</i> Transport and options</h4><div class="bgrid">
+      <label>${K.transports.length > 1 ? "Transport" : "Transport"}<select name="transport" onchange="bkTransport(this.value)">${K.transports.map(t => `<option value="${t.key}" ${t.key === tr.key ? "selected" : ""}>${esc(t.label)} — ${esc(t.note)}</option>`).join("")}</select></label>
+      ${options}</div></div>
+    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button>
+      <small class="mut">${K.key === "backhaul" ? "GRE link with local IPs, then backhaul: the panel measures the MTU, tunes both kernels, verifies the GRE link holds, starts backhaul on both sides and tests the data path." : "Both servers are inspected, the engine is installed when missing, a test door is opened on the foreign side, the services start and the panel waits until data really passes, then measures latency / jitter / loss and speed through the tunnel."} A failed build removes everything it created.</small></div>
   </form><div id="build-story" class="fix hidden"></div>`;
+}
+window.bkKeep = form => { const f = new FormData(form); bk.v = {}; for (const [k, x] of f.entries()) bk.v[k] = x; };
+window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); refresh(); };
+window.bkTransport = t => { bk.transport = t; refresh(); };
+function bkBody(f) {
+  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: (f.get("ports") || "").trim(), kind: bk.kind, transport: f.get("transport") || "", opts: {}};
+  if (bk.kind === "backhaul") { body.mtu = +f.get("mtu") || 0; body.keepalive = +f.get("keepalive") || 75; }
+  else for (const k of ["preset", "keepalive", "heartbeat", "sni_domain", "mtu", "kcp_mode", "conn"]) if (f.get(k) != null && f.get(k) !== "") body.opts[k] = isNaN(+f.get(k)) ? f.get(k) : +f.get(k);
+  if (f.get("accept_udp") === "on") body.opts.accept_udp = true;
+  return body;
 }
 window.autoIran = async form => { const f = new FormData(form), box = $("#auto-iran"); box.innerHTML = '<div class="fx-line run"><i></i>Pinging the foreign server from every Iran server…</div>'; try { const r = await api("/api/tunnels/auto-iran", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || ""})}); const best = r.ranking.find(x => x.score > 0); if (best) form.querySelector("[name=iran_id]").value = best.id; box.innerHTML = `<div class="ob-inbounds">${r.ranking.map((x, i) => `<span><b class="${x.score >= 70 ? "gw-ok" : x.score ? "" : "err"}">${i + 1}. ${esc(x.name)} · ${x.score}</b> <small class="mut">${esc(x.reason)}</small></span>`).join("")}</div>${best ? `<small>Chosen: <b>${esc(best.name)}</b> — change it above if you prefer another.</small>` : '<small class="err">No Iran server can carry this tunnel right now.</small>'}`; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.startTest = async e => {
   const f = new FormData(e.target.closest("form"));
-  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), transport: f.get("transport")};
+  const kind = bk.kind === "backhaul" ? (f.get("transport") || "tcpmux") : bk.kind === "backpack" ? "bp:" + f.get("transport") : bk.kind === "backpack_direct" ? "bpd:" + f.get("transport") : bk.kind === "paqet" ? "paqet" : (f.get("transport") === "wss" ? "chisel:tls" : "chisel");
   const box = $("#build-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Building a temporary tunnel…</div>';
-  try { const r = await api("/api/tunnel-test", {method: "POST", body: JSON.stringify(body)}); await followStory(r.id, box, 400); }
+  try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), kinds: [kind]})}); tt.job = {id: r.id, kinds: [kind], results: [], current: kind, done: false}; toast("Test started — the result shows in Tunnel test"); setSub("tunnels", "test"); }
   catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; }
 };
 window.newTunnel = () => { state.edit = "newtunnel"; state.open = null; refresh(); };
 window.startBuild = async e => {
   e.preventDefault();
-  const f = new FormData(e.target);
-  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: f.get("ports").trim(), transport: f.get("transport"), mtu: +f.get("mtu") || 0, keepalive: +f.get("keepalive") || 75};
+  const body = bkBody(new FormData(e.target));
   const box = $("#build-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
   try {
     const r = await api("/api/tunnels", {method: "POST", body: JSON.stringify(body)});
@@ -517,7 +550,7 @@ PAGES.configsList = async () => {
   if (cf.group !== "__all" && cf.group !== "__manual" && !names.includes(cf.group)) cf.group = "__all";
   const searched = d.configs.filter(c => !cf.q || (c.name + (c.group || "")).toLowerCase().includes(cf.q));
   const list = cf.group === "__all" ? searched : cf.group === "__manual" ? searched.filter(c => !c.group) : searched.filter(c => c.group === cf.group);
-  const groups = cf.group === "__all" ? [...new Set(list.map(c => c.group || ""))].sort((a, b) => (a || "~").localeCompare(b || "~")) : [cf.group === "__manual" ? "" : cf.group];
+  const groups = [null];   // one flat list in every view; in "All" the group badge says where a config belongs
   const tunnelSel = c => `<select class="cf-tun" title="Tunnel this config goes through" onclick="event.stopPropagation()" onchange="event.stopPropagation();cfSetTunnel(${c.id}, this.value)"><option value="">no tunnel</option>${tl.map(t => `<option value="${esc(t.name)}" ${t.name === c.tunnel ? "selected" : ""}>${esc(t.name)}</option>`).join("")}${c.tunnel && !tl.some(t => t.name === c.tunnel) ? `<option selected>${esc(c.tunnel)}</option>` : ""}</select>`;
   const cdnIn = c => `<input class="cf-cdn" inputmode="numeric" maxlength="5" placeholder="CDN port" title="CDN port: type it and press Enter" value="${esc(c.cdn_port || "")}" data-orig="${esc(c.cdn_port || "")}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onchange="cfSetCdn(${c.id}, this)">`;
   const live = c => `<span class="live ${c.status === "up" ? "up" : c.status === "down" ? "down" : "unk"}">● ${c.status === "up" ? "ONLINE" : c.status === "down" ? "OFFLINE" : "UNKNOWN"}</span>`;
@@ -558,13 +591,12 @@ PAGES.configsList = async () => {
     ${gbar}
     ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional" value="${esc(names.includes(cf.group) ? cf.group : "")}"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
     ${cf.sub ? cfSubHtml() : ""}
-    ${list.length ? groups.map(g => `${cf.group === "__all" ? `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span></div>` : ""}
-    ${cf.view === "grid" ? `<div class="cf-grid">${list.filter(c => (c.group || "") === g).map(card).join("")}</div>`
+    ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
       : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:26%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:14%"><col><col style="width:150px"></colgroup>
-      <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.filter(c => (c.group || "") === g).map(rowC).join("")}</tbody></table>`
+      <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
       : `<table class="tbl lift cf-list"><colgroup><col style="width:26%"><col style="width:11%"><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:150px"></colgroup>
       <thead><tr><th>Server</th><th>Ping</th><th>Tunnel</th><th>CDN</th><th>Download</th><th>Upload</th><th style="text-align:right">Actions</th></tr></thead>
-      <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
+      <tbody>${list.map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
     ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   const openC = d.configs.find(c => c.id === cf.open);

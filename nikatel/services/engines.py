@@ -25,6 +25,9 @@ from .events import emit
 log = get_logger("engines")
 ENGINES = {
     "backhaul": {"title": "Backhaul", "repo": "Musixal/Backhaul", "asset": r"backhaul_linux_amd64\.tar\.gz$", "member": "backhaul", "bin": "/usr/local/bin/backhaul", "units": "backhaul-*.service"},
+    "backpack": {"title": "BackPack", "repo": "AminMGMT/BackPack", "asset": r"(?i)backpack[_-]linux[_-]amd64.*\.(tar\.gz|zip)$", "member": "backpack", "bin": "/usr/local/bin/backpack", "units": "backpack-*.service"},
+    "paqet": {"title": "Paqet", "repo": "hanselime/paqet", "asset": r"^paqet-linux-amd64.*\.tar\.gz$", "member": "paqet_linux_amd64", "bin": "/usr/local/bin/paqet", "units": "paqet-*.service"},
+    "chisel": {"title": "Chisel", "repo": "jpillora/chisel", "asset": r"^chisel_.*_linux_amd64\.gz$", "member": "chisel", "bin": "/usr/local/bin/nikatel-chisel", "units": "chisel-*.service"},
     "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service"},
 }
 _STATE: dict = {"checked_at": 0, "result": None, "job": None}
@@ -111,6 +114,10 @@ def _download(engine: str) -> tuple[str, bytes]:
     if lt["url"].endswith(".zip"):
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             binary = z.read(member)
+    elif lt["url"].endswith(".gz") and not lt["url"].endswith(".tar.gz"):
+        import gzip
+
+        binary = gzip.decompress(data)
     else:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
             m = next((x for x in tf.getmembers() if x.isfile() and Path(x.name).name == member), None)
@@ -124,6 +131,55 @@ def _download(engine: str) -> tuple[str, bytes]:
         raise RuntimeError("the binary is too small to be real")
 
     return lt["version"], binary
+
+
+def cache_file(engine: str) -> Path:
+    """The core binary in the panel's cache (<data>/../engines/<engine>); downloaded and verified when missing."""
+    if engine not in ENGINES:
+        raise ValueError("unknown engine")
+
+    cache = get_settings().data_dir.parent / "engines"
+    cache.mkdir(parents=True, exist_ok=True)
+    f = cache / engine
+
+    if f.exists() and f.stat().st_size > 1_000_000:
+        return f
+
+    version, binary = _download(engine)
+    f.write_bytes(binary)
+    f.chmod(0o755)
+    (cache / f"{engine}-{version}").write_bytes(binary)
+    log.info("cached %s %s (%d bytes)", engine, version, len(binary))
+    return f
+
+
+def ensure_on_node(node: Node, engine: str, say=None) -> bool:
+    """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed."""
+    import subprocess
+
+    f = cache_file(engine)
+    sha = hashlib.sha256(f.read_bytes()).hexdigest()
+    e = ENGINES[engine]
+
+    if f"SHA={sha}" in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
+        return False
+
+    s = get_settings()
+    opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
+    r = subprocess.run(["scp", *opts, "-P", str(node.port), str(f), f"{node.user}@{node.host}:{e['bin']}.nikatel.new"], capture_output=True, text=True, timeout=300, check=False)
+
+    if r.returncode != 0:
+        raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + r.stderr.strip()[:120])
+
+    out = run_action(node, "engine_swap", {"BIN": e["bin"], "SHA": sha, "UNITS": "nikatel-none.service"}, timeout=120)
+
+    if "SWAPPED" not in out:
+        raise RuntimeError(f"{e['title']} did not install on {node.host}: {out.strip()[-120:]}")
+
+    if say:
+        say(f"{e['title']} installed on {node.host}")
+
+    return True
 
 
 def update(engine: str) -> dict:

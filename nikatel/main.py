@@ -93,6 +93,9 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
         response.headers["X-Request-Id"] = rid
 
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"   # the browser revalidates (ETag), so a deploy shows at once
+
         if request.url.path.startswith("/api/") and response.status_code >= 400:
             log.warning("%s %s -> %s in %dms", request.method, request.url.path, response.status_code, (time.time() - t0) * 1000)
 
