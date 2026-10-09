@@ -23,6 +23,7 @@ from .services import (
     backup,
     configs,
     facts,
+    nodes,
     panels,
     probe,
     report,
@@ -43,6 +44,8 @@ def _register_jobs() -> None:
     jobs.register("auto-repair", 60, actions.auto_repair)
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 120, panels.check_all)
+    jobs.register("geo", 3600, nodes.geo_missing_job)
+    jobs.register("filter", 3600, nodes.filter_daily_job)
 
 
 @asynccontextmanager

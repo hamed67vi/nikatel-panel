@@ -53,7 +53,13 @@ echo "LOAD=$(cut -d' ' -f1-3 /proc/loadavg) $(nproc)"
 echo "UP=$(cut -d. -f1 /proc/uptime)"
 echo "CONN=$(ss -tan state established 2>/dev/null | tail -n +2 | wc -l)"
 echo "HOST=$(hostname) $(uname -r)"
+echo "TOP=$(ps -eo comm=,pcpu= --sort=-pcpu 2>/dev/null | head -1)"
+echo "ABUSE=$(iptables -S abuse-defender 2>/dev/null | grep -c DROP)"
 """, {}),
+
+    # 4 pings to a host (used from the Iran servers: is a foreign address reachable / filtered?)
+    "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
+""", {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
 
     # one side of a tunnel: unit states, the GRE interface, its counters, a ping to the other end,
     # and the forwarded ports (only on the Iran side, where users connect)
@@ -331,6 +337,79 @@ try:
     while True: c.sendall(z)
 except OSError: pass' '@PORT@' >/dev/null 2>&1 &); sleep 1; echo started
 """, {"PORT": r"^\d{1,5}$"}),
+
+    # put a public key into authorized_keys (the operator's own key, so PuTTY / ssh open without a password)
+    "add_pubkey": (r"""umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys
+grep -qxF '@PUB@' ~/.ssh/authorized_keys || echo '@PUB@' >> ~/.ssh/authorized_keys; echo ADDED
+""", {"PUB": r"^ssh-(ed25519|rsa) [A-Za-z0-9+/=]{20,800}( [A-Za-z0-9@._-]{1,64})?$"}),
+
+    # reboot the server (the tunnel units come back with systemd)
+    "reboot": (r"""echo REBOOTING; (sleep 1; systemctl reboot) >/dev/null 2>&1 &
+""", {}),
+
+    # Abuse-Defender (foreign servers only): drop outgoing traffic to a public list of abused ranges,
+    # the panel's own servers / tunnel links / DNS / gateway stay whitelisted; refreshed nightly by cron
+    "abuse_install": (r"""set -e
+export DEBIAN_FRONTEND=noninteractive
+command -v iptables >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y iptables >/dev/null 2>&1; }
+command -v curl >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y curl >/dev/null 2>&1; }
+if ! dpkg -s iptables-persistent >/dev/null 2>&1; then
+  echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections 2>/dev/null || true
+  echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections 2>/dev/null || true
+  apt-get install -y iptables-persistent >/dev/null 2>&1 || true
+fi
+URL="@URL@"; WL="@WL@"
+tmp=$(mktemp)
+curl -fsS --max-time 25 "$URL" -o "$tmp" || { echo "LIST-DOWNLOAD-FAILED"; exit 3; }
+[ -s "$tmp" ] || { echo "LIST-EMPTY"; exit 3; }
+for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do iptables -N "$c" 2>/dev/null || true; done
+iptables -F abuse-defender-whitelist
+for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1); do
+  case "$i" in gre0|gretap0|erspan0) continue;; esac
+  iptables -A abuse-defender-whitelist -o "$i" -j ACCEPT
+done
+for ip in $WL; do iptables -A abuse-defender-whitelist -d "$ip" -j ACCEPT; done
+for ip in $(awk '/^nameserver/{print $2}' /etc/resolv.conf 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'); do iptables -A abuse-defender-whitelist -d "$ip" -j ACCEPT; done
+gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
+[ -n "$gw" ] && iptables -A abuse-defender-whitelist -d "$gw" -j ACCEPT
+iptables -A abuse-defender-whitelist -d 169.254.169.254 -j ACCEPT
+iptables -F abuse-defender
+while read -r r; do
+  r=$(echo "$r" | tr -d '\r ')
+  echo "$r" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$' || continue
+  iptables -A abuse-defender -d "$r" -j DROP
+done < "$tmp"
+rm -f "$tmp"
+for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do
+  while iptables -D OUTPUT -j "$c" 2>/dev/null; do :; done
+  iptables -I OUTPUT 1 -j "$c"
+done
+cat > /root/abuse-defender-update.sh <<'EOF'
+#!/bin/bash
+tmp=$(mktemp)
+curl -fsS --max-time 25 "@URL@" -o "$tmp" || exit 1
+[ -s "$tmp" ] || exit 1
+iptables -F abuse-defender
+while read -r r; do
+  r=$(echo "$r" | tr -d '\r ')
+  echo "$r" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$' || continue
+  iptables -A abuse-defender -d "$r" -j DROP
+done < "$tmp"
+rm -f "$tmp"
+mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4
+EOF
+chmod +x /root/abuse-defender-update.sh
+( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh'; echo "0 0 * * * /root/abuse-defender-update.sh" ) | crontab -
+mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4
+echo "ABUSE_OK=$(iptables -S abuse-defender | grep -c DROP)"
+""", {"URL": r"^https://raw\.githubusercontent\.com/[A-Za-z0-9._/-]{5,120}$", "WL": r"^(\d{1,3}(\.\d{1,3}){3}( \d{1,3}(\.\d{1,3}){3}){0,200})?$"}),
+    "abuse_remove": (r"""for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do
+  while iptables -D OUTPUT -j "$c" 2>/dev/null; do :; done
+  iptables -F "$c" 2>/dev/null; iptables -X "$c" 2>/dev/null
+done
+( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh' ) | crontab - 2>/dev/null || true
+rm -f /root/abuse-defender-update.sh; mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4 2>/dev/null || true; echo ABUSE_REMOVED
+""", {}),
 
     # shop bot: one UPDATE/INSERT with validated values (statement chosen here, values are quoted by the regexes)
     "bot_sql": (r"""set -a; [ -f '@ENV@' ] && . '@ENV@'; set +a

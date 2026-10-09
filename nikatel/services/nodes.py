@@ -1,0 +1,513 @@
+"""Node tools that the old panel had: console, connect with a password (installs the panel's key),
+add many servers at once, open-in-PuTTY/ssh launchers with the operator's own key, Abuse-Defender,
+reboot, country lookup of foreign servers, "is it filtered in Iran?" checks."""
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+import httpx
+from sqlalchemy import select
+
+from ..config import get_settings
+from ..db import session
+from ..log import get_logger
+from ..models import Server
+from ..ssh import Node, SSHError, run_action, run_raw, run_script
+from .events import emit
+
+log = get_logger("nodes")
+
+ABUSE_LIST_URL = "https://raw.githubusercontent.com/Kiya6955/Abuse-Defender/main/abuse-ips.ipv4"
+PRESETS = {
+    "logs": ("Last logs", "journalctl -n 60 --no-pager -o short-iso | cut -c1-220"),
+    "ports": ("Listening ports", "ss -ltnp | awk 'NR==1 || /LISTEN/' | cut -c1-200"),
+    "failed": ("Failed services", "systemctl --failed --no-legend --plain; echo; systemctl list-units --no-legend --plain 'backhaul-*' 'nikatel-*' 'backpack-*' 'chisel-*' 'paqet-*' | cut -c1-160"),
+    "top": ("Busiest processes", "ps -eo pid,comm,pcpu,pmem,etime --sort=-pcpu | head -15"),
+    "disk": ("Disk", "df -h / /var /opt 2>/dev/null | awk '!a[$1]++'; echo; du -xsh /var/log /root 2>/dev/null"),
+    "net": ("Network", "ip -br addr; echo; ip route; echo; ss -s"),
+    "tunnels": ("Tunnel units", "systemctl list-units --all --no-legend --plain 'backhaul-*' 'nikatel-gre-*' 'backpack-*' 'chisel-*' 'paqet-*' | cut -c1-160; echo; ip -br link show type gre 2>/dev/null"),
+}
+
+
+def _srv(server_id: int) -> tuple[Node, str, str, str]:
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        return Node(s.host, s.ssh_user, s.ssh_port), s.name, s.role, s.host
+
+
+def _set_extra(server_id: int, **kw) -> None:
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is not None:
+            d = dict(s.extra or {})
+            d.update(kw)
+            s.extra = d
+
+
+# ------------------------------------------------------------------ console
+def console(server_id: int, command: str) -> dict:
+    """Run one command on a server (read-write mode only). Every command is logged with the server name."""
+    cmd = str(command or "").strip()
+
+    if cmd in PRESETS:
+        cmd = PRESETS[cmd][1]
+
+    if not cmd:
+        raise ValueError("type a command")
+
+    if len(cmd) > 4000:
+        raise ValueError("the command is too long")
+
+    node, name, _role, _host = _srv(server_id)
+    log.info("console on %s: %s", name, cmd[:160].replace("\n", " "))
+    t0 = time.time()
+
+    try:
+        out = run_raw(node, cmd, timeout=60)
+        code = 0
+    except SSHError as e:
+        out = str(e)
+        code = e.code
+
+    with session() as db:
+        emit(db, "info", "nodes", f"Console on {name}: {cmd[:80]}" + ("" if code == 0 else f" (exit {code})"), name)
+
+    if len(out) > 30000:
+        out = "...\n" + out[-30000:]
+
+    return {"code": code, "output": out, "ms": int((time.time() - t0) * 1000)}
+
+
+# ------------------------------------------------------------------ connect with a password
+def _pubkey() -> str:
+    return (get_settings().ssh_key.with_suffix(".pub") if get_settings().ssh_key.suffix else get_settings().ssh_key.parent / (get_settings().ssh_key.name + ".pub")).read_text().strip()
+
+
+def connect(server_id: int, password: str) -> dict:
+    """Put the panel's public key on the server using the SSH password once (sshpass); the password is not kept."""
+    if not password:
+        raise ValueError("enter the SSH password of the server")
+
+    node, name, _role, host = _srv(server_id)
+    s = get_settings()
+    pub = _pubkey()
+    script = ("umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; "
+              f"grep -qxF '{pub}' ~/.ssh/authorized_keys || echo '{pub}' >> ~/.ssh/authorized_keys; echo KEY_INSTALLED")
+    env = dict(os.environ, SSHPASS=password)
+
+    try:
+        r = subprocess.run(["sshpass", "-e", "ssh", "-p", str(node.port), "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
+                            "-o", "ConnectTimeout=12", "-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no", "-o", "LogLevel=ERROR",
+                            f"{node.user}@{host}", script], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30, env=env)
+    except FileNotFoundError:
+        raise RuntimeError("sshpass is not installed on the panel server (apt install sshpass)")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("SSH password connection timed out")
+
+    low = r.stdout.lower()
+
+    if r.returncode != 0 or "KEY_INSTALLED" not in r.stdout:
+        if "permission denied" in low:
+            raise RuntimeError("wrong user or password")
+
+        if "refused" in low:
+            raise RuntimeError(f"SSH port {node.port} is closed")
+
+        raise RuntimeError("SSH connection failed: " + (r.stdout.strip().splitlines() or ["no answer"])[-1][:140])
+
+    out = run_script(node, "ping", timeout=25)
+    hostname = out.replace("HOST=", "").strip()[:80]
+    _set_extra(server_id, hostname=hostname, connected_at=int(time.time()))
+
+    with session() as db:
+        emit(db, "ok", "nodes", f"SSH key installed on {name} ({hostname}).", name)
+
+    return {"hostname": hostname}
+
+
+def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", ssh_port: int = 22) -> list[dict]:
+    """Lines of `name host [user] [port]`; every server is added to the panel and, with a password, connected in parallel."""
+    if role not in ("iran", "foreign"):
+        raise ValueError("bad role")
+
+    items = []
+
+    for ln in str(lines or "").splitlines():
+        p = ln.replace(",", " ").split()
+
+        if not p:
+            continue
+
+        if len(p) == 1:
+            p = [re.sub(r"[^A-Za-z0-9._-]", "-", p[0])[:30], p[0]]
+
+        name, host = p[0][:64], p[1]
+        user = p[2] if len(p) > 2 else ssh_user
+        port = int(p[3]) if len(p) > 3 and p[3].isdigit() else int(ssh_port)
+
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]*", host):
+            items.append({"name": name, "host": host, "ok": False, "error": "bad name or host"})
+            continue
+
+        items.append({"name": name, "host": host, "user": user, "port": port, "ok": None})
+
+    if not any(i["ok"] is None for i in items):
+        raise ValueError("give at least one line: name host [user] [port]")
+
+    for it in items:
+        if it["ok"] is not None:
+            continue
+
+        with session() as db:
+            if db.scalar(select(Server).where((Server.name == it["name"]) | (Server.host == it["host"]))):
+                it.update(ok=False, error="already in the panel")
+                continue
+
+            srv = Server(name=it["name"], host=it["host"], role=role, ssh_user=it["user"], ssh_port=it["port"])
+            db.add(srv)
+            db.flush()
+            it["id"] = srv.id
+            emit(db, "info", "servers", f"Server {srv.name} ({role}) added.", srv.name)
+
+    def one(it):
+        if it["ok"] is not None or "id" not in it:
+            return it
+
+        try:
+            if password:
+                r = connect(it["id"], password)
+                it.update(ok=True, detail=r["hostname"])
+            else:
+                node = Node(it["host"], it["user"], it["port"])
+                out = run_script(node, "ping", timeout=25)
+                it.update(ok=True, detail=out.replace("HOST=", "").strip()[:80])
+        except (RuntimeError, ValueError) as e:
+            it.update(ok=False, error=str(e)[:160] + ("" if password else " — the panel key is not on this server yet: add it with a password"))
+
+        return it
+
+    with ThreadPoolExecutor(6) as ex:
+        items = list(ex.map(one, items))
+
+    return items
+
+
+# ------------------------------------------------------------------ the operator's own key + launchers
+def user_key_path():
+    return get_settings().data_dir / "user_key"
+
+
+def user_key_ensure() -> str:
+    p = user_key_path()
+
+    if not p.exists():
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "nikatel-user", "-f", str(p)], check=True, capture_output=True, timeout=30)
+        p.chmod(0o600)
+
+    return (p.parent / (p.name + ".pub")).read_text().strip()
+
+
+def launcher(server_id: int, app: str) -> tuple[str, bytes]:
+    """A small .bat that opens the server in Windows ssh / PuTTY / MobaXterm with the operator's key (installed on the server first)."""
+    if app not in ("ssh", "putty", "mobaxterm"):
+        raise ValueError("bad app")
+
+    node, name, _role, host = _srv(server_id)
+    pub = user_key_ensure()
+    run_action(node, "add_pubkey", {"PUB": pub}, timeout=30)
+    user, port = node.user, node.port
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+
+    if app == "ssh":
+        body = f'@echo off\r\ntitle {safe}\r\nssh -i "%USERPROFILE%\\.ssh\\nikatel_user" -o StrictHostKeyChecking=accept-new -p {port} {user}@{host}\r\npause\r\n'
+    elif app == "putty":
+        body = (f'@echo off\r\nset "K=%USERPROFILE%\\.ssh\\nikatel_user.ppk"\r\nset "P=putty"\r\nwhere putty >nul 2>nul || set "P=%ProgramFiles%\\PuTTY\\putty.exe"\r\n'
+                f'start "" "%P%" -ssh {user}@{host} -P {port} -i "%K%"\r\n')
+    else:
+        body = (f'@echo off\r\nset "M=%ProgramFiles(x86)%\\Mobatek\\MobaXterm\\MobaXterm.exe"\r\nif not exist "%M%" set "M=%ProgramFiles%\\Mobatek\\MobaXterm\\MobaXterm.exe"\r\n'
+                f'if not exist "%M%" set "M=%LOCALAPPDATA%\\Programs\\MobaXterm\\MobaXterm.exe"\r\nstart "" "%M%" -newtab "ssh -p {port} -i /drives/c/Users/%USERNAME%/.ssh/nikatel_user {user}@{host}"\r\n')
+
+    return f"open-{app}-{safe}.bat", body.encode()
+
+
+# ------------------------------------------------------------------ abuse defender / reboot
+def _whitelist() -> str:
+    ips = set()
+
+    with session() as db:
+        for s in db.scalars(select(Server)):
+            if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", s.host):
+                ips.add(s.host)
+
+    try:
+        for x in subprocess.run(["hostname", "-I"], check=False, capture_output=True, text=True, timeout=5).stdout.split():
+            if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", x) and not re.match(r"(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|127\.)", x):
+                ips.add(x)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    return " ".join(sorted(ips)[:200])
+
+
+def abuse(server_id: int, action: str) -> dict:
+    node, name, role, _host = _srv(server_id)
+
+    if action == "install":
+        if role != "foreign":
+            raise ValueError("Abuse-Defender goes on foreign servers only, never on Iran servers")
+
+        out = run_action(node, "abuse_install", {"URL": ABUSE_LIST_URL, "WL": _whitelist()}, timeout=300)
+        m = re.search(r"ABUSE_OK=(\d+)", out)
+
+        if not m:
+            raise RuntimeError("Abuse-Defender did not finish: " + out.strip()[-200:])
+
+        rules = int(m.group(1))
+        _set_extra(server_id, abuse={"installed": True, "rules": rules, "at": int(time.time())})
+
+        with session() as db:
+            emit(db, "ok", "nodes", f"Abuse-Defender installed on {name}: {rules} ranges blocked.", name)
+
+        return {"installed": True, "rules": rules}
+
+    if action == "remove":
+        run_action(node, "abuse_remove", timeout=60)
+        _set_extra(server_id, abuse={"installed": False, "rules": 0, "at": int(time.time())})
+
+        with session() as db:
+            emit(db, "info", "nodes", f"Abuse-Defender removed from {name}.", name)
+
+        return {"installed": False, "rules": 0}
+
+    raise ValueError("unknown action")
+
+
+def reboot(server_id: int) -> None:
+    node, name, _role, _host = _srv(server_id)
+    run_action(node, "reboot", timeout=20)
+
+    with session() as db:
+        emit(db, "warn", "nodes", f"Server {name} is rebooting (asked from the panel).", name)
+
+
+# ------------------------------------------------------------------ country of foreign servers
+def _geo_sources(host: str) -> list[tuple[str, str, str, str]]:
+    out = []
+
+    def add(name, code, country="", city=""):
+        code = str(code or "").strip().upper()
+
+        if re.fullmatch(r"[A-Z]{2}", code):
+            out.append((name, code, str(country or "").strip(), str(city or "").strip()))
+
+    for name, url, pick in (
+        ("ip-api", f"http://ip-api.com/json/{host}?fields=status,country,countryCode,city", lambda d: (d.get("countryCode"), d.get("country"), d.get("city")) if d.get("status") == "success" else None),
+        ("ipwho", f"https://ipwho.is/{host}", lambda d: (d.get("country_code"), d.get("country"), d.get("city")) if d.get("success") else None),
+        ("ipinfo", f"https://ipinfo.io/{host}/json", lambda d: (d.get("country"), "", d.get("city"))),
+        ("country.is", f"https://api.country.is/{host}", lambda d: (d.get("country"), "", "")),
+    ):
+        try:
+            d = httpx.get(url, timeout=8, headers={"User-Agent": "nikatel-panel", "Accept": "application/json"}).json()
+            r = pick(d) if isinstance(d, dict) else None
+
+            if r:
+                add(name, *r)
+        except (httpx.HTTPError, ValueError):
+            continue
+
+    return out
+
+
+def lookup(host: str) -> dict:
+    """Country / city by majority vote of up to four services."""
+    src = _geo_sources(host)
+    votes: dict[str, list] = {}
+
+    for s in src:
+        votes.setdefault(s[1], []).append(s)
+
+    if not votes:
+        return {"country_code": "", "country": "", "city": "", "sources": 0, "total": len(src)}
+
+    code, group = max(votes.items(), key=lambda kv: (len(kv[1]), any(x[0] == "ip-api" for x in kv[1])))
+    return {"country_code": code, "country": next((x[2] for x in group if x[2]), ""), "city": next((x[3] for x in group if x[3]), ""), "sources": len(group), "total": len(src)}
+
+
+def geo_refresh(only_missing: bool = False) -> list[dict]:
+    with session() as db:
+        targets = [(s.id, s.host, s.country) for s in db.scalars(select(Server).where(Server.role == "foreign")) if not (only_missing and s.country)]
+
+    changes = []
+
+    for sid, host, old in targets:
+        loc = lookup(host)
+
+        if not loc["country_code"] or (loc["sources"] < 2 and old):
+            continue
+
+        with session() as db:
+            s = db.get(Server, sid)
+
+            if s is None:
+                continue
+
+            if s.country != loc["country_code"]:
+                changes.append({"name": s.name, "from": s.country, "to": loc["country_code"], "city": loc["city"]})
+
+            s.country = loc["country_code"]
+            d = dict(s.extra or {})
+            d["geo"] = {"country": loc["country"], "city": loc["city"], "agree": f"{loc['sources']}/{loc['total']}", "at": int(time.time())}
+            s.extra = d
+
+    return changes
+
+
+def geo_missing_job() -> None:
+    """Fill in the country of foreign servers that have none (runs once an hour, does nothing when all are known)."""
+    geo_refresh(only_missing=True)
+
+
+# ------------------------------------------------------------------ "filtered in Iran?" check of a foreign server
+def parse_ping(out: str) -> tuple[int, int, float | None]:
+    m = re.search(r"(\d+) packets transmitted, (\d+) (?:packets )?received", out)
+    tx, rx = (int(m.group(1)), int(m.group(2))) if m else (4, 0)
+    a = re.search(r"= [\d.]+/([\d.]+)/", out)
+    return tx, rx, (round(float(a.group(1)), 1) if a else None)
+
+
+def _own_rows(host: str) -> list[dict]:
+    with session() as db:
+        iran = [(s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))]
+
+    def one(item):
+        name, node = item
+        row = {"node": name, "city": name, "asn": "your server", "ok": 0, "total": 4, "avg_ms": None, "pending": False}
+
+        try:
+            tx, rx, avg = parse_ping(run_script(node, "ping_host", {"HOST": host}, timeout=30))
+            row.update(total=tx or 4, ok=rx, avg_ms=avg)
+        except (SSHError, ValueError):
+            row["pending"] = True
+
+        return row
+
+    with ThreadPoolExecutor(8) as ex:
+        return list(ex.map(one, iran))
+
+
+def _checkhost_rows(host: str, wait: int = 28) -> list[dict]:
+    base = "https://check-host.net"
+    h = {"Accept": "application/json", "User-Agent": "nikatel-panel"}
+    nodes = httpx.get(base + "/nodes/hosts", headers=h, timeout=15).json().get("nodes", {})
+    iran = {k: v for k, v in nodes.items() if k.startswith("ir")}
+
+    if not iran:
+        raise RuntimeError("check-host.net lists no Iranian nodes right now")
+
+    start = httpx.get(base + "/check-ping", params=[("host", host)] + [("node", k) for k in sorted(iran)], headers=h, timeout=20).json()
+    rid = start.get("request_id")
+
+    if not rid:
+        raise RuntimeError(start.get("error") or "check-host.net refused the request")
+
+    deadline = time.time() + wait
+    res: dict = {}
+
+    while time.time() < deadline:
+        time.sleep(2.5)
+        res = httpx.get(f"{base}/check-result/{rid}", headers=h, timeout=15).json()
+
+        if all(res.get(k) is not None for k in iran):
+            break
+
+    rows = []
+
+    for k in sorted(iran):
+        meta = iran[k]
+        loc = meta.get("location") or []
+        out = res.get(k)
+        row = {"node": k, "city": loc[2] if len(loc) > 2 else k, "asn": meta.get("asn", ""), "ok": 0, "total": 0, "avg_ms": None, "pending": out is None}
+
+        if out and isinstance(out, list) and out[0]:
+            times = []
+
+            for p in out[0]:
+                row["total"] += 1
+
+                if isinstance(p, list) and p and p[0] == "OK":
+                    row["ok"] += 1
+
+                    try:
+                        times.append(float(p[1]) * 1000)
+                    except (TypeError, ValueError, IndexError):
+                        pass
+
+            if times:
+                row["avg_ms"] = round(sum(times) / len(times), 1)
+        elif out is not None:
+            row["total"] = 4
+
+        rows.append(row)
+
+    return rows
+
+
+def verdict(rows: list[dict]) -> tuple[str, str]:
+    done = [r for r in rows if not r["pending"]]
+    bad = [r for r in done if r["ok"] < r["total"]]
+    dead = [r for r in done if r["ok"] == 0]
+
+    if not done:
+        return "unknown", "No answer from any Iranian location"
+
+    if len(dead) == len(done):
+        return "blocked", "Blocked in Iran (0 replies everywhere)"
+
+    if bad:
+        return "filtered", f"Filtered in Iran - {len(bad)} of {len(done)} locations lose packets" + (f" ({len(dead)} fully blocked)" if dead else "")
+
+    return "clean", f"Not filtered - all {len(done)} Iranian locations 4/4"
+
+
+def filter_check(server_id: int, wait: int = 28) -> dict:
+    _node, name, _role, host = _srv(server_id)
+    rows = _own_rows(host)
+    note = ""
+
+    try:
+        rows += _checkhost_rows(host, wait)
+    except (httpx.HTTPError, RuntimeError, ValueError) as e:
+        note = "check-host.net unavailable (" + str(e)[:60] + ")"
+
+    level, text = verdict(rows)
+    res = {"checked_at": int(time.time()), "level": level, "verdict": text, "nodes": rows, "source": "your Iran servers" + ("" if note else " + check-host.net"), "note": note}
+    _set_extra(server_id, iran_filter=res)
+
+    with session() as db:
+        emit(db, "bad" if level in ("blocked", "filtered") else "ok" if level == "clean" else "warn", "nodes", f"Filter check of {name}: {text}.", name)
+
+    return res
+
+
+def filter_daily_job() -> None:
+    """Every foreign server once a day (the job runs hourly and only does work when the last check is older than a day)."""
+    with session() as db:
+        due = [s.id for s in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)))
+               if int(((s.extra or {}).get("iran_filter") or {}).get("checked_at", 0)) < time.time() - 86400]
+
+    for sid in due[:12]:
+        try:
+            filter_check(sid, wait=20)
+        except (RuntimeError, ValueError, SSHError) as e:
+            log.warning("filter check %s failed: %s", sid, e)
+
+        time.sleep(5)

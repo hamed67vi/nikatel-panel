@@ -53,6 +53,16 @@ always installable; a milestone ends with a tag.
 - [x] #31 Shop bot: status, switches, users, tables, read-only SQL, backups, import of the real database
 - [x] #32 Retire the old panel (service stopped and disabled on 2026-10-10, files kept); repository private; Telegram alerts moved; auto-repair on
 
+## M7 · Parity with the old panel (everything it could do, in the new structure)
+- [x] #33 Navigation like the old panel: Nodes (Iran / Foreign / Monitoring / Gateway / Events / Jobs / Logs), Tunnels (list / create / repairs), Settings tabs; liquid-glass look
+- [x] #34 Node tools: console with presets, connect with a password, add several servers at once, open in ssh / PuTTY / MobaXterm with your own key, Abuse-Defender, reboot, country lookup, "filtered in Iran?" check (manual + daily)
+- [ ] #35 Tunnel tools: quality test with score on an existing tunnel, edit forwarded ports, restart, build log, detect tunnels already on the servers, automatic choice of the Iran server
+- [ ] #36 Engines: check / update the tunnel cores (backhaul) and Xray on every server from the panel
+- [ ] #37 AI: Anthropic key in Settings, Ask AI, AI advice inside Fix
+- [ ] #38 Appearance: themes, day / night; About: version and update from GitHub with one click
+- [ ] #39 Dashboard like the old one: connectivity, reachable-from-Iran, last filter checks, ping and speed tests
+- [ ] #40 Language switch (English / Persian)
+
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).
 * Nothing identifying the real infrastructure in the repository - ever. `scripts/check_no_secrets.sh`.

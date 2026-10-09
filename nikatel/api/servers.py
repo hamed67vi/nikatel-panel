@@ -32,6 +32,7 @@ class ServerOut(BaseModel):
     last_seen_at: int
     last_error: str
     facts: dict
+    extra: dict = {}
 
     model_config = {"from_attributes": True}
 

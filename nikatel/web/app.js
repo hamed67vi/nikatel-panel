@@ -57,9 +57,9 @@ $("#logout").onclick = async () => { await api("/api/auth/logout", {method: "POS
 /* ---- router */
 const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: ""}};
 const PAGES = {};
-const INFO_GW = "یک Xray ساده روی سرور ایران: کاربر به یک پورت آن وصل می‌شود و ترافیک به نود خارجی می‌رود — تا وقتی مستقیم کار می‌کند مستقیم، و هنگام قطعی اینترنت از طریق یک کانفیگ قرضی.";
+const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
 const INFO = {
-  dashboard: ["Dashboard", "چه چیزی الان به توجه نیاز دارد، و چه اتفاقی افتاده."],
+  dashboard: ["Dashboard", "What needs attention right now, and what happened."],
   nodes: ["Nodes", "سرورهای ایران و خارج، مانیتورینگ منابع، گیت‌وی ایران، رویدادها و لاگ."],
   servers: ["Servers", "هر سرور ایران و خارج: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH."],
   tunnels: ["Tunnels", "هر تانل بین یک سرور ایران و یک سرور خارج: سرویس‌ها، لینک GRE، پینگ طرف مقابل، پورت‌های فوروارد. هر دقیقه چک می‌شود."],
@@ -71,9 +71,10 @@ const INFO = {
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
 const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes"};
+if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
-  nodes: [["iran", "🇮🇷 ایران", "سرورهای ایران: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH نمونه‌برداری می‌شود."], ["foreign", "🌍 خارج", "سرورهای خارج: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH نمونه‌برداری می‌شود."], ["monitor", "📈 مانیتورینگ", "منابع همه سرورها در یک نگاه؛ فقط سرورهای مشکل‌دار را فیلتر کنید."], ["gateway", "🌐 گیت‌وی و اوت‌باند", INFO_GW], ["events", "🕘 رویدادها", "هر اتفاق در یک جمله ساده. جدیدترین اول."], ["jobs", "⚙ جاب‌ها", "کارهای پس‌زمینه پنل و اینکه موفق می‌شوند یا نه."], ["logs", "📜 لاگ", "لاگ خود پنل، جدیدترین اول. رازها قبل از نوشتن پنهان می‌شوند."]],
-  tunnels: [["list", "فهرست تانل‌ها", "هر تانل بین یک سرور ایران و یک سرور خارج: سرویس‌ها، لینک GRE، پینگ طرف مقابل، پورت‌های فوروارد. هر دقیقه چک می‌شود، دسته‌بندی بر اساس نوع."], ["create", "＋ ساخت تانل", "ساخت تانل backhaul روی GRE بین دو سرور، یا اول تست همان جفت."], ["repairs", "🩺 تعمیرات", "هر تعمیری که پنل برنامه‌ریزی یا اجرا کرده، با شرح کامل."]],
+  nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW], ["events", "🕘 Events", "One plain sentence per thing that happened. Newest first."], ["jobs", "⚙ Jobs", "The background jobs of the panel and whether they succeed."], ["logs", "📜 Logs", "The panel's own log, newest first. Secrets are masked before they are written."]],
+  tunnels: [["list", "Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "Build a backhaul-over-GRE tunnel between two of your servers, or test a pair first."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
@@ -103,7 +104,6 @@ PAGES.nodes = async () => {
   renderSub();
   const s = sub("nodes");
   if (s === "gateway") return PAGES.gateway();
-  if (s === "monitor") return PAGES.servers(true);
   if (s === "events" || s === "jobs" || s === "logs") return PAGES[s]();
   state.tab = s;
   return PAGES.servers(false);
@@ -154,55 +154,93 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
   </form>`;
 
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
-PAGES.servers = async (mon = false) => {
-  const list = await api("/api/servers");
-  if (mon && !["all", "iran", "foreign", "problems"].includes(state.mtab)) state.mtab = "all";
-  const pick = s => mon ? (state.mtab === "all" || (state.mtab === "problems" ? srvProblem(s) : s.role === state.mtab)) : s.role === state.tab;
-  const rows = list.filter(s => pick(s) && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
-  const nProb = list.filter(srvProblem).length;
+PAGES.servers = async () => {
+  const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
+  state.tunnelsCache = tl;
+  const mine = list.filter(s => s.role === state.tab);
+  const rows = mine.filter(s => (state.mtab !== "problems" || srvProblem(s)) && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
+  const nProb = mine.filter(srvProblem).length, online = mine.filter(s => s.online).length;
+  const avg = k => { const v = mine.filter(s => s.online && s.facts && s.facts[k] != null).map(s => s.facts[k]); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+  const sumNet = mine.reduce((a, s) => a + ((s.facts || {}).rx_mbps || 0) + ((s.facts || {}).tx_mbps || 0), 0);
   const row = s => {
     const f = s.facts || {}, cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
     return `<tr class="${cls}">
-      <td class="name">${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</td>
+      <td class="name">${s.role === "foreign" && s.country ? flag(s.country).split(" ")[0] + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${(s.extra || {}).iran_filter && (s.extra.iran_filter.level === "filtered" || s.extra.iran_filter.level === "blocked") ? '<span class="pill err">filtered</span>' : ""}</td>
       <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
       <td class="mono">${esc(s.host)}</td>
       <td class="hide-sm">${pct(f.cpu)}</td><td class="hide-sm">${pct(f.ram)}</td><td class="hide-sm">${pct(f.disk, 85, 95)}</td>
       <td class="num hide-sm">${f.load1 != null ? f.load1 + " / " + f.cores : "—"}</td>
       <td class="num hide-sm">${f.rx_mbps != null ? "↓" + f.rx_mbps + " ↑" + f.tx_mbps : "—"}</td>
-      <td class="mut" title="${esc(s.last_error)}">${s.last_error ? esc(s.last_error).slice(0, 40) : (s.last_seen_at ? ago(s.last_seen_at) + " ago" : "—")}</td>
+      <td class="num hide-sm">${f.conn != null ? f.conn : "—"}</td>
+      <td class="num hide-sm" title="${esc(s.last_error)}">${s.last_error ? `<span class="err">${esc(s.last_error).slice(0, 28)}</span>` : f.uptime ? (f.uptime > 86400 * 2 ? Math.round(f.uptime / 86400) + " d" : Math.round(f.uptime / 3600) + " h") : "—"}</td>
       <td><button class="sm" onclick="toggleDetail(${s.id})">${state.open === s.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkServer(${s.id})">Check</button></td></tr>
-      ${state.open === s.id ? `<tr class="detail"><td colspan="10" id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</td></tr>` : ""}`;
+      ${state.open === s.id ? `<tr class="detail"><td colspan="11" id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</td></tr>` : ""}`;
   };
-  $("#page").innerHTML = `<div class="toolbar">
-      ${mon ? `<div class="tabs">${[["all", "همه (" + list.length + ")"], ["iran", "🇮🇷 ایران"], ["foreign", "🌍 خارج"], ["problems", "⚠ مشکل‌دار (" + nProb + ")"]].map(([k, l]) => `<button class="${state.mtab === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}</button>`).join("")}</div>`
-          : `<span class="mut">${rows.length} سرور · ${rows.filter(s => s.online).length} آنلاین</span>`}
-      <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)">${mon ? "" : '<button onclick="newServer()">+ Add server</button>'}</div>
-    ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : ""}
-    <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:120px"></colgroup>
-      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Traffic</th><th>Seen</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || '<tr><td colspan="10" class="empty">No server.</td></tr>'}</tbody></table>`;
+  $("#page").innerHTML = `<div class="tiles">
+      <div class="tile ${online < mine.length ? "bad" : "ok"}"><small>Online</small><b>${online} / ${mine.length}</b><span>${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}</span></div>
+      <div class="tile ${nProb ? "warn" : ""}"><small>Problems</small><b>${nProb}</b><span>offline, or CPU > 85 %, RAM > 90 %, disk > 85 %</span></div>
+      <div class="tile"><small>Average load</small><b>${avg("cpu") ?? "—"}% <small style="display:inline;font-size:12px;letter-spacing:0;text-transform:none">cpu</small></b><span>ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%</span></div>
+      <div class="tile"><small>Traffic now</small><b>${sumNet.toFixed(0)} Mb/s</b><span>sum of ↓ and ↑ over all ${state.tab} servers</span></div></div>
+    <div class="toolbar">
+      <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
+      <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button><button onclick="srvMany()" title="Several servers at once, connected with one password">+ Several</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
+    ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : state.edit === "many" ? `<div class="card">${MANY_FORM()}</div>` : ""}
+    <table class="tbl lift"><colgroup><col style="width:20%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:7%"><col style="width:10%"><col style="width:6%"><col><col style="width:120px"></colgroup>
+      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Net Mb/s</th><th>Conn</th><th>Up</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join("") || '<tr><td colspan="11" class="empty">No server.</td></tr>'}</tbody></table>`;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
 };
+const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) + " " + cc : "";
 function serverDetailHtml(s) {
-  const f = s.facts || {};
+  const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};
+  const abuseOn = ab.installed || (f.abuse_rules || 0) > 0;
   return `<div class="kv">
-      <div><span>Host</span> <b>${esc(f.hostname || "—")}</b> <span class="mono">${esc(f.kernel || "")}</span></div>
-      <div><span>Uptime</span> ${f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"} · <span>connections</span> ${f.conn != null ? f.conn : "—"}</div>
-      <div><span>RAM</span> ${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : "—"} · <span>disk</span> ${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "—"}</div>
-      <div><span>SSH</span> ${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port} · <span>last seen</span> ${when(s.last_seen_at)}</div>
+      <div><span>Host</span> <b>${esc(f.hostname || x.hostname || "—")}</b> <span class="mono">${esc(f.kernel || "")}</span></div>
+      <div><span>Uptime</span> ${f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"} · <span>connections</span> ${f.conn != null ? f.conn : "—"} · <span>load</span> ${f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"}</div>
+      <div><span>RAM</span> ${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : "—"} · <span>swap</span> ${f.swap != null ? f.swap + "%" : "—"} · <span>disk</span> ${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "—"}</div>
+      <div><span>Busiest process</span> ${esc(f.top || "—")} · <span>SSH</span> ${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port} · <span>seen</span> ${when(s.last_seen_at)}</div>
+      ${s.role === "foreign" ? `<div><span>Country</span> ${flag(s.country) || "—"} ${esc(geo.city || "")} ${geo.agree ? `<small class="mut">(${esc(geo.agree)} services agree)</small>` : ""} · <span>Abuse-Defender</span> ${abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off"}</div>
+      <div><span>Filtered in Iran?</span> ${fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b> <small class="mut">${ago(fl.checked_at)} ago · ${esc(fl.source)}</small>` : "not checked yet"}</div>` : ""}
     </div>
+    ${fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : ""}
+    ${(state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).length ? `<div class="ob-inbounds" style="margin:6px 0 0"><b class="mut" style="font-size:11px;letter-spacing:.8px;text-transform:uppercase">Tunnels on this server</b>${(state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div>` : ""}
     <div class="charts" id="srv-charts-${s.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm" onclick="editServer(${s.id})">Edit</button><button class="sm" onclick="forgetKey(${s.id}, '${esc(s.name)}')" title="After a reinstall of this server">Forget host key</button></div>`;
+    <div class="kv" id="srv-peaks-${s.id}"></div>
+    <div class="frm-act"><button class="sm" onclick="editServer(${s.id})">Edit</button><button class="sm" onclick="srvConsole(${s.id})">⌨ Console</button><button class="sm" onclick="srvConnect(${s.id}, '${esc(s.name)}')" title="Install the panel's SSH key with the server password (used once)">Connect SSH</button>
+      <button class="sm" onclick="srvOpen(${s.id}, 'ssh')" title="Download a .bat that opens this server in Windows ssh with your own key">Open: ssh</button><button class="sm" onclick="srvOpen(${s.id}, 'putty')">PuTTY</button><button class="sm" onclick="srvOpen(${s.id}, 'mobaxterm')">MobaXterm</button>
+      ${s.role === "foreign" ? `<button class="sm" onclick="srvFilter(${s.id})" title="Ping this server from your Iran servers and from check-host.net's Iranian nodes">Check filtering in Iran</button><button class="sm" onclick="srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')">${abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender"}</button>` : ""}
+      <span class="sp"></span><button class="sm" onclick="forgetKey(${s.id}, '${esc(s.name)}')" title="After a reinstall of this server">Forget host key</button><button class="sm danger" onclick="srvReboot(${s.id}, '${esc(s.name)}')">Reboot</button></div>
+    ${state.con === s.id ? `<div class="fix" id="con-${s.id}"><div class="frm-act"><select id="con-preset-${s.id}" onchange="$('#con-cmd-${s.id}').value=this.value">${["", ...Object.keys(CON_PRESETS)].map(k => `<option value="${k ? esc(CON_PRESETS[k][1]) : ""}">${k ? esc(CON_PRESETS[k][0]) : "— preset —"}</option>`).join("")}</select><input id="con-cmd-${s.id}" style="flex:1" placeholder="command to run as ${esc(s.ssh_user)}…" onkeydown="if(event.key==='Enter')srvRun(${s.id})"><button class="pri sm" onclick="srvRun(${s.id})">Run</button><button class="sm" onclick="state.con=null;refresh()">Close</button></div><pre class="gl-out" id="con-out-${s.id}">${esc(state.conOut[s.id] || "")}</pre></div>` : ""}`;
 }
+let CON_PRESETS = {};
+api("/api/nodes/presets").then(d => { d.presets.forEach(p => CON_PRESETS[p.key] = [p.label, p.command]); }).catch(() => {});
+state.conOut = {};
+window.srvConsole = id => { state.con = state.con === id ? null : id; refresh(); };
+window.srvRun = async id => { const cmd = $(`#con-cmd-${id}`).value.trim(); if (!cmd) return; const out = $(`#con-out-${id}`); out.textContent = "running…"; try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: cmd})}); state.conOut[id] = `$ ${cmd}\n${r.output}${r.code ? "\n[exit " + r.code + "]" : ""}\n(${r.ms} ms)`; } catch (e) { state.conOut[id] = "✕ " + e.message; } out.textContent = state.conOut[id]; };
+window.srvConnect = async (id, name) => { const pw = prompt(`SSH password of ${name} (used once to install the panel's key, not stored):`); if (!pw) return; toast("Connecting…"); try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Nodes → 'My SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
+window.srvAbuse = async (id, action) => { if (!confirm(action === "install" ? "Install Abuse-Defender on this foreign server? Outgoing traffic to a public list of abused ranges is dropped; your own servers, tunnel links, DNS and gateway stay allowed. Takes a minute." : "Remove Abuse-Defender from this server?")) return; toast("Working… (up to a minute)"); try { const r = await api(`/api/servers/${id}/abuse`, {method: "POST", body: JSON.stringify({action})}); toast(r.installed ? `✓ Abuse-Defender on: ${r.rules} ranges blocked` : "✓ Abuse-Defender removed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvFilter = async id => { toast("Pinging from Iran… (about 30 s)"); try { const r = await api(`/api/servers/${id}/filter-check`, {method: "POST"}); toast((r.level === "clean" ? "✓ " : "⚠ ") + r.verdict, r.level === "clean" ? "ok" : "bad"); state.flt = id; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvReboot = async (id, name) => { if (!confirm(`Reboot ${name}? Its tunnels are down until it is back (usually under a minute).`)) return; try { await api(`/api/servers/${id}/reboot`, {method: "POST"}); toast("✓ Reboot requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvGeo = async () => { toast("Looking up countries…"); try { const r = await api("/api/servers/geo-refresh", {method: "POST"}); toast(`✓ ${r.changes.length} changed`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvMany = () => { state.edit = "many"; state.open = null; refresh(); };
+window.srvManyGo = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Adding… (a few seconds per server)"); try { const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: state.tab, lines: f.get("lines"), password: f.get("password"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22})}); state.manyRes = r.items; const ok = r.items.filter(i => i.ok).length; toast(`${ok ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, ok === r.items.length ? "ok" : "bad"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+const MANY_FORM = () => `<form class="frm" onsubmit="return srvManyGo(event)"><label style="grid-column:1/-1">Servers, one per line: <small>name host [user] [port] — e.g. <code>de4 203.0.113.9</code></small><textarea name="lines" class="ob-raw" required placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
+    <label>SSH user<input name="ssh_user" value="root"></label><label>SSH port<input name="ssh_port" type="number" value="22"></label><label>SSH password <small>(the same for all; used once to install the panel's key — leave empty if the key is already there)</small><input name="password" type="password" autocomplete="new-password"></label>
+    <div class="frm-act"><button class="pri" type="submit">Add ${state.tab} servers</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
+    ${state.manyRes ? `<div style="grid-column:1/-1">${state.manyRes.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> — ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div>` : ""}</form>`;
 async function loadServerCharts(id) {
   const box = document.getElementById("srv-charts-" + id);
   if (!box) return;
   const d = await api(`/api/servers/${id}/samples?hours=24`);
   const col = n => d.samples.map(r => r[d.columns.indexOf(n)]);
-  box.innerHTML = `<div><small>CPU %</small>${spark(col("cpu"), {max: 100, fmt: v => v + "%"})}</div><div><small>RAM %</small>${spark(col("ram"), {max: 100, fmt: v => v + "%"})}</div>
+  box.innerHTML = `<div><small>CPU %</small>${spark(col("cpu"), {max: 100, fmt: v => v + "%"})}</div><div><small>RAM %</small>${spark(col("ram"), {max: 100, fmt: v => v + "%"})}</div><div><small>Disk %</small>${spark(col("disk"), {max: 100, fmt: v => v + "%"})}</div>
     <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>
     <div><small>Load</small>${spark(col("load1"), {fmt: v => v.toFixed(2)})}</div><div><small>Connections</small>${spark(col("conn"), {fmt: v => v})}</div>`;
+  const pk = document.getElementById("srv-peaks-" + id);
+  if (pk && d.samples.length) { const mx = n => Math.max(...col(n).filter(v => v != null)), at = n => { const v = col(n), i = v.indexOf(Math.max(...v.filter(x => x != null))); return i >= 0 ? new Date(col("ts")[i] * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : ""; };
+    pk.innerHTML = `<div><span>24 h peaks</span> cpu <b>${mx("cpu")}%</b> at ${at("cpu")} · ram <b>${mx("ram")}%</b> at ${at("ram")} · ↓ <b>${mx("rx_mbps").toFixed(1)}</b> Mb/s at ${at("rx_mbps")} · ↑ <b>${mx("tx_mbps").toFixed(1)}</b> Mb/s at ${at("tx_mbps")} · conn <b>${mx("conn")}</b> · ${d.samples.length} samples</div>`; }
 }
 window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT; window.setQ = v => { state.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
@@ -370,11 +408,11 @@ PAGES.actions = async () => {
     <div class="card">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div>`;
 };
-INFO.actions = ["Repairs", "هر تعمیری که پنل برنامه‌ریزی یا اجرا کرده، با شرح کامل."];
+INFO.actions = ["Repairs", "Every repair the panel planned or performed, with its full story."];
 window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- configs (what the probe keeps alive and tests) */
-INFO.configs = ["Configs", "هر کانفیگ کلاینت که پروب از داخل ایران زنده نگه می‌دارد و تست می‌کند: دسترسی، پینگ، سرعت روزانه. لینک اضافه کنید یا اشتراک ایمپورت کنید؛ لینک را فیلد به فیلد ویرایش کنید."];
+INFO.configs = ["Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
 const cf = {open: null, edit: null, sub: null, q: ""};
 PAGES.configs = async () => {
   const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]);
@@ -519,7 +557,7 @@ window.cfSubDel = async id => { if (!confirm("Forget this subscription record? T
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
 const pn = {id: localStorage.getItem("nk.pn") || "", tab: "nodes", add: false, edit: false, users: null, uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostEdit: null, core: null, raw: false, logs: null};
-INFO.panels = ["Panels", "پنل‌های Marzban و PasarGuard شما: بالا هستند؟ نودها وصل‌اند؟ کاربران، هاست‌های لینک اشتراک، و اوت‌باندهای Xray هسته — قبل از هر تغییر هسته بکاپ گرفته می‌شود."];
+INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
   const list = (await api("/api/panels")).panels;
@@ -649,7 +687,7 @@ window.pnCoreRaw = id => { let cfg; try { cfg = JSON.parse($("#pn-core-raw").val
 
 /* ---- shop bot (PHP bot on its own server, over SSH) */
 const sb = {tab: "status", info: null, tg: null, stats: null, uq: "", users: null, table: "users", tpage: 0, tq: "", trows: null, sql: "", qres: null};
-INFO.bot = ["Shop bot", "بات اختصاصی فروش ما: زنده است؟ فروش امروز، سوئیچ‌ها، کاربران و جدول‌ها — و ایمپورت یک‌باره دیتابیس واقعی."];
+INFO.bot = ["Shop bot", "Our own dedicated sales bot: is it alive, today's sales, the switches, its users and tables — and the one-time import of the real database."];
 PAGES.bot = async () => {
   const pg = $("#page");
   try { sb.info = await api("/api/shopbot"); } catch (e) { pg.innerHTML = `<div class="empty">${esc(e.message)}${/Settings/.test(e.message) ? ' — <a onclick="go(\'settings\')">open Settings</a>' : ""}</div>`; return; }
@@ -912,11 +950,11 @@ PAGES.settings = async () => {
 };
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  alerts: ["🔔 هشدارها", "هشدارها کجا و کی بروند: تلگرام، قوانین نوسان، بازه‌های تعمیر، گزارش روزانه.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report"]],
-  repair: ["🩺 تعمیر و پروب", "چه چیزی را پنل خودش می‌تواند تغییر دهد، و پروبی که کانفیگ‌ها را از داخل ایران تست می‌کند.", ["Repairs", "Probe"]],
-  integrations: ["🔗 یکپارچه‌سازی", "سیستم‌های دیگری که پنل مدیریت می‌کند: سرور بات فروش.", ["Shop bot"]],
-  backups: ["💾 بکاپ", "نسخه‌های رمزشده داده‌های پنل، نگهداری اینجا و ارسال به تلگرام.", ["Backups"]],
-  account: ["👤 حساب", "رمز شما و تنظیماتی که سرویس با آن‌ها بالا آمده.", ["Password", "Effective settings"]],
+  alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report"]],
+  repair: ["🩺 Repair & probe", "What the panel may change on its own, and the probe that tests configs from inside Iran.", ["Repairs", "Probe"]],
+  integrations: ["🔗 Integrations", "Other systems the panel manages: the shop bot server.", ["Shop bot"]],
+  backups: ["💾 Backups", "Encrypted copies of the panel's data, kept here and sent to Telegram.", ["Backups"]],
+  account: ["👤 Account", "Your password and the settings the service was started with.", ["Password", "Effective settings"]],
 };
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "alerts";

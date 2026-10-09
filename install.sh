@@ -56,7 +56,7 @@ ask READ_ONLY "Start in read-only mode (the panel only looks at servers, changes
 say "packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null
-apt-get install -y -qq git python3 python3-venv python3-pip openssh-client openssl curl rsync >/dev/null
+apt-get install -y -qq git python3 python3-venv python3-pip openssh-client openssl curl rsync sshpass >/dev/null
 
 say "source ($BRANCH)"
 if [ -d "$SRC/.git" ]; then

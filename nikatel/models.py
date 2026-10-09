@@ -33,6 +33,7 @@ class Server(Base):
     last_seen_at: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str] = mapped_column(String(300), default="")
     facts: Mapped[dict] = mapped_column(JSON, default=dict)   # latest sample (cpu, ram, disk, load, rx, tx ...)
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)   # abuse defender, Iran filter check, geo, hostname/system
 
     samples: Mapped[list[ServerSample]] = relationship(back_populates="server", cascade="all, delete-orphan")
 

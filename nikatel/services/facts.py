@@ -47,6 +47,8 @@ def parse_facts(out: str) -> dict:
     conn = int(float(kv.get("CONN", "0").split()[0] or 0)) if kv.get("CONN", "").strip() else 0
     host = kv.get("HOST", "").split()
     ram_used = max(0.0, mt - ma)
+    top = kv.get("TOP", "").split()
+    abuse = kv.get("ABUSE", "").strip()
 
     return {
         "ts": int(time.time()),
@@ -66,6 +68,8 @@ def parse_facts(out: str) -> dict:
         "conn": conn,
         "hostname": host[0] if host else "",
         "kernel": host[1] if len(host) > 1 else "",
+        "top": f"{top[0]} {float(top[-1]):.0f}%" if len(top) >= 2 else "",      # busiest process
+        "abuse_rules": int(abuse) if abuse.isdigit() else 0,                   # Abuse-Defender DROP rules (0 = not installed)
     }
 
 

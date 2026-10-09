@@ -63,8 +63,7 @@ nav i { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 99
 .badge { display: inline-block; width: fit-content; padding: 2px 9px; border-radius: 999px; border: 1px solid rgba(255,196,77,.5); color: var(--warn); background: rgba(255,196,77,.12); font-size: 11px; font-weight: 800; }
 .main { overflow: auto; padding: 4px 6px 30px 2px; }
 .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 74px; padding: 0 22px; margin-bottom: 14px; border-radius: 20px; position: sticky; top: 0; z-index: 5; }
-.head h1 { margin: 0; font-size: 20px; letter-spacing: -.2px; } .head p { margin: 2px 0 0; font-size: 12px; max-width: 900px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
-.set-desc { direction: rtl; text-align: left; } .head-r { display: flex; align-items: center; gap: 10px; }
+.head h1 { margin: 0; font-size: 20px; letter-spacing: -.2px; } .head p { margin: 2px 0 0; font-size: 12px; max-width: 900px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .head-r { display: flex; align-items: center; gap: 10px; }
 .page { padding: 2px; }
 
 /* ---- components */

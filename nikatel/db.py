@@ -34,7 +34,16 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (4, "gateways table (created by create_all)", []),
     (5, "configs, config_samples, subscriptions tables (created by create_all)", []),
     (6, "panels table (created by create_all)", []),
+    (7, "servers.extra column", lambda db: _add_column(db, "servers", "extra", "JSON DEFAULT '{}'")),
 ]
+
+
+def _add_column(db: Session, table: str, column: str, ddl: str) -> None:
+    """ALTER TABLE ... ADD COLUMN unless create_all already made it (fresh databases)."""
+    have = {row[1] for row in db.execute(text(f"PRAGMA table_info({table})"))}
+
+    if column not in have:
+        db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
 
 
 def engine() -> Engine:

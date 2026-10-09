@@ -12,8 +12,8 @@ bad=0
 # public IPv4 (filter the allowed ones afterwards)
 while IFS=: read -r file line match; do
     case "$match" in
-        127.*|0.0.0.0|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.0.2.*|198.51.100.*|203.0.113.*|255.*) continue ;;
-        1.1.1.1|2.2.2.2|3.3.3.3|9.9.9.9|8.8.8.8) continue ;;
+        127.*|0.0.0.0|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.0.2.*|198.51.100.*|203.0.113.*|255.*|169.254.*) continue ;;
+        1.1.1.1|2.2.2.2|3.3.3.3|4.4.4.4|5.5.5.5|9.9.9.9|8.8.8.8) continue ;;
     esac
     echo "$file:$line: public IPv4 '$match'"; bad=1
 done < <(grep -nEo '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' $FILES 2>/dev/null | grep -vE '^(\./)?(pyproject\.toml|CHANGELOG\.md|scripts/check_no_secrets\.sh):' || true)
