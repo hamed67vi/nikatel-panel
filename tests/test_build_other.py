@@ -76,7 +76,8 @@ def test_kinds_and_actions():
     with pytest.raises(ValueError):
         render_action("sink_install", {"NAME": "fi-ir1", "PORT": "39101", "KEY": "x; id", "BIND": ""})
 
-    assert "/etc/paqet/x.yaml" in render_action("put_file", {"PATH": "/etc/paqet/x.yaml", "B64": "aGk=", "MODE": "0600"})
+    for p in ("/etc/paqet/x.yaml", "/etc/backpack/x.toml", "/etc/backpack/x-kharej.toml", "/etc/nikatel-chisel/x.srv.env", "/usr/local/sbin/nikatel-bpfw-x"):
+        assert p in render_action("put_file", {"PATH": p, "B64": "aGk=", "MODE": "0600"})
 
 
 def test_build_other_refused_in_read_only(client):

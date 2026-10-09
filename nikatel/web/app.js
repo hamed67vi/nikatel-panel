@@ -427,8 +427,20 @@ async function loadTunnelCharts(id) {
     <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>`;
 }
 /* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
-const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}};
+const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
 const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
+/* what to pick, and why - the defaults below every engine are already the many-users settings (mux, 8 mux channels, 16-24 pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels) */
+const BK_GUIDE = [
+  ["⭐ Many users, clean route", "Backhaul over GRE · TCP Mux", "backhaul", "tcpmux", "hundreds of users over a few connections; the GRE link hides the real traffic. The default for every tunnel in this panel."],
+  ["GRE filtered between the two servers", "BackPack · TCP Mux", "backpack", "tcpmux", "same multiplexing as backhaul, but over a plain TCP control port - works where GRE is dropped."],
+  ["Heavy filtering / DPI", "BackPack · TCP + Stealth or WebSocket TLS Mux", "backpack", "stealth", "Stealth looks like random bytes; WSS Mux looks like HTTPS and can sit behind a CDN."],
+  ["Voice, games, low latency", "BackPack Direct · UDP or QUIC", "backpack_direct", "udp", "an L3 link the Iran side dials; no TCP-over-TCP, lowest latency - UDP must be open."],
+  ["TCP throttled, a whitelisted domain exists", "BackPack Direct · PCK / SNI", "backpack_direct", "sni", "raw TCP frames that look like a normal flow; SNI adds a TLS hello naming the allowed domain."],
+  ["Provider stalls ordinary TCP", "Paqet · KCP over raw sockets", "paqet", "kcp", "one KCP session in raw packets, aes-128-gcm; good on lossy routes, needs raw sockets on both sides."],
+  ["Small group, simplest setup", "Chisel · TLS WebSocket", "chisel", "wss", "one HTTPS port on the Iran server, key pinned; fine for tens of users, CDN-able."],
+  ["Everything else is blocked", "BackPack · xDi (ICMP)", "backpack", "xdi", "KCP inside ping packets; slow, last resort."],
+];
+window.bkPick = (k, t) => { bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); refresh(); };
 async function buildFormHtml() {
   const [servers, kd] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds")]);
   bk.kinds = kd.kinds;
@@ -444,7 +456,10 @@ async function buildFormHtml() {
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>SNI domain <small>(a domain your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "") + (tr.key === "pck" || tr.key === "sni" ? num("mtu", "Carrier MTU", 1380, 1000, 1500) : "") + chk("accept_udp", "Forward UDP too");
   else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode">${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
   else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
-  return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
+  return `<div class="bsec guide"><h4><i>?</i> Which tunnel for which situation <span class="sp"></span><a class="mut" onclick="bk.guide=!bk.guide;refresh()">${bk.guide ? "hide" : "show"}</a></h4>
+    ${bk.guide ? `<div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row ${bk.kind === k && bk.transport === t ? "on" : ""}" onclick="bkPick('${k}', '${t}')"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
+    <small class="mut">All engines ship with their many-users settings: multiplexing where the transport has it, 8 mux channels, a 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq tuning on both kernels. Change a value only when you measured a reason.</small>` : ""}</div>
+  <form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
     <div class="bsec"><h4><i>1</i> Servers and ports</h4><div class="bgrid">
       <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran", "iran_id")}</select></label>
       <label>Foreign server<select name="foreign_id" required>${opt("foreign", "foreign_id")}</select></label>
