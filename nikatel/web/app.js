@@ -117,7 +117,12 @@ async function refresh() {
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit) refresh(); }, 30000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !cf.open) refresh(); }, 30000);
+/* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
+function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
+function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
+window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; cf.open = null; cf.edit = null; hideModal(); refresh(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
 /* ---- dashboard */
 PAGES.dashboard = async () => {
@@ -179,7 +184,7 @@ PAGES.servers = async () => {
   const sumNet = mine.reduce((a, s) => a + ((s.facts || {}).rx_mbps || 0) + ((s.facts || {}).tx_mbps || 0), 0);
   const row = s => {
     const f = s.facts || {}, cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
-    return `<tr class="${cls}">
+    return `<tr class="${cls} click" onclick="toggleDetail(${s.id})">
       <td class="name">${s.role === "foreign" && s.country ? flag(s.country).split(" ")[0] + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${(s.extra || {}).iran_filter && (s.extra.iran_filter.level === "filtered" || s.extra.iran_filter.level === "blocked") ? '<span class="pill err">filtered</span>' : ""}</td>
       <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
       <td class="mono">${esc(s.host)}</td>
@@ -188,9 +193,10 @@ PAGES.servers = async () => {
       <td class="num hide-sm">${f.rx_mbps != null ? "↓" + f.rx_mbps + " ↑" + f.tx_mbps : "—"}</td>
       <td class="num hide-sm">${f.conn != null ? f.conn : "—"}</td>
       <td class="num hide-sm" title="${esc(s.last_error)}">${s.last_error ? `<span class="err">${esc(s.last_error).slice(0, 28)}</span>` : f.uptime ? (f.uptime > 86400 * 2 ? Math.round(f.uptime / 86400) + " d" : Math.round(f.uptime / 3600) + " h") : "—"}</td>
-      <td><button class="sm" onclick="toggleDetail(${s.id})">${state.open === s.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkServer(${s.id})">Check</button></td></tr>
-      ${state.open === s.id ? `<tr class="detail"><td colspan="11" id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</td></tr>` : ""}`;
+      <td><button class="sm" onclick="event.stopPropagation();checkServer(${s.id})" title="Sample this server now">Health</button> <button class="sm" onclick="event.stopPropagation();srvConsole(${s.id})" title="Open the console">⌨</button></td></tr>`;
   };
+  const openSrv = list.find(s => s.id === state.open);
+  if (openSrv) { const s = openSrv, f = s.facts || {}; showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`, `<div id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide"); } else hideModal();
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile ${online < mine.length ? "bad" : "ok"}"><small>Online</small><b>${online} / ${mine.length}</b><span>${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}</span></div>
       <div class="tile ${nProb ? "warn" : ""}"><small>Problems</small><b>${nProb}</b><span>offline, or CPU > 85 %, RAM > 90 %, disk > 85 %</span></div>
@@ -205,6 +211,7 @@ PAGES.servers = async () => {
       <tbody>${rows.map(row).join("") || '<tr><td colspan="11" class="empty">No server.</td></tr>'}</tbody></table>`;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
+  if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
 };
 const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) + " " + cc : "";
 function serverDetailHtml(s) {
@@ -231,7 +238,7 @@ function serverDetailHtml(s) {
 let CON_PRESETS = {};
 api("/api/nodes/presets").then(d => { d.presets.forEach(p => CON_PRESETS[p.key] = [p.label, p.command]); }).catch(() => {});
 state.conOut = {};
-window.srvConsole = id => { state.con = state.con === id ? null : id; refresh(); };
+window.srvConsole = id => { state.con = state.con === id ? null : id; if (state.con) state.open = id; refresh(); };
 window.srvRun = async id => { const cmd = $(`#con-cmd-${id}`).value.trim(); if (!cmd) return; const out = $(`#con-out-${id}`); out.textContent = "running…"; try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: cmd})}); state.conOut[id] = `$ ${cmd}\n${r.output}${r.code ? "\n[exit " + r.code + "]" : ""}\n(${r.ms} ms)`; } catch (e) { state.conOut[id] = "✕ " + e.message; } out.textContent = state.conOut[id]; };
 window.srvConnect = async (id, name) => { const pw = prompt(`SSH password of ${name} (used once to install the panel's key, not stored):`); if (!pw) return; toast("Connecting…"); try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Nodes → 'My SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
@@ -372,7 +379,7 @@ window.engineUpdate = async k => { if (!confirm(`Update ${k} on every outdated s
 PAGES.tunnelsList = async () => {
   const list = await api("/api/tunnels");
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
-  const row = t => `<tr class="${t.state}">
+  const row = t => `<tr class="${t.state} click" onclick="toggleDetail(${t.id})">
       <td class="name">${esc(t.name)}${t.transport ? `<span class="pill">${esc(t.transport)}</span>` : ""}</td>
       <td><span class="st ${t.state}">${esc(t.state)}</span></td>
       <td>${esc(t.iran_name)} <span class="mut">⇄</span> ${esc(t.foreign_name)}</td>
@@ -380,8 +387,7 @@ PAGES.tunnelsList = async () => {
       <td class="num">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</td>
       <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td class="mut" title="${esc(t.last_error)}">${t.quality && t.quality.score != null ? `<b class="${t.quality.score >= 70 ? "gw-ok" : t.quality.score >= 40 ? "" : "err"}" title="quality score">${t.quality.score}</b> · ` : ""}${t.last_error ? esc(t.last_error).slice(0, 44) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
-      <td><button class="sm" onclick="toggleDetail(${t.id})">${state.open === t.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkTunnel(${t.id})" title="Health check now">Health</button> <button class="sm" onclick="qualityOne(${t.id})" title="Quality: latency, jitter, loss, score">Quality</button></td></tr>
-      ${state.open === t.id ? detailRow(t) : ""}`;
+      <td><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button> <button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Quality: latency, jitter, loss, score">Quality</button></td></tr>`;
   const creating = false;
   $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="qualityAll()" title="Latency, jitter, loss and a score over the GRE link of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Find tunnels that exist on the servers but not in this list">🔍 Detect on servers</button><button class="pri" onclick="setSub('tunnels', 'create')">＋ Create tunnel</button></div>
     ${detectHtml()}
@@ -389,12 +395,14 @@ PAGES.tunnelsList = async () => {
     <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:17%"><col style="width:7%"><col style="width:8%"><col style="width:12%"><col><col style="width:190px"></colgroup>
       <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Quality · note</th><th></th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
+  const openT = list.find(t => t.id === state.open);
+  if (openT) showModal(`<span class="st ${openT.state}"></span><b>${esc(openT.name)}</b> <span class="mut">${esc(openT.iran_name)} ⇄ ${esc(openT.foreign_name)}</span> <span class="pill">${esc(openT.type)}${openT.transport ? " · " + esc(openT.transport) : ""}</span>`, detailRow(openT), "wide"); else hideModal();
   if (state.open) loadTunnelCharts(state.open);
 };
 function detailRow(t) {
   const d = t.detail || {}, u = t.units || {};
   const unit = (side, name) => `<div><span>${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b></div>`;
-  return `<tr class="detail"><td colspan="8"><div class="kv">
+  return `<div class="kv">
       <div><span>Iran</span> <b>${esc(t.iran_name)}</b> <span class="mono">${esc(t.iran_host)}</span></div>
       <div><span>Foreign</span> <b>${esc(t.foreign_name)}</b> <span class="mono">${esc(t.foreign_host)}</span></div>
       <div><span>GRE</span> ${esc(u.iface || "—")} ${d.iface ? "· " + esc(d.iface) : ""} · ${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</div>
@@ -404,7 +412,7 @@ function detailRow(t) {
       ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
     </div><div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>
     <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><button class="sm" onclick="qualityOne(${t.id})" title="Latency, jitter, loss over the GRE link and a score">📊 Quality</button>${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports of this tunnel">Ports</button>` : ""}<span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
-    <div id="fix-${t.id}" class="fix hidden"></div></td></tr>`;
+    <div id="fix-${t.id}" class="fix hidden"></div>`;
 }
 async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
@@ -505,22 +513,21 @@ INFO.actions = ["Repairs", "Every repair the panel planned or performed, with it
 window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- configs (what the probe keeps alive and tests) */
-INFO.configs = ["Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
+INFO.configs = ["Panels", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
 const cf = {open: null, edit: null, sub: null, q: ""};
 PAGES.configsList = async () => {
   const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]);
   $("#n-configs").textContent = d.configs.length;
   const list = d.configs.filter(c => !cf.q || (c.name + c.group).toLowerCase().includes(cf.q));
   const groups = [...new Set(list.map(c => c.group || ""))].sort((a, b) => (a || "~").localeCompare(b || "~"));
-  const row = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""}">
+  const row = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
       <td class="name">${esc(c.name)}${c.tunnel ? `<span class="pill">${esc(c.tunnel)}</span>` : ""}${c.enabled ? "" : '<span class="pill">disabled</span>'}</td>
       <td><span class="st ${c.status}">${esc(c.status)}</span></td>
       <td class="num">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</td>
       <td class="num hide-sm">${c.down_mbps != null ? "↓" + c.down_mbps.toFixed(1) + " ↑" + (c.up_mbps || 0).toFixed(1) : "—"}</td>
       <td class="mut hide-sm">${c.cdn_port || "—"}</td>
       <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 44) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
-      <td><button class="sm" onclick="cfToggle(${c.id})">${cf.open === c.id ? "Hide" : "More"}</button> <button class="sm" onclick="cfEdit(${c.id})">Edit</button></td></tr>
-      ${cf.open === c.id ? `<tr class="detail"><td colspan="7" id="cf-detail-${c.id}">${cf.edit === c.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(c)}</td></tr>` : ""}`;
+      <td><button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button> <button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">⚡</button></td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
   const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${esc(c.name)}</b><span class="st ${c.status}">${esc(c.status)}</span></div><div class="cf-nums"><span>${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</span><span>${c.down_mbps != null ? "↓" + c.down_mbps.toFixed(0) + " ↑" + (c.up_mbps || 0).toFixed(0) + " Mb/s" : "no speed yet"}</span></div><small class="mut">${esc(c.group || "ungrouped")}${c.tunnel ? " · " + esc(c.tunnel) : ""} · ${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div>`;
@@ -536,11 +543,13 @@ PAGES.configsList = async () => {
     ${cf.sub ? cfSubHtml() : ""}
     ${subs.subscriptions.length ? `<div class="card"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}
     ${groups.map(g => `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span>${g ? `<a class="mut" style="order:3;font-size:10.5px;font-weight:500;text-transform:none;letter-spacing:0" onclick="cfGroupDel('${esc(g)}')">delete group</a>` : ""}</div>
-    ${cf.view === "grid" ? `<div class="cf-grid">${list.filter(c => (c.group || "") === g).map(card).join("")}</div>${list.filter(c => (c.group || "") === g && c.id === cf.open).map(c => `<div class="card">${cf.edit === c.id ? '<div id="cf-detail-' + c.id + '" class="mut">loading the link…</div>' : '<div id="cf-detail-' + c.id + '">' + cfDetailHtml(c) + '</div>'}</div>`).join("")}`
+    ${cf.view === "grid" ? `<div class="cf-grid">${list.filter(c => (c.group || "") === g).map(card).join("")}</div>`
       : `<table class="tbl lift ${cf.view === "compact" ? "compact" : ""}"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
       <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed Mb/s</th><th>CDN port</th><th>Note</th><th></th></tr></thead>
       <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`}`).join("") || '<div class="empty">No config yet. Add a link or import a subscription.</div>'}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  const openC = d.configs.find(c => c.id === cf.open);
+  if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(openC.name)}</b> <span class="pill">${esc(openC.group || "ungrouped")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide"); else hideModal();
   if (cf.open && cf.edit === cf.open) cfLoadEditor(cf.open);
   else if (cf.open) cfLoadChart(cf.open);
 };
@@ -562,7 +571,7 @@ window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refres
 window.cfSpeedAll = async () => { const d = await api("/api/configs"); const ids = d.configs.filter(c => c.enabled).map(c => c.id); if (!ids.length) return; if (!confirm(`Speed test all ${ids.length} configs one after the other? About a minute each — the page keeps working meanwhile.`)) return; let done = 0, bad = 0; for (const id of ids) { try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); done++; } catch (e) { bad++; } toast(`Speed tests: ${done} done, ${bad} failed, ${ids.length - done - bad} to go`); } toast(`✓ Speed tests finished: ${done} ok, ${bad} failed`, bad ? "bad" : "ok"); refresh(); };
 window.cfDeleteAll = async () => { const d = await api("/api/configs"); if (!d.configs.length) return; if (prompt(`Delete ALL ${d.configs.length} configs from the probe? Type DELETE to confirm:`) !== "DELETE") return; let n = 0; for (const c of d.configs) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); n++; } catch (e) { /* keep going */ } } toast(`✓ ${n} configs deleted`, "ok"); refresh(); };
 window.cfGroupDel = async g => { const d = await api("/api/configs"); const mine = d.configs.filter(c => (c.group || "") === g); if (!confirm(`Delete the group ${g} and its ${mine.length} configs from the probe?`)) return; for (const c of mine) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); } catch (e) { /* keep going */ } } toast("✓ Group deleted", "ok"); refresh(); };
-window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; refresh(); };
+window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; if (!cf.open) hideModal(); refresh(); };
 window.cfNew = () => { cf.edit = "new"; cf.open = null; cf.sub = null; refresh(); };
 window.cfCancel = () => { cf.edit = null; cf.sub = null; refresh(); };
 window.cfSync = async () => { toast("Asking the probe… (up to a minute)"); try { await api("/api/configs/sync", {method: "POST"}); toast("✓ Synced", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -691,11 +700,10 @@ PAGES.panels = async () => {
       <div class="tile"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
       <div class="tile"><small>Load</small><b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b><span>cpu · ram ${s.mem_pct ?? "—"}%</span></div>
       <div class="tile"><small>Traffic</small><b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b><span>↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}</span></div></div>
-    <div class="tabs" style="margin-bottom:10px">${["nodes", "users", "hosts", "outbounds"].map(t => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="tabs" style="margin-bottom:10px">${["nodes", "users", "hosts"].map(t => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div id="pn-body">${pn.tab === "nodes" ? pnNodesHtml(p) : '<div class="mut">loading…</div>'}</div>`;
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
-  if (pn.tab === "outbounds") pnCoreLoad(p.id);
 };
 function fmtB(b) { if (b == null) return "—"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i >= 3 ? 2 : 0) + " " + u[i]; }
 function pnNodesHtml(p) {
@@ -876,7 +884,8 @@ window.sbImport = async () => { if (!confirm("Import the real database over the 
 const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};
 INFO.gateway = ["Gateway", INFO_GW];
 PAGES.gateway = async () => {
-  const servers = (await api("/api/servers?role=iran")).filter(s => s.enabled);
+  const [srvAll, pnl] = await Promise.all([api("/api/servers?role=iran"), api("/api/panels").catch(() => ({panels: []}))]);
+  const servers = srvAll.filter(s => s.enabled), panelsList = pnl.panels || [], pnSel = panelsList.find(x => String(x.id) === pn.id) || panelsList[0] || {};
   if (!servers.length) { $("#page").innerHTML = '<div class="empty">No enabled Iran server.</div>'; return; }
   if (!servers.some(s => String(s.id) === gw.host)) { gw.host = String(servers[0].id); gw.st = null; }
   if (!gw.st || gw.st.server_id !== +gw.host) { gw.st = await api(`/api/gateway/${gw.host}`); gw.status = null; gw.test = null; gw.dirty = false; }
@@ -905,7 +914,10 @@ PAGES.gateway = async () => {
       <div class="frm-act"><input id="gw-p" type="number" min="1024" max="65535" placeholder="listen port"><span class="mut">→</span><input id="gw-h" placeholder="node IP or host"><input id="gw-tp" type="number" min="1" max="65535" placeholder="node port"><input id="gw-n" placeholder="note"><label class="chk"><input id="gw-udp" type="checkbox"> udp too</label><button class="pri" onclick="gwAddPort()">Add port</button></div></div>
     ${gw.test ? `<div class="card"><h3>Exit test <small class="mut">— from the Iran server, through every exit</small></h3>${t.map(r => `<div class="gw-row"><span><b>${esc(r.key === "direct" ? "Direct (no borrowed config)" : r.key === "gateway" ? "The gateway as users see it (current mode)" : r.name)}</b></span><span>${cell(r.key)}</span><span></span></div>`).join("")}</div>` : ""}
     ${gw.status && gw.status.log && gw.status.log.length ? `<div class="card"><h3>Latest log lines</h3><pre class="gl-out">${esc(gw.status.log.join("\n"))}</pre></div>` : ""}
-    ${gw.dirty ? '<div class="gw-dirty">Unsaved changes — press “Save &amp; apply”.</div>' : ""}`;
+    ${gw.dirty ? '<div class="gw-dirty">Unsaved changes — press “Save &amp; apply”.</div>' : ""}
+    <div class="nk-ghead"><b>Panel outbounds</b><span>Marzban / PasarGuard core</span></div>
+    ${panelsList.length ? `<div class="toolbar"><select onchange="pn.id=this.value;localStorage.setItem('nk.pn',this.value);refresh()">${panelsList.map(x => `<option value="${x.id}" ${String(x.id) === String(pnSel.id) ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select><span class="mut">the Xray outbounds of this panel's core: where its users' traffic leaves</span></div><div id="pn-body"><div class="mut">loading…</div></div>` : '<div class="empty">No panel yet — add one under Panels.</div>'}`;
+  if (panelsList.length) pnCoreLoad(pnSel.id);
 };
 window.gwPick = v => { gw.host = v; localStorage.setItem("nk.gw", v); gw.st = null; gw.note = ""; refresh(); };
 window.gwField = (k, v) => { gw.st[k] = v; gw.dirty = true; refresh(); };
