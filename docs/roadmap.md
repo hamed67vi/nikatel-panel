@@ -13,7 +13,7 @@ always installable; a milestone ends with a tag.
 - [x] #3 One-line installer (`install.sh`): questions or flags, dependencies, service, TLS (self-signed / Let's Encrypt), upgrade on re-run
 - [x] #4 `deploy.sh` with health check and rollback; `backup.sh`
 - [x] #5 Docs: README, ARCHITECTURE, operations, development, logging, ADRs, issue/PR templates
-- [ ] #6 Pre-commit hook that runs the secrets check locally
+- [x] #6 Pre-commit hook that runs the secrets check locally
 
 ## M1 · See (read-only)
 - [x] #7 Import of the old inventory (servers, tunnels), idempotent, secrets kept apart
@@ -33,9 +33,9 @@ always installable; a milestone ends with a tag.
 - [x] #19 Encrypted backup to Telegram + one-command restore
 
 ## M3 · Repair (first time the panel changes servers)
-- [ ] #20 Action framework: named, logged, dry-run, reversible, rate-limited (`read_only` off needed)
-- [ ] #21 Actions: restart unit, restart GRE, rebuild tunnel from its record
-- [ ] #22 "Fix" button with a live story; auto-repair with limits (max 2/hour, never when a server is down)
+- [x] #20 Action framework: named, logged, dry-run, rate-limited (`read_only` off needed)
+- [x] #21 Actions: restart unit, restart GRE (rebuild moves to M4 #23, it needs the tunnel builder)
+- [x] #22 "Fix" button with a live story; auto-repair with limits (max 2/hour, never when a server is down, off by default)
 
 ## M4 · Build
 - [ ] #23 Create tunnel (backhaul tcpmux first), with port allocation and GRE pair

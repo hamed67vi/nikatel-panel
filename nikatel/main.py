@@ -17,7 +17,7 @@ from . import log as logmod
 from .api import router as api_router
 from .config import get_settings
 from .db import init_db
-from .services import alerts, backup, facts, report, tunnels
+from .services import actions, alerts, backup, facts, report, tunnels
 
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
@@ -30,6 +30,7 @@ def _register_jobs() -> None:
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
     jobs.register("backup", 600, backup.scheduled)
+    jobs.register("auto-repair", 60, actions.auto_repair)
 
 
 @asynccontextmanager

@@ -14,6 +14,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "alerts": {"tunnel_fails": 3, "server_fails": 2, "up_stable_seconds": 600, "remind_hours": 6, "muted": []},
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True},
+    # auto-repair stays off until the old panel no longer repairs the same tunnels
+    "repair": {"auto": False, "after_seconds": 180},
 }
 
 SECRET_FIELDS = {"telegram": ("token",)}

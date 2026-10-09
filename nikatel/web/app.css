@@ -93,6 +93,14 @@ code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255
 .gl-out { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.3); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
 .frm label small { font-weight: 400; text-transform: none; letter-spacing: 0; }
 
+/* ---- repairs */
+.fix { margin-top: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0,0,0,.28); }
+.fx-line { display: flex; gap: 8px; align-items: flex-start; padding: 3px 2px; font-size: 12.5px; line-height: 1.45; } .fx-line span { white-space: pre-wrap; }
+.fx-line b { flex: 0 0 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; background: rgba(255,255,255,.1); }
+.fx-line.ok b { background: rgba(52,211,153,.25); color: var(--ok); } .fx-line.bad b { background: rgba(251,113,133,.25); color: var(--bad); } .fx-line.plan b { background: rgba(34,211,238,.25); color: var(--acc-2); }
+.fx-line.run { color: var(--mut); align-items: center; } .fx-line.run i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); border-top-color: var(--acc-2); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ---- logs */
 .log { padding: 6px 8px; max-height: 70vh; overflow: auto; }
 .ll { display: grid; grid-template-columns: 64px 62px 64px 1fr 60px; gap: 10px; align-items: start; padding: 3px 6px; border-radius: 6px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }

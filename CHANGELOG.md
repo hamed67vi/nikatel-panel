@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 - 2026-10-09 - Milestone 3 (repair)
+
+* Named actions (`ssh.ACTIONS`): the only way the panel changes a server; refused in read-only mode.
+* Fix: diagnose both sides → plan → restart only what is broken, Iran first → re-check after each step; dry run shows the exact script; every run stored in `action_log` with its story.
+* Limits: 2 repairs per tunnel per hour, never when a server is unreachable, auto-repair off by default and only in read-write mode.
+* Repairs page and Fix / Dry run buttons in the tunnel detail; pre-commit hook (`scripts/install-hooks.sh`).
+
 ## 0.3.0 - 2026-10-09 - Milestone 2 (alert)
 
 * Telegram: token and chat id in Settings (token never shown again), test message.

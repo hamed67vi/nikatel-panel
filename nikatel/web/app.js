@@ -222,7 +222,8 @@ function detailRow(t) {
       <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
       ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
     </div><div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button></div></td></tr>`;
+    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><span class="sp"></span><a class="mut" onclick="go('actions')">repair history →</a></div>
+    <div id="fix-${t.id}" class="fix hidden"></div></td></tr>`;
 }
 async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
@@ -235,6 +236,35 @@ async function loadTunnelCharts(id) {
     <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>`;
 }
 window.toggleDetail = id => { state.open = state.open === id ? null : id; state.edit = null; refresh(); };
+window.fixTunnel = async (id, dry) => {
+  if (!dry && !confirm("Repair this tunnel now? The panel restarts only the units that are not working, one at a time, and checks after each step.")) return;
+  const box = document.getElementById("fix-" + id);
+  if (!box) return;
+  box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
+  state.edit = "fix";   // pause auto-refresh while the story is running
+  try {
+    const r = await api(`/api/tunnels/${id}/fix?dry_run=${dry}`, {method: "POST"});
+    for (let i = 0; i < 150; i++) {
+      await new Promise(res => setTimeout(res, 1500));
+      const s = await api(`/api/actions/${r.id}`);
+      box.innerHTML = storyHtml(s);
+      if (s.done) break;
+    }
+  } catch (e) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
+  state.edit = null;
+};
+function storyHtml(s) {
+  const cls = l => /healthy|works|finished|succeeded/i.test(l) ? "ok" : /not repaired|failed|still|does not answer|No safe|read-only|Stopped/i.test(l) ? "bad" : /^Plan:|^\[dry run\]/.test(l) ? "plan" : "do";
+  return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
+    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
+}
+PAGES.actions = async () => {
+  const d = await api("/api/actions?limit=100");
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${d.read_only ? "Read-only mode: only dry runs happen. Set NIKATEL_READ_ONLY=false on the panel server to allow repairs." : "Read-write mode: repairs change servers."}</span></div>
+    <div class="card">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
+      <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div>`;
+};
+INFO.actions = ["Repairs", "Every repair the panel planned or performed, with its full story."];
 window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- events */
@@ -276,7 +306,7 @@ let lqT; window.setLogQ = v => { state.logs.q = v.trim(); clearTimeout(lqT); lqT
 
 /* ---- settings */
 PAGES.settings = async () => {
-  const [s, tg, al, rp, bk, mw] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance")]);
+  const [s, tg, al, rp, bk, mw, rp_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   $("#page").innerHTML = `<div class="grid2">
     <div class="card"><h3>Telegram <span class="sp"></span>${tg.has_token ? '<span class="pill">token saved</span>' : '<span class="pill">no token</span>'}</h3>
@@ -302,6 +332,13 @@ PAGES.settings = async () => {
         <label>Note<input name="note" placeholder="upgrade of …"></label>
         <div class="frm-act"><button class="pri" type="submit">Add window</button></div></form>
       ${mw.windows.map(w => `<div class="ev ${w.active ? "warn" : ""}"><time>${when(w.start).slice(0, 16)}</time><i></i><small>→ ${when(w.end).slice(0, 16)}</small><span>${esc(w.note)} ${w.active ? "<b>(active now)</b>" : ""} <a class="mut" onclick="delWindow(${w.id})">remove</a></span></div>`).join("") || '<div class="empty">No window.</div>'}</div>
+
+    <div class="card"><h3>Repairs <span class="sp"></span><span class="pill">${rp_.read_only ? "read-only" : "read-write"}</span></h3>
+      <form class="frm one" onsubmit="return saveRepair(event)">
+        <label class="chk"><input name="auto" type="checkbox" ${rp_.auto ? "checked" : ""} ${rp_.read_only ? "disabled" : ""}> repair a down tunnel automatically</label>
+        <label>…after it has been down for (seconds)<input name="after_seconds" type="number" min="60" max="3600" value="${rp_.after_seconds}"></label>
+        <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
+      <small class="mut">At most ${rp_.max_per_hour} repairs per tunnel per hour; never when a server is unreachable. Keep this off while the old panel still repairs the same tunnels. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
 
     <div class="card"><h3>Daily report</h3>
       <form class="frm one" onsubmit="return saveReport(event)">
@@ -351,6 +388,7 @@ window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["tunnel_fail
 window.muteRef = async (ref, on) => { try { await api(`/api/settings/alerts/mute?ref=${encodeURIComponent(ref)}&muted=${on}`, {method: "POST"}); toast(on ? "✓ Muted " + ref : "✓ Unmuted " + ref, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.addWindow = async e => { e.preventDefault(); const f = new FormData(e.target); const b = {start: Math.floor(new Date(f.get("start") + "Z").getTime() / 1000), end: Math.floor(new Date(f.get("end") + "Z").getTime() / 1000), note: f.get("note")}; try { await api("/api/maintenance", {method: "POST", body: JSON.stringify(b)}); toast("✓ Window added", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.delWindow = async id => { try { await api(`/api/maintenance/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.saveRepair = e => put(e, "/api/settings/repair", formJson(e, ["after_seconds"], ["auto"]), "✓ Repair settings saved");
 window.saveReport = e => put(e, "/api/settings/report", formJson(e, ["hour", "tz_offset_minutes"], ["enabled"]), "✓ Report settings saved");
 window.previewReport = async () => { const r = await api("/api/report/preview"); const p = $("#report-prev"); p.textContent = r.text; p.classList.remove("hidden"); };
 window.sendReport = async () => { toast("Sending…"); try { await api("/api/report/send", {method: "POST"}); toast("✓ Report sent (if Telegram is configured)", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };

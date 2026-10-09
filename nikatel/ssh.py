@@ -135,6 +135,56 @@ def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, t
     return _exec(node, script, timeout)
 
 
+# ---------------------------------------------------------------- reviewed actions (they change a server)
+# Same shape as SCRIPTS. They run only when the panel is not read-only, only through services/actions.py.
+ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
+    # restart systemd units, one after the other, report each state afterwards
+    "restart_units": (r"""for u in @UNITS@; do systemctl restart "$u" 2>/dev/null; sleep 1; echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
+""", {"UNITS": _UNITS}),
+}
+
+
+def run_action(node: Node, name: str, params: Mapping[str, str] | None = None, timeout: int = 90) -> str:
+    """Run one reviewed action. Refused while the panel is read-only."""
+    if get_settings().read_only:
+        raise SSHError("the panel is in read-only mode: set NIKATEL_READ_ONLY=false on the server to allow repairs")
+
+    if name not in ACTIONS:
+        raise ValueError(f"unknown action {name!r}")
+
+    script, rules = ACTIONS[name]
+    params = dict(params or {})
+
+    for key, rule in rules.items():
+        value = str(params.get(key, ""))
+
+        if not re.match(rule, value):
+            raise ValueError(f"bad value for {key}: {value[:40]!r}")
+
+        script = script.replace(f"@{key}@", value)
+
+    log.info("action %s on %s params=%s", name, node.host, dict(params))
+    return _exec(node, script, timeout)
+
+
+def render_action(name: str, params: Mapping[str, str]) -> str:
+    """The exact script an action would run - for dry runs. Validates like run_action, touches nothing."""
+    if name not in ACTIONS:
+        raise ValueError(f"unknown action {name!r}")
+
+    script, rules = ACTIONS[name]
+
+    for key, rule in rules.items():
+        value = str(params.get(key, ""))
+
+        if not re.match(rule, value):
+            raise ValueError(f"bad value for {key}: {value[:40]!r}")
+
+        script = script.replace(f"@{key}@", value)
+
+    return script.strip()
+
+
 def run_raw(node: Node, script: str, timeout: int = 60) -> str:
     """Arbitrary command - refused while the panel is read-only. Changing anything on a server
     goes through a named, reviewed action, never through this directly from an API handler."""
