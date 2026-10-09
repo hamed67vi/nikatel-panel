@@ -162,7 +162,7 @@ class ActionLog(Base):
     action: Mapped[str] = mapped_column(String(32))          # fix | restart_units | restart_gre
     source: Mapped[str] = mapped_column(String(16))          # manual | auto
     dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
-    ok: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)   # None while running
+    ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)   # None while running
     story: Mapped[list] = mapped_column(JSON, default=list)  # the sentences shown to the operator
     finished_at: Mapped[int] = mapped_column(Integer, default=0)
 
