@@ -63,8 +63,8 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
         try:
             response = await call_next(request)
-        except Exception as e:  # the boundary: never a traceback to the browser
-            log.exception("unhandled %s %s: %s", request.method, request.url.path, e)
+        except Exception:  # the boundary: never a traceback to the browser
+            log.exception("unhandled %s %s", request.method, request.url.path)
             return JSONResponse({"ok": False, "error": "internal error", "rid": rid}, status_code=500, headers={"X-Request-Id": rid})
         finally:
             logmod.request_id.reset(token)

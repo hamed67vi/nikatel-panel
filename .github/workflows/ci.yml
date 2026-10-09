@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: no secrets in the repository
+        run: bash scripts/check_no_secrets.sh
+      - name: install
+        run: |
+          python -m pip install -q --upgrade pip
+          pip install -q -e ".[dev]" ruff
+      - name: lint
+        run: ruff check nikatel tests
+      - name: tests
+        run: pytest -q
+      - name: front-end syntax
+        run: node --check nikatel/web/app.js
+      - name: installer syntax
+        run: bash -n install.sh scripts/*.sh
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

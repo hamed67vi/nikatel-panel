@@ -49,7 +49,7 @@ def run_once(name: str) -> None:
         err = ""
     except Exception as e:  # the boundary: a job never kills its loop
         err = str(e)[:300]
-        log.exception("job %s failed: %s", name, e)
+        log.exception("job %s failed", name)
     finally:
         request_id.reset(token)
 

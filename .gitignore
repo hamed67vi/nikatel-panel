@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+# runtime data never lives in the repo
+*.db
+*.db-wal
+*.db-shm
+*.log
+*.key
+*.crt
+*.pem
+*.env
+seed/
+data/
+known_hosts
