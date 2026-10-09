@@ -431,7 +431,7 @@ async function cfLoadEditor(id) {
   const td = document.getElementById("cf-detail-" + id); if (!td) return;
   try {
     const r = await api(`/api/configs/${id}/uri`);
-    cfe = {id, f: cfeParse(r.uri), origLink: r.uri};
+    cfe = {id, f: cfeParse(r.uri), origLink: cfeBuild(cfeParse(r.uri))};
     cfeRender(td);
   } catch (e) { td.innerHTML = `<div class="err">${esc(e.message)}</div><div class="frm-act"><button class="sm" onclick="cfToggle(${id})">Close</button></div>`; }
 }
