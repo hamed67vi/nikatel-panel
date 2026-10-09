@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import delete, select
 
+from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
@@ -215,6 +216,10 @@ def check_tunnel(tunnel_id: int) -> None:
         fi = ex.submit(_query, iran_node, plan, True)
         ff = ex.submit(_query, foreign_node, plan, False)
         iran, foreign = fi.result(), ff.result()
+
+    if (iran.error or foreign.error) and jobs.stopping():
+        log.info("check name=%s skipped: the panel is restarting", plan.iface or tunnel_id)
+        return
 
     state, reason = judge(plan, iran, foreign)
     now = int(time.time())

@@ -10,6 +10,9 @@ WorkingDirectory=/opt/nikatel/src
 ExecStart=/opt/nikatel/venv/bin/nikatel serve
 Restart=always
 RestartSec=3
+# on stop: SIGTERM only to the panel; its ssh children finish their checks while it shuts down
+KillMode=mixed
+TimeoutStopSec=60
 ProtectSystem=full
 ReadWritePaths=/var/lib/nikatel
 PrivateTmp=true

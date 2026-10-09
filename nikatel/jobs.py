@@ -114,9 +114,27 @@ def trigger(name: str) -> None:
         spec.wake.set()
 
 
-def stop_all() -> None:
+def stopping() -> bool:
+    """True once shutdown began: a check that fails now failed because of the restart, not the server."""
+    return _STOP.is_set()
+
+
+def stop_all(wait_seconds: float = 40) -> None:
+    """Stop the loops and give running jobs time to finish, so a restart does not leave half-done
+    checks (the systemd unit uses KillMode=mixed so the ssh children live until the process exits)."""
     _STOP.set()
 
     for spec in _SPECS.values():
         if spec.wake is not None:
             spec.wake.set()
+
+    deadline = time.time() + wait_seconds
+
+    for spec in _SPECS.values():
+        if spec.thread is not None and spec.thread.is_alive():
+            spec.thread.join(max(0.0, deadline - time.time()))
+
+    still = [s.name for s in _SPECS.values() if s.thread is not None and s.thread.is_alive()]
+
+    if still:
+        log.warning("jobs still running at shutdown: %s", ", ".join(still))

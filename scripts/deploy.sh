@@ -10,7 +10,12 @@ PORT=$(grep -oE '^NIKATEL_LISTEN_PORT=[0-9]+' /etc/nikatel/nikatel.env 2>/dev/nu
 cd "$SRC"
 
 health() { for _ in 1 2 3 4 5 6 7 8; do sleep 1; curl -sk -m 5 "https://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '"ok":true' && return 0; done; return 1; }
-install() { "$VENV/bin/pip" install -q -e "$SRC[dev]"; systemctl restart nikatel; }
+install() {
+    "$VENV/bin/pip" install -q -e "$SRC[dev]"
+    # the unit file travels with the source: install it when it changed
+    if ! cmp -s scripts/nikatel.service /etc/systemd/system/nikatel.service; then cp scripts/nikatel.service /etc/systemd/system/nikatel.service; systemctl daemon-reload; echo "unit file updated"; fi
+    systemctl restart nikatel
+}
 
 if [ "${1:-}" = "--rollback" ]; then
     [ -f "$STATE" ] || { echo "no known good commit"; exit 1; }
