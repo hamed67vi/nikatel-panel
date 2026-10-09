@@ -114,7 +114,8 @@ def run() -> None:
             a = tracks.get((kind, ref))
 
             if a is None:
-                a = AlertState(kind=kind, ref=ref)
+                # column defaults only apply at flush: set them now, decide() reads them right away
+                a = AlertState(kind=kind, ref=ref, fails=0, alerted=False, bad_since=0, good_since=0, last_notice=0)
                 db.add(a)
                 tracks[(kind, ref)] = a
 

@@ -113,3 +113,16 @@ def test_backup_roundtrip_and_restore(client, tmp_path):
     target = tmp_path / "restored"
     files = backup.restore(s.data_dir.parent / "backups" / name, "a-long-test-passphrase", data_dir=target)
     assert "nikatel.db" in files and "auth.json" in files and (target / "nikatel.db").stat().st_size > 0
+
+
+def test_alerts_run_with_new_config_state(client):
+    """A config that is down on its very first alert evaluation must not crash the job (fails was None)."""
+    from nikatel.db import session
+    from nikatel.models import Config
+    from nikatel.services import alerts
+
+    with session() as db:
+        db.add(Config(name="x", status="down", status_since=1, last_error="timeout"))
+
+    alerts.run()
+    alerts.run()

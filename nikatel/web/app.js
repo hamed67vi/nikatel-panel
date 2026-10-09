@@ -74,7 +74,7 @@ const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
   nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]]],
-  tunnels: [["list", "⇄ Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "GRE (local IPs) + Backhaul with the best settings between two of your servers."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["engines", "🧩 Core update", "Cores never update by themselves. Check which version every server runs and update them from here."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  tunnels: [["list", "⇄ Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "GRE (local IPs) + Backhaul with the best settings between two of your servers."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -146,7 +146,7 @@ PAGES.dashboard = async () => {
     <div class="card"><h3>Quick access</h3><div class="dash-actions">
       ${q("⚡", "Ping and speed tests", "every config, from inside Iran", "configs", "configs")}${q("🛰", "Check filtering in Iran", "is a foreign server reachable?", "nodes", "foreign")}
       ${q("🖥", "Manage Iran nodes", "resources, console, tools", "nodes", "iran")}${q("⇄", "Create and monitor", "tunnels between your servers", "tunnels", "list")}</div></div></div>
-    <div class="card"><h3>Activity</h3>${eventsHtml(ev.events)}</div>`;
+    <div class="card act"><h3>Activity</h3><div class="act-list">${eventsHtml(ev.events)}</div></div>`;
 };
 
 function eventsHtml(list) {
@@ -292,7 +292,6 @@ PAGES.tunnels = async () => {
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
   if (s === "test") return PAGES.tunnelTest();
-  if (s === "engines") return PAGES.engines();
   if (s === "create") { $("#page").innerHTML = `<div class="card" id="build-card"><h3>⇄ Create tunnel <span class="sp"></span><small class="mut">GRE (local IPs) + Backhaul with the best settings</small></h3>${await buildFormHtml()}</div>`; return; }
   return PAGES.tunnelsList();
 };
@@ -356,19 +355,20 @@ function detectHtml() {
 }
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); toast(`✓ ${r.results.filter(x => !x.error).length} measured`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-PAGES.engines = async () => {
+async function enginesLoad() {
+  const box = $("#eng-box"); if (!box) return;
   const d = await api("/api/engines");
   const eng = d.engines || {};
   const block = (k, e) => `<div class="card"><h3>${esc(e.title)} <span class="sp"></span>${e.latest ? `<span class="pill ok">latest ${esc(e.latest)}</span>` : `<span class="pill err">${esc(e.error || "not checked")}</span>`}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener">release notes</a>` : ""}</h3>
       <div class="mut" style="margin-bottom:8px">${e.current || 0} current · <b class="${e.outdated ? "err" : ""}">${e.outdated || 0} outdated</b> · ${(e.nodes || []).filter(n => n.state === "not installed").length} without it · ${(e.nodes || []).filter(n => n.state === "unreachable").length} unreachable</div>
       <div class="ob-inbounds">${(e.nodes || []).map(n => `<span><b class="${n.state === "current" ? "gw-ok" : n.state === "outdated" ? "err" : "mut"}">${esc(n.name)}</b> <small class="mut">${esc(n.version || "—")} · ${esc(n.state)}</small></span>`).join("") || '<span class="mut">press Check</span>'}</div>
       ${e.outdated ? `<div class="frm-act"><button class="pri" onclick="engineUpdate('${k}')">Update ${e.outdated} outdated server${e.outdated > 1 ? "s" : ""} to ${esc(e.latest)}</button><small class="mut">downloads the release, verifies its checksum, copies it to each server and restarts the tunnel units there — one server at a time of four</small></div>` : ""}</div>`;
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : "not checked yet"}</span><span class="sp"></span><button class="pri" onclick="engineCheck()">Check for updates</button></div>
+  box.innerHTML = `<div class="toolbar"><span class="mut">${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : "not checked yet"} · cores never update by themselves</span><span class="sp"></span><button class="pri" onclick="engineCheck()">Check for updates</button></div>
     ${Object.entries(eng).map(([k, e]) => block(k, e)).join("") || '<div class="empty">Press “Check for updates” to see which core every server runs.</div>'}
     ${d.job ? `<div class="card"><h3>Last update: ${esc(d.job.engine)} ${esc(d.job.version || "")} ${d.job.done ? "" : "(running…)"}</h3>${d.job.error ? `<div class="err">${esc(d.job.error)}</div>` : ""}${(d.job.items || []).map(i => `<div class="ev ${i.state === "ok" ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.state)}</small><span><b>${esc(i.name)}</b> ${esc(i.detail || "")}</span></div>`).join("")}</div>` : ""}`;
 };
-window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.engineUpdate = async k => { if (!confirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.engineUpdate = async k => { if (!confirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
   const list = await api("/api/tunnels");
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
@@ -1052,6 +1052,8 @@ PAGES.settings = async () => {
         <label>Animations<select onchange="lookSet('anim', this.value)">${[["on", "On"], ["off", "Off (calmer)"]].map(([k, l]) => `<option value="${k}" ${LOOK.anim === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <div class="frm-act"><button type="button" onclick="lookReset()">↺ Reset the look</button><small class="mut">kept in this browser</small></div></div></div>
 
+    <div class="card" style="grid-column:1/-1"><h3>Core update <span class="sp"></span><small class="mut">backhaul and Xray on every server</small></h3><div id="eng-box"><div class="mut">loading…</div></div></div>
+
     <div class="card"><h3>About <span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
       <div class="kv one" id="about-box"><div class="mut">checking GitHub…</div></div>
       <div class="frm-act"><button class="pri" onclick="panelUpdate()">Update from GitHub</button><button onclick="aboutLoad()">↻ Check</button><small class="mut">pull, tests, restart, health check — rolls back by itself when the new version does not start</small></div>
@@ -1076,7 +1078,7 @@ PAGES.settings = async () => {
       <small class="mut">These come from <code>${esc(s.env_file)}</code> on the panel server (then <code>systemctl restart nikatel</code>). Read-only cannot be switched off from here on purpose.</small></div>
   </div>`;
   settingsTabs();
-  if (state.stab === "look") aboutLoad();
+  if (state.stab === "update") { aboutLoad(); enginesLoad(); }
 };
 window.saveAi = e => put(e, "/api/settings/ai", formJson(e, [], ["enabled", "actions"]), "✓ AI settings saved");
 window.testAi = async () => { toast("Asking Anthropic…"); try { const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -1095,7 +1097,8 @@ const SET_TABS = {
   account: ["👤 Account", "Your password, the session and the settings the service was started with.", ["Password", "Effective settings"]],
   alerts: ["✈ Telegram & backup", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report, and the encrypted backups.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report", "Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
-  look: ["🎨 Appearance & about", "Theme, day / night, text size — and the version of this panel with one-click update from GitHub.", ["Appearance", "About"]],
+  look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
+  update: ["⬆ Update", "Update this panel from GitHub with one click, and the tunnel cores on your servers.", ["About", "Core update"]],
   ai: ["🤖 AI & automation", "The AI assistant inside Fix, automatic repairs, and the shop bot server the panel manages.", ["AI assistant", "Repairs", "Shop bot"]],
 };
 function settingsTabs() {

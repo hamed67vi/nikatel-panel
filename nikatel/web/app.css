@@ -150,6 +150,10 @@ html[data-mode="light"] body::after { background: none; } html[data-mode="light"
 html[data-size="small"] body { font-size: 12px; } html[data-size="large"] body { font-size: 14.5px; }
 html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] *::after { animation: none !important; transition: none !important; }
 #mode-btn { width: 36px; padding: 0; }
+/* dashboard: compact tiles; the activity box fits the page and scrolls inside */
+.page .tiles .tile { padding: 10px 14px; } .page .tiles .tile b { font-size: 20px; }
+.card.act { display: flex; flex-direction: column; max-height: calc(100vh - 150px); margin-bottom: 0; } .card.act .act-list { overflow: auto; min-height: 120px; padding-right: 4px; }
+.dash-row { padding: 8px 0; } .dash-action { padding: 11px 13px; }
 nav a > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ---- charts */
