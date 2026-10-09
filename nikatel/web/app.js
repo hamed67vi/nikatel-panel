@@ -57,25 +57,23 @@ $("#logout").onclick = async () => { await api("/api/auth/logout", {method: "POS
 /* ---- router */
 const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: ""}};
 const PAGES = {};
-const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
+const INFO_GW = "یک Xray ساده روی سرور ایران: کاربر به یک پورت آن وصل می‌شود و ترافیک به نود خارجی می‌رود — تا وقتی مستقیم کار می‌کند مستقیم، و هنگام قطعی اینترنت از طریق یک کانفیگ قرضی.";
 const INFO = {
-  dashboard: ["Dashboard", "What needs attention right now, and what happened."],
-  nodes: ["Nodes", "Your Iran and foreign servers, and the Iran gateway."],
-  monitor: ["Monitoring", "Server resources, tunnel health, events, jobs and the panel log."],
-  servers: ["Servers", "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH, read-only."],
-  tunnels: ["Tunnels", "Every tunnel between an Iran server and a foreign server: service units, GRE link, peer ping, forwarded ports. Checked every minute."],
-  events: ["Events", "One plain sentence per thing that happened. Newest first."],
-  jobs: ["Jobs", "The background jobs of the panel and whether they succeed."],
-  logs: ["Logs", "The panel's own log, newest first. Secrets are masked before they are written."],
-  settings: ["Settings", "Your password and the effective settings of this panel."],
+  dashboard: ["Dashboard", "چه چیزی الان به توجه نیاز دارد، و چه اتفاقی افتاده."],
+  nodes: ["Nodes", "سرورهای ایران و خارج، مانیتورینگ منابع، گیت‌وی ایران، رویدادها و لاگ."],
+  servers: ["Servers", "هر سرور ایران و خارج: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH."],
+  tunnels: ["Tunnels", "هر تانل بین یک سرور ایران و یک سرور خارج: سرویس‌ها، لینک GRE، پینگ طرف مقابل، پورت‌های فوروارد. هر دقیقه چک می‌شود."],
+  events: ["Events", "هر اتفاق در یک جمله ساده. جدیدترین اول."],
+  jobs: ["Jobs", "کارهای پس‌زمینه پنل و اینکه موفق می‌شوند یا نه."],
+  logs: ["Logs", "لاگ خود پنل، جدیدترین اول. رازها قبل از نوشتن پنهان می‌شوند."],
+  settings: ["Settings", "تنظیمات پنل: هشدارها، تعمیر و پروب، یکپارچه‌سازی‌ها، بکاپ و حساب کاربری."],
 };
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
-const NAV_ALIAS = {servers: "nodes", gateway: "nodes", actions: "tunnels", events: "monitor", jobs: "monitor", logs: "monitor"};
+const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes"};
 const SUB = {
-  nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
-  tunnels: [["list", "Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "Build a backhaul-over-GRE tunnel between two of your servers, or test a pair first."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
-  monitor: [["servers", "🖥 Servers", "Resources of every server at a glance; filter the ones with a problem."], ["tunnels", "⇄ Tunnel health", "Health of every tunnel: state, RTT, traffic, loss."], ["events", "🕘 Events", "One plain sentence per thing that happened. Newest first."], ["jobs", "⚙ Jobs", "The background jobs of the panel and whether they succeed."], ["logs", "📜 Logs", "The panel's own log, newest first. Secrets are masked before they are written."]],
+  nodes: [["iran", "🇮🇷 ایران", "سرورهای ایران: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH نمونه‌برداری می‌شود."], ["foreign", "🌍 خارج", "سرورهای خارج: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH نمونه‌برداری می‌شود."], ["monitor", "📈 مانیتورینگ", "منابع همه سرورها در یک نگاه؛ فقط سرورهای مشکل‌دار را فیلتر کنید."], ["gateway", "🌐 گیت‌وی و اوت‌باند", INFO_GW], ["events", "🕘 رویدادها", "هر اتفاق در یک جمله ساده. جدیدترین اول."], ["jobs", "⚙ جاب‌ها", "کارهای پس‌زمینه پنل و اینکه موفق می‌شوند یا نه."], ["logs", "📜 لاگ", "لاگ خود پنل، جدیدترین اول. رازها قبل از نوشتن پنهان می‌شوند."]],
+  tunnels: [["list", "فهرست تانل‌ها", "هر تانل بین یک سرور ایران و یک سرور خارج: سرویس‌ها، لینک GRE، پینگ طرف مقابل، پورت‌های فوروارد. هر دقیقه چک می‌شود، دسته‌بندی بر اساس نوع."], ["create", "＋ ساخت تانل", "ساخت تانل backhaul روی GRE بین دو سرور، یا اول تست همان جفت."], ["repairs", "🩺 تعمیرات", "هر تعمیری که پنل برنامه‌ریزی یا اجرا کرده، با شرح کامل."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
@@ -89,7 +87,11 @@ function renderSub() {
 }
 window.setSub = (page, k) => { state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.q = ""; refresh(); };
 function go(page) {
-  page = NAV_ALIAS[page] || page;
+  if (NAV_ALIAS[page]) {               // an old page name: open the page that holds it, on the right sub-tab
+    const target = NAV_ALIAS[page];
+    if ((SUB[target] || []).some(x => x[0] === page)) state.sub[target] = page;
+    page = target;
+  }
   if (!PAGES[page]) page = "dashboard";
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
@@ -97,8 +99,15 @@ function go(page) {
   $("#subnav").classList.toggle("hidden", !SUB[page]);
   refresh();
 }
-PAGES.nodes = async () => { renderSub(); const s = sub("nodes"); if (s === "gateway") return PAGES.gateway(); state.tab = s; return PAGES.servers(); };
-PAGES.monitor = async () => { renderSub(); const s = sub("monitor"); if (s === "servers") return PAGES.servers(); if (s === "tunnels") return PAGES.tunnelsList(); return PAGES[s](); };
+PAGES.nodes = async () => {
+  renderSub();
+  const s = sub("nodes");
+  if (s === "gateway") return PAGES.gateway();
+  if (s === "monitor") return PAGES.servers(true);
+  if (s === "events" || s === "jobs" || s === "logs") return PAGES[s]();
+  state.tab = s;
+  return PAGES.servers(false);
+};
 document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.page));
 $("#refresh").onclick = () => refresh();
 
@@ -145,9 +154,8 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
   </form>`;
 
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
-PAGES.servers = async () => {
+PAGES.servers = async (mon = false) => {
   const list = await api("/api/servers");
-  const mon = state.page === "monitor";
   if (mon && !["all", "iran", "foreign", "problems"].includes(state.mtab)) state.mtab = "all";
   const pick = s => mon ? (state.mtab === "all" || (state.mtab === "problems" ? srvProblem(s) : s.role === state.mtab)) : s.role === state.tab;
   const rows = list.filter(s => pick(s) && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
@@ -166,8 +174,8 @@ PAGES.servers = async () => {
       ${state.open === s.id ? `<tr class="detail"><td colspan="10" id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</td></tr>` : ""}`;
   };
   $("#page").innerHTML = `<div class="toolbar">
-      ${mon ? `<div class="tabs">${[["all", "All (" + list.length + ")"], ["iran", "🇮🇷 Iran"], ["foreign", "🌍 Foreign"], ["problems", "⚠ Problems (" + nProb + ")"]].map(([k, l]) => `<button class="${state.mtab === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}</button>`).join("")}</div>`
-          : `<span class="mut">${rows.length} servers · ${rows.filter(s => s.online).length} online</span>`}
+      ${mon ? `<div class="tabs">${[["all", "همه (" + list.length + ")"], ["iran", "🇮🇷 ایران"], ["foreign", "🌍 خارج"], ["problems", "⚠ مشکل‌دار (" + nProb + ")"]].map(([k, l]) => `<button class="${state.mtab === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}</button>`).join("")}</div>`
+          : `<span class="mut">${rows.length} سرور · ${rows.filter(s => s.online).length} آنلاین</span>`}
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)">${mon ? "" : '<button onclick="newServer()">+ Add server</button>'}</div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : ""}
     <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:120px"></colgroup>
@@ -362,11 +370,11 @@ PAGES.actions = async () => {
     <div class="card">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div>`;
 };
-INFO.actions = ["Repairs", "Every repair the panel planned or performed, with its full story."];
+INFO.actions = ["Repairs", "هر تعمیری که پنل برنامه‌ریزی یا اجرا کرده، با شرح کامل."];
 window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- configs (what the probe keeps alive and tests) */
-INFO.configs = ["Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
+INFO.configs = ["Configs", "هر کانفیگ کلاینت که پروب از داخل ایران زنده نگه می‌دارد و تست می‌کند: دسترسی، پینگ، سرعت روزانه. لینک اضافه کنید یا اشتراک ایمپورت کنید؛ لینک را فیلد به فیلد ویرایش کنید."];
 const cf = {open: null, edit: null, sub: null, q: ""};
 PAGES.configs = async () => {
   const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]);
@@ -511,7 +519,7 @@ window.cfSubDel = async id => { if (!confirm("Forget this subscription record? T
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
 const pn = {id: localStorage.getItem("nk.pn") || "", tab: "nodes", add: false, edit: false, users: null, uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostEdit: null, core: null, raw: false, logs: null};
-INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
+INFO.panels = ["Panels", "پنل‌های Marzban و PasarGuard شما: بالا هستند؟ نودها وصل‌اند؟ کاربران، هاست‌های لینک اشتراک، و اوت‌باندهای Xray هسته — قبل از هر تغییر هسته بکاپ گرفته می‌شود."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
   const list = (await api("/api/panels")).panels;
@@ -641,7 +649,7 @@ window.pnCoreRaw = id => { let cfg; try { cfg = JSON.parse($("#pn-core-raw").val
 
 /* ---- shop bot (PHP bot on its own server, over SSH) */
 const sb = {tab: "status", info: null, tg: null, stats: null, uq: "", users: null, table: "users", tpage: 0, tq: "", trows: null, sql: "", qres: null};
-INFO.bot = ["Shop bot", "Our own dedicated sales bot: is it alive, today's sales, the switches, its users and tables — and the one-time import of the real database."];
+INFO.bot = ["Shop bot", "بات اختصاصی فروش ما: زنده است؟ فروش امروز، سوئیچ‌ها، کاربران و جدول‌ها — و ایمپورت یک‌باره دیتابیس واقعی."];
 PAGES.bot = async () => {
   const pg = $("#page");
   try { sb.info = await api("/api/shopbot"); } catch (e) { pg.innerHTML = `<div class="empty">${esc(e.message)}${/Settings/.test(e.message) ? ' — <a onclick="go(\'settings\')">open Settings</a>' : ""}</div>`; return; }
@@ -720,7 +728,7 @@ window.sbImport = async () => { if (!confirm("Import the real database over the 
 
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
 const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};
-INFO.gateway = ["Gateway", "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off."];
+INFO.gateway = ["Gateway", INFO_GW];
 PAGES.gateway = async () => {
   const servers = (await api("/api/servers?role=iran")).filter(s => s.enabled);
   if (!servers.length) { $("#page").innerHTML = '<div class="empty">No enabled Iran server.</div>'; return; }
@@ -904,11 +912,11 @@ PAGES.settings = async () => {
 };
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  alerts: ["Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report"]],
-  repair: ["Repair & probe", "What the panel may change on its own, and the probe that tests configs from inside Iran.", ["Repairs", "Probe"]],
-  integrations: ["Integrations", "Other systems the panel manages: the shop bot server.", ["Shop bot"]],
-  backups: ["Backups", "Encrypted copies of the panel's data, kept here and sent to Telegram.", ["Backups"]],
-  account: ["Account", "Your password and the settings the service was started with.", ["Password", "Effective settings"]],
+  alerts: ["🔔 هشدارها", "هشدارها کجا و کی بروند: تلگرام، قوانین نوسان، بازه‌های تعمیر، گزارش روزانه.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report"]],
+  repair: ["🩺 تعمیر و پروب", "چه چیزی را پنل خودش می‌تواند تغییر دهد، و پروبی که کانفیگ‌ها را از داخل ایران تست می‌کند.", ["Repairs", "Probe"]],
+  integrations: ["🔗 یکپارچه‌سازی", "سیستم‌های دیگری که پنل مدیریت می‌کند: سرور بات فروش.", ["Shop bot"]],
+  backups: ["💾 بکاپ", "نسخه‌های رمزشده داده‌های پنل، نگهداری اینجا و ارسال به تلگرام.", ["Backups"]],
+  account: ["👤 حساب", "رمز شما و تنظیماتی که سرویس با آن‌ها بالا آمده.", ["Password", "Effective settings"]],
 };
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "alerts";
