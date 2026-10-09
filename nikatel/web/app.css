@@ -144,7 +144,7 @@ nav a { height: 38px; font-size: 13.5px; }
 .gchip a { padding: 0 9px 0 2px; color: var(--mut); font-weight: 800; cursor: pointer; } .gchip a:hover { color: var(--bad); } .gchip.on a { color: rgba(255,255,255,.8); }
 .nk-gbadge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); font-size: 10px; font-weight: 700; color: var(--mut); vertical-align: middle; }
 .live { display: inline-block; margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .6px; } .live.up { color: var(--ok); } .live.down { color: var(--bad); } .live.unk { color: var(--mut); }
-.cf-nm { font-weight: 700; } .cf-rf { cursor: pointer; margin-left: 4px; } .cf-rf:hover { color: var(--text); }
+.cf-nm { font-weight: 700; } .cf-grp { font-size: 11.5px; } .cf-card .cf-grp { display: block; margin-top: 2px; } .cf-rf { cursor: pointer; margin-left: 4px; } .cf-rf:hover { color: var(--text); }
 .cf-tun, .cf-cdn { height: 28px; padding: 0 8px; font-size: 12px; border-radius: 9px; width: 100%; max-width: 150px; } .cf-cdn { max-width: 90px; font-family: var(--mono); }
 .cf-acts { display: flex; gap: 4px; align-items: center; justify-content: flex-end; white-space: nowrap; } .cf-acts button.sm { height: 26px; padding: 0 9px; font-size: 11.5px; }
 .tbl td .ok { color: var(--ok); } .tbl td .warn { color: var(--warn); } .tbl td .bad { color: var(--bad); }

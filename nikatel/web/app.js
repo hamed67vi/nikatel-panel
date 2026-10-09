@@ -573,10 +573,12 @@ PAGES.configsList = async () => {
   const tunnelSel = c => `<select class="cf-tun" title="Tunnel this config goes through" onclick="event.stopPropagation()" onchange="event.stopPropagation();cfSetTunnel(${c.id}, this.value)"><option value="">no tunnel</option>${tl.map(t => `<option value="${esc(t.name)}" ${t.name === c.tunnel ? "selected" : ""}>${esc(t.name)}</option>`).join("")}${c.tunnel && !tl.some(t => t.name === c.tunnel) ? `<option selected>${esc(c.tunnel)}</option>` : ""}</select>`;
   const cdnIn = c => `<input class="cf-cdn" inputmode="numeric" maxlength="5" placeholder="CDN port" title="CDN port: type it and press Enter" value="${esc(c.cdn_port || "")}" data-orig="${esc(c.cdn_port || "")}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onchange="cfSetCdn(${c.id}, this)">`;
   const live = c => `<span class="live ${c.status === "up" ? "up" : c.status === "down" ? "down" : "unk"}">● ${c.status === "up" ? "ONLINE" : c.status === "down" ? "OFFLINE" : "UNKNOWN"}</span>`;
-  const title = c => `${cfFlag(c.name)}${esc(c.name)}${c.group && cf.group === "__all" ? `<span class="nk-gbadge">${esc(c.group)}</span>` : ""}${c.enabled ? "" : '<span class="pill">disabled</span>'}`;
+  const shown = c => c.group && c.name.startsWith(c.group + " ") ? c.name.slice(c.group.length + 1) : c.name;   // the group has its own column
+  const title = c => `${cfFlag(c.name)}${esc(shown(c))}${c.enabled ? "" : '<span class="pill">disabled</span>'}`;
+  const gcell = c => `<td class="mut cf-grp">${esc(c.group || "manual")}</td>`;
   const acts = c => `<button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button><button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
   const row = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
-      <td class="name"><div class="cf-nm">${title(c)}</div>${live(c)}</td>
+      <td class="name"><div class="cf-nm">${title(c)}</div>${live(c)}</td>${gcell(c)}
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b><small class="mut"> ms</small> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
       <td>${tunnelSel(c)}</td>
       <td>${cdnIn(c)}</td>
@@ -584,7 +586,7 @@ PAGES.configsList = async () => {
       <td class="num">${mb(c.up_mbps)}<small class="mut"> Mbps</small></td>
       <td class="cf-acts">${acts(c)}</td></tr>`;
   const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
-      <td class="name">${title(c)}</td><td>${live(c)}</td>
+      <td class="name">${title(c)}</td>${gcell(c)}<td>${live(c)}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</b></td>
       <td class="num hide-sm">${c.down_mbps != null ? "↓" + mb(c.down_mbps) + " ↑" + mb(c.up_mbps) : "—"}</td>
       <td class="mut hide-sm">${esc(c.tunnel || "—")}${c.cdn_port ? " · :" + esc(c.cdn_port) : ""}</td>
@@ -592,7 +594,7 @@ PAGES.configsList = async () => {
       <td class="cf-acts">${acts(c)}</td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
-  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div>
+  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div><small class="mut cf-grp">${esc(c.group || "manual")}</small>
       <div class="cf-stats"><div class="cf-stat"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}<small>ms</small></b><span>PING</span></div><div class="cf-stat"><b>${mb(c.down_mbps)}</b><span>DOWN Mbps</span></div><div class="cf-stat"><b>${mb(c.up_mbps)}</b><span>UP Mbps</span></div></div>
       <div class="cf-meta">${tunnelSel(c)}${cdnIn(c)}</div><div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
@@ -611,15 +613,15 @@ PAGES.configsList = async () => {
     ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional" value="${esc(names.includes(cf.group) ? cf.group : "")}"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
     ${cf.sub ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
-      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:26%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:14%"><col><col style="width:150px"></colgroup>
-      <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
-      : `<table class="tbl lift cf-list"><colgroup><col style="width:26%"><col style="width:11%"><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:150px"></colgroup>
-      <thead><tr><th>Server</th><th>Ping</th><th>Tunnel</th><th>CDN</th><th>Download</th><th>Upload</th><th style="text-align:right">Actions</th></tr></thead>
+      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col><col style="width:150px"></colgroup>
+      <thead><tr><th>Config</th><th>Group</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
+      : `<table class="tbl lift cf-list"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:10%"><col style="width:14%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:150px"></colgroup>
+      <thead><tr><th>Server</th><th>Group</th><th>Ping</th><th>Tunnel</th><th>CDN</th><th>Download</th><th>Upload</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${list.map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
     ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   const openC = d.configs.find(c => c.id === cf.open);
-  if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(openC.name)}</b> <span class="pill">${esc(openC.group || "ungrouped")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide"); else hideModal();
+  if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(shown(openC))}</b> <span class="pill">${esc(openC.group || "manual")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide"); else hideModal();
   if (cf.open && cf.edit === cf.open) cfLoadEditor(cf.open);
   else if (cf.open) cfLoadChart(cf.open);
 };
