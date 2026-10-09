@@ -228,6 +228,30 @@ class Subscription(Base):
     last_import: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class Panel(Base):
+    """A Marzban or PasarGuard panel the operator manages: login, last check, nodes."""
+    __tablename__ = "panels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), unique=True)
+    type: Mapped[str] = mapped_column(String(16))                        # marzban | pasarguard
+    url: Mapped[str] = mapped_column(String(200))
+    username: Mapped[str] = mapped_column(String(64), default="")
+    secrets: Mapped[dict] = mapped_column(JSON, default=dict)            # {"password": ...} - never listed
+    verify_tls: Mapped[bool] = mapped_column(Boolean, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="unknown")   # up | down | unknown
+    status_since: Mapped[int] = mapped_column(Integer, default=0)
+    fails: Mapped[int] = mapped_column(Integer, default=0)
+    checked_at: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version: Mapped[str] = mapped_column(String(40), default="")
+    stats: Mapped[dict] = mapped_column(JSON, default=dict)              # users_total / active / online, cpu, mem_pct, bw
+    nodes: Mapped[list] = mapped_column(JSON, default=list)              # [{id, name, address, status, xray, message, fails}]
+    last_error: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[int] = mapped_column(Integer, default=now)
+
+
 class Job(Base):
     """Status of every background job, so nothing fails silently."""
     __tablename__ = "jobs"

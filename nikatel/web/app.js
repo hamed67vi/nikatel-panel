@@ -466,6 +466,136 @@ window.cfSubImport = async () => { const picks = [...document.querySelectorAll("
 window.cfSubRefresh = (id, name) => { cf.sub = {name, url: "", nodes: null}; refresh(); toast("Paste the subscription link again to fetch new nodes"); };
 window.cfSubDel = async id => { if (!confirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
 
+/* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
+const pn = {id: localStorage.getItem("nk.pn") || "", tab: "nodes", add: false, edit: false, users: null, uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostEdit: null, core: null, raw: false, logs: null};
+INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
+const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
+PAGES.panels = async () => {
+  const list = (await api("/api/panels")).panels;
+  const sel = list.find(p => String(p.id) === pn.id) || list[0];
+  if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
+  const chip = p => p.status === "up" ? `<span class="pill ok">● up · ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err">● down</span>` : '<span class="pill">not checked yet</span>';
+  const addForm = `<div class="card"><h3>Add a panel</h3><form class="frm" onsubmit="return pnAdd(event)">
+      <label>Name<input name="name" required placeholder="shop"></label><label>Type<select name="type"><option value="marzban">Marzban</option><option value="pasarguard">PasarGuard</option></select></label><label>Address<input name="url" required placeholder="https://panel.example:8000"></label>
+      <label>Admin user<input name="username" required autocomplete="off"></label><label>Password<input name="password" type="password" required autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" checked> verify the TLS certificate</label>
+      <div class="frm-act"><button class="pri" type="submit">Log in and add</button><button type="button" onclick="pn.add=false;refresh()">Cancel</button></div></form></div>`;
+  if (!list.length) { $("#page").innerHTML = pn.add ? addForm : '<div class="empty">No panel yet. <button onclick="pn.add=true;refresh()">+ Add a panel</button></div>'; return; }
+  const p = sel, s = p.stats || {};
+  const editForm = `<div class="card"><h3>Edit ${esc(p.name)}</h3><form class="frm" onsubmit="return pnEdit(event, ${p.id})">
+      <label>Name<input name="name" value="${esc(p.name)}"></label><label>Address<input name="url" value="${esc(p.url)}"></label><label>Admin user<input name="username" value="${esc(p.username)}" autocomplete="off"></label>
+      <label>New password <small>(empty keeps the saved one)</small><input name="password" type="password" autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" ${p.verify_tls ? "checked" : ""}> verify the TLS certificate</label><label class="chk"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> enabled (checked every 2 min)</label>
+      <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="pn.edit=false;refresh()">Cancel</button><span class="sp"></span><button type="button" class="danger" onclick="pnDel(${p.id}, '${esc(p.name)}')">Remove from the list</button></div></form></div>`;
+  $("#page").innerHTML = `<div class="toolbar"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
+      <span class="mut">${esc(p.version || "")}${p.checked_at ? " · checked " + ago(p.checked_at) + " ago" : ""}</span><span class="sp"></span>
+      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
+    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
+    ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
+    <div class="tiles">
+      <div class="tile"><small>Users</small><b>${s.users_total ?? "—"}</b><span>${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online</span></div>
+      <div class="tile"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
+      <div class="tile"><small>Load</small><b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b><span>cpu · ram ${s.mem_pct ?? "—"}%</span></div>
+      <div class="tile"><small>Traffic</small><b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b><span>↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}</span></div></div>
+    <div class="tabs" style="margin-bottom:10px">${["nodes", "users", "hosts", "outbounds"].map(t => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div id="pn-body">${pn.tab === "nodes" ? pnNodesHtml(p) : '<div class="mut">loading…</div>'}</div>`;
+  if (pn.tab === "users") pnUsersLoad(p.id);
+  if (pn.tab === "hosts") pnHostsLoad(p.id);
+  if (pn.tab === "outbounds") pnCoreLoad(p.id);
+};
+function fmtB(b) { if (b == null) return "—"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i >= 3 ? 2 : 0) + " " + u[i]; }
+function pnNodesHtml(p) {
+  const rows = (p.nodes || []).map(n => { const ok = ["connected", "healthy", "disabled"].includes(n.status); return `<tr class="${ok ? (n.status === "disabled" ? "" : "up") : "down"}"><td class="name">${esc(n.name)}</td><td><span class="st ${ok ? (n.status === "disabled" ? "" : "up") : "down"}">${esc(n.status || "?")}</span></td><td class="mut">${esc(n.address)}</td><td class="mut">${esc(n.xray || "")}</td><td class="mut" title="${esc(n.message)}">${esc(n.message).slice(0, 60)}${n.fails ? ` <span class="pill err">${n.fails} checks</span>` : ""}</td>
+      <td><button class="sm" onclick="pnNodeLogs(${p.id}, ${n.id}, '${esc(n.name)}')">Log</button> <button class="sm" onclick="pnNodeReconnect(${p.id}, ${n.id})">Reconnect</button></td></tr>`; }).join("");
+  return `<table class="tbl"><colgroup><col style="width:18%"><col style="width:12%"><col style="width:18%"><col style="width:10%"><col><col style="width:150px"></colgroup><thead><tr><th>Node</th><th>Status</th><th>Address</th><th>Xray</th><th>Message</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="mut">no nodes</td></tr>'}</tbody></table>
+    ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
+}
+window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.edit = pn.add = false; refresh(); };
+window.pnTab = t => { pn.tab = t; pn.user = null; pn.hostEdit = null; refresh(); };
+window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added", "ok"); pn.add = false; pn.id = String(r.panel.id); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnEdit = async (e, id) => { e.preventDefault(); const f = new FormData(e.target); const body = {name: f.get("name").trim(), url: f.get("url").trim(), username: f.get("username").trim(), verify_tls: !!f.get("verify_tls"), enabled: !!f.get("enabled")}; if (f.get("password")) body.password = f.get("password"); try { await api(`/api/panels/${id}`, {method: "PATCH", body: JSON.stringify(body)}); toast("✓ Saved", "ok"); pn.edit = false; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnDel = async (id, name) => { if (!confirm(`Remove ${name} from this list? Nothing on the panel itself changes.`)) return; await api(`/api/panels/${id}`, {method: "DELETE"}); pn.id = ""; pn.edit = false; refresh(); };
+window.pnNodeReconnect = async (id, nid) => { try { await api(`/api/panels/${id}/nodes/${nid}/reconnect`, {method: "POST"}); toast("✓ Reconnect requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (await api(`/api/panels/${id}/nodes/${nid}/logs`)).log}; } catch (e) { pn.logs = {name, text: "✕ " + e.message}; } refresh(); };
+
+/* users */
+async function pnUsersLoad(id) {
+  const box = $("#pn-body"); if (!box) return;
+  try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=40&sort=-created_at`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const u = pn.users, now = Date.now() / 1000;
+  const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
+  box.innerHTML = `<div class="toolbar"><input id="pn-uq" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut">${u.total} users</span><span class="sp"></span>
+      <button class="sm" onclick="pnBulk(${id}, 'disable')">Disable ticked</button><button class="sm" onclick="pnBulk(${id}, 'enable')">Enable ticked</button><button class="sm" onclick="pnBulkRenew(${id})">Renew ticked…</button>
+      <button class="sm" ${pn.uoff ? "" : "disabled"} onclick="pn.uoff=Math.max(0,pn.uoff-40);refresh()">‹</button><button class="sm" ${pn.uoff + 40 < u.total ? "" : "disabled"} onclick="pn.uoff+=40;refresh()">›</button></div>
+    <table class="tbl"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:170px"></colgroup>
+      <thead><tr><th></th><th>User</th><th>Status</th><th>Traffic</th><th>Expires</th><th>Note</th><th></th></tr></thead>
+      <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}"><td><input type="checkbox" class="pn-uchk" value="${esc(x.username)}"></td><td class="name">${esc(x.username)}</td><td><span class="st ${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}">${esc(x.status)}</span></td>
+        <td class="num">${fmtB(x.used || 0)} / ${gb(x.limit)}</td><td class="num">${exp(x)}</td><td class="mut">${esc(x.note)}</td>
+        <td><button class="sm" onclick="pnUserOpen(${id}, '${esc(x.username)}')">Edit</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', '${x.status === "active" ? "disable" : "enable"}')">${x.status === "active" ? "Disable" : "Enable"}</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', 'reset')">Reset</button></td></tr>
+        ${pn.user && pn.user.username === x.username ? `<tr class="detail"><td colspan="7">${pnUserHtml(id, pn.user)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>`;
+  const q = $("#pn-uq"); if (q && pn.uq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+function pnUserHtml(id, u) {
+  return `<form class="frm" onsubmit="return pnUserSave(event, ${id}, '${esc(u.username)}')">
+    <label>Status<select name="status">${["active", "disabled", "on_hold"].map(s => `<option ${u.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+    <label>Expires <small>(empty = never)</small><input name="expire_date" type="date" value="${esc(u.expire_date)}"></label><label>Traffic limit GB <small>(0 = unlimited)</small><input name="limit_gb" type="number" step="0.1" min="0" value="${u.limit ? (u.limit / GB).toFixed(1) : 0}"></label>
+    <label>Reset<select name="reset">${["no_reset", "day", "week", "month", "year"].map(s => `<option ${u.reset === s ? "selected" : ""}>${s}</option>`).join("")}</select></label><label style="grid-column:2/-1">Note<input name="note" value="${esc(u.note)}"></label>
+    <div class="kv" style="grid-column:1/-1"><div><span>used</span> ${fmtB(u.used || 0)} · <span>lifetime</span> ${fmtB(u.lifetime || 0)}</div><div><span>created</span> ${esc(String(u.created_at || "").slice(0, 10))} · <span>online</span> ${esc(String(u.online_at || "never").slice(0, 16))}</div>${u.sub ? `<div><span>subscription</span> <a class="mut" onclick="navigator.clipboard.writeText('${esc(u.sub)}');toast('✓ copied','ok')">copy link</a></div>` : ""}</div>
+    <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="pn.user=null;refresh()">Close</button><span class="sp"></span>
+      <button type="button" class="sm" onclick="pnUAct(${id}, '${esc(u.username)}', 'renew', prompt('Add how many days?', '30'))">+ days</button><button type="button" class="sm" onclick="pnUAct(${id}, '${esc(u.username)}', 'revoke')">Revoke sub</button><button type="button" class="sm danger" onclick="if(confirm('Delete ${esc(u.username)} from the panel?'))pnUAct(${id}, '${esc(u.username)}', 'delete')">Delete</button></div></form>`;
+}
+window.pnUQ = v => { pn.uq = v.trim(); pn.uoff = 0; clearTimeout(qT); qT = setTimeout(refresh, 300); };
+window.pnUserOpen = async (id, name) => { try { pn.user = (await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`)).user; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnUserSave = async (e, id, name) => { e.preventDefault(); const f = new FormData(e.target); try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`, {method: "PUT", body: JSON.stringify({status: f.get("status"), expire_date: f.get("expire_date"), limit_gb: +f.get("limit_gb"), reset: f.get("reset"), note: f.get("note")})}); toast("✓ Saved", "ok"); pn.user = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnUAct = async (id, name, action, value) => { if (action === "renew" && !value) return; try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}/action`, {method: "POST", body: JSON.stringify({action, value})}); toast("✓ " + action + " done", "ok"); if (action === "delete") pn.user = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnBulk = async (id, action, value) => { const names = [...document.querySelectorAll(".pn-uchk:checked")].map(x => x.value); if (!names.length) { toast("Tick some users first", "bad"); return; } try { const r = await api(`/api/panels/${id}/users-bulk`, {method: "POST", body: JSON.stringify({action, value, usernames: names})}); toast(`✓ ${r.done} done${r.failed_count ? ", " + r.failed_count + " failed" : ""}`, r.failed_count ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnBulkRenew = id => { const d = prompt("Add how many days to the ticked users?", "30"); if (d) pnBulk(id, "renew", +d); };
+
+/* hosts */
+async function pnHostsLoad(id) {
+  const box = $("#pn-body"); if (!box) return;
+  try { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  box.innerHTML = `<div class="toolbar"><span class="mut">${pn.hosts.length} hosts — the address:port that goes into every subscription link</span><span class="sp"></span><button class="sm" onclick="pnHostsToggle(${id}, true)">Disable ticked</button><button class="sm" onclick="pnHostsToggle(${id}, false)">Enable ticked</button></div>
+    <table class="tbl"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:14%"><col><col style="width:8%"><col style="width:10%"><col style="width:150px"></colgroup>
+      <thead><tr><th></th><th>Remark</th><th>Inbound</th><th>Address</th><th>Port</th><th>State</th><th></th></tr></thead>
+      <tbody>${pn.hosts.map(h => `<tr class="${h.disabled ? "" : "up"}"><td><input type="checkbox" class="pn-hchk" value="${esc(h.key)}"></td><td class="name">${esc(h.remark)}</td><td class="mut">${esc(h.tag)}</td><td class="mut">${esc(h.address)}</td><td class="num">${h.port ?? "—"}</td><td><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span></td>
+        <td><button class="sm" onclick="pnHostOpen(${id}, '${esc(h.key)}')">Edit</button> <button class="sm" onclick="pnHostClone(${id}, '${esc(h.key)}')">Clone</button> <button class="sm danger" onclick="pnHostDel(${id}, '${esc(h.key)}', '${esc(h.remark)}')">✕</button></td></tr>
+        ${pn.hostEdit && pn.hostEdit.key === h.key ? `<tr class="detail"><td colspan="7">${pnHostHtml(id, pn.hostEdit)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="mut">no hosts</td></tr>'}</tbody></table>`;
+}
+function pnHostHtml(id, h) {
+  const txt = ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint"], bools = ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"];
+  return `<form class="frm" onsubmit="return pnHostSave(event, ${id}, '${esc(h.key)}')">${txt.map(k => `<label>${k}${k === "port" ? " <small>(empty = inbound port)</small>" : ""}<input name="${k}" value="${esc(h[k] == null ? "" : h[k])}"></label>`).join("")}
+    <label>security<select name="security">${["inbound_default", "none", "tls"].map(s => `<option ${h.security === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+    ${bools.map(k => `<label class="chk"><input type="checkbox" name="${k}" ${h[k] ? "checked" : ""}> ${k}</label>`).join("")}
+    <div class="frm-act"><button class="pri" type="submit">Save host</button><button type="button" onclick="pn.hostEdit=null;refresh()">Close</button></div></form>`;
+}
+window.pnHostOpen = async (id, key) => { try { pn.hostEdit = (await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`)).host; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostSave = async (e, id, key) => { e.preventDefault(); const f = new FormData(e.target), body = {}; ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint", "security"].forEach(k => body[k] = f.get(k)); ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"].forEach(k => body[k] = !!f.get(k)); try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "PUT", body: JSON.stringify(body)}); toast("✓ Host saved", "ok"); pn.hostEdit = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnHostsToggle = async (id, disable) => { const keys = [...document.querySelectorAll(".pn-hchk:checked")].map(x => x.value); if (!keys.length) { toast("Tick some hosts first", "bad"); return; } try { const r = await api(`/api/panels/${id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys, disable})}); toast(`✓ ${r.changed} hosts ${disable ? "disabled" : "enabled"}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostClone = async (id, key) => { try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}/clone`, {method: "POST"}); toast("✓ Cloned", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostDel = async (id, key, name) => { if (!confirm(`Delete host ${name} from the panel? Users lose that address in their links.`)) return; try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+
+/* outbounds (core config) */
+async function pnCoreLoad(id) {
+  const box = $("#pn-body"); if (!box) return;
+  try { pn.core = await api(`/api/panels/${id}/core`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const c = pn.core, s = c.summary;
+  box.innerHTML = `<div class="gw-out">Every change is validated, the previous config is saved below, written, read back — and put back automatically when the panel did not keep it. The <b>default</b> outbound (first in the list) carries all traffic that no rule sends elsewhere.</div>
+    <div class="card"><h3>Outbounds <span class="pill">${esc(c.kind)} · ${esc(c.name || "core")}</span><span class="sp"></span><button class="sm" onclick="pn.raw=!pn.raw;refresh()">${pn.raw ? "Hide" : "Raw JSON"}</button></h3>
+      ${s.outbounds.map(o => `<div class="gw-row"><span><b>${esc(o.tag)}</b> ${o.tag === s.default ? '<span class="pill ok">default</span>' : ""} <small class="mut">${esc(o.protocol)}${o.target ? " → " + esc(o.target) : ""}${o.network ? " · " + esc(o.network) : ""}</small></span><span></span>
+        <span class="ob-act">${o.tag !== s.default ? `<button class="sm" onclick="pnObDefault(${id}, '${esc(o.tag)}')">Make default</button>` : ""}${["freedom", "blackhole"].includes(o.protocol) ? "" : `<button class="sm danger" onclick="pnObDel(${id}, '${esc(o.tag)}')">Remove</button>`}</span></div>`).join("")}
+      <textarea id="pn-ob-uri" class="ob-raw" placeholder="Add an outbound from a link: vless://…  vmess://…  trojan://…  ss://…" spellcheck="false"></textarea>
+      <div class="frm-act"><input id="pn-ob-tag" placeholder="tag, e.g. fi-node" style="width:180px"><label class="chk"><input id="pn-ob-def" type="checkbox"> make it the default</label><button class="pri" onclick="pnObAdd(${id})">Add outbound</button></div></div>
+    <div class="card"><h3>Routing rules</h3>${s.rules.map(r => `<div class="gw-row"><span><b>→ ${esc(r.to)}</b></span><span class="mut">${esc(r.when)}</span><span></span></div>`).join("") || '<div class="mut">no rules: everything goes to the default outbound</div>'}${s.balancers.length ? `<div class="mut">balancers: ${esc(s.balancers.join(", "))}</div>` : ""}</div>
+    ${pn.raw ? `<div class="card"><h3>Raw core config <small class="mut">— for experts; saved only when valid</small></h3><textarea id="pn-core-raw" class="ob-raw" style="min-height:320px;font-family:var(--mono)" spellcheck="false">${esc(JSON.stringify(c.config, null, 2))}</textarea><div class="frm-act"><button class="pri" onclick="pnCoreRaw(${id})">Validate &amp; save</button></div></div>` : ""}
+    <div class="card"><h3>Backups <small class="mut">— the config as it was before each change</small></h3>${c.backups.map(b => `<div class="gw-row"><span><b>${new Date(b.at * 1000).toLocaleString()}</b> <small class="mut">${esc(b.note)}</small></span><span class="mut">${esc(b.outbounds.join(", "))}</span><span class="ob-act"><button class="sm" onclick="pnCoreRestore(${id}, '${esc(b.file)}')">Restore</button></span></div>`).join("") || '<div class="mut">no backup yet</div>'}</div>`;
+}
+const pnCoreDo = async (id, fn) => { toast("Writing to the panel… (it restarts its core)"); try { const r = await fn(); toast("✓ Applied · outbounds: " + r.outbounds.join(", "), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnObAdd = id => { const uri = $("#pn-ob-uri").value.trim(), tag = $("#pn-ob-tag").value.trim(), def = $("#pn-ob-def").checked; if (!uri || !tag) { toast("A link and a tag are needed", "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds`, {method: "POST", body: JSON.stringify({uri, tag, make_default: def})})); };
+window.pnObDel = (id, tag) => { if (!confirm(`Remove outbound ${tag}? Rules that use it are removed too.`)) return; pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds/${encodeURIComponent(tag)}`, {method: "DELETE"})); };
+window.pnObDefault = (id, tag) => pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds/${encodeURIComponent(tag)}/default`, {method: "POST"}));
+window.pnCoreRestore = (id, file) => { if (!confirm("Put this backup in place of the current core config?")) return; pnCoreDo(id, () => api(`/api/panels/${id}/core/restore/${file}`, {method: "POST"})); };
+window.pnCoreRaw = id => { let cfg; try { cfg = JSON.parse($("#pn-core-raw").value); } catch (e) { toast("✕ not valid JSON: " + e.message, "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core`, {method: "PUT", body: JSON.stringify({config: cfg, note: "manual edit"})})); };
+
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
 const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};
 INFO.gateway = ["Gateway", "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off."];

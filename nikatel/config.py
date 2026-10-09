@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     # where state lives
     data_dir: Path = Path("/var/lib/nikatel/data")
+    bootstrap_dir: Path = Path("/etc/nikatel")      # probe.json / panels.json read once on first start
     log_dir: Path = Path("/var/lib/nikatel/logs")
 
     # http

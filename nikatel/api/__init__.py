@@ -8,6 +8,7 @@ from . import (
     events,
     gateway,
     jobs,
+    panels,
     servers,
     system,
     tunnels,
@@ -15,5 +16,5 @@ from . import (
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, tunnels, events, jobs, alerts, actions, gateway, configs):
+for mod in (auth, system, servers, tunnels, events, jobs, alerts, actions, gateway, configs, panels):
     router.include_router(mod.router)

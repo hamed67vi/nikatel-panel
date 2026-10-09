@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from ..db import session
 from ..log import get_logger
-from ..models import AlertState, Config, Maintenance, Server, Tunnel
+from ..models import AlertState, Config, Maintenance, Panel, Server, Tunnel
 from . import settings as st
 from .events import emit
 from .telegram import send_text
@@ -168,6 +168,36 @@ def run() -> None:
                     remind_msgs.append(f"• config {c.name} — still down for {_dur(now - a.bad_since)}")
                 else:
                     up_msgs.append(f"• config {c.name} — was down {_dur(a.good_since - a.bad_since)}")
+
+        for p in db.scalars(select(Panel).where(Panel.enabled.is_(True))):
+            if p.status == "unknown":
+                continue
+
+            a = track_for("panel", p.name)
+            new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice), p.status == "down", now, rules_s)
+            a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice = new.fails, new.alerted, new.bad_since, new.good_since, new.last_notice
+
+            if verdict and p.name not in muted and not quiet:
+                if verdict == "down":
+                    down_msgs.append(f"• panel {p.name} — {p.last_error or 'does not answer'}")
+                elif verdict == "remind":
+                    remind_msgs.append(f"• panel {p.name} — still down for {_dur(now - a.bad_since)}")
+                else:
+                    up_msgs.append(f"• panel {p.name} — was down {_dur(a.good_since - a.bad_since)}")
+
+            for n in p.nodes or []:
+                bad = int(n.get("fails", 0)) >= 2
+                a = track_for("node", f"{p.name}/{n.get('name', '')}")
+                new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice), bad, now, rules_s)
+                a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice = new.fails, new.alerted, new.bad_since, new.good_since, new.last_notice
+
+                if verdict and p.name not in muted and not quiet:
+                    if verdict == "down":
+                        down_msgs.append(f"• node {n.get('name', '')} of {p.name} — {n.get('status') or 'not connected'}" + (f" ({n['message']})" if n.get("message") else ""))
+                    elif verdict == "remind":
+                        remind_msgs.append(f"• node {n.get('name', '')} of {p.name} — still not connected for {_dur(now - a.bad_since)}")
+                    else:
+                        up_msgs.append(f"• node {n.get('name', '')} of {p.name} — was disconnected {_dur(a.good_since - a.bad_since)}")
 
         if down_msgs:
             _deliver(db, "bad", f"🔴 DOWN ({len(down_msgs)})\n" + "\n".join(down_msgs))

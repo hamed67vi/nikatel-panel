@@ -17,7 +17,17 @@ from . import log as logmod
 from .api import router as api_router
 from .config import get_settings
 from .db import init_db
-from .services import actions, alerts, backup, configs, facts, probe, report, tunnels
+from .services import (
+    actions,
+    alerts,
+    backup,
+    configs,
+    facts,
+    panels,
+    probe,
+    report,
+    tunnels,
+)
 
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
@@ -32,6 +42,7 @@ def _register_jobs() -> None:
     jobs.register("backup", 600, backup.scheduled)
     jobs.register("auto-repair", 60, actions.auto_repair)
     jobs.register("configs", 120, configs.sync)
+    jobs.register("panels", 120, panels.check_all)
 
 
 @asynccontextmanager
@@ -47,6 +58,7 @@ async def _lifespan(app: FastAPI):
         log.info("first start: the admin password is in %s", s.data_dir / "initial-admin-password.txt")
 
     probe.bootstrap()
+    panels.bootstrap()
 
     if app.state.run_jobs:
         _register_jobs()

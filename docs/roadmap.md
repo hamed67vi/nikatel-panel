@@ -48,8 +48,8 @@ always installable; a milestone ends with a tag.
 - [x] #28 Probe installer (probe/ in this repo + cached Xray) and standby probes with automatic failover
 
 ## M6 · Panels & bot
-- [ ] #29 Marzban / PasarGuard: status, nodes, users, hosts
-- [ ] #30 Core outbounds manager with backup/restore
+- [x] #29 Marzban / PasarGuard: status, nodes (auto reconnect), users, hosts; alerts for panels and nodes
+- [x] #30 Core outbounds manager with validation, backup/restore and automatic rollback
 - [ ] #31 Shop bot: status, switches, users, SQL import
 - [ ] #32 Retire the old panel; make the repository private
 

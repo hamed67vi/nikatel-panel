@@ -25,7 +25,9 @@ def bootstrap() -> None:
     if cur.get("api_url"):
         return
 
-    p = Path("/etc/nikatel/probe.json")
+    from ..config import get_settings
+
+    p = Path(get_settings().bootstrap_dir) / "probe.json"
 
     if p.exists():
         try:

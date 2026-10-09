@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 - 2026-10-09 - Milestone 6, part 1: panels and outbounds
+
+* Panels page: Marzban / PasarGuard panels checked every 2 minutes (version, users, load, nodes); a node that stays disconnected gets a reconnect request; alerts for panels and nodes with the usual flapping rules.
+* Users: search, filter, paging; edit status / expiry / limit / reset / note; enable, disable, reset, renew, revoke, delete; bulk actions on ticked users.
+* Hosts: list with the effective port, edit every field, enable / disable, clone, delete.
+* Outbounds: the panel's Xray core config — add an outbound from a link, remove, make default, raw JSON edit; every change validated, backed up to `core-backups/`, read back and rolled back when the panel did not keep it; one-click restore of any backup.
+* First start imports the panels from `/etc/nikatel/panels.json` (passwords stay in the database, never in the API).
+
 ## 0.8.1 - 2026-10-09 - quieter tunnel health
 
 * The GRE peer check sends 20 pings instead of 5, so one lost packet is 5 %, not 20 %.
