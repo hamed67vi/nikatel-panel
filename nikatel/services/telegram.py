@@ -46,7 +46,7 @@ def send_text(text: str, require_enabled: bool = True) -> tuple[bool, str]:
         r = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=20,
                        json={"chat_id": chat, "text": text[:4000], "disable_web_page_preview": True})
         d = r.json()
-    except Exception as e:
+    except (httpx.HTTPError, ValueError) as e:
         log.warning("send failed: %s", e)
         return False, f"Telegram did not answer: {str(e)[:80]}"
 
@@ -70,7 +70,7 @@ def send_file(name: str, data: bytes, caption: str = "") -> tuple[bool, str]:
         r = httpx.post(f"https://api.telegram.org/bot{token}/sendDocument", timeout=120,
                        data={"chat_id": chat, "caption": caption[:900]}, files={"document": (name, data)})
         d = r.json()
-    except Exception as e:
+    except (httpx.HTTPError, ValueError) as e:
         log.warning("file send failed: %s", e)
         return False, f"Telegram did not answer: {str(e)[:80]}"
 
