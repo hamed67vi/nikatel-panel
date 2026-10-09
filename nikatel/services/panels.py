@@ -678,7 +678,7 @@ def test_config(panel_id: int) -> dict:
         c, name = _cred(p), p.name
 
     tu = test_user(c, name)
-    res = configs.import_subscription(name, tu["sub"])
+    res = configs.import_subscription(name, tu["sub"], prefix=name)
 
     with session() as db:
         p = db.get(Panel, panel_id)

@@ -60,13 +60,13 @@ const PAGES = {};
 const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
 const INFO = {
   dashboard: ["Dashboard", "What needs attention right now, and what happened."],
-  nodes: ["Nodes", "سرورهای ایران و خارج، مانیتورینگ منابع، گیت‌وی ایران، رویدادها و لاگ."],
-  servers: ["Servers", "هر سرور ایران و خارج: در دسترس بودن، بار، حافظه، دیسک. هر ۲ دقیقه از طریق SSH."],
-  tunnels: ["Tunnels", "هر تانل بین یک سرور ایران و یک سرور خارج: سرویس‌ها، لینک GRE، پینگ طرف مقابل، پورت‌های فوروارد. هر دقیقه چک می‌شود."],
-  events: ["Events", "هر اتفاق در یک جمله ساده. جدیدترین اول."],
-  jobs: ["Jobs", "کارهای پس‌زمینه پنل و اینکه موفق می‌شوند یا نه."],
-  logs: ["Logs", "لاگ خود پنل، جدیدترین اول. رازها قبل از نوشتن پنهان می‌شوند."],
-  settings: ["Settings", "تنظیمات پنل: هشدارها، تعمیر و پروب، یکپارچه‌سازی‌ها، بکاپ و حساب کاربری."],
+  nodes: ["Nodes", "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs."],
+  servers: ["Servers", "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH."],
+  tunnels: ["Tunnels", "Every tunnel between an Iran server and a foreign server: service units, GRE link, peer ping, forwarded ports. Checked every minute."],
+  events: ["Events", "One plain sentence per thing that happened. Newest first."],
+  jobs: ["Jobs", "The background jobs of the panel and whether they succeed."],
+  logs: ["Logs", "The panel's own log, newest first. Secrets are masked before they are written."],
+  settings: ["Settings", "Account, Telegram and backup, the probe, appearance and about, AI and automation."],
 };
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */

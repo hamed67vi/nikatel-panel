@@ -80,7 +80,7 @@ def test_panel_test_config_imports_to_probe(client, monkeypatch):
     monkeypatch.setattr(panels, "call", lambda c, m, p, **kw: {"version": "1", "total_user": 1} if p == "/api/system" else [] if p == "/api/nodes" else (_ for _ in ()).throw(PanelError("HTTP 404", 404)))
     pid = client.post("/api/panels", json={"name": "shop", "type": "marzban", "url": "https://1.1.1.1", "username": "a", "password": "p"}).json()["panel"]["id"]
     monkeypatch.setattr(panels, "test_user", lambda c, name: {"username": "nikatel-test-shop", "sub": "https://1.1.1.1/sub/x"})
-    monkeypatch.setattr(configs, "import_subscription", lambda name, url, picks=None: {"added": ["a", "b"], "skipped": [], "failed": []})
+    monkeypatch.setattr(configs, "import_subscription", lambda name, url, picks=None, prefix="": {"added": [prefix + " a", prefix + " b"], "skipped": [], "failed": []})
     r = client.post(f"/api/panels/{pid}/test-config")
-    assert r.status_code == 200 and r.json()["added"] == ["a", "b"] and r.json()["username"] == "nikatel-test-shop"
+    assert r.status_code == 200 and r.json()["added"] == ["shop a", "shop b"] and r.json()["username"] == "nikatel-test-shop"
     assert client.get("/api/panels").json()["panels"][0]["stats"]["test_user"] == "nikatel-test-shop"

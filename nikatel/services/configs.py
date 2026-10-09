@@ -9,6 +9,7 @@ import urllib.parse
 
 import httpx
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from ..db import session
 from ..log import get_logger
@@ -250,8 +251,9 @@ def fetch_subscription(url: str) -> list[dict]:
     return [{"name": clean_name(link_name(u)) or f"node{i + 1}", "uri": u, "proto": u.split("://", 1)[0]} for i, u in enumerate(links)]
 
 
-def import_subscription(name: str, url: str, picks: list[str] | None = None) -> dict:
-    """Add the chosen nodes (or all) as configs of group `name`. Existing names are skipped."""
+def import_subscription(name: str, url: str, picks: list[str] | None = None, prefix: str = "") -> dict:
+    """Add the chosen nodes (or all) as configs of group `name`. Existing names are skipped.
+    With `prefix` every config is named `<prefix> <node>` so a panel's test nodes never clash with hand-added ones."""
     name = clean_name(name)
 
     if not name:
@@ -270,7 +272,7 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None) -> 
         if picks is not None and n["name"] not in picks:
             continue
 
-        full = clean_name(f"{n['name']}")
+        full = clean_name(f"{prefix} {n['name']}" if prefix else n["name"])
 
         if full in existing:
             skipped.append(full)
@@ -282,8 +284,11 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None) -> 
             failed.append(f"{full}: {str(e)[:60]}")
             continue
 
-        with session() as db:
-            db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time())))
+        try:
+            with session() as db:
+                db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time())))
+        except IntegrityError:          # the sync job registered it a moment ago: it is there, that is all we need
+            pass
 
         added.append(full)
         existing.add(full)
