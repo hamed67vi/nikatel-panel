@@ -85,13 +85,19 @@ def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) 
 
 
 def _worker(aid: int, build_aid: int, name: str) -> None:
+    """Measure, then remove, then mark the test as done - so 'done' always means 'nothing is left behind'."""
+    ok: bool | None = False
+    verdict = ""
+
     try:
-        _run(aid, build_aid, name)
+        ok, verdict = _run(aid, build_aid, name)
     except Exception as e:  # thread boundary
         log.exception("tunnel test #%s crashed", aid)
-        _say(aid, f"Stopped: {str(e)[:160]}", done=True, ok=False)
+        verdict = f"Stopped: {str(e)[:160]}"
+        ok = False
     finally:
         _cleanup(aid, name)
+        _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 
 def _cleanup(aid: int, name: str) -> None:
@@ -107,7 +113,7 @@ def _cleanup(aid: int, name: str) -> None:
             _say(aid, f"Could not remove the temporary tunnel cleanly: {e}")
 
 
-def _run(aid: int, build_aid: int, name: str) -> None:
+def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
     # wait for the build
     for _ in range(200):
         time.sleep(3)
@@ -122,8 +128,7 @@ def _run(aid: int, build_aid: int, name: str) -> None:
         raise RuntimeError("the build took too long")
 
     if not ok:
-        _say(aid, "Build failed: " + (story[-1] if story else "unknown reason"), done=True, ok=False)
-        return
+        return False, "Build failed: " + (story[-1] if story else "unknown reason")
 
     _say(aid, "Built. " + next((s for s in story if s.startswith("Path MTU")), ""))
 
@@ -152,4 +157,4 @@ def _run(aid: int, build_aid: int, name: str) -> None:
     _say(aid, f"Download through the tunnel (foreign → Iran): {mbps if mbps is not None else 'not measured'} Mbps")
     sc = score(avg, jitter, loss, mbps)
     verdict = "excellent" if sc >= 75 else "usable" if sc >= 50 else "poor"
-    _say(aid, f"Score {sc}/100 — {verdict}.", done=True, ok=sc >= 50)
+    return sc >= 50, f"Score {sc}/100 — {verdict}. Everything temporary was removed."
