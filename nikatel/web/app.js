@@ -246,10 +246,17 @@ async function buildFormHtml() {
     <label>Transport<select name="transport"><option>tcpmux</option><option>tcp</option><option>wsmux</option><option>wssmux</option></select></label>
     <label>GRE MTU <small>(0 = measure)</small><input name="mtu" type="number" min="0" max="1476" value="0"></label>
     <label>Keepalive (s)<input name="keepalive" type="number" min="10" max="600" value="75"></label>
-    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
-    <small class="mut">Backhaul over GRE, like the existing tunnels: the panel measures the MTU, tunes both kernels, brings the GRE link up and verifies it holds, then starts backhaul on both sides and tests the data path. A failed build removes everything it created.</small>
+    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
+    <small class="mut">Backhaul over GRE, like the existing tunnels: the panel measures the MTU, tunes both kernels, brings the GRE link up and verifies it holds, then starts backhaul on both sides and tests the data path. A failed build removes everything it created. “Test this pair first” does the same with a temporary tunnel, measures latency / jitter / loss / speed, and removes it.</small>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
+window.startTest = async e => {
+  const f = new FormData(e.target.closest("form"));
+  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), transport: f.get("transport")};
+  const box = $("#build-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Building a temporary tunnel…</div>';
+  try { const r = await api("/api/tunnel-test", {method: "POST", body: JSON.stringify(body)}); await followStory(r.id, box, 400); }
+  catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; }
+};
 window.newTunnel = () => { state.edit = "newtunnel"; state.open = null; refresh(); };
 window.startBuild = async e => {
   e.preventDefault();

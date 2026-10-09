@@ -101,6 +101,14 @@ echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
     "http_probe": (r"""curl -sS -m 8 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:@PORT@/' 2>/dev/null || echo FAIL
 """, {"PORT": r"^\d{1,5}$"}),
 
+    # 30 pings with per-packet times (for jitter) over the GRE interface
+    "gre_pings": (r"""ping -c 30 -i 0.2 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | grep -E 'time=|packets transmitted'
+""", {"IFACE": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}$", "PEER": _IPV4}),
+
+    # pull from a sink through a forwarded port for 10 s; bytes per second
+    "speed_pull": (r"""echo "SPEED=$(curl -s -m 12 -o /dev/null -w '%{speed_download}' 'http://127.0.0.1:@PORT@/' 2>/dev/null || echo 0)"
+""", {"PORT": r"^\d{1,5}$"}),
+
     # the last log lines of a unit
     "unit_log": (r"""journalctl -u '@UNIT@' -n 8 --no-pager 2>/dev/null | cut -c1-180
 """, {"UNIT": r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}(\.service|\.timer)?$"}),
@@ -277,6 +285,15 @@ for p in @PORTS@; do if iptables -S INPUT 2>/dev/null | head -1 | grep -q DROP; 
 systemctl daemon-reload; systemctl enable nikatel-xgw >/dev/null 2>&1; systemctl restart nikatel-xgw; sleep 2
 if systemctl is-active --quiet nikatel-xgw; then echo "ACTIVE"; else [ -f config.prev.json ] && cp -f config.prev.json config.json && systemctl restart nikatel-xgw; echo "FAILED $(tail -n 3 error.log 2>/dev/null | tr '\n' ' ')"; fi
 """, {"B64": _B64, "PORTS": _PORTS}),
+
+    # a throw-away server on 127.0.0.1 that streams zeros for 20 s (the other end of the speed test)
+    "speed_sink": (r"""(timeout 20 python3 -c 'import socket,sys
+s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("127.0.0.1",int(sys.argv[1]))); s.listen(4)
+c,_=s.accept(); c.recv(2048); c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n"); z=b"\0"*65536
+try:
+    while True: c.sendall(z)
+except OSError: pass' '@PORT@' >/dev/null 2>&1 &); sleep 1; echo started
+""", {"PORT": r"^\d{1,5}$"}),
 
     # the gateway directory must exist before the binary is copied in
     "xgw_mkdir": (r"""mkdir -p /opt/nikatel-xgw && chmod 755 /opt/nikatel-xgw && echo OK

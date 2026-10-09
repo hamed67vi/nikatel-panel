@@ -32,6 +32,22 @@ def build(body: BuildIn):
     return {"ok": True, "id": aid}
 
 
+class TestIn(BaseModel):
+    iran_id: int
+    foreign_id: int
+    transport: str = Field("tcpmux", pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
+
+
+@router.post("/tunnel-test", status_code=202)
+def tunnel_test(body: TestIn):
+    from ..services import tunnel_test as tt
+
+    try:
+        return {"ok": True, "id": tt.start(body.iran_id, body.foreign_id, body.transport)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.delete("/tunnels/{tunnel_id}")
 def delete(tunnel_id: int):
     try:

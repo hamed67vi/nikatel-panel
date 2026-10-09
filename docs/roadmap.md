@@ -39,7 +39,7 @@ always installable; a milestone ends with a tag.
 
 ## M4 · Build
 - [x] #23 Create tunnel (backhaul over GRE), with port allocation, MTU measurement, hold test, rollback; remove; rebuild
-- [ ] #24 Tunnel test between two servers (temporary tunnels of several types, measured, removed)
+- [x] #24 Tunnel test between two servers (temporary backhaul-over-GRE tunnel, latency / jitter / loss / speed, removed again)
 - [x] #25 Iran gateway: Xray pushed over SSH, ports → node, borrowed configs with automatic fallback
 
 ## M5 · Configs & probe

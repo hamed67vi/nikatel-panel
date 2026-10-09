@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 - 2026-10-09 - Milestone 4 complete: tunnel test
+
+* "Test this pair first": builds a temporary backhaul-over-GRE tunnel, measures latency, jitter and loss over GRE and the real download speed through a forwarded port, gives a 0-100 score, and removes everything again. Results stay in the Repairs history.
+* Gateway: borrowed mode blocks instead of leaking to direct before the first probe.
+
 ## 0.6.0 - 2026-10-09 - Milestone 4, part 2: Iran gateway
 
 * Gateway page: a plain Xray on an Iran server, installed from the panel's cache over SSH (the server needs no internet); ports forward to foreign nodes; borrowed vless/vmess/trojan/ss configs as the way out during internet cuts, with modes auto (balancer + fallback) / borrowed / direct; exit test per config with IP and country; status, log, remove.
