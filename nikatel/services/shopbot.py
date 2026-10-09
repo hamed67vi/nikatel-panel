@@ -137,7 +137,11 @@ def info() -> dict:
 
 
 def telegram(method: str, body: dict | None = None) -> dict:
-    out = run_script(_node(), "bot_tg", {"DIR": conf()["dir"], "METHOD": method, "BODY": "'" + json.dumps(body or {}, ensure_ascii=False).replace("'", "").replace("\\", "") + "'"}, timeout=40)
+    """getMe / getWebhookInfo are reads (a script); everything else changes the bot (an action)."""
+    if method in ("getMe", "getWebhookInfo"):
+        out = run_script(_node(), "bot_tg_get", {"DIR": conf()["dir"], "METHOD": method}, timeout=40)
+    else:
+        out = run_action(_node(), "bot_tg", {"DIR": conf()["dir"], "METHOD": method, "BODY": "'" + json.dumps(body or {}, ensure_ascii=False).replace("'", "").replace("\\", "") + "'"}, timeout=40)
 
     try:
         return json.loads(out.strip() or "{}")

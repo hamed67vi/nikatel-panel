@@ -68,7 +68,7 @@ def test_info_users_and_import_through_api(client, monkeypatch):
             if "BOT_STATES" in sql:
                 return "value\n{\"a\":\"1\"}\n"
             return ""
-        if name == "bot_tg":
+        if name == "bot_tg_get":
             return '{"ok":true,"result":{"username":"shop_bot","url":"https://x/bot.php","pending_update_count":0}}'
         return ""
 
