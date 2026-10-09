@@ -78,7 +78,7 @@ def parse_ports(text: str) -> list[PortMap]:
 
 
 def pretty_name(foreign_name: str, iran_name: str, taken: set[str]) -> str:
-    """fi-mobin01 style, max 15 chars (Linux interface name), unique."""
+    """<foreign>-<iran> style (e.g. fi-ir1), max 15 chars (Linux interface name), unique."""
     def slug(v: str, n: int) -> str:
         return re.sub(r"[^a-z0-9]+", "", str(v or "").lower())[:n]
 

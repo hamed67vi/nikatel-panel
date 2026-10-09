@@ -4,7 +4,8 @@
 # Allowed: loopback, 0.0.0.0, RFC1918, documentation ranges, and the test addresses 1.1.1.1 … 9.9.9.9.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-FILES=$(git ls-files 2>/dev/null | grep -v '^$' || true)
+# tracked AND new (untracked, not ignored) files - a fresh file must not slip through before `git add`
+FILES=$( (git ls-files; git ls-files --others --exclude-standard) 2>/dev/null | grep -v '^$' | sort -u || true)
 [ -n "$FILES" ] || FILES=$(find . -type f -not -path './.git/*' -not -path '*/__pycache__/*' -not -name '*.pyc' -not -path './*.egg-info/*')
 bad=0
 

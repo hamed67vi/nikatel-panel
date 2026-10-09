@@ -26,8 +26,8 @@ def test_parse_ports_forms():
 
 
 def test_pretty_name_limits_and_uniqueness():
-    assert pretty_name("FI", "mobin01", set()) == "fi-mobin01"
-    assert pretty_name("FI", "mobin01", {"fi-mobin01"}) == "fi-mobin01-2"
+    assert pretty_name("FI", "ir1", set()) == "fi-ir1"
+    assert pretty_name("FI", "ir1", {"fi-ir1"}) == "fi-ir1-2"
     n = pretty_name("Netherlands-Amsterdam", "Respina Tehran 03", set())
     assert len(n) <= 15 and "-" in n
 
