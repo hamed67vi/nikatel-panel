@@ -38,7 +38,7 @@ always installable; a milestone ends with a tag.
 - [x] #22 "Fix" button with a live story; auto-repair with limits (max 2/hour, never when a server is down, off by default)
 
 ## M4 · Build
-- [ ] #23 Create tunnel (backhaul tcpmux first), with port allocation and GRE pair
+- [x] #23 Create tunnel (backhaul over GRE), with port allocation, MTU measurement, hold test, rollback; remove; rebuild
 - [ ] #24 Tunnel test between two servers (temporary tunnels of several types, measured, removed)
 - [ ] #25 Iran gateway: Xray pushed over SSH, ports → node, borrowed configs with automatic fallback
 

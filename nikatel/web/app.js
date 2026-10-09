@@ -204,7 +204,8 @@ PAGES.tunnels = async () => {
       <td class="mut" title="${esc(t.last_error)}">${t.last_error ? esc(t.last_error).slice(0, 48) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
       <td><button class="sm" onclick="toggleDetail(${t.id})">${state.open === t.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkTunnel(${t.id})">Check</button></td></tr>
       ${state.open === t.id ? detailRow(t) : ""}`;
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"></div>
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newTunnel()">+ Create tunnel</button></div>
+    ${state.edit === "newtunnel" ? `<div class="card" id="build-card">${await buildFormHtml()}</div>` : ""}
     <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:18%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col><col style="width:130px"></colgroup>
       <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Note</th><th></th></tr></thead>
       <tbody>${rows.map(row).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
@@ -222,7 +223,7 @@ function detailRow(t) {
       <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
       ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
     </div><div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><span class="sp"></span><a class="mut" onclick="go('actions')">repair history →</a></div>
+    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
     <div id="fix-${t.id}" class="fix hidden"></div></td></tr>`;
 }
 async function loadTunnelCharts(id) {
@@ -235,6 +236,53 @@ async function loadTunnelCharts(id) {
     <div><small>RTT ms</small>${spark(col("rtt_ms"), {fmt: v => v.toFixed(0)})}</div>
     <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>`;
 }
+async function buildFormHtml() {
+  const servers = await api("/api/servers");
+  const opt = role => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
+  return `<form class="frm" onsubmit="return startBuild(event)">
+    <label>Iran server<select name="iran_id" required>${opt("iran")}</select></label>
+    <label>Foreign server<select name="foreign_id" required>${opt("foreign")}</select></label>
+    <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072"></label>
+    <label>Transport<select name="transport"><option>tcpmux</option><option>tcp</option><option>wsmux</option><option>wssmux</option></select></label>
+    <label>GRE MTU <small>(0 = measure)</small><input name="mtu" type="number" min="0" max="1476" value="0"></label>
+    <label>Keepalive (s)<input name="keepalive" type="number" min="10" max="600" value="75"></label>
+    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
+    <small class="mut">Backhaul over GRE, like the existing tunnels: the panel measures the MTU, tunes both kernels, brings the GRE link up and verifies it holds, then starts backhaul on both sides and tests the data path. A failed build removes everything it created.</small>
+  </form><div id="build-story" class="fix hidden"></div>`;
+}
+window.newTunnel = () => { state.edit = "newtunnel"; state.open = null; refresh(); };
+window.startBuild = async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: f.get("ports").trim(), transport: f.get("transport"), mtu: +f.get("mtu") || 0, keepalive: +f.get("keepalive") || 75};
+  const box = $("#build-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
+  try {
+    const r = await api("/api/tunnels", {method: "POST", body: JSON.stringify(body)});
+    await followStory(r.id, box, 400);
+  } catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; }
+  return false;
+};
+async function followStory(aid, box, maxPolls) {
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise(res => setTimeout(res, 1500));
+    const s = await api(`/api/actions/${aid}`);
+    box.innerHTML = storyHtml(s);
+    if (s.done) return s;
+  }
+}
+window.deleteTunnel = async (id, name) => {
+  if (!confirm(`Remove the tunnel ${name} from BOTH servers? Users on it lose their connection. This cannot be undone.`)) return;
+  if (prompt(`Type the tunnel name to confirm:`) !== name) { toast("Not removed", "bad"); return; }
+  toast("Removing…");
+  try { const r = await api(`/api/tunnels/${id}`, {method: "DELETE"}); toast("✓ " + r.results.join(" · "), "ok"); state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.rebuildTunnel = async (id, name) => {
+  if (!confirm(`Rebuild ${name}: remove it from both servers and build it again with the same name and ports? It is down while this runs (about a minute).`)) return;
+  const box = document.getElementById("fix-" + id); if (!box) return;
+  box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Removing and rebuilding…</div>'; state.edit = "fix";
+  try { const r = await api(`/api/tunnels/${id}/rebuild`, {method: "POST"}); await followStory(r.id, box, 400); } catch (e) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
+  state.edit = null;
+};
 window.toggleDetail = id => { state.open = state.open === id ? null : id; state.edit = null; refresh(); };
 window.fixTunnel = async (id, dry) => {
   if (!dry && !confirm("Repair this tunnel now? The panel restarts only the units that are not working, one at a time, and checks after each step.")) return;
@@ -256,7 +304,7 @@ window.fixTunnel = async (id, dry) => {
 function storyHtml(s) {
   const cls = l => /healthy|works|finished|succeeded/i.test(l) ? "ok" : /not repaired|failed|still|does not answer|No safe|read-only|Stopped/i.test(l) ? "bad" : /^Plan:|^\[dry run\]/.test(l) ? "plan" : "do";
   return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
-    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
+    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "delete" ? "Removal" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 PAGES.actions = async () => {
   const d = await api("/api/actions?limit=100");

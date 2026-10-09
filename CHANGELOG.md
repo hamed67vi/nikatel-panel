@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 - 2026-10-09 - Milestone 4, part 1: build tunnels
+
+* Create a backhaul-over-GRE tunnel from the UI: preflight of both servers, free control port, path-MTU measurement, kernel tuning, GRE scripts + unit + health timer on both sides, two-way ping and a 10 s hold test, tuned backhaul configs, control-connection and data-path checks; a failed build removes what it created.
+* Remove a tunnel from both servers (typed confirmation) and rebuild it with the same name and ports.
+* New reviewed read-only scripts (`build_facts`, `mtu_probe`, `gre_verify`, `gre_hold`, `estab_check`, `http_probe`, `unit_log`) and actions (`put_file`, `unit_enable_restart`, `remove_tunnel_files`, `sysctl_tune`, `data_test_server`), all parameter-validated.
+
 ## 0.4.0 - 2026-10-09 - Milestone 3 (repair)
 
 * Named actions (`ssh.ACTIONS`): the only way the panel changes a server; refused in read-only mode.

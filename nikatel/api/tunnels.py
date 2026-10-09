@@ -1,15 +1,51 @@
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck
+from ..services import builder
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
+
+
+class BuildIn(BaseModel):
+    iran_id: int
+    foreign_id: int
+    ports: str = Field(min_length=1, max_length=300)
+    transport: str = Field("tcpmux", pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
+    mtu: int = Field(0, ge=0, le=1476)
+    keepalive: int = Field(75, ge=10, le=600)
+
+
+@router.post("/tunnels", status_code=202)
+def build(body: BuildIn):
+    try:
+        aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"ok": True, "id": aid}
+
+
+@router.delete("/tunnels/{tunnel_id}")
+def delete(tunnel_id: int):
+    try:
+        return {"ok": True, "results": builder.delete_tunnel(tunnel_id)}
+    except ValueError as e:
+        raise HTTPException(400 if "read-only" in str(e) else 404, str(e))
+
+
+@router.post("/tunnels/{tunnel_id}/rebuild", status_code=202)
+def rebuild(tunnel_id: int):
+    try:
+        return {"ok": True, "id": builder.rebuild_tunnel(tunnel_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 class TunnelOut(BaseModel):
