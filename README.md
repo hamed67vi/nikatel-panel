@@ -26,9 +26,20 @@ Non-interactive: `curl … | bash -s -- --yes --port 9443`.
 
 ## Status
 
-**1.0 - all milestones done.** Servers and tunnels (monitor, alert, repair, build, test), the Iran
-gateway, configs and the probe, Marzban / PasarGuard panels with their outbounds, and the shop bot.
-The old panel is retired. API docs at `/api/docs`.
+**1.4 - M0 to M7 done, M8 in progress.** Servers and tunnels (monitor, alert, repair, build, test),
+the Iran gateway, configs and the probe, Marzban / PasarGuard panels with their outbounds, the shop
+bot, and everything the old panel could do, in the new structure. The old panel is retired. Next
+(M8): the other tunnel engines (BackPack, Paqet, Chisel) in Create and Test, a fully customised shop
+bot, a language switch. API docs at `/api/docs`.
+
+## How it is built, in one paragraph
+
+One Python process (FastAPI) with SQLite. The browser talks to `/api/*`; the panel talks to servers
+only over SSH with its own key and a fixed list of reviewed scripts (`nikatel/ssh.py`), to Marzban /
+PasarGuard over their HTTP API, and to the probe inside Iran over its API. Background jobs sample
+servers, check tunnels with hysteresis, alert through Telegram, back up, and repair. The UI is three
+files with no build step: `index.html`, `app.css`, `app.js` (one function per page). The full map is
+in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 The repository contains no addresses, names or credentials of the real infrastructure; those live
 only in the database on the panel server. `scripts/check_no_secrets.sh` enforces this on every

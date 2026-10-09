@@ -510,39 +510,67 @@ window.checkTunnel = async id => { toast("Checking both servers…"); try { awai
 
 /* ---- configs (what the probe keeps alive and tests) */
 INFO.configs = ["Panels", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
-const cf = {open: null, edit: null, sub: null, q: ""};
+const cf = {open: null, edit: null, sub: null, q: "", group: localStorage.getItem("nk.cfgroup") || "__all"};
+const FLAGS = {de: "🇩🇪", germany: "🇩🇪", fi: "🇫🇮", finland: "🇫🇮", nl: "🇳🇱", netherlands: "🇳🇱", us: "🇺🇸", usa: "🇺🇸", fr: "🇫🇷", france: "🇫🇷", gb: "🇬🇧", uk: "🇬🇧", tr: "🇹🇷", turkey: "🇹🇷", ae: "🇦🇪", uae: "🇦🇪", se: "🇸🇪", sweden: "🇸🇪", pl: "🇵🇱", poland: "🇵🇱", ru: "🇷🇺", russia: "🇷🇺", ir: "🇮🇷", iran: "🇮🇷", ca: "🇨🇦", canada: "🇨🇦", jp: "🇯🇵", japan: "🇯🇵", sg: "🇸🇬", singapore: "🇸🇬", hk: "🇭🇰", it: "🇮🇹", italy: "🇮🇹", es: "🇪🇸", spain: "🇪🇸", at: "🇦🇹", austria: "🇦🇹", ch: "🇨🇭", kz: "🇰🇿", am: "🇦🇲", armenia: "🇦🇲", az: "🇦🇿", ge: "🇬🇪", qa: "🇶🇦", bh: "🇧🇭", om: "🇴🇲", lt: "🇱🇹", lv: "🇱🇻", ee: "🇪🇪", cz: "🇨🇿", ro: "🇷🇴", bg: "🇧🇬", gr: "🇬🇷", pt: "🇵🇹", ie: "🇮🇪", no: "🇳🇴", dk: "🇩🇰", be: "🇧🇪", lu: "🇱🇺", ua: "🇺🇦", md: "🇲🇩", rs: "🇷🇸", in: "🇮🇳", kr: "🇰🇷", au: "🇦🇺", br: "🇧🇷", mx: "🇲🇽", za: "🇿🇦"};
+function cfFlag(name) { const m = String(name || "").match(/[\u{1F1E6}-\u{1F1FF}]{2}/u); if (m) return ""; for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return FLAGS[t] + " "; return ""; }
+const pingCls = v => v == null ? "mut" : v < 150 ? "ok" : v < 400 ? "warn" : "bad";
+const mb = v => v == null ? "—" : Number(v).toFixed(v >= 100 ? 0 : 1);
 PAGES.configsList = async () => {
-  const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]);
+  const [d, subs, tl] = await Promise.all([api("/api/configs"), api("/api/subscriptions"), api("/api/tunnels").catch(() => [])]);
   $("#n-configs").textContent = d.configs.length;
-  const list = d.configs.filter(c => !cf.q || (c.name + c.group).toLowerCase().includes(cf.q));
-  const groups = [...new Set(list.map(c => c.group || ""))].sort((a, b) => (a || "~").localeCompare(b || "~"));
+  const names = [...new Set([...subs.subscriptions.map(s => s.name), ...d.configs.map(c => c.group).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
+  if (cf.group !== "__all" && cf.group !== "__manual" && !names.includes(cf.group)) cf.group = "__all";
+  const searched = d.configs.filter(c => !cf.q || (c.name + (c.group || "")).toLowerCase().includes(cf.q));
+  const list = cf.group === "__all" ? searched : cf.group === "__manual" ? searched.filter(c => !c.group) : searched.filter(c => c.group === cf.group);
+  const groups = cf.group === "__all" ? [...new Set(list.map(c => c.group || ""))].sort((a, b) => (a || "~").localeCompare(b || "~")) : [cf.group === "__manual" ? "" : cf.group];
+  const tunnelSel = c => `<select class="cf-tun" title="Tunnel this config goes through" onclick="event.stopPropagation()" onchange="event.stopPropagation();cfSetTunnel(${c.id}, this.value)"><option value="">no tunnel</option>${tl.map(t => `<option value="${esc(t.name)}" ${t.name === c.tunnel ? "selected" : ""}>${esc(t.name)}</option>`).join("")}${c.tunnel && !tl.some(t => t.name === c.tunnel) ? `<option selected>${esc(c.tunnel)}</option>` : ""}</select>`;
+  const cdnIn = c => `<input class="cf-cdn" inputmode="numeric" maxlength="5" placeholder="CDN port" title="CDN port: type it and press Enter" value="${esc(c.cdn_port || "")}" data-orig="${esc(c.cdn_port || "")}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onchange="cfSetCdn(${c.id}, this)">`;
+  const live = c => `<span class="live ${c.status === "up" ? "up" : c.status === "down" ? "down" : "unk"}">● ${c.status === "up" ? "ONLINE" : c.status === "down" ? "OFFLINE" : "UNKNOWN"}</span>`;
+  const title = c => `${cfFlag(c.name)}${esc(c.name)}${c.group && cf.group === "__all" ? `<span class="nk-gbadge">${esc(c.group)}</span>` : ""}${c.enabled ? "" : '<span class="pill">disabled</span>'}`;
+  const acts = c => `<button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button><button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
   const row = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
-      <td class="name">${esc(c.name)}${c.tunnel ? `<span class="pill">${esc(c.tunnel)}</span>` : ""}${c.enabled ? "" : '<span class="pill">disabled</span>'}</td>
-      <td><span class="st ${c.status}">${esc(c.status)}</span></td>
-      <td class="num">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</td>
-      <td class="num hide-sm">${c.down_mbps != null ? "↓" + c.down_mbps.toFixed(1) + " ↑" + (c.up_mbps || 0).toFixed(1) : "—"}</td>
-      <td class="mut hide-sm">${c.cdn_port || "—"}</td>
-      <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 44) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
-      <td><button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button> <button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">⚡</button></td></tr>`;
+      <td class="name"><div class="cf-nm">${title(c)}</div>${live(c)}</td>
+      <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b><small class="mut"> ms</small> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
+      <td>${tunnelSel(c)}</td>
+      <td>${cdnIn(c)}</td>
+      <td class="num">${mb(c.down_mbps)}<small class="mut"> Mbps</small></td>
+      <td class="num">${mb(c.up_mbps)}<small class="mut"> Mbps</small></td>
+      <td class="cf-acts">${acts(c)}</td></tr>`;
+  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
+      <td class="name">${title(c)}</td><td>${live(c)}</td>
+      <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</b></td>
+      <td class="num hide-sm">${c.down_mbps != null ? "↓" + mb(c.down_mbps) + " ↑" + mb(c.up_mbps) : "—"}</td>
+      <td class="mut hide-sm">${esc(c.tunnel || "—")}${c.cdn_port ? " · :" + esc(c.cdn_port) : ""}</td>
+      <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 40) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
+      <td class="cf-acts">${acts(c)}</td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
-  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${esc(c.name)}</b><span class="st ${c.status}">${esc(c.status)}</span></div><div class="cf-nums"><span>${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</span><span>${c.down_mbps != null ? "↓" + c.down_mbps.toFixed(0) + " ↑" + (c.up_mbps || 0).toFixed(0) + " Mb/s" : "no speed yet"}</span></div><small class="mut">${esc(c.group || "ungrouped")}${c.tunnel ? " · " + esc(c.tunnel) : ""} · ${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div>`;
+  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div>
+      <div class="cf-stats"><div class="cf-stat"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}<small>ms</small></b><span>PING</span></div><div class="cf-stat"><b>${mb(c.down_mbps)}</b><span>DOWN Mbps</span></div><div class="cf-stat"><b>${mb(c.up_mbps)}</b><span>UP Mbps</span></div></div>
+      <div class="cf-meta">${tunnelSel(c)}${cdnIn(c)}</div><div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
+  const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
+  const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
+  const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}${searched.some(c => !c.group) ? chip("Manual", searched.filter(c => !c.group).length, "__manual", false) : ""}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
+      ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Import new nodes of this subscription">⟳ Sync</button><button class="sm" onclick="cfSubOpen('${esc(cf.group)}')">Subscription</button>` : ""}</div>` : "";
   $("#page").innerHTML = `<div class="tiles">
-      <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${[...new Set(d.configs.map(c => c.group || ""))].filter(Boolean).length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
+      <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${names.length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
       <div class="tile ok"><small>Online</small><b>${up.length}</b><span>answer from inside Iran</span></div>
       <div class="tile ${down.length ? "bad" : ""}"><small>Offline</small><b>${down.length}</b><span>${down.length ? down.slice(0, 3).map(c => esc(c.name)).join(", ") + (down.length > 3 ? "…" : "") : "none"}</span></div>
       <div class="tile"><small>Average live ping</small><b>${pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) + " ms" : "—"}</b><span>over ${pings.length} online configs</span></div></div>
     <div class="toolbar"><input id="cq" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)">
-      <button onclick="cfNew()">+ Add config</button><button onclick="cfSubNew()">+ Add subscription</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config on the probe, one after the other">⚡ Speed test all</button><button class="danger" onclick="cfDeleteAll()">🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
-      <span class="sp"></span><div class="tabs" title="Display">${[["grid", "▦"], ["compact", "▤"], ["list", "☰"]].map(([k, l]) => `<button class="${cf.view === k ? "on" : ""}" onclick="cfView('${k}')">${l}</button>`).join("")}</div></div>
-    ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
+      <button onclick="cfNew()">+ Add config</button><button onclick="cfSubNew()">+ Add subscription</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config in this view, one after the other" ${list.length ? "" : "disabled"}>⚡ Test all</button><button class="danger" onclick="cfDeleteAll()" ${list.length ? "" : "disabled"}>🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
+      <span class="sp"></span><div class="tabs" title="Display">${[["grid", "▦ Grid"], ["compact", "▤ Compact"], ["list", "☰ List"]].map(([k, l]) => `<button class="${cf.view === k ? "on" : ""}" onclick="cfView('${k}')">${l}</button>`).join("")}</div></div>
+    ${gbar}
+    ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional" value="${esc(names.includes(cf.group) ? cf.group : "")}"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
     ${cf.sub ? cfSubHtml() : ""}
-    ${subs.subscriptions.length ? `<div class="card"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}
-    ${groups.map(g => `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span>${g ? `<a class="mut" style="order:3;font-size:10.5px;font-weight:500;text-transform:none;letter-spacing:0" onclick="cfGroupDel('${esc(g)}')">delete group</a>` : ""}</div>
+    ${list.length ? groups.map(g => `${cf.group === "__all" ? `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span></div>` : ""}
     ${cf.view === "grid" ? `<div class="cf-grid">${list.filter(c => (c.group || "") === g).map(card).join("")}</div>`
-      : `<table class="tbl lift ${cf.view === "compact" ? "compact" : ""}"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
-      <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed Mb/s</th><th>CDN port</th><th>Note</th><th></th></tr></thead>
-      <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`}`).join("") || '<div class="empty">No config yet. Add a link or import a subscription.</div>'}`;
+      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:26%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:14%"><col><col style="width:150px"></colgroup>
+      <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.filter(c => (c.group || "") === g).map(rowC).join("")}</tbody></table>`
+      : `<table class="tbl lift cf-list"><colgroup><col style="width:26%"><col style="width:11%"><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:150px"></colgroup>
+      <thead><tr><th>Server</th><th>Ping</th><th>Tunnel</th><th>CDN</th><th>Download</th><th>Upload</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
+    ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   const openC = d.configs.find(c => c.id === cf.open);
   if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(openC.name)}</b> <span class="pill">${esc(openC.group || "ungrouped")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide"); else hideModal();
@@ -564,9 +592,14 @@ async function cfLoadChart(id) {
 }
 window.cfQ = v => { cf.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
 window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refresh(); };
-window.cfSpeedAll = async () => { const d = await api("/api/configs"); const ids = d.configs.filter(c => c.enabled).map(c => c.id); if (!ids.length) return; if (!confirm(`Speed test all ${ids.length} configs one after the other? About a minute each — the page keeps working meanwhile.`)) return; let done = 0, bad = 0; for (const id of ids) { try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); done++; } catch (e) { bad++; } toast(`Speed tests: ${done} done, ${bad} failed, ${ids.length - done - bad} to go`); } toast(`✓ Speed tests finished: ${done} ok, ${bad} failed`, bad ? "bad" : "ok"); refresh(); };
-window.cfDeleteAll = async () => { const d = await api("/api/configs"); if (!d.configs.length) return; if (prompt(`Delete ALL ${d.configs.length} configs from the probe? Type DELETE to confirm:`) !== "DELETE") return; let n = 0; for (const c of d.configs) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); n++; } catch (e) { /* keep going */ } } toast(`✓ ${n} configs deleted`, "ok"); refresh(); };
-window.cfGroupDel = async g => { const d = await api("/api/configs"); const mine = d.configs.filter(c => (c.group || "") === g); if (!confirm(`Delete the group ${g} and its ${mine.length} configs from the probe?`)) return; for (const c of mine) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); } catch (e) { /* keep going */ } } toast("✓ Group deleted", "ok"); refresh(); };
+window.cfGroup = g => { cf.group = g; localStorage.setItem("nk.cfgroup", g); refresh(); };
+async function cfInView() { const d = await api("/api/configs"); return d.configs.filter(c => cf.group === "__all" ? true : cf.group === "__manual" ? !c.group : c.group === cf.group); }
+window.cfSpeedAll = async () => { const ids = (await cfInView()).filter(c => c.enabled).map(c => c.id); if (!ids.length) return; if (!confirm(`Speed test ${ids.length} configs one after the other? About a minute each — the page keeps working meanwhile.`)) return; let done = 0, bad = 0; for (const id of ids) { try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); done++; } catch (e) { bad++; } toast(`Speed tests: ${done} done, ${bad} failed, ${ids.length - done - bad} to go`); } toast(`✓ Speed tests finished: ${done} ok, ${bad} failed`, bad ? "bad" : "ok"); refresh(); };
+window.cfDeleteAll = async () => { const mine = await cfInView(); if (!mine.length) return; const where = cf.group === "__all" ? "ALL" : `all ${cf.group === "__manual" ? "manual" : cf.group}`; if (prompt(`Delete ${where} ${mine.length} configs from the probe? Type DELETE to confirm:`) !== "DELETE") return; let n = 0; for (const c of mine) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); n++; } catch (e) { /* keep going */ } } toast(`✓ ${n} configs deleted`, "ok"); refresh(); };
+window.cfGroupDel = async g => { const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]); const mine = d.configs.filter(c => (c.group || "") === g); const s = subs.subscriptions.find(x => x.name === g); const a = mine.length ? prompt(`Remove the group "${g}" (${mine.length} configs)?\nType DELETE to delete its configs from the probe too, or KEEP to only forget the group and keep the configs as manual ones:`) : "DELETE"; if (a !== "DELETE" && a !== "KEEP") return; for (const c of mine) { try { if (a === "DELETE") await api(`/api/configs/${c.id}`, {method: "DELETE"}); else await api(`/api/configs/${c.id}`, {method: "PUT", body: JSON.stringify({group: ""})}); } catch (e) { /* keep going */ } } if (s) { try { await api(`/api/subscriptions/${s.id}`, {method: "DELETE"}); } catch (e) { /* fine */ } } if (cf.group === g) cfGroup("__all"); toast("✓ Group removed", "ok"); refresh(); };
+window.cfSetTunnel = async (id, v) => { try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({tunnel: v})}); toast(v ? "✓ Tunnel set to " + v : "✓ Tunnel cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.cfSetCdn = async (id, inp) => { const v = inp.value.trim(); if (v === (inp.dataset.orig || "")) return; const n = Number(v); if (v && (!/^\d+$/.test(v) || n < 1 || n > 65535)) { toast("CDN port must be a number from 1 to 65535", "bad"); inp.value = inp.dataset.orig || ""; return; } try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({cdn_port: v})}); inp.dataset.orig = v; toast(v ? "✓ CDN port " + v + " saved" : "✓ CDN port cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); inp.value = inp.dataset.orig || ""; } };
+window.cfSubOpen = async name => { const subs = await api("/api/subscriptions"); cf.sub = {name, url: "", nodes: null, saved: subs.subscriptions.some(s => s.name === name)}; cf.edit = null; refresh(); };
 window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; if (!cf.open) hideModal(); refresh(); };
 window.cfNew = () => { cf.edit = "new"; cf.open = null; cf.sub = null; refresh(); };
 window.cfCancel = () => { cf.edit = null; cf.sub = null; refresh(); };
@@ -657,14 +690,14 @@ window.cfSubNew = () => { cf.sub = {name: "", url: "", nodes: null}; cf.edit = n
 function cfSubHtml() {
   const s = cf.sub;
   return `<div class="card"><h3>Import a subscription</h3><form class="frm" onsubmit="return cfSubPreview(event)">
-    <label>Group name<input name="name" required value="${esc(s.name)}" placeholder="hamed11"></label><label style="grid-column:2/-1">Subscription link<input name="url" required value="${esc(s.url)}" placeholder="https://…/sub/…"></label>
+    <label>Group name<input name="name" required value="${esc(s.name)}" ${s.saved ? "readonly" : ""} placeholder="hamed11"></label><label style="grid-column:2/-1">Subscription link${s.saved ? " <small>(empty = the link saved for this group)</small>" : ""}<input name="url" ${s.saved ? "" : "required"} value="${esc(s.url)}" placeholder="${s.saved ? "Saved on the server — leave empty to reuse" : "https://…/sub/…"}"></label>
     <div class="frm-act"><button class="pri" type="submit">Preview nodes</button><button type="button" onclick="cfCancel()">Cancel</button></div></form>
     ${s.nodes ? `<div class="ob-inbounds">${s.nodes.map(n => `<label><input type="checkbox" value="${esc(n.name)}" ${n.exists ? "" : "checked"} ${n.exists ? "disabled" : ""}> ${esc(n.name)} <small class="mut">${esc(n.proto)}${n.exists ? " · already there" : ""}</small></label>`).join("")}</div>
       <div class="frm-act"><button class="pri" onclick="cfSubImport()">Add the ticked nodes to the probe</button></div>` : ""}</div>`;
 }
 window.cfSubPreview = async e => { e.preventDefault(); const f = new FormData(e.target); cf.sub.name = f.get("name").trim(); cf.sub.url = f.get("url").trim(); toast("Downloading…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url})})).nodes; toast("✓ " + cf.sub.nodes.length + " nodes", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.cfSubImport = async () => { const picks = [...document.querySelectorAll(".ob-inbounds input:checked")].map(x => x.value); if (!picks.length) { toast("Tick at least one node", "bad"); return; } toast("Adding " + picks.length + " nodes… (a few seconds each)"); try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url, picks})}); toast(`✓ ${r.added.length} added, ${r.skipped.length} skipped, ${r.failed.length} failed`, r.failed.length ? "bad" : "ok"); cf.sub = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.cfSubRefresh = (id, name) => { cf.sub = {name, url: "", nodes: null}; refresh(); toast("Paste the subscription link again to fetch new nodes"); };
+window.cfSubRefresh = async (id, name) => { cf.sub = {name, url: "", nodes: null, saved: !!id}; cf.edit = null; if (!id) { refresh(); return; } toast("Fetching the saved subscription…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name, url: ""})})).nodes; const fresh = cf.sub.nodes.filter(n => !n.exists).length; toast(fresh ? `✓ ${fresh} new nodes — tick and add them` : "✓ Nothing new in this subscription", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.cfSubDel = async id => { if (!confirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
@@ -888,34 +921,32 @@ PAGES.gateway = async () => {
   const st = gw.st, t = gw.test || [], tr = k => t.find(x => x.key === k);
   const cell = k => { const r = tr(k); return r ? (r.ok ? `<span class="gw-ok">✓ ${r.ms} ms</span> <small class="mut">${esc(r.ip || "")} ${esc(r.country || "")}</small>` : '<span class="err">✗ no answer</span>') : ""; };
   const chip = !st.installed ? '<span class="pill">not installed</span>' : !gw.status ? '<span class="pill">status unknown</span>' : gw.status.error ? `<span class="pill err">✗ ${esc(gw.status.error).slice(0, 60)}</span>` : gw.status.active === "active" ? `<span class="pill ok">● running · ${esc((gw.status.version || "").split("(")[0])}</span>` : `<span class="pill err">● ${esc(gw.status.active || "stopped")}</span>`;
-  $("#page").innerHTML = `
-    <div class="toolbar"><select onchange="gwPick(this.value)">${servers.map(s => `<option value="${s.id}" ${String(s.id) === gw.host ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select>${chip}<span class="sp"></span>
-      <button onclick="gwStatus()">↻ Status</button><button onclick="gwTest()" ${st.installed ? "" : "disabled"}>⚡ Test exits</button>
-      ${st.installed ? `<button class="pri" onclick="gwApply()">Save &amp; apply</button><button class="danger" onclick="gwRemove()">Remove</button>` : `<button class="pri" onclick="gwInstall()" ${st.binary ? "" : "disabled"} title="${st.binary ? "" : "run scripts/fetch-xray.sh on the panel server first"}">Install Xray on this server</button>`}
-      ${st.read_only ? '<span class="badge">read-only</span>' : ""}</div>
-    ${gw.note ? `<div class="gw-out ${gw.noteCls}">${esc(gw.note)}</div>` : ""}
-    <div class="card"><h3>When to use the borrowed configs</h3>
-      <select onchange="gwField('mode', this.value)">
-        <option value="auto" ${st.mode === "auto" ? "selected" : ""}>Automatic — direct while it works, a borrowed config when it does not (recommended)</option>
-        <option value="borrowed" ${st.mode === "borrowed" ? "selected" : ""}>Always through the borrowed configs (test, or a full cut)</option>
-        <option value="direct" ${st.mode === "direct" ? "selected" : ""}>Direct only (borrowed configs kept but unused)</option></select></div>
-    <div class="card"><h3>Borrowed configs <small class="mut">— one is enough, several are safer: the fastest alive one is used</small></h3>
-      ${st.borrowed.map((b, i) => `<div class="gw-row"><span><b>${esc(b.note || "config " + (i + 1))}</b> <small class="mut">${esc(b.info || "new")}</small></span><span>${b.id ? cell(b.id) : ""}</span>
-        <span class="ob-act"><label class="chk"><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="gwToggle('borrowed', ${i}, this.checked)"> on</label><button class="sm danger" onclick="gwDel('borrowed', ${i})">Delete</button></span></div>`).join("") || '<div class="empty">No borrowed config yet.</div>'}
-      <textarea id="gw-uri" class="ob-raw" placeholder="vless://…  vmess://…  trojan://…  ss://…" spellcheck="false"></textarea>
-      <div class="frm-act"><input id="gw-note" placeholder="note (optional)"><button class="pri" onclick="gwAddBorrowed()">Add this config</button></div></div>
-    <div class="card"><h3>Ports <small class="mut">— a port on this Iran server that forwards to a foreign node</small></h3>
-      ${st.ports.map((p, i) => `<div class="gw-row"><span><b>:${p.port}</b> → ${esc(p.target_host)}:${p.target_port} <small class="mut">${p.udp ? "tcp+udp" : "tcp"} ${esc(p.note || "")}</small></span><span>${gw.status && gw.status.listen && gw.status.listen[p.port] != null ? (gw.status.listen[p.port] ? '<span class="gw-ok">listening</span>' : '<span class="err">not listening</span>') : ""}</span>
-        <span class="ob-act"><label class="chk"><input type="checkbox" ${p.enabled !== false ? "checked" : ""} onchange="gwToggle('ports', ${i}, this.checked)"> on</label><button class="sm danger" onclick="gwDel('ports', ${i})">Delete</button></span></div>`).join("") || '<div class="empty">No port yet.</div>'}
-      <div class="frm-act"><input id="gw-p" type="number" min="1024" max="65535" placeholder="listen port"><span class="mut">→</span><input id="gw-h" placeholder="node IP or host"><input id="gw-tp" type="number" min="1" max="65535" placeholder="node port"><input id="gw-n" placeholder="note"><label class="chk"><input id="gw-udp" type="checkbox"> udp too</label><button class="pri" onclick="gwAddPort()">Add port</button></div></div>
+  gw.tab = gw.tab || localStorage.getItem("nk.gwtab") || "gateway";
+  const gwHead = `<div class="tabs" style="margin-bottom:12px"><button class="${gw.tab === "gateway" ? "on" : ""}" onclick="gw.tab='gateway';localStorage.setItem('nk.gwtab','gateway');refresh()">🌐 Iran gateway</button><button class="${gw.tab === "outbounds" ? "on" : ""}" onclick="gw.tab='outbounds';localStorage.setItem('nk.gwtab','outbounds');refresh()">🧩 Panel outbounds</button></div>`;
+  if (gw.tab === "outbounds") {
+    $("#page").innerHTML = `${gwHead}${panelsList.length ? `<div class="toolbar"><select onchange="pn.id=this.value;localStorage.setItem('nk.pn',this.value);refresh()">${panelsList.map(x => `<option value="${x.id}" ${String(x.id) === String(pnSel.id) ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select><span class="mut">the Xray outbounds of this panel's core: where its users' traffic leaves</span></div><div id="pn-body"><div class="mut">loading…</div></div>` : '<div class="empty">No panel yet — add one under Panels.</div>'}`;
+    if (panelsList.length) pnCoreLoad(pnSel.id);
+    return;
+  }
+  const listen = p => gw.status && gw.status.listen && gw.status.listen[p.port] != null ? (gw.status.listen[p.port] ? '<span class="gw-ok">listening</span>' : '<span class="err">not listening</span>') : "";
+  $("#page").innerHTML = `${gwHead}
+    <div class="card"><h3>Iran gateway <span class="sp"></span>${chip}${st.read_only ? '<span class="badge">read-only</span>' : ""}</h3>
+      <div class="frm" style="grid-template-columns: 1.2fr 1.6fr auto">
+        <label>Iran server<select onchange="gwPick(this.value)">${servers.map(s => `<option value="${s.id}" ${String(s.id) === gw.host ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select></label>
+        <label>When to use the borrowed configs<select onchange="gwField('mode', this.value)"><option value="auto" ${st.mode === "auto" ? "selected" : ""}>Automatic — direct while it works, borrowed when it does not</option><option value="borrowed" ${st.mode === "borrowed" ? "selected" : ""}>Always through the borrowed configs</option><option value="direct" ${st.mode === "direct" ? "selected" : ""}>Direct only</option></select></label>
+        <div class="frm-act" style="align-self:end">${st.installed ? `<button class="pri" onclick="gwApply()">Save &amp; apply</button><button onclick="gwStatus()">↻ Status</button><button onclick="gwTest()">⚡ Test exits</button><button class="danger sm" onclick="gwRemove()">Remove</button>` : `<button class="pri" onclick="gwInstall()" ${st.binary ? "" : "disabled"} title="${st.binary ? "" : "run scripts/fetch-xray.sh on the panel server first"}">Install Xray on this server</button>`}</div></div>
+      ${gw.note ? `<div class="gw-out ${gw.noteCls}" style="margin-top:10px">${esc(gw.note)}</div>` : ""}${gw.dirty ? '<div class="gw-dirty">Unsaved changes — press “Save &amp; apply”.</div>' : ""}</div>
+    <div class="grid2">
+      <div class="card"><h3>Ports <span class="sp"></span><small class="mut">a port here that forwards to a foreign node</small></h3>
+        ${st.ports.map((p, i) => `<div class="gw-row"><span><b>:${p.port}</b> → ${esc(p.target_host)}:${p.target_port} <small class="mut">${p.udp ? "tcp+udp" : "tcp"} ${esc(p.note || "")}</small></span><span>${listen(p)}</span><span class="ob-act"><label class="chk"><input type="checkbox" ${p.enabled !== false ? "checked" : ""} onchange="gwToggle('ports', ${i}, this.checked)"> on</label><button class="sm danger" onclick="gwDel('ports', ${i})">✕</button></span></div>`).join("") || '<div class="empty">No port yet.</div>'}
+        <div class="frm" style="grid-template-columns:1fr 1.4fr 1fr;margin-top:8px"><label>Listen port<input id="gw-p" type="number" min="1024" max="65535" placeholder="28080"></label><label>Node address<input id="gw-h" placeholder="ip or host"></label><label>Node port<input id="gw-tp" type="number" min="1" max="65535" placeholder="443"></label><label>Note<input id="gw-n" placeholder="optional"></label><label class="chk"><input id="gw-udp" type="checkbox"> udp too</label><div class="frm-act"><button class="pri" onclick="gwAddPort()">Add port</button></div></div></div>
+      <div class="card"><h3>Borrowed configs <span class="sp"></span><small class="mut">the fastest alive one is used during cuts</small></h3>
+        ${st.borrowed.map((b, i) => `<div class="gw-row"><span><b>${esc(b.note || "config " + (i + 1))}</b> <small class="mut">${esc(b.info || "new")}</small></span><span>${b.id ? cell(b.id) : ""}</span><span class="ob-act"><label class="chk"><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="gwToggle('borrowed', ${i}, this.checked)"> on</label><button class="sm danger" onclick="gwDel('borrowed', ${i})">✕</button></span></div>`).join("") || '<div class="empty">No borrowed config yet.</div>'}
+        <textarea id="gw-uri" class="ob-raw" placeholder="vless://…  vmess://…  trojan://…  ss://…" spellcheck="false"></textarea>
+        <div class="frm-act"><input id="gw-note" placeholder="note (optional)"><button class="pri" onclick="gwAddBorrowed()">Add this config</button></div></div></div>
     ${gw.test ? `<div class="card"><h3>Exit test <small class="mut">— from the Iran server, through every exit</small></h3>${t.map(r => `<div class="gw-row"><span><b>${esc(r.key === "direct" ? "Direct (no borrowed config)" : r.key === "gateway" ? "The gateway as users see it (current mode)" : r.name)}</b></span><span>${cell(r.key)}</span><span></span></div>`).join("")}</div>` : ""}
-    ${gw.status && gw.status.log && gw.status.log.length ? `<div class="card"><h3>Latest log lines</h3><pre class="gl-out">${esc(gw.status.log.join("\n"))}</pre></div>` : ""}
-    ${gw.dirty ? '<div class="gw-dirty">Unsaved changes — press “Save &amp; apply”.</div>' : ""}
-    <div class="nk-ghead"><b>Panel outbounds</b><span>Marzban / PasarGuard core</span></div>
-    ${panelsList.length ? `<div class="toolbar"><select onchange="pn.id=this.value;localStorage.setItem('nk.pn',this.value);refresh()">${panelsList.map(x => `<option value="${x.id}" ${String(x.id) === String(pnSel.id) ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select><span class="mut">the Xray outbounds of this panel's core: where its users' traffic leaves</span></div><div id="pn-body"><div class="mut">loading…</div></div>` : '<div class="empty">No panel yet — add one under Panels.</div>'}`;
-  if (panelsList.length) pnCoreLoad(pnSel.id);
-};
-window.gwPick = v => { gw.host = v; localStorage.setItem("nk.gw", v); gw.st = null; gw.note = ""; refresh(); };
+    ${gw.status && gw.status.log && gw.status.log.length ? `<div class="card"><h3>Latest log lines</h3><pre class="gl-out">${esc(gw.status.log.join("\n"))}</pre></div>` : ""}`;
+};window.gwPick = v => { gw.host = v; localStorage.setItem("nk.gw", v); gw.st = null; gw.note = ""; refresh(); };
 window.gwField = (k, v) => { gw.st[k] = v; gw.dirty = true; refresh(); };
 window.gwToggle = (k, i, on) => { gw.st[k][i].enabled = on; gw.dirty = true; refresh(); };
 window.gwDel = (k, i) => { gw.st[k].splice(i, 1); gw.dirty = true; refresh(); };
@@ -1102,22 +1133,28 @@ window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode 
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  account: ["👤 Account", "Your password, the session and the settings the service was started with.", ["Password", "Effective settings"]],
-  alerts: ["✈ Telegram & backup", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report, and the encrypted backups.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report", "Backups"]],
+  account: ["👤 Account", "Your password and the settings the service was started with.", ["Password", "Effective settings"]],
+  alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows and the daily report.", ["Telegram", "Alert rules", "Daily report", "Maintenance windows"]],
+  backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
+  ai: ["🔧 Repairs & AI", "Automatic repairs of down tunnels, and the AI assistant inside Fix.", ["Repairs", "AI assistant"]],
+  bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
   update: ["⬆ Update", "Update this panel from GitHub with one click, and the tunnel cores on your servers.", ["About", "Core update"]],
-  ai: ["🤖 AI & automation", "The AI assistant inside Fix, automatic repairs, and the shop bot server the panel manages.", ["AI assistant", "Repairs", "Shop bot"]],
 };
 function settingsTabs() {
-  const cur = SET_TABS[state.stab] ? state.stab : "alerts";
+  const cur = SET_TABS[state.stab] ? state.stab : "account";
   state.stab = cur;
   const bar = `<div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
   $("#page").insertAdjacentHTML("afterbegin", bar);
-  document.querySelectorAll("#page .grid2 > .card").forEach(c => { const h = c.querySelector("h3"); const name = h ? h.childNodes[0].textContent.trim() : ""; c.classList.toggle("hidden", !SET_TABS[cur][2].includes(name)); });
+  const grid = $("#page .grid2"), byName = {};
+  grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); byName[h ? h.childNodes[0].textContent.trim() : ""] = c; c.classList.add("hidden"); });
+  const want = SET_TABS[cur][2].map(n => byName[n]).filter(Boolean);
+  want.forEach(c => { c.classList.remove("hidden"); grid.appendChild(c); });   // one tab = its cards, in this order
+  grid.classList.toggle("one", want.length === 1 || want.every(c => c.style.gridColumn));
 }
 window.setTab = k => { state.stab = k; localStorage.setItem("nk.stab", k); refresh(); };
-state.stab = localStorage.getItem("nk.stab") || "alerts";
+state.stab = localStorage.getItem("nk.stab") || "account";
 const formJson = (e, nums = [], bools = []) => { const f = new FormData(e.target), o = {}; for (const [k, v] of f.entries()) o[k] = v; nums.forEach(k => o[k] = +o[k]); bools.forEach(k => o[k] = f.get(k) === "on"); return o; };
 const put = async (e, path, body, okText) => { e.preventDefault(); try { await api(path, {method: "PUT", body: JSON.stringify(body)}); toast(okText, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveTelegram = e => put(e, "/api/settings/telegram", formJson(e, [], ["enabled"]), "✓ Telegram saved");

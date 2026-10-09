@@ -114,6 +114,12 @@ def test_subscription_import(client, monkeypatch):
     assert s["name"] == "grp" and s["nodes"] == ["B"] and "sub.example.net" == s["url_host"]
     with pytest.raises(ValueError):
         configs.fetch_subscription("ftp://x")
+    # Sync of a known group: empty link = the saved one; unknown group needs a link
+    seen = []
+    monkeypatch.setattr(configs.httpx, "get", lambda url, *a, **k: seen.append(url) or R())
+    p = client.post("/api/subscriptions/preview", json={"name": "grp", "url": ""}).json()
+    assert seen == ["https://sub.example.net/x"] and [n["exists"] for n in p["nodes"]] == [False, True]
+    assert client.post("/api/subscriptions/preview", json={"name": "other", "url": ""}).status_code == 400
 
 
 def test_probe_install_guards(client, monkeypatch):

@@ -18,24 +18,53 @@ servers; the panel observes and (later) repairs them, it never carries traffic.
 nikatel/
   config.py        Settings - the only place that reads the environment (NIKATEL_*)
   log.py           log format, request id, secret masking
-  db.py            engine, sessions, numbered migrations
-  models.py        tables: Server, ServerSample, Tunnel, TunnelCheck, Event, Job
-  ssh.py           Node, run_script(name, params) over the reviewed SCRIPTS; run_raw refused in read-only
+  db.py            engine, sessions, numbered migrations (MIGRATIONS, _add_column)
+  models.py        tables: Server (+extra), ServerSample, Tunnel, TunnelCheck, Event, Job, AlertState,
+                   Maintenance, Config, ConfigSample, Subscription, Panel, Action
+  ssh.py           Node, run_script(name, params) over the reviewed SCRIPTS and ACTIONS; run_raw only read-write
   auth.py          one admin, scrypt, signed cookie
-  jobs.py          background loops with their status in the jobs table
+  jobs.py          background loops with their status in the jobs table; stop_all waits for in-flight SSH
   services/        the logic, importable without HTTP
     facts.py         server resources (parse_facts is pure)
-    tunnels.py       tunnel health (plan_for / parse_side / judge are pure)
+    tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
+    builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports
+    detect.py        find tunnels already running on the servers and adopt them; auto choice of the Iran side
+    tunnel_test.py   quality of one / all tunnels; pair test over several transports with comparison
+    gateway.py       Iran Xray gateway: ports → node, borrowed configs, exit test
+    engines.py       check / update backhaul and Xray on every server (GitHub releases, cached binaries)
+    nodes.py         node tools: console presets, connect, add many, launchers, Abuse-Defender, reboot, geo, Iran filter check
+    actions.py       repair framework: named, logged, dry-run, rate-limited; Fix with a story
+    ai.py            Anthropic advice inside Fix (key in settings, never in the repo)
+    alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
+    configs.py       configs on the probe, subscriptions; probe.py probe API client; probe_install.py
+    panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
+    core.py          Xray core outbounds of a panel with backup / rollback
+    shopbot.py       the shop bot's server over SSH: services, switches, users, SQL, backups, DB import
     importer.py      the old panel's JSON -> rows, idempotent
+    settings.py      typed settings in the database (secrets masked in responses)
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
-  web/             index.html + app.css + app.js - no build step, one function per page
-  main.py          create_app(), lifespan, `nikatel` CLI (serve / import / set-password / run-job)
+                   (servers, tunnels, nodes, gateway, engines, actions, ai, configs, panels, shopbot,
+                    alerts, events, jobs, system = update of the panel itself)
+  web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
+                   glass modal windows (showModal), themes (LOOK)
+  main.py          create_app(), lifespan, `nikatel` CLI (serve / import / set-password / run-job / restore)
 tests/             pytest; services tested pure, the API through TestClient, ssh never real
-scripts/           deploy.sh (secrets → tests → restart → health → rollback), backup.sh, unit, secrets check
-install.sh         the one-line installer
+scripts/           deploy.sh (secrets → tests → unit → restart → health → rollback), backup.sh, unit, secrets check
+install.sh         the one-line installer (also used by the panel's own "Update" button through deploy.sh)
 docs/              operations, development, logging, roadmap, adr/
 ```
+
+## 2b. The UI, page by page
+
+* **Dashboard** - health rows, quick access in the header, activity feed that scrolls; auto-refresh.
+* **Nodes** - Iran / Foreign / Gateway & outbounds. A click on a node opens its glass window: overview,
+  charts, tunnels, filtering, tools (console, connect, reboot, Abuse-Defender, geo, launchers).
+* **Tunnels** - List (with quality and ports), Create, Test (pair test over several transports), Repairs.
+* **Panels** - Configs (group bar, grid / compact / list, inline tunnel and CDN port, subscriptions)
+  and Panels (Marzban / PasarGuard: nodes, users, hosts; each panel gets a test config on the probe).
+* **Shop bot** - the bot's server: status, switches, users, tables, SQL, backups, import.
+* **Settings** - Account · Alerts · Backups · Probe · Repairs & AI · Shop bot · Appearance · Update.
 
 ## 3. Rules
 

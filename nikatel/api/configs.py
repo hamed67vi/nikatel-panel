@@ -121,8 +121,21 @@ def speed(config_id: int):
 # ---- subscriptions
 class SubIn(BaseModel):
     name: str = Field(min_length=1, max_length=64)
-    url: str = Field(min_length=10, max_length=2000)
+    url: str = Field("", max_length=2000)     # empty = the link saved with this group (Sync)
     picks: list[str] | None = None
+
+
+def _sub_url(body: SubIn) -> str:
+    if body.url.strip():
+        return body.url.strip()
+
+    with session() as db:
+        s = db.scalar(select(Subscription).where(Subscription.name == body.name))
+
+    if s is None or not s.url:
+        raise HTTPException(400, "no saved link for this group — paste the subscription link")
+
+    return s.url
 
 
 @router.get("/subscriptions")
@@ -134,7 +147,7 @@ def subs():
 
 @router.post("/subscriptions/preview")
 def sub_preview(body: SubIn):
-    nodes = _wrap(configs.fetch_subscription, body.url)
+    nodes = _wrap(configs.fetch_subscription, _sub_url(body))
 
     with session() as db:
         existing = {c.name for c in db.scalars(select(Config))}
@@ -144,7 +157,7 @@ def sub_preview(body: SubIn):
 
 @router.post("/subscriptions/import")
 def sub_import(body: SubIn):
-    return {"ok": True, **_wrap(configs.import_subscription, body.name, body.url, body.picks)}
+    return {"ok": True, **_wrap(configs.import_subscription, body.name, _sub_url(body), body.picks)}
 
 
 @router.delete("/subscriptions/{sid}")
