@@ -197,7 +197,7 @@ def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, t
 # Same shape as SCRIPTS. They run only when the panel is not read-only, only through services/actions.py.
 _UNIT1 = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}\.(service|timer)$"
 _B64 = r"^[A-Za-z0-9+/=]{0,200000}$"
-_PATH = r"^/(etc/(systemd/system|backhaul|sysctl\.d)|usr/local/(bin|sbin))/[A-Za-z0-9._-]{1,80}$"
+_PATH = r"^/(etc/(systemd/system|backhaul|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
 _TNAME = r"^[a-z0-9][a-z0-9-]{0,14}$"
 
 ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
@@ -294,6 +294,23 @@ try:
     while True: c.sendall(z)
 except OSError: pass' '@PORT@' >/dev/null 2>&1 &); sleep 1; echo started
 """, {"PORT": r"^\d{1,5}$"}),
+
+    # probe install: directories, python deps, then start everything
+    "probe_prepare": (r"""set -e; mkdir -p /opt/nikatel-probe-manager/{configs,health-state,speed-state,logs} /opt/nikatel-probe/xray /etc/systemd/system
+command -v curl >/dev/null 2>&1 || (export DEBIAN_FRONTEND=noninteractive; apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null)
+python3 --version; echo PREPARED
+""", {}),
+    "probe_start": (r"""set -e; cd /opt/nikatel-probe/xray; [ -f xray ] && chmod 755 xray && ./xray version | head -1
+cp -f /opt/nikatel-probe-manager/manager.py /usr/local/bin/nikatel-probe; chmod 755 /usr/local/bin/nikatel-probe
+systemctl daemon-reload
+for u in nikatel-speed-api nikatel-probe-manager nikatel-probe-monitor; do systemctl enable "$u" >/dev/null 2>&1 || true; systemctl restart "$u"; done
+systemctl enable --now nikatel-daily-speed.timer >/dev/null 2>&1 || true
+sleep 3; for u in nikatel-speed-api nikatel-probe-manager nikatel-probe-monitor; do echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
+""", {}),
+
+    # run a speed test for one config on the probe (the daily timer does the same for all)
+    "probe_speed": (r"""timeout 180 /usr/local/bin/nikatel-probe speed '@NAME@' 2>&1 | tail -n 5
+""", {"NAME": r"^[\w .\-]{1,32}$"}),
 
     # the gateway directory must exist before the binary is copied in
     "xgw_mkdir": (r"""mkdir -p /opt/nikatel-xgw && chmod 755 /opt/nikatel-xgw && echo OK

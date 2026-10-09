@@ -182,6 +182,52 @@ class Gateway(Base):
     server: Mapped[Server] = relationship()
 
 
+class Config(Base):
+    """A client config the probe keeps alive and tests (one xray per config on the probe)."""
+    __tablename__ = "configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    slug: Mapped[str] = mapped_column(String(64), default="")
+    group: Mapped[str] = mapped_column(String(64), default="")          # subscription / group name
+    port: Mapped[int] = mapped_column(Integer, default=0)               # SOCKS port on the probe
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    tunnel: Mapped[str] = mapped_column(String(80), default="")         # free label: which tunnel it rides
+    cdn_port: Mapped[str] = mapped_column(String(8), default="")
+    status: Mapped[str] = mapped_column(String(16), default="unknown")  # up | down | unknown
+    status_since: Mapped[int] = mapped_column(Integer, default=0)
+    ping_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    down_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    up_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    speed_at: Mapped[str] = mapped_column(String(40), default="")
+    checked_at: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[int] = mapped_column(Integer, default=now)
+
+
+class ConfigSample(Base):
+    __tablename__ = "config_samples"
+    __table_args__ = (Index("ix_config_samples_config_ts", "config_id", "ts"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("configs.id", ondelete="CASCADE"))
+    ts: Mapped[int] = mapped_column(Integer)
+    up: Mapped[bool] = mapped_column(Boolean)
+    ping_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class Subscription(Base):
+    """A subscription link whose nodes were imported as configs (the group)."""
+    __tablename__ = "subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    url: Mapped[str] = mapped_column(Text)                              # secret-ish: never listed in clear
+    nodes: Mapped[list] = mapped_column(JSON, default=list)             # imported node names
+    created_at: Mapped[int] = mapped_column(Integer, default=now)
+    last_import: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Job(Base):
     """Status of every background job, so nothing fails silently."""
     __tablename__ = "jobs"

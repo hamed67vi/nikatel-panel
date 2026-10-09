@@ -16,9 +16,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True},
     # auto-repair stays off until the old panel no longer repairs the same tunnels
     "repair": {"auto": False, "after_seconds": 180},
+    # the probe(s): primary + standby list [{name, api_url, api_token}]
+    "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
 }
 
-SECRET_FIELDS = {"telegram": ("token",)}
+SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",)}
 
 
 def get(key: str) -> dict:

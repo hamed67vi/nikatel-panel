@@ -43,9 +43,9 @@ always installable; a milestone ends with a tag.
 - [x] #25 Iran gateway: Xray pushed over SSH, ports → node, borrowed configs with automatic fallback
 
 ## M5 · Configs & probe
-- [ ] #26 Probe API client, configs list / health / speed
-- [ ] #27 Add / edit configs (v2rayN-style editor), subscriptions import
-- [ ] #28 Probe installer and standby
+- [x] #26 Probe API client, configs list / health / speed, history, alerts for configs
+- [x] #27 Add / edit configs (v2rayN-style editor), subscriptions import
+- [x] #28 Probe installer (probe/ in this repo + cached Xray) and standby probes with automatic failover
 
 ## M6 · Panels & bot
 - [ ] #29 Marzban / PasarGuard: status, nodes, users, hosts

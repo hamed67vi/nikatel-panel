@@ -110,6 +110,14 @@ code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255
 .pill.ok { color: var(--ok); border-color: rgba(52,211,153,.5); } .pill.err { color: var(--bad); border-color: rgba(251,113,133,.5); }
 .card > select { width: 100%; max-width: 760px; }
 
+/* ---- configs */
+.nk-ghead { display: flex; align-items: center; gap: 8px; margin: 14px 4px 6px; font-size: 11.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); } .nk-ghead::after { content: ""; flex: 1; height: 1px; background: var(--line); } .nk-ghead span { order: 2; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: 10.5px; } .nk-ghead b { color: var(--text); }
+.ob-sec { padding: 8px 0 6px; border-top: 1px solid var(--line); } .ob-sec:first-child { border-top: 0; padding-top: 0; } .ob-sec h4 { margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); } .ob-sec h4 small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.cfe-cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.cfe-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 8px; margin: 0 0 5px; font-size: 12.5px; } .cfe-row > span { color: var(--mut); font-weight: 600; } .cfe-row input, .cfe-row select { width: 100%; height: 30px; }
+.ob-inbounds { display: flex; flex-wrap: wrap; gap: 6px 14px; max-height: 160px; overflow: auto; padding: 6px 2px; font-size: 12.5px; } .ob-inbounds label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+@media (max-width: 900px) { .cfe-cols { grid-template-columns: 1fr; } .cfe-row { grid-template-columns: 1fr; gap: 3px; } }
+
 /* ---- logs */
 .log { padding: 6px 8px; max-height: 70vh; overflow: auto; }
 .ll { display: grid; grid-template-columns: 64px 62px 64px 1fr 60px; gap: 10px; align-items: start; padding: 3px 6px; border-radius: 6px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }

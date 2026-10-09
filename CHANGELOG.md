@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0 - 2026-10-09 - Milestone 5: configs and probe
+
+* Configs page: the probe's configs with status, ping, daily speed, 24 h history, grouped by subscription; add a link; edit field by field (v2rayN-style) or paste a new link; delete; speed test on demand (over SSH on the probe server); copy link.
+* Subscriptions: preview the nodes of a link, import the ticked ones as a group.
+* Probe: primary + standby list with automatic failover; test; config alerts use the same flapping rules as tunnels.
+* Probe installer: the probe sources now live in `probe/`; Settings → Probe installs them with cached Xray on any Iran server and registers it.
+
 ## 0.7.0 - 2026-10-09 - Milestone 4 complete: tunnel test
 
 * "Test this pair first": builds a temporary backhaul-over-GRE tunnel, measures latency, jitter and loss over GRE and the real download speed through a forwarded port, gives a 0-100 score, and removes everything again. Results stay in the Repairs history.

@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from ..db import session
 from ..log import get_logger
-from ..models import AlertState, Maintenance, Server, Tunnel
+from ..models import AlertState, Config, Maintenance, Server, Tunnel
 from . import settings as st
 from .events import emit
 from .telegram import send_text
@@ -152,6 +152,22 @@ def run() -> None:
                     remind_msgs.append(f"• server {s.name} — still unreachable for {_dur(now - a.bad_since)}")
                 else:
                     up_msgs.append(f"• server {s.name} — was unreachable {_dur(a.good_since - a.bad_since)}")
+
+        for c in db.scalars(select(Config).where(Config.enabled.is_(True))):
+            if c.status == "unknown":
+                continue
+
+            a = track_for("config", c.name)
+            new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice), c.status == "down", now, rules_t)
+            a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice = new.fails, new.alerted, new.bad_since, new.good_since, new.last_notice
+
+            if verdict and c.name not in muted and not quiet:
+                if verdict == "down":
+                    down_msgs.append(f"• config {c.name} — {c.last_error or 'no answer through it'}")
+                elif verdict == "remind":
+                    remind_msgs.append(f"• config {c.name} — still down for {_dur(now - a.bad_since)}")
+                else:
+                    up_msgs.append(f"• config {c.name} — was down {_dur(a.good_since - a.bad_since)}")
 
         if down_msgs:
             _deliver(db, "bad", f"🔴 DOWN ({len(down_msgs)})\n" + "\n".join(down_msgs))

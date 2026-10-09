@@ -322,6 +322,150 @@ PAGES.actions = async () => {
 INFO.actions = ["Repairs", "Every repair the panel planned or performed, with its full story."];
 window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
+/* ---- configs (what the probe keeps alive and tests) */
+INFO.configs = ["Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
+const cf = {open: null, edit: null, sub: null, q: ""};
+PAGES.configs = async () => {
+  const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]);
+  $("#n-configs").textContent = d.configs.length;
+  const list = d.configs.filter(c => !cf.q || (c.name + c.group).toLowerCase().includes(cf.q));
+  const groups = [...new Set(list.map(c => c.group || ""))].sort((a, b) => (a || "~").localeCompare(b || "~"));
+  const row = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""}">
+      <td class="name">${esc(c.name)}${c.tunnel ? `<span class="pill">${esc(c.tunnel)}</span>` : ""}${c.enabled ? "" : '<span class="pill">disabled</span>'}</td>
+      <td><span class="st ${c.status}">${esc(c.status)}</span></td>
+      <td class="num">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</td>
+      <td class="num hide-sm">${c.down_mbps != null ? "↓" + c.down_mbps.toFixed(1) + " ↑" + (c.up_mbps || 0).toFixed(1) : "—"}</td>
+      <td class="mut hide-sm">${c.cdn_port || "—"}</td>
+      <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 44) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
+      <td><button class="sm" onclick="cfToggle(${c.id})">${cf.open === c.id ? "Hide" : "More"}</button> <button class="sm" onclick="cfEdit(${c.id})">Edit</button></td></tr>
+      ${cf.open === c.id ? `<tr class="detail"><td colspan="7" id="cf-detail-${c.id}">${cf.edit === c.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(c)}</td></tr>` : ""}`;
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${d.configs.filter(c => c.status === "up").length} up · ${d.configs.filter(c => c.status === "down").length} down · probe: ${esc(d.probe.active || "none")}</span><span class="sp"></span>
+      <input id="cq" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)"><button onclick="cfSync()">↻ Sync with the probe</button><button onclick="cfNew()">+ Add config</button><button onclick="cfSubNew()">+ Subscription</button></div>
+    ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
+    ${cf.sub ? cfSubHtml() : ""}
+    ${subs.subscriptions.length ? `<div class="card"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}
+    ${groups.map(g => `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span></div>
+    <table class="tbl"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
+      <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed Mb/s</th><th>CDN port</th><th>Note</th><th></th></tr></thead>
+      <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No config yet. Add a link or import a subscription.</div>'}`;
+  const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  if (cf.open && cf.edit === cf.open) cfLoadEditor(cf.open);
+  else if (cf.open) cfLoadChart(cf.open);
+};
+function cfDetailHtml(c) {
+  return `<div class="kv"><div><span>Probe port</span> ${c.port || "—"} · <span>slug</span> ${esc(c.slug)}</div><div><span>Group</span> ${esc(c.group || "—")} · <span>tunnel</span> ${esc(c.tunnel || "—")} · <span>CDN port</span> ${esc(c.cdn_port || "—")}</div>
+    <div><span>Speed</span> ${c.down_mbps != null ? "↓" + c.down_mbps + " ↑" + c.up_mbps + " Mb/s · " + esc((c.speed_at || "").slice(0, 16)) : "not measured"}</div><div><span>Since</span> ${c.status} ${ago(c.status_since)}</div></div>
+    <div class="charts" id="cf-charts-${c.id}"><div class="mut">loading 24 h…</div></div>
+    <div class="frm-act"><button class="sm" onclick="cfSpeed(${c.id})">Speed test now</button><button class="sm" onclick="cfCopy(${c.id})">Copy link</button><span class="sp"></span><button class="sm danger" onclick="cfDel(${c.id}, '${esc(c.name)}')">Delete from the probe</button></div>`;
+}
+async function cfLoadChart(id) {
+  const box = document.getElementById("cf-charts-" + id); if (!box) return;
+  const d = await api(`/api/configs/${id}/samples?hours=24`);
+  const col = n => d.samples.map(r => r[d.columns.indexOf(n)]);
+  const ups = col("up"), pct = ups.length ? Math.round(ups.filter(Boolean).length * 100 / ups.length) : null;
+  box.innerHTML = `<div><small>Up / down · ${ups.length} checks${pct != null ? " · " + pct + "% up" : ""}</small>${strip(ups)}</div><div><small>Ping ms</small>${spark(col("ping_ms").map(v => v || null), {fmt: v => v.toFixed(0)})}</div>`;
+}
+window.cfQ = v => { cf.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
+window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; refresh(); };
+window.cfNew = () => { cf.edit = "new"; cf.open = null; cf.sub = null; refresh(); };
+window.cfCancel = () => { cf.edit = null; cf.sub = null; refresh(); };
+window.cfSync = async () => { toast("Asking the probe… (up to a minute)"); try { await api("/api/configs/sync", {method: "POST"}); toast("✓ Synced", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.cfAdd = async e => { e.preventDefault(); const f = new FormData(e.target); try { const r = await api("/api/configs", {method: "POST", body: JSON.stringify({uri: f.get("uri").trim(), name: f.get("name").trim(), group: f.get("group").trim()})}); toast("✓ " + r.name + " added — the probe tests it within a minute", "ok"); cf.edit = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.cfDel = async (id, name) => { if (!confirm(`Delete ${name} from the probe? Its history goes too.`)) return; try { await api(`/api/configs/${id}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); cf.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.cfSpeed = async id => { toast("Measuring… (1–3 minutes)"); try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); toast("✓ Measured", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.cfCopy = async id => { try { const r = await api(`/api/configs/${id}/uri`); await navigator.clipboard.writeText(r.uri); toast("✓ Link copied", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.cfEdit = id => { cf.open = id; cf.edit = id; refresh(); };
+
+/* v2rayN-style editor: link <-> fields */
+const cfeNets = ["tcp", "ws", "grpc", "httpupgrade", "xhttp", "h2", "kcp", "quic"];
+function b64d(s) { s = String(s || "").replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, ""); while (s.length % 4) s += "="; try { return decodeURIComponent(escape(atob(s))); } catch (e) { return atob(s); } }
+function b64e(s) { return btoa(unescape(encodeURIComponent(s))); }
+function cfeParse(uri) {
+  uri = String(uri || "").trim(); const proto = (uri.match(/^([a-z0-9]+):\/\//i) || [])[1]; if (!proto) throw new Error("not a config link");
+  const p = proto.toLowerCase(), f = {proto: p, alias: "", address: "", port: "", id: "", flow: "", enc: "none", net: "tcp", htype: "", host: "", path: "", service: "", mode: "", seed: "", sec: "none", sni: "", fp: "", alpn: "", insecure: "", pbk: "", sid: "", spx: "", aid: "0", method: "", extra: {}};
+  if (p === "vmess") { const j = JSON.parse(b64d(uri.slice(8))); Object.assign(f, {alias: j.ps || "", address: j.add || "", port: String(j.port || ""), id: j.id || "", aid: String(j.aid || 0), enc: j.scy || "auto", net: j.net || "tcp", htype: j.type || "", host: j.host || "", path: j.path || "", sec: j.tls === "tls" ? "tls" : "none", sni: j.sni || "", fp: j.fp || "", alpn: j.alpn || ""}); if (f.net === "grpc") { f.service = f.path; f.path = ""; } return f; }
+  if (p === "ss") { let body = uri.slice(5), tag = ""; const h = body.indexOf("#"); if (h >= 0) { tag = body.slice(h + 1); body = body.slice(0, h); } const q = body.indexOf("?"); if (q >= 0) body = body.slice(0, q); if (body.indexOf("@") < 0) body = b64d(body); const at = body.lastIndexOf("@"); let cred = body.slice(0, at); const server = body.slice(at + 1); if (cred.indexOf(":") < 0) cred = b64d(cred); const ci = cred.indexOf(":"); f.method = cred.slice(0, ci); f.id = decodeURIComponent(cred.slice(ci + 1)); const m = server.match(/^\[?(.*?)\]?:(\d+)$/); f.address = m ? m[1] : server; f.port = m ? m[2] : ""; f.alias = decodeURIComponent(tag); return f; }
+  const u = new URL(uri), g = k => u.searchParams.get(k) || "";
+  Object.assign(f, {alias: decodeURIComponent(u.hash.replace(/^#/, "")), address: u.hostname.replace(/^\[|\]$/g, ""), port: u.port, id: decodeURIComponent(u.username), flow: g("flow"), enc: g("encryption") || "none", net: g("type") || "tcp", htype: g("headerType"), host: g("host"), path: g("path"), service: g("serviceName"), mode: g("mode"), seed: g("seed"), sec: g("security") || (p === "trojan" ? "tls" : "none"), sni: g("sni") || g("peer"), fp: g("fp"), alpn: g("alpn"), insecure: g("allowInsecure") || g("insecure"), pbk: g("pbk"), sid: g("sid"), spx: g("spx")});
+  const known = ["encryption", "flow", "type", "headerType", "host", "path", "serviceName", "mode", "seed", "security", "sni", "fp", "alpn", "allowInsecure", "insecure", "pbk", "sid", "spx", "peer"];
+  u.searchParams.forEach((v, k) => { if (known.indexOf(k) < 0) f.extra[k] = v; });
+  return f;
+}
+function cfeBuild(f) {
+  const name = encodeURIComponent(f.alias || ""), host = f.address.indexOf(":") >= 0 && f.address[0] !== "[" ? "[" + f.address + "]" : f.address;
+  if (f.proto === "vmess") return "vmess://" + b64e(JSON.stringify({v: "2", ps: f.alias, add: f.address, port: String(f.port), id: f.id, aid: String(f.aid || 0), scy: f.enc || "auto", net: f.net, type: f.htype || "none", host: f.host, path: f.net === "grpc" ? f.service : f.path, tls: f.sec === "tls" ? "tls" : "", sni: f.sni, alpn: f.alpn, fp: f.fp}));
+  if (f.proto === "ss") return "ss://" + b64e(f.method + ":" + f.id) + "@" + host + ":" + f.port + "#" + name;
+  const q = new URLSearchParams(), put = (k, v) => { if (v !== undefined && v !== null && String(v) !== "") q.set(k, v); };
+  if (f.proto === "vless") put("encryption", f.enc || "none");
+  put("security", f.sec); put("type", f.net); put("headerType", f.htype); put("flow", f.flow); put("host", f.host); put("path", f.path); put("serviceName", f.service); put("mode", f.mode); put("seed", f.seed); put("sni", f.sni); put("fp", f.fp); put("alpn", f.alpn); put("allowInsecure", f.insecure); put("pbk", f.pbk); put("sid", f.sid); put("spx", f.spx);
+  Object.keys(f.extra || {}).forEach(k => put(k, f.extra[k]));
+  return f.proto + "://" + encodeURIComponent(f.id) + "@" + host + ":" + f.port + "?" + q.toString() + "#" + name;
+}
+function cfeFields(f) {
+  const rows = [], add = (sec, key, label, kind, opts) => rows.push({sec, key, label, kind: kind || "text", opts: opts || []});
+  add("Server", "alias", "Alias (remarks)"); add("Server", "address", "Address"); add("Server", "port", "Port");
+  if (f.proto === "vless") { add("Server", "id", "UUID (id)"); add("Server", "flow", "Flow", "select", ["", "xtls-rprx-vision", "xtls-rprx-vision-udp443"]); add("Server", "enc", "Encryption"); }
+  else if (f.proto === "vmess") { add("Server", "id", "UUID (id)"); add("Server", "aid", "Alter ID"); add("Server", "enc", "Security", "select", ["auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"]); }
+  else if (f.proto === "trojan") { add("Server", "id", "Password"); add("Server", "flow", "Flow", "select", ["", "xtls-rprx-vision"]); }
+  else if (f.proto === "ss") { add("Server", "id", "Password"); add("Server", "method", "Method", "select", ["aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "none"]); return rows; }
+  const net = f.net; add("Transport", "net", "Transport protocol (network)", "select", cfeNets.indexOf(net) < 0 ? cfeNets.concat([net]) : cfeNets);
+  if (net === "tcp" || net === "kcp" || net === "quic") add("Transport", "htype", "Header type", "select", net === "tcp" ? ["", "none", "http"] : ["", "none", "srtp", "utp", "wechat-video", "dtls", "wireguard"]);
+  if (["ws", "httpupgrade", "xhttp", "h2"].indexOf(net) >= 0 || (net === "tcp" && f.htype === "http")) { add("Transport", "host", "Host"); add("Transport", "path", "Path"); }
+  if (net === "xhttp") add("Transport", "mode", "Mode", "select", ["", "auto", "packet-up", "stream-up", "stream-one"]);
+  if (net === "grpc") { add("Transport", "service", "Service name"); add("Transport", "mode", "Mode", "select", ["", "gun", "multi"]); }
+  if (net === "kcp") add("Transport", "seed", "Seed");
+  add("TLS", "sec", "Security", "select", ["none", "tls", "reality"]);
+  if (f.sec === "tls" || f.sec === "reality") { add("TLS", "sni", "SNI"); add("TLS", "fp", "Fingerprint", "select", ["", "chrome", "firefox", "safari", "ios", "android", "edge", "random", "randomized"]); }
+  if (f.sec === "tls") { add("TLS", "alpn", "ALPN"); add("TLS", "insecure", "Allow insecure", "select", ["", "0", "1"]); }
+  if (f.sec === "reality") { add("TLS", "pbk", "Public key"); add("TLS", "sid", "Short ID"); add("TLS", "spx", "SpiderX"); }
+  return rows;
+}
+function cfeWarn(f) {
+  const w = [];
+  if (!f.address) w.push("Address is empty"); if (!/^\d+$/.test(String(f.port)) || +f.port < 1 || +f.port > 65535) w.push("Port must be 1–65535"); if (!f.id) w.push(f.proto === "ss" || f.proto === "trojan" ? "Password is empty" : "UUID is empty");
+  if (f.proto !== "ss") { if (f.sec === "tls" && !f.sni && !f.host) w.push("TLS without SNI"); if (f.sec === "reality" && (!f.pbk || !f.sni)) w.push("Reality needs a public key and an SNI"); if (f.net === "ws" && !f.path) w.push("WebSocket without a path"); if (f.net === "grpc" && !f.service) w.push("gRPC without a service name"); }
+  return w;
+}
+let cfe = null;
+async function cfLoadEditor(id) {
+  const td = document.getElementById("cf-detail-" + id); if (!td) return;
+  try {
+    const r = await api(`/api/configs/${id}/uri`);
+    cfe = {id, f: cfeParse(r.uri), origLink: r.uri};
+    cfeRender(td);
+  } catch (e) { td.innerHTML = `<div class="err">${esc(e.message)}</div><div class="frm-act"><button class="sm" onclick="cfToggle(${id})">Close</button></div>`; }
+}
+function cfeRender(td) {
+  const f = cfe.f, rows = cfeFields(f), secs = [...new Set(rows.map(r => r.sec))], w = cfeWarn(f), link = cfeBuild(f);
+  td.innerHTML = `<div class="cfe"><div class="cfe-cols"><div>${secs.map(s => `<div class="ob-sec"><h4>${s}</h4>${rows.filter(r => r.sec === s).map(r => { const v = f[r.key] == null ? "" : f[r.key]; return `<label class="cfe-row"><span>${r.label}</span>${r.kind === "select" ? `<select data-k="${r.key}">${(r.opts.indexOf(v) < 0 ? r.opts.concat([v]) : r.opts).map(o => `<option value="${esc(o)}" ${o === v ? "selected" : ""}>${esc(o || "—")}</option>`).join("")}</select>` : `<input data-k="${r.key}" value="${esc(v)}" spellcheck="false">`}</label>`; }).join("")}</div>`).join("")}</div>
+    <div><div class="ob-sec"><h4>Check</h4>${w.length ? w.map(x => `<div class="err">⚠ ${esc(x)}</div>`).join("") : '<div class="gw-ok">✓ Looks valid</div>'}</div>
+      <div class="ob-sec"><h4>Link <small class="mut">(paste a whole new link here)</small></h4><textarea class="ob-raw" id="cfe-link" spellcheck="false">${esc(link)}</textarea></div></div></div>
+    <div class="frm-act"><button class="pri" onclick="cfeSave()">Save to the probe</button><button onclick="cfToggle(${cfe.id})">Cancel</button><span class="mut">${link === cfe.origLink ? "no change yet" : "changed"}</span></div></div>`;
+  td.querySelectorAll("[data-k]").forEach(el => { el.onchange = el.oninput = () => { cfe.f[el.dataset.k] = el.value.trim(); if (el.tagName === "SELECT" && ["net", "sec", "htype"].indexOf(el.dataset.k) >= 0) cfeRender(td); else { const t = td.querySelector("#cfe-link"); if (t) t.value = cfeBuild(cfe.f); } }; });
+  td.querySelector("#cfe-link").oninput = e => { try { cfe.f = cfeParse(e.target.value); const v = e.target.value; cfeRender(td); td.querySelector("#cfe-link").value = v; } catch (x) { /* keep typing */ } };
+}
+window.cfeSave = async () => {
+  const link = cfeBuild(cfe.f), hard = cfeWarn(cfe.f).filter(x => /empty|1–65535/.test(x));
+  if (hard.length) { toast("✕ " + hard[0], "bad"); return; }
+  toast("Saving to the probe…");
+  try { await api(`/api/configs/${cfe.id}`, {method: "PUT", body: JSON.stringify({uri: link === cfe.origLink ? "" : link, new_name: cfe.f.alias})}); toast("✓ Saved — the probe restarts this config", "ok"); cf.edit = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+
+/* subscriptions */
+window.cfSubNew = () => { cf.sub = {name: "", url: "", nodes: null}; cf.edit = null; refresh(); };
+function cfSubHtml() {
+  const s = cf.sub;
+  return `<div class="card"><h3>Import a subscription</h3><form class="frm" onsubmit="return cfSubPreview(event)">
+    <label>Group name<input name="name" required value="${esc(s.name)}" placeholder="hamed11"></label><label style="grid-column:2/-1">Subscription link<input name="url" required value="${esc(s.url)}" placeholder="https://…/sub/…"></label>
+    <div class="frm-act"><button class="pri" type="submit">Preview nodes</button><button type="button" onclick="cfCancel()">Cancel</button></div></form>
+    ${s.nodes ? `<div class="ob-inbounds">${s.nodes.map(n => `<label><input type="checkbox" value="${esc(n.name)}" ${n.exists ? "" : "checked"} ${n.exists ? "disabled" : ""}> ${esc(n.name)} <small class="mut">${esc(n.proto)}${n.exists ? " · already there" : ""}</small></label>`).join("")}</div>
+      <div class="frm-act"><button class="pri" onclick="cfSubImport()">Add the ticked nodes to the probe</button></div>` : ""}</div>`;
+}
+window.cfSubPreview = async e => { e.preventDefault(); const f = new FormData(e.target); cf.sub.name = f.get("name").trim(); cf.sub.url = f.get("url").trim(); toast("Downloading…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url})})).nodes; toast("✓ " + cf.sub.nodes.length + " nodes", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.cfSubImport = async () => { const picks = [...document.querySelectorAll(".ob-inbounds input:checked")].map(x => x.value); if (!picks.length) { toast("Tick at least one node", "bad"); return; } toast("Adding " + picks.length + " nodes… (a few seconds each)"); try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url, picks})}); toast(`✓ ${r.added.length} added, ${r.skipped.length} skipped, ${r.failed.length} failed`, r.failed.length ? "bad" : "ok"); cf.sub = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.cfSubRefresh = (id, name) => { cf.sub = {name, url: "", nodes: null}; refresh(); toast("Paste the subscription link again to fetch new nodes"); };
+window.cfSubDel = async id => { if (!confirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
+
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
 const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};
 INFO.gateway = ["Gateway", "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off."];
@@ -413,7 +557,7 @@ let lqT; window.setLogQ = v => { state.logs.q = v.trim(); clearTimeout(lqT); lqT
 
 /* ---- settings */
 PAGES.settings = async () => {
-  const [s, tg, al, rp, bk, mw, rp_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair")]);
+  const [s, tg, al, rp, bk, mw, rp_, pr, iranList] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   $("#page").innerHTML = `<div class="grid2">
     <div class="card"><h3>Telegram <span class="sp"></span>${tg.has_token ? '<span class="pill">token saved</span>' : '<span class="pill">no token</span>'}</h3>
@@ -439,6 +583,16 @@ PAGES.settings = async () => {
         <label>Note<input name="note" placeholder="upgrade of …"></label>
         <div class="frm-act"><button class="pri" type="submit">Add window</button></div></form>
       ${mw.windows.map(w => `<div class="ev ${w.active ? "warn" : ""}"><time>${when(w.start).slice(0, 16)}</time><i></i><small>→ ${when(w.end).slice(0, 16)}</small><span>${esc(w.note)} ${w.active ? "<b>(active now)</b>" : ""} <a class="mut" onclick="delWindow(${w.id})">remove</a></span></div>`).join("") || '<div class="empty">No window.</div>'}</div>
+
+    <div class="card"><h3>Probe <span class="sp"></span><span class="pill">${pr.state.active ? "active: " + esc(pr.state.active) : "none"}</span></h3>
+      <form class="frm one" onsubmit="return saveProbe(event)">
+        <label>Primary probe address<input name="api_url" value="${esc(pr.api_url)}" placeholder="http://ip:18080"></label>
+        <label>Token <small>(empty keeps the saved one)</small><input name="api_token" type="password" placeholder="${pr.has_api_token ? "•••••••• saved" : "from speed-api.token on the probe"}" autocomplete="off"></label>
+        <label>Server that runs the probe <small>(for speed tests over SSH)</small><select name="server_id"><option value="0">—</option>${iranList.map(s => `<option value="${s.id}" ${s.id === pr.server_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label>
+        <label>Standby probes <small>(one per line: name,http://ip:18080,token — token may be empty to keep)</small><textarea name="standby" class="ob-raw">${(pr.standby || []).map(x => `${x.name},${x.api_url},`).join("\n")}</textarea></label>
+        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testProbe()">Test</button></div></form>
+      <form class="frm one" onsubmit="return installProbe(event)"><label>Install the probe on an Iran server <small>(code from this repo + Xray from the cache; registers it as standby, or primary when none exists)</small><select name="server_id">${iranList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select></label>
+        <div class="frm-act"><button type="submit" ${s.read_only ? "disabled" : ""}>Install probe</button></div></form></div>
 
     <div class="card"><h3>Repairs <span class="sp"></span><span class="pill">${rp_.read_only ? "read-only" : "read-write"}</span></h3>
       <form class="frm one" onsubmit="return saveRepair(event)">
@@ -495,6 +649,9 @@ window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["tunnel_fail
 window.muteRef = async (ref, on) => { try { await api(`/api/settings/alerts/mute?ref=${encodeURIComponent(ref)}&muted=${on}`, {method: "POST"}); toast(on ? "✓ Muted " + ref : "✓ Unmuted " + ref, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.addWindow = async e => { e.preventDefault(); const f = new FormData(e.target); const b = {start: Math.floor(new Date(f.get("start") + "Z").getTime() / 1000), end: Math.floor(new Date(f.get("end") + "Z").getTime() / 1000), note: f.get("note")}; try { await api("/api/maintenance", {method: "POST", body: JSON.stringify(b)}); toast("✓ Window added", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.delWindow = async id => { try { await api(`/api/maintenance/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.saveProbe = e => { const f = new FormData(e.target); const standby = f.get("standby").split("\n").map(l => l.trim()).filter(Boolean).map(l => { const [name, api_url, api_token] = l.split(",").map(x => (x || "").trim()); return {name, api_url, api_token: api_token || ""}; }); return put(e, "/api/settings/probe", {api_url: f.get("api_url").trim(), api_token: f.get("api_token"), server_id: +f.get("server_id") || 0, standby}, "✓ Probe settings saved"); };
+window.testProbe = async () => { toast("Asking the probe…"); try { const r = await api("/api/settings/probe/test", {method: "POST"}); toast(`✓ ${r.probe.active} answers · ${r.configs} configs`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.installProbe = async e => { e.preventDefault(); const sid = +new FormData(e.target).get("server_id"); if (!confirm("Install the probe on this Iran server? It copies the probe code and Xray (about 65 MB) over SSH and starts three services. Nothing else on the server is touched.")) return false; toast("Installing… (2–5 minutes)"); try { const r = await api(`/api/settings/probe/install?server_id=${sid}`, {method: "POST"}); toast(`✓ Probe on ${r.server} registered as ${r.role}`, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveRepair = e => put(e, "/api/settings/repair", formJson(e, ["after_seconds"], ["auto"]), "✓ Repair settings saved");
 window.saveReport = e => put(e, "/api/settings/report", formJson(e, ["hour", "tz_offset_minutes"], ["enabled"]), "✓ Report settings saved");
 window.previewReport = async () => { const r = await api("/api/report/preview"); const p = $("#report-prev"); p.textContent = r.text; p.classList.remove("hidden"); };
