@@ -73,8 +73,8 @@ const INFO = {
 const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
-  nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW], ["events", "🕘 Events", "One plain sentence per thing that happened. Newest first."], ["jobs", "⚙ Jobs", "The background jobs of the panel and whether they succeed."], ["logs", "📜 Logs", "The panel's own log, newest first. Secrets are masked before they are written."]],
-  tunnels: [["list", "⇄ Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "GRE (local IPs) + Backhaul with the best settings between two of your servers."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["quality", "📊 Quality", "Latency, jitter, loss and a score measured through every existing tunnel."], ["engines", "🧩 Core update", "Cores never update by themselves. Check which version every server runs and update them from here."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]]],
+  tunnels: [["list", "⇄ Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "GRE (local IPs) + Backhaul with the best settings between two of your servers."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["engines", "🧩 Core update", "Cores never update by themselves. Check which version every server runs and update them from here."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -105,7 +105,6 @@ PAGES.nodes = async () => {
   renderSub();
   const s = sub("nodes");
   if (s === "gateway") return PAGES.gateway();
-  if (s === "events" || s === "jobs" || s === "logs") return PAGES[s]();
   state.tab = s;
   return PAGES.servers(false);
 };
@@ -147,7 +146,7 @@ PAGES.dashboard = async () => {
     <div class="card"><h3>Quick access</h3><div class="dash-actions">
       ${q("⚡", "Ping and speed tests", "every config, from inside Iran", "configs", "configs")}${q("🛰", "Check filtering in Iran", "is a foreign server reachable?", "nodes", "foreign")}
       ${q("🖥", "Manage Iran nodes", "resources, console, tools", "nodes", "iran")}${q("⇄", "Create and monitor", "tunnels between your servers", "tunnels", "list")}</div></div></div>
-    <div class="card"><h3>Activity <span class="sp"></span><a onclick="go('events')" class="mut">all events →</a></h3>${eventsHtml(ev.events)}</div>`;
+    <div class="card"><h3>Activity</h3>${eventsHtml(ev.events)}</div>`;
 };
 
 function eventsHtml(list) {
@@ -264,6 +263,7 @@ window.checkServer = async id => { toast("Checking…"); try { await api(`/api/s
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
 window.cancelEdit = () => { state.edit = null; if (state.page === "tunnels" && sub("tunnels") === "create") { setSub("tunnels", "list"); return; } refresh(); };
+window.newTunnel = () => setSub("tunnels", "create");
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
@@ -292,21 +292,44 @@ PAGES.tunnels = async () => {
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
   if (s === "test") return PAGES.tunnelTest();
-  if (s === "quality") return PAGES.tunnelQuality();
   if (s === "engines") return PAGES.engines();
-  if (s === "create" && state.edit !== "newtunnel") state.edit = "newtunnel";
+  if (s === "create") { $("#page").innerHTML = `<div class="card" id="build-card"><h3>⇄ Create tunnel <span class="sp"></span><small class="mut">GRE (local IPs) + Backhaul with the best settings</small></h3>${await buildFormHtml()}</div>`; return; }
   return PAGES.tunnelsList();
 };
 PAGES.configs = async () => { renderSub(); return sub("configs") === "panels" ? PAGES.panels() : PAGES.configsList(); };
+const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || "", foreign: localStorage.getItem("nk.tt.foreign") || ""};
 PAGES.tunnelTest = async () => {
-  const servers = await api("/api/servers");
-  const opt = role => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
-  $("#page").innerHTML = `<div class="card"><h3>🧪 Tunnel test</h3><form class="frm" onsubmit="event.preventDefault();startTest(event);return false">
-      <label>Iran server<select name="iran_id" required>${opt("iran")}</select></label><label>Foreign server<select name="foreign_id" required>${opt("foreign")}</select></label>
-      <label>Transport<select name="transport"><option>tcpmux</option><option>tcp</option><option>wsmux</option><option>wssmux</option></select></label>
-      <div class="frm-act"><button class="pri" type="submit">Start test</button></div>
-      <small class="mut">A temporary backhaul-over-GRE tunnel is built between the two servers (control port 9900+, test door 39400), latency / jitter / loss over GRE and the real download speed through a forwarded port are measured, a 0-100 score is given, and everything is removed again. Nothing is added to your list; the result stays in Repairs.</small></form><div id="build-story" class="fix hidden"></div></div>`;
+  const [servers, kd] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds")]);
+  tt.kinds = kd.kinds;
+  const opt = (role, cur) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
+  const j = tt.job, running = j && !j.done;
+  const row = r => { const sc = r.score == null ? null : r.score; return `<tr class="${r.ok ? "up" : "down"}"><td class="name">${esc((tt.kinds.find(k => k.key === r.kind) || {}).label || r.kind)}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor / failed"}</span></td>
+      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? r.down_mbps + " Mb/s" : "—"}</td>
+      <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc + " / 100"}</b></td><td class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 60))}</td></tr>`; };
+  const best = j && j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0];
+  $("#page").innerHTML = `<div class="card"><h3>🧪 Tunnel test <span class="sp"></span>${running ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""}</h3>
+    <div class="frm">
+      <label>Iran server<select id="tt-iran" ${running ? "disabled" : ""} onchange="tt.iran=this.value;localStorage.setItem('nk.tt.iran',this.value)">${opt("iran", tt.iran)}</select></label>
+      <label>Foreign server<select id="tt-foreign" ${running ? "disabled" : ""} onchange="tt.foreign=this.value;localStorage.setItem('nk.tt.foreign',this.value)">${opt("foreign", tt.foreign)}</select></label>
+      <div class="frm-act">${running ? `<button class="danger" onclick="ttStop()">Stop</button>` : `<button class="pri" onclick="ttStart()">Start test</button>`}<small class="mut">${running ? "the current transport finishes, then the test stops; everything temporary is removed" : "each ticked transport is built as a temporary tunnel, measured, and removed again — one after the other"}</small></div>
+    </div>
+    <div class="ob-sec"><h4>Transports to try</h4><div class="ob-inbounds" id="tt-kinds">${tt.kinds.map(k => `<label><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.key === "tcpmux" || k.key === "tcp") ? "checked" : ""}> <b>${esc(k.label)}</b> <small class="mut">${esc(k.note)}</small></label>`).join("")}</div></div>
+    <small class="mut">What happens for every transport: a temporary backhaul-over-GRE tunnel between the two servers (control port 9900+, test door 39400), 30 pings over GRE for latency / jitter / loss, a real download through a forwarded port for the speed, a 0-100 score — then everything is removed. Nothing is added to your list; the full story of each run stays in Repairs.</small></div>
+    ${j ? `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
+      <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
+        <thead><tr><th>Transport</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Download</th><th>Score</th><th>Verdict</th></tr></thead>
+        <tbody>${[...j.results].sort((a, b) => (b.score || 0) - (a.score || 0)).map(row).join("")}${running ? `<tr><td class="name">${esc(j.current)}</td><td colspan="7" class="mut">measuring…</td></tr>` : ""}</tbody></table>
+      ${running && j.story && j.story.length ? `<div class="fix">${j.story.map(l => `<div class="fx-line"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div>` : ""}</div>` : ""}`;
+  if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
 };
+window.ttStart = async () => {
+  const kinds = [...document.querySelectorAll("#tt-kinds input:checked")].map(x => x.value);
+  if (!kinds.length) { toast("Tick at least one transport", "bad"); return; }
+  try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +$("#tt-iran").value, foreign_id: +$("#tt-foreign").value, kinds})}); tt.job = {id: r.id, kinds, results: [], current: kinds[0], done: false}; toast("Test started — about 2 minutes per transport"); refresh(); }
+  catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.ttPoll = async () => { if (!tt.job || tt.job.done) return; try { tt.job = await api(`/api/tunnel-test/compare/${tt.job.id}`); } catch (e) { tt.job.done = true; } if (state.page === "tunnels" && sub("tunnels") === "test") refresh(); };
+window.ttStop = async () => { if (!tt.job) return; try { await api(`/api/tunnel-test/compare/${tt.job.id}/stop`, {method: "POST"}); toast("Stopping after the current transport…"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelQuality = async () => {
   const list = await api("/api/tunnels");
   const q = t => t.quality || {};
@@ -319,6 +342,18 @@ PAGES.tunnelQuality = async () => {
         <td><b class="${cls(q(t).score)}">${q(t).score != null ? q(t).score + " / 100" : "not measured"}</b> <small class="mut">${q(t).at ? ago(q(t).at) + " ago" : ""}</small></td>
         <td><button class="sm" onclick="qualityOne(${t.id})">Measure</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
 };
+window.editPorts = async (id, cur) => { const v = prompt("Forwarded ports of this tunnel (Iran → foreign), e.g. 443, 443=2096, 10000-10009:", cur); if (v == null || !v.trim()) return; toast("Changing the ports… (the tunnel service restarts)"); try { const r = await api(`/api/tunnels/${id}/ports`, {method: "PUT", body: JSON.stringify({ports: v})}); toast("✓ Ports: " + r.mapping, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.detectTunnels = async () => { state.detect = {loading: true}; refresh(); try { state.detect = await api("/api/tunnels/detect"); } catch (e) { state.detect = {error: e.message}; } refresh(); };
+window.adoptPair = async i => { const p = state.detect.pairs[i]; try { const r = await api("/api/tunnels/adopt", {method: "POST", body: JSON.stringify(p)}); toast("✓ " + r.name + " added to the panel", "ok"); state.detect = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+function detectHtml() {
+  const d = state.detect; if (!d) return "";
+  if (d.loading) return `<div class="card"><div class="fx-line run"><i></i>Scanning every server for tunnels…</div></div>`;
+  if (d.error) return `<div class="card"><div class="err">${esc(d.error)}</div></div>`;
+  const rows = d.pairs.filter(p => !p.in_panel);
+  return `<div class="card"><h3>Tunnels found on the servers <span class="sp"></span><span class="mut">${d.scanned} servers scanned · ${d.pairs.length} found · ${rows.length} not in the panel</span><button class="sm" onclick="state.detect=null;refresh()">Close</button></h3>
+    ${d.errors.length ? `<div class="err">${d.errors.map(e => esc(e.server) + ": " + esc(e.error)).join(" · ")}</div>` : ""}
+    ${rows.map((p, i) => `<div class="gw-row"><span><b>${esc(p.name)}</b> <small class="mut">${esc(p.transport)} · control ${p.port} · ports ${esc(p.ports.join(", ") || "—")} · GRE ${esc(p.iran_tunnel_ip || "?")} ⇄ ${esc(p.foreign_tunnel_ip || "?")}</small></span><span>${esc(p.iran_name)} ⇄ ${p.paired ? esc(p.foreign_name) : '<span class="err">no matching foreign side</span>'}</span><span class="ob-act">${p.paired ? `<button class="sm pri" onclick="adoptPair(${d.pairs.indexOf(p)})">Add to panel</button>` : ""}</span></div>`).join("") || '<div class="mut">Everything on the servers is already in the panel.</div>'}</div>`;
+}
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); toast(`✓ ${r.results.filter(x => !x.error).length} measured`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.engines = async () => {
@@ -345,14 +380,14 @@ PAGES.tunnelsList = async () => {
       <td class="num">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</td>
       <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td class="mut" title="${esc(t.last_error)}">${t.quality && t.quality.score != null ? `<b class="${t.quality.score >= 70 ? "gw-ok" : t.quality.score >= 40 ? "" : "err"}" title="quality score">${t.quality.score}</b> · ` : ""}${t.last_error ? esc(t.last_error).slice(0, 44) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
-      <td><button class="sm" onclick="toggleDetail(${t.id})">${state.open === t.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkTunnel(${t.id})">Check</button></td></tr>
+      <td><button class="sm" onclick="toggleDetail(${t.id})">${state.open === t.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkTunnel(${t.id})" title="Health check now">Health</button> <button class="sm" onclick="qualityOne(${t.id})" title="Quality: latency, jitter, loss, score">Quality</button></td></tr>
       ${state.open === t.id ? detailRow(t) : ""}`;
-  const creating = state.edit === "newtunnel";
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)">${creating || state.page !== "tunnels" ? "" : '<button onclick="setSub(\'tunnels\', \'create\')">+ Create tunnel</button>'}</div>
-    ${creating ? `<div class="card" id="build-card">${await buildFormHtml()}</div>` : ""}
+  const creating = false;
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="qualityAll()" title="Latency, jitter, loss and a score over the GRE link of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Find tunnels that exist on the servers but not in this list">🔍 Detect on servers</button><button class="pri" onclick="setSub('tunnels', 'create')">＋ Create tunnel</button></div>
+    ${detectHtml()}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
-    <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:18%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col><col style="width:130px"></colgroup>
-      <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Note</th><th></th></tr></thead>
+    <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:17%"><col style="width:7%"><col style="width:8%"><col style="width:12%"><col><col style="width:190px"></colgroup>
+      <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Quality · note</th><th></th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   if (state.open) loadTunnelCharts(state.open);
 };
@@ -368,7 +403,7 @@ function detailRow(t) {
       <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
       ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
     </div><div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><button class="sm" onclick="qualityOne(${t.id})" title="Latency, jitter, loss over the GRE link and a score">📊 Quality</button><span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
+    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><button class="sm" onclick="qualityOne(${t.id})" title="Latency, jitter, loss over the GRE link and a score">📊 Quality</button>${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports of this tunnel">Ports</button>` : ""}<span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
     <div id="fix-${t.id}" class="fix hidden"></div></td></tr>`;
 }
 async function loadTunnelCharts(id) {
@@ -385,9 +420,10 @@ async function buildFormHtml() {
   const servers = await api("/api/servers");
   const opt = role => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
   return `<form class="frm" onsubmit="return startBuild(event)">
-    <label>Iran server<select name="iran_id" required>${opt("iran")}</select></label>
+    <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran")}</select></label>
     <label>Foreign server<select name="foreign_id" required>${opt("foreign")}</select></label>
     <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072"></label>
+    <div id="auto-iran" class="mut" style="grid-column:1/-1"></div>
     <label>Transport<select name="transport"><option>tcpmux</option><option>tcp</option><option>wsmux</option><option>wssmux</option></select></label>
     <label>GRE MTU <small>(0 = measure)</small><input name="mtu" type="number" min="0" max="1476" value="0"></label>
     <label>Keepalive (s)<input name="keepalive" type="number" min="10" max="600" value="75"></label>
@@ -395,6 +431,7 @@ async function buildFormHtml() {
     <small class="mut">Backhaul over GRE, like the existing tunnels: the panel measures the MTU, tunes both kernels, brings the GRE link up and verifies it holds, then starts backhaul on both sides and tests the data path. A failed build removes everything it created. “Test this pair first” does the same with a temporary tunnel, measures latency / jitter / loss / speed, and removes it.</small>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
+window.autoIran = async form => { const f = new FormData(form), box = $("#auto-iran"); box.innerHTML = '<div class="fx-line run"><i></i>Pinging the foreign server from every Iran server…</div>'; try { const r = await api("/api/tunnels/auto-iran", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || ""})}); const best = r.ranking.find(x => x.score > 0); if (best) form.querySelector("[name=iran_id]").value = best.id; box.innerHTML = `<div class="ob-inbounds">${r.ranking.map((x, i) => `<span><b class="${x.score >= 70 ? "gw-ok" : x.score ? "" : "err"}">${i + 1}. ${esc(x.name)} · ${x.score}</b> <small class="mut">${esc(x.reason)}</small></span>`).join("")}</div>${best ? `<small>Chosen: <b>${esc(best.name)}</b> — change it above if you prefer another.</small>` : '<small class="err">No Iran server can carry this tunnel right now.</small>'}`; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.startTest = async e => {
   const f = new FormData(e.target.closest("form"));
   const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), transport: f.get("transport")};

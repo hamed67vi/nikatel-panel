@@ -38,6 +38,54 @@ class TestIn(BaseModel):
     transport: str = Field("tcpmux", pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
 
 
+class PortsIn(BaseModel):
+    ports: str = Field(min_length=1, max_length=300)
+
+
+@router.put("/tunnels/{tunnel_id}/ports")
+def set_ports(tunnel_id: int, body: PortsIn):
+    from ..ssh import SSHError
+
+    try:
+        return {"ok": True, **builder.set_ports(tunnel_id, body.ports)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (SSHError, RuntimeError) as e:
+        raise HTTPException(502, str(e))
+
+
+@router.get("/tunnels/detect")
+def detect():
+    from ..services import detect as dt
+
+    return {"ok": True, **dt.scan()}
+
+
+@router.post("/tunnels/adopt")
+def adopt(body: dict):
+    from ..services import detect as dt
+
+    try:
+        return {"ok": True, "name": dt.adopt(body)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class AutoIn(BaseModel):
+    foreign_id: int
+    ports: str = ""
+
+
+@router.post("/tunnels/auto-iran")
+def auto_iran(body: AutoIn):
+    from ..services import detect as dt
+
+    try:
+        return {"ok": True, "ranking": dt.auto_iran(body.foreign_id, body.ports)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/tunnels/{tunnel_id}/quality")
 def quality(tunnel_id: int):
     from ..services import tunnel_test as tt
@@ -56,6 +104,53 @@ def quality_all():
     from ..services import tunnel_test as tt
 
     return {"ok": True, "results": tt.quality_all()}
+
+
+class CompareIn(BaseModel):
+    iran_id: int
+    foreign_id: int
+    kinds: list[str] = Field(default_factory=lambda: ["tcpmux"])
+
+
+@router.get("/tunnel-test/kinds")
+def test_kinds():
+    from ..services import tunnel_test as tt
+
+    return {"ok": True, "kinds": [{"key": k, "label": lbl, "note": note} for k, lbl, note in tt.KINDS]}
+
+
+@router.post("/tunnel-test/compare", status_code=202)
+def compare_start(body: CompareIn):
+    from ..services import tunnel_test as tt
+
+    try:
+        return {"ok": True, "id": tt.compare_start(body.iran_id, body.foreign_id, body.kinds)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.get("/tunnel-test/compare/{jid}")
+def compare_status(jid: str):
+    from ..services import tunnel_test as tt
+
+    try:
+        return {"ok": True, **tt.compare_status(jid)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/tunnel-test/compare/{jid}/stop")
+def compare_stop(jid: str):
+    from ..services import tunnel_test as tt
+
+    try:
+        tt.compare_stop(jid)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+    return {"ok": True}
 
 
 @router.post("/tunnel-test", status_code=202)

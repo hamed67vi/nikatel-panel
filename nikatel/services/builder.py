@@ -401,6 +401,41 @@ def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> 
         raise RuntimeError(f"backhaul install unit ended {state}")
 
 
+def set_ports(tunnel_id: int, ports_text: str) -> dict:
+    """Change the forwarded ports of a backhaul tunnel: the Iran toml is rewritten, the service restarted,
+    every port must listen, otherwise the server puts the old file back. The record follows."""
+    import base64
+
+    ports = parse_ports(ports_text)
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        if (t.type or "").lower() != "backhaul":
+            raise ValueError("only backhaul tunnels can change their ports here")
+
+        node, name, cfg = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name, f"iran-{t.transport or 'tcpmux'}-{int(t.port)}"
+
+    body = "\n".join(f'    "{p.entry()}",' for p in ports)
+    out = run_action(node, "set_ports", {"CFG": cfg, "B64": base64.b64encode(body.encode()).decode(), "CHECK": " ".join(str(p.listen) for p in ports)}, timeout=60)
+
+    if "PORTS_OK" not in out:
+        raise RuntimeError("the ports were not changed (the old file was put back): " + out.strip()[-160:])
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        t.forwarded_ports = [p.listen for p in ports]
+        rec = dict(t.record or {})
+        rec["port_mapping"] = ",".join(p.spec() for p in ports)
+        t.record = rec
+        emit(db, "info", "tunnels", f"Ports of tunnel {name} changed to {', '.join(p.spec() for p in ports)}.", name)
+
+    return {"ports": [p.listen for p in ports], "mapping": ",".join(p.spec() for p in ports)}
+
+
 def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "") -> int:
     """Validate, create the action_log entry, run the build in a thread. Returns the action id."""
     if get_settings().read_only:

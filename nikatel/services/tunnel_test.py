@@ -201,5 +201,94 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
 
     _say(aid, f"Download through the tunnel (foreign → Iran): {mbps if mbps is not None else 'not measured'} Mbps")
     sc = score(avg, jitter, loss, mbps)
+    RESULTS[aid] = {"latency_ms": avg, "jitter_ms": jitter, "loss_pct": loss, "down_mbps": mbps, "score": sc}
     verdict = "excellent" if sc >= 75 else "usable" if sc >= 50 else "poor"
     return sc >= 50, f"Score {sc}/100 — {verdict}. Everything temporary was removed."
+
+
+# ------------------------------------------------------------------ compare several transports, one after the other
+RESULTS: dict[int, dict] = {}
+KINDS = [
+    ("tcpmux", "Backhaul · TCP Mux", "many users over few connections (recommended)"),
+    ("tcp", "Backhaul · TCP", "plain TCP, one connection per user"),
+    ("wsmux", "Backhaul · WebSocket Mux", "clear-text WebSocket, multiplexed (CDN-able)"),
+    ("wssmux", "Backhaul · WebSocket TLS Mux", "TLS WebSocket, multiplexed"),
+]
+_COMPARE: dict[str, dict] = {}
+
+
+def compare_start(iran_id: int, foreign_id: int, kinds: list[str]) -> str:
+    kinds = [k for k in kinds if k in {k_ for k_, _, _ in KINDS}] or ["tcpmux"]
+
+    if any(not j["done"] for j in _COMPARE.values()):
+        raise RuntimeError("another tunnel test is still running")
+
+    jid = f"cmp{int(time.time())}"
+    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time())}
+    _COMPARE[jid] = job
+
+    for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
+        _COMPARE.pop(old, None)
+
+    threading.Thread(target=_compare_worker, args=(job,), name=f"tunnel-compare-{jid}", daemon=True).start()
+    return jid
+
+
+def _compare_worker(job: dict) -> None:
+    try:
+        for kind in job["kinds"]:
+            if job["stop"]:
+                break
+
+            job["current"] = kind
+
+            try:
+                aid = start(job["iran_id"], job["foreign_id"], kind)
+            except (ValueError, RuntimeError) as e:
+                job["results"].append({"kind": kind, "ok": False, "error": str(e)[:160]})
+                continue
+
+            job["current_aid"] = aid
+
+            for _ in range(400):
+                time.sleep(3)
+
+                with session() as db:
+                    e = db.get(ActionLog, aid)
+
+                    if e is not None and e.finished_at:
+                        ok, story = bool(e.ok), list(e.story or [])
+                        break
+            else:
+                ok, story = False, ["the test took too long"]
+
+            r = dict(RESULTS.get(aid) or {})
+            r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "")
+            job["results"].append(r)
+    finally:
+        job["current"], job["current_aid"], job["done"] = "", None, True
+
+
+def compare_status(jid: str) -> dict:
+    job = _COMPARE.get(jid)
+
+    if job is None:
+        raise ValueError("unknown test")
+
+    story: list = []
+
+    if job["current_aid"]:
+        with session() as db:
+            e = db.get(ActionLog, job["current_aid"])
+            story = list(e.story or []) if e else []
+
+    return {k: v for k, v in job.items() if k != "stop"} | {"story": story, "stopping": job["stop"] and not job["done"]}
+
+
+def compare_stop(jid: str) -> None:
+    job = _COMPARE.get(jid)
+
+    if job is None:
+        raise ValueError("unknown test")
+
+    job["stop"] = True
