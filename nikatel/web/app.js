@@ -1182,7 +1182,7 @@ function settingsTabs() {
   grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); byName[h ? h.childNodes[0].textContent.trim() : ""] = c; c.classList.add("hidden"); });
   const want = SET_TABS[cur][2].map(n => byName[n]).filter(Boolean);
   want.forEach(c => { c.classList.remove("hidden"); grid.appendChild(c); });   // one tab = its cards, in this order
-  grid.classList.toggle("one", want.length === 1 || want.every(c => c.style.gridColumn));
+  grid.classList.toggle("one", want.length === 1 || want.some(c => c.style.gridColumn));   // a wide card = one column, all the same width
 }
 window.setTab = k => { state.stab = k; localStorage.setItem("nk.stab", k); refresh(); };
 state.stab = localStorage.getItem("nk.stab") || "account";
