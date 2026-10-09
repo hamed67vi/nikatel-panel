@@ -21,18 +21,14 @@
   <aside class="side">
     <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
     <nav id="nav">
-      <a data-page="dashboard" class="on">Dashboard</a>
-      <a data-page="servers">Servers <i id="n-servers"></i></a>
-      <a data-page="tunnels">Tunnels <i id="n-tunnels"></i></a>
-      <a data-page="configs">Configs <i id="n-configs"></i></a>
-      <a data-page="gateway">Gateway</a>
-      <a data-page="panels">Panels</a>
-      <a data-page="bot">Shop bot</a>
-      <a data-page="actions">Repairs</a>
-      <a data-page="events">Events</a>
-      <a data-page="jobs">Jobs</a>
-      <a data-page="logs">Logs</a>
-      <a data-page="settings">Settings</a>
+      <a data-page="dashboard" class="on"><span>▦ Dashboard</span></a>
+      <a data-page="nodes"><span>🖥 Nodes</span> <i id="n-servers"></i></a>
+      <a data-page="tunnels"><span>⇄ Tunnels</span> <i id="n-tunnels"></i></a>
+      <a data-page="configs"><span>⚡ Configs</span> <i id="n-configs"></i></a>
+      <a data-page="panels"><span>🧩 Panels</span></a>
+      <a data-page="monitor"><span>📈 Monitoring</span></a>
+      <a data-page="bot"><span>🛒 Shop bot</span></a>
+      <a data-page="settings"><span>⚙ Settings</span></a>
     </nav>
     <div class="side-foot">
       <span id="ro-badge" class="badge hidden">read-only</span>
@@ -46,6 +42,7 @@
       <div><h1 id="title">Dashboard</h1><p id="subtitle" class="mut"></p></div>
       <div class="head-r"><span id="updated" class="mut"></span><button id="refresh">↻ Refresh</button></div>
     </header>
+    <div id="subnav" class="subnav hidden"></div>
     <section id="page" class="page"></section>
   </main>
 </div>

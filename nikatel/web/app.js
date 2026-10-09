@@ -57,8 +57,11 @@ $("#logout").onclick = async () => { await api("/api/auth/logout", {method: "POS
 /* ---- router */
 const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: ""}};
 const PAGES = {};
+const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
 const INFO = {
   dashboard: ["Dashboard", "What needs attention right now, and what happened."],
+  nodes: ["Nodes", "Your Iran and foreign servers, and the Iran gateway."],
+  monitor: ["Monitoring", "Server resources, tunnel health, events, jobs and the panel log."],
   servers: ["Servers", "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH, read-only."],
   tunnels: ["Tunnels", "Every tunnel between an Iran server and a foreign server: service units, GRE link, peer ping, forwarded ports. Checked every minute."],
   events: ["Events", "One plain sentence per thing that happened. Newest first."],
@@ -67,13 +70,35 @@ const INFO = {
   settings: ["Settings", "Your password and the effective settings of this panel."],
 };
 
+/* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
+const NAV_ALIAS = {servers: "nodes", gateway: "nodes", actions: "tunnels", events: "monitor", jobs: "monitor", logs: "monitor"};
+const SUB = {
+  nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
+  tunnels: [["list", "Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "Build a backhaul-over-GRE tunnel between two of your servers, or test a pair first."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  monitor: [["servers", "🖥 Servers", "Resources of every server at a glance; filter the ones with a problem."], ["tunnels", "⇄ Tunnel health", "Health of every tunnel: state, RTT, traffic, loss."], ["events", "🕘 Events", "One plain sentence per thing that happened. Newest first."], ["jobs", "⚙ Jobs", "The background jobs of the panel and whether they succeed."], ["logs", "📜 Logs", "The panel's own log, newest first. Secrets are masked before they are written."]],
+};
+state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
+function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
+function renderSub() {
+  const list = SUB[state.page], box = $("#subnav");
+  box.classList.toggle("hidden", !list);
+  if (!list) return;
+  const cur = sub(state.page);
+  box.innerHTML = `<div class="tabs">${list.map(([k, label]) => `<button class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${label}</button>`).join("")}</div>`;
+  $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
+}
+window.setSub = (page, k) => { state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.q = ""; refresh(); };
 function go(page) {
+  page = NAV_ALIAS[page] || page;
   if (!PAGES[page]) page = "dashboard";
-  state.page = page; state.open = null; state.edit = null; localStorage.setItem("nk.page", page);
+  state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
+  $("#subnav").classList.toggle("hidden", !SUB[page]);
   refresh();
 }
+PAGES.nodes = async () => { renderSub(); const s = sub("nodes"); if (s === "gateway") return PAGES.gateway(); state.tab = s; return PAGES.servers(); };
+PAGES.monitor = async () => { renderSub(); const s = sub("monitor"); if (s === "servers") return PAGES.servers(); if (s === "tunnels") return PAGES.tunnelsList(); return PAGES[s](); };
 document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.page));
 $("#refresh").onclick = () => refresh();
 
@@ -119,9 +144,14 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <small class="mut">Adding a server here only tells the panel to look at it. Put the panel's public key in its <code>authorized_keys</code> first (Settings shows the key).</small>
   </form>`;
 
+const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
   const list = await api("/api/servers");
-  const rows = list.filter(s => s.role === state.tab && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
+  const mon = state.page === "monitor";
+  if (mon && !["all", "iran", "foreign", "problems"].includes(state.mtab)) state.mtab = "all";
+  const pick = s => mon ? (state.mtab === "all" || (state.mtab === "problems" ? srvProblem(s) : s.role === state.mtab)) : s.role === state.tab;
+  const rows = list.filter(s => pick(s) && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
+  const nProb = list.filter(srvProblem).length;
   const row = s => {
     const f = s.facts || {}, cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
     return `<tr class="${cls}">
@@ -136,8 +166,9 @@ PAGES.servers = async () => {
       ${state.open === s.id ? `<tr class="detail"><td colspan="10" id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</td></tr>` : ""}`;
   };
   $("#page").innerHTML = `<div class="toolbar">
-      <div class="tabs"><button class="${state.tab === "iran" ? "on" : ""}" onclick="setTab('iran')">🇮🇷 Iran (${list.filter(s => s.role === "iran").length})</button><button class="${state.tab === "foreign" ? "on" : ""}" onclick="setTab('foreign')">🌍 Foreign (${list.filter(s => s.role === "foreign").length})</button></div>
-      <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button></div>
+      ${mon ? `<div class="tabs">${[["all", "All (" + list.length + ")"], ["iran", "🇮🇷 Iran"], ["foreign", "🌍 Foreign"], ["problems", "⚠ Problems (" + nProb + ")"]].map(([k, l]) => `<button class="${state.mtab === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}</button>`).join("")}</div>`
+          : `<span class="mut">${rows.length} servers · ${rows.filter(s => s.online).length} online</span>`}
+      <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)">${mon ? "" : '<button onclick="newServer()">+ Add server</button>'}</div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : ""}
     <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:120px"></colgroup>
       <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Traffic</th><th>Seen</th><th></th></tr></thead>
@@ -170,7 +201,7 @@ let qT; window.setQ = v => { state.q = v.trim().toLowerCase(); clearTimeout(qT);
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
-window.cancelEdit = () => { state.edit = null; refresh(); };
+window.cancelEdit = () => { state.edit = null; if (state.page === "tunnels" && sub("tunnels") === "create") { setSub("tunnels", "list"); return; } refresh(); };
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
@@ -195,6 +226,13 @@ const TUN_TYPES = ["backhaul", "gre", "backpack", "chisel", "paqet", "other"];
 const TUN_LABEL = {backhaul: "Backhaul over GRE", gre: "Plain GRE", backpack: "Backpack", chisel: "Chisel", paqet: "Paqet", other: "Other"};
 const tunType = t => TUN_TYPES.includes((t.type || "").toLowerCase()) ? (t.type || "").toLowerCase() : "other";
 PAGES.tunnels = async () => {
+  renderSub();
+  const s = sub("tunnels");
+  if (s === "repairs") return PAGES.actions();
+  if (s === "create" && state.edit !== "newtunnel") state.edit = "newtunnel";
+  return PAGES.tunnelsList();
+};
+PAGES.tunnelsList = async () => {
   const list = await api("/api/tunnels");
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
   const row = t => `<tr class="${t.state}">
@@ -207,8 +245,9 @@ PAGES.tunnels = async () => {
       <td class="mut" title="${esc(t.last_error)}">${t.last_error ? esc(t.last_error).slice(0, 48) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
       <td><button class="sm" onclick="toggleDetail(${t.id})">${state.open === t.id ? "Hide" : "More"}</button> <button class="sm" onclick="checkTunnel(${t.id})">Check</button></td></tr>
       ${state.open === t.id ? detailRow(t) : ""}`;
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newTunnel()">+ Create tunnel</button></div>
-    ${state.edit === "newtunnel" ? `<div class="card" id="build-card">${await buildFormHtml()}</div>` : ""}
+  const creating = state.edit === "newtunnel";
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)">${creating || state.page !== "tunnels" ? "" : '<button onclick="setSub(\'tunnels\', \'create\')">+ Create tunnel</button>'}</div>
+    ${creating ? `<div class="card" id="build-card">${await buildFormHtml()}</div>` : ""}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
     <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:18%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col><col style="width:130px"></colgroup>
       <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Note</th><th></th></tr></thead>

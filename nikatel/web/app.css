@@ -120,6 +120,8 @@ input[type=checkbox] { height: 16px; width: 16px; accent-color: var(--acc); box-
 code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 6px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; } .kv.one { grid-template-columns: 1fr; }
 .set-desc { color: var(--mut); font-size: 12.5px; margin: 8px 4px 14px; }
+.subnav { margin: -4px 0 12px 2px; } .subnav .tabs button { height: 30px; padding: 0 14px; }
+nav a > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ---- charts */
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 16px; margin-top: 10px; }
