@@ -118,6 +118,39 @@ class Event(Base):
     ref: Mapped[str] = mapped_column(String(64), default="")   # the server / tunnel name it is about
 
 
+class Setting(Base):
+    """Editable panel settings and small markers: one JSON document per key (see services/settings.py)."""
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AlertState(Base):
+    """Flapping control per thing: how many bad checks in a row, whether we already told, since when."""
+    __tablename__ = "alert_states"
+    __table_args__ = (Index("ix_alert_states_kind_ref", "kind", "ref", unique=True),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))        # tunnel | server
+    ref: Mapped[str] = mapped_column(String(64))
+    fails: Mapped[int] = mapped_column(Integer, default=0)
+    alerted: Mapped[bool] = mapped_column(Boolean, default=False)
+    bad_since: Mapped[int] = mapped_column(Integer, default=0)
+    good_since: Mapped[int] = mapped_column(Integer, default=0)
+    last_notice: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Maintenance(Base):
+    """A window in which alerts are not sent (state tracking continues)."""
+    __tablename__ = "maintenance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    start: Mapped[int] = mapped_column(Integer)
+    end: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str] = mapped_column(String(120), default="")
+
+
 class Job(Base):
     """Status of every background job, so nothing fails silently."""
     __tablename__ = "jobs"

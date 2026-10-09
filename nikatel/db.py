@@ -29,6 +29,7 @@ _Session: sessionmaker[Session] | None = None
 # (version, description, sql statements or callable)
 MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (1, "initial schema", []),
+    (2, "settings, alert_states, maintenance tables (created by create_all)", []),
 ]
 
 

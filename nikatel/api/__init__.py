@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from . import auth, events, jobs, servers, system, tunnels
+from . import alerts, auth, events, jobs, servers, system, tunnels
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, tunnels, events, jobs):
+for mod in (auth, system, servers, tunnels, events, jobs, alerts):
     router.include_router(mod.router)

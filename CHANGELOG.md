@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-10-09 - Milestone 2 (alert)
+
+* Telegram: token and chat id in Settings (token never shown again), test message.
+* Alerts with flapping control: N failed checks before DOWN, UP only after a stable period, reminders while down, per-tunnel/server mute, maintenance windows.
+* Daily report at a local hour; preview and send-now.
+* Encrypted backups (openssl aes-256, passphrase set once) kept locally and sent to Telegram; `nikatel restore <file>`.
+
 ## 0.2.0 - 2026-10-09 - Milestone 1 (see) complete except the one-week comparison
 
 * Servers: add / edit / disable / remove from the UI; "forget host key" after a reinstall; detail row with host facts.

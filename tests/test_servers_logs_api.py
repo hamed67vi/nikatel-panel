@@ -50,7 +50,7 @@ def test_logs_endpoint_filters_and_masks(client):
     s = get_settings()
     setup("INFO", s.log_dir)
     logging.getLogger("tunnels").info("check name=t1 state=up")
-    logging.getLogger("auth").warning("login failed user=x token=abcdef123456")
+    logging.getLogger("auth").warning("login failed user=x password=not-a-real-password")
 
     for h in logging.getLogger().handlers:
         h.flush()
@@ -59,7 +59,7 @@ def test_logs_endpoint_filters_and_masks(client):
     assert r.status_code == 200
     lines = r.json()["lines"]
     assert lines and lines[0]["domain"] == "auth" and lines[0]["level"] == "WARNING"
-    assert "abcdef123456" not in r.text and "<hidden>" in r.text
+    assert "not-a-real-password" not in r.text and "<hidden>" in r.text
 
     only = client.get("/api/logs?domain=tunnels").json()["lines"]
     assert only and all(x["domain"] == "tunnels" for x in only)

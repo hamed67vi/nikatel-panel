@@ -17,7 +17,7 @@ from . import log as logmod
 from .api import router as api_router
 from .config import get_settings
 from .db import init_db
-from .services import facts, tunnels
+from .services import alerts, backup, facts, report, tunnels
 
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
@@ -27,6 +27,9 @@ def _register_jobs() -> None:
     s = get_settings()
     jobs.register("servers", s.server_sample_interval, facts.sample_all)
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
+    jobs.register("alerts", 60, alerts.run)
+    jobs.register("report", 300, report.run)
+    jobs.register("backup", 600, backup.scheduled)
 
 
 @asynccontextmanager
@@ -100,6 +103,10 @@ def cli(argv: list[str] | None = None) -> int:
     pw = sub.add_parser("set-password", help="set the admin password")
     pw.add_argument("password")
     sub.add_parser("run-job").add_argument("name")
+    sub.add_parser("backup", help="make an encrypted backup now (and send it to Telegram when configured)")
+    rs = sub.add_parser("restore", help="restore a backup into the data dir - stop the service first")
+    rs.add_argument("file")
+    rs.add_argument("--passphrase", default="", help="omit to be asked")
     a = p.parse_args(argv)
 
     s = get_settings()
@@ -122,6 +129,19 @@ def cli(argv: list[str] | None = None) -> int:
         init_db()
         _register_jobs()
         jobs.run_once(a.name)
+        return 0
+
+    if a.cmd == "backup":
+        init_db()
+        print(backup.run())
+        return 0
+
+    if a.cmd == "restore":
+        import getpass
+
+        pw = a.passphrase or getpass.getpass("backup passphrase: ")
+        files = backup.restore(Path(a.file), pw)
+        print("restored:", ", ".join(files), "- start the service again")
         return 0
 
     import uvicorn

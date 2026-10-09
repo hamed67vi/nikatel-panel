@@ -1,0 +1,9 @@
+# gitleaks configuration: the default rules, plus an allowlist for test fixtures.
+# Everything under tests/ is fake by definition (documentation addresses, made-up tokens that the
+# masking tests need). Real credentials never enter this repository; scripts/check_no_secrets.sh
+# guards the rest.
+[extend]
+useDefault = true
+
+[allowlist]
+paths = ['''^tests/.*''']

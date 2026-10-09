@@ -27,10 +27,10 @@ always installable; a milestone ends with a tag.
 - [ ] #15 **Exit criterion**: one week beside the old panel; same state for every tunnel in both
 
 ## M2 · Alert
-- [ ] #16 Telegram: bot token + chat, test message
-- [ ] #17 Alert rules with flapping control (N failed checks, UP only after stable), per tunnel/server mute
-- [ ] #18 Daily report; maintenance windows
-- [ ] #19 Encrypted backup to Telegram + one-command restore
+- [x] #16 Telegram: bot token + chat, test message
+- [x] #17 Alert rules with flapping control (N failed checks, UP only after stable), per tunnel/server mute
+- [x] #18 Daily report; maintenance windows
+- [x] #19 Encrypted backup to Telegram + one-command restore
 
 ## M3 · Repair (first time the panel changes servers)
 - [ ] #20 Action framework: named, logged, dry-run, reversible, rate-limited (`read_only` off needed)
