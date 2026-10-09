@@ -18,6 +18,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "repair": {"auto": False, "after_seconds": 180},
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
+    # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
+    "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",)}

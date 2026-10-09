@@ -10,11 +10,12 @@ from . import (
     jobs,
     panels,
     servers,
+    shopbot,
     system,
     tunnels,
 )
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, tunnels, events, jobs, alerts, actions, gateway, configs, panels):
+for mod in (auth, system, servers, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot):
     router.include_router(mod.router)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 - 2026-10-09 - Milestone 6, part 2: shop bot
+
+* Shop bot page: the PHP bot on its own server, over SSH through reviewed scripts — services, cron, Telegram webhook, sales today / 7 d / 30 d, switches (BOT_STATES), users (wallet, discount, agent, ban), tables, a read-only SQL box, stats; actions: set webhook, restart PHP, dump the database, clear logs.
+* One-click import of the real database from the staging copy (the live database is dumped first; broadcast queues are left out).
+* Settings → Shop bot: where the bot runs and its public URL. Database credentials never leave the bot server.
+
 ## 0.9.0 - 2026-10-09 - Milestone 6, part 1: panels and outbounds
 
 * Panels page: Marzban / PasarGuard panels checked every 2 minutes (version, users, load, nodes); a node that stays disconnected gets a reconnect request; alerts for panels and nodes with the usual flapping rules.

@@ -596,6 +596,85 @@ window.pnObDefault = (id, tag) => pnCoreDo(id, () => api(`/api/panels/${id}/core
 window.pnCoreRestore = (id, file) => { if (!confirm("Put this backup in place of the current core config?")) return; pnCoreDo(id, () => api(`/api/panels/${id}/core/restore/${file}`, {method: "POST"})); };
 window.pnCoreRaw = id => { let cfg; try { cfg = JSON.parse($("#pn-core-raw").value); } catch (e) { toast("✕ not valid JSON: " + e.message, "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core`, {method: "PUT", body: JSON.stringify({config: cfg, note: "manual edit"})})); };
 
+/* ---- shop bot (PHP bot on its own server, over SSH) */
+const sb = {tab: "status", info: null, tg: null, stats: null, uq: "", users: null, table: "users", tpage: 0, tq: "", trows: null, sql: "", qres: null};
+INFO.bot = ["Shop bot", "Our own dedicated sales bot: is it alive, today's sales, the switches, its users and tables — and the one-time import of the real database."];
+PAGES.bot = async () => {
+  const pg = $("#page");
+  try { sb.info = await api("/api/shopbot"); } catch (e) { pg.innerHTML = `<div class="empty">${esc(e.message)}${/Settings/.test(e.message) ? ' — <a onclick="go(\'settings\')">open Settings</a>' : ""}</div>`; return; }
+  const d = sb.info, c = d.counts || {}, s = d.sales || {}, u = d.units || {};
+  const php = Object.keys(u).find(k => /php/.test(k)), dbu = Object.keys(u).find(k => /mariadb|mysql/.test(k)), web = Object.keys(u).find(k => /caddy|nginx/.test(k));
+  const unit = k => k ? `<span class="pill ${u[k] === "active" ? "ok" : "err"}">${esc(k)} ${esc(u[k])}</span>` : '<span class="pill err">missing</span>';
+  const money = v => v == null ? "—" : (v / 1000).toLocaleString() + " k";
+  pg.innerHTML = `<div class="toolbar">${d.installed ? '<span class="pill ok">● installed</span>' : '<span class="pill err">● not installed</span>'}${unit(php)}${unit(dbu)}${unit(web)}<span class="pill ${d.cron ? "ok" : "err"}">cron ${d.cron ? d.cron + " jobs" : "off"}</span><span class="sp"></span>
+      <button class="sm" onclick="sbAct('webhook')">Set webhook</button><button class="sm" onclick="sbAct('restart')">Restart PHP</button><button class="sm" onclick="sbAct('backup')">Dump DB</button><button class="sm" onclick="sbAct('clearlogs')">Clear logs</button></div>
+    <div class="tiles">
+      <div class="tile"><small>Users</small><b>${c.users ?? "—"}</b><span>+${s.new_users_today ?? "—"} today · +${s.new_users_week ?? "—"} this week</span></div>
+      <div class="tile ok"><small>Today</small><b>${money((s.today || {}).income)}</b><span>${(s.today || {}).orders ?? "—"} orders</span></div>
+      <div class="tile"><small>7 days</small><b>${money((s.week || {}).income)}</b><span>${(s.week || {}).orders ?? "—"} orders</span></div>
+      <div class="tile"><small>30 days</small><b>${money((s.month || {}).income)}</b><span>${(s.month || {}).orders ?? "—"} orders · ${c.pending_pays ?? "—"} payments pending</span></div></div>
+    ${d.stage_users != null && d.stage_users > (c.users || 0) ? `<div class="gw-out"><b>Real database waiting:</b> the staging copy on the bot server holds ${d.stage_users} users, the live bot has ${c.users}. <button class="pri sm" onclick="sbImport()">Import the real database now</button> <small class="mut">(the live database is dumped to /opt/nikabot/backups first; broadcast queues are not copied)</small></div>` : ""}
+    <div class="tabs" style="margin-bottom:10px">${["status", "switches", "users", "tables", "sql", "stats"].map(t => `<button class="${sb.tab === t ? "on" : ""}" onclick="sb.tab='${t}';refresh()">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div id="sb-body">${sb.tab === "status" ? sbStatusHtml(d) : sb.tab === "switches" ? sbSwitchesHtml(d) : '<div class="mut">loading…</div>'}</div>`;
+  if (sb.tab === "status") sbTgLoad();
+  if (sb.tab === "users") sbUsersLoad();
+  if (sb.tab === "tables") sbTableLoad();
+  if (sb.tab === "sql") sbSqlHtml();
+  if (sb.tab === "stats") sbStatsLoad();
+};
+function sbStatusHtml(d) {
+  return `<div class="grid2"><div class="card"><h3>Telegram</h3><div id="sb-tg" class="kv"><div class="mut">asking Telegram…</div></div></div>
+    <div class="card"><h3>Panels the bot sells from</h3>${(d.panels || []).map(p => `<div class="gw-row"><span><b>#${esc(p.id)}</b> ${esc(p.type)}</span><span class="mut">${esc(p.host)}</span><span></span></div>`).join("") || '<div class="mut">none</div>'}</div></div>
+    <div class="card"><h3>Latest bot errors <span class="sp"></span><small class="mut">${(d.backups || []).length ? "backups: " + esc(d.backups.join(", ")) : ""}</small></h3><pre class="gl-out">${esc((d.logs.errors || []).join("\n") || "(no errors logged)")}</pre>${(d.logs.php || []).length ? `<pre class="gl-out">${esc(d.logs.php.join("\n"))}</pre>` : ""}</div>`;
+}
+async function sbTgLoad() { const box = $("#sb-tg"); if (!box) return; try { const t = await api("/api/shopbot/telegram"); box.innerHTML = `<div><span>bot</span> @${esc(t.bot.username || "?")} ${esc(t.bot.name || "")}</div><div><span>webhook</span> ${esc(t.webhook.url || "not set")}</div><div><span>pending updates</span> ${t.webhook.pending}</div>${t.webhook.last_error ? `<div><span>last error</span> <b class="err">${esc(t.webhook.last_error)}</b> ${ago(t.webhook.last_error_at)} ago</div>` : ""}`; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } }
+const SB_SWITCHES = [["cashbackPercent", "Cashback percent on every purchase (0 = off)"], ["wheelState", "Lucky wheel (on / off)"], ["wheelPrizes", "Wheel prizes, comma separated (Toman)"], ["wheelHours", "Hours between two spins"], ["giftState", "Gift codes (on / off)"], ["testState", "Free test accounts (on / off)"], ["botState", "Whole bot (on / off)"]];
+function sbSwitchesHtml(d) {
+  const st = d.states || {}, known = SB_SWITCHES.map(x => x[0]), other = Object.keys(st).filter(k => !known.includes(k)).sort();
+  return `<div class="card"><h3>Switches <small class="mut">— BOT_STATES in the bot's database, read by the bot on every message</small></h3><form class="frm" onsubmit="return sbSaveStates(event)">
+    ${SB_SWITCHES.map(([k, label]) => `<label>${label}<input name="${k}" value="${esc(st[k] == null ? "" : st[k])}" placeholder="not set"></label>`).join("")}
+    ${other.map(k => `<label>${esc(k)}<input name="${esc(k)}" value="${esc(st[k])}"></label>`).join("")}
+    <div class="frm-act"><button class="pri" type="submit">Save changed switches</button></div></form></div>`;
+}
+window.sbSaveStates = async e => { e.preventDefault(); const f = new FormData(e.target), st = sb.info.states || {}, ch = {}; for (const [k, v] of f.entries()) { if (String(st[k] == null ? "" : st[k]) !== String(v)) ch[k] = v; } if (!Object.keys(ch).length) { toast("nothing changed"); return false; } try { await api("/api/shopbot/states", {method: "PUT", body: JSON.stringify({changes: ch})}); toast("✓ " + Object.keys(ch).join(", ") + " saved", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+async function sbUsersLoad() {
+  const box = $("#sb-body"); if (!box) return;
+  const rows = sb.uq ? (await api("/api/shopbot/users?q=" + encodeURIComponent(sb.uq)).catch(e => { toast("✕ " + e.message, "bad"); return {users: []}; })).users : [];
+  box.innerHTML = `<div class="toolbar"><input id="sb-uq" placeholder="Telegram id, username, name or phone…" value="${esc(sb.uq)}" oninput="sbUQ(this.value)"><span class="mut">${sb.uq ? rows.length + " found" : "type to search the bot's users"}</span></div>
+    ${rows.length ? `<table class="tbl"><colgroup><col style="width:14%"><col style="width:22%"><col style="width:12%"><col style="width:8%"><col style="width:8%"><col style="width:10%"><col></colgroup><thead><tr><th>Telegram id</th><th>Name</th><th>Wallet</th><th>Orders</th><th>Agent</th><th>Discount</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr class="${r.step === "banned" ? "down" : "up"}"><td class="num">${esc(r.userid)}</td><td class="name">${esc(r.name || "")} <small class="mut">${r.username ? "@" + esc(r.username) : ""}</small></td><td class="num">${(+r.wallet || 0).toLocaleString()}</td><td class="num">${esc(r.orders)}</td><td>${r.is_agent === "1" ? '<span class="pill ok">agent</span>' : ""}</td><td class="num">${esc(r.discount_percent || 0)}%</td>
+        <td><button class="sm" onclick="sbU('${esc(r.userid)}', 'wallet', prompt('Add to the wallet (Toman, negative to take)', '10000'))">± wallet</button> <button class="sm" onclick="sbU('${esc(r.userid)}', 'discount', prompt('Discount percent', '${esc(r.discount_percent || 0)}'))">discount</button> <button class="sm" onclick="sbU('${esc(r.userid)}', '${r.is_agent === "1" ? "agent_off" : "agent_on"}')">${r.is_agent === "1" ? "agent off" : "agent on"}</button> <button class="sm ${r.step === "banned" ? "" : "danger"}" onclick="sbU('${esc(r.userid)}', '${r.step === "banned" ? "unban" : "ban"}')">${r.step === "banned" ? "unban" : "ban"}</button></td></tr>`).join("")}</tbody></table>` : ""}`;
+  const q = $("#sb-uq"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+window.sbUQ = v => { sb.uq = v.trim(); clearTimeout(qT); qT = setTimeout(refresh, 350); };
+window.sbU = async (uid, action, value) => { if ((action === "wallet" || action === "discount") && (value == null || value === "")) return; try { await api("/api/shopbot/users/action", {method: "POST", body: JSON.stringify({action, userid: uid, value})}); toast("✓ " + action + " done", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+async function sbTableLoad() {
+  const box = $("#sb-body"); if (!box) return;
+  const tables = ["users", "orders_list", "pays", "server_plans", "server_config", "server_categories", "discounts", "setting", "send_list", "add_link", "increase_order", "gift_codes", "wheel_log", "cashback_log"];
+  let t; try { t = await api(`/api/shopbot/table/${sb.table}?page=${sb.tpage}&q=${encodeURIComponent(sb.tq)}`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  box.innerHTML = `<div class="toolbar"><select onchange="sb.table=this.value;sb.tpage=0;sb.tq='';refresh()">${tables.map(x => `<option ${x === sb.table ? "selected" : ""}>${x}</option>`).join("")}</select><input id="sb-tq" placeholder="filter…" value="${esc(sb.tq)}" oninput="sbTQ(this.value)"><span class="mut">${t.total} rows</span><span class="sp"></span><button class="sm" ${sb.tpage ? "" : "disabled"} onclick="sb.tpage--;refresh()">‹</button><button class="sm" ${(sb.tpage + 1) * 40 < t.total ? "" : "disabled"} onclick="sb.tpage++;refresh()">›</button></div>
+    <div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${t.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${t.rows.map(r => `<tr>${t.columns.map(c => `<td title="${esc(r[c])}" style="max-width:260px">${esc(r[c] == null ? "" : r[c])}</td>`).join("")}</tr>`).join("") || `<tr><td class="mut">empty</td></tr>`}</tbody></table></div>`;
+  const q = $("#sb-tq"); if (q && sb.tq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+window.sbTQ = v => { sb.tq = v.trim(); sb.tpage = 0; clearTimeout(qT); qT = setTimeout(refresh, 350); };
+function sbSqlHtml() {
+  const box = $("#sb-body"); if (!box) return;
+  const r = sb.qres;
+  box.innerHTML = `<div class="card"><h3>Read-only SQL <small class="mut">— one SELECT or SHOW; string literals in double quotes; 200 rows max</small></h3><textarea id="sb-sql" class="ob-raw" spellcheck="false" placeholder='SELECT userid, name, wallet FROM users WHERE wallet > 100000 ORDER BY wallet DESC'>${esc(sb.sql)}</textarea><div class="frm-act"><button class="pri" onclick="sbRun()">Run</button></div></div>
+    ${r ? (r.error ? `<div class="err">${esc(r.error)}</div>` : `<div class="mut">${r.rows.length} rows</div><div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${r.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${r.rows.map(x => `<tr>${r.columns.map(c => `<td style="max-width:260px" title="${esc(x[c])}">${esc(x[c] == null ? "" : x[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`) : ""}`;
+}
+window.sbRun = async () => { sb.sql = $("#sb-sql").value; try { sb.qres = await api("/api/shopbot/query", {method: "POST", body: JSON.stringify({sql: sb.sql})}); } catch (e) { sb.qres = {error: e.message}; } sbSqlHtml(); };
+async function sbStatsLoad() {
+  const box = $("#sb-body"); if (!box) return;
+  let s; try { s = await api("/api/shopbot/stats"); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const list = (title, rows, f) => `<div class="card"><h3>${title}</h3>${rows.map(r => `<div class="gw-row"><span>${f(r)}</span><span></span><span></span></div>`).join("") || '<div class="mut">nothing</div>'}</div>`;
+  box.innerHTML = `<div class="card"><h3>Income per day, 30 days</h3>${spark(s.daily.map(d => +d.income / 1000), {fmt: v => v.toFixed(0) + " k"})}<div class="mut">${s.daily.length ? s.daily[0].day + " → " + s.daily[s.daily.length - 1].day : ""}</div></div>
+    <div class="grid2">${list("Top buyers", s.top_buyers, r => `<b>${esc(r.name || r.userid)}</b> <small class="mut">${r.orders} orders · ${(+r.spent / 1000).toLocaleString()} k</small>`)}${list("Biggest wallets", s.top_wallets, r => `<b>${esc(r.name || r.userid)}</b> <small class="mut">${(+r.wallet / 1000).toLocaleString()} k</small>`)}</div>
+    ${list("Pending payments", s.pending_pays, r => `<b>#${esc(r.id)}</b> ${esc(r.name || r.user_id)} <small class="mut">${(+r.price / 1000).toLocaleString()} k · ${esc(r.type)}</small>`)}`;
+}
+window.sbAct = async act => { const msgs = {webhook: "Point the Telegram webhook at the bot's public URL?", restart: "Restart PHP on the bot server?", backup: "Dump the bot's database to /opt/nikabot/backups?", clearlogs: "Clear the bot's log files?"}; if (!confirm(msgs[act])) return; toast("Working…"); try { const r = await api(`/api/shopbot/action/${act}`, {method: "POST"}); toast((r.done ? "✓ " : "✕ ") + (r.message || act), r.done ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbImport = async () => { if (!confirm("Import the real database over the live one?\n\nThe live database is dumped first. Users, orders, payments, plans, panels and settings are replaced; broadcast queues are not copied. The bot then serves the real customers.")) return; toast("Dumping and importing… (1–3 minutes)"); try { const r = await api("/api/shopbot/import-stage", {method: "POST"}); toast(`✓ Imported: ${r.tables.users} users, ${r.tables.orders_list} orders · backup ${r.backup.split("/").pop()}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
 const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};
 INFO.gateway = ["Gateway", "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off."];
@@ -687,7 +766,7 @@ let lqT; window.setLogQ = v => { state.logs.q = v.trim(); clearTimeout(lqT); lqT
 
 /* ---- settings */
 PAGES.settings = async () => {
-  const [s, tg, al, rp, bk, mw, rp_, pr, iranList] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran")]);
+  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   $("#page").innerHTML = `<div class="grid2">
     <div class="card"><h3>Telegram <span class="sp"></span>${tg.has_token ? '<span class="pill">token saved</span>' : '<span class="pill">no token</span>'}</h3>
@@ -752,6 +831,14 @@ PAGES.settings = async () => {
       ${bk.backups.slice(0, 8).map(b => `<div class="ev"><time>${ago(b.at)} ago</time><i></i><small>${Math.round(b.bytes / 1024)} KB</small><span><a href="/api/backup/download/${esc(b.file)}">${esc(b.file)}</a></span></div>`).join("") || '<div class="empty">No backup yet.</div>'}
       <small class="mut">Restore: stop the service, then <code>nikatel restore &lt;file&gt;</code> on the server.</small></div>
 
+    <div class="card"><h3>Shop bot <span class="sp"></span><span class="pill">${sb.host ? "server set" : "not set"}</span></h3>
+      <form class="frm one" onsubmit="return saveShopbot(event)">
+        <label>Server that runs the bot <small>(IP or host, reached with the panel's SSH key)</small><input name="host" value="${esc(sb.host)}" placeholder="ip or host"></label>
+        <label>SSH user / port<input name="ssh_user" value="${esc(sb.ssh_user)}" style="width:48%;display:inline-block"> <input name="ssh_port" type="number" value="${sb.ssh_port}" style="width:48%;display:inline-block"></label>
+        <label>Bot directory<input name="dir" value="${esc(sb.dir)}"></label><label>DB env file<input name="env" value="${esc(sb.env)}"></label>
+        <label>Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
+        <div class="frm-act"><button class="pri" type="submit">Save</button></div></form></div>
+
     <div class="card"><h3>Password</h3>
       <form class="frm one" onsubmit="return changePassword(event)">
         <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
@@ -782,6 +869,7 @@ window.delWindow = async id => { try { await api(`/api/maintenance/${id}`, {meth
 window.saveProbe = e => { const f = new FormData(e.target); const standby = f.get("standby").split("\n").map(l => l.trim()).filter(Boolean).map(l => { const [name, api_url, api_token] = l.split(",").map(x => (x || "").trim()); return {name, api_url, api_token: api_token || ""}; }); return put(e, "/api/settings/probe", {api_url: f.get("api_url").trim(), api_token: f.get("api_token"), server_id: +f.get("server_id") || 0, standby}, "✓ Probe settings saved"); };
 window.testProbe = async () => { toast("Asking the probe…"); try { const r = await api("/api/settings/probe/test", {method: "POST"}); toast(`✓ ${r.probe.active} answers · ${r.configs} configs`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.installProbe = async e => { e.preventDefault(); const sid = +new FormData(e.target).get("server_id"); if (!confirm("Install the probe on this Iran server? It copies the probe code and Xray (about 65 MB) over SSH and starts three services. Nothing else on the server is touched.")) return false; toast("Installing… (2–5 minutes)"); try { const r = await api(`/api/settings/probe/install?server_id=${sid}`, {method: "POST"}); toast(`✓ Probe on ${r.server} registered as ${r.role}`, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.saveShopbot = e => { const f = new FormData(e.target); return put(e, "/api/settings/shopbot", {host: f.get("host").trim(), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, dir: f.get("dir").trim(), env: f.get("env").trim(), public_url: f.get("public_url").trim()}, "✓ Shop bot settings saved"); };
 window.saveRepair = e => put(e, "/api/settings/repair", formJson(e, ["after_seconds"], ["auto"]), "✓ Repair settings saved");
 window.saveReport = e => put(e, "/api/settings/report", formJson(e, ["hour", "tz_offset_minutes"], ["enabled"]), "✓ Report settings saved");
 window.previewReport = async () => { const r = await api("/api/report/preview"); const p = $("#report-prev"); p.textContent = r.text; p.classList.remove("hidden"); };

@@ -50,7 +50,7 @@ always installable; a milestone ends with a tag.
 ## M6 · Panels & bot
 - [x] #29 Marzban / PasarGuard: status, nodes (auto reconnect), users, hosts; alerts for panels and nodes
 - [x] #30 Core outbounds manager with validation, backup/restore and automatic rollback
-- [ ] #31 Shop bot: status, switches, users, SQL import
+- [x] #31 Shop bot: status, switches, users, tables, read-only SQL, backups, import of the real database
 - [ ] #32 Retire the old panel; make the repository private
 
 ## Rules
