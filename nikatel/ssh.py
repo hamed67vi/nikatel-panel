@@ -92,7 +92,7 @@ echo "LOG_END"
 """, {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$", "ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$"}),
 
     # ask Telegram about the bot, from the bot server with the bot's own token (the token never leaves it)
-    "bot_tg_get": (r"""TOK=$(grep -oE "\$botToken\s*=\s*'[^']+'" '@DIR@/baseInfo.php' | head -1 | sed "s/.*'\(.*\)'/\1/")
+    "bot_tg_get": (r"""TOK=$(grep -oE "botToken *= *'[^']+'" '@DIR@/baseInfo.php' | head -1 | sed "s/.*'\(.*\)'/\1/")
 [ -n "$TOK" ] || { echo '{"ok":false,"description":"no bot token in baseInfo.php"}'; exit 0; }
 curl -s -m 20 "https://api.telegram.org/bot$TOK/@METHOD@" | head -c 4000
 """, {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$", "METHOD": r"^(getMe|getWebhookInfo)$"}),
@@ -355,7 +355,7 @@ echo IMPORTED
 """, {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$"}),
 
     # shop bot: talk to Telegram from the bot server with the bot's own token (the token never leaves it)
-    "bot_tg": (r"""TOK=$(grep -oE "\$botToken\s*=\s*'[^']+'" '@DIR@/baseInfo.php' | head -1 | sed "s/.*'\(.*\)'/\1/")
+    "bot_tg": (r"""TOK=$(grep -oE "botToken *= *'[^']+'" '@DIR@/baseInfo.php' | head -1 | sed "s/.*'\(.*\)'/\1/")
 [ -n "$TOK" ] || { echo '{"ok":false,"description":"no bot token in baseInfo.php"}'; exit 0; }
 curl -s -m 20 -X POST "https://api.telegram.org/bot$TOK/@METHOD@" -H 'Content-Type: application/json' -d @BODY@ | head -c 4000
 """, {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$", "METHOD": r"^(setWebhook|setMyCommands|setChatMenuButton|deleteWebhook)$", "BODY": r"^'\{[^'`\\$]{0,3000}\}'$"}),
