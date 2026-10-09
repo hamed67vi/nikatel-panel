@@ -117,11 +117,11 @@ async function refresh() {
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !cf.open && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !cf.open && !cf.edit && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
-window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; cf.open = null; cf.edit = null; hideModal(); refresh(); };
+window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; cf.open = null; cf.edit = null; cf.subEdit = null; hideModal(); refresh(); };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
 /* ---- dashboard */
@@ -180,7 +180,7 @@ PAGES.servers = async () => {
   const row = s => {
     const f = s.facts || {}, cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
     return `<tr class="${cls} click" onclick="toggleDetail(${s.id})">
-      <td class="name">${s.role === "foreign" && s.country ? flag(s.country).split(" ")[0] + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${(s.extra || {}).iran_filter && (s.extra.iran_filter.level === "filtered" || s.extra.iran_filter.level === "blocked") ? '<span class="pill err">filtered</span>' : ""}</td>
+      <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${(s.extra || {}).iran_filter && (s.extra.iran_filter.level === "filtered" || s.extra.iran_filter.level === "blocked") ? '<span class="pill err">filtered</span>' : ""}</td>
       <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
       <td class="mono">${esc(s.host)}</td>
       <td class="hide-sm">${pct(f.cpu)}</td><td class="hide-sm">${pct(f.ram)}</td><td class="hide-sm">${pct(f.disk, 85, 95)}</td>
@@ -208,7 +208,9 @@ PAGES.servers = async () => {
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
 };
-const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) + " " + cc : "";
+/* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
+const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="https://flagcdn.com/20x15/${cc.toLowerCase()}.png" srcset="https://flagcdn.com/40x30/${cc.toLowerCase()}.png 2x" width="20" height="15" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
+const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? flagImg(cc) + " " + cc : "";
 function serverDetailHtml(s) {
   const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};
   const abuseOn = ab.installed || (f.abuse_rules || 0) > 0;
@@ -558,8 +560,8 @@ window.checkTunnel = async id => { toast("Checking both servers…"); try { awai
 /* ---- configs (what the probe keeps alive and tests) */
 INFO.configs = ["Panels", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
 const cf = {open: null, edit: null, sub: null, q: "", group: localStorage.getItem("nk.cfgroup") || "__all"};
-const FLAGS = {de: "🇩🇪", germany: "🇩🇪", fi: "🇫🇮", finland: "🇫🇮", nl: "🇳🇱", netherlands: "🇳🇱", us: "🇺🇸", usa: "🇺🇸", fr: "🇫🇷", france: "🇫🇷", gb: "🇬🇧", uk: "🇬🇧", tr: "🇹🇷", turkey: "🇹🇷", ae: "🇦🇪", uae: "🇦🇪", se: "🇸🇪", sweden: "🇸🇪", pl: "🇵🇱", poland: "🇵🇱", ru: "🇷🇺", russia: "🇷🇺", ir: "🇮🇷", iran: "🇮🇷", ca: "🇨🇦", canada: "🇨🇦", jp: "🇯🇵", japan: "🇯🇵", sg: "🇸🇬", singapore: "🇸🇬", hk: "🇭🇰", it: "🇮🇹", italy: "🇮🇹", es: "🇪🇸", spain: "🇪🇸", at: "🇦🇹", austria: "🇦🇹", ch: "🇨🇭", kz: "🇰🇿", am: "🇦🇲", armenia: "🇦🇲", az: "🇦🇿", ge: "🇬🇪", qa: "🇶🇦", bh: "🇧🇭", om: "🇴🇲", lt: "🇱🇹", lv: "🇱🇻", ee: "🇪🇪", cz: "🇨🇿", ro: "🇷🇴", bg: "🇧🇬", gr: "🇬🇷", pt: "🇵🇹", ie: "🇮🇪", no: "🇳🇴", dk: "🇩🇰", be: "🇧🇪", lu: "🇱🇺", ua: "🇺🇦", md: "🇲🇩", rs: "🇷🇸", in: "🇮🇳", kr: "🇰🇷", au: "🇦🇺", br: "🇧🇷", mx: "🇲🇽", za: "🇿🇦"};
-function cfFlag(name) { const m = String(name || "").match(/[\u{1F1E6}-\u{1F1FF}]{2}/u); if (m) return ""; for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return FLAGS[t] + " "; return ""; }
+const FLAGS = {de: "de", germany: "de", fi: "fi", finland: "fi", nl: "nl", netherlands: "nl", us: "us", usa: "us", unitedstates: "us", fr: "fr", france: "fr", gb: "gb", uk: "gb", unitedkingdom: "gb", england: "gb", tr: "tr", turkey: "tr", ae: "ae", uae: "ae", emirates: "ae", dubai: "ae", se: "se", sweden: "se", pl: "pl", poland: "pl", ru: "ru", russia: "ru", ir: "ir", iran: "ir", ca: "ca", canada: "ca", jp: "jp", japan: "jp", sg: "sg", singapore: "sg", hk: "hk", hongkong: "hk", it: "it", italy: "it", es: "es", spain: "es", at: "at", austria: "at", ch: "ch", switzerland: "ch", kz: "kz", kazakhstan: "kz", am: "am", armenia: "am", az: "az", ge: "ge", georgia: "ge", qa: "qa", qatar: "qa", bh: "bh", bahrain: "bh", om: "om", oman: "om", lt: "lt", lv: "lv", ee: "ee", cz: "cz", czech: "cz", czechia: "cz", ro: "ro", romania: "ro", bg: "bg", bulgaria: "bg", gr: "gr", greece: "gr", pt: "pt", portugal: "pt", ie: "ie", ireland: "ie", no: "no", norway: "no", dk: "dk", denmark: "dk", be: "be", belgium: "be", lu: "lu", ua: "ua", ukraine: "ua", md: "md", rs: "rs", serbia: "rs", in: "in", india: "in", kr: "kr", korea: "kr", au: "au", australia: "au", br: "br", brazil: "br", mx: "mx", za: "za", cn: "cn", china: "cn", tw: "tw", taiwan: "tw", vn: "vn", vietnam: "vn", th: "th", thailand: "th", my: "my", malaysia: "my", id: "id", indonesia: "id", ph: "ph", eg: "eg", egypt: "eg", sa: "sa", saudi: "sa", kw: "kw", kuwait: "kw", iq: "iq", iraq: "iq", pk: "pk", pakistan: "pk", il: "il", cy: "cy", cyprus: "cy", mt: "mt", malta: "mt", hu: "hu", hungary: "hu", sk: "sk", si: "si", hr: "hr", croatia: "hr", fin: "fi", ger: "de", ned: "nl", fra: "fr", tur: "tr", ita: "it", swe: "se", pol: "pl", can: "ca", aus: "au", usa2: "us"};
+function cfFlag(name) { for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return flagImg(FLAGS[t]) + " "; return ""; }
 const pingCls = v => v == null ? "mut" : v < 150 ? "ok" : v < 400 ? "warn" : "bad";
 const mb = v => v == null ? "—" : Number(v).toFixed(v >= 100 ? 0 : 1);
 PAGES.configsList = async () => {
@@ -600,18 +602,19 @@ PAGES.configsList = async () => {
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
   const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
   const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}${searched.some(c => !c.group) ? chip("Manual", searched.filter(c => !c.group).length, "__manual", false) : ""}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
-      ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Import new nodes of this subscription">⟳ Sync</button><button class="sm" onclick="cfSubOpen('${esc(cf.group)}')">Subscription</button>` : ""}</div>` : "";
+      ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Import new nodes of this subscription">⟳ Sync</button><button class="sm" onclick="cfSubManage('${esc(cf.group)}')" title="Tick which nodes of this subscription are kept on the probe">☑ Subscription</button>` : ""}</div>` : "";
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${names.length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
       <div class="tile ok"><small>Online</small><b>${up.length}</b><span>answer from inside Iran</span></div>
       <div class="tile ${down.length ? "bad" : ""}"><small>Offline</small><b>${down.length}</b><span>${down.length ? down.slice(0, 3).map(c => esc(c.name)).join(", ") + (down.length > 3 ? "…" : "") : "none"}</span></div>
       <div class="tile"><small>Average live ping</small><b>${pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) + " ms" : "—"}</b><span>over ${pings.length} online configs</span></div></div>
     <div class="toolbar"><input id="cq" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)">
-      <button onclick="cfNew()">+ Add config</button><button onclick="cfSubNew()">+ Add subscription</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config in this view, one after the other" ${list.length ? "" : "disabled"}>⚡ Test all</button><button class="danger" onclick="cfDeleteAll()" ${list.length ? "" : "disabled"}>🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
+      <button class="${cf.edit === "new" ? "on" : ""}" onclick="cfNew()">＋ Add</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config in this view, one after the other" ${list.length ? "" : "disabled"}>⚡ Test all</button><button class="danger" onclick="cfDeleteAll()" ${list.length ? "" : "disabled"}>🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
       <span class="sp"></span><div class="tabs" title="Display">${[["grid", "▦ Grid"], ["compact", "▤ Compact"], ["list", "☰ List"]].map(([k, l]) => `<button class="${cf.view === k ? "on" : ""}" onclick="cfView('${k}')">${l}</button>`).join("")}</div></div>
     ${gbar}
-    ${cf.edit === "new" ? `<div class="card"><h3>Add a config</h3><form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional" value="${esc(names.includes(cf.group) ? cf.group : "")}"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form></div>` : ""}
-    ${cf.sub ? cfSubHtml() : ""}
+    ${cf.edit === "new" ? `<div class="card"><h3>Add <span class="sp"></span><div class="tabs">${[["link", "🔗 A link"], ["sub", "📡 A subscription"]].map(([k, l]) => `<button class="${(cf.addTab || "link") === k ? "on" : ""}" onclick="cf.addTab='${k}';refresh()">${l}</button>`).join("")}</div></h3>
+      ${(cf.addTab || "link") === "link" ? `<form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional" value="${esc(names.includes(cf.group) ? cf.group : "")}"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfCancel()">Cancel</button></div></form>` : cfSubHtml(true)}</div>` : ""}
+    ${cf.sub && cf.edit !== "new" ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
       : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col><col style="width:150px"></colgroup>
       <thead><tr><th>Config</th><th>Group</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
@@ -649,7 +652,7 @@ window.cfSetTunnel = async (id, v) => { try { await api(`/api/configs/${id}`, {m
 window.cfSetCdn = async (id, inp) => { const v = inp.value.trim(); if (v === (inp.dataset.orig || "")) return; const n = Number(v); if (v && (!/^\d+$/.test(v) || n < 1 || n > 65535)) { toast("CDN port must be a number from 1 to 65535", "bad"); inp.value = inp.dataset.orig || ""; return; } try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({cdn_port: v})}); inp.dataset.orig = v; toast(v ? "✓ CDN port " + v + " saved" : "✓ CDN port cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); inp.value = inp.dataset.orig || ""; } };
 window.cfSubOpen = async name => { const subs = await api("/api/subscriptions"); cf.sub = {name, url: "", nodes: null, saved: subs.subscriptions.some(s => s.name === name)}; cf.edit = null; refresh(); };
 window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; if (!cf.open) hideModal(); refresh(); };
-window.cfNew = () => { cf.edit = "new"; cf.open = null; cf.sub = null; refresh(); };
+window.cfNew = () => { if (cf.edit === "new") { cf.edit = null; cf.sub = null; } else { cf.edit = "new"; cf.open = null; cf.sub = {name: "", url: "", nodes: null}; } refresh(); };
 window.cfCancel = () => { cf.edit = null; cf.sub = null; refresh(); };
 window.cfSync = async () => { toast("Asking the probe… (up to a minute)"); try { await api("/api/configs/sync", {method: "POST"}); toast("✓ Synced", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.cfAdd = async e => { e.preventDefault(); const f = new FormData(e.target); try { const r = await api("/api/configs", {method: "POST", body: JSON.stringify({uri: f.get("uri").trim(), name: f.get("name").trim(), group: f.get("group").trim()})}); toast("✓ " + r.name + " added — the probe tests it within a minute", "ok"); cf.edit = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
@@ -734,15 +737,47 @@ window.cfeSave = async () => {
 };
 
 /* subscriptions */
-window.cfSubNew = () => { cf.sub = {name: "", url: "", nodes: null}; cf.edit = null; refresh(); };
-function cfSubHtml() {
+window.cfSubNew = () => { cf.sub = {name: "", url: "", nodes: null}; cf.edit = "new"; cf.addTab = "sub"; refresh(); };
+function cfSubHtml(inline = false) {
+  if (!cf.sub) cf.sub = {name: "", url: "", nodes: null};
   const s = cf.sub;
-  return `<div class="card"><h3>Import a subscription</h3><form class="frm" onsubmit="return cfSubPreview(event)">
+  const body = `<form class="frm" onsubmit="return cfSubPreview(event)">
     <label>Group name<input name="name" required value="${esc(s.name)}" ${s.saved ? "readonly" : ""} placeholder="hamed11"></label><label style="grid-column:2/-1">Subscription link${s.saved ? " <small>(empty = the link saved for this group)</small>" : ""}<input name="url" ${s.saved ? "" : "required"} value="${esc(s.url)}" placeholder="${s.saved ? "Saved on the server — leave empty to reuse" : "https://…/sub/…"}"></label>
     <div class="frm-act"><button class="pri" type="submit">Preview nodes</button><button type="button" onclick="cfCancel()">Cancel</button></div></form>
     ${s.nodes ? `<div class="ob-inbounds">${s.nodes.map(n => `<label><input type="checkbox" value="${esc(n.name)}" ${n.exists ? "" : "checked"} ${n.exists ? "disabled" : ""}> ${esc(n.name)} <small class="mut">${esc(n.proto)}${n.exists ? " · already there" : ""}</small></label>`).join("")}</div>
-      <div class="frm-act"><button class="pri" onclick="cfSubImport()">Add the ticked nodes to the probe</button></div>` : ""}</div>`;
+      <div class="frm-act"><button class="pri" onclick="cfSubImport()">Add the ticked nodes to the probe</button></div>` : ""}`;
+  return inline ? body : `<div class="card"><h3>Import a subscription</h3>${body}</div>`;
 }
+/* the Subscription window of a group: tick which nodes stay on the probe; unticked ones are removed, newly ticked ones added */
+window.cfSubManage = async group => {
+  toast("Reading the saved subscription…");
+  try {
+    const [p, d] = await Promise.all([api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: group, url: ""})}), api("/api/configs")]);
+    const mine = d.configs.filter(c => c.group === group);
+    cf.subEdit = {group, nodes: p.nodes.map(n => ({...n, cfg: mine.find(c => c.name === n.name || c.name === group + " " + n.name) || null}))};
+    cfSubRender();
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+function cfSubRender() {
+  const s = cf.subEdit; if (!s) return;
+  showModal(`<b>☑ ${esc(s.group)}</b> <span class="pill">${s.nodes.filter(n => n.cfg).length} of ${s.nodes.length} on the probe</span>`,
+    `<div class="toolbar"><a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=true)">tick all</a> · <a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=false)">untick all</a><span class="sp"></span><small class="mut">ticked = kept on the probe and shown in the list</small></div>
+     <div class="ob-inbounds sub-nodes" id="sub-nodes" style="max-height:50vh">${s.nodes.map((n, i) => `<label><input type="checkbox" data-i="${i}" ${n.cfg ? "checked" : ""}> ${cfFlag(n.name)}${esc(n.name)} <small class="mut">${esc(n.proto)}${n.cfg ? ` · ${n.cfg.status}${n.cfg.ping_ms != null && n.cfg.status === "up" ? " " + Math.round(n.cfg.ping_ms) + " ms" : ""}` : " · not on the probe"}</small></label>`).join("")}</div>
+     <div class="frm-act"><button class="pri" onclick="cfSubApply()">Apply</button><button onclick="cf.subEdit=null;closeModal()">Cancel</button></div>`, "wide");
+}
+window.cfSubApply = async () => {
+  const s = cf.subEdit; if (!s) return;
+  const ticked = [...document.querySelectorAll("#sub-nodes input")].map(x => x.checked);
+  const drop = s.nodes.filter((n, i) => n.cfg && !ticked[i]), add = s.nodes.filter((n, i) => !n.cfg && ticked[i]);
+  if (!drop.length && !add.length) { toast("Nothing changed"); return; }
+  if (drop.length && !confirm(`Remove ${drop.length} configs of ${s.group} from the probe?`)) return;
+  toast(`Applying: ${add.length} to add, ${drop.length} to remove…`);
+  let bad = 0;
+  for (const n of drop) { try { await api(`/api/configs/${n.cfg.id}`, {method: "DELETE"}); } catch (e) { bad++; } }
+  if (add.length) { try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: s.group, url: "", picks: add.map(n => n.name)})}); bad += (r.failed || []).length; } catch (e) { bad += add.length; } }
+  toast(bad ? `⚠ Done with ${bad} failures` : "✓ Subscription applied", bad ? "bad" : "ok");
+  cf.subEdit = null; closeModal();
+};
 window.cfSubPreview = async e => { e.preventDefault(); const f = new FormData(e.target); cf.sub.name = f.get("name").trim(); cf.sub.url = f.get("url").trim(); toast("Downloading…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url})})).nodes; toast("✓ " + cf.sub.nodes.length + " nodes", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.cfSubImport = async () => { const picks = [...document.querySelectorAll(".ob-inbounds input:checked")].map(x => x.value); if (!picks.length) { toast("Tick at least one node", "bad"); return; } toast("Adding " + picks.length + " nodes… (a few seconds each)"); try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url, picks})}); toast(`✓ ${r.added.length} added, ${r.skipped.length} skipped, ${r.failed.length} failed`, r.failed.length ? "bad" : "ok"); cf.sub = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.cfSubRefresh = async (id, name) => { cf.sub = {name, url: "", nodes: null, saved: !!id}; cf.edit = null; if (!id) { refresh(); return; } toast("Fetching the saved subscription…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name, url: ""})})).nodes; const fresh = cf.sub.nodes.filter(n => !n.exists).length; toast(fresh ? `✓ ${fresh} new nodes — tick and add them` : "✓ Nothing new in this subscription", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
