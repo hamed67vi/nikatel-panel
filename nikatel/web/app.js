@@ -109,7 +109,7 @@ PAGES.nodes = async () => {
   return PAGES.servers(false);
 };
 document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.page));
-$("#refresh").onclick = () => refresh();
+
 
 async function refresh() {
   try {
@@ -117,7 +117,7 @@ async function refresh() {
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !cf.open) refresh(); }, 30000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !cf.open && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
@@ -135,25 +135,21 @@ PAGES.dashboard = async () => {
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   const q = (icon, title, sub, page, subtab) => `<a class="dash-action" onclick="go('${page}')${subtab ? `;setSub('${page}','${subtab}')` : ""}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
-  $("#page").innerHTML = `<div class="tiles">
+  const quick = `<div class="dash-quick">${q("⚡", "Ping and speed tests", "every config, from inside Iran", "configs", "configs")}${q("🛰", "Check filtering in Iran", "is a foreign server reachable?", "nodes", "foreign")}${q("🖥", "Manage Iran nodes", "resources, console, tools", "nodes", "iran")}${q("⇄", "Create and monitor", "tunnels between your servers", "tunnels", "list")}</div>`;
+  $("#page").innerHTML = `${quick}<div class="tiles">
       ${tile("Tunnels up", o.tunnels.up + " / " + o.tunnels.total, o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " degraded" : "all good"), o.tunnels.down ? "bad" : o.tunnels.degraded ? "warn" : "ok")}
       ${tile("Servers online", o.servers.online + " / " + o.servers.total, o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", o.servers.offline ? "bad" : "ok")}
       ${tile("Configs online", cUp + " / " + cfg.configs.length, cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from Iran", cfg.configs.length - cUp ? "bad" : "ok")}
       ${tile("Jobs", o.jobs.total, o.jobs.failing.length ? "failing: " + o.jobs.failing.join(", ") : o.jobs.stale.length ? "stale: " + o.jobs.stale.join(", ") : "all running", o.jobs.failing.length ? "bad" : o.jobs.stale.length ? "warn" : "ok")}
     </div>
-    <div class="dash-cols"><div class="card"><h3>Infrastructure health</h3>
-      ${hrow("VLESS / VMess connectivity", "configs the probe can use from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
-      ${hrow("SSH connected nodes", "servers that answered the last check", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
-      ${hrow("Reachable from Iran", "foreign servers whose last filter check was clean", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
-      ${hrow("Last “filtered in Iran?” checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 4).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet — run one from a foreign server", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
-      ${hrow("Iran ↔ Foreign", "tunnels carrying users right now", `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
-      <div class="dash-updated">updated ${new Date().toLocaleTimeString(undefined, {hour12: false})}</div></div>
-    <div class="card"><h3>Quick access</h3><div class="dash-actions">
-      ${q("⚡", "Ping and speed tests", "every config, from inside Iran", "configs", "configs")}${q("🛰", "Check filtering in Iran", "is a foreign server reachable?", "nodes", "foreign")}
-      ${q("🖥", "Manage Iran nodes", "resources, console, tools", "nodes", "iran")}${q("⇄", "Create and monitor", "tunnels between your servers", "tunnels", "list")}</div></div></div>
-    <div class="card act"><h3>Activity</h3><div class="act-list">${eventsHtml(ev.events)}</div></div>`;
+    <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3>
+      ${hrow("VLESS / VMess connectivity", "configs usable from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
+      ${hrow("SSH connected nodes", "servers that answered", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
+      ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
+      ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
+      ${hrow("Iran ↔ Foreign", "tunnels carrying users", `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}</div>
+    <div class="card act"><h3>Activity</h3><div class="act-list">${eventsHtml(ev.events)}</div></div></div>`;
 };
-
 function eventsHtml(list) {
   if (!list.length) return '<div class="empty">Nothing happened yet.</div>';
   return list.map(e => `<div class="ev ${e.level}"><time title="${when(e.ts)}">${ago(e.ts)} ago</time><i></i><small>${esc(e.domain)}</small><span>${esc(e.text)}</span></div>`).join("");
