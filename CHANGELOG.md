@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 - 2026-10-09 - Milestone 1 (see) complete except the one-week comparison
+
+* Servers: add / edit / disable / remove from the UI; "forget host key" after a reinstall; detail row with host facts.
+* 24-hour charts: CPU, RAM, traffic, load, connections per server; up/down strip, RTT and throughput per tunnel.
+* Settings page: change password, effective settings (read-only mode stays server-side on purpose).
+* Logs page: the panel's own log with level / domain / text filters, request ids, secrets masked.
+
 ## 0.1.0 - 2026-10-09 - Milestone 0 and the first half of Milestone 1
 
 * Project skeleton: settings, logging with request ids and secret masking, SQLite with

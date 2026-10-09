@@ -20,10 +20,10 @@ always installable; a milestone ends with a tag.
 - [x] #8 Server facts every 2 min; 24 h history endpoint
 - [x] #9 Tunnel health every 1 min: units both sides, GRE interface, peer ping, forwarded ports → up / degraded / down / unknown with a reason
 - [x] #10 UI: Dashboard, Servers, Tunnels (detail row), Events, Jobs
-- [ ] #11 Charts: CPU/RAM/traffic per server, RTT/throughput per tunnel (24 h)
-- [ ] #12 Add / edit / disable a server from the UI; "forget host key"
-- [ ] #13 Settings page: change password, intervals, read-only switch (read-only can only be turned off from the server, not the UI)
-- [ ] #14 Log viewer in the UI (last 500 lines, filter by domain / level / rid)
+- [x] #11 Charts: CPU/RAM/traffic per server, RTT/throughput per tunnel (24 h)
+- [x] #12 Add / edit / disable a server from the UI; "forget host key"
+- [x] #13 Settings page: change password, intervals, read-only switch (read-only can only be turned off from the server, not the UI)
+- [x] #14 Log viewer in the UI (last 500 lines, filter by domain / level / rid)
 - [ ] #15 **Exit criterion**: one week beside the old panel; same state for every tunnel in both
 
 ## M2 · Alert
