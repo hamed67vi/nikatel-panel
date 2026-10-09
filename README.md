@@ -26,9 +26,10 @@ Non-interactive: `curl … | bash -s -- --yes --port 9443`.
 
 ## Status
 
-**Milestone 1 - see.** Read-only monitoring of servers and tunnels. The panel changes nothing
-on the servers (`NIKATEL_READ_ONLY=true`). API docs at `/api/docs`.
+**1.0 - all milestones done.** Servers and tunnels (monitor, alert, repair, build, test), the Iran
+gateway, configs and the probe, Marzban / PasarGuard panels with their outbounds, and the shop bot.
+The old panel is retired. API docs at `/api/docs`.
 
-This repository is public while it is being built. It contains no addresses, names or
-credentials of the real infrastructure; those live only in the database on the panel server.
-`scripts/check_no_secrets.sh` enforces this on every commit and in CI.
+The repository contains no addresses, names or credentials of the real infrastructure; those live
+only in the database on the panel server. `scripts/check_no_secrets.sh` enforces this on every
+commit and in CI.

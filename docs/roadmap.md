@@ -24,7 +24,7 @@ always installable; a milestone ends with a tag.
 - [x] #12 Add / edit / disable a server from the UI; "forget host key"
 - [x] #13 Settings page: change password, intervals, read-only switch (read-only can only be turned off from the server, not the UI)
 - [x] #14 Log viewer in the UI (last 500 lines, filter by domain / level / rid)
-- [ ] #15 **Exit criterion**: one week beside the old panel; same state for every tunnel in both
+- [x] #15 **Exit criterion**: one week beside the old panel; same state for every tunnel in both (shortened by decision of the operator on 2026-10-09: both panels agreed on every tunnel during the day they ran side by side)
 
 ## M2 · Alert
 - [x] #16 Telegram: bot token + chat, test message
@@ -51,7 +51,7 @@ always installable; a milestone ends with a tag.
 - [x] #29 Marzban / PasarGuard: status, nodes (auto reconnect), users, hosts; alerts for panels and nodes
 - [x] #30 Core outbounds manager with validation, backup/restore and automatic rollback
 - [x] #31 Shop bot: status, switches, users, tables, read-only SQL, backups, import of the real database
-- [ ] #32 Retire the old panel; make the repository private
+- [x] #32 Retire the old panel (service stopped and disabled on 2026-10-10, files kept); repository private; Telegram alerts moved; auto-repair on
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

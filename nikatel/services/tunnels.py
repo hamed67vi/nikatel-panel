@@ -153,9 +153,9 @@ def judge(plan: Plan, iran: Side, foreign: Side) -> tuple[str, str]:
 
 
 def settle(old_state: str, judged: str, streak: dict | None) -> tuple[str, dict]:
-    """Flapping control between up and degraded: the judged state must repeat CONFIRM_CHECKS times
-    before it replaces the stored one. down / unknown / starting apply at once (a stopped unit is
-    not noise), and so does the first state of a new tunnel. Pure, so the rule is testable."""
+    """Flapping control: between up and degraded, and into unknown (an ssh hiccup), the judged state
+    must repeat CONFIRM_CHECKS times before it replaces the stored one. down applies at once (a
+    stopped unit is not noise), and so does the first state of a new tunnel. Pure, so the rule is testable."""
     streak = dict(streak or {})
 
     if streak.get("state") == judged:
@@ -166,9 +166,9 @@ def settle(old_state: str, judged: str, streak: dict | None) -> tuple[str, dict]
     if judged == old_state:
         return old_state, streak
 
-    soft = {"up", "degraded"}
+    soft = {"up", "degraded", "unknown"}
 
-    if old_state in soft and judged in soft and streak["n"] < CONFIRM_CHECKS:
+    if old_state in soft and judged in soft and judged != "down" and streak["n"] < CONFIRM_CHECKS and old_state != "unknown":
         return old_state, streak
 
     return judged, streak
@@ -180,12 +180,23 @@ def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
               "PEER": plan.iran_peer if is_iran else "",
               "PORTS": " ".join(str(p) for p in plan.ports) if is_iran else ""}
 
-    try:
-        return parse_side(run_script(node, "tunnel_side", params, timeout=35))
-    except (SSHError, ValueError) as e:
-        s = Side()
-        s.error = str(e)[:160]
-        return s
+    for attempt in (1, 2):
+        try:
+            return parse_side(run_script(node, "tunnel_side", params, timeout=35))
+        except SSHError as e:
+            if e.code == 255 and attempt == 1:       # the connection dropped mid-run: one more try before "unknown"
+                time.sleep(3)
+                continue
+
+            s = Side()
+            s.error = str(e)[:160]
+            return s
+        except ValueError as e:
+            s = Side()
+            s.error = str(e)[:160]
+            return s
+
+    return Side()
 
 
 def check_tunnel(tunnel_id: int) -> None:

@@ -91,3 +91,8 @@ def test_settle_needs_two_checks_for_up_degraded_flips():
     assert settle("up", "down", None)[0] == "down"
     assert settle("down", "up", None)[0] == "up"
     assert settle("unknown", "up", None)[0] == "up"
+    # one ssh hiccup does not make a working tunnel "unknown"; two in a row do
+    st, streak = settle("up", "unknown", None)
+    assert st == "up"
+    assert settle("up", "unknown", streak)[0] == "unknown"
+    assert settle("degraded", "unknown", None)[0] == "degraded"

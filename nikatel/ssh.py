@@ -18,7 +18,9 @@ log = get_logger("ssh")
 
 
 class SSHError(RuntimeError):
-    pass
+    def __init__(self, msg: str, code: int = 1):
+        super().__init__(msg)
+        self.code = code          # 255 = the ssh connection itself failed (worth one retry)
 
 
 @dataclass(frozen=True)
@@ -189,13 +191,16 @@ def _exec(node: Node, script: str, timeout: int) -> str:
 
     if r.returncode != 0:
         tail = out.strip().splitlines()[-1] if out.strip() else f"exit {r.returncode}"
+        log.warning("ssh %s exit %s: %s", node.host, r.returncode, out.strip().replace("\n", " | ")[-400:])
 
         if "Permission denied" in out:
             tail = "the panel's key is not accepted (authorized_keys)"
         elif "Host key verification failed" in out or "IDENTIFICATION HAS CHANGED" in out:
             tail = "the host key of this server changed (reinstalled?) - forget it in Settings"
+        elif r.returncode == 255:
+            tail = "ssh connection lost (" + (re.search(r"(Timeout, server[^|]*|Connection (reset|closed|timed out)[^|]*|kex_exchange_identification[^|]*|Broken pipe)", out) or [None, "network"])[0].strip() + ")"
 
-        raise SSHError(tail[:200])
+        raise SSHError(tail[:200], r.returncode)
 
     return out
 
