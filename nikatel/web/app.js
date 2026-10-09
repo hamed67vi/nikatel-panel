@@ -139,7 +139,7 @@ PAGES.servers = async () => {
       <div class="tabs"><button class="${state.tab === "iran" ? "on" : ""}" onclick="setTab('iran')">🇮🇷 Iran (${list.filter(s => s.role === "iran").length})</button><button class="${state.tab === "foreign" ? "on" : ""}" onclick="setTab('foreign')">🌍 Foreign (${list.filter(s => s.role === "foreign").length})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button></div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : ""}
-    <table class="tbl"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:120px"></colgroup>
+    <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col><col style="width:120px"></colgroup>
       <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Traffic</th><th>Seen</th><th></th></tr></thead>
       <tbody>${rows.map(row).join("") || '<tr><td colspan="10" class="empty">No server.</td></tr>'}</tbody></table>`;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
@@ -191,11 +191,14 @@ window.forgetKey = async (id, name) => {
 };
 
 /* ---- tunnels */
+const TUN_TYPES = ["backhaul", "gre", "backpack", "chisel", "paqet", "other"];
+const TUN_LABEL = {backhaul: "Backhaul over GRE", gre: "Plain GRE", backpack: "Backpack", chisel: "Chisel", paqet: "Paqet", other: "Other"};
+const tunType = t => TUN_TYPES.includes((t.type || "").toLowerCase()) ? (t.type || "").toLowerCase() : "other";
 PAGES.tunnels = async () => {
   const list = await api("/api/tunnels");
-  const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name).toLowerCase().includes(state.q));
+  const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
   const row = t => `<tr class="${t.state}">
-      <td class="name">${esc(t.name)}<span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span></td>
+      <td class="name">${esc(t.name)}${t.transport ? `<span class="pill">${esc(t.transport)}</span>` : ""}</td>
       <td><span class="st ${t.state}">${esc(t.state)}</span></td>
       <td>${esc(t.iran_name)} <span class="mut">⇄</span> ${esc(t.foreign_name)}</td>
       <td class="num">${t.port || "—"}</td>
@@ -206,9 +209,10 @@ PAGES.tunnels = async () => {
       ${state.open === t.id ? detailRow(t) : ""}`;
   $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newTunnel()">+ Create tunnel</button></div>
     ${state.edit === "newtunnel" ? `<div class="card" id="build-card">${await buildFormHtml()}</div>` : ""}
-    <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:18%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col><col style="width:130px"></colgroup>
+    ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
+    <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:18%"><col style="width:7%"><col style="width:8%"><col style="width:13%"><col><col style="width:130px"></colgroup>
       <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Note</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
+      <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   if (state.open) loadTunnelCharts(state.open);
 };
 function detailRow(t) {
@@ -345,7 +349,7 @@ PAGES.configs = async () => {
     ${cf.sub ? cfSubHtml() : ""}
     ${subs.subscriptions.length ? `<div class="card"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}
     ${groups.map(g => `<div class="nk-ghead"><b>${esc(g || "Ungrouped")}</b><span>${list.filter(c => (c.group || "") === g).length}</span></div>
-    <table class="tbl"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
+    <table class="tbl lift"><colgroup><col style="width:28%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"><col><col style="width:110px"></colgroup>
       <thead><tr><th>Config</th><th>Status</th><th>Ping</th><th>Speed Mb/s</th><th>CDN port</th><th>Note</th><th></th></tr></thead>
       <tbody>${list.filter(c => (c.group || "") === g).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No config yet. Add a link or import a subscription.</div>'}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
@@ -857,7 +861,25 @@ PAGES.settings = async () => {
       <div><span>Port</span> ${s.listen_port}</div></div>
       <small class="mut">These come from <code>${esc(s.env_file)}</code> on the panel server (then <code>systemctl restart nikatel</code>). Read-only cannot be switched off from here on purpose.</small></div>
   </div>`;
+  settingsTabs();
 };
+/* settings are grouped in tabs; each tab has one line that says what it is for */
+const SET_TABS = {
+  alerts: ["Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows, the daily report.", ["Telegram", "Alert rules", "Maintenance windows", "Daily report"]],
+  repair: ["Repair & probe", "What the panel may change on its own, and the probe that tests configs from inside Iran.", ["Repairs", "Probe"]],
+  integrations: ["Integrations", "Other systems the panel manages: the shop bot server.", ["Shop bot"]],
+  backups: ["Backups", "Encrypted copies of the panel's data, kept here and sent to Telegram.", ["Backups"]],
+  account: ["Account", "Your password and the settings the service was started with.", ["Password", "Effective settings"]],
+};
+function settingsTabs() {
+  const cur = SET_TABS[state.stab] ? state.stab : "alerts";
+  state.stab = cur;
+  const bar = `<div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
+  $("#page").insertAdjacentHTML("afterbegin", bar);
+  document.querySelectorAll("#page .grid2 > .card").forEach(c => { const h = c.querySelector("h3"); const name = h ? h.childNodes[0].textContent.trim() : ""; c.classList.toggle("hidden", !SET_TABS[cur][2].includes(name)); });
+}
+window.setTab = k => { state.stab = k; localStorage.setItem("nk.stab", k); refresh(); };
+state.stab = localStorage.getItem("nk.stab") || "alerts";
 const formJson = (e, nums = [], bools = []) => { const f = new FormData(e.target), o = {}; for (const [k, v] of f.entries()) o[k] = v; nums.forEach(k => o[k] = +o[k]); bools.forEach(k => o[k] = f.get(k) === "on"); return o; };
 const put = async (e, path, body, okText) => { e.preventDefault(); try { await api(path, {method: "PUT", body: JSON.stringify(body)}); toast(okText, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveTelegram = e => put(e, "/api/settings/telegram", formJson(e, [], ["enabled"]), "✓ Telegram saved");
