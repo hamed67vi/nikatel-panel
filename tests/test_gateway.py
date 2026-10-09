@@ -67,6 +67,9 @@ def test_build_config_auto_and_direct():
     assert user_in["port"] == 28080 and user_in["settings"]["address"] == "2.2.2.2" and user_in["settings"]["network"] == "tcp"
     assert any(r.get("balancerTag") == "gw-bal" and "gw-in-28080" in r["inboundTag"] for r in cfg["routing"]["rules"])
 
+    st["mode"] = "borrowed"
+    assert build_config(st)["routing"]["balancers"][0]["fallbackTag"] == "block"
+
     st["mode"] = "direct"
     cfg2 = build_config(st)
     assert "balancers" not in cfg2["routing"] and any(r.get("outboundTag") == "direct" and "gw-in-28080" in r["inboundTag"] for r in cfg2["routing"]["rules"])

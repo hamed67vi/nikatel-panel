@@ -208,7 +208,9 @@ def build_config(st: dict) -> dict:
 
     if on and mode in ("auto", "borrowed"):
         sel = ["b-"] if mode == "borrowed" else ["direct", "b-"]
-        bal = {"tag": "gw-bal", "selector": sel, "strategy": {"type": "leastPing"}, **({"fallbackTag": "direct"} if mode == "auto" else {})}
+        # auto: when no borrowed config is alive, go direct. borrowed: never leak to direct - block instead
+        # (Xray would otherwise use the first outbound, which is direct, before the observatory has measured anything)
+        bal = {"tag": "gw-bal", "selector": sel, "strategy": {"type": "leastPing"}, "fallbackTag": "direct" if mode == "auto" else "block"}
         cfg["routing"]["balancers"] = [bal]
         cfg["observatory"] = {"subjectSelector": sel, "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "30s", "enableConcurrency": True}
         rules.append({"type": "field", "inboundTag": tags + ["gw-test"], "balancerTag": "gw-bal"})
