@@ -52,7 +52,7 @@ def summarize(key: str, name: str, group: str, raw: dict | None) -> dict:
 
     known = [s for s in sites if s["state"] != "none"]
     bad, warn = sum(1 for s in known if s["state"] == "bad"), sum(1 for s in known if s["state"] == "warn")
-    state = "none" if not known else "bad" if bad >= 2 else "warn" if bad or warn else "ok"
+    state = "none" if not known else "bad" if bad >= 2 else "warn" if bad else "ok"      # a site that fails only now and then (below level 1) colours its own square, not the data centre
     strip = []
 
     for i in range(STRIP // 2):        # 30 cells of two minutes: the worst value of any site in that time

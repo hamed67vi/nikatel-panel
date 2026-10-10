@@ -307,7 +307,8 @@ PAGES.servers = async () => {
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
-      <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td></tr>`;
+      <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>
+      <td><div class="td-act"><button class="sm" onclick="event.stopPropagation();editServer(${s.id})" title="Change name, address, SSH user or port">Edit</button><button class="sm danger" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button></div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
   $("#page").innerHTML = `<div class="tiles">
@@ -318,9 +319,9 @@ PAGES.servers = async () => {
     <div class="toolbar">
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
-    <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:17%"><col style="width:6%"><col style="width:6%"><col style="width:17%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:12%"><col style="width:13%">' : '<col style="width:19%"><col style="width:7%"><col style="width:19%"><col style="width:11%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%">'}</colgroup>
-      <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th></tr></thead>
-      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 9 : 8}" class="empty">No server.</td></tr>`}</tbody></table>`;;
+    <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:14%"><col style="width:6%"><col style="width:6%"><col style="width:14%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:15%">' : '<col style="width:16%"><col style="width:7%"><col style="width:16%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:14%">'}</colgroup>
+      <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
