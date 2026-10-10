@@ -82,6 +82,9 @@ def classify(d: dict) -> tuple[str, str]:
     if (loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50):
         return "route_cut", f"the two servers cannot reach each other (loss {loss_i}% / {loss_f}%): the route between them is cut or filtered"
 
+    if d.get("state") == "degraded" and max(v or 0 for v in (d.get("gre_loss"), loss_i, loss_f)) >= 15:
+        return "lossy_route", f"the link loses packets (GRE {d.get('gre_loss')} %, servers {loss_i} % / {loss_f} %): the route between these two servers is poor, a restart does not cure that"
+
     if d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50):
         return "gre_blocked", "the servers reach each other but GRE packets do not pass: GRE is filtered on this route"
 
@@ -103,6 +106,11 @@ def ladder_for(cause: str, kind: str, level: str = "switch") -> list[str]:
             steps.append("rebuild")
     elif cause in ("gre_blocked", "port_blocked") and rank >= 2:
         steps.append("switch")
+    elif cause == "lossy_route":
+        if rank >= 2:
+            steps.append("switch")      # another tunnel type may cross the same route better; it is only kept when it measures better
+
+        steps.append("move")            # never automatic: the operator chooses the server
     elif cause == "route_cut":
         steps.append("move")        # never automatic: the operator chooses the server
 
@@ -179,8 +187,8 @@ def diagnose(tunnel_id: int) -> dict:
     advice = ai.advise(json.dumps({"tunnel": info["name"], "type": kind, "cause": cause, "summary": why, "facts": {k: v for k, v in facts.items() if k != "last_error"}, "last_error": str(info["last_error"] or "")[:200]}, ensure_ascii=False)) if cause != "healthy" else None
 
     return {**info, "kind": kind, "cause": cause, "summary": why, "findings": findings, "ai": (advice or {}).get("diagnosis", ""),
-            "ladder": ladder_for(cause, kind), "can_switch": cause in ("gre_blocked", "port_blocked", "unknown") and cause != "healthy",
-            "can_move": cause in ("route_cut", "server_unreachable") or cause == "unknown"}
+            "ladder": ladder_for(cause, kind), "can_switch": cause in ("gre_blocked", "port_blocked", "unknown", "lossy_route") and cause != "healthy",
+            "can_move": cause in ("route_cut", "server_unreachable", "lossy_route") or cause == "unknown"}
 
 
 CONFIG_SYSTEM = """You help the owner of a self-hosted tunnel panel. One client config (a VLESS/VMess/Trojan link) fails the probe's test from inside Iran.

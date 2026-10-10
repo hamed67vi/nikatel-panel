@@ -20,6 +20,8 @@ def test_classification_picks_the_real_cause():
     assert ap.classify({"state": "down", "under_loss_i": 0, "under_loss_f": 0, "gre": True, "gre_loss": None})[0] == "gre_blocked"
     assert ap.classify({"state": "down", "under_loss_i": 0, "under_loss_f": 0, "gre": False, "port_open": False, "port": 9601})[0] == "port_blocked"
     assert ap.classify({"state": "down", "under_loss_i": 0, "under_loss_f": 0, "gre": False, "port_open": True})[0] == "unknown"
+    assert ap.classify({"state": "degraded", "under_loss_i": 3, "under_loss_f": 2, "gre": True, "gre_loss": 33})[0] == "lossy_route"      # lossy but not cut: restarting cannot help
+    assert ap.classify({"state": "degraded", "under_loss_i": 0, "under_loss_f": 0, "gre": True, "gre_loss": 5})[0] != "lossy_route"
 
 
 def test_ladder_is_limited_by_the_level():
@@ -28,6 +30,7 @@ def test_ladder_is_limited_by_the_level():
     assert ap.ladder_for("gre_blocked", "tcpmux", "rebuild") == []
     assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["switch"] and ap.ladder_for("port_blocked", "bp:tcp", "switch") == ["switch"]
     assert ap.ladder_for("route_cut", "tcpmux", "switch") == ["move"]          # moving is never automatic, but it is the advice
+    assert ap.ladder_for("lossy_route", "tcpmux", "switch") == ["switch", "move"] and ap.ladder_for("lossy_route", "tcpmux", "restart") == ["move"]
     assert ap.ladder_for("healthy", "tcpmux") == [] and ap.ladder_for("server_unreachable", "tcpmux") == []
 
 
