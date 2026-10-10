@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.2 - 2026-10-11 - Re-tune can start with one tunnel
+
+* The re-tune can be started for the first N tunnels only (a pilot before the rest).
+
 ## 1.13.1 - 2026-10-11 - Smart Iran choice: quality, then resources, then the next server
 
 * **Smart Iran server**: ranked by QUALITY first (ping and loss to the foreign server, in steps of 10 points); among servers of about the same quality the one with MORE free resources, then the one carrying fewer tunnels. When the build on one fails, the next one (up to 4) is tried in the same story instead of stopping.

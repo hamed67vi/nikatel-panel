@@ -153,8 +153,8 @@ def tune_one(aid: int, tid: int) -> str:
     return "rolled back"
 
 
-def run(aid: int) -> bool:
-    ids = candidates()
+def run(aid: int, limit: int = 0) -> bool:
+    ids = candidates()[: limit or None]
     autopilot._say(aid, f"Re-tuning {len(ids)} tunnel(s), one at a time, at quiet moments; each is checked and rolled back if it gets worse.")
     results, back_in_a_row = {}, 0
 
@@ -189,5 +189,5 @@ def run(aid: int) -> bool:
     return done > 0
 
 
-def start() -> int:
-    return autopilot._start("retune all tunnels", run, action="retune")
+def start(limit: int = 0) -> int:
+    return autopilot._start("retune all tunnels", run, limit, action="retune")
