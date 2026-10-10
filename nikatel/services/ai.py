@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 import httpx
 
@@ -12,6 +13,7 @@ from ..log import get_logger
 from . import settings as st
 
 log = get_logger("ai")
+LAST: dict = {}     # what the API reported about the last call (the model that really answered)
 ACTIONS = ("restart_services", "restart_gre", "restart_both", "rebuild", "notify")
 SYSTEM = """You are the repair assistant of a self-hosted tunnel panel that links Iranian and foreign Linux servers
 with Backhaul over GRE tunnels. You get the facts the panel collected from BOTH servers of one broken tunnel:
@@ -48,7 +50,9 @@ def ask(system: str, user: str, max_tokens: int = 700, timeout: float = 45) -> s
 
         raise RuntimeError(f"Anthropic API answered {r.status_code}: {msg[:150]}")
 
-    return "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text").strip()
+    body = r.json()
+    LAST["model"] = str(body.get("model") or "")
+    return "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text").strip()
 
 
 def parse_advice(raw: str) -> dict:
@@ -77,4 +81,21 @@ def advise(report: str) -> dict | None:
 
 
 def test_key() -> str:
-    return ask("Answer with the single word OK.", "ping", max_tokens=5, timeout=30)[:40]
+    return check()["answer"]
+
+
+def check() -> dict:
+    """Ask the API one word and keep the result (connected or not, which model answered, how fast, why not) so Settings can show it."""
+    s = conf()
+    t0 = time.monotonic()
+    LAST.clear()
+
+    try:
+        answer = ask("Answer with the single word OK.", "ping", max_tokens=5, timeout=30)[:40]
+        res = {"ok": True, "answer": answer, "error": ""}
+    except (RuntimeError, httpx.HTTPError) as e:
+        res = {"ok": False, "answer": "", "error": str(e)[:160]}
+
+    res.update({"provider": "Anthropic", "model": LAST.get("model") or s.get("model") or "", "ms": int((time.monotonic() - t0) * 1000), "at": int(time.time())})
+    st.put("ai", {"status": res})
+    return res

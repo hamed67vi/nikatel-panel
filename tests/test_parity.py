@@ -12,9 +12,9 @@ def test_ai_parse_advice_keeps_only_known_actions():
 
 
 def test_ai_settings_api_masks_key(client, monkeypatch):
+    monkeypatch.setattr(ai, "ask", lambda *a, **k: "OK")
     r = client.put("/api/settings/ai", json={"enabled": True, "api_key": "sk-test-123", "model": "claude-sonnet-5-5", "actions": False})
     assert r.status_code == 200 and r.json()["has_api_key"] is True and r.json()["api_key"] == "" and r.json()["actions"] is False
-    monkeypatch.setattr(ai, "ask", lambda *a, **k: "OK")
     assert client.post("/api/settings/ai/test").json()["answer"] == "OK"
     assert client.delete("/api/settings/ai/key").json()["has_api_key"] is False
 
@@ -87,3 +87,24 @@ def test_panel_test_config_imports_to_probe(client, monkeypatch):
     r = client.post(f"/api/panels/{pid}/test-config")
     assert r.status_code == 200 and r.json()["added"] == ["shop a", "shop b"] and r.json()["username"] == "nikatel-test-shop"
     assert client.get("/api/panels").json()["panels"][0]["stats"]["test_user"] == "nikatel-test-shop"
+
+
+def test_ai_check_keeps_the_status_and_names_the_model(client, monkeypatch):
+    from nikatel.services import settings as st
+
+    def fake(*a, **k):
+        ai.LAST["model"] = "claude-sonnet-5-5-20260101"
+        return "OK"
+
+    monkeypatch.setattr(ai, "ask", fake)
+    r = client.put("/api/settings/ai", json={"enabled": True, "api_key": "sk-test-1234567890", "model": "claude-sonnet-5-5", "actions": True}).json()
+    assert r["status"]["ok"] is True and r["status"]["model"] == "claude-sonnet-5-5-20260101" and r["api_key_tail"] == "7890" and r["api_key"] == ""
+
+    def boom(*a, **k):
+        raise RuntimeError("Anthropic API answered 401: invalid x-api-key")
+
+    monkeypatch.setattr(ai, "ask", boom)
+    assert client.post("/api/settings/ai/test").status_code == 502
+    s = st.get("ai")["status"]
+    assert s["ok"] is False and "401" in s["error"]
+    assert client.delete("/api/settings/ai/key").json()["status"] == {}

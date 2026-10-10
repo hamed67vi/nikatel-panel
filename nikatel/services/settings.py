@@ -21,7 +21,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
     "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
     # the AI assistant (Anthropic): advises inside Fix; `actions` lets its suggested steps be added to the plan
-    "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True},
+    "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {}},   # status: the result of the last key test
     # the secret entry path: when set, the panel answers 404 to everything until the browser has opened /<entry_path>
     "security": {"entry_path": ""},
 }
@@ -76,6 +76,9 @@ def public(key: str) -> dict:
 
     for f in SECRET_FIELDS.get(key, ()):
         d[f"has_{f}"] = bool(d.get(f))
+        if key == "ai":
+            d[f"{f}_tail"] = str(d.get(f) or "")[-4:] if len(str(d.get(f) or "")) >= 12 else ""   # the last four characters tell which key it is
+
         d[f] = ""
 
     return d

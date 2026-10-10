@@ -1452,7 +1452,8 @@ PAGES.settings = async () => {
         <label>Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form></div>
 
-    <div class="card"><h3>AI assistant <span class="sp"></span><span class="pill">${ai_.has_api_key ? "key saved" : "no key"}</span></h3>
+    <div class="card"><h3>AI assistant <span class="sp"></span>${aiPill(ai_)}</h3>
+      ${aiStatus(ai_)}
       <form class="frm one" onsubmit="return saveAi(event)">
         <label class="chk"><input name="enabled" type="checkbox" ${ai_.enabled ? "checked" : ""}> use the AI to diagnose broken tunnels (inside Fix)</label>
         <label class="chk"><input name="actions" type="checkbox" ${ai_.actions ? "checked" : ""}> let the AI add safe repair steps to the plan</label>
@@ -1527,6 +1528,14 @@ window.secNewCodes = async () => { if (!await gconfirm("Make new recovery codes?
 window.secDownloadCodes = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["Nikatel recovery codes (each works once)\n\n" + (sec.codes || []).join("\n") + "\n"], {type: "text/plain"})); a.download = "nikatel-recovery-codes.txt"; document.body.appendChild(a); a.click(); a.remove(); };
 window.secPath = async random => { let path = ""; if (random) { const b = new Uint8Array(9); crypto.getRandomValues(b); path = "nk-" + [...b].map(x => x.toString(36).padStart(2, "0")).join("").slice(0, 14); } else { path = await gprompt("The secret path (8-64 letters, digits, - and _):"); if (!path) return; } const pw = await askPw(); if (!pw) return; try { const r = await api("/api/auth/entry-path", {method: "PUT", body: JSON.stringify({path, password: pw})}); toast("✓ The panel now lives at /" + r.path, "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secPathOff = async () => { if (!await gconfirm("Turn the secret path off? The panel answers on its normal address again.")) return; const pw = await askPw(); if (!pw) return; try { await api("/api/auth/entry-path", {method: "PUT", body: JSON.stringify({path: "", password: pw})}); toast("Secret path off", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+const aiPill = a => !a.has_api_key ? '<span class="pill">no key</span>' : !a.status || !a.status.at ? '<span class="pill">key saved - not tested</span>' : a.status.ok ? '<span class="pill ok">● connected</span>' : '<span class="pill err">● not working</span>';
+const aiStatus = a => {   // which AI is behind the key, whether it answers, how fast, and what it is used for
+  const s = a.status || {};
+  if (!a.has_api_key) return '<div class="ai-stat"><span class="mut">No key saved. Paste an Anthropic API key below and the panel tests it at once.</span></div>';
+  if (!s.at) return '<div class="ai-stat"><span class="mut">Key ...' + esc(a.api_key_tail || "") + ' saved but not tested yet.</span> <button type="button" class="sm" onclick="testAi()">Test now</button></div>';
+  const rows = [["AI", esc(s.provider || "Anthropic") + " · Claude"], ["Model", `<b>${esc(s.model || a.model)}</b>`], ["Key", "..." + esc(a.api_key_tail || "")], ["Answer time", s.ok ? s.ms + " ms" : "—"], ["Tested", ago(s.at) + " ago"], ["Used for", a.enabled ? "diagnosis inside Fix" + (a.actions ? " + safe repair steps" : "") : "<span class=\"mut\">switched off (tick the first box)</span>"]];
+  return `<div class="ai-stat ${s.ok ? "ok" : "bad"}"><div class="ai-head">${s.ok ? "● Connected" : "● Not working"}</div>${s.ok ? "" : `<div class="err">${esc(s.error || "no answer")}</div>`}<div class="ai-grid">${rows.map(r => `<span class="mut">${r[0]}</span><span>${r[1]}</span>`).join("")}</div></div>`;
+};
 window.saveAi = e => put(e, "/api/settings/ai", formJson(e, [], ["enabled", "actions"]), "✓ AI settings saved");
 window.testAi = async () => { toast("Asking Anthropic…"); try { const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };

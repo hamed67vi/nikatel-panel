@@ -1,4 +1,3 @@
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -26,14 +25,19 @@ def ai_put(body: AiIn):
     if body.model and len(body.model) > 60:
         raise HTTPException(400, "model name too long")
 
+    before = st.get("ai").get("model")
     st.put("ai", {"enabled": body.enabled, "api_key": body.api_key.strip(), "model": body.model.strip() or "claude-sonnet-5-5", "actions": body.actions})
+
+    if (body.api_key.strip() or (body.model.strip() or "claude-sonnet-5-5") != before) and st.get("ai").get("api_key"):   # a new key or model: find out at once whether it works
+        ai.check()
+
     return ai_get()
 
 
 @router.delete("/settings/ai/key")
 def ai_forget_key():
     st.put("ai", {"api_key": "-"})          # a non-empty value replaces the key ...
-    st.put("ai", {"enabled": False})
+    st.put("ai", {"enabled": False, "status": {}})
 
     from ..db import session
     from ..models import Setting
@@ -51,7 +55,9 @@ def ai_forget_key():
 
 @router.post("/settings/ai/test")
 def ai_test():
-    try:
-        return {"ok": True, "answer": ai.test_key()}
-    except (RuntimeError, httpx.HTTPError) as e:
-        raise HTTPException(502, str(e))
+    res = ai.check()
+
+    if not res["ok"]:
+        raise HTTPException(502, res["error"])
+
+    return res
