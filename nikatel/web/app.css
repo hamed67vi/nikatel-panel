@@ -813,3 +813,11 @@ nav a { font-family: "Poppins", "Vazirmatn", "Inter", system-ui, sans-serif; fon
 nav a > span { font-weight: 600; } nav a.on > span { font-weight: 700; }
 nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins", "Inter", sans-serif; font-size: 11.5px; }
 @media (max-width: 700px) { nav a { font-size: 13px; height: auto; } }
+
+/* ---- the footer in Poppins as well, on one line */
+.side-ver, .sc-out, .side-foot { font-family: "Poppins", "Vazirmatn", "Inter", system-ui, sans-serif; }
+.side-ver { font-size: 12px; white-space: nowrap; gap: 7px; padding: 10px 11px; }
+.side-ver .sc-by { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.side-ver .sc-by b { font-weight: 700; letter-spacing: .8px; } .side-ver:hover .sc-by b { letter-spacing: 1.4px; }
+.sc-ver { font-family: "Poppins", "Inter", sans-serif !important; font-weight: 600 !important; font-size: 11px !important; flex: none; }
+.sc-out { font-size: 14.5px; font-weight: 600; }
