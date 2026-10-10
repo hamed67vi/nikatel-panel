@@ -9,6 +9,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
+def is_temp(name: str) -> bool:
+    """A temporary test tunnel (built by a tunnel test or by the smart repair to measure a candidate, removed again): never listed, never checked, never repaired."""
+    return str(name).startswith("test-")
+
+
 def now() -> int:
     return int(time.time())
 

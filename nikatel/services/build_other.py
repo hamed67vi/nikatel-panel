@@ -20,7 +20,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Server, Tunnel
+from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import engines
 from .builder import PortMap, _node, _put, _say, _unit, parse_ports, pretty_name
@@ -782,7 +782,7 @@ def _build(b: Build) -> None:
     _measure(b, iran, key)
 
     with session() as db:
-        t = Tunnel(name=b.name, type=eng, transport=b.transport if b.kind != "backpack_direct" else f"l3:{b.transport}", engine=eng,
+        t = Tunnel(name=b.name, enabled=not is_temp(b.name), type=eng, transport=b.transport if b.kind != "backpack_direct" else f"l3:{b.transport}", engine=eng,
                    iran_server_id=b.iran.id, foreign_server_id=b.foreign.id, port=b.port,
                    iran_tunnel_ip=f"10.10.{b.net}.1" if b.net else "", foreign_tunnel_ip=f"10.10.{b.net}.2" if b.net else "",
                    forwarded_ports=[p.listen for p in b.ports],

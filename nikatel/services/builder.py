@@ -22,7 +22,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Server, Tunnel
+from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import settings as st
 from .events import emit
@@ -744,7 +744,7 @@ def _build(b: Build) -> None:
 
     # 7. record
     with session() as db:
-        t = Tunnel(name=b.name, type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
+        t = Tunnel(name=b.name, enabled=not is_temp(b.name), type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
                    record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel"},

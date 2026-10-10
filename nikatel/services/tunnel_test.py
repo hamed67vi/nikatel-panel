@@ -149,6 +149,25 @@ def full_check() -> dict:
     return {"rows": rows, **{k: sum(1 for r in rows if r["state"] == k) for k in order}, "high_loss": sum(1 for r in rows if r["loss"] == "high"), "some_loss": sum(1 for r in rows if r["loss"] == "some")}
 
 
+def purge_stale() -> None:
+    """Job hook (every 10 minutes): a temporary test tunnel older than 40 minutes belongs to a test that is gone (the panel restarted in the middle of it):
+    it is removed from both servers, so that nothing hidden is left behind."""
+    from ..models import is_temp
+
+    if any(not j["done"] for j in _COMPARE.values()):
+        return
+
+    with session() as db:
+        old = [t.id for t in db.scalars(select(Tunnel)) if is_temp(t.name) and time.time() - (t.created_at or 0) > 2400]
+
+    for tid in old:
+        try:
+            builder.delete_tunnel(tid)
+            log.info("removed a stale temporary test tunnel (#%s)", tid)
+        except (ValueError, SSHError) as e:
+            log.warning("stale temporary tunnel #%s not removed: %s", tid, str(e)[:100])
+
+
 def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
     """Validate and start; returns the action id of the test (the build has its own id in the story)."""
     with session() as db:

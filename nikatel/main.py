@@ -26,10 +26,12 @@ from .services import (
     configs,
     facts,
     failover,
+    netwatch,
     nodes,
     panels,
     probe,
     report,
+    tunnel_test,
     tunnels,
 )
 
@@ -79,6 +81,8 @@ def _register_jobs() -> None:
     jobs.register("auto-repair", 60, actions.auto_repair)
     jobs.register("smart-repair", 300, autopilot.auto_escalate)
     jobs.register("observe", 300, autopilot.observe_all)
+    jobs.register("netwatch", 300, netwatch.probe_all)
+    jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("failover", 60, failover.check)
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 120, panels.check_all)

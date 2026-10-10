@@ -55,6 +55,14 @@ def explain(body: ExplainIn):
     return {"ok": True, **_wrap(autopilot.explain, body.tunnel_id)}
 
 
+@router.get("/netwatch")
+def netwatch_report():
+    """Disturbances of the network itself: an Iran server with weak connectivity, a server most of whose tunnels lose packets."""
+    from ..services import netwatch
+
+    return {"ok": True, **netwatch.report()}
+
+
 @router.get("/autopilot/outage")
 def outage():
     """Is there a mass disruption (several servers offline / many tunnels down): the repair holds back from deleting or rebuilding."""

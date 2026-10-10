@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from ..auth import current_user
 from ..db import session
-from ..models import Tunnel, TunnelCheck
+from ..models import Tunnel, TunnelCheck, is_temp
 from ..services import builder
 from ..services.tunnels import check_tunnel, plan_for
 
@@ -318,7 +318,7 @@ def _out(t: Tunnel) -> TunnelOut:
 @router.get("/tunnels", response_model=list[TunnelOut])
 def list_tunnels():
     with session() as db:
-        return [_out(t) for t in db.scalars(select(Tunnel).order_by(Tunnel.name))]
+        return [_out(t) for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name)]      # a temporary test tunnel is not part of the list
 
 
 @router.get("/tunnels/{tunnel_id}", response_model=TunnelOut)
