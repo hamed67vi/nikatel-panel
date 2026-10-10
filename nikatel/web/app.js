@@ -182,7 +182,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 /* ---- dashboard */
 PAGES.dashboard = async () => {
   const [o, ev, cfg, srv, tl, rd] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => []), api("/api/radar").catch(() => null)]);
-  state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.evs = Object.fromEntries(ev.events.map(e => [e.id, e]));
+  state.tunnelsCache = tl; state.cfgCache = cfg.configs;
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
   $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
@@ -197,13 +197,31 @@ PAGES.dashboard = async () => {
       ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div>
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events), true)}</div></div></div>${radarCard(rd)}`;
-  const h = $("#page .card.health"), a = $("#page .card.act");
-  if (h && a && !state.actBig) a.style.height = h.offsetHeight + "px";   // the log box lines up with the health box
+    ${problemsCard(o, tl, srv, cfg.configs, bad)}
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>${radarCard(rd)}`;
+  const h = $("#page .card.health"), p = $("#page .card.problems"), a = $("#page .card.act");
+  if (h && a && !state.actBig) { const H = Math.max(h.offsetHeight, 300); a.style.height = H + "px"; if (p) p.style.maxHeight = H + "px"; }   // the three boxes of the row are as tall as the health box (at least 300 px)
 };
 state.actBig = localStorage.getItem("nk.actbig") === "1";
 window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
-/* ---- the activity box: categories, problems only, and a window per event with "Fix with AI" */
+/* ---- the Problems box: only what is wrong right now (read from the live state, so a solved problem leaves it by itself), each with its way to fix it */
+function problemsCard(o, tl, srv, configs, filtered) {
+  const rows = [];
+  const row = (lvl, title, sub, btn) => rows.push(`<div class="pb-row"><i class="dash-dot ${lvl === "bad" ? "red" : "yellow"}"></i><div class="pb-t"><b>${title}</b><small>${esc(String(sub || "").slice(0, 110))}</small></div>${btn || ""}</div>`);
+  const fix = (fn, id) => `<button class="sm pri" onclick="${fn}(${id}${fn === "apDiagnose" ? ", {auto: true}" : ""})" title="Finds the cause and repairs it by itself where that is possible">✨ Fix with AI</button>`;
+  tl.filter(t => t.enabled !== false && (t.state === "down" || t.state === "degraded")).sort((a, b) => (a.state === "down" ? 0 : 1) - (b.state === "down" ? 0 : 1))
+    .forEach(t => row(t.state === "down" ? "bad" : "warn", `Tunnel ${esc(t.name)} <span class="mut">${esc(t.state)}</span>`, t.last_error || `${t.iran_name} ⇄ ${t.foreign_name}`, fix("apDiagnose", t.id)));
+  srv.filter(srvProblem).forEach(s => { const f = s.facts || {}; row(s.online === false ? "bad" : "warn", `Server ${esc(s.name)} <span class="mut">${s.online === false ? "offline" : "overloaded"}</span>`, s.online === false ? (s.last_error || "does not answer over SSH") : `CPU ${f.cpu ?? "—"} % · RAM ${f.ram ?? "—"} % · disk ${f.disk ?? "—"} %`, `<button class="sm" onclick="checkServer(${s.id})" title="Ask the server now">Check now</button>`); });
+  const down = configs.filter(c => c.status === "down");
+  down.slice(0, 5).forEach(c => row("bad", `Config ${esc(c.name)} <span class="mut">down</span>`, c.last_error || "the probe gets no answer through it", fix("cfDiagnose", c.id)));
+  if (down.length > 5) rows.push(`<div class="pb-more"><a onclick="go('configs')">and ${down.length - 5} more configs are down → open the list</a></div>`);
+  filtered.forEach(s => row("warn", `Server ${esc(s.name)} <span class="mut">filtered from Iran</span>`, "its address cannot be reached from inside Iran", `<button class="sm" onclick="srvFilter(${s.id})" title="Check again from the Iran servers">Re-check</button>`));
+  (o.jobs.failing || []).forEach(n => row("bad", `Job ${esc(n)} <span class="mut">failing</span>`, "a background job keeps failing", `<button class="sm" onclick="runJob('${esc(n)}')">Run now</button>`));
+  (o.jobs.stale || []).forEach(n => row("warn", `Job ${esc(n)} <span class="mut">stale</span>`, "a background job did not run on time", `<button class="sm" onclick="runJob('${esc(n)}')">Run now</button>`));
+  const n = rows.length - (down.length > 5 ? 1 : 0) + Math.max(0, down.length - 5);
+  return `<div class="card problems"><h3>Problems <span class="sp"></span><span class="pill ${n ? "err" : "ok"}">${n ? n + " now" : "all clear"}</span></h3>${rows.join("") || '<div class="empty" style="padding:18px 0">Nothing is wrong right now.</div>'}</div>`;
+}
+/* ---- the activity box: categories and problems only */
 const EV_CATS = {tunnels: "Tunnels", configs: "Configs", servers: "Servers", actions: "Repairs", alerts: "Alerts", system: "System", jobs: "Jobs", panels: "Panels", gateway: "Gateway"};
 state.actCat = localStorage.getItem("nk.actcat") || "all"; state.actProb = localStorage.getItem("nk.actprob") === "1";
 const evProblem = e => e.level === "bad" || e.level === "warn";
@@ -215,15 +233,6 @@ function actHead(list) {
 }
 window.actSet = c => { state.actCat = c; localStorage.setItem("nk.actcat", c); refresh(); };
 window.actProb = () => { state.actProb = !state.actProb; localStorage.setItem("nk.actprob", state.actProb ? "1" : "0"); refresh(); };
-window.evOpen = id => {
-  const e = (state.evs || {})[id]; if (!e) return;
-  const tun = (state.tunnelsCache || []).find(t => t.name === e.ref), cfg = tun ? null : (state.cfgCache || []).find(c => c.name === e.ref);
-  const fix = tun ? `<a class="wtool" onclick="apDiagnose(${tun.id}, {auto: true})"><i>✨</i><b>Fix with AI</b><small>finds the cause and repairs ${esc(tun.name)} by itself</small></a>`
-    : cfg ? `<a class="wtool" onclick="cfDiagnose(${cfg.id})"><i>✨</i><b>Fix with AI</b><small>finds why ${esc(cfg.name)} fails and what to do about it</small></a>` : "";
-  showModal(`<span class="st ${e.level === "bad" ? "down" : e.level === "warn" ? "degraded" : "up"}"></span><b>${esc(EV_CATS[e.domain] || e.domain)}</b> <span class="mut">${ago(e.ts)} ago</span>`,
-    `<div class="ibox"><h5><i>📋</i>Event</h5>${irow("About", esc(e.ref || "—"))}${irow("Level", esc(e.level))}${irow("When", when(e.ts))}<div style="padding:8px 0;font-size:13.5px">${esc(e.text)}</div></div>
-     ${fix ? `<div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">${fix}</div></div>` : '<div class="mut" style="margin-top:10px">Nothing to repair for this event.</div>'}`, "");
-};
 window.cfDiagnose = async id => {
   showModal("<b>✨ Diagnosis</b>", '<div class="mut" style="padding:20px;text-align:center">Looking at the config, the others behind the same address and its tunnel…</div>', "wide");
   try {
