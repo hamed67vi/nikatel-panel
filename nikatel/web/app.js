@@ -189,18 +189,20 @@ PAGES.servers = async () => {
     const cls = bad === ts.length ? "err" : bad || up < ts.length ? "warn" : "gw-ok", txt = bad === ts.length ? "GRE ✕" : bad ? "GRE ✓/✕" : up === ts.length ? "GRE ✓" : "GRE ~";
     return `<b class="${cls}" title="${esc(ts.map(t => t.name + ": " + t.state).join(", "))}">${txt}</b> <small class="mut">${ts.length}</small>`;
   };
-  const row = s => {
-    const f = s.facts || {}, cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
-    return `<tr class="${cls} click" onclick="toggleDetail(${s.id})">
-      <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${(s.extra || {}).iran_filter && (s.extra.iran_filter.level === "filtered" || s.extra.iran_filter.level === "blocked") ? '<span class="pill err">filtered</span>' : ""}</td>
-      <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
-      <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
-      <td class="hide-sm">${pct(f.cpu)}</td><td class="hide-sm">${pct(f.ram)}</td><td class="hide-sm">${pct(f.disk, 85, 95)}</td>
-      <td class="num hide-sm">${f.load1 != null ? f.load1 + " / " + f.cores : "—"}</td>
-      <td class="num hide-sm">${f.rx_mbps != null ? "↓" + f.rx_mbps + " ↑" + f.tx_mbps : "—"}</td>
-      <td class="num hide-sm">${f.conn != null ? f.conn : "—"}</td>
-      <td class="num hide-sm" title="${esc(s.last_error)}">${s.last_error ? `<span class="err">${esc(s.last_error).slice(0, 28)}</span>` : f.uptime ? (f.uptime > 86400 * 2 ? Math.round(f.uptime / 86400) + " d" : Math.round(f.uptime / 3600) + " h") : "—"}</td>
-      <td><button class="sm" onclick="event.stopPropagation();checkServer(${s.id})" title="Sample this server now">Health</button> <button class="sm" onclick="event.stopPropagation();srvConsole(${s.id})" title="Open the console">⌨</button></td></tr>`;
+  // Marzban / PasarGuard nodes that sit on this server's address: "Panel ✓ name" chips next to the status
+  const pnl = await api("/api/panels").catch(() => ({panels: []}));
+  const byIp = {};
+  (pnl.panels || []).forEach(p => (p.nodes || []).forEach(n => { const ip = String(n.address || "").trim(); if (ip) (byIp[ip] = byIp[ip] || []).push({panel: p.name, status: n.status, name: n.name}); }));
+  const chips = s => (byIp[s.host] || []).map(x => { const ok = x.status === "connected"; return `<span class="mchip ${ok ? "ok" : "bad"}" title="Node ${esc(x.name)} in panel ${esc(x.panel)}: ${esc(x.status || "?")}">${ok ? "Panel ✓" : "Panel ✕"} ${esc(x.panel)}</span>`; }).join("");
+  const row = s => {   // one row like the old panel: Server | Status | IPv4 | GRE | RAM | CPU | Disk
+    const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
+    const tone = !s.enabled ? "" : s.online === false ? "bad" : srvProblem(s) ? "warn" : s.online ? "good" : "";
+    return `<div class="srv-row ${tone}" onclick="toggleDetail(${s.id})" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
+      <div class="srv-name">${s.role === "foreign" && s.country ? flagImg(s.country) : ""}<b>${esc(s.name)}</b><span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</div>
+      <div class="srv-st"><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}${chips(s)}</div>
+      <div class="srv-ip" onclick="event.stopPropagation();copyText('${esc(s.host)}')" title="Click to copy">${esc(s.host)}</div>
+      <div class="srv-gre">${greCell(s)}</div>
+      <div>${pct(f.ram, 80, 90)}</div><div>${pct(f.cpu, 80, 92)}</div><div>${pct(f.disk, 85, 95)}</div></div>`;
   };
   const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else hideModal();
@@ -213,9 +215,8 @@ PAGES.servers = async () => {
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button><button onclick="srvMany()" title="Several servers at once, connected with one password">+ Several</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : state.edit === "many" ? `<div class="card">${MANY_FORM()}</div>` : ""}
-    <table class="tbl lift"><colgroup><col style="width:19%"><col style="width:7%"><col style="width:11%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:6%"><col><col style="width:120px"></colgroup>
-      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>GRE</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Net Mb/s</th><th>Conn</th><th>Up</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || '<tr><td colspan="12" class="empty">No server.</td></tr>'}</tbody></table>`;
+    <div class="srv-list"><div class="srv-row srv-th"><div>Server</div><div>Status</div><div>IPv4</div><div>GRE</div><div>RAM</div><div>CPU</div><div>Disk</div></div>
+      ${rows.map(row).join("") || '<div class="empty">No server.</div>'}</div>`;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
@@ -231,7 +232,7 @@ function serverDetailHtml(s) {
   const tab = state.wtab || "overview";
   const tabs = `<div class="tabs wtabs">${[["overview", "Overview"], ["charts", "Charts 24 h"], ["tools", "Tools"], ["console", "⌨ Console"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
-  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools">${tool("✎", "Edit", "name, address, SSH user, port", `editServer(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
+  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools">${tool("♥", "Health check", "sample this server now", `checkServer(${s.id})`)}${tool("✎", "Edit", "name, address, SSH user, port", `editServer(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
     <div class="wgroup"><h4>Open on my computer</h4><div class="wtools">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
     ${s.role === "foreign" ? `<div class="wgroup"><h4>Security</h4><div class="wtools">${tool("🛰", "Check filtering in Iran", "ping from your Iran servers + check-host.net", `srvFilter(${s.id})`)}${tool("🛡", abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender", abuseOn ? `${f.abuse_rules || ab.rules || "?"} ranges blocked now` : "drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)}</div></div>` : ""}
     <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;
@@ -250,6 +251,7 @@ function serverDetailHtml(s) {
     <div class="frm-act"><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('tools')">🧰 Tools</button><button class="sm" onclick="wtab('console')">⌨ Console</button>${s.role === "foreign" ? `<button class="sm" onclick="srvFilter(${s.id})">Check filtering in Iran</button>` : ""}<span class="sp"></span><button class="sm danger" onclick="srvReboot(${s.id}, '${esc(s.name)}')">Reboot</button></div>`;
 }
 /* a window tab only redraws the window body - no API call, the list behind it stays as it is */
+window.copyText = t => { const done = () => toast("✓ Copied " + t, "ok"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => {}); else { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) { /* no clipboard */ } ta.remove(); } };
 window.wtab = k => {
   state.wtab = k;
   const body = $("#modal .modal-body");

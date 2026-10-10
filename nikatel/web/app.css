@@ -150,6 +150,16 @@ nav a { height: 38px; font-size: 13.5px; }
 .nk-gbadge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); font-size: 10px; font-weight: 700; color: var(--mut); vertical-align: middle; }
 .live { display: inline-block; margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .6px; } .live.up { color: var(--ok); } .live.down { color: var(--bad); } .live.unk { color: var(--mut); }
 .cf-nm { font-weight: 700; } .cf-grp { font-size: 11.5px; }
+/* server rows like the old panel: Server | Status | IPv4 | GRE | RAM | CPU | Disk; a colour bar on the left, an accent sweep on hover */
+.srv-list { display: grid; gap: 4px; }
+.srv-row { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(170px, 1.2fr) 130px 100px repeat(3, minmax(110px, 1fr)); column-gap: 12px; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background-color: rgba(255,255,255,.035); background-image: linear-gradient(90deg, rgba(124,131,255,.2), rgba(124,131,255,.05) 42%, transparent 62%); background-repeat: no-repeat; background-size: 0% 100%; font-size: 12.5px; cursor: pointer; transition: background-size .4s cubic-bezier(.22,.8,.3,1), border-color .25s; }
+.srv-row:hover { background-size: 100% 100%; border-color: var(--line-hi); }
+.srv-row.good { box-shadow: inset 3px 0 0 var(--ok); } .srv-row.warn { box-shadow: inset 3px 0 0 var(--warn); } .srv-row.bad { box-shadow: inset 3px 0 0 var(--bad); }
+.srv-th { min-height: 22px; border: 0 !important; background: none !important; cursor: default; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); box-shadow: none !important; } .srv-th:hover { background-size: 0% 100%; }
+.srv-name { display: flex; align-items: center; gap: 8px; min-width: 0; } .srv-name b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .srv-name .pill { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.srv-st { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .srv-ip { font-family: var(--mono); font-size: 12px; color: var(--mut); cursor: copy; } .srv-ip:hover { color: var(--text); }
+.mchip { padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid var(--line); } .mchip.ok { color: var(--ok); border-color: rgba(52,211,153,.4); } .mchip.bad { color: var(--bad); border-color: rgba(255,107,139,.45); }
+@media (max-width: 900px) { .srv-th { display: none; } .srv-row { grid-template-columns: 1fr 1fr; row-gap: 6px; padding: 10px 12px; } .srv-name, .srv-st { grid-column: 1 / -1; } }
 /* core update: one row per core */
 .eng-head, .eng-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.6fr 150px; gap: 10px; align-items: center; padding: 8px 12px; }
 .eng-head { font-size: 10.5px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); font-weight: 700; padding-bottom: 4px; }
