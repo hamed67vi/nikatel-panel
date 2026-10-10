@@ -1,4 +1,4 @@
-from nikatel.models import Tunnel
+﻿from nikatel.models import Tunnel
 from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for, settle
 
 IRAN_OK = """UNIT backhaul-iran-tcpmux-9443.service active
@@ -96,3 +96,18 @@ def test_settle_needs_two_checks_for_up_degraded_flips():
     assert st == "up"
     assert settle("up", "unknown", streak)[0] == "unknown"
     assert settle("degraded", "unknown", None)[0] == "degraded"
+
+def test_judge_catches_a_tunnel_that_runs_but_passes_no_data():
+    """Regression: units active, port listening, GRE fine - yet nothing came back through the tunnel, and the list said 'up'."""
+    from nikatel.services.tunnels import DATA_DOWN_AFTER
+
+    broken = IRAN_OK.replace("NOW 1791566810", "DATA 80 000\nNOW 1791566810")
+    healthy = IRAN_OK.replace("NOW 1791566810", "DATA 80 404\nNOW 1791566810")
+    assert parse_side(broken).data_code == "000" and parse_side(broken).data_port == 80 and parse_side(healthy).data_code == "404"
+    assert judge(_plan(), parse_side(healthy), parse_side(FOREIGN_OK), True, 0) == ("up", "")
+    state, why = judge(_plan(), parse_side(broken), parse_side(FOREIGN_OK), True, 1)
+    assert state == "degraded" and "no data comes back" in why and "80" in why
+    assert judge(_plan(), parse_side(broken), parse_side(FOREIGN_OK), True, DATA_DOWN_AFTER)[0] == "down"
+    # a port that never answered HTTP (another protocol) is not judged by this probe; an old script without DATA is fine too
+    assert judge(_plan(), parse_side(broken), parse_side(FOREIGN_OK), False, 9) == ("up", "")
+    assert judge(_plan(), parse_side(IRAN_OK), parse_side(FOREIGN_OK), True, 9) == ("up", "")

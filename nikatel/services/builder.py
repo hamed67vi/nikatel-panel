@@ -268,6 +268,7 @@ def clean_bh_opts(o: dict | None) -> dict:
     num("heartbeat", 5, 120)
     num("channel_size", 1024, 65536)
     num("mux_con", 1, 64)
+    num("mux_version", 1, 2)
     num("mux_framesize", 1024, 131072)
     num("mux_recievebuffer", 65536, 67108864)
     num("mux_streambuffer", 16384, 33554432)
@@ -295,8 +296,9 @@ def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: l
     o = opts or {}
     mux = transport != "tcp"
     nd = "true" if nodelay else "false"
-    mux_server = (f"mux_con = {o.get('mux_con', 8)}\nmux_version = 2\nmux_framesize = {o.get('mux_framesize', 32768)}\nmux_recievebuffer = {o.get('mux_recievebuffer', 8388608)}\nmux_streambuffer = {o.get('mux_streambuffer', 262144)}\n") if mux else ""
-    mux_client = (f"mux_version = 2\nmux_framesize = {o.get('mux_framesize', 32768)}\nmux_recievebuffer = {o.get('mux_recievebuffer', 8388608)}\nmux_streambuffer = {o.get('mux_streambuffer', 262144)}\n") if mux else ""
+    mv, fs, rb, sb = o.get("mux_version", 2), o.get("mux_framesize", 32768), o.get("mux_recievebuffer", 8388608), o.get("mux_streambuffer", 262144)
+    mux_server = (f"mux_con = {o.get('mux_con', 8)}\nmux_version = {mv}\nmux_framesize = {fs}\nmux_recievebuffer = {rb}\nmux_streambuffer = {sb}\n") if mux else ""
+    mux_client = (f"mux_version = {mv}\nmux_framesize = {fs}\nmux_recievebuffer = {rb}\nmux_streambuffer = {sb}\n") if mux else ""
     port_lines = "\n".join(f'    "{p.entry()}",' for p in ports)
     iran = f"""[server]
 bind_addr = "{iran_ip}:{port}"
@@ -330,6 +332,7 @@ sniffer = false
 {mux_client}
 """
     return iran, foreign
+
 
 def backhaul_unit(config_path: str) -> str:
     return f"""[Unit]

@@ -76,6 +76,8 @@ class Side:
     rtt_ms: float | None = None
     loss_pct: float | None = None
     listen: dict[int, bool] = field(default_factory=dict)
+    data_port: int = 0           # the forwarded port that was asked for one HTTP answer
+    data_code: str = ""          # its answer: an HTTP code, "000" = nothing came back, "" = not asked
     now: int = 0
     error: str = ""
 
@@ -110,14 +112,20 @@ def parse_side(out: str) -> Side:
                 s.loss_pct = 100.0
         elif p[0] == "LISTEN" and len(p) >= 3:
             s.listen[int(p[1])] = p[2] != "0"
+        elif p[0] == "DATA" and len(p) >= 3:
+            s.data_port, s.data_code = int(p[1]), p[2]
         elif p[0] == "NOW" and len(p) >= 2:
             s.now = int(p[1])
 
     return s
 
 
-def judge(plan: Plan, iran: Side, foreign: Side) -> tuple[str, str]:
-    """(state, reason). Pure, so the rules are testable."""
+DATA_DOWN_AFTER = 4          # this many failed data probes in a row (4 minutes): the tunnel is down, not just degraded
+
+
+def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_fails: int = 0) -> tuple[str, str]:
+    """(state, reason). Pure, so the rules are testable. `data_seen`: this tunnel has answered an HTTP request before (so silence now
+    is a fault, not a port that speaks another protocol); `data_fails`: consecutive probes without an answer, this one included."""
     if iran.error and foreign.error:
         return "unknown", f"both servers do not answer ({iran.error})"
 
@@ -149,6 +157,10 @@ def judge(plan: Plan, iran: Side, foreign: Side) -> tuple[str, str]:
 
     if closed:
         return "degraded", "port " + ", ".join(str(p) for p in closed) + " is not listening on the Iran server"
+
+    if data_seen and iran.data_code == "000":   # everything is running and the port listens, yet nothing comes back through the tunnel
+        why = f"port {iran.data_port} accepts connections but no data comes back through the tunnel"
+        return ("down" if data_fails >= DATA_DOWN_AFTER else "degraded"), why
 
     return "up", ""
 
@@ -221,7 +233,9 @@ def check_tunnel(tunnel_id: int) -> None:
         log.info("check name=%s skipped: the panel is restarting", plan.iface or tunnel_id)
         return
 
-    state, reason = judge(plan, iran, foreign)
+    data_seen = bool(prev.get("data_seen")) or iran.data_code not in ("", "000")
+    data_fails = int(prev.get("data_fails", 0)) + 1 if iran.data_code == "000" else 0
+    state, reason = judge(plan, iran, foreign, data_seen, data_fails)
     now = int(time.time())
     rx = tx = None
 
@@ -257,7 +271,8 @@ def check_tunnel(tunnel_id: int) -> None:
         t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state,
                     "loss_pct": iran.loss_pct, "listen": {str(k): v for k, v in iran.listen.items()},
                     "rx_bytes": iran.rx_bytes, "tx_bytes": iran.tx_bytes, "now": iran.now,
-                    "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak}
+                    "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak,
+                    "data_seen": data_seen, "data_fails": data_fails, "data_code": iran.data_code}
         db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=judged == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
 
         if state != old:
