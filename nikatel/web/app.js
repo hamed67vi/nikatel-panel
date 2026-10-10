@@ -2140,12 +2140,3 @@ window.changePassword = async e => {
 
 /* the AI buttons (anything with ✨ in it) get the glass-gold look and the magic wand on hover (see .ai-btn in app.css) */
 (() => { let q = false; const mark = () => { q = false; document.querySelectorAll("button:not(.ai-btn)").forEach(b => { if (b.textContent.includes("✨")) b.classList.add("ai-btn"); }); }; new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(mark); } }).observe(document.documentElement, {childList: true, subtree: true, characterData: true}); mark(); })();
-
-/* a ripple that spreads from the point of every click on a button */
-document.addEventListener("pointerdown", e => {
-  const b = e.target.closest && e.target.closest("button:not(:disabled), nav a"); if (!b || b.classList.contains("lang-btn") && false) return;
-  const r = b.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2, s = document.createElement("span");
-  s.className = "rpl"; s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
-  if (getComputedStyle(b).position === "static") b.style.position = "relative";
-  b.appendChild(s); setTimeout(() => s.remove(), 650);
-}, {passive: true});

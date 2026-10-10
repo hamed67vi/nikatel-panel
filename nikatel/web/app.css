@@ -614,7 +614,7 @@ html[dir="rtl"] .brand { direction: ltr; }
   box-shadow: 0 8px 26px rgba(255, 184, 56, .42), 0 0 0 1px rgba(255, 230, 160, .35), inset 0 1px 0 rgba(255, 255, 255, .7), inset 0 -8px 14px rgba(255, 150, 20, .2); }
 .ai-btn:hover::before { opacity: 1; animation: wand-in .55s cubic-bezier(.2, .9, .3, 1.3) forwards, wand-wave 1.1s .55s ease-in-out infinite; }
 .ai-btn:hover::after { animation: ai-sweep .9s ease-out; }
-.ai-btn:active { transform: scale(.97); }
+
 @keyframes wand-in { 0% { opacity: 0; transform: translate(-16px, -30%) rotate(-50deg) scale(.6); } 60% { opacity: 1; transform: translate(2px, -52%) rotate(14deg) scale(1.15); } 100% { opacity: 1; transform: translate(0, -50%) rotate(0) scale(1); } }
 @keyframes wand-wave { 0%, 100% { transform: translate(0, -50%) rotate(0); } 25% { transform: translate(0, -50%) rotate(-16deg); } 55% { transform: translate(0, -50%) rotate(10deg); } }
 @keyframes ai-sweep { to { transform: translateX(130%); } }
@@ -627,7 +627,7 @@ button[onclick^="newTunnel("], button[onclick^="openBuild("] { position: relativ
 button[onclick^="newTunnel("]::after, button[onclick^="openBuild("]::after { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0; background: radial-gradient(120% 140% at 30% 0%, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 60%); transition: opacity .55s ease; }
 button[onclick^="newTunnel("]:hover, button[onclick^="openBuild("]:hover { transform: translateY(-1px) scale(1.035); filter: brightness(1.1) saturate(1.08); animation-play-state: paused; box-shadow: 0 12px 34px rgba(255, 190, 70, .5), inset 0 1px 0 rgba(255, 255, 255, .6); }
 button[onclick^="newTunnel("]:hover::after, button[onclick^="openBuild("]:hover::after { opacity: 1; }
-button[onclick^="newTunnel("]:active, button[onclick^="openBuild("]:active { transform: scale(.98); transition-duration: .12s; }
+
 @keyframes ct-breathe { 0%, 100% { box-shadow: 0 6px 18px rgba(255, 190, 70, .22); filter: brightness(1); } 50% { box-shadow: 0 8px 30px rgba(255, 190, 70, .46); filter: brightness(1.07); } }
 @media (prefers-reduced-motion: reduce) { button[onclick^="newTunnel("], button[onclick^="openBuild("] { animation: none; } }
 
@@ -653,10 +653,10 @@ html[dir="rtl"] nav a::after { right: auto; left: 10px; transform-origin: 20% 90
 /* ---- every button: a soft lift with a glow ring on hover, a press, and a ripple where you click */
 button { position: relative; overflow: hidden; }
 button:not(:disabled):not(.ai-btn):hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, .25), 0 0 0 3px rgba(124, 131, 255, .16); }
-button:not(:disabled):not(.ai-btn):active { transform: translateY(0) scale(.96); box-shadow: 0 0 0 4px rgba(124, 131, 255, .22); transition-duration: .08s; }
+
 button.pri:not(.ai-btn):hover { box-shadow: 0 10px 26px rgba(124, 131, 255, .4), 0 0 0 3px rgba(124, 131, 255, .22); }
 button.danger:hover { box-shadow: 0 6px 18px rgba(255, 90, 120, .25), 0 0 0 3px rgba(255, 90, 120, .18); }
-.rpl { position: absolute; border-radius: 50%; pointer-events: none; background: rgba(255, 255, 255, .38); transform: scale(0); animation: rpl .6s ease-out forwards; z-index: 0; }
+.rpl { display: none; }
 @keyframes rpl { to { transform: scale(1); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rpl { display: none; } nav a:hover, nav a:hover::after, nav a:hover .ic { animation: none; } nav a:hover::after { opacity: 1; transform: translate(0, -50%); } }
 
@@ -664,3 +664,10 @@ button.danger:hover { box-shadow: 0 6px 18px rgba(255, 90, 120, .25), 0 0 0 3px 
 .ai-btn::before { left: 12px; }
 .ai-btn:hover { padding-left: 42px; }
 html[dir="rtl"] .ai-btn::before { left: auto; right: 12px; } html[dir="rtl"] .ai-btn:hover { padding-left: 14px; padding-right: 42px; }
+
+/* the magic wand belongs to the AI buttons only; everything else gets a small white curtain that passes over it on hover (no click animation anywhere) */
+@media (min-width: 761px) { nav a::after { content: none !important; animation: none !important; } nav a:hover .cnt { opacity: 1; } }
+button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):not(.lang-btn)::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .26) 50%, transparent 62%); transform: translateX(-130%); }
+button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):not(.lang-btn):hover::after { animation: curtain .75s ease-out; }
+@keyframes curtain { to { transform: translateX(130%); } }
+@media (prefers-reduced-motion: reduce) { button:hover::after { animation: none; } }
