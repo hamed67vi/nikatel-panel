@@ -319,16 +319,17 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label>Role<select name="role">${["iran", "foreign"].map(r => `<option ${(s ? s.role : role) === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
     <label>SSH user<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}"></label>
     <label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}"></label>
-    ${s ? `<label>Provider<input name="provider" value="${esc(s.provider)}" placeholder="optional"></label>` : `<label>SSH password <small>(optional)</small><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the server"></label>`}
+    ${s ? `<input type="hidden" name="provider" value="${esc(s.provider)}">` : ""}
+    <label>SSH password <small>(optional)</small><input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to (re)install the panel's key now" : "empty = the panel's key is already on the server"}"></label>
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
-    ${s ? "" : `<div class="srv-extra"><b>Install after adding</b> <small class="mut">(optional, needs root; the server is added first, then these run and tell what they did)</small>
+    ${`<div class="srv-extra"><b>${s ? "Install after saving" : "Install after adding"}</b> <small class="mut">(optional, needs root; the server is ${s ? "saved" : "added"} first, then these run and tell what they did)</small>
       <label class="chk"><input name="x_bt" type="checkbox"> Block public torrents <small class="mut">(iptables DROP rules for tracker addresses, refreshed daily - Heclalava/blockpublictorrent-iptables)</small></label>
       <label class="chk"><input name="x_node" type="checkbox" onchange="this.closest('.srv-extra').querySelectorAll('.x-cert').forEach(e => e.classList.toggle('hidden', !this.checked))"> Marzban node <small class="mut">(Docker + the official Gozargah installer; ports 62050 / 62051)</small></label>
       <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
       <label class="chk x-cert hidden"><input name="x_cert_save" type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>`}
     <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>
       ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
-    <small class="mut">${s ? "Changing a server here only changes how the panel looks at it." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
+    <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install below acts on the server itself." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
   </form>`;
 
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
@@ -564,26 +565,26 @@ window.saveServer = async (e, id) => {
   const f = new FormData(e.target);
   const body = {name: f.get("name").trim(), host: f.get("host").trim(), role: f.get("role"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
   const items = [f.get("x_bt") === "on" ? "btblock" : "", f.get("x_node") === "on" ? "marzban_node" : ""].filter(Boolean), cert = f.get("x_cert") || "";
-  if (!id && items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
-  if (!id && items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
+  if (items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
+  if (items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;
     let connected = true;
-    if (id) toast("✓ Saved", "ok");
+    if (id && !pw) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
       toast("Server added — connecting with the password…");
-      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Added and connected: " + r.hostname, "ok"); }
+      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname, "ok"); }
       catch (err) { connected = await connectWithPrompt(saved.id, body.name, err.message); }
     } else {          // no password: the panel's key must already be on the server - try it
       try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
     refresh();
-    if (!id && items.length && connected) {   // the extras run in one story the operator can follow (and minimise)
+    if (items.length && connected) {   // the extras run in one story the operator can follow (and minimise)
       const r = await api(`/api/servers/${saved.id}/install`, {method: "POST", body: JSON.stringify({items, cert})});
       showModal(`<b>⬇ Installing on ${esc(body.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
       followStory(r.id, $("#ap-story"), 400).then(() => refresh());
-    } else if (!id && items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
+    } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
