@@ -846,3 +846,6 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 .tile:hover, .gw-row:hover, .ap-row:hover, .hl-row:hover, .wtool:hover, .dns-row:hover { transform: scale(1.025) !important; position: relative; z-index: 3; box-shadow: 0 12px 30px rgba(0,0,0,.38); }
 :root[data-anim="off"] .tbl tbody tr:hover, :root[data-anim="off"] .tile:hover { transform: none !important; }
 @media (prefers-reduced-motion: reduce) { .tbl tbody tr:hover, .tile:hover, .gw-row:hover, .ap-row:hover, .wtool:hover { transform: none !important; } }
+
+.tf-tabs { margin: 0 0 10px; }
+

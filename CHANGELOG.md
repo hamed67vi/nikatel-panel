@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.9 - 2026-10-10 - All / Problems in the tunnel list
+
+* The tunnel manager has two tabs: **All** and **Problems** (the red and yellow rows: down, degraded, lossy, slow). The choice is kept in the browser.
+
 ## 1.9.8 - 2026-10-10 - GRE filter named as such
 
 * When plain ping between the two servers passes (under 10 % loss both ways) but the GRE link is dead, the cause is now *GRE (protocol 47) is filtered on this route*, not *the link flaps*: the real fault, and the right steps (a new GRE link, another tunnel type).
