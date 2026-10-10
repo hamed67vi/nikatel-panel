@@ -327,19 +327,62 @@ const MANY_FORM = () => `<form class="frm" onsubmit="return srvManyGo(event)"><l
     <label>SSH user<input name="ssh_user" value="root"></label><label>SSH port<input name="ssh_port" type="number" value="22"></label><label>SSH password <small>(the same for all; used once to install the panel's key — leave empty if the key is already there)</small><input name="password" type="password" autocomplete="new-password"></label>
     <div class="frm-act"><button class="pri" type="submit">Add ${state.tab} servers</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
     ${state.manyRes ? `<div style="grid-column:1/-1">${state.manyRes.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> — ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div>` : ""}</form>`;
+/* ---- monitoring: real charts with axes, a hover read-out, min / avg / max, a range switch (1 h / 6 h / 24 h / 7 d) ---- */
+const CH = {}; let chSeq = 0;
+const RANGES = [[1, "1 h"], [6, "6 h"], [24, "24 h"], [168, "7 days"]];
+state.mrange = +localStorage.getItem("nk.mrange") || 24;
+const avgOf = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+const nums = a => a.filter(v => v != null);
+const fmtT = (ts, span) => { const d = new Date(ts * 1000), hm = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", hour12: false}); return span > 36 * 3600 ? d.toLocaleDateString([], {day: "2-digit", month: "short"}) + " " + hm : hm; };
+const durText = s => s < 90 ? Math.round(s) + " s" : s < 5400 ? Math.round(s / 60) + " min" : s < 172800 ? (s / 3600).toFixed(1) + " h" : (s / 86400).toFixed(1) + " d";
+function chartCard(title, pts, o = {}) {
+  const v = pts.filter(p => p[1] != null), fmt = o.fmt || (x => String(Math.round(x * 10) / 10)), unit = o.unit || "";
+  if (v.length < 2) return `<div class="mcard"><h6>${title}</h6><div class="mut chart-empty">not enough data yet</div></div>`;
+  const vals = v.map(p => p[1]), cur = vals[vals.length - 1], mn = Math.min(...vals), mx = Math.max(...vals), av = avgOf(vals);
+  const W = 460, H = 130, pl = 40, pr = 8, pt = 10, pb = 20, t0 = pts[0][0], t1 = pts[pts.length - 1][0], span = t1 - t0 || 1;
+  const top = o.max != null ? o.max : (mx * 1.15 || 1), bot = o.min != null ? o.min : 0;
+  const X = t => pl + (t - t0) / span * (W - pl - pr), Y = x => pt + (1 - (Math.min(top, Math.max(bot, x)) - bot) / (top - bot || 1)) * (H - pt - pb);
+  let line = "", gap = true;
+  pts.forEach(p => { if (p[1] == null) { gap = true; return; } line += (gap ? "M" : "L") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1); gap = false; });
+  const area = line + `L${X(v[v.length - 1][0]).toFixed(1)} ${H - pb}L${X(v[0][0]).toFixed(1)} ${H - pb}Z`;
+  const tone = o.bad != null && cur >= o.bad ? "bad" : o.warn != null && cur >= o.warn ? "warn" : "";
+  const grid = [0, .5, 1].map(f => { const y = (pt + (1 - f) * (H - pt - pb)).toFixed(1); return `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" class="lg"/><text x="${pl - 5}" y="${(+y + 3).toFixed(1)}" class="lt" text-anchor="end">${fmt(bot + f * (top - bot))}</text>`; }).join("");
+  const xl = [0, .5, 1].map(f => `<text x="${(pl + f * (W - pl - pr)).toFixed(1)}" y="${H - 4}" class="lt" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}">${fmtT(t0 + f * span, span)}</text>`).join("");
+  const id = "c" + (++chSeq); CH[id] = {v, t0, span, W, pl, pr, X, Y, fmt, unit};
+  return `<div class="mcard"><h6>${title}<span class="mval ${tone}">${fmt(cur)}${unit}</span></h6>
+    <div class="lc-wrap"><svg class="lc ${tone}" data-ch="${id}" viewBox="0 0 ${W} ${H}">${grid}${xl}<path class="la" d="${area}"/><path class="ll" d="${line}"/><line class="lc-cur" y1="${pt}" y2="${H - pb}" x1="-9" x2="-9"/><circle class="lc-dot" r="3.5" cx="-9" cy="-9"/></svg><div class="lc-tip"></div></div>
+    <div class="mstat"><span>min <b>${fmt(mn)}${unit}</b></span><span>avg <b>${fmt(av)}${unit}</b></span><span>max <b>${fmt(mx)}${unit}</b></span></div></div>`;
+}
+document.addEventListener("mousemove", e => {
+  const s = e.target.closest ? e.target.closest("svg.lc") : null;
+  document.querySelectorAll(".lc-tip.on").forEach(t => { if (!s || t.parentNode !== s.parentNode) t.classList.remove("on"); });
+  if (!s) return;
+  const c = CH[s.dataset.ch]; if (!c) return;
+  const r = s.getBoundingClientRect(), t = c.t0 + ((e.clientX - r.left) / r.width * c.W - c.pl) / (c.W - c.pl - c.pr) * c.span;
+  let b = c.v[0]; for (const p of c.v) if (Math.abs(p[0] - t) < Math.abs(b[0] - t)) b = p;
+  const x = c.X(b[0]), y = c.Y(b[1]), cur = s.querySelector(".lc-cur"), dot = s.querySelector(".lc-dot"), tip = s.parentNode.querySelector(".lc-tip");
+  cur.setAttribute("x1", x); cur.setAttribute("x2", x); dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+  tip.textContent = `${c.fmt(b[1])}${c.unit} · ${fmtT(b[0], c.span)}`; tip.classList.add("on");
+  tip.style.left = Math.min(Math.max(x / c.W * 100, 18), 82) + "%";
+});
+const rangeTabs = () => `<div class="tabs mrange">${RANGES.map(([h, l]) => `<button class="${state.mrange === h ? "on" : ""}" onclick="mrange(${h})">${l}</button>`).join("")}</div>`;
+const mtile = (label, big, sub, cls = "") => `<div class="mtile ${cls}"><small>${label}</small><b>${big}</b><span>${sub}</span></div>`;
+window.mrange = h => { state.mrange = h; localStorage.setItem("nk.mrange", h); const sb = document.querySelector('[id^="srv-charts-"]'), tb = document.querySelector('[id^="tun-charts-"]'); if (sb) loadServerCharts(+sb.id.split("-").pop()); else if (tb) loadTunnelCharts(+tb.id.split("-").pop()); };
 async function loadServerCharts(id) {
   const box = document.getElementById("srv-charts-" + id);
   if (!box) return;
-  const d = await api(`/api/servers/${id}/samples?hours=24`);
-  const col = n => d.samples.map(r => r[d.columns.indexOf(n)]);
-  box.innerHTML = `<div><small>CPU %</small>${spark(col("cpu"), {max: 100, fmt: v => v + "%"})}</div><div><small>RAM %</small>${spark(col("ram"), {max: 100, fmt: v => v + "%"})}</div><div><small>Disk %</small>${spark(col("disk"), {max: 100, fmt: v => v + "%"})}</div>
-    <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>
-    <div><small>Load</small>${spark(col("load1"), {fmt: v => v.toFixed(2)})}</div><div><small>Connections</small>${spark(col("conn"), {fmt: v => v})}</div>`;
-  const pk = document.getElementById("srv-peaks-" + id);
-  if (pk && d.samples.length) { const mx = n => Math.max(...col(n).filter(v => v != null)), at = n => { const v = col(n), i = v.indexOf(Math.max(...v.filter(x => x != null))); return i >= 0 ? new Date(col("ts")[i] * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : ""; };
-    pk.innerHTML = `<div><span>24 h peaks</span> cpu <b>${mx("cpu")}%</b> at ${at("cpu")} · ram <b>${mx("ram")}%</b> at ${at("ram")} · ↓ <b>${mx("rx_mbps").toFixed(1)}</b> Mb/s at ${at("rx_mbps")} · ↑ <b>${mx("tx_mbps").toFixed(1)}</b> Mb/s at ${at("tx_mbps")} · conn <b>${mx("conn")}</b> · ${d.samples.length} samples</div>`; }
+  const d = await api(`/api/servers/${id}/samples?hours=${state.mrange}`);
+  const pk = document.getElementById("srv-peaks-" + id); if (pk) pk.remove();
+  const ts = d.samples.map(r => r[0]), col = n => d.samples.map(r => r[d.columns.indexOf(n)]), series = n => ts.map((t, i) => [t, col(n)[i]]);
+  CH_reset();
+  const cpu = nums(col("cpu")), ram = nums(col("ram")), disk = nums(col("disk")), rx = nums(col("rx_mbps")), tx = nums(col("tx_mbps")), conn = nums(col("conn"));
+  const f1 = v => v == null ? "—" : (Math.round(v * 10) / 10), pc = v => f1(v) + "%";
+  box.className = "mon";
+  box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${d.samples.length} samples · one every 2 minutes · hover a chart for exact values</small></div>
+    <div class="mtiles">${mtile("CPU", pc(avgOf(cpu)), "peak " + pc(cpu.length ? Math.max(...cpu) : null), avgOf(cpu) > 85 ? "bad" : "")}${mtile("RAM", pc(avgOf(ram)), "peak " + pc(ram.length ? Math.max(...ram) : null), avgOf(ram) > 90 ? "bad" : "")}${mtile("Disk", pc(disk.length ? disk[disk.length - 1] : null), "now", disk.length && disk[disk.length - 1] > 85 ? "bad" : "")}${mtile("Traffic", "↓ " + f1(avgOf(rx)), "↑ " + f1(avgOf(tx)) + " Mb/s avg · peak ↓ " + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}${mtile("Connections", conn.length ? Math.round(avgOf(conn)) : "—", "peak " + (conn.length ? Math.max(...conn) : "—"))}</div>
+    <div class="mgrid">${chartCard("CPU", series("cpu"), {max: 100, unit: "%", warn: 70, bad: 85, fmt: v => Math.round(v)})}${chartCard("RAM", series("ram"), {max: 100, unit: "%", warn: 80, bad: 90, fmt: v => Math.round(v)})}${chartCard("Disk", series("disk"), {max: 100, unit: "%", warn: 75, bad: 85, fmt: v => Math.round(v)})}${chartCard("Load (1 min)", series("load1"), {fmt: v => (Math.round(v * 100) / 100)})}${chartCard("Download ↓", series("rx_mbps"), {unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {unit: " Mb/s"})}${chartCard("Connections", series("conn"), {fmt: v => Math.round(v)})}</div>`;
 }
-window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
+function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT; window.setQ = v => { state.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
@@ -528,14 +571,22 @@ function detailRow(t) {
 async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
   if (!box) return;
-  const d = await api(`/api/tunnels/${id}/checks?hours=24`);
-  const col = n => d.checks.map(r => r[d.columns.indexOf(n)]);
-  const oks = col("ok"), upPct = oks.length ? Math.round(oks.filter(Boolean).length * 100 / oks.length) : null;
-  box.innerHTML = `<div><small>Up / down · ${oks.length} checks${upPct != null ? " · " + upPct + "% up" : ""}</small>${strip(oks)}</div>
-    <div><small>RTT ms</small>${spark(col("rtt_ms"), {fmt: v => v.toFixed(0)})}</div>
-    <div><small>↓ Mb/s</small>${spark(col("rx_mbps"), {fmt: v => v.toFixed(1)})}</div><div><small>↑ Mb/s</small>${spark(col("tx_mbps"), {fmt: v => v.toFixed(1)})}</div>`;
-}
-/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
+  const d = await api(`/api/tunnels/${id}/checks?hours=${state.mrange}`);
+  const ci = n => d.columns.indexOf(n), rows = d.checks, ts = rows.map(r => r[0]), col = n => rows.map(r => r[ci(n)]), series = n => ts.map((t, i) => [t, col(n)[i]]);
+  CH_reset();
+  const oks = col("ok"), up = oks.filter(Boolean).length, upPct = oks.length ? up * 100 / oks.length : null, rtt = nums(col("rtt_ms")), rx = nums(col("rx_mbps")), tx = nums(col("tx_mbps"));
+  // outages: runs of failed checks -> start, length, first error
+  const out = []; let cur = null;
+  rows.forEach(r => { if (!r[ci("ok")]) { if (!cur) cur = {from: r[0], to: r[0], err: r[ci("error")] || ""}; cur.to = r[0]; if (!cur.err) cur.err = r[ci("error")] || ""; } else if (cur) { cur.to = r[0]; out.push(cur); cur = null; } });
+  if (cur) { cur.open = true; cur.to = Date.now() / 1000; out.push(cur); }
+  const down = out.reduce((a, o) => a + (o.to - o.from), 0), f1 = v => v == null ? "—" : (Math.round(v * 10) / 10);
+  box.className = "mon";
+  box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
+    <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length} checks up`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) + " in total" : "none in this range", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) + " · worst " + Math.round(Math.max(...rtt)) + " ms" : "")}${mtile("Traffic", "↓ " + f1(avgOf(rx)), "↑ " + f1(avgOf(tx)) + " Mb/s avg · peak ↓ " + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}</div>
+    <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
+    <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {unit: " Mb/s"})}
+      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-8).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
+}/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
 const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
 /* what to pick, and why - the defaults below every engine are already the many-users settings (mux, 8 mux channels, 16-24 pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels) */

@@ -256,6 +256,20 @@ button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); bord
 .modal .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; } @media (max-width: 700px) { .modal .charts { grid-template-columns: 1fr; } } .modal .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
 .modal .frm-act { margin-top: 14px; flex-wrap: wrap; gap: 6px; } .modal .ob-inbounds { margin-top: 10px; }
 /* window tabs and tool groups (server / tunnel windows) */
+/* monitoring tab: tiles, range switch, charts */
+.mon { display: grid; gap: 10px; } .mhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .mrange button { height: 28px; padding: 0 12px; font-size: 12px; }
+.mtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.mtile { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .mtile small { display: block; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); font-weight: 700; } .mtile b { display: block; font-size: 19px; margin: 1px 0; letter-spacing: -.3px; } .mtile span { font-size: 10.5px; color: var(--mut); }
+.mtile.ok b { color: var(--ok); } .mtile.warn b { color: var(--warn); } .mtile.bad b { color: var(--bad); }
+.mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; } @media (max-width: 760px) { .mgrid { grid-template-columns: 1fr; } }
+.mcard { padding: 10px 14px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); box-sizing: border-box; } .mcard.mwide { grid-column: 1 / -1; }
+.mcard h6 { margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); } .mval { font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--text); font-weight: 700; } .mval.warn { color: var(--warn); } .mval.bad { color: var(--bad); }
+.lc-wrap { position: relative; } svg.lc { width: 100%; height: auto; display: block; cursor: crosshair; } svg.lc .lg { stroke: rgba(255,255,255,.07); stroke-width: 1; } svg.lc .lt { fill: var(--mut); font-size: 9px; }
+svg.lc .ll { fill: none; stroke: var(--acc-2); stroke-width: 1.6; stroke-linejoin: round; } svg.lc .la { fill: var(--acc-2); opacity: .12; stroke: none; }
+svg.lc.warn .ll { stroke: var(--warn); } svg.lc.warn .la { fill: var(--warn); } svg.lc.bad .ll { stroke: var(--bad); } svg.lc.bad .la { fill: var(--bad); }
+svg.lc .lc-cur { stroke: rgba(255,255,255,.35); stroke-width: 1; stroke-dasharray: 3 3; } svg.lc .lc-dot { fill: var(--text); stroke: var(--acc-2); stroke-width: 2; }
+.lc-tip { position: absolute; top: -4px; transform: translateX(-50%); padding: 3px 9px; border-radius: 8px; background: rgba(8,10,24,.92); border: 1px solid var(--line-hi); font-size: 11px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s; } .lc-tip.on { opacity: 1; }
+.mstat { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--mut); } .mstat b { color: var(--text); font-weight: 600; } .chart-empty { padding: 26px 0; text-align: center; font-size: 12px; }
 /* info windows: every group of facts in its own box */
 .iboxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 4px; align-items: stretch; }   /* two equal columns, the two boxes of a row are equally tall, a lone last box takes the full width */
 .iboxes > .ibox:last-child:nth-child(odd) { grid-column: 1 / -1; } @media (max-width: 760px) { .iboxes { grid-template-columns: 1fr; } }
