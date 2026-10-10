@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.2 - 2026-10-10 - Working now; quiet colours under 20 % loss
+
+* Smart repair → Needs attention starts with **Working now**: every tunnel the smart repair is looking at or repairing, with the last line of its story and a Live button; the network disturbances sit under their own title.
+* Packet loss **under 20 %** is no longer shown on the tunnel list and no longer colours the row (the Iran-abroad paths lose a few percent on a normal day); from 20 % the badge and the yellow row appear.
+
 ## 1.11.1 - 2026-10-10 - A wrench on what is being repaired; wording and probe fixes
 
 * A **🔧 wrench that turns and taps** stands in front of every tunnel the smart repair is working on (tunnel list and Smart repair list); a read-only look does not count.

@@ -66,7 +66,7 @@ def netwatch_report():
 @router.get("/autopilot/outage")
 def outage():
     """Is there a mass disruption (several servers offline / many tunnels down): the repair holds back from deleting or rebuilding."""
-    return {"ok": True, **autopilot.outage_state(), "repairing": autopilot.repairing_names()}
+    return {"ok": True, **autopilot.outage_state(), "repairing": autopilot.repairing_names(), "working": autopilot.working()}
 
 
 @router.get("/autopilot/situation")

@@ -773,6 +773,32 @@ def repairing_names() -> list[str]:
     return sorted(names)
 
 
+def working() -> list[dict]:
+    """What the smart repair is doing right now: every tunnel it looks at or repairs, with the last line of its story."""
+    with _LOCK:
+        busy = dict(_BUSY)
+
+    rows, seen = [], set()
+
+    with session() as db:
+        for label, aid in busy.items():
+            e = db.get(ActionLog, aid)
+
+            if e is None or label.startswith(("create ", "failover ", "install ", "dns ")):
+                continue
+
+            seen.add(label)
+            rows.append({"name": label, "mode": "look" if e.action == "observe" else "repair", "aid": aid, "line": (list(e.story or []) or [""])[-1][:160]})
+
+        for name, aid in dict(actions._RUNNING).items():
+            e = db.get(ActionLog, aid)
+
+            if name not in seen and e is not None:
+                rows.append({"name": name, "mode": "repair", "aid": aid, "line": (list(e.story or []) or [""])[-1][:160]})
+
+    return rows
+
+
 def storm_now() -> bool:
     return outage_state()["storm"]
 

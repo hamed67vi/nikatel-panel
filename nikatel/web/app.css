@@ -870,3 +870,7 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 .wrench { display: inline-block; margin-left: 8px; font-size: 14px; transform-origin: 70% 70%; animation: wrench-work 1.1s ease-in-out infinite; filter: drop-shadow(0 0 6px rgba(255,190,70,.6)); }
 @keyframes wrench-work { 0%, 100% { transform: rotate(-28deg); } 45% { transform: rotate(22deg) translateY(1px); } 60% { transform: rotate(12deg); } }
 @media (prefers-reduced-motion: reduce) { .wrench { animation: none; } }
+
+.nw-title { font-size: 12px; letter-spacing: .4px; text-transform: uppercase; color: var(--mut); }
+.work-box { border-color: rgba(124,131,255,.45); background: rgba(124,131,255,.07); } .work-line { flex: 1; min-width: 0; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.work-box .nw-row { align-items: center; }
