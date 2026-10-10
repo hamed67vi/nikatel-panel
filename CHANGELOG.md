@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.5 - 2026-10-10 - Automatic repair on by default, with a switch
+
+* The smart repair is **on by default** (level: everything up to another tunnel type). Smart repair → Needs attention has an **Automatic repair** switch: off, the panel only watches and shows Diagnose / Fix with AI to work by hand.
+
 ## 1.9.4 - 2026-10-10 - Change SSH password
 
 * **Nodes → a server → Tools → Change SSH password**: sets a new login password for the server's SSH user over the panel's key, or generates a strong one and shows it once (the panel keeps no password). Payloads of actions (files, passwords, keys) are no longer written to the log.
