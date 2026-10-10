@@ -1,4 +1,4 @@
-﻿from nikatel.models import Tunnel
+from nikatel.models import Tunnel
 from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for, settle
 
 IRAN_OK = """UNIT backhaul-iran-tcpmux-9443.service active
@@ -133,7 +133,7 @@ def test_link_of_a_tunnel_found_on_the_servers():
     assert link_of(with_link) == ("lk", "10.8.0.2") and plan_for(with_link).iface == "lk"
     no_link = Tunnel(name="t2-b", type="backhaul", foreign_tunnel_ip="203.0.113.9", record={"legacy_gre": True, "legacy_iface": ""})
     no_link.foreign = foreign
-    assert link_of(no_link) == ("", "203.0.113.9") and plan_for(no_link).iface == "" and plan_for(no_link).iran_peer == ""
+    assert link_of(no_link) == ("", "203.0.113.9") and plan_for(no_link).iface == "" and plan_for(no_link).iran_peer == "203.0.113.9"
     assert link_of(Tunnel(name="t3-c", type="backhaul", foreign_tunnel_ip="10.1.1.2", record={})) == ("t3-c", "10.1.1.2")
 
 

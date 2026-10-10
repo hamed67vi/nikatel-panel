@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 import time
 import urllib.parse
 
@@ -182,7 +183,10 @@ def sync() -> None:
 
 def _sync() -> None:
     try:
-        rows = parse_health(probe.health())
+        with _PLOCK:
+            pending = set(_PENDING)
+
+        rows = [r for r in parse_health(probe.health()) if r["name"] not in pending]
     except RuntimeError as e:
         log.warning("sync skipped: %s", e)
 
@@ -320,6 +324,53 @@ def remove(name: str) -> None:
         emit(db, "warn", "configs", f"Config {name} deleted from the probe.", name)
 
 
+_PENDING: set[str] = set()      # names being deleted on the probe right now: the sync must not bring them back meanwhile
+_PLOCK = threading.Lock()
+
+
+def _spawn(fn, *args) -> None:
+    threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+def remove_fast(names: list[str]) -> dict:
+    """Delete configs at once for the user: the rows (and their samples) go from the panel in this call, the probe is told in the
+    background with ONE bulk call (the probe needs seconds per config to restart its services). If the probe refuses, a warning
+    event says so and the config comes back with the next sync."""
+    names = [n for n in dict.fromkeys(names) if n]
+
+    if not names:
+        return {"deleted": 0}
+
+    with session() as db:
+        rows = list(db.scalars(select(Config).where(Config.name.in_(names))))
+
+        for c in rows:
+            db.delete(c)
+
+        emit(db, "warn", "configs", f"Config {rows[0].name} deleted." if len(rows) == 1 else f"{len(rows)} configs deleted.", rows[0].name if len(rows) == 1 else "")
+
+    with _PLOCK:
+        _PENDING.update(names)
+
+    _spawn(_probe_delete, names)
+    return {"deleted": len(rows)}
+
+
+def _probe_delete(names: list[str]) -> None:
+    try:
+        failed = {n: why for n, why in probe.delete_many(names).items() if why is not None}
+    except RuntimeError as e:
+        failed = {n: str(e)[:100] for n in names}
+    finally:
+        with _PLOCK:
+            _PENDING.difference_update(names)
+
+    if failed:
+        first = next(iter(failed))
+
+        with session() as db:
+            emit(db, "bad", "configs", f"{len(failed)} configs could not be deleted on the probe (for example {first}: {failed[first]}); they come back with the next sync.", first)
+
 # ------------------------------------------------------------------ subscriptions
 def fetch_subscription(url: str) -> list[dict]:
     """Download and decode; returns [{name, uri, proto}] - nothing is added yet."""
@@ -359,6 +410,8 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
         sub.url = url
         db.add(sub)
 
+    todo = []
+
     for n in nodes:
         if picks is not None and n["name"] not in picks:
             continue
@@ -369,21 +422,29 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
             skipped.append(full)
             continue
 
+        todo.append((full, n["uri"]))
+
+    if todo:   # one call for all of them: the probe restarts its services once, not once per config
         try:
-            probe.add_config(with_name(n["uri"], full))
+            res = probe.add_many([{"uri": with_name(uri, full), "name": full} for full, uri in todo])
         except RuntimeError as e:
-            failed.append(f"{full}: {str(e)[:60]}")
-            continue
+            res = {full: str(e)[:60] for full, _ in todo}
 
-        try:
-            with session() as db:
-                db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(n["uri"])))
-        except IntegrityError:          # the sync job registered it a moment ago: it is there, that is all we need
-            pass
+        for full, uri in todo:
+            why = res.get(full, "no answer for this one")
 
-        added.append(full)
-        existing.add(full)
+            if why:
+                failed.append(f"{full}: {str(why)[:60]}")
+                continue
 
+            try:
+                with session() as db:
+                    db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(uri)))
+            except IntegrityError:          # the sync job registered it a moment ago: it is there, that is all we need
+                pass
+
+            added.append(full)
+            existing.add(full)
     with session() as db:
         sub = db.scalar(select(Subscription).where(Subscription.name == name))
         sub.nodes = sorted(set(list(sub.nodes or []) + added + skipped))

@@ -33,6 +33,7 @@ def test_group_is_found_from_the_name(client):
 
 def test_meta_is_filled_from_the_probe(client, monkeypatch):
     monkeypatch.setattr(probe, "add_config", lambda uri, push_url="": {"ok": True})
+    monkeypatch.setattr(probe, "add_many", lambda items: {i["name"]: None for i in items})
     assert client.post("/api/configs", json={"uri": "vless://u@h.example:443?type=ws&security=tls#A", "group": "g"}).status_code == 201
     c = client.get("/api/configs").json()["configs"][0]
     assert c["meta"]["address"] == "h.example" and c["meta"]["network"] == "ws" and c["meta"]["security"] == "tls"

@@ -357,3 +357,17 @@ nav a > span:first-child { display: inline-flex; align-items: center; gap: 8px; 
 .ai-stat { margin: 4px 0 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); } .ai-stat.ok { border-color: rgba(61,220,151,.4); } .ai-stat.bad { border-color: rgba(255,107,139,.45); }
 .ai-head { font-weight: 800; margin-bottom: 6px; } .ai-stat.ok .ai-head { color: var(--ok); } .ai-stat.bad .ai-head { color: var(--bad); }
 .ai-grid { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 13px; }
+
+/* ---- activity categories, event window, Arvan Radar */
+.act-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; } .act-cats button { padding: 3px 11px; font-size: 12px; } .act-cats button small { opacity: .65; margin-left: 3px; } .act-cats button.on { background: var(--grad); color: #fff; border-color: transparent; }
+.ev.click { cursor: pointer; } .ev.click:hover { background: rgba(255,255,255,.05); }
+.card.radar { margin-top: 16px; } .rd-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; margin: 6px 0 10px; } .rd-cols h4 { margin: 4px 0 6px; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
+.rd-row { display: grid; grid-template-columns: 14px minmax(110px, 1.1fr) auto minmax(120px, 1fr); align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; font-size: 12.5px; } .rd-row:hover { background: rgba(255,255,255,.04); } .rd-row b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-sites { display: inline-flex; gap: 3px; } .rd-s { width: 9px; height: 9px; border-radius: 3px; background: var(--unk, rgba(255,255,255,.14)); } .rd-s.ok { background: var(--ok); } .rd-s.warn { background: var(--warn); } .rd-s.bad { background: var(--bad); }
+.rd-strip { display: flex; gap: 1px; height: 12px; } .rd-strip i { flex: 1; border-radius: 2px; background: rgba(255,255,255,.12); } .rd-strip i.ok { background: rgba(61,220,151,.55); } .rd-strip i.warn { background: var(--warn); } .rd-strip i.bad { background: var(--bad); }
+@media (max-width: 900px) { .rd-cols { grid-template-columns: 1fr; } }
+
+/* ---- fade: buttons and cards change colour smoothly when the mouse enters or leaves; frames and boxes (.card, .ibox, .modal) are left alone */
+button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .dash-action, .tile.click, .ev.click, .rd-row, tbody tr, .mchip, a.mut {
+  transition: background-color .32s ease, color .32s ease, border-color .32s ease, box-shadow .32s ease, opacity .32s ease, filter .32s ease;
+}

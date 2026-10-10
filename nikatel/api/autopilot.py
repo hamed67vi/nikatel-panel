@@ -27,6 +27,11 @@ class FixIn(BaseModel):
     level: str = Field("switch", pattern=r"^(restart|rebuild|switch)$")
 
 
+@router.get("/autopilot/diagnose-config/{config_id}")
+def diagnose_config(config_id: int):
+    return {"ok": True, **_wrap(autopilot.diagnose_config, config_id)}
+
+
 @router.post("/autopilot/smart-fix", status_code=202)
 def smart_fix(body: FixIn):
     return {"ok": True, "id": _wrap(autopilot.smart_fix_start, body.tunnel_id, body.level)}

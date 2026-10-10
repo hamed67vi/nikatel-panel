@@ -85,6 +85,17 @@ def update(config_id: int, body: UpdateIn):
     return {"ok": True}
 
 
+class DeleteMany(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=2000)
+
+
+@router.post("/configs/delete-many")
+def remove_many(body: DeleteMany):
+    with session() as db:
+        names = [c.name for c in db.scalars(select(Config).where(Config.id.in_(body.ids)))]
+
+    return {"ok": True, **configs.remove_fast(names)}
+
 @router.delete("/configs/{config_id}")
 def remove(config_id: int):
     with session() as db:
@@ -95,7 +106,7 @@ def remove(config_id: int):
 
         name = c.name
 
-    _wrap(configs.remove, name)
+    configs.remove_fast([name])
     return {"ok": True}
 
 

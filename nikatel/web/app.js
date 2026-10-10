@@ -8,10 +8,17 @@ const when = ts => ts ? new Date(ts * 1000).toLocaleString(undefined, {hour12: f
 const mbps = v => v == null ? "—" : v >= 1000 ? (v / 1000).toFixed(1) + " Gb/s" : v.toFixed(1) + " Mb/s";
 const pct = (v, warn = 80, bad = 92) => v == null ? "—" : `<span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span>${v}%`;
 
+/* Reading a page's data (GET) is tied to the page: leaving the page cancels what it is still waiting for, and a cancelled read never answers,
+   so a slow page can no longer finish later and paint itself over the page the user moved to. Actions (POST/PUT/DELETE) and the progress polls are never cancelled. */
+let navCtl = new AbortController();
+const KEEP_ALIVE = /^\/api\/(actions\/\d+|tunnel-test\/)/;
 async function api(path, opts = {}) {
-  const r = await fetch(path, Object.assign({headers: {"Content-Type": "application/json"}}, opts));
-  let body = null;
-  try { body = await r.json(); } catch (e) { /* no json body */ }
+  const ctl = (!opts.method || String(opts.method).toUpperCase() === "GET") && !KEEP_ALIVE.test(path) ? navCtl : null;
+  let r, body = null;
+  try {
+    r = await fetch(path, Object.assign({headers: {"Content-Type": "application/json"}}, opts, ctl ? {signal: ctl.signal} : {}));
+    try { body = await r.json(); } catch (e) { if (e.name === "AbortError") throw e; /* no json body */ }
+  } catch (e) { if (e.name === "AbortError") return new Promise(() => {}); throw e; }
   if (r.status === 401) { showLogin(); throw new Error("not logged in"); }
   if (!r.ok) {
     const rid = r.headers.get("X-Request-Id");
@@ -116,6 +123,7 @@ function go(page) {
     page = target;
   }
   if (!PAGES[page]) page = "dashboard";
+  if (state.page !== page) { navCtl.abort(); navCtl = new AbortController(); }   // what the page we leave still waits for is dropped
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
@@ -173,16 +181,15 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 
 /* ---- dashboard */
 PAGES.dashboard = async () => {
-  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=40"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
+  const [o, ev, cfg, srv, tl, rd] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => []), api("/api/radar").catch(() => null)]);
+  state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.evs = Object.fromEntries(ev.events.map(e => [e.id, e]));
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
   $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
   const clean = checked.filter(s => s.extra.iran_filter.level === "clean"), bad = checked.filter(s => ["filtered", "blocked"].includes(s.extra.iran_filter.level));
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
-  const q = (icon, title, sub, page, subtab) => `<a class="dash-action" onclick="go('${page}')${subtab ? `;setSub('${page}','${subtab}')` : ""}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
-  const quick = `<div class="dash-quick">${q("⚡", "Ping and speed tests", "every config, from inside Iran", "configs", "configs")}${q("🛰", "Check filtering in Iran", "is a foreign server reachable?", "nodes", "foreign")}${q("🖥", "Manage Iran nodes", "resources, console, tools", "nodes", "iran")}${q("⇄", "Create and monitor", "tunnels between your servers", "tunnels", "list")}</div>`;
-  $("#page").innerHTML = `${quick}
+  $("#page").innerHTML = `
     <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3>
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " degraded" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
@@ -190,15 +197,63 @@ PAGES.dashboard = async () => {
       ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div>
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3><div class="act-list">${eventsHtml(ev.events)}</div></div></div>`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events), true)}</div></div></div>${radarCard(rd)}`;
   const h = $("#page .card.health"), a = $("#page .card.act");
   if (h && a && !state.actBig) a.style.height = h.offsetHeight + "px";   // the log box lines up with the health box
 };
 state.actBig = localStorage.getItem("nk.actbig") === "1";
 window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
-function eventsHtml(list) {
+/* ---- the activity box: categories, problems only, and a window per event with "Fix with AI" */
+const EV_CATS = {tunnels: "Tunnels", configs: "Configs", servers: "Servers", actions: "Repairs", alerts: "Alerts", system: "System", jobs: "Jobs", panels: "Panels", gateway: "Gateway"};
+state.actCat = localStorage.getItem("nk.actcat") || "all"; state.actProb = localStorage.getItem("nk.actprob") === "1";
+const evProblem = e => e.level === "bad" || e.level === "warn";
+const actFilter = list => list.filter(e => (state.actCat === "all" || e.domain === state.actCat) && (!state.actProb || evProblem(e)));
+function actHead(list) {
+  const cnt = {}; list.forEach(e => { cnt[e.domain] = (cnt[e.domain] || 0) + 1; });
+  const cats = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]), prob = list.filter(evProblem).length;
+  return `<div class="act-cats"><button class="${state.actCat === "all" ? "on" : ""}" onclick="actSet('all')">All <small>${list.length}</small></button>${cats.map(c => `<button class="${state.actCat === c ? "on" : ""}" onclick="actSet('${esc(c)}')">${esc(EV_CATS[c] || c.charAt(0).toUpperCase() + c.slice(1))} <small>${cnt[c]}</small></button>`).join("")}<span class="sp"></span><button class="${state.actProb ? "on" : ""}" onclick="actProb()" title="Only warnings and failures">⚠ Problems <small>${prob}</small></button></div>`;
+}
+window.actSet = c => { state.actCat = c; localStorage.setItem("nk.actcat", c); refresh(); };
+window.actProb = () => { state.actProb = !state.actProb; localStorage.setItem("nk.actprob", state.actProb ? "1" : "0"); refresh(); };
+window.evOpen = id => {
+  const e = (state.evs || {})[id]; if (!e) return;
+  const tun = (state.tunnelsCache || []).find(t => t.name === e.ref), cfg = tun ? null : (state.cfgCache || []).find(c => c.name === e.ref);
+  const fix = tun ? `<a class="wtool" onclick="apDiagnose(${tun.id}, {auto: true})"><i>✨</i><b>Fix with AI</b><small>finds the cause and repairs ${esc(tun.name)} by itself</small></a>`
+    : cfg ? `<a class="wtool" onclick="cfDiagnose(${cfg.id})"><i>✨</i><b>Fix with AI</b><small>finds why ${esc(cfg.name)} fails and what to do about it</small></a>` : "";
+  showModal(`<span class="st ${e.level === "bad" ? "down" : e.level === "warn" ? "degraded" : "up"}"></span><b>${esc(EV_CATS[e.domain] || e.domain)}</b> <span class="mut">${ago(e.ts)} ago</span>`,
+    `<div class="ibox"><h5><i>📋</i>Event</h5>${irow("About", esc(e.ref || "—"))}${irow("Level", esc(e.level))}${irow("When", when(e.ts))}<div style="padding:8px 0;font-size:13.5px">${esc(e.text)}</div></div>
+     ${fix ? `<div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">${fix}</div></div>` : '<div class="mut" style="margin-top:10px">Nothing to repair for this event.</div>'}`, "");
+};
+window.cfDiagnose = async id => {
+  showModal("<b>✨ Diagnosis</b>", '<div class="mut" style="padding:20px;text-align:center">Looking at the config, the others behind the same address and its tunnel…</div>', "wide");
+  try {
+    const d = await api(`/api/autopilot/diagnose-config/${id}`), tn = d.tunnel_info;
+    showModal(`<span class="st ${d.status === "up" ? "up" : "down"}"></span><b>${esc(d.name)}</b> <span class="mut">${esc(d.address)}${d.port ? ":" + d.port : ""}</span>`, `
+      <div class="ibox"><h5><i>🩺</i>Cause</h5><div style="padding:6px 0;font-size:13.5px"><b class="${d.status === "up" ? "gw-ok" : "err"}">${esc(d.summary)}</b></div></div>
+      ${d.ai ? `<div class="ibox" style="margin-top:10px"><h5><i>✨</i>AI</h5><div style="padding:6px 0;font-size:13px">${esc(d.ai)}</div></div>` : ""}
+      <div class="ibox" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5>${d.findings.map(f => irow(esc(f.text), f.ok ? '<b class="gw-ok">✓</b>' : '<b class="err">✕</b>')).join("")}</div>
+      <div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">
+        ${tn && tn.state !== "up" ? `<a class="wtool" onclick="apDiagnose(${tn.id}, {auto: true})"><i>🛠</i><b>Fix the tunnel ${esc(tn.name)}</b><small>diagnose it and repair it by itself</small></a>` : ""}</div>
+        ${tn && tn.state !== "up" ? "" : '<div class="mut" style="padding:6px 0;font-size:12.5px">Nothing on your servers can change this: when an address is cut from inside Iran, the config needs another address (another foreign server or a CDN).</div>'}</div>`, "wide");
+  } catch (e) { showModal("<b>✨ Diagnosis</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); }
+};
+/* ---- Arvan Radar: how ArvanCloud's points of presence reach well-known sites, per data centre */
+const RD_NAME = {ok: "reachable", warn: "some probes fail", bad: "failing", none: "no data"};
+function radarCard(r) {
+  const head = right => `<h3>Data-centre internet <small class="mut">Arvan Radar</small><span class="sp"></span>${right}<a class="mut" href="https://radar.arvancloud.ir/" target="_blank" rel="noopener" style="margin-left:10px">radar.arvancloud.ir ↗</a></h3>`;
+  if (!r || !r.rows) return `<div class="card radar">${head('<span class="pill">not reachable</span>')}<div class="empty">The radar does not answer from the panel server right now.</div></div>`;
+  const row = d => `<div class="rd-row"><i class="dash-dot ${d.state === "ok" ? "green" : d.state === "warn" ? "yellow" : d.state === "bad" ? "red" : ""}"></i><b>${esc(d.name)}</b>
+    <span class="rd-sites">${d.sites.map(s => `<i class="rd-s ${s.state}" title="${esc(s.name)}: ${RD_NAME[s.state]}${s.avg != null ? " (level " + s.avg + ")" : ""}"></i>`).join("")}</span>
+    <span class="rd-strip" title="the last hour, two minutes per square">${d.strip.map(v => `<i class="${v == null ? "n" : v <= 0 ? "ok" : v < 1 ? "warn" : "bad"}"></i>`).join("")}</span></div>`;
+  const col = (g, title) => `<div><h4>${title}</h4>${r.rows.filter(x => x.group === g).map(row).join("")}</div>`;
+  const bad = r.rows.filter(x => x.state === "bad").length, warn = r.rows.filter(x => x.state === "warn").length;
+  return `<div class="card radar">${head(`<span class="pill ${bad ? "err" : warn ? "" : "ok"}">${bad ? bad + " disturbed" : warn ? warn + " with minor trouble" : "all calm"}</span>${r.stale ? ' <span class="pill">old data</span>' : ""}`)}
+    <div class="rd-cols">${col("iran", "Iran data centres")}${col("foreign", "Foreign data centres")}</div>
+    <small class="mut">Seen from ArvanCloud's points of presence: GitHub, Google, Bing, Wikipedia, PlayStation, Aparat, Digikala, Divar (one small square each, red = failing, grey = no data). It describes data centres, not home or mobile internet. Updated ${ago(r.at)} ago.</small></div>`;
+}
+function eventsHtml(list, open) {
   if (!list.length) return '<div class="empty">Nothing happened yet.</div>';
-  return list.map(e => `<div class="ev ${e.level}"><time title="${when(e.ts)}">${ago(e.ts)} ago</time><i></i><small>${esc(e.domain)}</small><span>${esc(e.text)}</span></div>`).join("");
+  return list.map(e => `<div class="ev ${e.level}${open ? " click" : ""}"${open ? ` onclick="evOpen(${e.id})" title="Click for details and Fix with AI"` : ""}><time title="${when(e.ts)}">${ago(e.ts)} ago</time><i></i><small>${esc(e.domain)}</small><span>${esc(e.text)}</span></div>`).join("");
 }
 
 /* ---- servers */
@@ -254,7 +309,7 @@ PAGES.servers = async () => {
       <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
       <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
-  if (openSrv) srvModal(openSrv); else hideModal();
+  if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile ${online < mine.length ? "bad" : "ok"}"><small>Online</small><b>${online} / ${mine.length}</b><span>${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}</span></div>
       <div class="tile ${nProb ? "warn" : ""}"><small>Problems</small><b>${nProb}</b><span>offline, or CPU > 85 %, RAM > 90 %, disk > 85 %</span></div>
@@ -262,8 +317,7 @@ PAGES.servers = async () => {
       <div class="tile"><small>Traffic now</small><b>${sumNet.toFixed(0)} Mb/s</b><span>sum of ↓ and ↑ over all ${state.tab} servers</span></div></div>
     <div class="toolbar">
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
-      <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button><button onclick="srvMany()" title="Several servers at once, connected with one password">+ Several</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
-    ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : state.edit === "many" ? `<div class="card">${MANY_FORM()}</div>` : ""}
+      <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
     <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:17%"><col style="width:6%"><col style="width:6%"><col style="width:17%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:12%"><col style="width:13%">' : '<col style="width:19%"><col style="width:7%"><col style="width:19%"><col style="width:11%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%">'}</colgroup>
       <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th></tr></thead>
       <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 9 : 8}" class="empty">No server.</td></tr>`}</tbody></table>`;;
@@ -324,6 +378,11 @@ window.srvReboot = async (id, name) => { if (!await gconfirm(`Reboot ${name}? It
 window.greCheckAll = async () => { toast("Checking GRE on every server… (up to a minute)"); try { const r = await api("/api/servers/gre-check-all?role=" + encodeURIComponent(state.tab), {method: "POST"}); toast(`GRE: ${r.ok} ok · ${r.no_gre} without GRE · ${r.bad.length} not OK` + (r.bad.length ? " — " + r.bad.slice(0, 3).join("; ") : ""), r.bad.length ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.srvGeo = async () => { toast("Looking up countries…"); try { const r = await api("/api/servers/geo-refresh", {method: "POST"}); toast(`✓ ${r.changes.length} changed`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvMany = () => { state.edit = "many"; state.open = null; refresh(); };
+window.addTab = k => { state.edit = k; addModal(); };
+function addModal() {   // one window for adding: a tab for one server, a tab for several at once
+  const one = state.edit === "new";
+  showModal(`<b>+ Add ${esc(state.tab)} server</b>`, `<div class="tabs" style="margin-bottom:12px"><button class="${one ? "on" : ""}" onclick="addTab('new')">One server</button><button class="${one ? "" : "on"}" onclick="addTab('many')">Several at once</button></div>${one ? SERVER_FORM(null, state.tab) : MANY_FORM()}`);
+}
 window.srvManyGo = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Adding… (a few seconds per server)"); try { const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: state.tab, lines: f.get("lines"), password: f.get("password"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22})}); state.manyRes = r.items; const ok = r.items.filter(i => i.ok).length; toast(`${ok ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, ok === r.items.length ? "ok" : "bad"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 const MANY_FORM = () => `<form class="frm" onsubmit="return srvManyGo(event)"><label style="grid-column:1/-1">Servers, one per line: <small>name host [user] [port] — e.g. <code>de4 203.0.113.9</code></small><textarea name="lines" class="ob-raw" required placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
     <label>SSH user<input name="ssh_user" value="root"></label><label>SSH port<input name="ssh_port" type="number" value="22"></label><label>SSH password <small>(the same for all; used once to install the panel's key — leave empty if the key is already there)</small><input name="password" type="password" autocomplete="new-password"></label>
@@ -786,13 +845,14 @@ function apStoryWindow(aid, title) {
   showModal(`<b>${esc(title)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
   followStory(aid, $("#ap-story"), 600).then(() => refresh());
 }
-window.apDiagnose = async id => {
+window.apDiagnose = async (id, opts = {}) => {
   showModal("<b>🩺 Diagnosis</b>", '<div class="mut" style="padding:20px;text-align:center">Looking at both servers, the route and the tunnel… (about 15 s)</div>', "wide");
   try {
     const d = await api(`/api/autopilot/diagnose/${id}`);
     const sw = d.can_switch && d.cause !== "healthy", mv = d.can_move && d.cause !== "healthy";
     showModal(`<span class="st ${d.state}"></span><b>${esc(d.name)}</b> <span class="mut">${esc(d.iran_name)} ⇄ ${esc(d.foreign_name)}</span>`, `
       <div class="ibox"><h5><i>🩺</i>Cause</h5><div style="padding:6px 0;font-size:13.5px"><b class="${d.cause === "healthy" ? "gw-ok" : "err"}">${esc(d.summary)}</b></div></div>
+      ${d.ai ? `<div class="ibox" style="margin-top:10px"><h5><i>✨</i>AI</h5><div style="padding:6px 0;font-size:13px">${esc(d.ai)}</div></div>` : ""}
       <div class="ibox" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5>${d.findings.map(f => irow(esc(f.text), f.ok ? '<b class="gw-ok">✓</b>' : '<b class="err">✕</b>')).join("")}</div>
       ${d.cause === "healthy" ? "" : `<div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">
         ${d.ladder.includes("restart") ? `<a class="wtool" onclick="apRun(${id}, 'rebuild')"><i>🛠</i><b>Smart fix</b><small>restart what is not running, then rebuild if needed</small></a>` : ""}
@@ -800,8 +860,16 @@ window.apDiagnose = async id => {
         ${mv ? `<a class="wtool" onclick="apMove(${id})"><i>🚚</i><b>Move to another Iran server</b><small>when the route to this foreign server is cut from that Iran server</small></a>` : ""}
         <a class="wtool" onclick="closeModal();apTune(${id})"><i>🧭</i><b>Network advisor</b><small>rank every tunnel type on today's network</small></a></div></div>`}
       <div id="ap-story" class="fix hidden" style="margin-top:10px"></div>`, "wide");
+    if (opts.auto && d.cause !== "healthy") {   // "Fix with AI": no further question - restart/rebuild (or switch the type when the network cuts this one)
+      const steps = d.ladder.filter(s => s !== "move");
+      if (steps.length) apStart(id, steps.includes("switch") ? "switch" : "rebuild");
+      else toast("This one needs your choice: another Iran server (Move), or the servers must come back first", "bad");
+    }
   } catch (e) { showModal("<b>🩺 Diagnosis</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); }
 };
+async function apStart(id, level) {
+  try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
+}
 window.apTune = id => { ap.tid = String(id); localStorage.setItem("nk.ap.tid", ap.tid); refresh(); };
 window.apRun = async (id, level) => {
   if (!await gconfirm(level === "switch" ? "Test the other tunnel types and replace this tunnel with the best one that works? Users reconnect after about a minute. If the new one fails, the old type is built again." : "Repair this tunnel now? Restarts first, then a rebuild when restarting is not enough.", {danger: true})) return;
@@ -869,7 +937,7 @@ PAGES.configsList = async () => {
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
   const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
   const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
-      ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Import new nodes of this subscription">⟳ Sync</button><button class="sm" onclick="cfSubManage('${esc(cf.group)}')" title="Tick which nodes of this subscription are kept on the probe">☑ Subscription</button>` : ""}</div>` : "";
+      ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Add the new nodes of this subscription at once">⟳ Sync</button><button class="sm" onclick="cfSubManage('${esc(cf.group)}')" title="Tick which nodes of this group are kept on the probe">✎ Edit</button>` : ""}</div>` : "";
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${names.length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
       <div class="tile ok"><small>Online</small><b>${up.length}</b><span>answer from inside Iran</span></div>
@@ -931,8 +999,8 @@ window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refres
 window.cfGroup = g => { cf.group = g; localStorage.setItem("nk.cfgroup", g); refresh(); };
 async function cfInView() { const d = await api("/api/configs"); return d.configs.filter(c => cf.group === "__all" ? true : cf.group === "__manual" ? !c.group : c.group === cf.group); }
 window.cfSpeedAll = async () => { const ids = (await cfInView()).filter(c => c.enabled).map(c => c.id); if (!ids.length) return; if (!await gconfirm(`Speed test ${ids.length} configs one after the other? About a minute each — the page keeps working meanwhile.`)) return; let done = 0, bad = 0; for (const id of ids) { try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); done++; } catch (e) { bad++; } toast(`Speed tests: ${done} done, ${bad} failed, ${ids.length - done - bad} to go`); } toast(`✓ Speed tests finished: ${done} ok, ${bad} failed`, bad ? "bad" : "ok"); refresh(); };
-window.cfDeleteAll = async () => { const mine = await cfInView(); if (!mine.length) return; const where = cf.group === "__all" ? "ALL" : `all ${cf.group === "__manual" ? "manual" : cf.group}`; if (!await gconfirm(`Delete ${where} ${mine.length} configs from the probe?`)) return; let n = 0; for (const c of mine) { try { await api(`/api/configs/${c.id}`, {method: "DELETE"}); n++; } catch (e) { /* keep going */ } } toast(`✓ ${n} configs deleted`, "ok"); refresh(); };
-window.cfGroupDel = async g => { const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]); const mine = d.configs.filter(c => (c.group || "") === g); const s = subs.subscriptions.find(x => x.name === g); const a = mine.length ? await gprompt(`Remove the group "${g}" (${mine.length} configs)?\nType DELETE to delete its configs from the probe too, or KEEP to only forget the group and keep the configs as manual ones:`) : "DELETE"; if (a !== "DELETE" && a !== "KEEP") return; for (const c of mine) { try { if (a === "DELETE") await api(`/api/configs/${c.id}`, {method: "DELETE"}); else await api(`/api/configs/${c.id}`, {method: "PUT", body: JSON.stringify({group: ""})}); } catch (e) { /* keep going */ } } if (s) { try { await api(`/api/subscriptions/${s.id}`, {method: "DELETE"}); } catch (e) { /* fine */ } } if (cf.group === g) cfGroup("__all"); toast("✓ Group removed", "ok"); refresh(); };
+window.cfDeleteAll = async () => { const mine = await cfInView(); if (!mine.length) return; const where = cf.group === "__all" ? "ALL" : `all ${cf.group === "__manual" ? "manual" : cf.group}`; if (!await gconfirm(`Delete ${where} ${mine.length} configs from the probe?`)) return; try { const r = await api("/api/configs/delete-many", {method: "POST", body: JSON.stringify({ids: mine.map(c => c.id)})}); toast(`✓ ${r.deleted} configs deleted`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.cfGroupDel = async g => { const [d, subs] = await Promise.all([api("/api/configs"), api("/api/subscriptions")]); const mine = d.configs.filter(c => (c.group || "") === g); const s = subs.subscriptions.find(x => x.name === g); const a = mine.length ? await gprompt(`Remove the group "${g}" (${mine.length} configs)?\nType DELETE to delete its configs from the probe too, or KEEP to only forget the group and keep the configs as manual ones:`) : "DELETE"; if (a !== "DELETE" && a !== "KEEP") return; if (a === "DELETE" && mine.length) { try { await api("/api/configs/delete-many", {method: "POST", body: JSON.stringify({ids: mine.map(c => c.id)})}); } catch (e) { toast("✕ " + e.message, "bad"); } } else for (const c of mine) { try { await api(`/api/configs/${c.id}`, {method: "PUT", body: JSON.stringify({group: ""})}); } catch (e) { /* keep going */ } } if (s) { try { await api(`/api/subscriptions/${s.id}`, {method: "DELETE"}); } catch (e) { /* fine */ } } if (cf.group === g) cfGroup("__all"); toast("✓ Group removed", "ok"); refresh(); };
 window.cfSetTunnel = async (id, v) => { try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({tunnel: v})}); toast(v ? "✓ Tunnel set to " + v : "✓ Tunnel cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.cfSetCdn = async (id, inp) => { const v = inp.value.trim(); if (v === (inp.dataset.orig || "")) return; const n = Number(v); if (v && (!/^\d+$/.test(v) || n < 1 || n > 65535)) { toast("CDN port must be a number from 1 to 65535", "bad"); inp.value = inp.dataset.orig || ""; return; } try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({cdn_port: v})}); inp.dataset.orig = v; toast(v ? "✓ CDN port " + v + " saved" : "✓ CDN port cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); inp.value = inp.dataset.orig || ""; } };
 window.cfSubOpen = async name => { const subs = await api("/api/subscriptions"); cf.sub = {name, url: "", nodes: null, saved: subs.subscriptions.some(s => s.name === name)}; cf.edit = null; refresh(); };
@@ -1066,14 +1134,22 @@ window.cfSubApply = async () => {
   if (drop.length && !await gconfirm(`Remove ${drop.length} configs of ${s.group} from the probe?`)) return;
   toast(`Applying: ${add.length} to add, ${drop.length} to remove…`);
   let bad = 0;
-  for (const n of drop) { try { await api(`/api/configs/${n.cfg.id}`, {method: "DELETE"}); } catch (e) { bad++; } }
+  if (drop.length) { try { await api("/api/configs/delete-many", {method: "POST", body: JSON.stringify({ids: drop.map(n => n.cfg.id)})}); } catch (e) { bad += drop.length; } }
   if (add.length) { try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: s.group, url: "", picks: add.map(n => n.name)})}); bad += (r.failed || []).length; } catch (e) { bad += add.length; } }
   toast(bad ? `⚠ Done with ${bad} failures` : "✓ Subscription applied", bad ? "bad" : "ok");
   cf.subEdit = null; closeModal();
 };
 window.cfSubPreview = async e => { e.preventDefault(); const f = new FormData(e.target); cf.sub.name = f.get("name").trim(); cf.sub.url = f.get("url").trim(); toast("Downloading…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url})})).nodes; toast("✓ " + cf.sub.nodes.length + " nodes", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.cfSubImport = async () => { const picks = [...document.querySelectorAll(".ob-inbounds input:checked")].map(x => x.value); if (!picks.length) { toast("Tick at least one node", "bad"); return; } toast("Adding " + picks.length + " nodes… (a few seconds each)"); try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url, picks})}); toast(`✓ ${r.added.length} added, ${r.skipped.length} skipped, ${r.failed.length} failed`, r.failed.length ? "bad" : "ok"); cf.sub = null; cf.add = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.cfSubRefresh = async (id, name) => { cf.sub = {name, url: "", nodes: null, saved: !!id}; cf.edit = null; if (!id) { refresh(); return; } toast("Fetching the saved subscription…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name, url: ""})})).nodes; const fresh = cf.sub.nodes.filter(n => !n.exists).length; toast(fresh ? `✓ ${fresh} new nodes — tick and add them` : "✓ Nothing new in this subscription", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+/* Sync: no window. The saved link is read and every node that is not on the probe yet is added in one go. */
+window.cfSubRefresh = async (id, name) => {
+  if (!id) { cf.sub = {name, url: "", nodes: null, saved: false}; cf.edit = null; refresh(); return; }   // no saved link: ask for it once
+  try {
+    const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name, url: ""})});
+    toast(r.added.length ? `✓ ${r.added.length} new configs added` + (r.failed.length ? `, ${r.failed.length} failed` : "") : r.failed.length ? "✕ " + r.failed[0] : "✓ Nothing new in this subscription", r.failed.length ? "bad" : "ok");
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+  refresh();
+};
 window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */

@@ -63,10 +63,13 @@ def test_sync_upserts_and_emits(client, monkeypatch):
 
 
 def test_add_update_delete_go_through_probe(client, monkeypatch):
+    from nikatel.services import configs as configs_svc
+
     calls = []
     monkeypatch.setattr(probe, "add_config", lambda uri, push_url="": calls.append(("add", uri)) or {"ok": True})
     monkeypatch.setattr(probe, "update_config", lambda name, uri="", new_name="": calls.append(("update", name, uri, new_name)) or {"ok": True})
-    monkeypatch.setattr(probe, "delete_config", lambda name: calls.append(("delete", name)) or {"ok": True})
+    monkeypatch.setattr(probe, "delete_many", lambda names: calls.append(("delete", names[0])) or {n: None for n in names})
+    monkeypatch.setattr(configs_svc, "_spawn", lambda fn, *a: fn(*a))      # the probe is told in the background; run it here
 
     r = client.post("/api/configs", json={"uri": "vless://u@h:443?type=tcp#My Node", "group": "g1"})
     assert r.status_code == 201 and r.json()["name"] == "My Node" and calls[0][1].endswith("#My%20Node")
@@ -105,6 +108,7 @@ def test_subscription_import(client, monkeypatch):
 
     monkeypatch.setattr(configs.httpx, "get", lambda *a, **k: R())
     monkeypatch.setattr(probe, "add_config", lambda uri, push_url="": {"ok": True})
+    monkeypatch.setattr(probe, "add_many", lambda items: {i["name"]: None for i in items})
     p = client.post("/api/subscriptions/preview", json={"name": "grp", "url": "https://sub.example.net/x"}).json()
     assert [n["name"] for n in p["nodes"]] == ["A", "B"]
     r = client.post("/api/subscriptions/import", json={"name": "grp", "url": "https://sub.example.net/x", "picks": ["B"]}).json()
@@ -144,3 +148,24 @@ def test_probe_install_guards(client, monkeypatch):
     assert r.status_code == 502 and "Xray" in r.json()["detail"]
     assert sorted(p.name for p in probe_install.SRC.glob("*.py"))[:2] == ["bulk-import.py", "daily-speed.py"]
     assert set(probe_install.UNITS) >= {"nikatel-speed-api.service", "nikatel-probe-manager.service", "nikatel-daily-speed.timer"}
+
+
+def test_delete_many_is_instant_and_one_bulk_call(client, monkeypatch):
+    from nikatel.services import configs as configs_svc
+
+    seen = []
+    monkeypatch.setattr(probe, "add_config", lambda uri, push_url="": {"ok": True})
+    monkeypatch.setattr(probe, "add_many", lambda items: {i["name"]: None for i in items})
+    monkeypatch.setattr(probe, "delete_many", lambda names: seen.append(list(names)) or {n: (None if n != "b" else "locked") for n in names})
+    monkeypatch.setattr(configs_svc, "_spawn", lambda fn, *a: fn(*a))
+
+    for n in "abc":
+        assert client.post("/api/configs", json={"uri": f"vless://u@h:443#{n}"}).status_code == 201
+
+    ids = [c["id"] for c in client.get("/api/configs").json()["configs"]]
+    r = client.post("/api/configs/delete-many", json={"ids": ids})
+    assert r.status_code == 200 and r.json()["deleted"] == 3
+    assert client.get("/api/configs").json()["configs"] == [] and len(seen) == 1 and sorted(seen[0]) == ["a", "b", "c"]
+    ev = client.get("/api/events?domain=configs").json()["events"]
+    assert any("could not be deleted" in e["text"] and "locked" in e["text"] for e in ev)
+    assert configs_svc._PENDING == set()

@@ -134,6 +134,21 @@ def add_config(uri: str, push_url: str = "") -> dict:
     return d
 
 
+def add_many(items: list[dict]) -> dict:
+    """Several configs in ONE call (the probe restarts its services once for all, not once per config). items: [{"uri", "name"}].
+    Returns {name: None when added | error text}."""
+    d = request("POST", "/api/config/bulk", {"add": [{"uri": i["uri"], "name": i["name"]} for i in items]}, timeout=300)
+
+    if not d.get("ok"):
+        raise RuntimeError(str(d.get("error") or d.get("output") or "the probe refused the bulk add")[:300])
+
+    res = {i["name"]: "no answer for this one" for i in items}
+
+    for it in d.get("add", []):
+        res[str(it.get("name", ""))] = None if it.get("ok") else str(it.get("error", "failed"))[:100]
+
+    return res
+
 def update_config(name: str, uri: str = "", new_name: str = "") -> dict:
     body = {"name": name}
 
@@ -159,6 +174,22 @@ def delete_config(name: str) -> dict:
 
     return d
 
+
+def delete_many(names: list[str]) -> dict:
+    """Several configs in ONE call: the probe restarts its services once for all of them (one call per config took ~3 s each).
+    Returns {name: None when gone | error text}. A name the probe does not know counts as gone."""
+    d = request("POST", "/api/config/bulk", {"delete": list(names)}, timeout=300)
+
+    if not d.get("ok"):
+        raise RuntimeError(str(d.get("error") or d.get("output") or "the probe refused the bulk delete")[:300])
+
+    res = {n: "no answer for this one" for n in names}
+
+    for it in d.get("delete", []):
+        n = str(it.get("name", ""))
+        res[n] = None if it.get("ok") or it.get("error") == "not found" else str(it.get("error", "failed"))[:100]
+
+    return res
 
 def speed_state(name: str) -> dict:
     return request("GET", "/api/speed?name=" + httpx.QueryParams({"n": name})["n"].replace("+", "%20"), timeout=30)

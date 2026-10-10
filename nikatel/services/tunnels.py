@@ -65,7 +65,7 @@ def plan_for(t: Tunnel) -> Plan:
 
     if typ == "backhaul" and (t.record or {}).get("legacy_gre"):   # found on the servers: its GRE link is not run by a nikatel-gre unit, so only backhaul, the data path and (when it has one) the link are judged
         iface, peer = link_of(t)
-        return Plan([f"backhaul-iran-{tr}-{port}.service"], [f"backhaul-kharej-{tr}-{port}.service"], iface=iface, iran_peer=peer if iface else "", ports=ports)
+        return Plan([f"backhaul-iran-{tr}-{port}.service"], [f"backhaul-kharej-{tr}-{port}.service"], iface=iface, iran_peer=peer, ports=ports)
 
     if typ == "backhaul":
         return Plan([f"backhaul-iran-{tr}-{port}.service", f"nikatel-gre-{name}.service"],

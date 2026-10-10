@@ -44,3 +44,28 @@ def test_api_guards(client):
     assert client.get("/api/autopilot/diagnose/999").status_code == 400
     assert client.put("/api/settings/repair", json={"auto": False, "after_seconds": 180, "level": "switch"}).json()["level"] == "switch"
     assert client.put("/api/settings/repair", json={"auto": False, "after_seconds": 180, "level": "nuke"}).status_code == 422
+
+
+def test_diagnose_config_names_the_likely_cause(client):
+    from nikatel.db import session
+    from nikatel.models import Config, Server, Tunnel
+    from nikatel.services import autopilot
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        db.add(Tunnel(name="tun1", type="backhaul", iran_server_id=a.id, foreign_server_id=b.id, state="down"))
+
+        for n, st, addr, tun in (("c1", "down", "x.example", "tun1"), ("c2", "down", "y.example", ""), ("c3", "down", "y.example", ""), ("c4", "up", "z.example", ""), ("c5", "down", "z.example", "")):
+            db.add(Config(name=n, status=st, meta={"address": addr, "port": 80, "network": "ws", "security": "none"}, tunnel=tun))
+
+        ids = {c.name: c.id for c in db.scalars(__import__("sqlalchemy").select(Config))}
+
+    d = autopilot.diagnose_config(ids["c1"])
+    assert d["tunnel_info"]["name"] == "tun1" and "tun1" in d["summary"] and "fix the tunnel" in d["summary"]
+    assert "address is cut" in autopilot.diagnose_config(ids["c2"])["summary"]       # every config on that address fails
+    assert "only this config fails" in autopilot.diagnose_config(ids["c5"])["summary"]  # a neighbour on the same address works
+    assert autopilot.diagnose_config(ids["c4"])["summary"] == "this config works now"
+    assert client.get(f"/api/autopilot/diagnose-config/{ids['c1']}").json()["ok"] is True
+    assert client.get("/api/autopilot/diagnose-config/9999").status_code == 400
