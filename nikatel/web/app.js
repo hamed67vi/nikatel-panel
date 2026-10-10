@@ -1301,11 +1301,27 @@ function settingsTabs() {
   $("#page").insertAdjacentHTML("afterbegin", bar);
   const grid = $("#page .grid2"), byName = {};
   grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); byName[h ? h.childNodes[0].textContent.trim() : ""] = c; c.classList.add("hidden"); });
-  const want = SET_TABS[cur][2].map(n => byName[n]).filter(Boolean);
-  want.forEach(c => { c.classList.remove("hidden"); grid.appendChild(c); });   // one tab = its cards, in this order
-  grid.classList.toggle("one", want.length === 1 || want.some(c => c.style.gridColumn));   // a wide card = one column, all the same width
+  const names = SET_TABS[cur][2].filter(n => byName[n]);
+  let show = names;
+  if (names.length > 1) {   // several cards in a tab: a second row of tabs, one card at a time
+    const pick = names.includes(state.sstab) ? state.sstab : names[0];
+    state.sstab = pick; show = [pick];
+    $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div>`);
+  }
+  show.forEach(n => { const c = byName[n]; c.classList.remove("hidden"); grid.appendChild(c); });
+  grid.classList.add("one");
 }
-window.setTab = k => { state.stab = k; localStorage.setItem("nk.stab", k); refresh(); };
+settingsTabs.only = () => {   // switch the card without touching the server or the forms: hide / show and redraw the small tab row
+  const grid = $("#page .grid2"); if (!grid) return refresh();
+  const old = $("#page .set-sub"); if (old) old.remove();
+  const byName = {};
+  grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); byName[h ? h.childNodes[0].textContent.trim() : ""] = c; c.classList.add("hidden"); });
+  const names = SET_TABS[state.stab][2].filter(n => byName[n]), pick = names.includes(state.sstab) ? state.sstab : names[0];
+  $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div>`);
+  byName[pick].classList.remove("hidden");
+  if (pick === "About") aboutLoad(); if (pick === "Core update") enginesLoad();
+};
+window.setTab = k => { state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); refresh(); };
 state.stab = localStorage.getItem("nk.stab") || "account";
 const formJson = (e, nums = [], bools = []) => { const f = new FormData(e.target), o = {}; for (const [k, v] of f.entries()) o[k] = v; nums.forEach(k => o[k] = +o[k]); bools.forEach(k => o[k] = f.get(k) === "on"); return o; };
 const put = async (e, path, body, okText) => { e.preventDefault(); try { await api(path, {method: "PUT", body: JSON.stringify(body)}); toast(okText, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
