@@ -85,6 +85,9 @@ def classify(d: dict) -> tuple[str, str]:
     if (loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50):
         return "route_cut", f"the two servers cannot reach each other (loss {loss_i}% / {loss_f}%): the route between them is cut or filtered"
 
+    if d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50) and (loss_i or 0) < 10 and (loss_f or 0) < 10:
+        return "gre_blocked", f"plain ping between the servers passes both ways ({loss_i}% / {loss_f}% loss) but GRE packets do not (inner link {d.get('gre_loss')}% loss): GRE (protocol 47) is filtered on this route"
+
     if (d.get("flap_fails") or 0) >= 3 and d.get("state") != "down":
         return "lossy_route", f"the link flaps: {d['flap_fails']} of the last {d.get('flap_n')} checks failed - the route is unstable, a restart does not cure that"
 

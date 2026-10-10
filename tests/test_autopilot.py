@@ -174,3 +174,9 @@ def test_pathscan_locates_the_loss():
     assert pathscan.locate({"pair_ab": bad, "pair_ba": ok, "iran_to_other_foreign": [ok, ok, ok], "other_iran_to_foreign": [ok, ok], "iran_anchor": [bad, bad], "foreign_anchor": [ok, ok]})["where"] == "iran_side"      # even toward the internet
     r = pathscan.parse_loss("LOSS 203.0.113.9 20 17 93.512\nLOSS 1.1.1.1 20 0 -\nnoise")
     assert r["203.0.113.9"] == {"loss": 15.0, "avg_ms": 93.512} and r["1.1.1.1"]["loss"] == 100.0 and r["1.1.1.1"]["avg_ms"] is None
+
+
+def test_clean_ping_but_dead_gre_is_a_gre_filter_not_a_flapping_route():
+    cause, why = ap.classify({"state": "down", "flap_fails": 9, "flap_n": 10, "gre": True, "gre_loss": 100.0, "under_loss_i": 0.0, "under_loss_f": 0.0})
+    assert cause == "gre_blocked" and "protocol 47" in why
+    assert ap.classify({"state": "degraded", "flap_fails": 4, "flap_n": 10, "gre": True, "gre_loss": 0.0, "under_loss_i": 0.0, "under_loss_f": 0.0})[0] == "lossy_route"      # a flapping link without a dead GRE ping stays a route problem
