@@ -124,8 +124,8 @@ function renderSub() {
   box.innerHTML = `<div class="tabs">${list.map(([k, label]) => `<button class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${label}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
-window.setSub = (page, k) => { if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "overview"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
-const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "overview"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
+window.setSub = (page, k) => { if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
+const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
 function go(page) {
   let aliased = false;
   if (NAV_ALIAS[page]) {   aliased = true;               // an old page name: open the page that holds it, on the right sub-tab
@@ -1143,12 +1143,12 @@ window.cfAddPick = k => { cf.add = k; cf.sub = k === "sub" ? {name: "", url: "",
 function cfAddModal() {
   const k = cf.add;
   if (k === "choose") return showModal("<b>＋ Add configs</b>", `<div class="addpick"><a onclick="cfAddPick('link')"><i>🔗</i><b>A single config</b><small>paste one vless:// vmess:// trojan:// or ss:// link</small></a><a onclick="cfAddPick('sub')"><i>📡</i><b>A subscription</b><small>import every node of a subscription link as a group; pick which ones to keep</small></a></div>`);
-  if (k === "link") return showModal("<b>🔗 Add a config</b>", `<form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><label>Name <small>(empty = the link's own name)</small><input name="name"></label><label>Group<input name="group" placeholder="optional" value="${esc((cf.names || []).includes(cf.group) ? cf.group : "")}"></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfNew()">← Back</button></div></form>`);
+  if (k === "link") return showModal("<b>🔗 Add a config</b>", `<form class="frm" onsubmit="return cfAdd(event)"><label style="grid-column:1/-1">Link<textarea name="uri" class="ob-raw" required placeholder="vless://…  vmess://…  trojan://…  ss://…"></textarea></label><div class="frm-act"><button class="pri" type="submit">Add to the probe</button><button type="button" onclick="cfNew()">← Back</button></div></form>`);
   if (k === "sub") return showModal("<b>📡 Import a subscription</b>", cfSubHtml(true));
 }
 window.cfCancel = () => { cf.edit = null; cf.sub = null; cf.add = null; refresh(); };
 window.cfSync = async () => { toast("Asking the probe… (up to a minute)"); try { await api("/api/configs/sync", {method: "POST"}); toast("✓ Synced", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.cfAdd = async e => { e.preventDefault(); const f = new FormData(e.target); try { const r = await api("/api/configs", {method: "POST", body: JSON.stringify({uri: f.get("uri").trim(), name: f.get("name").trim(), group: f.get("group").trim()})}); toast("✓ " + r.name + " added — the probe tests it within a minute", "ok"); cf.edit = null; cf.add = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.cfAdd = async e => { e.preventDefault(); const f = new FormData(e.target); try { const r = await api("/api/configs", {method: "POST", body: JSON.stringify({uri: f.get("uri").trim(), name: "", group: ""})}); toast("✓ " + r.name + " added — the probe tests it within a minute", "ok"); cf.edit = null; cf.add = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.cfDel = async (id, name) => {   // one config goes at once, no question asked (Delete all still asks)
   const row = document.querySelector(`[data-cf="${id}"]`); if (row) row.remove();
   try { await api(`/api/configs/${id}`, {method: "DELETE"}); toast(`✓ ${name} deleted`, "ok"); cf.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };
@@ -1303,11 +1303,11 @@ window.cfSubRefresh = async (id, name) => {
 window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
-const pn = {id: localStorage.getItem("nk.pn") || "", tab: "overview", add: false, edit: false, users: null, usersKey: "", uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostsKey: "", hostEdit: null, core: null, raw: false, logs: null};
+const pn = {id: localStorage.getItem("nk.pn") || "", tab: "users", add: false, edit: false, users: null, usersKey: "", uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostsKey: "", hostEdit: null, core: null, raw: false, logs: null};
 INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
-  const list = (await api("/api/panels")).panels;
+  const list = (await api("/api/panels")).panels; state.panelsCache = list;
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
   const chip = p => p.status === "up" ? `<span class="pill ok">● up · ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err">● down</span>` : '<span class="pill">not checked yet</span>';
@@ -1328,11 +1328,11 @@ PAGES.panels = async () => {
     ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
     <div class="tiles">
       <div class="tile"><small>Users</small><b>${s.users_total ?? "—"}</b><span>${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online</span></div>
-      <div class="tile"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
+      <div class="tile click" onclick="pnNodesWin()" title="Open the nodes of this panel"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
       <div class="tile"><small>Load</small><b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b><span>cpu · ram ${s.mem_pct ?? "—"}%</span></div>
       <div class="tile"><small>Traffic</small><b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b><span>↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}</span></div></div>
-    <div class="tabs" style="margin-bottom:10px">${[["overview", "Overview"], ["users", `Users${s.users_total != null ? ` <small>${s.users_total}</small>` : ""}`], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>
-    <div id="pn-body">${pn.tab === "overview" ? pnOverviewHtml(p) : '<div class="loading"><i class="spin"></i><span>Loading…</span></div>'}</div>`;
+    <div class="tabs" style="margin-bottom:10px">${[["users", `Users${s.users_total != null ? ` <small>${s.users_total}</small>` : ""}`], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>
+    <div id="pn-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
@@ -1352,8 +1352,9 @@ function pnNodesHtml(p) {
   return `<table class="tbl"><colgroup><col style="width:18%"><col style="width:12%"><col style="width:18%"><col style="width:10%"><col><col style="width:200px"></colgroup><thead><tr><th>Node</th><th>Status</th><th>Address</th><th>Xray</th><th>Message</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="mut">no nodes</td></tr>'}</tbody></table>
     ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
 }
-window.pnPick = v => { pn.tab = "overview"; pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };
+window.pnPick = v => { pn.tab = "users"; pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };
 window.pnTab = t => { pn.tab = t; pn.user = null; pn.hostEdit = null; refresh(); };
+window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (p) showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };
 window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added — making its test config on the probe…", "ok"); pn.add = false; pn.id = String(r.panel.id); refresh(); pnTestConfig(r.panel.id, r.panel.name, true); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
@@ -1380,22 +1381,27 @@ async function pnUsersLoad(id) {
       <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}"><td><input type="checkbox" class="pn-uchk" value="${esc(x.username)}"></td><td class="name">${esc(x.username)}</td><td><span class="st ${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}">${esc(x.status)}</span></td>
         <td class="num">${fmtB(x.used || 0)} / ${gb(x.limit)}</td><td class="num">${exp(x)}</td><td class="mut">${esc(x.note)}</td>
         <td><button class="sm" onclick="pnUserOpen(${id}, '${esc(x.username)}')">Edit</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', '${x.status === "active" ? "disable" : "enable"}')">${x.status === "active" ? "Disable" : "Enable"}</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', 'reset')">Reset</button></td></tr>
-        ${pn.user && pn.user.username === x.username ? `<tr class="detail"><td colspan="7">${pnUserHtml(id, pn.user)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>`;
+`).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>`;
   const q = $("#pn-uq"); if (q && pn.uq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
-function pnUserHtml(id, u) {
-  return `<form class="frm" onsubmit="return pnUserSave(event, ${id}, '${esc(u.username)}')">
-    <label>Status<select name="status">${["active", "disabled", "on_hold"].map(s => `<option ${u.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
-    <label>Expires <small>(empty = never)</small><input name="expire_date" type="date" value="${esc(u.expire_date)}"></label><label>Traffic limit GB <small>(0 = unlimited)</small><input name="limit_gb" type="number" step="0.1" min="0" value="${u.limit ? (u.limit / GB).toFixed(1) : 0}"></label>
-    <label>Reset<select name="reset">${["no_reset", "day", "week", "month", "year"].map(s => `<option ${u.reset === s ? "selected" : ""}>${s}</option>`).join("")}</select></label><label style="grid-column:2/-1">Note<input name="note" value="${esc(u.note)}"></label>
-    <div class="kv" style="grid-column:1/-1"><div><span>used</span> ${fmtB(u.used || 0)} · <span>lifetime</span> ${fmtB(u.lifetime || 0)}</div><div><span>created</span> ${esc(String(u.created_at || "").slice(0, 10))} · <span>online</span> ${esc(String(u.online_at || "never").slice(0, 16))}</div>${u.sub ? `<div><span>subscription</span> <a class="mut" onclick="navigator.clipboard.writeText('${esc(u.sub)}');toast('✓ copied','ok')">copy link</a></div>` : ""}</div>
-    <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="pn.user=null;refresh()">Close</button><span class="sp"></span>
-      <button type="button" class="sm" onclick="(async()=>pnUAct(${id}, '${esc(u.username)}', 'renew', await gprompt('Add how many days?', '30')))()">+ days</button><button type="button" class="sm" onclick="pnUAct(${id}, '${esc(u.username)}', 'revoke')">Revoke sub</button><button type="button" class="sm danger" onclick="(async()=>{if(await gconfirm('Delete ${esc(u.username)} from the panel?'))pnUAct(${id}, '${esc(u.username)}', 'delete')})()">Delete</button></div></form>`;
-}
-window.pnUQ = v => { pn.uq = v.trim(); pn.uoff = 0; clearTimeout(qT); qT = setTimeout(refresh, 300); };
-window.pnUserOpen = async (id, name) => { try { pn.user = (await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`)).user; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnUserSave = async (e, id, name) => { e.preventDefault(); const f = new FormData(e.target); try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`, {method: "PUT", body: JSON.stringify({status: f.get("status"), expire_date: f.get("expire_date"), limit_gb: +f.get("limit_gb"), reset: f.get("reset"), note: f.get("note")})}); toast("✓ Saved", "ok"); pn.user = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
-window.pnUAct = async (id, name, action, value) => { if (action === "renew" && !value) return; try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}/action`, {method: "POST", body: JSON.stringify({action, value})}); toast("✓ " + action + " done", "ok"); if (action === "delete") pn.user = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+function pnUserHtml(id, u) {   // the user window, laid out like the Marzban dashboard's: usage on top, the fields, the subscription, the actions
+  if (u.sub && u.sub.startsWith("/")) { const pp = (state.panelsCache || []).find(x => String(x.id) === String(id)); if (pp) u = {...u, sub: String(pp.url || "").replace(/\/+$/, "") + u.sub}; }
+  const nm = esc(u.username), pct = u.limit ? Math.min(100, Math.round((u.used || 0) * 100 / u.limit)) : 0, left = u.expire ? Math.ceil((u.expire - Date.now() / 1000) / 86400) : null;
+  return `<div class="ue-top"><div class="ue-use"><div class="row2"><b>${fmtB(u.used || 0)}</b><span class="mut">of ${u.limit ? gb(u.limit) : "unlimited"}${u.limit ? " · " + pct + " %" : ""}</span></div>${u.limit ? `<div class="ue-bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>` : ""}</div>
+      <div class="ue-facts"><div><span>Lifetime</span><b>${fmtB(u.lifetime || 0)}</b></div><div><span>Expires</span><b>${u.expire_date ? esc(u.expire_date) + (left != null ? ` <small class="${left < 0 ? "err" : "mut"}">${left < 0 ? "expired" : left + " d"}</small>` : "") : "never"}</b></div><div><span>Created</span><b>${esc(String(u.created_at || "").slice(0, 10)) || "—"}</b></div><div><span>Online</span><b>${esc(String(u.online_at || "never").slice(0, 16).replace("T", " "))}</b></div></div></div>
+    <form class="frm ue-form" onsubmit="return pnUserSave(event, ${id}, '${nm}')">
+      <label>Status<select name="status">${["active", "disabled", "on_hold"].map(s => `<option ${u.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+      <label>Data limit (GB) <small>(0 = unlimited)</small><input name="limit_gb" type="number" step="0.1" min="0" value="${u.limit ? (u.limit / GB).toFixed(1) : 0}"></label>
+      <label>Reset usage every<select name="reset">${["no_reset", "day", "week", "month", "year"].map(s => `<option ${u.reset === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+      <label>Expires <small>(empty = never)</small><input name="expire_date" type="date" value="${esc(u.expire_date)}"></label>
+      <label class="ue-note">Note<input name="note" value="${esc(u.note)}" placeholder="optional"></label>
+      <div class="frm-act ue-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>
+    ${u.sub ? `<div class="ue-sub"><span class="mut">Subscription</span><span class="mono ell">${esc(u.sub)}</span><button class="sm" onclick="navigator.clipboard.writeText('${esc(u.sub)}');toast('✓ copied','ok')">Copy</button></div>` : ""}
+    <div class="ue-acts"><button class="sm" onclick="(async()=>pnUAct(${id}, '${nm}', 'renew', await gprompt('Add how many days?', '30')))()">+ Add days</button><button class="sm" onclick="pnUAct(${id}, '${nm}', 'reset')">Reset usage</button><button class="sm" onclick="pnUAct(${id}, '${nm}', 'revoke')">Revoke subscription</button><button class="sm" onclick="pnUAct(${id}, '${nm}', '${u.status === "disabled" ? "enable" : "disable"}')">${u.status === "disabled" ? "Enable" : "Disable"}</button><span class="sp"></span><button class="sm danger" onclick="(async()=>{if(await gconfirm('Delete ${nm} from the panel?'))pnUAct(${id}, '${nm}', 'delete')})()">Delete user</button></div>`;
+}window.pnUQ = v => { pn.uq = v.trim(); pn.uoff = 0; clearTimeout(qT); qT = setTimeout(refresh, 300); };
+window.pnUserOpen = async (id, name) => { try { pn.user = (await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`)).user; const u = pn.user; showModal(`<span class="st ${u.status === "active" ? "online" : u.status === "disabled" ? "" : "offline"}"></span><b>${esc(u.username)}</b> <span class="pill">${esc(u.status)}</span>`, pnUserHtml(id, u), "wide ue"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnUserSave = async (e, id, name) => { e.preventDefault(); const f = new FormData(e.target); try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`, {method: "PUT", body: JSON.stringify({status: f.get("status"), expire_date: f.get("expire_date"), limit_gb: +f.get("limit_gb"), reset: f.get("reset"), note: f.get("note")})}); toast("✓ Saved", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnUAct = async (id, name, action, value) => { if (action === "renew" && !value) return; try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}/action`, {method: "POST", body: JSON.stringify({action, value})}); toast("✓ " + action + " done", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnBulk = async (id, action, value) => { const names = [...document.querySelectorAll(".pn-uchk:checked")].map(x => x.value); if (!names.length) { toast("Tick some users first", "bad"); return; } try { const r = await api(`/api/panels/${id}/users-bulk`, {method: "POST", body: JSON.stringify({action, value, usernames: names})}); toast(`✓ ${r.done} done${r.failed_count ? ", " + r.failed_count + " failed" : ""}`, r.failed_count ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnBulkRenew = async id => { const d = await gprompt("Add how many days to the ticked users?", "30"); if (d) pnBulk(id, "renew", +d); };
 

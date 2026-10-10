@@ -578,3 +578,13 @@ button::after { transition: opacity .3s ease; }
   .login-box { width: 100%; margin: 10px; }
 }
 @media (max-width: 760px) and (orientation: landscape) { .app { padding-bottom: calc(96px + env(safe-area-inset-bottom)); } #nav a::after { display: none; } #nav a { height: 36px; min-height: 36px; } }
+
+/* the user window of a Marzban / PasarGuard panel */
+.modal.ue { max-width: 760px; }
+.ue-top { display: grid; grid-template-columns: 1.2fr 2fr; gap: 12px; margin-bottom: 12px; } .ue-use, .ue-facts { padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); }
+.ue-use .row2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .ue-use b { font-size: 18px; } .ue-bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 8px; } .ue-bar i { display: block; height: 100%; background: var(--grad); } .ue-bar i.warn { background: var(--warn); } .ue-bar i.bad { background: var(--bad); }
+.ue-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; } .ue-facts div { display: grid; gap: 2px; } .ue-facts span { font-size: 10.5px; color: var(--mut); text-transform: uppercase; letter-spacing: .6px; } .ue-facts b { font-size: 12.5px; }
+.ue-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ue-form .ue-note, .ue-form .ue-save { grid-column: 1 / -1; }
+.ue-sub { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ue-sub .ell { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+.ue-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); } .ue-acts .sp { flex: 1; }
+@media (max-width: 760px) { .ue-top, .ue-form { grid-template-columns: 1fr; } .ue-facts { grid-template-columns: 1fr 1fr; } }
