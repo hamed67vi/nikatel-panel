@@ -93,3 +93,56 @@ def test_diagnose_config_tells_a_filtered_name_from_a_filtered_address(client, m
 
     monkeypatch.setattr(autopilot, "run_script", lambda node, name, params=None, timeout=25: "SNI 203.0.113.7 own=0 control=1")
     assert any("the name is filtered" in f["text"] for f in autopilot.diagnose_config(cid)["findings"])
+
+
+def test_fix_all_runs_every_broken_tunnel_in_one_story(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import ActionLog, Server, Tunnel
+    from nikatel.services import autopilot as ap
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        db.add(Tunnel(name="t-down", type="backhaul", iran_server_id=a.id, foreign_server_id=b.id, state="down", last_error="x"))
+        db.add(Tunnel(name="t-deg", type="backhaul", iran_server_id=a.id, foreign_server_id=b.id, state="degraded"))
+        db.add(Tunnel(name="t-ok", type="backhaul", iran_server_id=a.id, foreign_server_id=b.id, state="up"))
+
+    done = []
+
+    def fake_fix(aid, tid, level, source="manual", finish=True):
+        done.append((tid, level, finish))
+        ap._say(aid, f"tunnel {tid}: fixed")
+        return tid % 2 == 1
+
+    monkeypatch.setattr(ap, "smart_fix", fake_fix)
+    monkeypatch.setattr(ap.get_settings(), "read_only", False)
+    aid = ap.fix_all_start("restart")
+    import time
+    for _ in range(50):
+        with session() as db:
+            e = db.get(ActionLog, aid)
+            if e.finished_at:
+                break
+        time.sleep(0.1)
+    with session() as db:
+        e = db.get(ActionLog, aid)
+        assert e.finished_at and len(done) == 2 and all(not f for _, _, f in done) and e.story[1].startswith("2 tunnel(s) need attention")
+        assert e.story[-1].startswith("Done:")
+
+    assert client.post("/api/autopilot/fix-all", json={"level": "nope"}).status_code == 422
+    s = client.get("/api/autopilot/situation").json()
+    assert {t["name"] for t in s["tunnels"]} == {"t-down", "t-deg"} and s["totals"]["tunnels"] == 3
+
+
+def test_explain_needs_a_key_and_hands_the_facts_to_the_ai(client, monkeypatch):
+    from nikatel.services import ai
+    from nikatel.services import autopilot as ap
+
+    assert client.post("/api/autopilot/explain", json={}).status_code == 400          # no key saved
+    monkeypatch.setattr(ai, "conf", lambda: {"enabled": True, "api_key": "k"})
+    seen = {}
+    monkeypatch.setattr(ai, "ask", lambda system, user, max_tokens=700, timeout=45: seen.update({"user": user}) or "Handle the down tunnel first.")
+    r = client.post("/api/autopilot/explain", json={}).json()
+    assert r["text"].startswith("Handle") and "<facts>" in seen["user"] and "configs_down" in seen["user"]
+    assert ap.situation()["totals"]["tunnels"] == 0

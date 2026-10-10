@@ -37,6 +37,29 @@ def smart_fix(body: FixIn):
     return {"ok": True, "id": _wrap(autopilot.smart_fix_start, body.tunnel_id, body.level)}
 
 
+class LevelIn(BaseModel):
+    level: str = Field("rebuild", pattern=r"^(restart|rebuild|switch)$")
+
+
+@router.post("/autopilot/fix-all", status_code=202)
+def fix_all(body: LevelIn):
+    return {"ok": True, "id": _wrap(autopilot.fix_all_start, body.level)}
+
+
+class ExplainIn(BaseModel):
+    tunnel_id: int | None = None
+
+
+@router.post("/autopilot/explain")
+def explain(body: ExplainIn):
+    return {"ok": True, **_wrap(autopilot.explain, body.tunnel_id)}
+
+
+@router.get("/autopilot/situation")
+def situation():
+    return {"ok": True, **_wrap(autopilot.situation)}
+
+
 class RecommendIn(BaseModel):
     iran_id: int
     foreign_id: int
