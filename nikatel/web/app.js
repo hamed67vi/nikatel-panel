@@ -272,7 +272,7 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}"></label>
     ${s ? `<label>Provider<input name="provider" value="${esc(s.provider)}" placeholder="optional"></label>` : `<label>SSH password <small>(optional)</small><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the server"></label>`}
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
-    <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? "" : '<button type="button" onclick="cancelEdit()">Cancel</button>'}
+    <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>
       ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
     <small class="mut">${s ? "Changing a server here only changes how the panel looks at it." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
   </form>`;
@@ -394,7 +394,7 @@ function addModal() {   // one window for adding: a tab for one server, a tab fo
 window.srvManyGo = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Adding… (a few seconds per server)"); try { const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: state.tab, lines: f.get("lines"), password: f.get("password"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22})}); state.manyRes = r.items; const ok = r.items.filter(i => i.ok).length; toast(`${ok ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, ok === r.items.length ? "ok" : "bad"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 const MANY_FORM = () => `<form class="frm" onsubmit="return srvManyGo(event)"><label style="grid-column:1/-1">Servers, one per line: <small>name host [user] [port] — e.g. <code>de4 203.0.113.9</code></small><textarea name="lines" class="ob-raw" required placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
     <label>SSH user<input name="ssh_user" value="root"></label><label>SSH port<input name="ssh_port" type="number" value="22"></label><label>SSH password <small>(the same for all; used once to install the panel's key — leave empty if the key is already there)</small><input name="password" type="password" autocomplete="new-password"></label>
-    <div class="frm-act"><button class="pri" type="submit">Add ${state.tab} servers</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
+    <div class="frm-act"><button class="pri" type="submit">Add ${state.tab} servers</button></div>
     ${state.manyRes ? `<div style="grid-column:1/-1">${state.manyRes.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> — ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div>` : ""}</form>`;
 /* ---- monitoring: real charts with axes, a hover read-out, min / avg / max, a range switch (1 h / 6 h / 24 h / 7 d) ---- */
 const CH = {}; let chSeq = 0;
