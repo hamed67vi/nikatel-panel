@@ -208,6 +208,9 @@ set -- @PORTS@; if [ -n "$1" ]; then C=$(curl -s -m 4 -o /dev/null -w '%{http_co
 echo "NOW $(date +%s)"
 """, {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS}),
 
+    # can this server open a TCP connection to host:port (several at once): "REACH host:port 1|0 <connect ms>". Only connects, sends nothing.
+    "tcp_reach": (r"""for hp in @TARGETS@; do h=${hp%:*}; p=${hp##*:}; ( s=$(date +%s%N); if timeout 4 bash -c "echo > /dev/tcp/$h/$p" 2>/dev/null; then e=$(date +%s%N); echo "REACH $hp 1 $(( (e - s) / 1000000 ))"; else echo "REACH $hp 0 0"; fi ) & done; wait
+""", {"TARGETS": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}( [A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}){0,39}$"}),
     # is the server there at all, and what is it
     "ping": (r"""echo "HOST=$(hostname) $(uname -sr)" """, {}),
 

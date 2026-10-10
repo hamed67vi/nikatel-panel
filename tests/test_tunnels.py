@@ -150,3 +150,10 @@ def test_restart_all_and_health_all_report_the_states(client, monkeypatch):
         assert j["up"] == 1 and j["down"] == 1 and j["degraded"] == 0 and len(j["results"]) == 2
 
     assert client.post("/api/tunnels/999/restart").status_code == 409
+
+
+def test_repair_plan_for_active_services_without_data_restarts_the_tunnel_services():
+    from nikatel.services.actions import _plan_steps
+
+    steps = _plan_steps(_plan(), parse_side(IRAN_OK.replace("NOW 1791566810", "DATA 80 000\nNOW 1791566810")), parse_side(FOREIGN_OK))
+    assert [(s["side"], s["units"]) for s in steps] == [("iran", ["backhaul-iran-tcpmux-9443.service"]), ("foreign", ["backhaul-kharej-tcpmux-9443.service"])]

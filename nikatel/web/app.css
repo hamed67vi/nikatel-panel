@@ -383,3 +383,15 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .card.problems { margin-bottom: 0; overflow: auto; padding: 8px 12px; box-sizing: border-box; } .card.problems h3 { margin: 2px 0 6px; }
 .pb-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-top: 1px solid var(--line); } .pb-row:first-of-type { border-top: 0; } .pb-t { flex: 1; min-width: 0; } .pb-t b { display: block; font-size: 12.5px; font-weight: 700; } .pb-t b .mut { font-weight: 500; font-size: 11px; margin-left: 3px; } .pb-t small { display: block; font-size: 10.5px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pb-row button.sm { flex: none; height: 24px; padding: 0 9px; font-size: 11px; } .pb-more { padding: 6px 0 2px; font-size: 11.5px; } .pb-more a { cursor: pointer; color: var(--mut); }
+
+/* ---- the category chips of the activity box: small enough for one line */
+.act-cats { flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: none; } .act-cats::-webkit-scrollbar { display: none; }
+.act-cats button { flex: none; padding: 1px 7px; height: 22px; font-size: 10.5px; line-height: 1; border-radius: 999px; white-space: nowrap; } .act-cats button small { font-size: 9.5px; margin-left: 2px; }
+.act-cats .sp { flex: 1 0 4px; }
+
+/* ---- dashboard: the three boxes are one size; the heading stays while the list inside scrolls */
+.dash-cols { align-items: stretch; }
+.dash-cols > .card { height: 340px; max-height: none; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; margin-bottom: 0; }
+.dash-cols > .card > h3, .dash-cols > .card > .act-cats { flex: none; }
+.dash-cols .hl-list, .dash-cols .pb-list, .dash-cols .act-list { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.dash-cols > .card.act.big { height: calc(100vh - 150px) !important; }

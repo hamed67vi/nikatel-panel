@@ -148,7 +148,7 @@ async function refresh() {
 }
 setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !state.detect && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
-function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
+function showModal(title, body, cls = "", acts = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span>${acts}<button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
@@ -190,17 +190,15 @@ PAGES.dashboard = async () => {
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   $("#page").innerHTML = `
-    <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3>
+    <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " degraded" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
       ${hrow("VLESS / VMess connectivity", cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
       ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
-      ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div>
+      ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
     <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>${radarCard(rd)}`;
-  const h = $("#page .card.health"), p = $("#page .card.problems"), a = $("#page .card.act");
-  if (h && a && !state.actBig) { const H = Math.max(h.offsetHeight, 300); a.style.height = H + "px"; if (p) p.style.maxHeight = H + "px"; }   // the three boxes of the row are as tall as the health box (at least 300 px)
 };
 state.actBig = localStorage.getItem("nk.actbig") === "1";
 window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
@@ -219,7 +217,7 @@ function problemsCard(o, tl, srv, configs, filtered) {
   (o.jobs.failing || []).forEach(n => row("bad", `Job ${esc(n)} <span class="mut">failing</span>`, "a background job keeps failing", `<button class="sm" onclick="runJob('${esc(n)}')">Run now</button>`));
   (o.jobs.stale || []).forEach(n => row("warn", `Job ${esc(n)} <span class="mut">stale</span>`, "a background job did not run on time", `<button class="sm" onclick="runJob('${esc(n)}')">Run now</button>`));
   const n = rows.length - (down.length > 5 ? 1 : 0) + Math.max(0, down.length - 5);
-  return `<div class="card problems"><h3>Problems <span class="sp"></span><span class="pill ${n ? "err" : "ok"}">${n ? n + " now" : "all clear"}</span></h3>${rows.join("") || '<div class="empty" style="padding:18px 0">Nothing is wrong right now.</div>'}</div>`;
+  return `<div class="card problems"><h3>Problems <span class="sp"></span><span class="pill ${n ? "err" : "ok"}">${n ? n + " now" : "all clear"}</span></h3><div class="pb-list">${rows.join("") || '<div class="empty" style="padding:18px 0">Nothing is wrong right now.</div>'}</div></div>`;
 }
 /* ---- the activity box: categories and problems only */
 const EV_CATS = {tunnels: "Tunnels", configs: "Configs", servers: "Servers", actions: "Repairs", alerts: "Alerts", system: "System", jobs: "Jobs", panels: "Panels", gateway: "Gateway"};
@@ -310,14 +308,14 @@ PAGES.servers = async () => {
   const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
-    return `<tr class="${cls} click" onclick="toggleDetail(${s.id})" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
+    return `<tr class="${cls}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</td>
       <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
       <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>
-      <td><div class="td-act"><button class="sm" onclick="event.stopPropagation();editServer(${s.id})" title="Change name, address, SSH user or port">Edit</button><button class="sm danger" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button></div></td></tr>`;
+      <td><div class="td-act"><button class="sm" onclick="toggleDetail(${s.id})" title="Resources, charts, console and tools of this server">More</button><button class="sm" onclick="event.stopPropagation();editServer(${s.id})" title="Change name, address, SSH user or port">Edit</button><button class="sm danger" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button></div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
   $("#page").innerHTML = `<div class="tiles">
@@ -328,14 +326,14 @@ PAGES.servers = async () => {
     <div class="toolbar">
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
-    <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:14%"><col style="width:6%"><col style="width:6%"><col style="width:14%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:15%">' : '<col style="width:16%"><col style="width:7%"><col style="width:16%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:14%">'}</colgroup>
+    <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:17%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:16%">'}</colgroup>
       <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
       <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
 };
-function srvModal(s) { const f = s.facts || {}; showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`, `<div id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide"); }
+function srvModal(s) { const f = s.facts || {}; showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`, `<div id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide", `<button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port">✎ Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button>`); }
 function tunModal(t) { showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide"); }
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="https://flagcdn.com/20x15/${cc.toLowerCase()}.png" srcset="https://flagcdn.com/40x30/${cc.toLowerCase()}.png 2x" width="20" height="15" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
@@ -348,7 +346,7 @@ function serverDetailHtml(s) {
   const tab = state.wtab || "overview";
   const tabs = `<div class="tabs wtabs">${[["overview", "Overview"], ["charts", "Charts 24 h"], ["tools", "Tools"], ["console", "⌨ Console"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
-  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools">${tool("♥", "Health check", "sample this server now", `checkServer(${s.id})`)}${tool("✎", "Edit", "name, address, SSH user, port", `editServer(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
+  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools">${tool("♥", "Health check", "sample this server now", `checkServer(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
     <div class="wgroup"><h4>Open on my computer</h4><div class="wtools">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
     ${s.role === "foreign" ? `<div class="wgroup"><h4>Security</h4><div class="wtools">${tool("🛰", "Check filtering in Iran", "ping from your Iran servers + check-host.net", `srvFilter(${s.id})`)}${tool("🛡", abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender", abuseOn ? `${f.abuse_rules || ab.rules || "?"} ranges blocked now` : "drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)}</div></div>` : ""}
     <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;

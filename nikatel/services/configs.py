@@ -15,7 +15,8 @@ from sqlalchemy.exc import IntegrityError
 
 from ..db import session
 from ..log import get_logger
-from ..models import Config, ConfigSample, Subscription
+from ..models import Config, ConfigSample, Server, Subscription
+from ..ssh import Node, SSHError, run_script
 from . import probe
 from .events import emit
 
@@ -171,8 +172,10 @@ def fill_meta(limit: int = 20) -> int:
 
 # ------------------------------------------------------------------ sync job
 def sync() -> None:
+    down_tcp: list[str] = []
+
     try:
-        _sync()
+        down_tcp = _sync()
     finally:
         try:
             assign_groups()
@@ -180,8 +183,74 @@ def sync() -> None:
         except Exception:
             log.exception("meta fill failed")
 
+    try:
+        refresh_reach(down_tcp)
+    except Exception:
+        log.exception("reach check failed")
 
-def _sync() -> None:
+
+REACH_TTL = 300     # seconds a reachability answer is kept
+
+
+def _direct_tcp(meta: dict | None) -> bool:
+    """A config that goes straight to a foreign server over raw TCP (also with Reality). For these "the port opens from Iran" is what tells
+    filtered from not filtered: the probe's full proxy test from a data centre fails on paths that work for people."""
+    m = meta or {}
+    return m.get("network") == "tcp" and bool(m.get("address")) and bool(m.get("port"))
+
+
+def refresh_reach(names: list[str]) -> None:
+    """For direct TCP configs the probe calls down: can the first two Iran servers open the port? Kept in meta["reach"] for REACH_TTL seconds."""
+    if not names:
+        return
+
+    now = int(time.time())
+
+    with session() as db:
+        todo: dict[str, list[int]] = {}
+
+        for c in db.scalars(select(Config).where(Config.name.in_(names))):
+            m = c.meta or {}
+
+            if _direct_tcp(m) and now - int((m.get("reach") or {}).get("at", 0)) >= REACH_TTL:
+                todo.setdefault(f"{m['address']}:{m['port']}", []).append(c.id)
+
+        vantage = [Node(s.host, s.ssh_user, s.ssh_port) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)).order_by(Server.id).limit(2))]
+
+    if not todo or not vantage:
+        return
+
+    answers: dict[str, tuple[bool, int | None]] = {}      # host:port -> (opens, fastest connect time in ms)
+    targets = list(todo)
+
+    for i in range(0, len(targets), 40):
+        for node in vantage:
+            try:
+                out = run_script(node, "tcp_reach", {"TARGETS": " ".join(targets[i:i + 40])}, timeout=40)
+            except (SSHError, ValueError):
+                continue
+
+            for ln in out.splitlines():
+                p = ln.split()
+
+                if len(p) >= 3 and p[0] == "REACH":
+                    ok, ms = p[2] == "1", (int(p[3]) if len(p) > 3 and p[3].isdigit() else 0) or None
+                    was_ok, was_ms = answers.get(p[1], (False, None))
+                    answers[p[1]] = (was_ok or ok, min(x for x in (was_ms, ms if ok else None) if x) if (was_ms or (ok and ms)) else None)
+
+    with session() as db:
+        for hp, ids in todo.items():
+            if hp not in answers:
+                continue
+
+            for cid in ids:
+                c = db.get(Config, cid)
+
+                if c is not None:
+                    c.meta = {**(c.meta or {}), "reach": {"ok": answers[hp][0], "ms": answers[hp][1], "at": now}}
+
+
+def _sync() -> list[str]:
     try:
         with _PLOCK:
             pending = set(_PENDING)
@@ -193,9 +262,10 @@ def _sync() -> None:
         with session() as db:
             emit_once_probe_down(db, str(e))
 
-        return
+        return []
 
     now = int(time.time())
+    down_tcp: list[str] = []
 
     with session() as db:
         by_name = {c.name: c for c in db.scalars(select(Config))}
@@ -211,6 +281,22 @@ def _sync() -> None:
                 emit(db, "info", "configs", f"Config {r['name']} appeared on the probe.", r["name"])
 
             seen.add(r["name"])
+            m = c.meta or {}
+
+            if _direct_tcp(m):          # direct TCP: down only when the port really does not open from Iran
+                reach = m.get("reach") or {}
+                fresh = now - int(reach.get("at", 0)) < REACH_TTL * 6
+
+                if r["status"] == "down":
+                    down_tcp.append(c.name)
+
+                    if reach.get("ok") and fresh:
+                        r = {**r, "status": "up", "ping_ms": reach.get("ms"), "error": "the port opens from Iran (the delay is the connect time); the probe's full proxy test does not pass from a data centre"}
+                    elif reach.get("ok") is False and fresh:
+                        r = {**r, "error": "the port does not open from Iran: the address is filtered or its server is off"}
+                elif r["status"] == "up" and reach:
+                    c.meta = {k: v for k, v in m.items() if k != "reach"}
+
             old = c.status
             c.slug, c.port, c.enabled = r["slug"], r["port"], r["enabled"]
             c.ping_ms, c.last_error, c.checked_at = r["ping_ms"], r["error"], r["checked_at"] or now
@@ -237,6 +323,7 @@ def _sync() -> None:
         db.execute(delete(ConfigSample).where(ConfigSample.ts < now - KEEP_SAMPLES_SECONDS))
 
     log.info("sync ok configs=%s up=%s", len(rows), sum(1 for r in rows if r["status"] == "up"))
+    return down_tcp
 
 
 _PROBE_DOWN = {"at": 0}

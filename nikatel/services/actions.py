@@ -136,6 +136,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         t = db.get(Tunnel, tunnel_id)
         name, label = t.name, f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
         plan = plan_for(t)
+        prev = dict(t.detail or {})
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
 
@@ -151,7 +152,10 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         fi, ff = ex.submit(_query, iran_node, plan, True), ex.submit(_query, foreign_node, plan, False)
         iran, foreign = fi.result(), ff.result()
 
-    state, reason = judge(plan, iran, foreign)
+    # the same rule as the monitor: a tunnel that once passed data and now passes none is not healthy, even when every service is active
+    data_seen = bool(prev.get("data_seen")) or iran.data_code not in ("", "000")
+    data_fails = int(prev.get("data_fails", 0)) + 1 if iran.data_code == "000" else 0
+    state, reason = judge(plan, iran, foreign, data_seen, data_fails)
     _say(aid, f"Found: {reason or 'everything looks fine on both servers'} (state {state})")
 
     if iran.error or foreign.error:

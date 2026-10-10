@@ -169,3 +169,34 @@ def test_delete_many_is_instant_and_one_bulk_call(client, monkeypatch):
     ev = client.get("/api/events?domain=configs").json()["events"]
     assert any("could not be deleted" in e["text"] and "locked" in e["text"] for e in ev)
     assert configs_svc._PENDING == set()
+
+def test_a_direct_tcp_config_is_down_only_when_its_port_does_not_open(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import Config
+
+    health = {"ok": True, "configs": [{"name": "Direct", "slug": "direct", "port": 11000, "status": "down", "ping": 0, "checked_at": 1, "error": "curl: (28) SSL connection timeout", "speed": {}}]}
+    monkeypatch.setattr(probe, "health", lambda: health)
+    monkeypatch.setattr(probe, "config_uri", lambda name: "vless://u@d.example:443?type=tcp&security=reality#Direct")
+    client.post("/api/servers", json={"name": "ir1", "host": "9.9.9.9", "role": "iran"})
+    answer = {"v": "REACH d.example:443 1 42\n"}
+    monkeypatch.setattr(configs, "run_script", lambda node, name, params=None, timeout=25: answer["v"])
+
+    def status():
+        c = client.get("/api/configs").json()["configs"][0]
+        return c["status"], c["last_error"]
+
+    configs.sync()                          # the config appears (down)
+    configs.sync()                          # its link is read: the port is tried
+    configs.sync()                          # the port opens from Iran: not filtered, so not down
+    st, err = status()
+    assert st == "up" and "port opens from Iran" in err
+    assert client.get("/api/configs").json()["configs"][0]["ping_ms"] == 42      # the delay is the connect time
+
+    answer["v"] = "REACH d.example:443 0 0\n"   # now the port does not open: that is a filtered address or a dead server
+    with session() as db:
+        c = db.query(Config).one()
+        c.meta = {**c.meta, "reach": {"ok": True, "at": 1}}      # the old answer has expired
+    configs.sync()
+    configs.sync()
+    st, err = status()
+    assert st == "down" and "does not open from Iran" in err
