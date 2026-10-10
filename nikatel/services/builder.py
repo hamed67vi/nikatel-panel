@@ -245,12 +245,58 @@ WantedBy=timers.target
             f"/etc/systemd/system/nikatel-gre-check-{name}.service": check_unit, f"/etc/systemd/system/nikatel-gre-check-{name}.timer": timer}
 
 
-def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: list[PortMap], keepalive: int = 75, nodelay: bool = True) -> tuple[str, str]:
-    """(iran server toml, foreign client toml) - tuned for many users."""
+BH_LOG = ("debug", "info", "warn", "error")
+
+
+def clean_bh_opts(o: dict | None) -> dict:
+    """The tunnel options the operator may change (Advanced settings), range-checked. Missing = the many-users defaults."""
+    o = dict(o or {})
+    out: dict = {}
+
+    def num(key: str, lo: int, hi: int) -> None:
+        if o.get(key) not in (None, ""):
+            try:
+                v = int(o[key])
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} must be a number")
+
+            if not lo <= v <= hi:
+                raise ValueError(f"{key} must be between {lo} and {hi}")
+
+            out[key] = v
+
+    num("heartbeat", 5, 120)
+    num("channel_size", 1024, 65536)
+    num("mux_con", 1, 64)
+    num("mux_framesize", 1024, 131072)
+    num("mux_recievebuffer", 65536, 67108864)
+    num("mux_streambuffer", 16384, 33554432)
+    num("connection_pool", 1, 256)
+    num("dial_timeout", 3, 60)
+    num("retry_interval", 1, 30)
+
+    if o.get("log_level") not in (None, ""):
+        if o["log_level"] not in BH_LOG:
+            raise ValueError("log_level must be debug, info, warn or error")
+
+        out["log_level"] = o["log_level"]
+
+    if "aggressive_pool" in o:
+        out["aggressive_pool"] = bool(o["aggressive_pool"])
+
+    if "tune" in o:
+        out["tune"] = bool(o["tune"])
+
+    return out
+
+
+def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: list[PortMap], keepalive: int = 75, nodelay: bool = True, opts: dict | None = None) -> tuple[str, str]:
+    """(iran server toml, foreign client toml) - tuned for many users. `opts` are the Advanced settings (see clean_bh_opts)."""
+    o = opts or {}
     mux = transport != "tcp"
-    mux_server = ("mux_con = 8\nmux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 8388608\nmux_streambuffer = 262144\n") if mux else ""
-    mux_client = ("mux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 8388608\nmux_streambuffer = 262144\n") if mux else ""
     nd = "true" if nodelay else "false"
+    mux_server = (f"mux_con = {o.get('mux_con', 8)}\nmux_version = 2\nmux_framesize = {o.get('mux_framesize', 32768)}\nmux_recievebuffer = {o.get('mux_recievebuffer', 8388608)}\nmux_streambuffer = {o.get('mux_streambuffer', 262144)}\n") if mux else ""
+    mux_client = (f"mux_version = 2\nmux_framesize = {o.get('mux_framesize', 32768)}\nmux_recievebuffer = {o.get('mux_recievebuffer', 8388608)}\nmux_streambuffer = {o.get('mux_streambuffer', 262144)}\n") if mux else ""
     port_lines = "\n".join(f'    "{p.entry()}",' for p in ports)
     iran = f"""[server]
 bind_addr = "{iran_ip}:{port}"
@@ -258,9 +304,9 @@ transport = "{transport}"
 token = "{token}"
 keepalive_period = {keepalive}
 nodelay = {nd}
-heartbeat = 20
-channel_size = 8192
-log_level = "warn"
+heartbeat = {o.get('heartbeat', 20)}
+channel_size = {o.get('channel_size', 8192)}
+log_level = "{o.get('log_level', 'warn')}"
 web_port = 0
 sniffer = false
 {mux_server}
@@ -272,19 +318,18 @@ ports = [
 remote_addr = "{iran_ip}:{port}"
 transport = "{transport}"
 token = "{token}"
-connection_pool = {16 if mux else 32}
-aggressive_pool = false
+connection_pool = {o.get('connection_pool', 16 if mux else 32)}
+aggressive_pool = {"true" if o.get('aggressive_pool') else "false"}
 keepalive_period = {keepalive}
-dial_timeout = 10
-retry_interval = 2
+dial_timeout = {o.get('dial_timeout', 10)}
+retry_interval = {o.get('retry_interval', 2)}
 nodelay = {nd}
-log_level = "warn"
+log_level = "{o.get('log_level', 'warn')}"
 web_port = 0
 sniffer = false
 {mux_client}
 """
     return iran, foreign
-
 
 def backhaul_unit(config_path: str) -> str:
     return f"""[Unit]
@@ -328,6 +373,7 @@ class Build:
     mtu: int = 0           # 0 = measure
     keepalive: int = 75
     nodelay: bool = True
+    opts: dict = field(default_factory=dict)
     name: str = ""
     created: list[tuple[str, Node]] = field(default_factory=list)   # (what, where) for rollback
 
@@ -438,7 +484,7 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
     return {"ports": [p.listen for p in ports], "mapping": ",".join(p.spec() for p in ports)}
 
 
-def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True) -> int:
+def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True, opts: dict | None = None) -> int:
     """Validate, create the action_log entry, run the build in a thread. Returns the action id."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
@@ -447,6 +493,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
         raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
     ports = parse_ports(ports_text)
+    opts = clean_bh_opts(opts)
 
     if mtu and not 1200 <= mtu <= 1476:
         raise ValueError("MTU must be between 1200 and 1476 (0 = measure)")
@@ -475,7 +522,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
         db.add(entry)
         db.flush()
         aid = entry.id
-        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), name=forced_name)
+        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name)
         db.expunge(iran)
         db.expunge(foreign)
 
@@ -551,7 +598,7 @@ def _build(b: Build) -> None:
         b.mtu = max(1200, min(a or 1400, c or 1400, 1360))
         _say(aid, f"Path MTU measured: Iran side {a or '?'}, foreign side {c or '?'} → GRE MTU {b.mtu}")
 
-    for label, node in (("Iran", iran), ("foreign", foreign)):
+    for label, node in (("Iran", iran), ("foreign", foreign)) if b.opts.get("tune", True) else ():
         try:
             _say(aid, f"Kernel tuning on the {label} server: " + run_action(node, "sysctl_tune").strip().splitlines()[-1])
         except (SSHError, ValueError) as e:
@@ -599,7 +646,7 @@ def _build(b: Build) -> None:
     _say(aid, f"GRE holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
 
     # 5. backhaul both sides
-    iran_toml, foreign_toml = backhaul_texts(iran_ip, port, token, b.transport, b.ports, b.keepalive, b.nodelay)
+    iran_toml, foreign_toml = backhaul_texts(iran_ip, port, token, b.transport, b.ports, b.keepalive, b.nodelay, b.opts)
     iran_cfg, foreign_cfg = f"/etc/backhaul/iran-{b.transport}-{port}.toml", f"/etc/backhaul/kharej-{b.transport}-{port}.toml"
     iran_unit, foreign_unit = f"backhaul-iran-{b.transport}-{port}.service", f"backhaul-kharej-{b.transport}-{port}.service"
 
@@ -646,7 +693,7 @@ def _build(b: Build) -> None:
     with session() as db:
         t = Tunnel(name=b.name, type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
-                   record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay,
+                   record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel"},
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
@@ -734,4 +781,4 @@ def rebuild_tunnel(tunnel_id: int) -> int:
         kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
         return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), rec.get("opts") or {}, forced_name=name)
 
-    return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)))
+    return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)), opts=rec.get("opts") or {})

@@ -66,6 +66,22 @@ def test_backhaul_nodelay_switch():
     assert "nodelay = false" in iran and "nodelay = false" in foreign and "nodelay = true" not in iran
 
 
+def test_backhaul_advanced_options():
+    from nikatel.services.builder import clean_bh_opts
+
+    o = clean_bh_opts({"heartbeat": "30", "connection_pool": 48, "log_level": "info", "aggressive_pool": True, "tune": False, "mux_con": ""})
+    assert o == {"heartbeat": 30, "connection_pool": 48, "log_level": "info", "aggressive_pool": True, "tune": False}
+    iran, foreign = backhaul_texts("10.1.2.1", 9900, "tok", "tcpmux", parse_ports("8072"), 90, True, o)
+    assert "heartbeat = 30" in iran and 'log_level = "info"' in iran and "mux_con = 8" in iran and "keepalive_period = 90" in iran
+    assert "connection_pool = 48" in foreign and "aggressive_pool = true" in foreign and 'log_level = "info"' in foreign
+    plain = backhaul_texts("10.1.2.1", 9900, "tok", "tcp", parse_ports("8072"))[1]
+    assert "connection_pool = 32" in plain and "aggressive_pool = false" in plain and "dial_timeout = 10" in plain
+
+    for bad in ({"heartbeat": 1}, {"log_level": "loud"}, {"connection_pool": "many"}):
+        with pytest.raises(ValueError):
+            clean_bh_opts(bad)
+
+
 def test_parse_facts():
     f = parse_facts("IPS=1.1.1.1/24 10.1.1.1/30\nLINKS=eth0 fi-ir1\nLISTEN=22 9900\nUNITS=backhaul-iran-tcpmux-9900.service\nBROKEN=\nGRE_MOD=1\nBACKHAUL=v0.7.2\nIPTABLES=1\n")
     assert f["listen"] == {22, 9900} and f["gre_mod"] and f["backhaul"] and "fi-ir1" in f["links"] and f["broken"] == []

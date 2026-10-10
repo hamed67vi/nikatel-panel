@@ -32,7 +32,7 @@ def build(body: BuildIn):
             if body.transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
                 raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
-            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive, nodelay=body.nodelay)
+            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=body.opts)
         else:
             from ..services import build_other
 
