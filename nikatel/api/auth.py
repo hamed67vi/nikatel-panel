@@ -36,6 +36,7 @@ class CodeIn(BaseModel):
 class PasswordIn(BaseModel):
     current: str = Field(max_length=256)
     new: str = Field(max_length=256)
+    logout_others: bool = True
 
 
 class ResetIn(BaseModel):
@@ -111,12 +112,12 @@ def change_password(body: PasswordIn, request: Request, response: Response, user
         raise HTTPException(400, "the current password is wrong")
 
     try:
-        auth.set_password(body.new)
+        auth.set_password(body.new, logout_others=body.logout_others)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    _cookie(request, response, user)       # this browser stays signed in, every other session ends
-    _audit("warn", f"The password was changed (from {ip}); every other session was signed out.")
+    _cookie(request, response, user)       # this browser stays signed in; the others end when the box was ticked
+    _audit("warn", f"The password was changed (from {ip})" + ("; every other session was signed out." if body.logout_others else "; other sessions were kept."))
     return {"ok": True}
 
 

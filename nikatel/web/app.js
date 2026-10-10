@@ -1310,8 +1310,9 @@ PAGES.settings = async () => {
     <div class="card"><h3>Password</h3>
       <form class="frm one" onsubmit="return changePassword(event)">
         <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
-        <label>New password<input name="new" type="password" required minlength="8" autocomplete="new-password"></label>
-        <label>Repeat<input name="again" type="password" required minlength="8" autocomplete="new-password"></label>
+        <label>New password <small>(at least 10 characters)</small><input name="new" type="password" required minlength="10" autocomplete="new-password"></label>
+        <label>Repeat<input name="again" type="password" required minlength="10" autocomplete="new-password"></label>
+        <label class="chk"><input name="logout_others" type="checkbox" checked> sign out every other session (other browsers and devices)</label>
         <div class="frm-act"><button class="pri" type="submit">Change password</button></div></form></div>
 
     <div class="card"><h3>Effective settings</h3><div class="kv one">
@@ -1333,7 +1334,7 @@ PAGES.settings = async () => {
 const sec = {setup: null, codes: null};
 async function secLoad() {
   const box = $("#sec-box"); if (!box) return;
-  const [s, lg] = await Promise.all([api("/api/auth/security"), api("/api/auth/security-log").catch(() => ({events: []}))]);
+  const s = await api("/api/auth/security");
   const pill = $("#sec-pill"); if (pill) { pill.textContent = s.totp_enabled ? "2-step on" : "2-step OFF"; pill.className = "pill " + (s.totp_enabled ? "ok" : "err"); }
   const url = s.entry_path ? location.origin + "/" + s.entry_path : "";
   const codes = sec.codes ? `<div class="sec-sec" style="border-color:var(--warn)"><h4>⚠ Your recovery codes - shown once</h4><small class="mut">Each code works one time: to sign in without the app, or to reset a forgotten password. Keep them somewhere safe and offline.</small><div class="sec-codes">${sec.codes.map(c => `<code>${esc(c)}</code>`).join("")}</div><div class="frm-act"><button class="sm" onclick="secDownloadCodes()">⬇ Download .txt</button><button class="sm pri" onclick="sec.codes=null;secLoad()">I saved them</button></div></div>` : "";
@@ -1346,7 +1347,7 @@ async function secLoad() {
     <div class="sec-sec"><h4>Secret entry path</h4><small class="mut">With a path set, the panel answers “404 Not Found” to everyone, on every address, until the browser has opened the secret address once. Scanners and bots find nothing.</small>
       ${url ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a><small class="err">Write this address down. If you lose it: <code>nikatel entry-path --clear</code> on the server.</small>` : '<div class="irow"><span>Status</span><div><b class="err">Off</b> - the panel answers on its normal address</div></div>'}
       <div class="frm-act"><button class="sm pri" onclick="secPath(true)">${url ? "Change the path" : "Turn on with a random path"}</button>${url ? '<button class="sm" onclick="secPath(false)">Choose my own</button><button class="sm danger" onclick="secPathOff()">Turn off</button>' : '<button class="sm" onclick="secPath(false)">Choose my own</button>'}</div></div>
-    <div class="sec-sec"><h4>Security log</h4>${(lg.events || []).map(e => `<div class="ev ${e.level === "bad" ? "bad" : e.level === "warn" ? "warn" : "info"}"><time>${ago(e.ts)} ago</time><i></i><span>${esc(e.text)}</span></div>`).join("") || '<div class="mut">Nothing yet.</div>'}</div>`;
+`;
 }
 const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
 window.secSetup = async () => { const pw = await askPw(); if (!pw) return; try { sec.setup = await api("/api/auth/2fa/setup", {method: "POST", body: JSON.stringify({password: pw})}); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -1431,7 +1432,7 @@ window.changePassword = async e => {
   e.preventDefault();
   const f = new FormData(e.target);
   if (f.get("new") !== f.get("again")) { toast("✕ the two new passwords differ", "bad"); return false; }
-  try { await api("/api/auth/password", {method: "POST", body: JSON.stringify({current: f.get("current"), new: f.get("new")})}); toast("✓ Password changed", "ok"); e.target.reset(); }
+  try { await api("/api/auth/password", {method: "POST", body: JSON.stringify({current: f.get("current"), new: f.get("new"), logout_others: f.get("logout_others") === "on"})}); toast("✓ Password changed" + (f.get("logout_others") === "on" ? " - every other session was signed out" : ""), "ok"); e.target.reset(); }
   catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };

@@ -79,15 +79,15 @@ def check_strength(password: str, user: str = "admin") -> None:
         raise ValueError("this password is too easy to guess")
 
 
-def set_password(password: str) -> None:
-    """Store a new password. Keeps the 2FA / recovery settings, bumps the session epoch (every other session ends),
-    and removes the first-start password file."""
+def set_password(password: str, logout_others: bool = True) -> None:
+    """Store a new password. Keeps the 2FA / recovery settings, bumps the session epoch (every other session ends,
+    unless `logout_others` is False), and removes the first-start password file."""
     check_strength(password)
 
     with _LOCK:
         d = load()
         salt = os.urandom(16)
-        d.update({"user": "admin", "salt": salt.hex(), "hash": _hash(password, salt).hex(), "epoch": int(d.get("epoch", 0)) + 1, "changed_at": int(time.time())})
+        d.update({"user": "admin", "salt": salt.hex(), "hash": _hash(password, salt).hex(), "epoch": int(d.get("epoch", 0)) + (1 if logout_others else 0), "changed_at": int(time.time())})
         save(d)
 
     try:

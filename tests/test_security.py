@@ -69,6 +69,11 @@ def test_changing_the_password_ends_other_sessions(client):
     assert client.get("/api/auth/me").status_code == 200           # this browser stays in
     assert other.get("/api/auth/me").status_code == 401            # the other one is out
     assert client.post("/api/auth/password", json={"current": "a-much-better-password", "new": "short"}).status_code == 400
+    # with the box unticked the other sessions stay
+    again = TestClient(client.app)
+    assert again.post("/api/auth/login", json={"user": "admin", "password": "a-much-better-password"}).status_code == 200
+    assert client.post("/api/auth/password", json={"current": "a-much-better-password", "new": "yet-another-password", "logout_others": False}).status_code == 200
+    assert again.get("/api/auth/me").status_code == 200
 
 
 def test_forgotten_password_reset_with_a_recovery_code(client):
