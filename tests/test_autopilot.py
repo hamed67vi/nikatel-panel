@@ -256,3 +256,13 @@ def test_a_busy_tunnel_test_makes_the_repair_wait_not_fail(monkeypatch):
         raised = True
 
     assert raised
+
+
+def test_probe_verdict_tells_route_from_foreign_server():
+    from nikatel.services.autopilot import probe_verdict
+
+    good = probe_verdict("fi1", "ir1", "ir2", {"score": 80, "latency_ms": 40, "loss_pct": 0})
+    assert "route between ir1 and fi1" in good and "switched off" in good
+    poor = probe_verdict("fi1", "ir1", "ir2", {"score": 20, "latency_ms": 300, "loss_pct": 30})
+    assert "fi1 or its provider" in poor
+    assert "no result" in probe_verdict("fi1", "ir1", "ir2", None)

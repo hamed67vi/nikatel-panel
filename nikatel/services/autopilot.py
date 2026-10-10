@@ -606,11 +606,73 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
         healed = failover.after_ladder(aid, tunnel_id, d["cause"])     # the move to another Iran server, with the DNS: asks first unless the failover is automatic
 
+        if not healed and not storm_now():
+            probe_other_iran(aid, snap, d["kind"])                     # only a test from one other Iran server (nothing is moved, nothing shows in the cards)
     with session() as db:
         emit(db, "ok" if healed else "bad", "actions", f"Smart repair of {snap['label']} " + ("succeeded." if healed else "did not heal it."), snap["name"])
 
     _say(aid, f"{snap['name']}: " + ("works again." if healed else "still not up. A human should look at it."), done=finish, ok=healed)
     return healed
+
+
+def probe_verdict(foreign: str, iran: str, other: str, res: dict | None, good: int = 50) -> str:
+    """Pure: what a test of the foreign server from ANOTHER Iran server says about the cut tunnel."""
+    if not res or res.get("score") is None:
+        return f"The test from {other} gave no result: nothing can be said about {foreign} from there."
+
+    line = f"{res.get('latency_ms')} ms, {res.get('loss_pct')} % loss, score {res.get('score')}/100"
+
+    if (res.get("score") or 0) >= good:
+        return (f"From {other} the foreign server {foreign} works well ({line}): it is the route between {iran} and {foreign} (or {iran} itself) that is bad, not {foreign}. "
+                f"Moving the tunnel to {other} would fix it, but moving (a new server IP in the DNS) is switched off for now: nothing was changed.")
+
+    return f"From {other} the foreign server {foreign} is poor too ({line}): the problem is {foreign} or its provider, not the Iran server. Nothing was changed."
+
+
+def probe_other_iran(aid: int, snap: dict, kind: str) -> None:
+    """A cut tunnel that no step could heal: ONE temporary test tunnel from the best other Iran server to the same foreign server tells whether the fault is the
+    route / the Iran server or the foreign server. The temporary tunnel is hidden from the cards and removed again; the real tunnel is not touched."""
+    try:
+        usable = [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r.get("score", 0) > 0 and r["id"] != snap["iran_id"]]
+    except ValueError as e:
+        _say(aid, f"No test from another Iran server: {str(e)[:100]}")
+        return
+
+    if not usable:
+        _say(aid, "No other Iran server is free for a test from there.")
+        return
+
+    other = usable[0]
+    _say(aid, f"Testing the foreign server from another Iran server ({other['name']}): a temporary tunnel is built, measured and removed (it is not shown in the cards)…")
+    test_kind = kind if kind in tunnel_test.KIND_KEYS else "tcpmux"
+    jid = None
+
+    for _ in range(60):                                   # one tunnel test at a time
+        try:
+            jid = tunnel_test.compare_start(other["id"], snap["foreign_id"], [test_kind], measure="full")
+            break
+        except ValueError as e:
+            if "still running" not in str(e):
+                _say(aid, f"The test from {other['name']} could not start: {str(e)[:120]}")
+                return
+
+            time.sleep(10)
+
+    res, end = None, time.time() + 900
+
+    while jid and time.time() < end:
+        time.sleep(5)
+        job = tunnel_test.compare_status(jid)
+
+        if job["done"]:
+            res = (job.get("results") or [None])[0]
+            break
+
+    with session() as db:
+        iran, foreign = db.get(Server, snap["iran_id"]), db.get(Server, snap["foreign_id"])
+        names = (iran.name if iran else "the Iran server", foreign.name if foreign else "the foreign server")
+
+    _say(aid, probe_verdict(names[1], names[0], other["name"], res))
 
 
 def smart_fix_start(tunnel_id: int, level: str = "switch", source: str = "manual") -> int:

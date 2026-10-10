@@ -885,3 +885,5 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 /* the busy chip names what is being done, short; the whole name shows very faintly under the pointer */
 .busy-detail { max-width: 46px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: .75; font-weight: 600; transition: max-width .35s ease, opacity .35s ease; }
 .busy-chip:hover .busy-detail { max-width: 180px; opacity: .4; }
+
+.dup { margin-left: 6px; font-size: 10px; font-weight: 800; padding: 0 6px; border-radius: 999px; color: var(--warn, #f5c542); border: 1px solid rgba(245,197,66,.45); background: rgba(245,197,66,.10); vertical-align: 1px; cursor: help; }
