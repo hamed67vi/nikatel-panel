@@ -234,6 +234,21 @@ function glassAsk(text, {input = false, value = "", danger, password = false} = 
     setTimeout(() => { if (inp) { inp.focus(); inp.select(); } else $(".ask-yes", el).focus(); }, 30);
   });
 }
+/* a question with several answers: resolves to the chosen value, or null on Cancel / Esc / a click outside */
+function glassChoice(text, choices) {
+  return new Promise(resolve => {
+    const old = $("#ask"); if (old) old.remove();
+    const el = document.createElement("div"); el.id = "ask";
+    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic">?</div><div class="ask-text">${esc(text)}</div><div class="ask-act ask-choices">${choices.map((c, i) => `<button class="${c.cls || ""}" data-i="${i}">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ""}</button>`).join("")}<button class="ask-no">Cancel</button></div></div></div>`;
+    document.body.appendChild(el);
+    const done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
+    function key(e) { if (e.key === "Escape") { e.stopPropagation(); done(null); } }
+    document.addEventListener("keydown", key, true);
+    el.querySelectorAll("button[data-i]").forEach(b => { b.onclick = () => done(choices[+b.dataset.i].v); });
+    $(".ask-no", el).onclick = () => done(null);
+    $(".ask-ov", el).onmousedown = e => { if (e.target.classList.contains("ask-ov")) done(null); };
+  });
+}
 window.gconfirm = (text, o) => glassAsk(text, o);
 window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({input: true, value}, o));
 window.closeModal = () => {
@@ -1048,6 +1063,13 @@ window.startBuild = async e => {
     if (c.busy.length) { box.innerHTML = `<div class="fx-line bad"><b>!</b>Port ${c.busy[0].port} is already in use on ${esc(c.iran)} (${esc(c.busy[0].by)}): choose another Iran server or another port. Nothing was built.</div>`; return false; }
     if (c.conflicts.length && !seen) { box.innerHTML = '<div class="fx-line plan"><b>›</b>A tunnel already carries this port to the foreign server: decide above (replace it or keep it), then press Build again.</div>'; return false; }
     body.replace_ids = [...form.querySelectorAll("input[name^=replace_]:checked")].map(x => +x.name.slice(8));
+    const dup = (c.same_foreign || []).filter(x => !body.replace_ids.includes(x.id));        // the foreign server already ends a tunnel that is not being replaced: ask what to do with it
+    if (dup.length) {
+      const what = await glassChoice(`${c.foreign} already has ${dup.length === 1 ? "a tunnel" : dup.length + " tunnels"}: ${dup.map(x => `${x.name} (${x.iran}, ${x.state}, port ${x.ports.join(",") || "-"})`).join("; ")}.`,
+        [{v: "replace", label: "Remove it and replace it", cls: "danger-fill", note: "the old one is removed first, then the new one is built"}, {v: "second", label: "Add as a second tunnel", cls: "pri", note: "the old one stays; both run"}]);
+      if (!what) { box.innerHTML = '<div class="fx-line plan"><b>›</b>Nothing was built.</div>'; return false; }
+      if (what === "replace") body.replace_ids = [...new Set([...body.replace_ids, ...dup.map(x => x.id)])].slice(0, 5);
+    }
     body.dns_follow = body.replace_ids.length > 0 && !!form.querySelector("input[name=dns_follow]:checked");
     body.dns_names = form.querySelector("input[name=dns_set]:checked") ? String(f.get("dns_names") || "").split(/[,\s]+/).filter(Boolean) : [];
     box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';

@@ -42,9 +42,12 @@ def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> d
         if iran_id and (iran is None or iran.role != "iran"):
             raise ValueError("choose an Iran server")
 
-        busy, conflicts = [], []
+        busy, conflicts, same_foreign = [], [], []
 
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
+            if t.foreign_server_id == foreign.id:       # every tunnel that already ends on this foreign server, with or without a common port: the form asks what to do with it
+                same_foreign.append({"id": t.id, "name": t.name, "iran": t.iran.name, "state": t.state, "ports": [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()]})
+
             ps = sorted({int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()} & wanted)
 
             if not ps:
@@ -58,6 +61,7 @@ def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> d
 
         node = Node(iran.host, iran.ssh_user, iran.ssh_port) if iran is not None else None
         iran_name = iran.name if iran is not None else ""
+        foreign_name = foreign.name
 
     error = ""
 
@@ -72,7 +76,7 @@ def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> d
         except (SSHError, ValueError) as e:
             error = f"{iran_name} could not be inspected: {str(e)[:120]}"
 
-    return {"iran": iran_name, "busy": busy, "conflicts": conflicts, "error": error, "can_build": not busy}
+    return {"iran": iran_name, "foreign": foreign_name, "busy": busy, "conflicts": conflicts, "same_foreign": same_foreign, "error": error, "can_build": not busy}
 
 
 def _follow(aid: int, build_aid: int, limit: int = 1500) -> bool:

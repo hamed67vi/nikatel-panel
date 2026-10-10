@@ -213,3 +213,10 @@ def test_the_smart_test_leaves_a_poor_server_and_takes_the_next(client, monkeypa
 
     text = "\n".join(s["story"])
     assert tested == [w["ir1"], w["ir2"]] and "ir1: 100 ms, 0 % loss, score 47/100 - poor, trying the next Iran server" in text and s["story"][-1] == "Best server: ir2" and s["ok"] is True
+
+
+def test_precheck_lists_every_tunnel_that_already_ends_on_the_foreign_server(client):
+    w = _world()
+    r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9000"}).json()
+    assert r["conflicts"] == [] and r["foreign"] == "fi1"                       # no port in common, but a second tunnel to fi1 is still asked about
+    assert sorted(x["name"] for x in r["same_foreign"]) == ["fi1-ir1", "fi1-ir1-b"]

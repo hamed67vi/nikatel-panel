@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.5 - 2026-10-11 - A second tunnel to the same foreign server is asked about
+
+* Create tunnel: when the foreign server already has a tunnel (and it is not ticked for replacing), pressing Build opens a box: **Remove it and replace it** or **Add as a second tunnel** (or Cancel). Nothing is built silently any more.
+
 ## 1.14.4 - 2026-10-11 - Search boxes in their own bar, a small search on the dashboard
 
 * The search box of Nodes, Tunnels and Configs now sits in its own bar under the buttons. On Nodes and Tunnels it hides rows at once without redrawing the page, so the buttons beside it no longer jump.
