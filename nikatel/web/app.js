@@ -194,15 +194,14 @@ PAGES.servers = async () => {
   const byIp = {};
   (pnl.panels || []).forEach(p => (p.nodes || []).forEach(n => { const ip = String(n.address || "").trim(); if (ip) (byIp[ip] = byIp[ip] || []).push({panel: p.name, status: n.status, name: n.name}); }));
   const chips = s => (byIp[s.host] || []).map(x => { const ok = x.status === "connected"; return `<span class="mchip ${ok ? "ok" : "bad"}" title="Node ${esc(x.name)} in panel ${esc(x.panel)}: ${esc(x.status || "?")}">${ok ? "Panel ✓" : "Panel ✕"} ${esc(x.panel)}</span>`; }).join("");
-  const row = s => {   // one row like the old panel: Server | Status | IPv4 | GRE | RAM | CPU | Disk
+  const row = s => {   // the old panel's columns - Server | Status | IPv4 | GRE | RAM | CPU | Disk - in this panel's own look
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
-    const tone = !s.enabled ? "" : s.online === false ? "bad" : srvProblem(s) ? "warn" : s.online ? "good" : "";
-    return `<div class="srv-row ${tone}" onclick="toggleDetail(${s.id})" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
-      <div class="srv-name">${s.role === "foreign" && s.country ? flagImg(s.country) : ""}<b>${esc(s.name)}</b><span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</div>
-      <div class="srv-st"><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}${chips(s)}</div>
-      <div class="srv-ip" onclick="event.stopPropagation();copyText('${esc(s.host)}')" title="Click to copy">${esc(s.host)}</div>
-      <div class="srv-gre">${greCell(s)}</div>
-      <div>${pct(f.ram, 80, 90)}</div><div>${pct(f.cpu, 80, 92)}</div><div>${pct(f.disk, 85, 95)}</div></div>`;
+    const cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
+    return `<tr class="${cls} click" onclick="toggleDetail(${s.id})" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
+      <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</td>
+      <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>${blocked ? ' <span class="pill err" title="Not reachable from inside Iran">filtered</span>' : ""}${chips(s)}</td>
+      <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
+      <td>${pct(f.ram, 80, 90)}</td><td>${pct(f.cpu, 80, 92)}</td><td>${pct(f.disk, 85, 95)}</td></tr>`;
   };
   const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else hideModal();
@@ -215,8 +214,9 @@ PAGES.servers = async () => {
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button><button onclick="srvMany()" title="Several servers at once, connected with one password">+ Several</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : state.edit === "many" ? `<div class="card">${MANY_FORM()}</div>` : ""}
-    <div class="srv-list"><div class="srv-row srv-th"><div>Server</div><div>Status</div><div>IPv4</div><div>GRE</div><div>RAM</div><div>CPU</div><div>Disk</div></div>
-      ${rows.map(row).join("") || '<div class="empty">No server.</div>'}</div>`;
+    <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:16%"><col style="width:13%"><col style="width:9%"><col style="width:13%"><col style="width:13%"><col style="width:12%"></colgroup>
+      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th></tr></thead>
+      <tbody>${rows.map(row).join("") || '<tr><td colspan="7" class="empty">No server.</td></tr>'}</tbody></table>`;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
