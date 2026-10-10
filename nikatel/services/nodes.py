@@ -117,12 +117,19 @@ def connect(server_id: int, password: str) -> dict:
 
     if r.returncode != 0 or "KEY_INSTALLED" not in r.stdout:
         if "permission denied" in low:
-            raise RuntimeError("wrong user or password")
+            msg = "wrong user or password"
+        elif "refused" in low:
+            msg = f"SSH port {node.port} is closed"
+        else:
+            msg = "SSH connection failed: " + (r.stdout.strip().splitlines() or ["no answer"])[-1][:140]
 
-        if "refused" in low:
-            raise RuntimeError(f"SSH port {node.port} is closed")
+        with session() as db:                       # the server list shows why this server has no login, until it has one
+            srv = db.get(Server, server_id)
 
-        raise RuntimeError("SSH connection failed: " + (r.stdout.strip().splitlines() or ["no answer"])[-1][:140])
+            if srv is not None:
+                srv.last_error = ("SSH login failed: " + msg)[:300]
+
+        raise RuntimeError(msg)
 
     out = run_script(node, "ping", timeout=25)
     hostname = out.replace("HOST=", "").strip()[:80]

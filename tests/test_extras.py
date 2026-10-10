@@ -95,3 +95,18 @@ def test_default_marzban_certificate_is_kept_and_checked(client):
     assert r.status_code == 200 and r.json()["marzban_cert"].startswith("-----BEGIN CERTIFICATE-----") and "\n\n" not in r.json()["marzban_cert"]
     assert client.get("/api/settings/nodes").json()["marzban_cert"] == r.json()["marzban_cert"]
     assert client.put("/api/settings/nodes", json={"marzban_cert": ""}).json()["marzban_cert"] == ""
+
+
+def test_a_wrong_password_is_remembered_as_the_servers_error(client, monkeypatch):
+    import subprocess
+
+    from nikatel.services import nodes
+
+    sid = _server()
+    monkeypatch.setattr(nodes.shutil if hasattr(nodes, "shutil") else subprocess, "which", lambda x: "/usr/bin/" + x, raising=False)
+    monkeypatch.setattr(nodes, "_pubkey", lambda: "ssh-ed25519 AAAA test")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 255, stdout="Permission denied, please try again.\n"))
+    r = client.post(f"/api/servers/{sid}/connect", json={"password": "wrong"})
+    assert r.status_code == 502 and "wrong user or password" in r.json()["detail"]
+    s = client.get(f"/api/servers/{sid}").json()
+    assert s["last_error"] == "SSH login failed: wrong user or password" and s["online"] is None

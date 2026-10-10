@@ -331,6 +331,8 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <small class="mut">${s ? "Changing a server here only changes how the panel looks at it." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
   </form>`;
 
+/* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
+const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
   const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
@@ -364,12 +366,12 @@ PAGES.servers = async () => {
     const cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
     return `<tr class="${cls}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</td>
-      <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
+      <td>${noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
       <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>
-      <td><div class="td-act"><button class="sm" onclick="toggleDetail(${s.id})" title="Resources, charts, console and tools of this server">More</button><button class="sm" onclick="event.stopPropagation();editServer(${s.id})" title="Change name, address, SSH user or port">Edit</button><button class="sm danger" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button></div></td></tr>`;
+      <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}<button class="sm" onclick="toggleDetail(${s.id})" title="Resources, charts, console and tools of this server">More</button><button class="sm" onclick="event.stopPropagation();editServer(${s.id})" title="Change name, address, SSH user or port">Edit</button><button class="sm danger" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button></div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
   $("#page").innerHTML = `<div class="tiles">
@@ -544,6 +546,19 @@ window.editServer = id => { state.edit = id; state.open = id; refresh(); };
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
 window.openBuild = () => { state.build = true; state.open = null; refresh(); };
 window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "list") { state.build = true; go("tunnels"); state.sub.tunnels = "list"; refresh(); } else openBuild(); };
+/* the SSH password was wrong (or the server did not answer): ask for it again, three tries, instead of leaving a server that silently has no login */
+async function connectWithPrompt(id, name, firstError) {
+  let why = firstError;
+  for (let i = 0; i < 3; i++) {
+    const pw = await gprompt(`${name}: ${why}. Enter the SSH password again (Cancel to do it later with the 🔑 Password button).`, "", {password: true});
+    if (pw == null || pw === "") break;
+    try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Connected: " + r.hostname, "ok"); refresh(); return true; }
+    catch (err) { why = err.message; if (!/password|user|denied/i.test(why)) break; }
+  }
+  toast(`✕ ${name} is added but has no login yet: ${why}. Use 🔑 Password on its row.`, "bad"); refresh();
+  return false;
+}
+window.serverPassword = (id, name, why) => connectWithPrompt(id, name, why || "enter the SSH password");
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
@@ -559,7 +574,7 @@ window.saveServer = async (e, id) => {
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
       toast("Server added — connecting with the password…");
       try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Added and connected: " + r.hostname, "ok"); }
-      catch (err) { connected = false; toast("Added, but not connected: " + err.message, "bad"); }
+      catch (err) { connected = await connectWithPrompt(saved.id, body.name, err.message); }
     } else {          // no password: the panel's key must already be on the server - try it
       try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
