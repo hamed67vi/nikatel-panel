@@ -514,6 +514,8 @@ button::after { transition: opacity .3s ease; }
 /* the bot section: one size for tabs, toolbar buttons and row buttons, nothing clipped */
 .sb-tabs { gap: 4px; padding: 4px; } .sb-tabs button { height: 30px; padding: 0 12px; font-size: 12.5px; border-radius: 10px; }
 .page .toolbar button, .sb-quick button { height: 32px; font-size: 12.5px; padding: 0 14px; } .page .toolbar button.sm { height: 28px; padding: 0 11px; font-size: 12px; }
+/* the button rows above the lists sit in a frame of their own */
+.toolbar:not(.card .toolbar):not(.modal .toolbar):not(.sub-nodes .toolbar) { padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); box-shadow: var(--edge); margin-bottom: 12px; }
 .td-act { min-width: max-content; } .td-act button.sm { height: 26px; min-width: 46px; padding: 0 10px; font-size: 11.5px; }
 .sb-quick h3 small { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; }
 .qa-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 10px; align-items: end; margin: 6px 0 8px; } .qa-row label { display: grid; gap: 4px; font-size: 11.5px; color: var(--mut); min-width: 0; }
