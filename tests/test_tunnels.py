@@ -104,6 +104,7 @@ def test_judge_catches_a_tunnel_that_runs_but_passes_no_data():
     broken = IRAN_OK.replace("NOW 1791566810", "DATA 80 000\nNOW 1791566810")
     healthy = IRAN_OK.replace("NOW 1791566810", "DATA 80 404\nNOW 1791566810")
     assert parse_side(broken).data_code == "000" and parse_side(broken).data_port == 80 and parse_side(healthy).data_code == "404"
+    assert parse_side(IRAN_OK.replace("NOW 1791566810", "DATA 80 000000\nNOW 1791566810")).data_code == "000"      # what a failed curl printed twice in the field
     assert judge(_plan(), parse_side(healthy), parse_side(FOREIGN_OK), True, 0) == ("up", "")
     state, why = judge(_plan(), parse_side(broken), parse_side(FOREIGN_OK), True, 1)
     assert state == "degraded" and "no data comes back" in why and "80" in why

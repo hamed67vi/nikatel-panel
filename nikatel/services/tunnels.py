@@ -131,7 +131,7 @@ def parse_side(out: str) -> Side:
         elif p[0] == "LISTEN" and len(p) >= 3:
             s.listen[int(p[1])] = p[2] != "0"
         elif p[0] == "DATA" and len(p) >= 3:
-            s.data_port, s.data_code = int(p[1]), p[2]
+            s.data_port, s.data_code = int(p[1]), ("000" if set(p[2]) == {"0"} else p[2])      # curl prints 000 itself when it fails: "000000" and "0" mean the same
         elif p[0] == "NOW" and len(p) >= 2:
             s.now = int(p[1])
 
