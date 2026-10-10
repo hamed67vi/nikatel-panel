@@ -52,6 +52,7 @@ select option { background: #0f1430; color: var(--text); }
 .login-box label { display: grid; gap: 5px; font-size: 12px; color: var(--mut); } .login-box input { width: 100%; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 2px 4px; } .brand > div { display: grid; line-height: 1.15; } .brand b { font-size: 17px; letter-spacing: 2px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; } .brand small { color: var(--mut); font-size: 10.5px; letter-spacing: .3px; }
 .brand .logo { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 11px; background: var(--grad); color: #fff; font-style: normal; font-weight: 800; font-size: 17px; box-shadow: 0 6px 18px rgba(124,131,255,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+.brand .logo-img { width: 36px; height: 36px; flex: none; filter: drop-shadow(0 4px 12px rgba(100,130,255,.35)); }
 .login-box .brand { justify-content: center; }
 
 /* ---- layout */
