@@ -116,7 +116,8 @@ nav i { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 99
 /* ---- forms */
 .frm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
 .frm.one { grid-template-columns: 1fr; max-width: 380px; }
-.frm label { display: grid; gap: 4px; font-size: 11.5px; color: var(--mut); } .frm label.chk { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; align-self: end; height: 32px; }
+.frm label { display: flex; flex-wrap: wrap; align-content: flex-end; align-items: baseline; gap: 4px 6px; font-size: 11.5px; color: var(--mut); }   /* title and hint on one line, the field below: fields line up across the row */
+.frm label > input, .frm label > select, .frm label > textarea { flex-basis: 100%; width: 100%; } .frm label.chk { flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: 8px; align-self: end; height: 32px; } .frm label.chk > input { flex-basis: auto; width: auto; }
 .frm input, .frm select { width: 100%; } .frm .frm-act, .frm > small { grid-column: 1 / -1; }
 .frm-act { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; } .frm-act .sp { flex: 1; }
 .frm label small { font-weight: 400; text-transform: none; letter-spacing: 0; }

@@ -177,12 +177,19 @@ PAGES.servers = async () => {
   const nProb = mine.filter(srvProblem).length, online = mine.filter(s => s.online).length;
   const avg = k => { const v = mine.filter(s => s.online && s.facts && s.facts[k] != null).map(s => s.facts[k]); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
   const sumNet = mine.reduce((a, s) => a + ((s.facts || {}).rx_mbps || 0) + ((s.facts || {}).tx_mbps || 0), 0);
+  const greCell = s => {   // the GRE tunnels this server carries: all up / some down / all down / none
+    const ts = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre"));
+    if (!ts.length) return '<span class="mut">—</span>';
+    const up = ts.filter(t => t.state === "up").length, bad = ts.filter(t => t.state === "down").length;
+    const cls = bad === ts.length ? "err" : bad || up < ts.length ? "warn" : "gw-ok", txt = bad === ts.length ? "GRE ✕" : bad ? "GRE ✓/✕" : up === ts.length ? "GRE ✓" : "GRE ~";
+    return `<b class="${cls}" title="${esc(ts.map(t => t.name + ": " + t.state).join(", "))}">${txt}</b> <small class="mut">${ts.length}</small>`;
+  };
   const row = s => {
     const f = s.facts || {}, cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
     return `<tr class="${cls} click" onclick="toggleDetail(${s.id})">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${(s.extra || {}).iran_filter && (s.extra.iran_filter.level === "filtered" || s.extra.iran_filter.level === "blocked") ? '<span class="pill err">filtered</span>' : ""}</td>
       <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
-      <td class="mono">${esc(s.host)}</td>
+      <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
       <td class="hide-sm">${pct(f.cpu)}</td><td class="hide-sm">${pct(f.ram)}</td><td class="hide-sm">${pct(f.disk, 85, 95)}</td>
       <td class="num hide-sm">${f.load1 != null ? f.load1 + " / " + f.cores : "—"}</td>
       <td class="num hide-sm">${f.rx_mbps != null ? "↓" + f.rx_mbps + " ↑" + f.tx_mbps : "—"}</td>
@@ -201,9 +208,9 @@ PAGES.servers = async () => {
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button><button onclick="srvMany()" title="Several servers at once, connected with one password">+ Several</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : state.edit === "many" ? `<div class="card">${MANY_FORM()}</div>` : ""}
-    <table class="tbl lift"><colgroup><col style="width:20%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:7%"><col style="width:10%"><col style="width:6%"><col><col style="width:120px"></colgroup>
-      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Net Mb/s</th><th>Conn</th><th>Up</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || '<tr><td colspan="11" class="empty">No server.</td></tr>'}</tbody></table>`;
+    <table class="tbl lift"><colgroup><col style="width:19%"><col style="width:7%"><col style="width:11%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:6%"><col><col style="width:120px"></colgroup>
+      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>GRE</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Load</th><th>Net Mb/s</th><th>Conn</th><th>Up</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join("") || '<tr><td colspan="12" class="empty">No server.</td></tr>'}</tbody></table>`;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
