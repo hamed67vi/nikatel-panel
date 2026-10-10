@@ -31,6 +31,16 @@ def arvan_put(body: ArvanIn):
 
     doms = [d.strip().lower() for d in body.domains if d.strip()][:20]
     st.put("arvan", {"api_key": body.api_key.strip(), "mode": body.mode, "confirm_minutes": body.confirm_minutes, "domains": doms})
+
+    if body.api_key.strip():                 # a new key: find out at once whether it works (read only)
+        st.put("arvan", {"status": {}})
+
+    if st.get("arvan").get("api_key") and (body.api_key.strip() or not st.get("arvan").get("status")):
+        try:
+            arvan.test()
+        except RuntimeError as e:
+            st.put("arvan", {"status": {"ok": False, "error": str(e)}})
+
     return arvan_get()
 
 
