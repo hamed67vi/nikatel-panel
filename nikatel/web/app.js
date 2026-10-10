@@ -97,7 +97,13 @@ $("#login-form").onsubmit = async e => {
     showApp(); go(state.page);
   } catch (er) { err.style.color = ""; err.textContent = er.message; }
 };
-$("#logout").onclick = async () => { await api("/api/auth/logout", {method: "POST"}); showLogin(); };
+$("#logout").onclick = async () => {
+  /* the way out: the panel folds away in 3D, a light sweeps over it, then the sign-in page rises */
+  const quiet = document.documentElement.dataset.anim === "off" || matchMedia("(prefers-reduced-motion: reduce)").matches, root = document.documentElement;
+  if (!quiet) root.classList.add("bye");
+  await Promise.all([api("/api/auth/logout", {method: "POST"}).catch(() => {}), new Promise(r => setTimeout(r, quiet ? 0 : 900))]);
+  showLogin(); root.classList.remove("bye");
+};
 
 /* ---- router */
 const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: ""}};

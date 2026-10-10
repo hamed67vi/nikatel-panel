@@ -110,10 +110,10 @@ def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
 
     n = 1
 
-    while f"nkt{n}" in names:
+    while f"test-{n}" in names:
         n += 1
 
-    name = f"nkt{n}"
+    name = f"test-{n}"
     build_aid = builder.start_build(iran_id, foreign_id, str(TEST_PORT), transport, forced_name=name)
 
     with session() as db:
@@ -283,10 +283,10 @@ def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full")
 
     n = 1
 
-    while f"nkt{n}" in names:
+    while f"test-{n}" in names:
         n += 1
 
-    name = f"nkt{n}"
+    name = f"test-{n}"
     build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name, measure=measure)
 
     with session() as db:
