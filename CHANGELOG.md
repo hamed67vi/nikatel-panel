@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.8 - 2026-10-11 - A soft backdrop behind every list of cards
+
+* The rows of Nodes, Tunnels and Configs and the config grid sit on a soft glass backdrop (two faint colour glows, an edge that fades out), in the dark and the light theme.
+
 ## 1.14.7 - 2026-10-11 - Soft framed filter strip
 
 * The tabs and the search box of Tunnels sit together in one soft frame whose edge fades out (it fades in when the page opens); the search bar of Nodes and Configs gets the same frame.
