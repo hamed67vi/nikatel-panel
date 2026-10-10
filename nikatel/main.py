@@ -22,6 +22,7 @@ from .services import (
     alerts,
     autopilot,
     backup,
+    builder,
     configs,
     facts,
     nodes,
@@ -96,6 +97,11 @@ async def _lifespan(app: FastAPI):
     if app.state.run_jobs:
         _register_jobs()
         jobs.start_all()
+
+        try:
+            builder.resume_pending()
+        except Exception:
+            log.exception("resuming interrupted rebuilds failed")
 
     log.info("nikatel %s listening on %s:%s read_only=%s", __version__, s.listen_host, s.listen_port, s.read_only)
     yield

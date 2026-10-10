@@ -441,3 +441,16 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .tta { margin-top: 10px; display: grid; gap: 8px; } .tta-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: start; } .tta-g { font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); padding-top: 6px; }
 .tta-chips { display: flex; flex-wrap: wrap; gap: 6px; } .tta-chips .ttk { display: flex; align-items: center; gap: 6px; width: 170px; height: 30px; box-sizing: border-box; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tta-chips .ttk:hover { filter: brightness(1.08); }
 
+
+
+/* ---- tunnel test, advanced list: one tidy card per engine, the chosen transports lit up */
+.tta { gap: 10px; }
+.tta-row { grid-template-columns: 170px 1fr; align-items: center; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,.025); }
+.tta-g { padding-top: 0; font-size: 11.5px; color: var(--text); display: flex; align-items: center; gap: 8px; } .tta-g::before { content: ""; width: 4px; height: 18px; border-radius: 2px; background: var(--grad); }
+.tta-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.tta-chips .ttk { width: auto; height: 32px; border-radius: 10px; color: var(--mut); font-weight: 600; transition: background-color .25s ease, border-color .25s ease, color .25s ease; }
+.tta-chips .ttk:has(input:checked) { color: var(--text); border-color: rgba(124,131,255,.55); background: rgba(124,131,255,.14); }
+.tta-chips .ttk input { flex: none; }
+/* the situations: one row, every box the same size */
+.ob-sec .bguide { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(170px, 1fr); overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+

@@ -24,6 +24,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel
 from ..ssh import Node, SSHError, run_action, run_script
+from . import settings as st
 from .events import emit
 from .tunnels import check_tunnel
 
@@ -533,6 +534,52 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
     return aid
 
 
+def pending_put(item: dict) -> None:
+    """Remember a rebuild before the old tunnel is removed: if the panel restarts before the new one is built, `resume_pending` builds it."""
+    items = [i for i in st.get("pending_builds").get("items", []) if i.get("name") != item["name"]] + [item]
+    st.put("pending_builds", {"items": items})
+
+
+def pending_drop(name: str) -> None:
+    if name:
+        st.put("pending_builds", {"items": [i for i in st.get("pending_builds").get("items", []) if i.get("name") != name]})
+
+
+def resume_pending() -> int:
+    """At start: build again every rebuild that a restart interrupted (its tunnel does not exist, the old one was already removed)."""
+    started = 0
+
+    for it in list(st.get("pending_builds").get("items", [])):
+        name, a = it.get("name", ""), it.get("args") or {}
+
+        with session() as db:
+            exists = db.scalar(select(Tunnel).where(Tunnel.name == name)) is not None
+
+        if exists:
+            pending_drop(name)
+            continue
+
+        try:
+            if it.get("kind") == "other":
+                from . import build_other
+
+                build_other.start_build(a["iran_id"], a["foreign_id"], a["ports_text"], a["kind"], a["transport"], a.get("opts") or {}, forced_name=name)
+            else:
+                start_build(a["iran_id"], a["foreign_id"], a["ports_text"], a["transport"], a.get("mtu", 0), a.get("keepalive", 75), forced_name=name, nodelay=bool(a.get("nodelay", True)), opts=a.get("opts") or {})
+
+            started += 1
+
+            with session() as db:
+                emit(db, "warn", "tunnels", f"The rebuild of {name} was interrupted by a restart of the panel: building it again.", name)
+        except (ValueError, KeyError) as e:
+            pending_drop(name)
+
+            with session() as db:
+                emit(db, "bad", "tunnels", f"The rebuild of {name} was interrupted and could not be resumed: {str(e)[:120]}. Build it again from Create tunnel.", name)
+
+    return started
+
+
 def _build_worker(b: Build, pair: str) -> None:
     try:
         _build(b)
@@ -541,6 +588,8 @@ def _build_worker(b: Build, pair: str) -> None:
         _rollback(b)
         _say(b.aid, f"Stopped: {str(e)[:200]}. Everything created was removed again.", done=True, ok=False)
     finally:
+        pending_drop(b.name)
+
         with _LOCK:
             _BUILDING.discard(pair)
 
@@ -776,12 +825,16 @@ def rebuild_tunnel(tunnel_id: int) -> int:
     if not ports_text:
         raise ValueError("the saved record has no ports")
 
+    other = typ in ("backpack", "paqet", "chisel")
+    kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
+    pending_put({"name": name, "kind": "other" if other else "backhaul",
+                 "args": {"iran_id": iran_id, "foreign_id": foreign_id, "ports_text": ports_text, "transport": transport.replace("l3:", "") if other else transport, "kind": kind, "mtu": mtu,
+                          "keepalive": keepalive, "nodelay": bool(rec.get("nodelay", True)), "opts": rec.get("opts") or {}}})
     delete_tunnel(tunnel_id)
 
-    if typ in ("backpack", "paqet", "chisel"):
+    if other:
         from . import build_other
 
-        kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
         return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), rec.get("opts") or {}, forced_name=name)
 
     return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)), opts=rec.get("opts") or {})

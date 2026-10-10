@@ -474,6 +474,10 @@ def _worker(b: Build, pair: str) -> None:
         _rollback(b)
         _say(b.aid, f"Stopped: {str(e)[:220]}. Everything created was removed again.", done=True, ok=False)
     finally:
+        from .builder import pending_drop
+
+        pending_drop(b.name)
+
         with _LOCK:
             _BUILDING.discard(pair)
 

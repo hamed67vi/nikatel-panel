@@ -108,3 +108,29 @@ def test_start_build_refused_in_read_only(client):
     r = client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "transport": "udp"})
     assert r.status_code == 400 and "transport must be" in r.json()["detail"]
     assert client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "transport": "u dp"}).status_code == 422
+
+
+def test_a_rebuild_interrupted_by_a_restart_is_resumed_once(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services import builder
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        ids = (a.id, b.id)
+
+    item = {"name": "f1-i1", "kind": "backhaul", "args": {"iran_id": ids[0], "foreign_id": ids[1], "ports_text": "80", "transport": "tcpmux", "mtu": 0, "keepalive": 75, "nodelay": True, "opts": {}}}
+    builder.pending_put(item)
+    calls = []
+    monkeypatch.setattr(builder, "start_build", lambda *a, **k: calls.append((a, k)) or 1)
+    assert builder.resume_pending() == 1 and calls[0][1]["forced_name"] == "f1-i1" and calls[0][0][2] == "80"
+
+    with session() as db:       # the tunnel exists again (the build finished before the restart): nothing to resume, the note is dropped
+        db.add(Tunnel(name="f1-i1", type="backhaul", iran_server_id=ids[0], foreign_server_id=ids[1]))
+
+    assert builder.resume_pending() == 0 and len(calls) == 1
+    builder.pending_put(item)
+    builder.pending_drop("f1-i1")                    # a build that ended (well or badly) removes its note
+    assert builder.resume_pending() == 0
