@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.4 - 2026-10-11 - The steps of a test are shown
+
+* A tunnel test now writes the steps of its temporary build into its own story as they happen (preflight, GRE, backhaul, data path), so the Test window never sits on one line.
+
 ## 1.13.3 - 2026-10-11 - Re-tune takes the idlest tunnels first
 
 ## 1.13.2 - 2026-10-11 - Re-tune can start with one tunnel

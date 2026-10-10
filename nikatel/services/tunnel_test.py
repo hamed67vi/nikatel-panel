@@ -243,22 +243,30 @@ def _cleanup(aid: int, name: str, iran_id: int = 0, foreign_id: int = 0) -> None
 
 def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
     # wait for the build
+    seen = 0
+
     for _ in range(200):
         time.sleep(3)
 
         with session() as db:
             b = db.get(ActionLog, build_aid)
+            lines, fin, bok = (list(b.story or []), bool(b.finished_at), b.ok) if b is not None else ([], False, None)
 
-            if b is not None and b.finished_at:
-                ok, story = b.ok, list(b.story or [])
-                break
+        for ln in lines[seen:]:               # the steps of the build, as they happen: the operator sees what the test is doing
+            _say(aid, ln)
+
+        seen = len(lines)
+
+        if fin:
+            ok, story = bok, lines
+            break
     else:
         raise RuntimeError("the build took too long")
 
     if not ok:
         return False, "Build failed: " + (story[-1] if story else "unknown reason")
 
-    _say(aid, "Built. " + next((s for s in story if s.startswith("Path MTU")), ""))
+    _say(aid, "Built; measuring…")
 
     with session() as db:
         t = db.scalar(select(Tunnel).where(Tunnel.name == name))
@@ -369,15 +377,23 @@ def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign
     verdict = ""
 
     try:
+        seen = 0
+
         for _ in range(200):
             time.sleep(3)
 
             with session() as db:
                 b = db.get(ActionLog, build_aid)
+                lines, fin, bok = (list(b.story or []), bool(b.finished_at), b.ok) if b is not None else ([], False, None)
 
-                if b is not None and b.finished_at:
-                    ok, story = b.ok, list(b.story or [])
-                    break
+            for ln in lines[seen:]:
+                _say(aid, ln)
+
+            seen = len(lines)
+
+            if fin:
+                ok, story = bok, lines
+                break
         else:
             raise RuntimeError("the build took too long")
 
