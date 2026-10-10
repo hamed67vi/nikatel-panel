@@ -15,7 +15,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True},
     # auto-repair stays off until the old panel no longer repairs the same tunnels
-    "repair": {"auto": False, "after_seconds": 180},
+    "repair": {"auto": False, "after_seconds": 180, "level": "restart"},   # level: restart | rebuild | switch (how far the automatic repair may go)
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL

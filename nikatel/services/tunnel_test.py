@@ -240,6 +240,7 @@ KINDS = [
     ("chisel", "Chisel · WebSocket", "HTTP WebSocket, one inbound port", "Chisel", True),
     ("chisel:tls", "Chisel · TLS WebSocket", "TLS WebSocket, one inbound port", "Chisel", False),
 ]
+KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}
 
 
@@ -260,7 +261,7 @@ def kind_parts(kind: str) -> tuple[str, str]:
     return "chisel", "wss" if kind == "chisel:tls" else "ws"
 
 
-def start_other(iran_id: int, foreign_id: int, kind: str) -> int:
+def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full") -> int:
     """A temporary BackPack / Paqet / Chisel tunnel: built (which measures it), then removed. Returns the test's action id."""
     from . import build_other
 
@@ -275,7 +276,7 @@ def start_other(iran_id: int, foreign_id: int, kind: str) -> int:
         n += 1
 
     name = f"nkt{n}"
-    build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name)
+    build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name, measure=measure)
 
     with session() as db:
         entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {kind} tunnel {name} is being built (build #{build_aid})…"])
@@ -324,14 +325,14 @@ def _other_worker(aid: int, build_aid: int, name: str) -> None:
         _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 
-def compare_start(iran_id: int, foreign_id: int, kinds: list[str]) -> str:
+def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full") -> str:
     kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
 
     if any(not j["done"] for j in _COMPARE.values()):
         raise RuntimeError("another tunnel test is still running")
 
     jid = f"cmp{int(time.time())}"
-    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time())}
+    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time())}
     _COMPARE[jid] = job
 
     for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
@@ -350,7 +351,7 @@ def _compare_worker(job: dict) -> None:
             job["current"] = kind
 
             try:
-                aid = start(job["iran_id"], job["foreign_id"], kind) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind)
+                aid = start(job["iran_id"], job["foreign_id"], kind) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind, job.get("measure", "full"))
             except (ValueError, RuntimeError) as e:
                 job["results"].append({"kind": kind, "ok": False, "error": str(e)[:160]})
                 continue

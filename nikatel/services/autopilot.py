@@ -1,0 +1,424 @@
+"""Smart repair. Where `actions.fix` only restarts what is not running, this looks at *why* a tunnel is
+down and climbs a ladder:
+
+  1. restart   - the units that are not active (actions.fix)
+  2. rebuild   - remove and build the same tunnel again
+  3. switch    - the network cuts what this tunnel type is (GRE filtered, control port blocked): test the other
+                 tunnel types between the same two servers (latency only), keep the best one that works
+  4. move      - the route between these two servers is cut: carry the tunnel on another Iran server
+                 (manual: the operator picks the server from a ranking)
+
+A panel cannot change a server's public IP (that is the provider's), so "change the IP" means "use another
+Iran server" (move) - or another foreign server, which the operator decides.
+
+The *network advisor* answers "which tunnel is best between these two servers today": the same pair test as
+the Tunnel test page, latency-only (about a minute per type), ranked by score.
+Every run is written to action_log with its full story. Limits: refused while the panel is read-only; one run
+per tunnel at a time; the automatic escalation (Settings -> Repairs) only after plain restarts failed, once per
+6 hours per tunnel, never `move`.
+"""
+from __future__ import annotations
+
+import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+from sqlalchemy import select
+
+from ..config import get_settings
+from ..db import session
+from ..log import get_logger
+from ..models import ActionLog, Tunnel
+from ..ssh import Node, SSHError, run_script
+from . import actions, build_other, builder, detect, tunnel_test
+from . import settings as st
+from .events import emit
+from .tunnels import check_tunnel
+
+log = get_logger("autopilot")
+LEVELS = ("restart", "rebuild", "switch")
+CANDIDATES = ["tcpmux", "bp:tcpmux", "bp:wssmux", "chisel:tls", "bpd:udp"]
+NO_GRE = ["bp:tcpmux", "bp:wssmux", "chisel:tls", "bpd:udp"]
+_BUSY: dict[str, int] = {}
+_LOCK = threading.Lock()
+
+
+# ------------------------------------------------------------------ pure helpers (tested)
+def kind_of(typ: str, transport: str, record: dict) -> str:
+    """The tunnel-test kind key of an existing tunnel ('tcpmux', 'bp:wss', 'bpd:udp', 'paqet', 'chisel:tls' ...)."""
+    typ, transport = (typ or "").lower(), (transport or "").lower()
+
+    if typ in ("backhaul", "gre", ""):
+        return transport or "tcpmux"
+
+    if typ == "paqet":
+        return "paqet"
+
+    if typ == "chisel":
+        return "chisel:tls" if transport in ("wss", "chisel-tls") else "chisel"
+
+    if (record or {}).get("kind") == "backpack_direct" or transport.startswith("l3:"):
+        return "bpd:" + transport.replace("l3:", "")
+
+    return "bp:" + transport
+
+
+def classify(d: dict) -> tuple[str, str]:
+    """(cause, one sentence) from the measured facts. Pure: see test_autopilot."""
+    if d.get("iran_error") or d.get("foreign_error"):
+        return "server_unreachable", "a server does not answer over SSH: restarting or rebuilding cannot help until it is back"
+
+    if d.get("state") == "up" and not d.get("units_bad"):
+        return "healthy", "the tunnel works"
+
+    if d.get("units_bad"):
+        return "units_down", "tunnel services are not running: " + ", ".join(d["units_bad"][:3])
+
+    loss_i, loss_f = d.get("under_loss_i"), d.get("under_loss_f")
+
+    if (loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50):
+        return "route_cut", f"the two servers cannot reach each other (loss {loss_i}% / {loss_f}%): the route between them is cut or filtered"
+
+    if d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50):
+        return "gre_blocked", "the servers reach each other but GRE packets do not pass: GRE is filtered on this route"
+
+    if d.get("port_open") is False:
+        return "port_blocked", f"the tunnel's control port {d.get('port')} cannot be reached from the other side: it is blocked"
+
+    return "unknown", "the services run and the servers answer, but no data passes: " + str(d.get("last_error") or "no reason found")
+
+
+def ladder_for(cause: str, kind: str, level: str = "switch") -> list[str]:
+    """The steps that make sense, in order, limited by `level`."""
+    rank = LEVELS.index(level) if level in LEVELS else 0
+    steps: list[str] = []
+
+    if cause in ("units_down", "unknown"):
+        steps.append("restart")
+
+        if rank >= 1:
+            steps.append("rebuild")
+    elif cause in ("gre_blocked", "port_blocked") and rank >= 2:
+        steps.append("switch")
+    elif cause == "route_cut":
+        steps.append("move")        # never automatic: the operator chooses the server
+
+    return steps
+
+
+def rank_results(results: list[dict]) -> list[dict]:
+    """Working kinds first, best score first."""
+    return sorted([r for r in results if r.get("ok")], key=lambda r: -(r.get("score") or 0))
+
+
+# ------------------------------------------------------------------ diagnosis (read-only)
+def _ping_loss(node: Node, host: str) -> float | None:
+    try:
+        out = run_script(node, "ping_host", {"HOST": host}, timeout=30)
+    except (SSHError, ValueError):
+        return None
+
+    m = re.search(r"(\d+) packets transmitted, (\d+) received", out)
+    return round(100.0 - int(m.group(2)) * 100.0 / int(m.group(1)), 1) if m and int(m.group(1)) else None
+
+
+def diagnose(tunnel_id: int) -> dict:
+    check_tunnel(tunnel_id)
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        rec, det = dict(t.record or {}), dict(t.detail or {})
+        info = {"id": t.id, "name": t.name, "state": t.state, "last_error": t.last_error, "type": t.type, "transport": t.transport, "port": int(t.port or 0),
+                "iran_name": t.iran.name, "foreign_name": t.foreign.name, "iran_host": t.iran.host, "foreign_host": t.foreign.host, "iran_id": t.iran_server_id,
+                "foreign_id": t.foreign_server_id, "ports": ",".join(str(p) for p in (t.forwarded_ports or []))}
+        iran, foreign = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
+
+    gre = info["type"] in ("backhaul", "gre")
+    units_bad = [f"{u} ({s})" for side in ("iran_units", "foreign_units") for u, s in (det.get(side) or {}).items() if s != "active"]
+    facts = {"state": info["state"], "last_error": info["last_error"], "iran_error": det.get("iran_error", ""), "foreign_error": det.get("foreign_error", ""),
+             "units_bad": units_bad, "gre": gre, "gre_loss": det.get("loss_pct"), "port": info["port"]}
+
+    if not facts["iran_error"] and not facts["foreign_error"]:
+        with ThreadPoolExecutor(3) as ex:
+            fi, ff = ex.submit(_ping_loss, iran, info["foreign_host"]), ex.submit(_ping_loss, foreign, info["iran_host"])
+            facts["under_loss_i"], facts["under_loss_f"] = fi.result(), ff.result()
+
+        if not gre and info["port"] and not (rec.get("udp_carrier") or str(info["transport"]).startswith("l3:")):
+            probe_from, probe_to = (foreign, info["iran_host"]) if info["type"] in ("backpack", "chisel") else (iran, info["foreign_host"])
+
+            try:
+                facts["port_open"] = "OPEN" in run_script(probe_from, "tcp_probe", {"HOST": probe_to, "PORT": str(info["port"])}, timeout=20)
+            except (SSHError, ValueError):
+                facts["port_open"] = None
+
+    cause, why = classify(facts)
+    kind = kind_of(info["type"], info["transport"], rec)
+    findings = [
+        {"ok": not facts["iran_error"], "text": "Iran server answers over SSH" if not facts["iran_error"] else "Iran server: " + facts["iran_error"]},
+        {"ok": not facts["foreign_error"], "text": "Foreign server answers over SSH" if not facts["foreign_error"] else "Foreign server: " + facts["foreign_error"]},
+        {"ok": not units_bad, "text": "Tunnel services are active on both sides" if not units_bad else "Not active: " + ", ".join(units_bad[:4])},
+    ]
+
+    if "under_loss_i" in facts:
+        for label, loss in (("Iran → foreign", facts["under_loss_i"]), ("foreign → Iran", facts["under_loss_f"])):
+            findings.append({"ok": loss is not None and loss < 50, "text": f"{label}: " + ("no answer to ping" if loss is None else f"{loss}% packet loss between the public addresses")})
+
+    if gre:
+        findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": "GRE link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
+
+    if "port_open" in facts:
+        findings.append({"ok": facts["port_open"] is not False, "text": f"Control port {info['port']} is " + ("reachable from the other side" if facts["port_open"] is not False else "BLOCKED from the other side")})
+
+    return {**info, "kind": kind, "cause": cause, "summary": why, "findings": findings,
+            "ladder": ladder_for(cause, kind), "can_switch": cause in ("gre_blocked", "port_blocked", "unknown") and cause != "healthy",
+            "can_move": cause in ("route_cut", "server_unreachable") or cause == "unknown"}
+
+
+# ------------------------------------------------------------------ the runs
+def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) -> None:
+    with session() as db:
+        e = db.get(ActionLog, aid)
+
+        if e is not None:
+            e.story = list(e.story or []) + [line]
+
+            if done:
+                e.ok, e.finished_at = ok, int(time.time())
+
+    log.info("autopilot #%s: %s", aid, line)
+
+
+def _wait(aid: int, limit: int = 900) -> tuple[bool, list[str]]:
+    """Wait for an action_log entry (a build, a fix) to finish."""
+    end = time.time() + limit
+
+    while time.time() < end:
+        time.sleep(3)
+
+        with session() as db:
+            e = db.get(ActionLog, aid)
+
+            if e is not None and e.finished_at:
+                return bool(e.ok), list(e.story or [])
+
+    return False, ["timed out"]
+
+
+def _start(label: str, fn, *args) -> int:
+    """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id."""
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server")
+
+    with _LOCK:
+        if label in _BUSY:
+            raise ValueError("a smart repair of this tunnel is already running")
+
+        with session() as db:
+            entry = ActionLog(ref=label, action="autopilot", source="manual", story=["Starting…"])
+            db.add(entry)
+            db.flush()
+            aid = entry.id
+
+        _BUSY[label] = aid
+
+    def run() -> None:
+        try:
+            fn(aid, *args)
+        except Exception as e:
+            log.exception("autopilot #%s crashed", aid)
+            _say(aid, f"Stopped: {str(e)[:200]}", done=True, ok=False)
+        finally:
+            with _LOCK:
+                _BUSY.pop(label, None)
+
+    threading.Thread(target=run, name=f"autopilot-{label}", daemon=True).start()
+    return aid
+
+
+def _snapshot(tunnel_id: int) -> dict:
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        rec = dict(t.record or {})
+        return {"id": t.id, "name": t.name, "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id, "type": t.type, "transport": t.transport, "record": rec,
+                "ports": rec.get("port_mapping") or ",".join(str(p) for p in (t.forwarded_ports or [])), "label": f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"}
+
+
+def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict | None = None) -> int:
+    k, tr = tunnel_test.kind_parts(kind)
+
+    if k == "backhaul":
+        return builder.start_build(iran_id, foreign_id, snap["ports"], tr, forced_name=snap["name"], opts=opts or {})
+
+    return build_other.start_build(iran_id, foreign_id, snap["ports"], k, tr, opts or {}, forced_name=snap["name"])
+
+
+def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str, why: str) -> bool:
+    """Remove the tunnel and build it again as `kind` between iran_id and foreign_id (same name, same ports).
+    When the new build fails the old kind is built again, so the operator is never left with nothing."""
+    snap = _snapshot(tunnel_id)
+    old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
+    _say(aid, f"{why} Replacing {snap['label']}: {old_kind} → {kind}")
+    res = builder.delete_tunnel(tunnel_id)
+    _say(aid, "Old tunnel removed: " + "; ".join(res))
+    ok, story = _wait(_build_kind(snap, iran_id, foreign_id, kind))
+
+    if ok:
+        _say(aid, f"The new {kind} tunnel is built and works.")
+        return True
+
+    _say(aid, f"The {kind} build failed ({story[-1] if story else '?'}). Putting the old {old_kind} tunnel back.")
+    ok2, _ = _wait(_build_kind(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts")))
+    _say(aid, "The old tunnel is back." if ok2 else "The old tunnel could not be rebuilt either: it needs a human.")
+    return False
+
+
+def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str]) -> list[dict]:
+    jid = tunnel_test.compare_start(iran_id, foreign_id, kinds, measure="latency")
+    _say(aid, f"Testing {len(kinds)} tunnel types between the two servers (latency only, about a minute each)…")
+    end = time.time() + 1500
+
+    while time.time() < end:
+        time.sleep(5)
+        job = tunnel_test.compare_status(jid)
+
+        if job["done"]:
+            return job["results"]
+
+    return []
+
+
+def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual") -> None:
+    snap = _snapshot(tunnel_id)
+    d = diagnose(tunnel_id)
+    _say(aid, f"Diagnosis: {d['summary']}.")
+
+    if d["cause"] == "healthy":
+        _say(aid, "Nothing to repair.", done=True, ok=True)
+        return
+
+    steps = ladder_for(d["cause"], d["kind"], level)
+
+    if not steps:
+        hint = " Use “Move to another Iran server” on the Smart repair page." if d["cause"] == "route_cut" else ""
+        _say(aid, f"No step at level “{level}” applies to this cause.{hint}", done=True, ok=False)
+        return
+
+    with session() as db:
+        emit(db, "warn", "actions", f"Smart repair of {snap['label']} ({source}): {d['summary']}.", snap["name"])
+
+    healed = False
+
+    for step in steps:
+        if step == "restart":
+            ok, story = _wait(actions.fix(tunnel_id, source=source), 300)
+            _say(aid, "Restart: " + (story[-1] if story else "no result"))
+            healed = ok
+        elif step == "rebuild":
+            ok, story = _wait(builder.rebuild_tunnel(tunnel_id))
+            _say(aid, "Rebuild: " + (story[-1] if story else "no result"))
+            healed = ok
+        elif step == "switch":
+            results = _recommend_now(aid, snap["iran_id"], snap["foreign_id"], NO_GRE if d["cause"] == "gre_blocked" else [k for k in CANDIDATES if k != d["kind"]])
+            best = next((r for r in rank_results(results) if r.get("ok") and (r.get("score") or 0) >= 45), None)
+
+            if best is None:
+                _say(aid, "No other tunnel type works well on this route today. A human should look at it.")
+            else:
+                healed = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], best["kind"], f"Best type today: {best['kind']} (score {best.get('score')}).")
+
+        if healed:
+            break
+
+    with session() as db:
+        emit(db, "ok" if healed else "bad", "actions", f"Smart repair of {snap['label']} " + ("succeeded." if healed else "did not heal it."), snap["name"])
+
+    _say(aid, "The tunnel works again." if healed else "The tunnel is still not up. A human should look at it.", done=True, ok=healed)
+
+
+def smart_fix_start(tunnel_id: int, level: str = "switch", source: str = "manual") -> int:
+    if level not in LEVELS:
+        raise ValueError("level must be restart, rebuild or switch")
+
+    snap = _snapshot(tunnel_id)
+    return _start(snap["name"], smart_fix, tunnel_id, level, source)
+
+
+def replace_start(tunnel_id: int, kind: str) -> int:
+    if kind not in tunnel_test.KIND_KEYS:
+        raise ValueError("unknown tunnel type")
+
+    snap = _snapshot(tunnel_id)
+
+    def run(aid: int) -> None:
+        ok = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "Chosen by you.")
+        _say(aid, "Done." if ok else "Not changed.", done=True, ok=ok)
+
+    return _start(snap["name"], run)
+
+
+def move_start(tunnel_id: int, iran_id: int) -> int:
+    snap = _snapshot(tunnel_id)
+
+    if iran_id == snap["iran_id"]:
+        raise ValueError("choose another Iran server")
+
+    kind = kind_of(snap["type"], snap["transport"], snap["record"])
+
+    def run(aid: int) -> None:
+        ok = _replace(aid, tunnel_id, iran_id, snap["foreign_id"], kind, "Moving to another Iran server.")
+        _say(aid, "Moved." if ok else "Not moved.", done=True, ok=ok)
+
+    return _start(snap["name"], run)
+
+
+def recommend_start(iran_id: int, foreign_id: int, kinds: list[str] | None = None) -> str:
+    kinds = [k for k in (kinds or CANDIDATES) if k in tunnel_test.KIND_KEYS] or CANDIDATES
+    return tunnel_test.compare_start(iran_id, foreign_id, kinds, measure="latency")
+
+
+def ranking(tunnel_id: int) -> list[dict]:
+    """The Iran servers that could carry this tunnel, best first (the current one is left out)."""
+    snap = _snapshot(tunnel_id)
+    return [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r["id"] != snap["iran_id"]]
+
+
+# ------------------------------------------------------------------ automatic escalation (Settings -> Repairs, level)
+def auto_escalate() -> None:
+    """Job hook: a tunnel that plain restarts could not heal gets a smart repair, once per 6 hours, never `move`."""
+    conf = st.get("repair")
+    level = conf.get("level", "restart")
+
+    if not conf.get("auto") or level not in ("rebuild", "switch") or get_settings().read_only:
+        return
+
+    muted = set(st.get("alerts").get("muted") or [])
+    now = int(time.time())
+
+    with session() as db:
+        down = [(t.id, t.name, t.state_since) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down"))]
+
+    for tid, name, since in down:
+        if name in muted or name in _BUSY or now - since < int(conf.get("after_seconds", 180)) + 600 or actions.recent_fixes(name) < actions.MAX_PER_HOUR:
+            continue
+
+        with session() as db:
+            last = db.scalar(select(ActionLog.ts).where(ActionLog.ref == name, ActionLog.action == "autopilot").order_by(ActionLog.id.desc()).limit(1))
+
+        if last and now - last < 6 * 3600:
+            continue
+
+        log.info("auto smart repair of %s (down for %ss, level %s)", name, now - since, level)
+
+        try:
+            smart_fix_start(tid, level, source="auto")
+        except ValueError as e:
+            log.warning("auto smart repair of %s refused: %s", name, e)

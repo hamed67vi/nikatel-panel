@@ -150,10 +150,12 @@ nav a { height: 38px; font-size: 13.5px; }
 .gchip a { padding: 0 9px 0 2px; color: var(--mut); font-weight: 800; cursor: pointer; } .gchip a:hover { color: var(--bad); } .gchip.on a { color: rgba(255,255,255,.8); }
 .nk-gbadge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); font-size: 10px; font-weight: 700; color: var(--mut); vertical-align: middle; }
 .live { display: inline-block; margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .6px; } .live.up { color: var(--ok); } .live.down { color: var(--bad); } .live.unk { color: var(--mut); }
+.ap-row { display: flex; align-items: center; gap: 12px; padding: 7px 10px; margin-bottom: 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12.5px; } .ap-row .ap-err { color: var(--bad); max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cf-nm { font-weight: 700; display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .cf-grp { font-size: 11.5px; }
 .sdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--unk); } .sdot.up { background: var(--ok); box-shadow: 0 0 6px var(--ok); } .sdot.down { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
 /* the configs list is dense: one line per config */
-.cf-list td, .tbl.compact td { padding-top: 2px; padding-bottom: 2px; font-size: 12px; } .cf-list th { padding-top: 4px; padding-bottom: 4px; } .cf-list tbody tr { height: 30px; }
+.cf-list { border-spacing: 0 2px; } .cf-list td, .tbl.compact td { height: 27px; padding: 0 10px; font-size: 12px; } .cf-list th { padding: 0 10px 2px; } .tbl.compact { border-spacing: 0 2px; }
+.cf-sub { color: var(--mut); opacity: .6; font-size: 11.5px; } td.cf-sub { overflow: hidden; text-overflow: ellipsis; } .cf-card .cf-sub { display: block; margin-top: 2px; }
 .cf-list .flg { width: 17px; height: 12px; vertical-align: -1px; } .cf-list input.cf-cdn { height: 22px; font-size: 11px; max-width: 70px; border-radius: 7px; padding: 0 6px; } .cf-list .cf-acts button.sm { height: 22px; padding: 0 8px; font-size: 11px; } .cf-list .cf-grp { font-size: 11px; }
 .cf-list td.mono { font-size: 11px; } .cf-list .td-type { font-size: 9.5px; padding: 0 6px; }
 .addpick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } @media (max-width: 640px) { .addpick { grid-template-columns: 1fr; } }

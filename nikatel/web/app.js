@@ -95,7 +95,7 @@ const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
   nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Smart repair", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -307,6 +307,7 @@ window.wtab = k => {
   const body = $("#modal .modal-body");
   if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { body.innerHTML = `<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k === "charts") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
   if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); if (k === "charts") loadTunnelCharts(t.id); return; } }
+  if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; if (k === "charts") cfLoadChart(c.id); return; } }
   refresh();
 };
 let CON_PRESETS = {};
@@ -367,7 +368,7 @@ document.addEventListener("mousemove", e => {
 });
 const rangeTabs = () => `<div class="tabs mrange">${RANGES.map(([h, l]) => `<button class="${state.mrange === h ? "on" : ""}" onclick="mrange(${h})">${l}</button>`).join("")}</div>`;
 const mtile = (label, big, sub, cls = "") => `<div class="mtile ${cls}"><small>${label}</small><b>${big}</b><span>${sub}</span></div>`;
-window.mrange = h => { state.mrange = h; localStorage.setItem("nk.mrange", h); const sb = document.querySelector('[id^="srv-charts-"]'), tb = document.querySelector('[id^="tun-charts-"]'); if (sb) loadServerCharts(+sb.id.split("-").pop()); else if (tb) loadTunnelCharts(+tb.id.split("-").pop()); };
+window.mrange = h => { state.mrange = h; localStorage.setItem("nk.mrange", h); const sb = document.querySelector('[id^="srv-charts-"]'), tb = document.querySelector('[id^="tun-charts-"]'), cb = document.querySelector('[id^="cf-charts-"]'); if (sb) loadServerCharts(+sb.id.split("-").pop()); else if (tb) loadTunnelCharts(+tb.id.split("-").pop()); else if (cb) cfLoadChart(+cb.id.split("-").pop()); };
 async function loadServerCharts(id) {
   const box = document.getElementById("srv-charts-" + id);
   if (!box) return;
@@ -733,14 +734,86 @@ function storyHtml(s) {
   return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
     (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "delete" ? "Removal" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
+/* ---- Smart repair: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
+const ap = {job: null, tid: localStorage.getItem("nk.ap.tid") || "", timer: null};
+const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
+const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
-  const d = await api("/api/actions?limit=100");
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${d.read_only ? "Read-only mode: only dry runs happen. Set NIKATEL_READ_ONLY=false on the panel server to allow repairs." : "Read-write mode: repairs change servers."}</span></div>
-    <div class="card">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
+  const [d, tl] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels")]);
+  const bad = tl.filter(t => t.state !== "up"), pick = tl.find(t => String(t.id) === ap.tid) || bad[0] || tl[0];
+  const row = t => `<div class="ap-row"><span class="st ${t.state}">${esc(t.state)}</span><b>${esc(t.name)}</b><span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc((t.last_error || "").slice(0, 70))}</span><span class="sp"></span><button class="sm pri" onclick="apDiagnose(${t.id})">🩺 Diagnose</button></div>`;
+  $("#page").innerHTML = `<div class="card"><h3>🩺 Needs attention <span class="sp"></span><span class="pill ${bad.length ? "err" : "ok"}">${bad.length ? bad.length + " of " + tl.length + " not healthy" : "all " + tl.length + " healthy"}</span></h3>
+      ${bad.length ? bad.map(row).join("") : '<div class="mut" style="padding:6px 0">Every tunnel is up. Nothing to repair. When one fails, it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port) and offers the fix - restart, rebuild, another tunnel type, or another Iran server.</div>'}
+      <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : "A panel cannot change a server's public IP (the provider does that). When the route between two servers is cut, “Move” carries the tunnel on another Iran server."}</small></div>
+    <div class="card"><h3>🧭 Network advisor — which tunnel is best today <span class="sp"></span></h3>
+      <div class="frm"><label>Tunnel <small>(its two servers are tested)</small><select id="ap-tun" onchange="ap.tid=this.value;localStorage.setItem('nk.ap.tid',this.value)">${tl.map(t => `<option value="${t.id}" ${pick && t.id === pick.id ? "selected" : ""}>${esc(t.name)} — ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(t.type)})</option>`).join("")}</select></label>
+        <div class="frm-act" style="align-self:end"><button class="pri" onclick="apRecommend()" ${tl.length ? "" : "disabled"}>Find the best tunnel today</button></div></div>
+      <small class="mut">Builds a temporary tunnel of each type between the two servers (TCP Mux over GRE, BackPack TCP Mux, BackPack WS TLS Mux, Chisel TLS, BackPack Direct UDP), measures latency and loss, removes it again. About a minute per type. Nothing of your real tunnel changes until you press “Use”.</small>
+      <div id="ap-adv"></div></div>
+    <div class="card"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3>${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div>`;
+  apAdvisor();
 };
-INFO.actions = ["Repairs", "Every repair the panel planned or performed, with its full story."];
-window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+INFO.actions = ["Smart repair", "Finds why a tunnel is down and fixes it: restart, rebuild, another tunnel type or another Iran server - and says which tunnel is best on today's network."];
+function apAdvisor() {
+  const box = $("#ap-adv"), j = ap.job; if (!box || !j) return;
+  const rs = [...(j.results || [])].sort((a, b) => (b.score || 0) - (a.score || 0)), best = rs.find(r => r.ok);
+  const run = !j.done;
+  box.innerHTML = `<table class="tbl" style="margin-top:10px"><thead><tr><th>Tunnel type</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Score</th><th></th></tr></thead><tbody>
+    ${rs.map(r => `<tr class="${r === best ? "up" : r.ok ? "" : "down"}"><td class="name">${esc(apName(r.kind))}${r === best ? ' <span class="pill ok">best today</span>' : ""}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor"}</span></td><td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td><b class="${r.score >= 70 ? "gw-ok" : r.score >= 50 ? "" : "err"}">${r.score != null ? r.score + " / 100" : "—"}</b></td><td>${r.ok ? `<button class="sm ${r === best ? "pri" : ""}" onclick="apUse('${esc(r.kind)}')">Use for this tunnel</button>` : `<span class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 36))}</span>`}</td></tr>`).join("")}
+    ${run ? `<tr><td class="name">${esc(apName(j.current))}</td><td colspan="6" class="mut">testing… ${j.results.length} of ${j.kinds.length} done</td></tr>` : ""}</tbody></table>
+    ${!run && !best ? '<div class="err" style="margin-top:8px">No tunnel type works well between these two servers right now.</div>' : ""}${!run && best ? `<div class="mut" style="margin-top:8px">Best today: <b>${esc(apName(best.kind))}</b>, score ${best.score}. “Use” replaces this tunnel with that type (same name, same ports); if the new one fails, the old type is built again.</div>` : ""}`;
+  clearTimeout(ap.timer);
+  if (run) ap.timer = setTimeout(apPoll, 3000);
+}
+async function apPoll() { if (!ap.job || ap.job.done || state.page !== "tunnels") return; try { ap.job = await api(`/api/tunnel-test/compare/${ap.job.id}`); } catch (e) { ap.job.done = true; } apAdvisor(); }
+window.apRecommend = async () => {
+  const t = (state.tunnelsCache || []).find(x => String(x.id) === ($("#ap-tun") || {}).value) || (await api("/api/tunnels")).find(x => String(x.id) === ($("#ap-tun") || {}).value);
+  if (!t) return;
+  const sv = (await api("/api/servers")), iran = sv.find(s => s.name === t.iran_name), foreign = sv.find(s => s.name === t.foreign_name);
+  try { const r = await api("/api/autopilot/recommend", {method: "POST", body: JSON.stringify({iran_id: iran.id, foreign_id: foreign.id})}); ap.job = {id: r.id, kinds: ["…", "…", "…", "…", "…"], results: [], current: "starting", done: false}; apAdvisor(); apPoll(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.apUse = async kind => {
+  const tid = +($("#ap-tun") || {}).value; if (!tid) return;
+  if (!await gconfirm(`Replace this tunnel with ${apName(kind)}? It is removed and built again (same name, same ports); users on it reconnect after about a minute. If the new one fails, the old type is built again.`, {danger: true})) return;
+  try { const r = await api("/api/autopilot/replace", {method: "POST", body: JSON.stringify({tunnel_id: tid, kind})}); apStoryWindow(r.id, "Replacing the tunnel"); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+function apStoryWindow(aid, title) {
+  showModal(`<b>${esc(title)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
+  followStory(aid, $("#ap-story"), 600).then(() => refresh());
+}
+window.apDiagnose = async id => {
+  showModal("<b>🩺 Diagnosis</b>", '<div class="mut" style="padding:20px;text-align:center">Looking at both servers, the route and the tunnel… (about 15 s)</div>', "wide");
+  try {
+    const d = await api(`/api/autopilot/diagnose/${id}`);
+    const sw = d.can_switch && d.cause !== "healthy", mv = d.can_move && d.cause !== "healthy";
+    showModal(`<span class="st ${d.state}"></span><b>${esc(d.name)}</b> <span class="mut">${esc(d.iran_name)} ⇄ ${esc(d.foreign_name)}</span>`, `
+      <div class="ibox"><h5><i>🩺</i>Cause</h5><div style="padding:6px 0;font-size:13.5px"><b class="${d.cause === "healthy" ? "gw-ok" : "err"}">${esc(d.summary)}</b></div></div>
+      <div class="ibox" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5>${d.findings.map(f => irow(esc(f.text), f.ok ? '<b class="gw-ok">✓</b>' : '<b class="err">✕</b>')).join("")}</div>
+      ${d.cause === "healthy" ? "" : `<div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">
+        ${d.ladder.includes("restart") ? `<a class="wtool" onclick="apRun(${id}, 'rebuild')"><i>🛠</i><b>Smart fix</b><small>restart what is not running, then rebuild if needed</small></a>` : ""}
+        ${sw ? `<a class="wtool" onclick="apRun(${id}, 'switch')"><i>🔀</i><b>Switch the tunnel type</b><small>test the other types on this route today and keep the best that works</small></a>` : ""}
+        ${mv ? `<a class="wtool" onclick="apMove(${id})"><i>🚚</i><b>Move to another Iran server</b><small>when the route to this foreign server is cut from that Iran server</small></a>` : ""}
+        <a class="wtool" onclick="closeModal();apTune(${id})"><i>🧭</i><b>Network advisor</b><small>rank every tunnel type on today's network</small></a></div></div>`}
+      <div id="ap-story" class="fix hidden" style="margin-top:10px"></div>`, "wide");
+  } catch (e) { showModal("<b>🩺 Diagnosis</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); }
+};
+window.apTune = id => { ap.tid = String(id); localStorage.setItem("nk.ap.tid", ap.tid); refresh(); };
+window.apRun = async (id, level) => {
+  if (!await gconfirm(level === "switch" ? "Test the other tunnel types and replace this tunnel with the best one that works? Users reconnect after about a minute. If the new one fails, the old type is built again." : "Repair this tunnel now? Restarts first, then a rebuild when restarting is not enough.", {danger: true})) return;
+  try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.apMove = async id => {
+  const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Ranking the Iran servers against this foreign server…</div>';
+  try {
+    const r = await api(`/api/autopilot/ranking/${id}`);
+    box.innerHTML = `<div class="ibox"><h5><i>🚚</i>Iran servers that could carry it</h5>${r.ranking.map(x => irow(`<b>${esc(x.name)}</b> <small class="mut">${esc(x.reason || "")}</small>`, x.score > 0 ? `<b class="${x.score >= 70 ? "gw-ok" : ""}">${x.score}</b> <button class="sm pri" onclick="apMoveTo(${id}, ${x.id}, '${esc(x.name)}')">Move here</button>` : '<span class="err">no</span>')).join("") || '<div class="mut">No other Iran server is online.</div>'}</div>`;
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+};
+window.apMoveTo = async (id, iranId, name) => {
+  if (!await gconfirm(`Move this tunnel to ${name}? It is removed from its Iran server and built again on ${name} (same name, same ports, same type); users reconnect after about a minute. If it fails, the old one is built again.`, {danger: true})) return;
+  try { const r = await api("/api/autopilot/move", {method: "POST", body: JSON.stringify({tunnel_id: id, iran_id: iranId})}); const box = $("#ap-story"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
+};window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- configs (what the probe keeps alive and tests) */
 INFO.configs = ["Panels", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
@@ -753,7 +826,7 @@ PAGES.configsList = async () => {
   const [d, subs, tl] = await Promise.all([api("/api/configs"), api("/api/subscriptions"), api("/api/tunnels").catch(() => [])]);
   $("#n-configs").textContent = d.configs.length;
   const names = [...new Set([...subs.subscriptions.map(s => s.name), ...d.configs.map(c => c.group).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
-  if (cf.group !== "__all" && cf.group !== "__manual" && !names.includes(cf.group)) cf.group = "__all";
+  if (cf.group !== "__all" && !names.includes(cf.group)) cf.group = "__all";
   const searched = d.configs.filter(c => !cf.q || (c.name + (c.group || "")).toLowerCase().includes(cf.q));
   const list = cf.group === "__all" ? searched : cf.group === "__manual" ? searched.filter(c => !c.group) : searched.filter(c => c.group === cf.group);
   const groups = [null];   // one flat list in every view; in "All" the group badge says where a config belongs
@@ -762,17 +835,18 @@ PAGES.configsList = async () => {
   const live = c => `<span class="live ${c.status === "up" ? "up" : c.status === "down" ? "down" : "unk"}">● ${c.status === "up" ? "ONLINE" : c.status === "down" ? "OFFLINE" : "UNKNOWN"}</span>`;
   const shown = c => { const g = [c.group, ...names].filter(Boolean).find(x => c.name.startsWith(x + " ")); return g ? c.name.slice(g.length + 1) : c.name; };   // the group has its own column: never repeat it in the name
   const title = c => `${cfFlag(c.name)}${esc(shown(c))}${c.enabled ? "" : '<span class="pill">disabled</span>'}`;
-  const gcell = c => `<td class="mut cf-grp">${esc(c.group || "manual")}</td>`;
+  const inAll = cf.group === "__all";
+  const gcell = c => inAll ? `<td class="cf-sub">${c.group ? esc(c.group) : "—"}</td>` : "";
   const acts = c => `<button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button><button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
   const MBs = v => v == null ? "—" : mb(v / 8);   // the table speaks MB/s like a v2ray client; the stat boxes elsewhere stay in Mb/s
   const row = c => { const m = c.meta || {}; return `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
       <td><span class="td-type">${esc((m.proto || "—").toUpperCase())}</span></td>
       <td class="name"><div class="cf-nm"><i class="sdot ${c.status}" title="${esc(c.status)}"></i>${title(c)}</div></td>
+      ${gcell(c)}
       <td class="mono" title="${esc(m.address || "")}">${esc(m.address || "—")}</td>
       <td class="num">${m.port || "—"}</td>
       <td>${esc(m.network || "—")}</td>
       <td>${m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : '<span class="mut">none</span>'}</td>
-      ${gcell(c)}
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
       <td class="num">${c.down_mbps != null ? "↓" + MBs(c.down_mbps) + " ↑" + MBs(c.up_mbps) : "—"}</td>
       <td>${cdnIn(c)}</td>
@@ -785,12 +859,12 @@ PAGES.configsList = async () => {
       <td class="cf-acts">${acts(c)}</td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
-  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div><small class="mut cf-grp">${esc(c.group || "manual")}</small>
+  const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div>${inAll && c.group ? `<small class="cf-sub">${esc(c.group)}</small>` : ""}
       <div class="cf-stats"><div class="cf-stat"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}<small>ms</small></b><span>PING</span></div><div class="cf-stat"><b>${mb(c.down_mbps)}</b><span>DOWN Mbps</span></div><div class="cf-stat"><b>${mb(c.up_mbps)}</b><span>UP Mbps</span></div></div>
       <div class="cf-meta">${cdnIn(c)}</div><div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
   const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
-  const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}${searched.some(c => !c.group) ? chip("Manual", searched.filter(c => !c.group).length, "__manual", false) : ""}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
+  const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
       ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Import new nodes of this subscription">⟳ Sync</button><button class="sm" onclick="cfSubManage('${esc(cf.group)}')" title="Tick which nodes of this subscription are kept on the probe">☑ Subscription</button>` : ""}</div>` : "";
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${names.length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
@@ -803,14 +877,14 @@ PAGES.configsList = async () => {
     ${gbar}
     ${cf.sub && cf.edit !== "new" ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
-      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col><col style="width:150px"></colgroup>
-      <thead><tr><th>Config</th><th>Group</th><th>Status</th><th>Ping</th><th>Speed</th><th>CDN port</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
-      : `<table class="tbl lift cf-list srv-tbl"><colgroup><col style="width:6%"><col style="width:17%"><col style="width:13%"><col style="width:5%"><col style="width:7%"><col style="width:7%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:7%"><col style="width:150px"></colgroup>
-      <thead><tr><th>Type</th><th>Remarks</th><th>Address</th><th>Port</th><th>Transport</th><th>TLS</th><th>Subs group</th><th>Delay (ms)</th><th>Speed (MB/s)</th><th>CDN port</th><th style="text-align:right">Actions</th></tr></thead>
+      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup>${inAll ? '<col style="width:22%"><col style="width:14%">' : '<col style="width:30%">'}<col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col><col style="width:150px"></colgroup>
+      <thead><tr><th>Config</th>${inAll ? "<th>Subs group</th>" : ""}<th>Status</th><th>Ping</th><th>Speed</th><th>CDN port</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
+      : `<table class="tbl lift cf-list srv-tbl">${inAll ? '<colgroup><col style="width:5%"><col style="width:17%"><col style="width:13%"><col style="width:18%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:6%"><col style="width:150px"></colgroup>' : '<colgroup><col style="width:6%"><col style="width:22%"><col style="width:22%"><col style="width:6%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:12%"><col style="width:7%"><col style="width:150px"></colgroup>'}
+      <thead><tr><th>Type</th><th>Remarks</th>${inAll ? "<th>Subs group</th>" : ""}<th>Address</th><th>Port</th><th>Transport</th><th>TLS</th><th>Delay (ms)</th><th>Speed (MB/s)</th><th>CDN port</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${list.map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
     ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
-  cf.names = names;
+  cf.names = names; cf.cache = d.configs;
   const openC = d.configs.find(c => c.id === cf.open);
   if (cf.add) cfAddModal();
   else if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(shown(openC))}</b> <span class="pill">${esc(openC.group || "manual")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide"); else hideModal();
@@ -818,19 +892,37 @@ PAGES.configsList = async () => {
   else if (cf.open) cfLoadChart(cf.open);
 };
 function cfDetailHtml(c) {
-  return `<div class="kv"><div><span>Probe port</span> ${c.port || "—"} · <span>slug</span> ${esc(c.slug)}</div><div><span>Group</span> ${esc(c.group || "—")} · <span>tunnel</span> ${esc(c.tunnel || "—")} · <span>CDN port</span> ${esc(c.cdn_port || "—")}</div>
-    <div><span>Speed</span> ${c.down_mbps != null ? "↓" + c.down_mbps + " ↑" + c.up_mbps + " Mb/s · " + esc((c.speed_at || "").slice(0, 16)) : "not measured"}</div><div><span>Since</span> ${c.status} ${ago(c.status_since)}</div></div>
-    <div class="charts" id="cf-charts-${c.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm" onclick="cfSpeed(${c.id})">Speed test now</button><button class="sm" onclick="cfCopy(${c.id})">Copy link</button><span class="sp"></span><button class="sm danger" onclick="cfDel(${c.id}, '${esc(c.name)}')">Delete from the probe</button></div>`;
+  const m = c.meta || {}, tab = state.wtab || "info";
+  const tabs = `<div class="tabs wtabs">${[["info", "Info"], ["charts", "Monitoring"], ["actions", "Actions"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
+  const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
+  if (tab === "charts") return tabs + `<div id="cf-charts-${c.id}"><div class="mut">loading…</div></div>`;
+  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Test</h4><div class="wtools">${tool("⚡", "Speed test now", "download and upload through this config from inside Iran (1-3 min)", `cfSpeed(${c.id})`)}${tool("↻", "Ping now", "ask the probe for the live state of every config", "cfSync()")}${tool("🔗", "Copy link", "the vless:// vmess:// trojan:// ss:// link", `cfCopy(${c.id})`)}</div></div>
+    <div class="wgroup"><h4>Change</h4><div class="wtools">${tool("✎", "Edit", "change the link field by field, rename, group", `cfEdit(${c.id})`)}</div></div>
+    <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("🗑", "Delete from the probe", "its history goes too", `cfDel(${c.id}, '${esc(c.name)}')`, "danger")}</div></div>`;
+  const sp = c.down_mbps != null ? `↓ ${mb(c.down_mbps / 8)} ↑ ${mb(c.up_mbps / 8)} MB/s <small class="mut">(${mb(c.down_mbps)} / ${mb(c.up_mbps)} Mb/s)</small>` : "not measured";
+  return tabs + `<div class="iboxes">${[
+    ibox("🧩", "Config", [irow("Type", esc((m.proto || "—").toUpperCase())), irow("Address", `<span class="mono">${esc(m.address || "—")}</span>`), irow("Port", m.port || "—"), irow("Transport", esc(m.network || "—")), irow("TLS", m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : "none")]),
+    ibox("🕒", "Status", [irow("State", `<span class="st ${c.status}">${esc(c.status)}</span>`), irow("Since", c.status_since ? ago(c.status_since) + " ago" : "—"), irow("Delay", c.ping_ms != null && c.status === "up" ? `<b class="${pingCls(c.ping_ms)}">${Math.round(c.ping_ms)} ms</b>` : "—"), irow("Last check", c.checked_at ? ago(c.checked_at) + " ago" : "—"), c.last_error ? irow("Error", `<span class="err">${esc(c.last_error.slice(0, 60))}</span>`) : ""]),
+    ibox("📡", "Subscription & routing", [irow("Subs group", c.group ? esc(c.group) : "—"), irow("CDN port", esc(c.cdn_port || "—")), irow("Probe port", `${c.port || "—"} <small class="mut">slug ${esc(c.slug)}</small>`)]),
+    ibox("⚡", "Speed", [irow("Last test", sp), irow("Measured", esc((c.speed_at || "").slice(0, 16).replace("T", " ") || "—"))]),
+  ].join("")}</div>`;
 }
 async function cfLoadChart(id) {
   const box = document.getElementById("cf-charts-" + id); if (!box) return;
-  const d = await api(`/api/configs/${id}/samples?hours=24`);
-  const col = n => d.samples.map(r => r[d.columns.indexOf(n)]);
-  const ups = col("up"), pct = ups.length ? Math.round(ups.filter(Boolean).length * 100 / ups.length) : null;
-  box.innerHTML = `<div><small>Up / down · ${ups.length} checks${pct != null ? " · " + pct + "% up" : ""}</small>${strip(ups)}</div><div><small>Ping ms</small>${spark(col("ping_ms").map(v => v || null), {fmt: v => v.toFixed(0)})}</div>`;
-}
-window.cfQ = v => { cf.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
+  const d = await api(`/api/configs/${id}/samples?hours=${state.mrange}`);
+  const rows = d.samples, ups = rows.map(r => r[1]), pings = nums(rows.map(r => r[2]).filter((v, i) => ups[i])), upn = ups.filter(Boolean).length;
+  const pct = ups.length ? upn * 100 / ups.length : null, f1 = v => v == null ? "—" : Math.round(v * 10) / 10;
+  const out = []; let cur = null;
+  rows.forEach(r => { if (!r[1]) { if (!cur) cur = {from: r[0], to: r[0]}; cur.to = r[0]; } else if (cur) { cur.to = r[0]; out.push(cur); cur = null; } });
+  if (cur) { cur.open = true; cur.to = Date.now() / 1000; out.push(cur); }
+  CH_reset();
+  box.className = "mon";
+  box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · hover a chart for exact values</small></div>
+    <div class="mtiles">${mtile("Uptime", pct == null ? "—" : f1(pct) + "%", `${upn} of ${rows.length} checks up`, pct != null && pct < 90 ? "bad" : pct != null && pct < 99 ? "warn" : "ok")}${mtile("Delay", pings.length ? Math.round(avgOf(pings)) + " ms" : "—", pings.length ? "best " + Math.round(Math.min(...pings)) + " · worst " + Math.round(Math.max(...pings)) + " ms" : "")}${mtile("Outages", out.length, out.length ? "down " + durText(out.reduce((a, o) => a + (o.to - o.from), 0)) + " in total" : "none in this range", out.length ? "warn" : "ok")}</div>
+    <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(ups)}</div>
+    <div class="mgrid">${chartCard("Delay", rows.map(r => [r[0], r[1] ? r[2] : null]), {unit: " ms", warn: 400, bad: 800, fmt: v => Math.round(v)})}
+      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-8).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)}</span><div class="err">${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
+}window.cfQ = v => { cf.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
 window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refresh(); };
 window.cfGroup = g => { cf.group = g; localStorage.setItem("nk.cfgroup", g); refresh(); };
 async function cfInView() { const d = await api("/api/configs"); return d.configs.filter(c => cf.group === "__all" ? true : cf.group === "__manual" ? !c.group : c.group === cf.group); }
@@ -840,7 +932,7 @@ window.cfGroupDel = async g => { const [d, subs] = await Promise.all([api("/api/
 window.cfSetTunnel = async (id, v) => { try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({tunnel: v})}); toast(v ? "✓ Tunnel set to " + v : "✓ Tunnel cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.cfSetCdn = async (id, inp) => { const v = inp.value.trim(); if (v === (inp.dataset.orig || "")) return; const n = Number(v); if (v && (!/^\d+$/.test(v) || n < 1 || n > 65535)) { toast("CDN port must be a number from 1 to 65535", "bad"); inp.value = inp.dataset.orig || ""; return; } try { await api(`/api/configs/${id}`, {method: "PUT", body: JSON.stringify({cdn_port: v})}); inp.dataset.orig = v; toast(v ? "✓ CDN port " + v + " saved" : "✓ CDN port cleared", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); inp.value = inp.dataset.orig || ""; } };
 window.cfSubOpen = async name => { const subs = await api("/api/subscriptions"); cf.sub = {name, url: "", nodes: null, saved: subs.subscriptions.some(s => s.name === name)}; cf.edit = null; refresh(); };
-window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; if (!cf.open) hideModal(); refresh(); };
+window.cfToggle = id => { cf.open = cf.open === id ? null : id; cf.edit = null; state.wtab = null; if (!cf.open) hideModal(); refresh(); };
 /* Add: first a choice (one link / a subscription), then a glass window with that form */
 window.cfNew = () => { cf.add = "choose"; cf.edit = null; cf.open = null; cf.sub = null; cfAddModal(); };
 window.cfAddPick = k => { cf.add = k; cf.sub = k === "sub" ? {name: "", url: "", nodes: null} : null; cfAddModal(); };

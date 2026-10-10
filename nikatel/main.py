@@ -20,6 +20,7 @@ from .db import init_db
 from .services import (
     actions,
     alerts,
+    autopilot,
     backup,
     configs,
     facts,
@@ -70,6 +71,7 @@ def _register_jobs() -> None:
     jobs.register("report", 300, report.run)
     jobs.register("backup", 600, backup.scheduled)
     jobs.register("auto-repair", 60, actions.auto_repair)
+    jobs.register("smart-repair", 300, autopilot.auto_escalate)
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 120, panels.check_all)
     jobs.register("geo", 3600, nodes.geo_missing_job)

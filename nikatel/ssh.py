@@ -184,6 +184,10 @@ print("NKPROBE " + json.dumps(out))
 __NK_PY__
 """, {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$"}),
 
+    # can this server open a TCP connection to HOST:PORT (a tunnel's control port, seen from the other side)?
+    "tcp_probe": (r"""if timeout 4 bash -c "exec 3<>/dev/tcp/@HOST@/@PORT@" 2>/dev/null; then echo OPEN; else echo CLOSED; fi
+""", {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
+
     # 4 pings to a host (used from the Iran servers: is a foreign address reachable / filtered?)
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
