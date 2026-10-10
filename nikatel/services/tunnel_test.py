@@ -103,6 +103,52 @@ def quality_all() -> list[dict]:
     return out
 
 
+LOSS_HIGH = 10.0           # % packet loss users feel (video stalls, slow pages)
+LOSS_SOME = 3.0
+
+
+def loss_level(loss: float | None) -> str:
+    """Pure: how bad a packet loss is for the users. Shown only - nothing is repaired because of it."""
+    if loss is None:
+        return ""
+
+    return "high" if loss >= LOSS_HIGH else "some" if loss >= LOSS_SOME else ""
+
+
+def full_check() -> dict:
+    """One button for everything: every tunnel is checked for real (are both sides up, does data pass), then its packet loss and
+    latency are measured; the answer lists up / degraded / down and flags a loss that users will feel. Display only."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import actions
+
+    states = {r["id"]: r for r in actions.health_all()}
+
+    with session() as db:
+        info = {t.id: (t.iran.name, t.foreign.name, dict(t.detail or {})) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))}
+
+    def one(tid: int) -> dict:
+        try:
+            return quality(tid)
+        except (ValueError, SSHError) as e:
+            return {"error": str(e)[:120]}
+
+    with ThreadPoolExecutor(6) as ex:
+        measured = dict(zip(info, ex.map(one, list(info))))
+
+    rows = []
+
+    for tid, (iran, foreign, det) in info.items():
+        q, st_ = measured.get(tid, {}), states.get(tid, {})
+        loss = q.get("loss_pct") if q.get("loss_pct") is not None else det.get("loss_pct")
+        rows.append({"id": tid, "name": st_.get("name", str(tid)), "iran": iran, "foreign": foreign, "state": st_.get("state", "unknown"), "why": st_.get("why", ""),
+                     "latency_ms": q.get("latency_ms"), "jitter_ms": q.get("jitter_ms"), "loss_pct": loss, "loss": loss_level(loss), "measured": "error" not in q})
+
+    order = {"down": 0, "unknown": 1, "degraded": 2, "up": 3}
+    rows.sort(key=lambda r: (order.get(r["state"], 1), -(r["loss_pct"] or 0), r["name"]))
+    return {"rows": rows, **{k: sum(1 for r in rows if r["state"] == k) for k in order}, "high_loss": sum(1 for r in rows if r["loss"] == "high"), "some_loss": sum(1 for r in rows if r["loss"] == "some")}
+
+
 def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
     """Validate and start; returns the action id of the test (the build has its own id in the story)."""
     with session() as db:

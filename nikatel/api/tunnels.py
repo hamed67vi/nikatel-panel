@@ -186,6 +186,14 @@ def quality(tunnel_id: int):
         raise HTTPException(502, str(e))
 
 
+@router.post("/tunnels/full-check")
+def full_check():
+    """Check every tunnel (up / down, data path) and measure its packet loss; display only."""
+    from ..services import tunnel_test as tt
+
+    return {"ok": True, **tt.full_check()}
+
+
 @router.post("/tunnels/quality-all")
 def quality_all():
     from ..services import tunnel_test as tt

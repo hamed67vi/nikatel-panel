@@ -59,3 +59,35 @@ def test_cleanup_also_removes_a_renamed_temporary_tunnel(monkeypatch):
     with session() as db:
         assert {db.get(Tunnel, t).name for t in gone} == {"f1-i1-2"}
         assert "Removed the temporary tunnel" in db.get(ActionLog, aid).story[-1]
+
+
+def test_loss_levels_and_the_full_check_report(client, monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services import actions, tunnel_test
+
+    assert [tunnel_test.loss_level(x) for x in (None, 0, 2.9, 3, 9.9, 10, 40)] == ["", "", "", "some", "some", "high", "high"]
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        ids = []
+
+        for n, st in (("t-up", "up"), ("t-down", "down"), ("t-lossy", "up")):
+            t = Tunnel(name=n, type="backhaul", iran_server_id=a.id, foreign_server_id=b.id, state=st, detail={})
+            db.add(t)
+            db.flush()
+            ids.append(t.id)
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(actions, "health_all", lambda: [{"id": i, "name": n, "state": s, "why": "x" if s == "down" else ""} for i, n, s in zip(ids, ("t-up", "t-down", "t-lossy"), ("up", "down", "up"))])
+    quality = {ids[0]: {"latency_ms": 90.0, "jitter_ms": 1.0, "loss_pct": 0.0}, ids[2]: {"latency_ms": 120.0, "jitter_ms": 9.0, "loss_pct": 22.0}}
+    monkeypatch.setattr(tunnel_test, "quality", lambda tid: quality[tid] if tid in quality else (_ for _ in ()).throw(ValueError("no link")))
+    r = client.post("/api/tunnels/full-check").json()
+    assert (r["up"], r["down"], r["high_loss"]) == (2, 1, 1)
+    assert [x["name"] for x in r["rows"]] == ["t-down", "t-lossy", "t-up"]                                   # worst first: down, then the lossy one, then the clean one
+    lossy = next(x for x in r["rows"] if x["name"] == "t-lossy")
+    assert lossy["loss"] == "high" and lossy["loss_pct"] == 22.0
+    assert next(x for x in r["rows"] if x["name"] == "t-down")["measured"] is False
