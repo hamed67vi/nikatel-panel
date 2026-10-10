@@ -270,11 +270,11 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label>Role<select name="role">${["iran", "foreign"].map(r => `<option ${(s ? s.role : role) === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
     <label>SSH user<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}"></label>
     <label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}"></label>
-    <label>Provider<input name="provider" value="${esc(s ? s.provider : "")}" placeholder="optional"></label>
+    ${s ? `<label>Provider<input name="provider" value="${esc(s.provider)}" placeholder="optional"></label>` : `<label>SSH password <small>(optional)</small><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the server"></label>`}
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
     <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? "" : '<button type="button" onclick="cancelEdit()">Cancel</button>'}
       ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
-    <small class="mut">Adding a server here only tells the panel to look at it. Put the panel's public key in its <code>authorized_keys</code> first (Settings shows the key).</small>
+    <small class="mut">${s ? "Changing a server here only changes how the panel looks at it." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
   </form>`;
 
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
@@ -462,10 +462,19 @@ window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "l
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  const body = {name: f.get("name").trim(), host: f.get("host").trim(), role: f.get("role"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: f.get("provider").trim(), enabled: f.get("enabled") === "on"};
+  const body = {name: f.get("name").trim(), host: f.get("host").trim(), role: f.get("role"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
   try {
-    await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
-    toast(id ? "✓ Saved" : "✓ Server added", "ok"); state.edit = null; refresh();
+    const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
+    state.edit = null;
+    if (id) toast("✓ Saved", "ok");
+    else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
+      toast("Server added — connecting with the password…");
+      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Added and connected: " + r.hostname, "ok"); }
+      catch (err) { toast("Added, but not connected: " + err.message, "bad"); }
+    } else {          // no password: the panel's key must already be on the server - try it
+      try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
+    }
+    refresh();
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
