@@ -21,6 +21,7 @@ class BuildIn(BaseModel):
     transport: str = Field("tcpmux", pattern=r"^[a-z0-9:]{0,16}$")
     mtu: int = Field(0, ge=0, le=1476)
     keepalive: int = Field(75, ge=10, le=600)
+    nodelay: bool = True
     opts: dict = Field(default_factory=dict)
 
 
@@ -31,11 +32,11 @@ def build(body: BuildIn):
             if body.transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
                 raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
-            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive)
+            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive, nodelay=body.nodelay)
         else:
             from ..services import build_other
 
-            opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+            opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
             aid = build_other.start_build(body.iran_id, body.foreign_id, body.ports, body.kind, body.transport, opts, measure="full" if body.opts.get("measure") != "latency" else "latency")
     except ValueError as e:
         raise HTTPException(400, str(e))

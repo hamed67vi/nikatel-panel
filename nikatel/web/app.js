@@ -189,7 +189,7 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}"></label>
     <label>Provider<input name="provider" value="${esc(s ? s.provider : "")}" placeholder="optional"></label>
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
-    <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button><button type="button" onclick="cancelEdit()">Cancel</button>
+    <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? "" : '<button type="button" onclick="cancelEdit()">Cancel</button>'}
       ${s ? `<span class="sp"></span><button type="button" class="danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')">Remove from panel</button>` : ""}</div>
     <small class="mut">Adding a server here only tells the panel to look at it. Put the panel's public key in its <code>authorized_keys</code> first (Settings shows the key).</small>
   </form>`;
@@ -247,6 +247,8 @@ function tunModal(t) { showModal(`<span class="st ${t.state}"></span><b>${esc(t.
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="https://flagcdn.com/20x15/${cc.toLowerCase()}.png" srcset="https://flagcdn.com/40x30/${cc.toLowerCase()}.png 2x" width="20" height="15" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
 const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? flagImg(cc) + " " + cc : "";
+const irow = (label, val) => `<div class="irow"><span>${label}</span><div>${val}</div></div>`;
+const ibox = (icon, title, rows) => `<div class="ibox"><h5><i>${icon}</i>${title}</h5>${rows.filter(Boolean).join("")}</div>`;
 function serverDetailHtml(s) {
   const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};
   const abuseOn = ab.installed || (f.abuse_rules || 0) > 0;
@@ -259,16 +261,15 @@ function serverDetailHtml(s) {
     <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;
   if (tab === "console") { if (state.con !== s.id) state.con = s.id; return tabs + `<div class="fix" id="con-${s.id}"><div class="frm-act"><select id="con-preset-${s.id}" onchange="$('#con-cmd-${s.id}').value=this.value">${["", ...Object.keys(CON_PRESETS)].map(k => `<option value="${k ? esc(CON_PRESETS[k][1]) : ""}">${k ? esc(CON_PRESETS[k][0]) : "— preset —"}</option>`).join("")}</select><input id="con-cmd-${s.id}" style="flex:1" placeholder="command to run as ${esc(s.ssh_user)}…" onkeydown="if(event.key==='Enter')srvRun(${s.id})"><button class="pri sm" onclick="srvRun(${s.id})">Run</button></div><pre class="gl-out" id="con-out-${s.id}">${esc(state.conOut[s.id] || "")}</pre></div>`; }
   if (tab === "charts") return tabs + `<div class="charts" id="srv-charts-${s.id}"><div class="mut">loading 24 h…</div></div><div class="kv" id="srv-peaks-${s.id}"></div>`;
-  return tabs + `<div class="kv">
-      <div><span>Host</span> <b>${esc(f.hostname || x.hostname || "—")}</b> <span class="mono">${esc(f.kernel || "")}</span></div>
-      <div><span>Uptime</span> ${f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"} · <span>connections</span> ${f.conn != null ? f.conn : "—"} · <span>load</span> ${f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"}</div>
-      <div><span>RAM</span> ${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : "—"} · <span>swap</span> ${f.swap != null ? f.swap + "%" : "—"} · <span>disk</span> ${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "—"}</div>
-      <div><span>Busiest process</span> ${esc(f.top || "—")} · <span>SSH</span> ${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port} · <span>seen</span> ${when(s.last_seen_at)}</div>
-      ${s.role === "foreign" ? `<div><span>Country</span> ${flag(s.country) || "—"} ${esc(geo.city || "")} ${geo.agree ? `<small class="mut">(${esc(geo.agree)} services agree)</small>` : ""} · <span>Abuse-Defender</span> ${abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off"}</div>
-      <div><span>Filtered in Iran?</span> ${fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b> <small class="mut">${ago(fl.checked_at)} ago · ${esc(fl.source)}</small>` : "not checked yet"}</div>` : ""}
-    </div>
-    ${fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : ""}
-    ${(state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).length ? `<div class="ob-inbounds" style="margin:6px 0 0"><b class="mut" style="font-size:11px;letter-spacing:.8px;text-transform:uppercase">Tunnels on this server</b>${(state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div>` : ""}
+  const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
+  const boxes = [
+    ibox("🖥", "System", [irow("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), irow("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), irow("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"), irow("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), irow("Connections", f.conn != null ? f.conn : "—"), irow("Busiest process", esc(f.top || "—"))]),
+    ibox("📊", "Resources", [irow("CPU", pct(f.cpu, 80, 92)), irow("RAM", `${pct(f.ram, 80, 90)} <small class="mut">${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""}</small>`), irow("Swap", f.swap != null ? f.swap + "%" : "—"), irow("Disk", `${pct(f.disk, 85, 95)} <small class="mut">${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""}</small>`), irow("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—")]),
+    ibox("🔑", "Access", [irow("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), irow("Last seen", when(s.last_seen_at)), irow("Role", esc(s.role)), irow("Provider", esc(s.provider || s.asn || "—"))]),
+    s.role === "foreign" ? ibox("🛡", "Location & security", [irow("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")} ${geo.agree ? `<small class="mut">(${esc(geo.agree)} agree)</small>` : ""}`), irow("Abuse-Defender", abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off"), irow("Filtered in Iran?", fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : "not checked yet")]) : "",
+  ].join("");
+  return tabs + `<div class="iboxes">${boxes}</div>    ${fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : ""}
+    ${mine.length ? `<div class="ibox wide-box"><h5><i>⇄</i>Tunnels on this server <small>${mine.length}</small></h5><div class="ichips">${mine.map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div></div>` : ""}
     <div class="frm-act"><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('tools')">🧰 Tools</button><button class="sm" onclick="wtab('console')">⌨ Console</button>${s.role === "foreign" ? `<button class="sm" onclick="srvFilter(${s.id})">Check filtering in Iran</button>` : ""}<span class="sp"></span><button class="sm danger" onclick="srvReboot(${s.id}, '${esc(s.name)}')">Reboot</button></div>`;
 }
 /* a window tab only redraws the window body - no API call, the list behind it stays as it is */
@@ -469,7 +470,7 @@ PAGES.tunnelsList = async () => {
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);
   else if (state.detect) detectHtml();
-  else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b> <span class="mut">pick the servers, the ports and the type - the panel does the rest and removes everything when a build fails</span>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
+  else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
   else hideModal();
   if (state.open) loadTunnelCharts(state.open);
 };
@@ -484,17 +485,16 @@ function detailRow(t) {
     <div class="wgroup"><h4>Change</h4><div class="wtools">${t.type === "backhaul" ? tool("⇅", "Ports", "change the forwarded ports", `editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')`) : ""}${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
     <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("🗑", "Remove", "from both servers; users lose their connection", `deleteTunnel(${t.id}, '${esc(t.name)}')`, "danger")}</div></div>
     <div id="fix-${t.id}" class="fix hidden"></div>`;
-  return tabs + `<div class="kv">
-      <div><span>Iran</span> <b>${esc(t.iran_name)}</b> <span class="mono">${esc(t.iran_host)}</span></div>
-      <div><span>Foreign</span> <b>${esc(t.foreign_name)}</b> <span class="mono">${esc(t.foreign_host)}</span></div>
-      ${t.type === "backhaul" || t.type === "gre" ? `<div><span>GRE</span> ${esc(u.iface || "—")} ${d.iface ? "· " + esc(d.iface) : ""} · ${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</div>` : `<div><span>Engine</span> ${esc((t.record || {}).transport_label || t.type)} · ${esc((t.record || {}).direction || "")}${(t.record || {}).test_port ? " · test door " + (t.record || {}).test_port : ""}${t.iran_tunnel_ip ? " · " + esc(t.iran_tunnel_ip) + " ⇄ " + esc(t.foreign_tunnel_ip) : ""}</div>`}
-      ${t.quality && t.quality.score != null ? `<div><span>Quality</span> <b class="${t.quality.score >= 70 ? "gw-ok" : t.quality.score >= 40 ? "" : "err"}">${t.quality.score} / 100</b> · ${t.quality.latency_ms} ms · jitter ${t.quality.jitter_ms} · loss ${t.quality.loss_pct}%${t.quality.down_mbps != null ? " · ↓" + t.quality.down_mbps + " ↑" + t.quality.up_mbps + " Mb/s" : ""} <small class="mut">${t.quality.at ? ago(t.quality.at) + " ago" : ""}</small></div>` : ""}
-      <div><span>Loss</span> ${d.loss_pct != null ? d.loss_pct + "%" : "—"} · <span>ports</span> ${(t.forwarded_ports || []).map(p => p + (d.listen && d.listen[p] === false ? " ✗" : "")).join(", ") || "—"}</div>
-      ${(u.iran || []).map(n => unit("iran", n)).join("")}${(u.foreign || []).map(n => unit("foreign", n)).join("")}
-      <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
-      ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
-    </div>
-    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step">🛠 Fix</button><button class="sm" onclick="qualityOne(${t.id})">📊 Quality</button><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('actions')">🧰 Actions</button><span class="sp"></span><button class="sm" onclick="closeModal()">← Back</button></div>
+  const rec = t.record || {}, q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre";
+  const unitRow = (side, label, name) => irow(label, `<span class="mono">${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "gw-ok" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b>`);
+  const boxes = [
+    ibox("⇄", "Servers", [irow("Iran", `<b>${esc(t.iran_name)}</b> <span class="mono mut">${esc(t.iran_host)}</span>`), irow("Foreign", `<b>${esc(t.foreign_name)}</b> <span class="mono mut">${esc(t.foreign_host)}</span>`), irow("Type", `${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}`), irow("Direction", esc(rec.direction || "reverse"))]),
+    ibox("🔗", "Link", [gre ? irow("GRE", `${esc(u.iface || "—")} ${d.iface ? "· " + esc(d.iface) : ""}`) : irow("Engine", esc(rec.transport_label || t.type)), irow("Tunnel IPs", t.iran_tunnel_ip ? `<span class="mono">${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</span>` : "—"), irow("Control port", t.port || "—"), irow("Ports", `<div class="td-ports">${(t.forwarded_ports || []).map(p => `<i class="${d.listen && d.listen[p] === false ? "bad" : ""}">${p}</i>`).join("") || "—"}</div>`), irow("Packet loss", d.loss_pct != null ? d.loss_pct + "%" : "—")]),
+    ibox("📈", "Quality", q.score != null ? [irow("Score", `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score} / 100</b>`), irow("Latency", q.latency_ms + " ms"), irow("Jitter / loss", `${q.jitter_ms} ms · ${q.loss_pct}%`), irow("Speed", q.down_mbps != null ? `↓ ${q.down_mbps} ↑ ${q.up_mbps} Mb/s` : "—"), irow("Measured", q.at ? ago(q.at) + " ago" : "—")] : [irow("Not measured yet", '<button class="sm" onclick="qualityOne(' + t.id + ')">Measure now</button>')]),
+    ibox("⚙", "Services", [...(u.iran || []).map(n => unitRow("iran", "Iran", n)), ...(u.foreign || []).map(n => unitRow("foreign", "Foreign", n))]),
+    ibox("🕒", "Status", [irow("State", `<span class="st ${t.state}">${esc(t.state)}</span>`), irow("Since", t.state_since ? ago(t.state_since) + " ago" : "—"), irow("Checked", when(t.last_check_at)), irow("Created", when(t.created_at)), irow("RTT", t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"), irow("Traffic", t.rx_mbps != null ? `↓ ${mbps(t.rx_mbps)} ↑ ${mbps(t.tx_mbps)}` : "—"), d.iran_error ? irow("Iran error", `<span class="err">${esc(d.iran_error)}</span>`) : "", d.foreign_error ? irow("Foreign error", `<span class="err">${esc(d.foreign_error)}</span>`) : "", t.last_error ? irow("Last error", `<span class="err">${esc(t.last_error)}</span>`) : ""]),
+  ].join("");
+  return tabs + `<div class="iboxes">${boxes}</div>    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step">🛠 Fix</button><button class="sm" onclick="qualityOne(${t.id})">📊 Quality</button><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('actions')">🧰 Actions</button><span class="sp"></span><button class="sm" onclick="closeModal()">← Back</button></div>
     <div id="fix-${t.id}" class="fix hidden"></div>`;
 }
 async function loadTunnelCharts(id) {
@@ -537,10 +537,11 @@ async function buildFormHtml() {
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
   const opt = (role, name) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
-  const chk = (name, label, small) => `<label class="chk"><input name="${name}" type="checkbox" ${v[name] === "on" ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
+  const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(v.__t ? v[name] === "on" : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
+  const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
   let options = "";
-  if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600);
-  else if (K.key === "backpack") options = `<label>Preset<select name="preset">${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
+  if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600) + nodelay;
+  else if (K.key === "backpack") options = `<label>Preset<select name="preset">${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", BP_MUXED.includes(tr.key) ? 16 : 24, 1, 256, "(client connections kept ready)") + (BP_MUXED.includes(tr.key) ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + nodelay + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>SNI domain <small>(a domain your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "") + (tr.key === "pck" || tr.key === "sni" ? num("mtu", "Carrier MTU", 1380, 1000, 1500) : "") + chk("accept_udp", "Forward UDP too");
   else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode">${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
   else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
@@ -552,18 +553,23 @@ async function buildFormHtml() {
       <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label>
       <label>Tunnel type <small>(the defaults are the many-users settings)</small>${typeSel}</label></div>
     <div id="auto-iran" class="mut"></div>
-    <div class="badv"><a onclick="bk.adv=!bk.adv;refresh()">${bk.adv ? "▾ Advanced settings" : "▸ Advanced settings"} <small class="mut">${bk.adv ? "— change a value only when you measured a reason" : "— keepalive, heartbeat, MTU, preset, UDP…"}</small></a>${bk.adv ? `<div class="bgrid" style="margin-top:8px">${options}</div>` : ""}</div>
-    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
+    <div class="badv"><a onclick="bkAdv()">${bk.adv ? "▾ Advanced settings" : "▸ Advanced settings"} <small class="mut">${bk.adv ? "— change a value only when you measured a reason" : "— keepalive, heartbeat, MTU, preset, UDP…"}</small></a>${bk.adv ? `<div class="bgrid" style="margin-top:8px">${options}</div>` : ""}</div>
+    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button></div>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
-window.bkType = v => { const [k, t] = v.split("|"); bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); refresh(); };
-window.bkKeep = form => { const f = new FormData(form); bk.v = {}; for (const [k, x] of f.entries()) bk.v[k] = x; };
-window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); refresh(); };
-window.bkTransport = t => { bk.transport = t; refresh(); };
+/* the Create window redraws only its own body: no refresh of the page behind it, the typed values stay */
+async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) return refresh(); const form = $("#modal form.build"); if (form) bkKeep(form); const story = $("#build-story"), keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; body.innerHTML = await buildFormHtml(); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
+window.bkAdv = () => { bk.adv = !bk.adv; bkRedraw(); };
+window.bkType = v => { const [k, t] = v.split("|"); bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
+const BP_MUXED = ["tcpmux", "wsmux", "wssmux"];
+window.bkKeep = form => { const f = new FormData(form); bk.v = {__t: "1"}; for (const [k, x] of f.entries()) bk.v[k] = x; };
+window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
+window.bkTransport = t => { bk.transport = t; bkRedraw(); };
 function bkBody(f) {
   const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: (f.get("ports") || "").trim(), kind: bk.kind, transport: f.get("transport") || "", opts: {}};
-  if (bk.kind === "backhaul") { body.mtu = +f.get("mtu") || 0; body.keepalive = +f.get("keepalive") || 75; }
-  else for (const k of ["preset", "keepalive", "heartbeat", "sni_domain", "mtu", "kcp_mode", "conn"]) if (f.get(k) != null && f.get(k) !== "") body.opts[k] = isNaN(+f.get(k)) ? f.get(k) : +f.get(k);
+  if (bk.kind === "backhaul") { body.mtu = +f.get("mtu") || 0; body.keepalive = +f.get("keepalive") || 75; body.nodelay = $("#modal [name=nodelay]") ? f.get("nodelay") === "on" : true; }
+  else for (const k of ["preset", "keepalive", "heartbeat", "sni_domain", "mtu", "kcp_mode", "conn", "connection_pool", "mux_con", "channel_size"]) if (f.get(k) != null && f.get(k) !== "") body.opts[k] = isNaN(+f.get(k)) ? f.get(k) : +f.get(k);
+  if (bk.kind === "backpack") body.opts.nodelay = $("#modal [name=nodelay]") ? f.get("nodelay") === "on" : true;
   if (f.get("accept_udp") === "on") body.opts.accept_udp = true;
   return body;
 }
@@ -815,7 +821,7 @@ function cfeRender(td) {
   td.innerHTML = `<div class="cfe"><div class="cfe-cols"><div>${secs.map(s => `<div class="ob-sec"><h4>${s}</h4>${rows.filter(r => r.sec === s).map(r => { const v = f[r.key] == null ? "" : f[r.key]; return `<label class="cfe-row"><span>${r.label}</span>${r.kind === "select" ? `<select data-k="${r.key}">${(r.opts.indexOf(v) < 0 ? r.opts.concat([v]) : r.opts).map(o => `<option value="${esc(o)}" ${o === v ? "selected" : ""}>${esc(o || "—")}</option>`).join("")}</select>` : `<input data-k="${r.key}" value="${esc(v)}" spellcheck="false">`}</label>`; }).join("")}</div>`).join("")}</div>
     <div><div class="ob-sec"><h4>Check</h4>${w.length ? w.map(x => `<div class="err">⚠ ${esc(x)}</div>`).join("") : '<div class="gw-ok">✓ Looks valid</div>'}</div>
       <div class="ob-sec"><h4>Link <small class="mut">(paste a whole new link here)</small></h4><textarea class="ob-raw" id="cfe-link" spellcheck="false">${esc(link)}</textarea></div></div></div>
-    <div class="frm-act"><button class="pri" onclick="cfeSave()">Save to the probe</button><button onclick="cfToggle(${cfe.id})">Cancel</button><span class="mut">${link === cfe.origLink ? "no change yet" : "changed"}</span></div></div>`;
+    <div class="frm-act"><button class="pri" onclick="cfeSave()">Save to the probe</button><span class="mut">${link === cfe.origLink ? "no change yet" : "changed"}</span></div></div>`;
   td.querySelectorAll("[data-k]").forEach(el => { el.onchange = el.oninput = () => { cfe.f[el.dataset.k] = el.value.trim(); if (el.tagName === "SELECT" && ["net", "sec", "htype"].indexOf(el.dataset.k) >= 0) cfeRender(td); else { const t = td.querySelector("#cfe-link"); if (t) t.value = cfeBuild(cfe.f); } }; });
   td.querySelector("#cfe-link").oninput = e => { try { cfe.f = cfeParse(e.target.value); const v = e.target.value; cfeRender(td); td.querySelector("#cfe-link").value = v; } catch (x) { /* keep typing */ } };
 }
@@ -853,7 +859,7 @@ function cfSubRender() {
   showModal(`<b>☑ ${esc(s.group)}</b> <span class="pill">${s.nodes.filter(n => n.cfg).length} of ${s.nodes.length} on the probe</span>`,
     `<div class="toolbar"><a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=true)">tick all</a> · <a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=false)">untick all</a><span class="sp"></span><small class="mut">ticked = kept on the probe and shown in the list</small></div>
      <div class="ob-inbounds sub-nodes" id="sub-nodes" style="max-height:50vh">${s.nodes.map((n, i) => `<label><input type="checkbox" data-i="${i}" ${n.cfg ? "checked" : ""}> ${cfFlag(n.name)}${esc(n.name)} <small class="mut">${esc(n.proto)}${n.cfg ? ` · ${n.cfg.status}${n.cfg.ping_ms != null && n.cfg.status === "up" ? " " + Math.round(n.cfg.ping_ms) + " ms" : ""}` : " · not on the probe"}</small></label>`).join("")}</div>
-     <div class="frm-act"><button class="pri" onclick="cfSubApply()">Apply</button><button onclick="cf.subEdit=null;closeModal()">Cancel</button></div>`, "wide");
+     <div class="frm-act"><button class="pri" onclick="cfSubApply()">Apply</button></div>`, "wide");
 }
 window.cfSubApply = async () => {
   const s = cf.subEdit; if (!s) return;

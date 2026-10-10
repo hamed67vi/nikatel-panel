@@ -246,12 +246,20 @@ button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); bord
 .modal .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; } @media (max-width: 700px) { .modal .charts { grid-template-columns: 1fr; } } .modal .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
 .modal .frm-act { margin-top: 14px; flex-wrap: wrap; gap: 6px; } .modal .ob-inbounds { margin-top: 10px; }
 /* window tabs and tool groups (server / tunnel windows) */
+/* info windows: every group of facts in its own box */
+.iboxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin-bottom: 4px; align-items: start; }
+.ibox { padding: 10px 14px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); } .ibox.wide-box { margin-top: 10px; }
+.ibox h5 { margin: 0 0 6px; padding-bottom: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); border-bottom: 1px solid var(--line); } .ibox h5 i { font-style: normal; font-size: 14px; } .ibox h5 small { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.irow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; font-size: 12.5px; } .irow > span { color: var(--mut); flex: none; } .irow > div { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.irow + .irow { border-top: 1px solid rgba(255,255,255,.04); } .irow .td-ports { justify-content: flex-end; }
+.ichips { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0; font-size: 12.5px; }
 .wtabs { margin: -2px 0 14px; } .wtabs button { height: 30px; padding: 0 14px; font-size: 12.5px; }
 .wgroup { margin-bottom: 14px; } .wgroup h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
 .wtools { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 .wtool { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 9px 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; transition: background .2s, border-color .2s; }
 .wtool i { grid-row: 1 / 3; font-style: normal; font-size: 17px; text-align: center; } .wtool b { font-size: 12.5px; } .wtool small { font-size: 10.5px; color: var(--mut); line-height: 1.3; }
 .wtool:hover { filter: brightness(1.07); border-color: var(--line-hi); } .wtool.danger { border-color: rgba(255,90,120,.4); } .wtool.danger b { color: var(--bad); }
+.modal-head > b, .modal-head > span:not(.sp) { white-space: nowrap; } .modal-head button { flex: none; white-space: nowrap; }
 .modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 15px; } .modal-head .sp { flex: 1; } .modal-head .st::before { width: 10px; height: 10px; }
 .modal-body { padding: 14px 18px 18px; overflow: auto; }
 .tbl tr.click { cursor: pointer; }

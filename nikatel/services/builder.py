@@ -245,18 +245,19 @@ WantedBy=timers.target
             f"/etc/systemd/system/nikatel-gre-check-{name}.service": check_unit, f"/etc/systemd/system/nikatel-gre-check-{name}.timer": timer}
 
 
-def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: list[PortMap], keepalive: int = 75) -> tuple[str, str]:
+def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: list[PortMap], keepalive: int = 75, nodelay: bool = True) -> tuple[str, str]:
     """(iran server toml, foreign client toml) - tuned for many users."""
     mux = transport != "tcp"
     mux_server = ("mux_con = 8\nmux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 8388608\nmux_streambuffer = 262144\n") if mux else ""
     mux_client = ("mux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 8388608\nmux_streambuffer = 262144\n") if mux else ""
+    nd = "true" if nodelay else "false"
     port_lines = "\n".join(f'    "{p.entry()}",' for p in ports)
     iran = f"""[server]
 bind_addr = "{iran_ip}:{port}"
 transport = "{transport}"
 token = "{token}"
 keepalive_period = {keepalive}
-nodelay = true
+nodelay = {nd}
 heartbeat = 20
 channel_size = 8192
 log_level = "warn"
@@ -276,7 +277,7 @@ aggressive_pool = false
 keepalive_period = {keepalive}
 dial_timeout = 10
 retry_interval = 2
-nodelay = true
+nodelay = {nd}
 log_level = "warn"
 web_port = 0
 sniffer = false
@@ -326,6 +327,7 @@ class Build:
     transport: str
     mtu: int = 0           # 0 = measure
     keepalive: int = 75
+    nodelay: bool = True
     name: str = ""
     created: list[tuple[str, Node]] = field(default_factory=list)   # (what, where) for rollback
 
@@ -436,7 +438,7 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
     return {"ports": [p.listen for p in ports], "mapping": ",".join(p.spec() for p in ports)}
 
 
-def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "") -> int:
+def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True) -> int:
     """Validate, create the action_log entry, run the build in a thread. Returns the action id."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
@@ -473,7 +475,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
         db.add(entry)
         db.flush()
         aid = entry.id
-        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, name=forced_name)
+        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), name=forced_name)
         db.expunge(iran)
         db.expunge(foreign)
 
@@ -597,7 +599,7 @@ def _build(b: Build) -> None:
     _say(aid, f"GRE holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
 
     # 5. backhaul both sides
-    iran_toml, foreign_toml = backhaul_texts(iran_ip, port, token, b.transport, b.ports, b.keepalive)
+    iran_toml, foreign_toml = backhaul_texts(iran_ip, port, token, b.transport, b.ports, b.keepalive, b.nodelay)
     iran_cfg, foreign_cfg = f"/etc/backhaul/iran-{b.transport}-{port}.toml", f"/etc/backhaul/kharej-{b.transport}-{port}.toml"
     iran_unit, foreign_unit = f"backhaul-iran-{b.transport}-{port}.service", f"backhaul-kharej-{b.transport}-{port}.service"
 
@@ -644,7 +646,7 @@ def _build(b: Build) -> None:
     with session() as db:
         t = Tunnel(name=b.name, type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
-                   record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive,
+                   record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel"},
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
@@ -732,4 +734,4 @@ def rebuild_tunnel(tunnel_id: int) -> int:
         kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
         return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), rec.get("opts") or {}, forced_name=name)
 
-    return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name)
+    return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)))

@@ -59,6 +59,13 @@ def test_backhaul_texts():
     assert "mux_con" not in iran_tcp
 
 
+def test_backhaul_nodelay_switch():
+    iran, foreign = backhaul_texts("10.1.2.1", 9900, "tok", "tcpmux", parse_ports("8072"))
+    assert "nodelay = true" in iran and "nodelay = true" in foreign
+    iran, foreign = backhaul_texts("10.1.2.1", 9900, "tok", "tcpmux", parse_ports("8072"), 75, False)
+    assert "nodelay = false" in iran and "nodelay = false" in foreign and "nodelay = true" not in iran
+
+
 def test_parse_facts():
     f = parse_facts("IPS=1.1.1.1/24 10.1.1.1/30\nLINKS=eth0 fi-ir1\nLISTEN=22 9900\nUNITS=backhaul-iran-tcpmux-9900.service\nBROKEN=\nGRE_MOD=1\nBACKHAUL=v0.7.2\nIPTABLES=1\n")
     assert f["listen"] == {22, 9900} and f["gre_mod"] and f["backhaul"] and "fi-ir1" in f["links"] and f["broken"] == []
