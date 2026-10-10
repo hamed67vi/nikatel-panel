@@ -193,9 +193,11 @@ async function refresh() {
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
   const seq = navSeq;
+  const ae = document.activeElement, focus = ae && ae.id && ae.matches("input, textarea") ? {id: ae.id, a: ae.selectionStart, b: ae.selectionEnd} : null;   // the box being typed in
   try {
     await PAGES[state.page]();
     if (seq !== navSeq) return;                 // another page was opened meanwhile: this one is history
+    if (focus) { const el = document.getElementById(focus.id); if (el && el !== document.activeElement) { el.focus(); try { el.setSelectionRange(focus.a, focus.b); } catch (e) { /* not a text box */ } } }   // a re-drawn page must not take the cursor out of the search box
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
     scrollRestore(snap);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.2 - 2026-10-11 - The search box keeps the cursor
+
+* Typing in a search box (Tunnels, Nodes, and the other pages) no longer throws the cursor out of the box when the list is redrawn: the focus and the cursor position are put back after every refresh.
+
 ## 1.14.1 - 2026-10-11 - Two builds never share a server; a tunnel must stay up before it is called ready
 
 * **Cause of a tunnel reported as built but DOWN:** a temporary test build and a real build to the same foreign server ran at the same time, both took the same free control port, and when the test finished, its clean-up removed the shared service and config files. Now a build holds both of its servers for its whole run; a second build on the same server waits (one story line says so) and then picks its own port.
