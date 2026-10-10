@@ -24,6 +24,7 @@ from .services import (
     backup,
     builder,
     configs,
+    extras,
     facts,
     failover,
     netwatch,
@@ -111,6 +112,7 @@ async def _lifespan(app: FastAPI):
 
         try:
             builder.resume_pending()
+            extras.resume_pending()
         except Exception:
             log.exception("resuming interrupted rebuilds failed")
 

@@ -27,6 +27,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
+    # installs on a server (torrent block, Marzban node) that the panel is following: picked up again when the panel starts
+    "pending_installs": {"items": []},
     # the secret entry path: when set, the panel answers 404 to everything until the browser has opened /<entry_path>
     "security": {"entry_path": ""},
     # Add server → Marzban node: the certificate of the Marzban panel that is filled in by default (a public certificate, kept in the panel database only)

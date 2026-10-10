@@ -189,6 +189,14 @@ __NK_PY__
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
 
     # 4 pings to a host (used from the Iran servers: is a foreign address reachable / filtered?)
+    # how far a detached install (install_btblock / install_marzban_node) is: "STATE running|ok|failed|none" and the last lines of its log or result. Read-only.
+    "install_status": (r"""d=/var/lib/nikatel-install; n=@NAME@; s="$n"; [ "$n" = btblock ] && s=btblock; [ "$n" = mznode ] && s=mznode
+if [ -f $d/$n.ok ]; then echo "STATE ok"; cat $d/$n.out 2>/dev/null | tail -n 3
+elif [ -f $d/$n.fail ]; then echo "STATE failed"; tail -n 12 $d/$n.log 2>/dev/null
+elif pgrep -f "nikatel-install/$n.sh" >/dev/null 2>&1; then echo "STATE running"; tail -n 2 $d/$n.log 2>/dev/null; tail -n 1 $d/mz-install.log 2>/dev/null
+else echo "STATE none"; fi
+""", {"NAME": r"^(btblock|mznode)$"}),
+
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
 
@@ -802,36 +810,51 @@ sleep 3; for u in nikatel-speed-api nikatel-probe-manager nikatel-probe-monitor;
 """, {"NAME": r"^[\w .\-]{1,32}$"}),
 
     # after adding a server: stop torrent trackers (the public script of Heclalava/blockpublictorrent-iptables: a tracker list, DROP rules in a daily cron job, hosts entries).
-    # The script writes the cron job but does not run it, so it is run once here to make the rules active now.
-    "install_btblock": (r"""set -e; export DEBIAN_FRONTEND=noninteractive
+    # The script writes the cron job but does not run it, so it is run once to make the rules active now. That run applies thousands of iptables rules and takes minutes,
+    # so the whole install runs DETACHED on the server (it survives the SSH call and a restart of the panel); the panel asks `install_status` how far it is.
+    "install_btblock": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
+if pgrep -f 'nikatel-install/btblock.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
+rm -f $d/btblock.ok $d/btblock.fail $d/btblock.out
+cat > $d/btblock.sh <<'EOS'
+set -e; export DEBIAN_FRONTEND=noninteractive
 command -v wget >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq wget >/dev/null; }
 command -v iptables >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq iptables >/dev/null; }
-d=$(mktemp -d); cd "$d"
+w=$(mktemp -d); cd "$w"
 wget -q https://github.com/Heclalava/blockpublictorrent-iptables/raw/main/bt.sh && chmod +x bt.sh && bash bt.sh >/dev/null 2>&1
-[ -x /etc/cron.daily/denypublic ] || { echo BT_FAILED; exit 1; }
+[ -x /etc/cron.daily/denypublic ] || { echo BT_FAILED: the script did not create /etc/cron.daily/denypublic; exit 1; }
 bash /etc/cron.daily/denypublic >/dev/null 2>&1 || true
-echo "BT_OK drop_rules=$(iptables -S 2>/dev/null | grep -c -- '-j DROP')"
-cd /; rm -rf "$d"
+echo "BT_OK drop_rules=$(iptables -S 2>/dev/null | grep -c -- '-j DROP')" > /var/lib/nikatel-install/btblock.out
+EOS
+nohup setsid bash -c 'bash /var/lib/nikatel-install/btblock.sh > /var/lib/nikatel-install/btblock.log 2>&1 && touch /var/lib/nikatel-install/btblock.ok || touch /var/lib/nikatel-install/btblock.fail' >/dev/null 2>&1 &
+echo STARTED
 """, {}),
 
     # after adding a server: a Marzban node (the official installer of Gozargah/Marzban-scripts). It reads the panel's certificate from stdin, then asks about REST (Enter = yes)
     # and the two ports (Enter = 62050 / 62051), and ends in `logs -f`, which never returns: it runs in the background and is stopped as soon as the container is up.
-    "install_marzban_node": (r"""set -e; export DEBIAN_FRONTEND=noninteractive
+    # Detached like the torrent block: Docker alone can take minutes.
+    "install_marzban_node": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
 [ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
 [ -d /opt/marzban-node ] && { echo MZNODE_EXISTS; exit 0; }
-d=$(mktemp -d); cd "$d"
-echo '@B64@' | base64 -d | sed '/^[[:space:]]*$/d' > cert.txt
-grep -q 'BEGIN CERTIFICATE' cert.txt || { echo BAD_CERT; exit 1; }
+if pgrep -f 'nikatel-install/mznode.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
+rm -f $d/mznode.ok $d/mznode.fail $d/mznode.out
+echo '@B64@' | base64 -d | sed '/^[[:space:]]*$/d' > $d/mznode.cert; chmod 600 $d/mznode.cert
+grep -q 'BEGIN CERTIFICATE' $d/mznode.cert || { echo BAD_CERT; exit 1; }
+cat > $d/mznode.sh <<'EOS'
+set -e; export DEBIAN_FRONTEND=noninteractive
+d=/var/lib/nikatel-install; cd $d
 command -v curl >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null; }
 curl -fsSL https://github.com/Gozargah/Marzban-scripts/raw/master/marzban-node.sh -o mz.sh
 [ -s mz.sh ] || { echo DOWNLOAD_FAILED; exit 1; }
-( cat cert.txt; printf '\n\n\n\n\n' ) | setsid bash mz.sh install > install.log 2>&1 &
+( cat mznode.cert; printf '\n\n\n\n\n' ) | setsid bash mz.sh install > mz-install.log 2>&1 &
 ok=0
-for i in $(seq 1 90); do sleep 3; if docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -qi 'marzban-node.* Up'; then ok=1; break; fi; done
+for i in $(seq 1 200); do sleep 3; if docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -qi 'marzban-node.* Up'; then ok=1; break; fi; done
 sleep 3
 pkill -f 'docker.* logs' 2>/dev/null || true; pkill -f 'bash mz.sh' 2>/dev/null || true
-if [ "$ok" = 1 ]; then echo "MZNODE_OK $(docker ps --format '{{.Names}} {{.Status}}' | grep -i marzban-node | head -1)"; else echo MZNODE_FAILED; tail -n 12 install.log; exit 1; fi
-cd /; rm -rf "$d"
+if [ "$ok" = 1 ]; then echo "MZNODE_OK $(docker ps --format '{{.Names}} {{.Status}}' | grep -i marzban-node | head -1)" > mznode.out; else echo MZNODE_FAILED; tail -n 12 mz-install.log; exit 1; fi
+shred -u mznode.cert 2>/dev/null || true
+EOS
+nohup setsid bash -c 'bash /var/lib/nikatel-install/mznode.sh > /var/lib/nikatel-install/mznode.log 2>&1 && touch /var/lib/nikatel-install/mznode.ok || touch /var/lib/nikatel-install/mznode.fail' >/dev/null 2>&1 &
+echo STARTED
 """, {"B64": _B64}),
 
     # change the login password of the SSH user (the payload is base64 of "user:password"; it never appears in the logs). The panel logs in with its key, so it is not affected.

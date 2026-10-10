@@ -7,6 +7,7 @@ import pytest
 from nikatel.db import session
 from nikatel.models import Server
 from nikatel.services import extras
+from nikatel.services import settings as st
 from nikatel.ssh import render_action
 
 CERT = "-----BEGIN CERTIFICATE-----\nMIIBdemo\n\n-----END CERTIFICATE-----\n"
@@ -37,48 +38,85 @@ def _server():
         return s.id
 
 
-def test_install_story_reports_each_item(client, monkeypatch):
+def _wait(client, aid):
+    for _ in range(100):
+        s = client.get(f"/api/actions/{aid}").json()
+
+        if s["done"]:
+            return s
+
+        time.sleep(0.1)
+
+    return s
+
+
+def _fast(monkeypatch, status_answers, start_answer="STARTED\n"):
+    """The server: starting answers `start_answer`, then every status question gets the next answer of the list (the last one repeats)."""
     from nikatel.config import get_settings
 
     monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(extras, "POLL", 0)
+    monkeypatch.setattr(extras.time, "sleep", lambda s: None)
+    calls, answers = [], list(status_answers)
+    monkeypatch.setattr(extras, "run_action", lambda node, name, params=None, timeout=90: calls.append(name) or start_answer)
+    monkeypatch.setattr(extras, "run_script", lambda node, name, params=None, timeout=90: answers.pop(0) if len(answers) > 1 else answers[0])
+    return calls
+
+
+def test_install_story_follows_each_detached_install(client, monkeypatch):
     sid = _server()
-    calls = []
-
-    def fake(node, name, params=None, timeout=90):
-        calls.append(name)
-        return {"install_btblock": "BT_OK drop_rules=41\n", "install_marzban_node": "MZNODE_OK marzban-node-marzban-node-1 Up 5 seconds\n"}[name]
-
-    monkeypatch.setattr(extras, "run_action", fake)
+    calls = _fast(monkeypatch, ["STATE running\nsome log line\n", "STATE ok\nBT_OK drop_rules=41\n", "STATE ok\nMZNODE_OK marzban-node-marzban-node-1 Up 5 seconds\n"])
     r = client.post(f"/api/servers/{sid}/install", json={"items": ["btblock", "marzban_node"], "cert": CERT})
     assert r.status_code == 200, r.text
-
-    for _ in range(60):
-        s = client.get(f"/api/actions/{r.json()['id']}").json()
-        if s["done"]:
-            break
-        time.sleep(0.1)
-
+    s = _wait(client, r.json()["id"])
     text = "\n".join(s["story"])
-    assert s["done"] and s["ok"] is True and calls == ["install_btblock", "install_marzban_node"]
-    assert "installed (drop rules=41)" in text and "address 203.0.113.77, port 62050" in text
+    assert s["done"] and s["ok"] is True and calls == ["install_btblock", "install_marzban_node"], text
+    assert "installed (drop rules=41)" in text and "address 203.0.113.77, port 62050" in text and "keep running on the server" in text
+    assert st.get("pending_installs")["items"] == [] and client.get(f"/api/servers/{sid}").json()["extra"]["busy"] is None        # nothing is left pending
 
 
-def test_a_failed_node_install_says_why(client, monkeypatch):
-    from nikatel.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "read_only", False)
+def test_a_failed_install_says_why(client, monkeypatch):
     sid = _server()
-    monkeypatch.setattr(extras, "run_action", lambda node, name, params=None, timeout=90: "BAD_CERT\n")
+    _fast(monkeypatch, ["STATE failed\nMZNODE_FAILED\n"])
     r = client.post(f"/api/servers/{sid}/install", json={"items": ["marzban_node"], "cert": CERT})
+    s = _wait(client, r.json()["id"])
+    assert s["done"] and s["ok"] is False and "failed - MZNODE_FAILED" in "\n".join(s["story"])
+    _fast(monkeypatch, [], start_answer="BAD_CERT\n")
+    s = _wait(client, client.post(f"/api/servers/{sid}/install", json={"items": ["marzban_node"], "cert": CERT}).json()["id"])
+    assert s["ok"] is False and "the certificate is not valid" in "\n".join(s["story"])
 
-    for _ in range(60):
-        s = client.get(f"/api/actions/{r.json()['id']}").json()
-        if s["done"]:
-            break
-        time.sleep(0.1)
 
-    assert s["done"] and s["ok"] is False and "the certificate is not valid" in "\n".join(s["story"])
+def test_an_install_that_vanished_is_a_failure_not_an_endless_wait(client, monkeypatch):
+    sid = _server()
+    _fast(monkeypatch, ["STATE none\n"])
+    s = _wait(client, client.post(f"/api/servers/{sid}/install", json={"items": ["btblock"]}).json()["id"])
+    assert s["ok"] is False and "left no result" in "\n".join(s["story"])
 
+
+def test_a_restart_of_the_panel_does_not_lose_the_install(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import ActionLog
+
+    sid = _server()
+    calls = _fast(monkeypatch, ["STATE running\n", "STATE ok\nBT_OK drop_rules=3\n"])
+
+    with session() as db:                                                       # the story of an install that was being followed when the panel stopped
+        e = ActionLog(ref="install ir7", action="install", source="manual", story=["Starting…"])
+        db.add(e)
+        db.flush()
+        aid = e.id
+
+    st.put("pending_installs", {"items": [{"aid": aid, "server_id": sid, "items": ["btblock"], "cert": ""}]})
+    extras.resume_pending()
+    s = _wait(client, aid)
+    text = "\n".join(s["story"])
+    assert s["done"] and s["ok"] is True and "the panel was restarted; the install kept running" in text and "installed (drop rules=3)" in text
+    assert calls == [] and st.get("pending_installs")["items"] == []             # it was only followed, never started a second time
+
+
+def test_status_parser():
+    assert extras.parse_status("STATE running\nline a\nline b\n") == ("running", "line b")
+    assert extras.parse_status("STATE ok\nBT_OK drop_rules=5") == ("ok", "BT_OK drop_rules=5") and extras.parse_status("garbage") == ("none", "garbage")
 
 def test_install_api_refuses_what_it_cannot_do(client):
     sid = _server()
