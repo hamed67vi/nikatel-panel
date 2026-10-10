@@ -703,3 +703,10 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 .dk-t { display: flex; flex-direction: column; min-width: 0; flex: 1; } .dk-t b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dk-t small { color: var(--mut); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dk-x { flex: none; padding: 0 5px; border: 0; background: none; color: var(--mut); cursor: pointer; }
 @media (max-width: 700px) { #dock { bottom: 64px; } }
+
+/* ---- the list of panel messages: time, a coloured dot and the whole text on the full width */
+.msg-row { display: grid; grid-template-columns: 74px 12px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
+.msg-row:last-child { border-bottom: 0; }
+.msg-row time { color: var(--mut); font: 12px ui-monospace, Consolas, monospace; padding-top: 1px; }
+.msg-row i { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--mut); } .msg-row.bad i { background: var(--bad); } .msg-row.ok i { background: var(--ok); }
+.msg-row span { overflow-wrap: anywhere; white-space: pre-wrap; } .msg-row.bad span { color: var(--bad); }

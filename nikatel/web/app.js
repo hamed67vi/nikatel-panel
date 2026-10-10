@@ -30,8 +30,9 @@ async function api(path, opts = {}) {
     const rid = r.headers.get("X-Request-Id");
     let msg = (body && (body.detail || body.error)) || "HTTP " + r.status;
     if (Array.isArray(msg)) msg = msg.map(x => (x.loc || []).slice(-1)[0] + ": " + x.msg).join("; ");
-    const bare = /^HTTP \d+$/.test(msg);   // the server said nothing: name what was being done, so the message is never just a number
-    throw new Error(msg + (bare ? " — " + apiWhat(path, opts) : "") + (rid && r.status >= 500 ? " · id " + rid : ""));
+    const bare = /^HTTP \d+$/.test(msg);
+    if (bare && [502, 503, 504].includes(r.status)) msg = "The panel did not answer (HTTP " + r.status + "): it is most likely restarting after an update. Wait about 10 seconds and try again";   // the server said nothing: name what was being done, so the message is never just a number
+    throw new Error(msg + (bare || /^The panel did not answer/.test(msg) ? " — " + apiWhat(path, opts) : "") + (rid && r.status >= 500 ? " · id " + rid : ""));
   }
   return body;
 }
@@ -46,7 +47,7 @@ function toast(text, cls) {
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
   clearTimeout(toastT); toastT = setTimeout(() => bar.classList.remove("live"), 7000);
 }
-window.sbHistory = () => showModal("<b>Messages</b>", MSGS.length ? MSGS.map(m => `<div class="ev ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">No message yet.</div>');
+window.sbHistory = () => showModal("<b>Messages</b>", MSGS.length ? MSGS.map(m => `<div class="msg-row ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">No message yet.</div>');
 
 /* a tiny inline chart: values -> svg polyline, optional threshold colouring */
 function spark(values, opts = {}) {
