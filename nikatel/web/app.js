@@ -925,7 +925,7 @@ const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack ·
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
   // Smart repair is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Nodes)
-  const [d, tl, rp, fo] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), api("/api/failover").catch(() => null)]);
+  const [d, tl, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), api("/api/failover").catch(() => null), api("/api/settings/arvan").catch(() => ({})), api("/api/servers?role=iran").catch(() => [])]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= 15), pick = tl.find(t => String(t.id) === ap.tid) || bad[0] || tl[0];
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b><span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span><button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button></div>`;
@@ -935,7 +935,7 @@ PAGES.actions = async () => {
       ${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
       <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). A panel cannot change a server's public IP; when a route is cut, “Move” carries the tunnel on another Iran server.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
-    ${foCard(fo)}
+    ${foCard(fo, av, irn)}
     <div class="card"><h3>🧭 Network advisor — which tunnel is best today <span class="sp"></span></h3>
       <div class="frm"><label>Tunnel <small>(its two servers are tested)</small><select id="ap-tun" onchange="ap.tid=this.value;localStorage.setItem('nk.ap.tid',this.value)">${tl.map(t => `<option value="${t.id}" ${pick && t.id === pick.id ? "selected" : ""}>${esc(t.name)} — ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(t.type)})</option>`).join("")}</select></label>
         <div class="frm-act" style="align-self:end"><button class="pri" onclick="apRecommend()" ${tl.length ? "" : "disabled"}>Find the best tunnel today</button></div></div>
@@ -945,19 +945,36 @@ PAGES.actions = async () => {
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div>`;
   apAdvisor();
 };
-const foCard = fo => {
+const foForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
+    <label>ArvanCloud API key <small>(empty keeps the saved one; stays on this server)</small><input name="api_key" type="password" placeholder="${av.has_api_key ? "•••••••• saved" : "paste the key here"}" autocomplete="off"></label>
+    <label>When an Iran server is down<select name="mode">${[["off", "Do nothing (failover off)"], ["approve", "Prepare a plan and ask me first"], ["auto", "Do it by itself (only clean plans)"]].map(([k, l]) => `<option value="${k}" ${(av.mode || "off") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label>…after it has been down for (minutes)<input name="confirm_minutes" type="number" min="2" max="120" value="${av.confirm_minutes || 5}"></label>
+    <label>Only these domains <small>(empty = all, comma separated)</small><input name="domains" value="${esc((av.domains || []).join(", "))}" placeholder="all domains of the account"></label>
+    <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testArvan()">Test the key (read only)</button></div></form>
+  <details class="mut" style="margin-top:6px"><summary>How to get the key</summary><ol style="margin:6px 18px;line-height:1.7"><li>panel.arvancloud.ir → profile menu → <b>Machine Users</b> → create one.</li><li>Open it → <b>Access rules</b> and give it the <b>CDN</b> service with a manager role (not only “server manager”).</li><li>Create an access key for it, copy it at once (shown once) and paste it above.</li></ol></details>`;
+const foCard = (fo, av = {}, irn = []) => {
   if (!fo) return "";
-  const plan = p => `<div class="ap-row" style="flex-wrap:wrap;gap:6px"><span class="st down">down</span><b>${esc(p.server)}</b><span class="mut">${esc(p.ip)}</span><span class="sp"></span><button class="sm pri" onclick="foApprove('${esc(p.id)}')" ${p.target ? "" : "disabled"}>✓ Approve</button><button class="sm" onclick="foDismiss('${esc(p.id)}')">Dismiss</button>
+  const st = av.status || {}, conn = st.ok ? `<div class="ai-stat ok"><div class="ai-head">● Connected</div><div class="ai-grid"><span class="mut">Domains</span><span>${st.domains}</span><span class="mut">DNS records</span><span>${st.records}</span></div></div>` : av.has_api_key ? `<div class="ai-stat bad"><div class="ai-head">● Not connected</div><div class="err">${esc(st.error || "press “Test the key”")}</div></div>` : "";  const plan = p => `<div class="ap-row" style="flex-wrap:wrap;gap:6px"><span class="st down">down</span><b>${esc(p.server)}</b><span class="mut">${esc(p.ip)}</span><span class="sp"></span><button class="sm pri" onclick="foApprove('${esc(p.id)}')" ${p.target ? "" : "disabled"}>✓ Approve</button><button class="sm" onclick="foDismiss('${esc(p.id)}')">Dismiss</button>
     <div class="mut" style="flex-basis:100%">${p.target ? `Move ${p.tunnels.length} tunnel(s) (${p.tunnels.map(t => esc(t.name)).join(", ") || "none"}) to <b>${esc(p.target.name)}</b> (${esc(p.target.ip)}).` : '<span class="err">No other Iran server can carry all of its tunnels.</span>'}
     ${p.dns.length ? ` Then point ${p.dns.length} DNS record(s) at ${p.target ? esc(p.target.ip) : "the new server"}: ${p.dns.map(d => `<b>${esc(d.fqdn)}</b>${d.configs.length ? " (" + d.configs.length + " config" + (d.configs.length > 1 ? "s" : "") + ")" : ""}`).join(", ")}.` : " No DNS record points at this server (or no ArvanCloud key)."}
     ${p.problems.length ? `<div class="err">${p.problems.map(esc).join("<br>")}</div>` : ""}</div></div>`;
   const his = h => `<div class="ev ${h.ok === true ? "ok" : h.ok === false ? "bad" : "warn"}"><time title="${when(h.at)}">${ago(h.at)} ago</time><i></i><small>${h.dismissed ? "dismissed" : h.undone ? "undone" : "done"}</small><span><b>${esc(h.server)}</b> ${h.dismissed ? "" : `→ ${h.target ? esc(h.target.name) : "?"}: ${h.moved}/${h.tunnels} tunnels, ${h.dns.length} DNS record(s)${h.errors.length ? ", errors: " + esc(h.errors.join("; ")) : ""}`} ${h.dns.length && !h.undone ? `<a class="mut" onclick="foUndo('${esc(h.id)}')">↩ point the DNS back</a>` : ""}</span></div>`;
   const label = {off: "off", approve: "asks first", auto: "automatic"}[fo.mode] || fo.mode;
   return `<div class="card"><h3>🔁 Iran server failover <span class="sp"></span><span class="pill ${fo.mode === "off" ? "" : "ok"}">${label}</span></h3>
-    ${fo.pending.map(plan).join("") || `<div class="mut" style="padding:4px 0">${fo.mode === "off" ? "Off. " : `Watching the Iran servers: one that stays down for ${fo.confirm_minutes} minutes gets a plan here. `}<a class="mut" onclick="go('settings');setTab('ai')">Settings → ArvanCloud failover</a></div>`}
-    ${fo.history.map(his).join("")}</div>`;
+    ${fo.pending.map(plan).join("") || `<div class="mut" style="padding:4px 0">${fo.mode === "off" ? "Off. " : `Watching the Iran servers: one that stays down for ${fo.confirm_minutes} minutes gets a plan here. `}</div>`}
+    ${fo.history.map(his).join("")}
+    ${conn}
+    ${st.ok ? `<div class="frm-act" style="margin-top:8px"><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button type="button" class="sm" onclick="foPreview()">👁 Preview: what would happen if it went down</button></div>` : ""}
+    <details ${st.ok ? "" : "open"} style="margin-top:8px"><summary class="mut">⚙ Settings of the failover</summary>${foForm(av)}</details></div>`;
 };
-window.foApprove = async id => {
+window.foPreview = async () => {
+  const id = ($("#fo-srv") || {}).value; if (!id) return;
+  showModal("<b>👁 Failover preview</b>", '<div class="loading"><i class="spin"></i><span>Looking at the tunnels and the DNS records…</span></div>');
+  try { const p = await api("/api/failover/plan/" + id);
+    showModal(`<b>👁 If ${esc(p.server)} (${esc(p.ip)}) went down</b>`, `<div class="mut">${p.target ? `${p.tunnels.length} tunnel(s) (${p.tunnels.map(t => esc(t.name)).join(", ") || "none"}) would move to <b>${esc(p.target.name)}</b> (${esc(p.target.ip)}).` : '<span class="err">No other Iran server could carry all of its tunnels.</span>'}</div>
+      <div style="margin-top:8px">${p.dns.length ? "DNS records that would be changed:" + p.dns.map(d => `<div class="ap-row"><b>${esc(d.fqdn)}</b><span class="mut">${esc(d.ip)} → ${p.target ? esc(p.target.ip) : "?"}</span></div>`).join("") : "No DNS record points at this server."}</div>${p.problems.length ? `<div class="err" style="margin-top:8px">${p.problems.map(esc).join("<br>")}</div>` : ""}<small class="mut">Nothing was changed.</small>`); }
+  catch (e) { showModal("<b>👁 Failover preview</b>", `<div class="err">${esc(e.message)}</div>`); }
+};window.foApprove = async id => {
   if (!await gconfirm("Move the tunnels of this server to the replacement and change the ArvanCloud DNS records? Users reconnect after about a minute.", {danger: true})) return;
   try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/approve", {method: "POST"}); showModal("<b>🔁 Failover</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.action_id, $("#ap-story"), 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
@@ -1915,7 +1932,7 @@ let lqT; window.setLogQ = v => { state.logs.q = v.trim(); clearTimeout(lqT); lqT
 
 /* ---- settings */
 PAGES.settings = async () => {
-  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_, av_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai"), api("/api/settings/arvan").catch(() => ({}))]);
+  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   $("#page").innerHTML = `<div class="grid2">
     <div class="card"><h3>Telegram <span class="sp"></span>${tg.has_token ? '<span class="pill">token saved</span>' : '<span class="pill">no token</span>'}</h3>
@@ -2002,18 +2019,6 @@ PAGES.settings = async () => {
         <label>Model<input name="model" value="${esc(ai_.model)}"></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testAi()">Test the key</button><button type="button" class="danger" onclick="forgetAi()">Remove the key</button></div></form></div>
 
-    <div class="card" data-name="ArvanCloud failover"><h3>ArvanCloud failover <span class="sp"></span>${av_.status && av_.status.ok ? `<span class="pill ok">key works · ${av_.status.domains} domains</span>` : av_.has_api_key ? '<span class="pill err">key not working</span>' : '<span class="pill">no key</span>'}</h3>
-      <small class="mut">When an Iran server stays down, its tunnels move to another Iran server and the DNS records in ArvanCloud that pointed at it are pointed at the new one. Only the address changes. Start with “ask me first”: the panel prepares the plan and waits for your click on Smart repair.</small>
-      ${av_.status && av_.status.ok ? `<div class="ai-stat ok"><div class="ai-head">● Connected</div><div class="ai-grid"><span class="mut">Domains</span><span>${av_.status.domains}</span><span class="mut">DNS records</span><span>${av_.status.records}</span></div></div>` : av_.has_api_key ? `<div class="ai-stat bad"><div class="ai-head">● Not connected</div><div class="err">${esc((av_.status && av_.status.error) || "press “Test the key”")}</div></div>` : ""}
-      <form class="frm one" onsubmit="return saveArvan(event)">
-        <label>ArvanCloud API key <small>(empty keeps the saved one; stays on this server)</small><input name="api_key" type="password" placeholder="${av_.has_api_key ? "•••••••• saved" : "Apikey … (see below how to create it)"}" autocomplete="off"></label>
-        <label>What to do when an Iran server is down<select name="mode">${[["off", "Nothing (failover off)"], ["approve", "Prepare a plan and ask me first"], ["auto", "Do it by itself (only when the plan is clean)"]].map(([k, l]) => `<option value="${k}" ${(av_.mode || "off") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-        <label>…after the server has been down for (minutes)<input name="confirm_minutes" type="number" min="2" max="120" value="${av_.confirm_minutes || 5}"></label>
-        <label>Only these domains <small>(empty = every domain of the account, comma separated)</small><input name="domains" value="${esc((av_.domains || []).join(", "))}" placeholder="example.ir"></label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testArvan()">Test the key (read only)</button></div></form>
-      <details class="mut" style="margin-top:8px"><summary>How to get the key</summary>
-        <ol style="margin:6px 18px;line-height:1.7"><li>Sign in at <b>panel.arvancloud.ir</b>.</li><li>Open your profile menu (top corner) → <b>Machine Users</b> (کاربران ماشین) and create one, or open <b>API Keys</b> (کلیدهای API) in the same menu.</li><li>Give it access to the <b>CDN</b> service with the DNS role (DNS Administrator / Domain Administrator). Nothing else is needed.</li><li>Copy the key (it looks like <code>Apikey xxxxxxxx-xxxx-…</code>; the part after Apikey is enough) and paste it above. It is shown only once.</li></ol>
-        <small>Menu names change from time to time. If you cannot find it, search “API” in the panel search box.</small></details></div>
     <div class="card"><h3>Appearance</h3>
       <div class="frm">
         <label>Theme<select onchange="lookSet('theme', this.value)">${[["aurora", "🌌 Aurora glass"], ["gold", "✨ Gold luxury"], ["neon", "⚡ Cyber neon"], ["minimal", "▫ Minimal"]].map(([k, l]) => `<option value="${k}" ${LOOK.theme === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -2108,7 +2113,7 @@ const SET_TABS = {
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows and the daily report.", ["Telegram", "Alert rules", "Daily report", "Maintenance windows"]],
   backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
-  ai: ["🔧 Repairs & AI", "Automatic repairs of down tunnels, and the AI assistant inside Fix.", ["Repairs", "AI assistant", "ArvanCloud failover"]],
+  ai: ["🔧 Repairs & AI", "Automatic repairs of down tunnels, and the AI assistant inside Fix.", ["Repairs", "AI assistant"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
   update: ["⬆ Update", "Update this panel from GitHub with one click, and the tunnel cores on your servers.", ["About", "Core update"]],
