@@ -3,6 +3,7 @@ the probe; subscriptions whose nodes become a group of configs."""
 from __future__ import annotations
 
 import base64
+import json
 import re
 import time
 import urllib.parse
@@ -91,8 +92,78 @@ def decode_subscription(body: bytes) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip().startswith(_SCHEMES)]
 
 
+# ------------------------------------------------------------------ what a link says (type, address, port, transport, TLS)
+def meta_from_uri(uri: str) -> dict:
+    """{'proto','address','port','network','security'} from a vless / vmess / trojan / ss link. No secret is kept."""
+    from urllib.parse import parse_qs, urlsplit
+
+    uri = str(uri).strip()
+    proto = uri.split("://", 1)[0].lower() if "://" in uri else ""
+    m = {"proto": proto, "address": "", "port": 0, "network": "tcp", "security": "none"}
+
+    try:
+        if proto == "vmess":
+            raw = uri[8:].split("#", 1)[0]
+            j = json.loads(base64.b64decode(raw + "=" * (-len(raw) % 4)))
+            m.update(address=str(j.get("add", "")), port=int(j.get("port") or 0), network=str(j.get("net") or "tcp"), security="tls" if str(j.get("tls", "")).lower() == "tls" else "none")
+        elif proto in ("vless", "trojan"):
+            u = urlsplit(uri)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            m.update(address=u.hostname or "", port=u.port or 0, network=q.get("type", "tcp"), security=q.get("security") or ("tls" if proto == "trojan" else "none"))
+        elif proto == "ss":
+            rest = uri[5:].split("#", 1)[0].split("?", 1)[0]
+
+            if "@" not in rest:
+                rest = base64.urlsafe_b64decode(rest + "=" * (-len(rest) % 4)).decode()
+
+            hostport = rest.rsplit("@", 1)[1]
+            host, _, port = hostport.rpartition(":")
+            m.update(address=host.strip("[]"), port=int(port) if port.isdigit() else 0)
+    except (ValueError, IndexError, KeyError, UnicodeError):
+        pass
+
+    return m
+
+
+def fill_meta(limit: int = 20) -> int:
+    """Read the link of configs that have no meta yet (from the probe) and keep the readable facts. A few per run."""
+    with session() as db:
+        names = [c.name for c in db.scalars(select(Config).where(Config.enabled.is_(True)))
+                 if not (c.meta or {}).get("proto")][:limit]
+
+    done = 0
+
+    for name in names:
+        try:
+            meta = meta_from_uri(probe.config_uri(name))
+        except (RuntimeError, ValueError):
+            continue
+
+        if not meta["proto"]:
+            continue
+
+        with session() as db:
+            c = db.scalar(select(Config).where(Config.name == name))
+
+            if c is not None:
+                c.meta = meta
+                done += 1
+
+    return done
+
+
 # ------------------------------------------------------------------ sync job
 def sync() -> None:
+    try:
+        _sync()
+    finally:
+        try:
+            fill_meta()
+        except Exception:
+            log.exception("meta fill failed")
+
+
+def _sync() -> None:
     try:
         rows = parse_health(probe.health())
     except RuntimeError as e:
@@ -177,7 +248,7 @@ def add(uri: str, name: str = "", group: str = "") -> str:
     probe.add_config(with_name(uri, wanted))
 
     with session() as db:
-        c = Config(name=wanted, group=group[:64], status="unknown", status_since=int(time.time()))
+        c = Config(name=wanted, group=group[:64], status="unknown", status_since=int(time.time()), meta=meta_from_uri(uri))
         db.add(c)
         emit(db, "info", "configs", f"Config {wanted} added" + (f" to group {group}" if group else "") + ".", wanted)
 
@@ -204,6 +275,9 @@ def update(name: str, uri: str = "", new_name: str = "", group: str | None = Non
 
         if new_clean and new_clean != name:
             c.name = new_clean
+
+        if uri:
+            c.meta = meta_from_uri(uri)
 
         if group is not None:
             c.group = group[:64]
@@ -286,7 +360,7 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
 
         try:
             with session() as db:
-                db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time())))
+                db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(n["uri"])))
         except IntegrityError:          # the sync job registered it a moment ago: it is there, that is all we need
             pass
 

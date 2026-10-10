@@ -195,6 +195,7 @@ class Config(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     tunnel: Mapped[str] = mapped_column(String(80), default="")         # free label: which tunnel it rides
     cdn_port: Mapped[str] = mapped_column(String(8), default="")
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)              # read from the link: proto, address, port, network, security (no secrets)
     status: Mapped[str] = mapped_column(String(16), default="unknown")  # up | down | unknown
     status_since: Mapped[int] = mapped_column(Integer, default=0)
     ping_ms: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -27,7 +27,7 @@ def list_configs():
     with session() as db:
         rows = list(db.scalars(select(Config).order_by(Config.group, Config.name)))
         return {"ok": True, "probe": probe.active(), "configs": [{
-            "id": c.id, "name": c.name, "slug": c.slug, "group": c.group, "port": c.port, "enabled": c.enabled, "tunnel": c.tunnel, "cdn_port": c.cdn_port,
+            "id": c.id, "name": c.name, "slug": c.slug, "group": c.group, "port": c.port, "enabled": c.enabled, "tunnel": c.tunnel, "cdn_port": c.cdn_port, "meta": c.meta or {},
             "status": c.status, "status_since": c.status_since, "ping_ms": c.ping_ms, "down_mbps": c.down_mbps, "up_mbps": c.up_mbps, "speed_at": c.speed_at,
             "checked_at": c.checked_at, "last_error": c.last_error} for c in rows]}
 

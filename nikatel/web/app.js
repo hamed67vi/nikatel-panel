@@ -754,26 +754,30 @@ PAGES.configsList = async () => {
   const title = c => `${cfFlag(c.name)}${esc(shown(c))}${c.enabled ? "" : '<span class="pill">disabled</span>'}`;
   const gcell = c => `<td class="mut cf-grp">${esc(c.group || "manual")}</td>`;
   const acts = c => `<button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button><button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
-  const row = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
-      <td class="name"><div class="cf-nm">${title(c)}</div>${live(c)}</td>${gcell(c)}
-      <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b><small class="mut"> ms</small> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
-      <td>${tunnelSel(c)}</td>
+  const MBs = v => v == null ? "—" : mb(v / 8);   // the table speaks MB/s like a v2ray client; the stat boxes elsewhere stay in Mb/s
+  const row = c => { const m = c.meta || {}; return `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
+      <td><span class="td-type">${esc((m.proto || "—").toUpperCase())}</span></td>
+      <td class="name"><div class="cf-nm">${title(c)}</div>${live(c)}</td>
+      <td class="mono" title="${esc(m.address || "")}">${esc(m.address || "—")}</td>
+      <td class="num">${m.port || "—"}</td>
+      <td>${esc(m.network || "—")}</td>
+      <td>${m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : '<span class="mut">none</span>'}</td>
+      ${gcell(c)}
+      <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
+      <td class="num">${c.down_mbps != null ? "↓" + MBs(c.down_mbps) + " ↑" + MBs(c.up_mbps) : "—"}</td>
       <td>${cdnIn(c)}</td>
-      <td class="num">${mb(c.down_mbps)}<small class="mut"> Mbps</small></td>
-      <td class="num">${mb(c.up_mbps)}<small class="mut"> Mbps</small></td>
-      <td class="cf-acts">${acts(c)}</td></tr>`;
-  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
+      <td class="cf-acts">${acts(c)}</td></tr>`; };  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" onclick="cfToggle(${c.id})">
       <td class="name">${title(c)}</td>${gcell(c)}<td>${live(c)}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</b></td>
       <td class="num hide-sm">${c.down_mbps != null ? "↓" + mb(c.down_mbps) + " ↑" + mb(c.up_mbps) : "—"}</td>
-      <td class="mut hide-sm">${esc(c.tunnel || "—")}${c.cdn_port ? " · :" + esc(c.cdn_port) : ""}</td>
+      <td class="mut hide-sm">${c.cdn_port ? ":" + esc(c.cdn_port) : "—"}</td>
       <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 40) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
       <td class="cf-acts">${acts(c)}</td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
   const card = c => `<div class="cf-card ${c.status}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div><small class="mut cf-grp">${esc(c.group || "manual")}</small>
       <div class="cf-stats"><div class="cf-stat"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}<small>ms</small></b><span>PING</span></div><div class="cf-stat"><b>${mb(c.down_mbps)}</b><span>DOWN Mbps</span></div><div class="cf-stat"><b>${mb(c.up_mbps)}</b><span>UP Mbps</span></div></div>
-      <div class="cf-meta">${tunnelSel(c)}${cdnIn(c)}</div><div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
+      <div class="cf-meta">${cdnIn(c)}</div><div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
   const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
   const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}${searched.some(c => !c.group) ? chip("Manual", searched.filter(c => !c.group).length, "__manual", false) : ""}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
@@ -792,9 +796,9 @@ PAGES.configsList = async () => {
     ${cf.sub && cf.edit !== "new" ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
       : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col><col style="width:150px"></colgroup>
-      <thead><tr><th>Config</th><th>Group</th><th>Status</th><th>Ping</th><th>Speed</th><th>Tunnel</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
-      : `<table class="tbl lift cf-list"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:10%"><col style="width:14%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:150px"></colgroup>
-      <thead><tr><th>Server</th><th>Group</th><th>Ping</th><th>Tunnel</th><th>CDN</th><th>Download</th><th>Upload</th><th style="text-align:right">Actions</th></tr></thead>
+      <thead><tr><th>Config</th><th>Group</th><th>Status</th><th>Ping</th><th>Speed</th><th>CDN port</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
+      : `<table class="tbl lift cf-list srv-tbl"><colgroup><col style="width:6%"><col style="width:17%"><col style="width:13%"><col style="width:5%"><col style="width:7%"><col style="width:7%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:7%"><col style="width:150px"></colgroup>
+      <thead><tr><th>Type</th><th>Remarks</th><th>Address</th><th>Port</th><th>Transport</th><th>TLS</th><th>Subs group</th><th>Delay (ms)</th><th>Speed (MB/s)</th><th>CDN port</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${list.map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
     ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
   const q = $("#cq"); if (q && cf.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
