@@ -32,6 +32,7 @@ from . import settings as st
 from .events import emit
 
 log = get_logger("failover")
+ENABLED = False      # the whole ArvanCloud / Iran-server failover is switched off for now (code and settings stay): the tunnels and the smart repair are tested first
 ROUTE_CAUSES = ("gre_blocked", "route_cut", "lossy_route", "port_blocked")
 REASONS = {"down": "the server does not answer",
            "gre_blocked": "GRE is filtered on its route and no other tunnel type works",
@@ -231,7 +232,7 @@ def check() -> None:
     c = conf()
     mode = c.get("mode", "off")
 
-    if mode not in ("approve", "auto") or get_settings().read_only:
+    if not ENABLED or mode not in ("approve", "auto") or get_settings().read_only:
         return
 
     now = int(time.time())
@@ -343,8 +344,8 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
     Returns True when the tunnel was moved."""
     mode = conf().get("mode", "off")
 
-    if mode not in ("approve", "auto"):
-        autopilot._say(aid, "Failover is off (Smart repair → Failover · CDN → settings): the tunnel is not moved to another Iran server.")
+    if not ENABLED or mode not in ("approve", "auto"):
+        autopilot._say(aid, "Moving the tunnel to another Iran server is switched off for now: the tunnel stays where it is.")
         return False
 
     try:

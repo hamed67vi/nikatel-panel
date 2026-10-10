@@ -793,7 +793,7 @@ const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp
   "paqet:kcp": "ordinary TCP stalls, raw sockets", "chisel:ws": "small group, simplest", "chisel:wss": "small group, looks like HTTPS"};
 async function buildFormHtml() {
   const [servers, kd, av] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds"), api("/api/settings/arvan").catch(() => ({}))]);
-  bk.kinds = kd.kinds; bk.arvan = !!av.has_api_key; bk.arvanMode = av.mode || "off";
+  bk.kinds = kd.kinds; bk.arvan = ARVAN_UI && !!av.has_api_key; bk.arvanMode = av.mode || "off";
   const K = bk.kinds.find(k => k.key === bk.kind) || bk.kinds[0]; bk.kind = K.key;
   const tr = K.transports.find(t => t.key === bk.transport) || K.transports[0]; bk.transport = tr.key;
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
@@ -972,12 +972,13 @@ function storyHtml(s) {
     (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 /* ---- Smart repair: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
+const ARVAN_UI = false;   // the ArvanCloud failover is switched off for now (also server side: failover.ENABLED); flip both to bring it back
 const ap = {job: null, tid: localStorage.getItem("nk.ap.tid") || "", timer: null};
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
   // Smart repair is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Nodes)
-  const [d, tl, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), api("/api/failover").catch(() => null), api("/api/settings/arvan").catch(() => ({})), api("/api/servers?role=iran").catch(() => [])]);
+  const [d, tl, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= 15), pick = tl.find(t => String(t.id) === ap.tid) || bad[0] || tl[0];
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b><span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span><button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button></div>`;
@@ -986,12 +987,12 @@ PAGES.actions = async () => {
   $("#page").innerHTML = `<div class="card" data-tab="att"><h3>🩺 Tunnels that need attention <span class="sp"></span>${bad.length ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
       ${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
-      <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). Restart, rebuild and another tunnel type happen by themselves; only a move to another Iran server (with its CDN records) asks first - under Failover · CDN.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
+      <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). Restart, rebuild, a new GRE link and another tunnel type happen by themselves, without asking.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
     ${foCard(fo, av, irn)}
-    <div class="grid2 ap-two" data-tab="att">
+    <div class="${ARVAN_UI ? "grid2 ap-two" : ""}" data-tab="att">
     <div class="card"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div>
-    ${dnsCard(fo, av, irn)}</div>`;
+    ${ARVAN_UI ? dnsCard(fo, av, irn) : ""}</div>`;
   const nPend = (fo && fo.pending.length) || 0;
   pageTabs("actions", [["att", "🩺 Needs attention"], ["fo", "🔁 Failover · CDN"]].filter(t => t[0] !== "fo" || fo), nPend ? "fo" : "att", {att: n, fo: nPend});
 };
@@ -2060,7 +2061,7 @@ PAGES.settings = async () => {
         <label>…after it has been down for (seconds)<input name="after_seconds" type="number" min="60" max="3600" value="${rp_.after_seconds}"></label>
         <label>How far it may go<select name="level">${[["restart", "Restart only (safe)"], ["rebuild", "+ rebuild the tunnel if restarting did not help"], ["switch", "+ switch the tunnel type when the route blocks it (GRE / port filtered)"]].map(([k, l]) => `<option value="${k}" ${(rp_.level || "restart") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
-      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps (rebuild, another tunnel type) run by themselves once the restarts failed, and again after 30 minutes if needed - nothing asks for approval. When no tunnel type works on a route, the move to another Iran server (with the CDN records) goes through the failover on Smart repair → Failover · CDN: it asks first, or runs by itself when set so. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
+      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps (rebuild, another tunnel type) run by themselves once the restarts failed, and again after 30 minutes if needed - nothing asks for approval. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
 
     <div class="card"><h3>Daily report</h3>
       <form class="frm one" onsubmit="return saveReport(event)">

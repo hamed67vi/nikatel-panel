@@ -1,10 +1,18 @@
 """Create tunnel with the smart choices: the port precheck, the smart Iran choice, replacing a dead tunnel, the DNS follow-up."""
 import time
 
+import pytest
+
 from nikatel.db import session
 from nikatel.models import ActionLog, Config, Server, Tunnel
 from nikatel.services import arvan, builder, create, detect, failover
 from nikatel.services import settings as st
+
+
+@pytest.fixture(autouse=True)
+def _failover_on(monkeypatch):
+    monkeypatch.setattr(failover, "ENABLED", True)          # the feature is switched off in production for now; these tests are about how it works
+
 
 
 def _world():

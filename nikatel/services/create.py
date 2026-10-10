@@ -100,7 +100,8 @@ def _follow(aid: int, build_aid: int, limit: int = 1500) -> bool:
 def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, opts: dict, replace_ids: list[int], dns_follow: bool,
           mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None) -> int:
     _ports(ports)                                   # a sentence for a bad list, before anything starts
-    dns_names = [n.strip().lower() for n in (dns_names or []) if n.strip()]
+    dns_names = [n.strip().lower() for n in (dns_names or []) if n.strip()] if failover.ENABLED else []
+    dns_follow = dns_follow and failover.ENABLED
 
     with session() as db:
         f = db.get(Server, foreign_id)

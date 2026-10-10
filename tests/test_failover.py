@@ -4,6 +4,12 @@ import pytest
 from nikatel.services import arvan, failover
 from nikatel.services import settings as st
 
+
+@pytest.fixture(autouse=True)
+def _failover_on(monkeypatch):
+    monkeypatch.setattr(failover, "ENABLED", True)          # the feature is switched off in production for now; these tests are about how it works
+
+
 REC = {"id": "r1", "type": "A", "name": "ir", "value": [{"ip": "203.0.113.5", "port": None, "weight": 100, "country": ""}], "ttl": 120, "cloud": False, "upstream_https": "default", "ip_filter_mode": {"count": "single", "order": "none", "geo_filter": "none"}, "created_at": "x"}
 
 
@@ -227,3 +233,14 @@ def test_replace_plan_follows_only_the_records_of_the_replaced_tunnel(monkeypatc
     assert [d["fqdn"] for d in p["dns"]] == ["b.example.test"] and p["left_alone"] == [] and p["tunnels"] == [] and p["target"]["id"] == ids["ir2"] and p["reason"] == "replace" and p["old_tunnel"] == "t2"
     p = failover.replace_plan(ids["t1"], ids["ir2"])          # a.example.test also serves t3, which stays: left alone
     assert p["dns"] == [] and [d["fqdn"] for d in p["left_alone"]] == ["a.example.test"]
+
+
+def test_the_failover_is_switched_off_for_now(client, monkeypatch):
+    monkeypatch.setattr(failover, "ENABLED", False)
+    st.put("arvan", {"api_key": "k", "mode": "auto", "confirm_minutes": 5})
+    failover.check()                                                       # nothing happens, whatever the settings say
+    assert st.get("failover")["pending"] == [] and st.get("failover")["seen"] == {}
+    said = []
+    monkeypatch.setattr(failover.autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    assert failover.after_ladder(1, 1, "gre_blocked") is False and "switched off" in said[-1]
+    assert client.post("/api/failover/x/approve").status_code == 403 and client.post("/api/failover/point", json={"names": ["a.example.test"], "iran_id": 1}).status_code == 403
