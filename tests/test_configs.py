@@ -236,3 +236,59 @@ def test_an_import_waits_for_a_delete_that_is_still_running():
     t0 = time.monotonic()
     configs.wait_for_deletes(5)
     assert 0.2 < time.monotonic() - t0 < 3 and configs._PENDING == set()
+
+
+def test_sync_subscription_makes_the_group_equal_to_the_subscription(client, monkeypatch):
+    from sqlalchemy import select
+
+    from nikatel.db import session
+    from nikatel.models import Config, Subscription
+
+    def link(i, host="h.example"):
+        return f"vless://u@{host}:{80 + i}?type=ws#N{i}"
+
+    sub_nodes = [{"name": f"N{i}", "uri": link(i), "proto": "vless"} for i in (3, 1, 2)]        # the subscription lists N3, N1, N2 (N4 left, N1 got a new address)
+    sub_nodes[1]["uri"] = link(1, "new.example")
+    monkeypatch.setattr(configs, "fetch_subscription", lambda url: sub_nodes)
+    probe_links = {"N1": link(1), "N2": link(2), "N4": link(4)}
+    calls = {"added": [], "updated": [], "deleted": []}
+    monkeypatch.setattr(probe, "config_uri", lambda name: probe_links[name])
+    monkeypatch.setattr(probe, "add_many", lambda items: calls["added"].extend(i["name"] for i in items) or {i["name"]: None for i in items})
+    monkeypatch.setattr(probe, "update_many", lambda items: calls["updated"].extend(i["name"] for i in items) or {i["name"]: None for i in items})
+    monkeypatch.setattr(probe, "delete_many", lambda names: calls["deleted"].extend(names) or {n: None for n in names})
+    monkeypatch.setattr(configs, "_spawn", lambda fn, *a: fn(*a))
+
+    with session() as db:
+        db.add(Subscription(name="grp", url="https://sub.example.net/x", nodes=["N1", "N2", "N4"], excluded=["N2"]))
+        for n in ("N1", "N2", "N4"):
+            db.add(Config(name=n, group="grp", status="up", meta={}))
+
+    r = client.post("/api/subscriptions/sync", json={"name": "grp"}).json()
+    assert r["ok"] and r["removed"] == 2           # N4 left the subscription, N2 was unticked
+    assert r["updated"] == ["N1"] and r["added"] == ["N3"] and r["failed"] == []
+    assert sorted(calls["deleted"]) == ["N2", "N4"] and calls["updated"] == ["N1"] and calls["added"] == ["N3"]
+    assert [c["name"] for c in client.get("/api/configs").json()["configs"]] == ["N3", "N1"]      # the order of the subscription, N2 unticked stays away
+    assert client.put("/api/subscriptions/excluded", json={"name": "grp", "excluded": []}).json()["excluded"] == []
+    with session() as db:
+        assert db.scalar(select(Subscription)).excluded == []
+
+
+def test_a_node_the_probe_holds_under_a_look_alike_name_is_added_with_the_group_prefix(client, monkeypatch):
+    nodes = [{"name": "Turkey-2", "uri": "vless://u@h.example:80?type=ws#Turkey-2", "proto": "vless"}]
+    monkeypatch.setattr(configs, "fetch_subscription", lambda url: nodes)
+    seen = []
+
+    def fake(items):
+        seen.append([i["name"] for i in items])
+        return {i["name"]: ("config 'Turkey-2' already exists" if i["name"] == "Turkey-2" else None) for i in items}
+
+    monkeypatch.setattr(probe, "add_many", fake)
+    r = configs.import_subscription("bot", "https://sub.example.net/x")
+    assert r["added"] == ["bot Turkey-2"] and r["failed"] == [] and seen == [["Turkey-2"], ["bot Turkey-2"]]
+
+
+def test_which_configs_are_direct():
+    assert configs._direct_tcp({"network": "tcp", "security": "none", "address": "a.example", "port": 1616})
+    assert configs._direct_tcp({"network": "xhttp", "security": "reality", "address": "a.example", "port": 2082})
+    assert not configs._direct_tcp({"network": "ws", "security": "none", "address": "a.example", "port": 80})       # through a CDN: the probe's own test is the judge
+    assert not configs._direct_tcp({"network": "tcp", "security": "none", "address": "", "port": 80})

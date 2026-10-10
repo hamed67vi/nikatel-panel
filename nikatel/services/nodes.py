@@ -1,4 +1,4 @@
-﻿"""Node tools that the old panel had: console, connect with a password (installs the panel's key),
+"""Node tools that the old panel had: console, connect with a password (installs the panel's key),
 add many servers at once, open-in-PuTTY/ssh launchers with the operator's own key, Abuse-Defender,
 reboot, country lookup of foreign servers, "is it filtered in Iran?" checks."""
 from __future__ import annotations
@@ -191,7 +191,7 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
                 out = run_script(node, "ping", timeout=25)
                 it.update(ok=True, detail=out.replace("HOST=", "").strip()[:80])
         except (RuntimeError, ValueError) as e:
-            it.update(ok=False, error=str(e)[:160] + ("" if password else " â€” the panel key is not on this server yet: add it with a password"))
+            it.update(ok=False, error=str(e)[:160] + ("" if password else " — the panel key is not on this server yet: add it with a password"))
 
         return it
 

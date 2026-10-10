@@ -1121,30 +1121,31 @@ function cfSubHtml(inline = false) {
 window.cfSubManage = async group => {
   toast("Reading the saved subscription…");
   try {
-    const [p, d] = await Promise.all([api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: group, url: ""})}), api("/api/configs")]);
-    const mine = d.configs.filter(c => c.group === group);
-    cf.subEdit = {group, nodes: p.nodes.map(n => ({...n, cfg: mine.find(c => c.name === n.name || c.name === group + " " + n.name) || null}))};
+    const [p, d, subs] = await Promise.all([api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: group, url: ""})}), api("/api/configs"), api("/api/subscriptions")]);
+    const mine = d.configs.filter(c => c.group === group), sub = subs.subscriptions.find(s => s.name === group);
+    cf.subEdit = {group, excluded: (sub && sub.excluded) || [], nodes: p.nodes.map(n => ({...n, cfg: mine.find(c => c.name === n.name || c.name === group + " " + n.name) || null}))};
     cfSubRender();
   } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 function cfSubRender() {
   const s = cf.subEdit; if (!s) return;
-  showModal(`<b>☑ ${esc(s.group)}</b> <span class="pill">${s.nodes.filter(n => n.cfg).length} of ${s.nodes.length} on the probe</span>`,
-    `<div class="toolbar"><a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=true)">tick all</a> · <a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=false)">untick all</a><span class="sp"></span><small class="mut">ticked = kept on the probe and shown in the list</small></div>
-     <div class="ob-inbounds sub-nodes" id="sub-nodes" style="max-height:50vh">${s.nodes.map((n, i) => `<label><input type="checkbox" data-i="${i}" ${n.cfg ? "checked" : ""}> ${cfFlag(n.name)}${esc(n.name)} <small class="mut">${esc(n.proto)}${n.cfg ? ` · ${n.cfg.status}${n.cfg.ping_ms != null && n.cfg.status === "up" ? " " + Math.round(n.cfg.ping_ms) + " ms" : ""}` : " · not on the probe"}</small></label>`).join("")}</div>
+  const on = n => !s.excluded.includes(n.name);      // ticked = wanted: stays ticked after a delete, a sync loads it again
+  showModal(`<b>✎ ${esc(s.group)}</b> <span class="pill">${s.nodes.filter(on).length} of ${s.nodes.length} wanted · ${s.nodes.filter(n => n.cfg).length} on the probe</span>`,
+    `<div class="toolbar"><a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=true)">tick all</a> · <a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=false)">untick all</a><span class="sp"></span><small class="mut">ticked = wanted: the group follows the subscription and keeps these. Unticked ones are removed and never come back with a sync.</small></div>
+     <div class="ob-inbounds sub-nodes" id="sub-nodes" style="max-height:50vh">${s.nodes.map((n, i) => `<label><input type="checkbox" data-i="${i}" ${on(n) ? "checked" : ""}> ${cfFlag(n.name)}${esc(n.name)} <small class="mut">${esc(n.proto)}${n.cfg ? ` · ${n.cfg.status}${n.cfg.ping_ms != null && n.cfg.status === "up" ? " " + Math.round(n.cfg.ping_ms) + " ms" : ""}` : " · not on the probe"}</small></label>`).join("")}</div>
      <div class="frm-act"><button class="pri" onclick="cfSubApply()">Apply</button></div>`, "wide");
 }
 window.cfSubApply = async () => {
   const s = cf.subEdit; if (!s) return;
-  const ticked = [...document.querySelectorAll("#sub-nodes input")].map(x => x.checked);
-  const drop = s.nodes.filter((n, i) => n.cfg && !ticked[i]), add = s.nodes.filter((n, i) => !n.cfg && ticked[i]);
-  if (!drop.length && !add.length) { toast("Nothing changed"); return; }
-  if (drop.length && !await gconfirm(`Remove ${drop.length} configs of ${s.group} from the probe?`)) return;
-  toast(`Applying: ${add.length} to add, ${drop.length} to remove…`);
-  let bad = 0;
-  if (drop.length) { try { await api("/api/configs/delete-many", {method: "POST", body: JSON.stringify({ids: drop.map(n => n.cfg.id)})}); } catch (e) { bad += drop.length; } }
-  if (add.length) { try { const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name: s.group, url: "", picks: add.map(n => n.name)})}); bad += (r.failed || []).length; } catch (e) { bad += add.length; } }
-  toast(bad ? `⚠ Done with ${bad} failures` : "✓ Subscription applied", bad ? "bad" : "ok");
+  const ticked = [...document.querySelectorAll("#sub-nodes input")].map(x => x.checked), unticked = s.nodes.filter((n, i) => !ticked[i]);
+  const dropping = unticked.filter(n => n.cfg).length;
+  if (dropping && !await gconfirm(`Remove ${dropping} configs of ${s.group} from the probe? They stay unticked and a sync will not bring them back.`)) return;
+  toast("Applying…");
+  try {
+    await api("/api/subscriptions/excluded", {method: "PUT", body: JSON.stringify({name: s.group, excluded: unticked.map(n => n.name)})});
+    const r = await api("/api/subscriptions/sync", {method: "POST", body: JSON.stringify({name: s.group})});
+    toast(`✓ ${r.added.length} added · ${r.updated.length} updated · ${r.removed} removed` + (r.failed.length ? ` · ${r.failed.length} failed: ${r.failed[0]}` : ""), r.failed.length ? "bad" : "ok");
+  } catch (e) { toast("✕ " + e.message, "bad"); }
   cf.subEdit = null; closeModal();
 };
 window.cfSubPreview = async e => { e.preventDefault(); const f = new FormData(e.target); cf.sub.name = f.get("name").trim(); cf.sub.url = f.get("url").trim(); toast("Downloading…"); try { cf.sub.nodes = (await api("/api/subscriptions/preview", {method: "POST", body: JSON.stringify({name: cf.sub.name, url: cf.sub.url})})).nodes; toast("✓ " + cf.sub.nodes.length + " nodes", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
@@ -1153,8 +1154,9 @@ window.cfSubImport = async () => { const picks = [...document.querySelectorAll("
 window.cfSubRefresh = async (id, name) => {
   if (!id) { cf.sub = {name, url: "", nodes: null, saved: false}; cf.edit = null; refresh(); return; }   // no saved link: ask for it once
   try {
-    const r = await api("/api/subscriptions/import", {method: "POST", body: JSON.stringify({name, url: ""})});
-    toast(r.added.length ? `✓ ${r.added.length} new configs added` + (r.failed.length ? `, ${r.failed.length} failed` : "") : r.failed.length ? "✕ " + r.failed[0] : "✓ Nothing new in this subscription", r.failed.length ? "bad" : "ok");
+    const r = await api("/api/subscriptions/sync", {method: "POST", body: JSON.stringify({name})});
+    const same = !r.added.length && !r.updated.length && !r.removed && !r.failed.length;
+    toast(same ? "✓ The list already matches the subscription" : `✓ ${r.added.length} added · ${r.updated.length} updated · ${r.removed} removed` + (r.failed.length ? ` · ${r.failed.length} failed: ${r.failed[0]}` : ""), r.failed.length ? "bad" : "ok");
   } catch (e) { toast("✕ " + e.message, "bad"); }
   refresh();
 };

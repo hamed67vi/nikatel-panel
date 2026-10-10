@@ -184,7 +184,11 @@ def sync() -> None:
             log.exception("meta fill failed")
 
     try:
-        refresh_reach(down_tcp)
+        with session() as db:       # direct configs the probe calls down (read again: their link was only just read into meta)
+            down_direct = [c.name for c in db.scalars(select(Config).where(Config.status == "down")) if _direct_tcp(c.meta)]
+
+        if refresh_reach(sorted(set(down_tcp) | set(down_direct))):
+            _sync()                  # the answer is there: show it now, not at the next round
     except Exception:
         log.exception("reach check failed")
 
@@ -196,13 +200,13 @@ def _direct_tcp(meta: dict | None) -> bool:
     """A config that goes straight to a foreign server over raw TCP (also with Reality). For these "the port opens from Iran" is what tells
     filtered from not filtered: the probe's full proxy test from a data centre fails on paths that work for people."""
     m = meta or {}
-    return m.get("network") == "tcp" and bool(m.get("address")) and bool(m.get("port"))
+    return (m.get("network") == "tcp" or m.get("security") == "reality") and bool(m.get("address")) and bool(m.get("port"))
 
 
-def refresh_reach(names: list[str]) -> None:
+def refresh_reach(names: list[str]) -> bool:
     """For direct TCP configs the probe calls down: can the first two Iran servers open the port? Kept in meta["reach"] for REACH_TTL seconds."""
     if not names:
-        return
+        return False
 
     now = int(time.time())
 
@@ -218,7 +222,7 @@ def refresh_reach(names: list[str]) -> None:
         vantage = [Node(s.host, s.ssh_user, s.ssh_port) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)).order_by(Server.id).limit(2))]
 
     if not todo or not vantage:
-        return
+        return False
 
     answers: dict[str, tuple[bool, int | None]] = {}      # host:port -> (opens, fastest connect time in ms)
     targets = list(todo)
@@ -238,6 +242,8 @@ def refresh_reach(names: list[str]) -> None:
                     was_ok, was_ms = answers.get(p[1], (False, None))
                     answers[p[1]] = (was_ok or ok, min(x for x in (was_ms, ms if ok else None) if x) if (was_ms or (ok and ms)) else None)
 
+    changed = False
+
     with session() as db:
         for hp, ids in todo.items():
             if hp not in answers:
@@ -248,6 +254,9 @@ def refresh_reach(names: list[str]) -> None:
 
                 if c is not None:
                     c.meta = {**(c.meta or {}), "reach": {"ok": answers[hp][0], "ms": answers[hp][1], "at": now}}
+                    changed = True
+
+    return changed
 
 
 def _sync() -> list[str]:
@@ -495,9 +504,14 @@ def fetch_subscription(url: str) -> list[dict]:
     return [{"name": clean_name(link_name(u)) or f"node{i + 1}", "uri": u, "proto": u.split("://", 1)[0]} for i, u in enumerate(links)]
 
 
+def _alt_name(group: str, node: str) -> str:
+    return clean_name(f"{group} {node}")
+
+
 def import_subscription(name: str, url: str, picks: list[str] | None = None, prefix: str = "") -> dict:
-    """Add the chosen nodes (or all) as configs of group `name`. Existing names are skipped.
-    With `prefix` every config is named `<prefix> <node>` so a panel's test nodes never clash with hand-added ones."""
+    """Add the chosen nodes (or, with picks=None, every node the operator did not untick) as configs of group `name`. Existing names are skipped.
+    With `prefix` every config is named `<prefix> <node>` so a panel's test nodes never clash with hand-added ones. A node whose name the probe
+    already holds under another config (the probe compares names without punctuation: "Turkey-2" is "Turkey 2") is added as "<group> <node>"."""
     name = clean_name(name)
 
     if not name:
@@ -513,50 +527,79 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
         ungrouped = {c.name for c in rows_now if not c.group}      # on the probe already, but in no group yet (the sync job registered them first)
         sub = db.scalar(select(Subscription).where(Subscription.name == name)) or Subscription(name=name, url=url)
         sub.url = url
+        excluded = set(sub.excluded or [])
         db.add(sub)
 
-    todo, regroup = [], []
+    todo, regroup, final = [], [], {}       # final: node name -> the name of its config
 
     for n in nodes:
         if picks is not None and n["name"] not in picks:
+            continue
+
+        if picks is None and n["name"] in excluded:
             continue
 
         full = clean_name(f"{prefix} {n['name']}" if prefix else n["name"])
 
         if full in existing:
             skipped.append(full)
+            final[n["name"]] = full
 
             if full in ungrouped:
                 regroup.append(full)
 
             continue
 
-        todo.append((full, n["uri"]))
+        alt = _alt_name(name, n["name"])
+
+        if alt in existing and alt != full:      # an earlier import already had to use the longer name
+            skipped.append(alt)
+            final[n["name"]] = alt
+
+            if alt in ungrouped:
+                regroup.append(alt)
+
+            continue
+
+        todo.append((n["name"], full, n["uri"]))
+
+    def add_batch(items: list[tuple[str, str, str]]) -> dict[str, str | None]:
+        try:
+            return probe.add_many([{"uri": with_name(uri, cname), "name": cname} for _node, cname, uri in items])
+        except RuntimeError as e:
+            return {cname: str(e)[:60] for _node, cname, _uri in items}
 
     if todo:   # one call for all of them: the probe restarts its services once, not once per config
-        try:
-            res = probe.add_many([{"uri": with_name(uri, full), "name": full} for full, uri in todo])
-        except RuntimeError as e:
-            res = {full: str(e)[:60] for full, _ in todo}
+        res = add_batch(todo)
+        clash = [(node, _alt_name(name, node), uri) for node, cname, uri in todo if "already exists" in str(res.get(cname) or "") and _alt_name(name, node) != cname]
 
-        for full, uri in todo:
-            why = res.get(full, "no answer for this one")
+        if clash:
+            res.update(add_batch(clash))
+
+        names_of = {node: cname for node, cname, _uri in todo}
+        names_of.update({node: alt for node, alt, _uri in clash})
+
+        for node, cname, uri in todo:
+            use = names_of[node]
+            why = res.get(use, "no answer for this one")
 
             if why:
-                failed.append(f"{full}: {str(why)[:60]}")
+                failed.append(f"{use}: {str(why)[:60]}")
                 continue
 
-            regroup.append(full)            # the sync job may have registered it a moment ago without a group: it joins this one
+            regroup.append(use)            # the sync job may have registered it a moment ago without a group: it joins this one
 
             try:
                 with session() as db:
-                    if db.scalar(select(Config).where(Config.name == full)) is None:
-                        db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(uri)))
+                    if db.scalar(select(Config).where(Config.name == use)) is None:
+                        db.add(Config(name=use, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(uri)))
             except IntegrityError:          # registered by the sync job in the same instant: the regroup below puts it in the group
                 pass
 
-            added.append(full)
-            existing.add(full)
+            added.append(use)
+            final[node] = use
+            existing.add(use)
+
     if regroup:
         with session() as db:
             for c in db.scalars(select(Config).where(Config.name.in_(regroup), Config.group == "")):
@@ -564,8 +607,99 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
 
     with session() as db:
         sub = db.scalar(select(Subscription).where(Subscription.name == name))
-        sub.nodes = sorted(set(list(sub.nodes or []) + added + skipped))
+        order = [final[n["name"]] for n in nodes if n["name"] in final]      # the order of the subscription
+        sub.nodes = order + [x for x in (sub.nodes or []) if x not in order] if picks is not None else order
         sub.last_import = int(time.time())
         emit(db, "info", "configs", f"Subscription {name}: {len(added)} configs added, {len(skipped)} already there, {len(failed)} failed.", name)
 
     return {"added": added, "skipped": skipped, "failed": failed}
+
+
+def _link_key(uri: str) -> tuple:
+    """A link without its name: two links with the same key are the same config."""
+    from urllib.parse import parse_qs, urlsplit
+
+    try:
+        sp = urlsplit(uri.strip())
+
+        if sp.scheme == "vmess":
+            raw = uri.strip()[8:].split("#", 1)[0]
+            j = json.loads(base64.b64decode(raw + "=" * (-len(raw) % 4)))
+            j.pop("ps", None)
+            return ("vmess", tuple(sorted((k, str(v)) for k, v in j.items())))
+
+        return (sp.scheme, sp.username, sp.hostname, sp.port, tuple(sorted((k, v[0]) for k, v in parse_qs(sp.query).items())))
+    except (ValueError, UnicodeError):
+        return (uri,)
+
+
+def sync_subscription(name: str) -> dict:
+    """Make the group equal to its subscription: nodes that are new are added, nodes whose link changed get the new link, nodes that left the subscription
+    or that the operator unticked are removed. The list then follows the order of the subscription."""
+    with session() as db:
+        sub = db.scalar(select(Subscription).where(Subscription.name == name))
+
+        if sub is None or not sub.url:
+            raise ValueError("no saved link for this group: paste the subscription link first")
+
+        url, excluded, known = sub.url, set(sub.excluded or []), list(sub.nodes or [])
+
+    wait_for_deletes()
+    nodes = fetch_subscription(url)
+    node_names = {n["name"] for n in nodes}
+
+    with session() as db:
+        mine = {c.name: c for c in db.scalars(select(Config).where(Config.group == name))}
+        have = {c.name: c.id for c in mine.values()}
+
+    def config_of(node: str) -> str | None:
+        for cand in (clean_name(node), _alt_name(name, node)):
+            if cand in have:
+                return cand
+
+        return None
+
+    # 1. gone: imported earlier, no longer in the subscription - or unticked
+    gone = [cn for cn in known if cn in have and not any(config_of(n) == cn for n in node_names - excluded)]
+    removed = remove_fast(gone)["deleted"] if gone else 0
+    # 2. changed links
+    changes = []
+
+    for n in nodes:
+        cn = config_of(n["name"])
+
+        if cn and n["name"] not in excluded and cn not in gone:
+            try:
+                if _link_key(probe.config_uri(cn)) != _link_key(n["uri"]):
+                    changes.append({"name": cn, "uri": with_name(n["uri"], cn)})
+            except RuntimeError:
+                continue
+
+    updated, failed = [], []
+
+    if changes:
+        try:
+            res = probe.update_many(changes)
+        except RuntimeError as e:
+            res = {c["name"]: str(e)[:60] for c in changes}
+
+        for c in changes:
+            if res.get(c["name"]):
+                failed.append(f"{c['name']}: {res[c['name']]}")
+            else:
+                updated.append(c["name"])
+
+        if updated:
+            with session() as db:
+                for c in db.scalars(select(Config).where(Config.name.in_(updated))):
+                    uri = next(n["uri"] for n in nodes if config_of(n["name"]) == c.name)
+                    c.meta = meta_from_uri(uri)
+
+    # 3. new nodes, in one call; then the order of the subscription
+    imp = import_subscription(name, url)
+    failed += imp["failed"]
+
+    with session() as db:
+        emit(db, "info", "configs", f"Group {name} follows its subscription: {len(imp['added'])} added, {len(updated)} updated, {removed} removed.", name)
+
+    return {"added": imp["added"], "updated": updated, "removed": removed, "failed": failed, "total": len(nodes) - len(excluded & node_names)}

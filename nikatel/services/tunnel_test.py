@@ -1,4 +1,4 @@
-﻿"""Tunnel test: before you commit to a pair of servers, build a temporary tunnel between them, measure
+"""Tunnel test: before you commit to a pair of servers, build a temporary tunnel between them, measure
 it (latency, jitter, loss over GRE; real download speed through a forwarded port) and remove it again.
 Nothing stays on the servers; the result is kept in action_log."""
 from __future__ import annotations
@@ -117,7 +117,7 @@ def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
     build_aid = builder.start_build(iran_id, foreign_id, str(TEST_PORT), transport, forced_name=name)
 
     with session() as db:
-        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {transport} tunnel {name} is being built (build #{build_aid})â€¦"])
+        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {transport} tunnel {name} is being built (build #{build_aid})…"])
         db.add(entry)
         db.flush()
         aid = entry.id
@@ -212,39 +212,39 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
     except (SSHError, ValueError) as e:
         _say(aid, f"Speed test skipped: {e}")
 
-    _say(aid, f"Download through the tunnel (foreign â†’ Iran): {mbps if mbps is not None else 'not measured'} Mbps")
+    _say(aid, f"Download through the tunnel (foreign → Iran): {mbps if mbps is not None else 'not measured'} Mbps")
     sc = score(avg, jitter, loss, mbps)
     RESULTS[aid] = {"latency_ms": avg, "jitter_ms": jitter, "loss_pct": loss, "down_mbps": mbps, "score": sc}
     verdict = "excellent" if sc >= 75 else "usable" if sc >= 50 else "poor"
-    return sc >= 50, f"Score {sc}/100 â€” {verdict}. Everything temporary was removed."
+    return sc >= 50, f"Score {sc}/100 — {verdict}. Everything temporary was removed."
 
 
 # ------------------------------------------------------------------ compare several transports, one after the other
 RESULTS: dict[int, dict] = {}
 # key, label, note, group, ticked by default
 KINDS = [
-    ("tcpmux", "Backhaul Â· TCP Mux", "over GRE, many users over few connections (recommended)", "Backhaul over GRE", True),
-    ("tcp", "Backhaul Â· TCP", "over GRE, plain TCP, one connection per user", "Backhaul over GRE", True),
-    ("wsmux", "Backhaul Â· WebSocket Mux", "over GRE, clear-text WebSocket, multiplexed", "Backhaul over GRE", False),
-    ("wssmux", "Backhaul Â· WebSocket TLS Mux", "over GRE, TLS WebSocket, multiplexed", "Backhaul over GRE", False),
-    ("bp:tcpmux", "BackPack Â· TCP Mux", "many users over few connections", "BackPack", True),
-    ("bp:tcp", "BackPack Â· TCP", "plain TCP", "BackPack", True),
-    ("bp:stealth", "BackPack Â· TCP + Stealth", "looks like random bytes", "BackPack", True),
-    ("bp:wss", "BackPack Â· WebSocket TLS", "TLS + decoy page", "BackPack", False),
-    ("bp:wssmux", "BackPack Â· WebSocket TLS Mux", "TLS WebSocket, multiplexed", "BackPack", True),
-    ("bp:ws", "BackPack Â· WebSocket", "clear-text WebSocket", "BackPack", False),
-    ("bp:wsmux", "BackPack Â· WebSocket Mux", "clear-text, multiplexed", "BackPack", False),
-    ("bp:kcp", "BackPack Â· UDP + KCP", "UDP must be open", "BackPack", False),
-    ("bp:quic", "BackPack Â· UDP + QUIC", "UDP must be open", "BackPack", False),
-    ("bp:pck", "BackPack Â· TCP + PCK", "raw TCP segments (root)", "BackPack", False),
-    ("bp:xdi", "BackPack Â· xDi (ICMP)", "slow, last resort", "BackPack", False),
-    ("bpd:udp", "BackPack Direct Â· UDP", "Iran dials, UDP", "BackPack Direct", True),
-    ("bpd:quic", "BackPack Direct Â· QUIC", "Iran dials, QUIC", "BackPack Direct", False),
-    ("bpd:pck", "BackPack Direct Â· PCK", "Iran dials, looks like TCP (root)", "BackPack Direct", True),
-    ("bpd:xdi", "BackPack Direct Â· xDi (ICMP)", "Iran dials, inside ping (root)", "BackPack Direct", False),
-    ("paqet", "Paqet Â· KCP raw sockets", "needs raw sockets", "Paqet", True),
-    ("chisel", "Chisel Â· WebSocket", "HTTP WebSocket, one inbound port", "Chisel", True),
-    ("chisel:tls", "Chisel Â· TLS WebSocket", "TLS WebSocket, one inbound port", "Chisel", False),
+    ("tcpmux", "Backhaul · TCP Mux", "over GRE, many users over few connections (recommended)", "Backhaul over GRE", True),
+    ("tcp", "Backhaul · TCP", "over GRE, plain TCP, one connection per user", "Backhaul over GRE", True),
+    ("wsmux", "Backhaul · WebSocket Mux", "over GRE, clear-text WebSocket, multiplexed", "Backhaul over GRE", False),
+    ("wssmux", "Backhaul · WebSocket TLS Mux", "over GRE, TLS WebSocket, multiplexed", "Backhaul over GRE", False),
+    ("bp:tcpmux", "BackPack · TCP Mux", "many users over few connections", "BackPack", True),
+    ("bp:tcp", "BackPack · TCP", "plain TCP", "BackPack", True),
+    ("bp:stealth", "BackPack · TCP + Stealth", "looks like random bytes", "BackPack", True),
+    ("bp:wss", "BackPack · WebSocket TLS", "TLS + decoy page", "BackPack", False),
+    ("bp:wssmux", "BackPack · WebSocket TLS Mux", "TLS WebSocket, multiplexed", "BackPack", True),
+    ("bp:ws", "BackPack · WebSocket", "clear-text WebSocket", "BackPack", False),
+    ("bp:wsmux", "BackPack · WebSocket Mux", "clear-text, multiplexed", "BackPack", False),
+    ("bp:kcp", "BackPack · UDP + KCP", "UDP must be open", "BackPack", False),
+    ("bp:quic", "BackPack · UDP + QUIC", "UDP must be open", "BackPack", False),
+    ("bp:pck", "BackPack · TCP + PCK", "raw TCP segments (root)", "BackPack", False),
+    ("bp:xdi", "BackPack · xDi (ICMP)", "slow, last resort", "BackPack", False),
+    ("bpd:udp", "BackPack Direct · UDP", "Iran dials, UDP", "BackPack Direct", True),
+    ("bpd:quic", "BackPack Direct · QUIC", "Iran dials, QUIC", "BackPack Direct", False),
+    ("bpd:pck", "BackPack Direct · PCK", "Iran dials, looks like TCP (root)", "BackPack Direct", True),
+    ("bpd:xdi", "BackPack Direct · xDi (ICMP)", "Iran dials, inside ping (root)", "BackPack Direct", False),
+    ("paqet", "Paqet · KCP raw sockets", "needs raw sockets", "Paqet", True),
+    ("chisel", "Chisel · WebSocket", "HTTP WebSocket, one inbound port", "Chisel", True),
+    ("chisel:tls", "Chisel · TLS WebSocket", "TLS WebSocket, one inbound port", "Chisel", False),
 ]
 KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}
@@ -285,7 +285,7 @@ def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full")
     build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name, measure=measure)
 
     with session() as db:
-        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {kind} tunnel {name} is being built (build #{build_aid})â€¦"])
+        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {kind} tunnel {name} is being built (build #{build_aid})…"])
         db.add(entry)
         db.flush()
         aid = entry.id
@@ -320,9 +320,9 @@ def _other_worker(aid: int, build_aid: int, name: str) -> None:
 
             sc = int(q.get("score") or 0)
             RESULTS[aid] = {"latency_ms": q.get("latency_ms"), "jitter_ms": q.get("jitter_ms"), "loss_pct": q.get("loss_pct"), "down_mbps": q.get("down_mbps"), "up_mbps": q.get("up_mbps"), "score": sc}
-            _say(aid, f"Built and measured: {q.get('latency_ms')} ms, jitter {q.get('jitter_ms')} ms, loss {q.get('loss_pct')}%, â†“{q.get('down_mbps')} â†‘{q.get('up_mbps')} Mb/s")
+            _say(aid, f"Built and measured: {q.get('latency_ms')} ms, jitter {q.get('jitter_ms')} ms, loss {q.get('loss_pct')}%, ↓{q.get('down_mbps')} ↑{q.get('up_mbps')} Mb/s")
             ok = sc >= 50
-            verdict = f"Score {sc}/100 â€” {'excellent' if sc >= 75 else 'usable' if sc >= 50 else 'poor'}. Everything temporary was removed."
+            verdict = f"Score {sc}/100 — {'excellent' if sc >= 75 else 'usable' if sc >= 50 else 'poor'}. Everything temporary was removed."
     except Exception as e:  # thread boundary
         log.exception("tunnel test #%s crashed", aid)
         verdict, ok = f"Stopped: {str(e)[:160]}", False

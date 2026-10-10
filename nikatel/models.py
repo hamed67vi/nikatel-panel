@@ -225,7 +225,8 @@ class Subscription(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(64), unique=True)
     url: Mapped[str] = mapped_column(Text)                              # secret-ish: never listed in clear
-    nodes: Mapped[list] = mapped_column(JSON, default=list)             # imported node names
+    nodes: Mapped[list] = mapped_column(JSON, default=list)             # imported node names, in the order of the subscription
+    excluded: Mapped[list] = mapped_column(JSON, default=list)          # node names the operator unticked: a sync never adds them (and removes them when present)
     created_at: Mapped[int] = mapped_column(Integer, default=now)
     last_import: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -149,6 +149,21 @@ def add_many(items: list[dict]) -> dict:
 
     return res
 
+def update_many(items: list[dict]) -> dict:
+    """Change the link of several configs in ONE call. items: [{"name", "uri"}]. Returns {name: None when changed | error text}."""
+    d = request("POST", "/api/config/bulk", {"update": [{"name": i["name"], "uri": i["uri"]} for i in items]}, timeout=300)
+
+    if not d.get("ok"):
+        raise RuntimeError(str(d.get("error") or d.get("output") or "the probe refused the bulk update")[:300])
+
+    res = {i["name"]: "no answer for this one" for i in items}
+
+    for it in (d.get("results") or d).get("update", []):
+        res[str(it.get("name", ""))] = None if it.get("ok") else str(it.get("error", "failed"))[:100]
+
+    return res
+
+
 def update_config(name: str, uri: str = "", new_name: str = "") -> dict:
     body = {"name": name}
 

@@ -36,6 +36,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (6, "panels table (created by create_all)", []),
     (7, "servers.extra column", lambda db: _add_column(db, "servers", "extra", "JSON DEFAULT '{}'")),
     (8, "configs.meta column", lambda db: _add_column(db, "configs", "meta", "JSON DEFAULT '{}'")),
+    (9, "subscriptions.excluded column", lambda db: _add_column(db, "subscriptions", "excluded", "JSON DEFAULT '[]'")),
 ]
 
 

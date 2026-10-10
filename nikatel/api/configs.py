@@ -25,7 +25,8 @@ def _wrap(fn, *a, **kw):
 @router.get("/configs")
 def list_configs():
     with session() as db:
-        rows = list(db.scalars(select(Config).order_by(Config.group, Config.name)))
+        order = {s.name: {n: i for i, n in enumerate(s.nodes or [])} for s in db.scalars(select(Subscription))}      # a group lists its configs in the order of its subscription
+        rows = sorted(db.scalars(select(Config)), key=lambda c: (c.group or "", order.get(c.group or "", {}).get(c.name, 10**6), c.name.lower()))
         return {"ok": True, "probe": probe.active(), "configs": [{
             "id": c.id, "name": c.name, "slug": c.slug, "group": c.group, "port": c.port, "enabled": c.enabled, "tunnel": c.tunnel, "cdn_port": c.cdn_port, "meta": c.meta or {},
             "status": c.status, "status_since": c.status_since, "ping_ms": c.ping_ms, "down_mbps": c.down_mbps, "up_mbps": c.up_mbps, "speed_at": c.speed_at,
@@ -152,7 +153,7 @@ def _sub_url(body: SubIn) -> str:
 @router.get("/subscriptions")
 def subs():
     with session() as db:
-        return {"ok": True, "subscriptions": [{"id": s.id, "name": s.name, "nodes": s.nodes, "last_import": s.last_import, "url_host": s.url.split("/")[2] if "//" in s.url else ""}
+        return {"ok": True, "subscriptions": [{"id": s.id, "name": s.name, "nodes": s.nodes, "excluded": s.excluded or [], "last_import": s.last_import, "url_host": s.url.split("/")[2] if "//" in s.url else ""}
                                               for s in db.scalars(select(Subscription).order_by(Subscription.name))]}
 
 
@@ -164,6 +165,29 @@ def sub_preview(body: SubIn):
         existing = {c.name for c in db.scalars(select(Config))}
 
     return {"ok": True, "nodes": [{"name": n["name"], "proto": n["proto"], "exists": n["name"] in existing} for n in nodes]}
+
+
+class ExcludedIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    excluded: list[str] = Field(default_factory=list, max_length=2000)
+
+
+@router.put("/subscriptions/excluded")
+def sub_excluded(body: ExcludedIn):
+    with session() as db:
+        s = db.scalar(select(Subscription).where(Subscription.name == body.name))
+
+        if s is None:
+            raise HTTPException(404, "no such subscription")
+
+        s.excluded = sorted(set(body.excluded))
+
+    return {"ok": True, "excluded": sorted(set(body.excluded))}
+
+
+@router.post("/subscriptions/sync")
+def sub_sync(body: SubIn):
+    return {"ok": True, **_wrap(configs.sync_subscription, body.name)}
 
 
 @router.post("/subscriptions/import")
