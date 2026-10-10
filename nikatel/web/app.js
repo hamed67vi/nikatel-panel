@@ -453,10 +453,10 @@ const BK_GUIDE = [
   ["Everything else is blocked", "BackPack · xDi (ICMP)", "backpack", "xdi", "KCP inside ping packets; slow, last resort."],
 ];
 /* two or three words per type, shown in the drop-down */
-const BK_FOR = {"backhaul:tcpmux": "many users ⭐", "backhaul:tcp": "few users, plain", "backhaul:wsmux": "CDN-able, clear", "backhaul:wssmux": "CDN-able, TLS",
-  "backpack:tcpmux": "many users, GRE blocked", "backpack:tcp": "plain TCP", "backpack:stealth": "heavy filtering", "backpack:pck": "TCP stalls (root)", "backpack:kcp": "lossy route, games", "backpack:udp": "UDP services", "backpack:quic": "QUIC, UDP open", "backpack:ws": "behind your TLS", "backpack:wsmux": "WebSocket, mux", "backpack:wss": "looks like HTTPS", "backpack:wssmux": "HTTPS + mux, CDN", "backpack:xdi": "last resort, slow",
-  "backpack_direct:udp": "low latency, voice", "backpack_direct:quic": "low latency, QUIC", "backpack_direct:pck": "TCP throttled (root)", "backpack_direct:sni": "whitelisted domain", "backpack_direct:xdi": "UDP + TCP blocked",
-  "paqet:kcp": "provider stalls TCP", "chisel:ws": "small group, simple", "chisel:wss": "small group, TLS"};
+const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp": "few users, plain route", "backhaul:wsmux": "behind a CDN, clear", "backhaul:wssmux": "behind a CDN, TLS",
+  "backpack:tcpmux": "many users, GRE blocked", "backpack:tcp": "few users, GRE blocked", "backpack:stealth": "very heavy filtering", "backpack:pck": "Iran stalls plain TCP (root)", "backpack:kcp": "lossy route, games", "backpack:udp": "UDP-only services", "backpack:quic": "UDP open, wants QUIC", "backpack:ws": "behind your own TLS", "backpack:wsmux": "WebSocket + many users", "backpack:wss": "must look like HTTPS", "backpack:wssmux": "heavy filtering + many users", "backpack:xdi": "Iran blocks almost everything",
+  "backpack_direct:udp": "low latency, voice, games", "backpack_direct:quic": "low latency, UDP open", "backpack_direct:pck": "Iran throttles TCP (root)", "backpack_direct:sni": "Iran only allows a domain", "backpack_direct:xdi": "UDP and TCP both blocked",
+  "paqet:kcp": "ordinary TCP stalls, raw sockets", "chisel:ws": "small group, simplest", "chisel:wss": "small group, looks like HTTPS"};
 async function buildFormHtml() {
   const [servers, kd] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds")]);
   bk.kinds = kd.kinds;
@@ -480,9 +480,9 @@ async function buildFormHtml() {
       <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran", "iran_id")}</select></label>
       <label>Foreign server<select name="foreign_id" required>${opt("foreign", "foreign_id")}</select></label>
       <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label>
-      <label>Tunnel type${typeSel}</label>
-      ${options}</div>
+      <label>Tunnel type <small>(the defaults are the many-users settings)</small>${typeSel}</label></div>
     <div id="auto-iran" class="mut"></div>
+    <div class="badv"><a onclick="bk.adv=!bk.adv;refresh()">${bk.adv ? "▾ Advanced settings" : "▸ Advanced settings"} <small class="mut">${bk.adv ? "— change a value only when you measured a reason" : "— keepalive, heartbeat, MTU, preset, UDP…"}</small></a>${bk.adv ? `<div class="bgrid" style="margin-top:8px">${options}</div>` : ""}</div>
     <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
