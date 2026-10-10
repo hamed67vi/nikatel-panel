@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.svg" alt="Nikatel" width="112" height="112">
+
 # Nikatel panel
 
 **One control panel for a tunnel-based network** — Iranian and foreign servers, the tunnels between them,

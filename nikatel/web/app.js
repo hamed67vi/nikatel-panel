@@ -2081,7 +2081,7 @@ function settingsTabs() {
   const bar = `<div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
   $("#page").insertAdjacentHTML("afterbegin", bar);
   const grid = $("#page .grid2"), byName = {};
-  grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); byName[h ? h.childNodes[0].textContent.trim() : ""] = c; c.classList.add("hidden"); });
+  grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); const nm = c.dataset.name || (h ? h.childNodes[0].textContent.trim() : ""); c.dataset.name = nm; byName[nm] = c; c.classList.add("hidden"); });
   const names = SET_TABS[cur][2].filter(n => byName[n]);
   let show = names;
   if (names.length > 1) {   // several cards in a tab: a second row of tabs, one card at a time
@@ -2096,7 +2096,7 @@ settingsTabs.only = () => {   // switch the card without touching the server or 
   const grid = $("#page .grid2"); if (!grid) return refresh();
   const old = $("#page .set-sub"); if (old) old.remove();
   const byName = {};
-  grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); byName[h ? h.childNodes[0].textContent.trim() : ""] = c; c.classList.add("hidden"); });
+  grid.querySelectorAll(":scope > .card").forEach(c => { const nm = c.dataset.name || ""; byName[nm] = c; c.classList.add("hidden"); });
   const names = SET_TABS[state.stab][2].filter(n => byName[n]), pick = names.includes(state.sstab) ? state.sstab : names[0];
   $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div>`);
   byName[pick].classList.remove("hidden");
@@ -2104,6 +2104,7 @@ settingsTabs.only = () => {   // switch the card without touching the server or 
 };
 window.setTab = k => { state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); refresh(); };
 state.stab = localStorage.getItem("nk.stab") || "account";
+window.onLangChange = () => { try { refresh(); } catch (e) { /* not signed in yet */ } };
 const formJson = (e, nums = [], bools = []) => { const f = new FormData(e.target), o = {}; for (const [k, v] of f.entries()) o[k] = v; nums.forEach(k => o[k] = +o[k]); bools.forEach(k => o[k] = f.get(k) === "on"); return o; };
 const put = async (e, path, body, okText) => { e.preventDefault(); try { await api(path, {method: "PUT", body: JSON.stringify(body)}); toast(okText, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveTelegram = e => put(e, "/api/settings/telegram", formJson(e, [], ["enabled"]), "✓ Telegram saved");
@@ -2136,3 +2137,15 @@ window.changePassword = async e => {
 (async () => {
   try { await api("/api/auth/me"); showApp(); go(state.page); } catch (e) { showLogin(); }
 })();
+
+/* the AI buttons (anything with ✨ in it) get the glass-gold look and the magic wand on hover (see .ai-btn in app.css) */
+(() => { let q = false; const mark = () => { q = false; document.querySelectorAll("button:not(.ai-btn)").forEach(b => { if (b.textContent.includes("✨")) b.classList.add("ai-btn"); }); }; new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(mark); } }).observe(document.documentElement, {childList: true, subtree: true, characterData: true}); mark(); })();
+
+/* a ripple that spreads from the point of every click on a button */
+document.addEventListener("pointerdown", e => {
+  const b = e.target.closest && e.target.closest("button:not(:disabled), nav a"); if (!b || b.classList.contains("lang-btn") && false) return;
+  const r = b.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2, s = document.createElement("span");
+  s.className = "rpl"; s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+  if (getComputedStyle(b).position === "static") b.style.position = "relative";
+  b.appendChild(s); setTimeout(() => s.remove(), 650);
+}, {passive: true});

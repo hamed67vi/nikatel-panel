@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2150"/><stop offset=".55" stop-color="#0d1130"/><stop offset="1" stop-color="#070a1c"/>
+    </linearGradient>
+    <linearGradient id="ac" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b7cff"/><stop offset=".5" stop-color="#4aa8ff"/><stop offset="1" stop-color="#2fe0d0"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".45"/><stop offset=".4" stop-color="#ffffff" stop-opacity=".05"/><stop offset="1" stop-color="#ffffff" stop-opacity=".12"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#4aa8ff" stop-opacity=".55"/><stop offset="1" stop-color="#4aa8ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#bg)"/>
+  <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="29.3" fill="none" stroke="url(#rim)" stroke-width="1.5"/>
+  <circle cx="64" cy="64" r="52" fill="url(#glow)" opacity=".55"/>
+  <!-- faint network grid -->
+  <g stroke="#6f8cff" stroke-opacity=".16" stroke-width="1" fill="none">
+    <circle cx="64" cy="64" r="44"/><circle cx="64" cy="64" r="30"/>
+    <path d="M64 18V110M18 64H110"/>
+  </g>
+  <!-- the tunnel: an arc between two servers -->
+  <path d="M26 92C44 52 84 52 102 92" fill="none" stroke="url(#ac)" stroke-opacity=".5" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/>
+  <!-- the N, drawn as a path that runs from one node to the other -->
+  <path d="M38 94V36L90 94V36" fill="none" stroke="url(#ac)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft)" opacity=".55"/>
+  <path d="M38 94V36L90 94V36" fill="none" stroke="url(#ac)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M38 94V36L90 94V36" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1.2 -1.2)"/>
+  <!-- nodes at the four ends -->
+  <g>
+    <circle cx="38" cy="36" r="7.5" fill="#0d1130" stroke="#8b7cff" stroke-width="3"/><circle cx="38" cy="36" r="2.6" fill="#fff"/>
+    <circle cx="90" cy="36" r="7.5" fill="#0d1130" stroke="#2fe0d0" stroke-width="3"/><circle cx="90" cy="36" r="2.6" fill="#fff"/>
+    <circle cx="38" cy="94" r="7.5" fill="#0d1130" stroke="#6aa0ff" stroke-width="3"/><circle cx="38" cy="94" r="2.6" fill="#fff"/>
+    <circle cx="90" cy="94" r="7.5" fill="#0d1130" stroke="#4fd8e6" stroke-width="3"/><circle cx="90" cy="94" r="2.6" fill="#fff"/>
+  </g>
+  <!-- signal dots running through the tunnel -->
+  <g fill="#fff"><circle cx="64" cy="64.5" r="2.4"/><circle cx="52" cy="50" r="1.6" fill-opacity=".7"/><circle cx="76" cy="79" r="1.6" fill-opacity=".7"/></g>
+</svg>

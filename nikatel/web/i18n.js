@@ -33,7 +33,11 @@
     let r = lookup(c, depth);
     if (r != null) return r;
     const m = SYM.exec(c);
-    if (m && (m[1] || m[3]) && m[2]) { r = lookup(m[2], depth); if (r != null) return m[1] + r + m[3].replace(/\.\.\./g, "…"); }
+    if (m && (m[1] || m[3]) && m[2]) {
+      if (m[1]) { r = lookup(c.slice(m[1].length), depth); if (r != null) return m[1] + r; }
+      r = lookup(m[2], depth); if (r != null) return m[1] + r + m[3].replace(/\.\.\./g, "…");
+      if (m[3]) { r = lookup(m[2] + m[3].trimEnd().slice(0, 1), depth); if (r != null) return m[1] + r; }   // the sentence needs its full stop to match
+    }
     const p = /^\((.*)\)$/s.exec(c);
     if (p) { r = core(p[1], depth + 1); if (r != null) return "(" + r + ")"; }
     // several sentences in one text: each one by itself

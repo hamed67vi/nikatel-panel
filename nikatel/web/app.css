@@ -588,3 +588,79 @@ button::after { transition: opacity .3s ease; }
 .ue-sub { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ue-sub .ell { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
 .ue-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); } .ue-acts .sp { flex: 1; }
 @media (max-width: 760px) { .ue-top, .ue-form { grid-template-columns: 1fr; } .ue-facts { grid-template-columns: 1fr 1fr; } }
+
+/* ---- Persian: right to left, the Persian font first; technical text (addresses, code, numbers in tables, charts) stays left to right */
+.lang-btn { min-width: 40px; height: 34px; padding: 0 10px; border-radius: 12px; font-weight: 800; font-size: 13px; }
+.head-r { display: flex; align-items: center; gap: 8px; } .login-lang { position: absolute; top: 12px; right: 12px; } .login-box { position: relative; }
+html[lang="fa"] body, html[lang="fa"] button, html[lang="fa"] input, html[lang="fa"] select, html[lang="fa"] textarea { font-family: "Vazirmatn", "Inter", system-ui, sans-serif; }
+html[dir="rtl"] .mono, html[dir="rtl"] code, html[dir="rtl"] pre, html[dir="rtl"] input[type="number"], html[dir="rtl"] input[type="password"], html[dir="rtl"] input[type="url"], html[dir="rtl"] textarea.ob-raw, html[dir="rtl"] svg.lc, html[dir="rtl"] .lc-wrap, html[dir="rtl"] .num, html[dir="rtl"] .gl-out, html[dir="rtl"] .ll time, html[dir="rtl"] .login-lang { direction: ltr; unicode-bidi: plaintext; }
+html[dir="rtl"] .num, html[dir="rtl"] td.num { text-align: left; }
+html[dir="rtl"] input, html[dir="rtl"] select, html[dir="rtl"] textarea { text-align: right; }
+html[dir="rtl"] nav a::before { left: auto; right: 0; } html[dir="rtl"] nav a:hover { transform: translateX(-3px); }
+html[dir="rtl"] .login-lang { right: auto; left: 12px; }
+html[dir="rtl"] .statusbar .sb-time { margin-right: auto; margin-left: 0; }
+html[dir="rtl"] .td-act, html[dir="rtl"] .cf-acts { justify-content: flex-start; }
+html[dir="rtl"] .tbl th, html[dir="rtl"] .tbl td { text-align: right; }
+html[dir="rtl"] .brand { direction: ltr; }
+
+/* ---- AI buttons: gold glass; on hover a magic wand flicks in, sparkles pop and a light sweeps across */
+.ai-btn, .ai-btn.pri { position: relative; overflow: hidden; isolation: isolate; color: #fff3cf; font-weight: 800; text-shadow: 0 1px 6px rgba(120, 70, 0, .55);
+  background: linear-gradient(135deg, rgba(255, 224, 140, .42), rgba(255, 178, 48, .20) 55%, rgba(255, 214, 120, .30)); border: 1px solid rgba(255, 224, 150, .62);
+  box-shadow: 0 6px 18px rgba(255, 176, 40, .22), inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -8px 14px rgba(255, 150, 20, .14); backdrop-filter: blur(10px) saturate(1.5); -webkit-backdrop-filter: blur(10px) saturate(1.5);
+  transition: padding .28s cubic-bezier(.2, .9, .3, 1.2), box-shadow .3s ease, filter .3s ease, transform .15s ease, border-color .3s ease; }
+.ai-btn::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%); transform: translateX(-130%); }
+.ai-btn::before { content: "🪄"; position: absolute; left: 9px; top: 50%; font-size: 14px; line-height: 1; opacity: 0; transform: translate(-16px, -30%) rotate(-50deg) scale(.6); transform-origin: 20% 90%; pointer-events: none; text-shadow: none; }
+.ai-btn:hover { padding-left: 30px; border-color: rgba(255, 238, 180, .95); filter: brightness(1.12) saturate(1.1);
+  box-shadow: 0 8px 26px rgba(255, 184, 56, .42), 0 0 0 1px rgba(255, 230, 160, .35), inset 0 1px 0 rgba(255, 255, 255, .7), inset 0 -8px 14px rgba(255, 150, 20, .2); }
+.ai-btn:hover::before { opacity: 1; animation: wand-in .55s cubic-bezier(.2, .9, .3, 1.3) forwards, wand-wave 1.1s .55s ease-in-out infinite; }
+.ai-btn:hover::after { animation: ai-sweep .9s ease-out; }
+.ai-btn:active { transform: scale(.97); }
+@keyframes wand-in { 0% { opacity: 0; transform: translate(-16px, -30%) rotate(-50deg) scale(.6); } 60% { opacity: 1; transform: translate(2px, -52%) rotate(14deg) scale(1.15); } 100% { opacity: 1; transform: translate(0, -50%) rotate(0) scale(1); } }
+@keyframes wand-wave { 0%, 100% { transform: translate(0, -50%) rotate(0); } 25% { transform: translate(0, -50%) rotate(-16deg); } 55% { transform: translate(0, -50%) rotate(10deg); } }
+@keyframes ai-sweep { to { transform: translateX(130%); } }
+html[dir="rtl"] .ai-btn::before { left: auto; right: 9px; transform-origin: 80% 90%; } html[dir="rtl"] .ai-btn:hover { padding-left: 14px; padding-right: 30px; }
+@media (prefers-reduced-motion: reduce) { .ai-btn:hover::before, .ai-btn:hover::after { animation: none; } .ai-btn:hover::before { opacity: 1; transform: translate(0, -50%); } }
+
+/* the Create tunnel button: bigger, with a slow fade-breathing glow and a fade-in sheen on hover */
+button[onclick^="newTunnel("], button[onclick^="openBuild("] { position: relative; overflow: hidden; isolation: isolate; height: 44px; padding: 0 26px; font-size: 15px; font-weight: 800; letter-spacing: .2px; border-radius: 16px;
+  animation: ct-breathe 3.6s ease-in-out infinite; transition: transform .35s ease, filter .45s ease, box-shadow .45s ease; }
+button[onclick^="newTunnel("]::after, button[onclick^="openBuild("]::after { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0; background: radial-gradient(120% 140% at 30% 0%, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 60%); transition: opacity .55s ease; }
+button[onclick^="newTunnel("]:hover, button[onclick^="openBuild("]:hover { transform: translateY(-1px) scale(1.035); filter: brightness(1.1) saturate(1.08); animation-play-state: paused; box-shadow: 0 12px 34px rgba(255, 190, 70, .5), inset 0 1px 0 rgba(255, 255, 255, .6); }
+button[onclick^="newTunnel("]:hover::after, button[onclick^="openBuild("]:hover::after { opacity: 1; }
+button[onclick^="newTunnel("]:active, button[onclick^="openBuild("]:active { transform: scale(.98); transition-duration: .12s; }
+@keyframes ct-breathe { 0%, 100% { box-shadow: 0 6px 18px rgba(255, 190, 70, .22); filter: brightness(1); } 50% { box-shadow: 0 8px 30px rgba(255, 190, 70, .46); filter: brightness(1.07); } }
+@media (prefers-reduced-motion: reduce) { button[onclick^="newTunnel("], button[onclick^="openBuild("] { animation: none; } }
+
+/* the sidebar signature */
+.powered { text-align: center; font-size: 10.5px; letter-spacing: .6px; color: var(--mut); opacity: .75; padding: 2px 0 0; direction: ltr; }
+.powered b { font-weight: 800; letter-spacing: 1px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---- the sidebar menu gets the wand too: it flicks in, a light sweeps across the row, the icon bounces */
+@media (min-width: 761px) {
+  nav a { background-image: linear-gradient(105deg, transparent 38%, rgba(255, 224, 150, .22) 50%, transparent 62%); background-repeat: no-repeat; background-size: 260% 100%; background-position: 140% 0; }
+  nav a::after { content: "🪄"; position: absolute; right: 10px; top: 50%; font-size: 13px; line-height: 1; opacity: 0; transform: translate(14px, -30%) rotate(40deg) scale(.6); transform-origin: 80% 90%; pointer-events: none; }
+  nav a:hover { border-color: rgba(255, 224, 150, .35); animation: nav-sweep .8s ease-out; }
+  nav a:hover::after { opacity: 1; animation: nav-wand-in .5s cubic-bezier(.2, .9, .3, 1.3) forwards, nav-wand-wave 1.1s .5s ease-in-out infinite; }
+  nav a:hover .ic { animation: ic-bounce .6s ease; }
+  nav a:hover .cnt { opacity: 0; transition: opacity .2s ease; } nav a .cnt { transition: opacity .3s ease; }
+}
+@keyframes nav-sweep { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+@keyframes nav-wand-in { 0% { opacity: 0; transform: translate(14px, -30%) rotate(40deg) scale(.6); } 60% { opacity: 1; transform: translate(-2px, -52%) rotate(-14deg) scale(1.15); } 100% { opacity: 1; transform: translate(0, -50%) rotate(0) scale(1); } }
+@keyframes nav-wand-wave { 0%, 100% { transform: translate(0, -50%) rotate(0); } 25% { transform: translate(0, -50%) rotate(14deg); } 55% { transform: translate(0, -50%) rotate(-10deg); } }
+@keyframes ic-bounce { 0%, 100% { transform: scale(1.08); } 35% { transform: scale(1.3) rotate(-8deg); } 65% { transform: scale(1.12) rotate(6deg); } }
+html[dir="rtl"] nav a::after { right: auto; left: 10px; transform-origin: 20% 90%; }
+
+/* ---- every button: a soft lift with a glow ring on hover, a press, and a ripple where you click */
+button { position: relative; overflow: hidden; }
+button:not(:disabled):not(.ai-btn):hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, .25), 0 0 0 3px rgba(124, 131, 255, .16); }
+button:not(:disabled):not(.ai-btn):active { transform: translateY(0) scale(.96); box-shadow: 0 0 0 4px rgba(124, 131, 255, .22); transition-duration: .08s; }
+button.pri:not(.ai-btn):hover { box-shadow: 0 10px 26px rgba(124, 131, 255, .4), 0 0 0 3px rgba(124, 131, 255, .22); }
+button.danger:hover { box-shadow: 0 6px 18px rgba(255, 90, 120, .25), 0 0 0 3px rgba(255, 90, 120, .18); }
+.rpl { position: absolute; border-radius: 50%; pointer-events: none; background: rgba(255, 255, 255, .38); transform: scale(0); animation: rpl .6s ease-out forwards; z-index: 0; }
+@keyframes rpl { to { transform: scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rpl { display: none; } nav a:hover, nav a:hover::after, nav a:hover .ic { animation: none; } nav a:hover::after { opacity: 1; transform: translate(0, -50%); } }
+
+/* the wand sits beside the text, not on it: the button opens a clear space for it on hover */
+.ai-btn::before { left: 12px; }
+.ai-btn:hover { padding-left: 42px; }
+html[dir="rtl"] .ai-btn::before { left: auto; right: 12px; } html[dir="rtl"] .ai-btn:hover { padding-left: 14px; padding-right: 42px; }

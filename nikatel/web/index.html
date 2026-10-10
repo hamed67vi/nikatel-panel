@@ -13,6 +13,7 @@
 <body>
 <div id="login" class="login hidden">
   <form id="login-form" class="login-box" autocomplete="on">
+    <button type="button" class="lang-btn login-lang" data-notr onclick="toggleLang()" title="فارسی">فا</button>
     <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
     <div id="ls-pass" class="lstep">
       <label>User<input name="user" value="admin" autocomplete="username"></label>
@@ -41,7 +42,7 @@
 
 <div id="app" class="app hidden">
   <aside class="side">
-    <div class="brand"><img class="logo-img" src="/static/favicon.svg" alt="" width="34" height="34"><div><b>NIKATEL</b><small>control panel</small></div></div>
+    <div class="brand"><img class="logo-img" src="/static/favicon.svg" alt="" width="34" height="34"><div><b data-notr>NIKATEL</b><small>control panel</small></div></div>
     <nav id="nav">
       <a data-page="dashboard" class="on" data-icon="▦" data-short="Home"><i class="ic">▦</i><span>Dashboard</span></a>
       <a data-page="nodes" data-icon="🖥" data-short="Nodes"><i class="ic">🖥</i><span>Nodes</span><i id="n-servers" class="cnt"></i></a>
@@ -56,13 +57,14 @@
         <a id="logout">⎋ Sign out</a>
         <span id="version" class="mut"></span>
       </div>
+      <div class="powered" data-notr>Powered by <b>v2v2H</b></div>
     </div>
   </aside>
 
   <main class="main">
     <header class="head">
       <div><h1 id="title">Dashboard</h1><p id="subtitle" class="mut"></p></div>
-      <div class="head-r"><span id="updated" class="hidden"></span><button id="mode-btn" onclick="toggleMode()" title="Day / night">☀</button></div>
+      <div class="head-r"><span id="updated" class="hidden"></span><button class="lang-btn" data-notr onclick="toggleLang()" title="فارسی">فا</button><button id="mode-btn" onclick="toggleMode()" title="Day / night">☀</button></div>
     </header>
     <div id="statusbar" class="statusbar" title="Messages of the panel: click for the last ones" onclick="sbHistory()"><i class="sb-dot"></i><span class="sb-text">Ready</span><span class="sb-time"></span></div>
     <div id="subnav" class="subnav hidden"></div>
@@ -70,6 +72,9 @@
   </main>
 </div>
 
+<script src="/static/i18n.js"></script>
+<script src="/static/i18n.fa.ui.js"></script>
+<script src="/static/i18n.fa.msg.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
