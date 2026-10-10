@@ -101,6 +101,26 @@ def adopt(body: dict):
         raise HTTPException(400, str(e))
 
 
+class CleanIn(BaseModel):
+    iran_id: int
+    transport: str = Field(pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
+    port: int = Field(ge=1, le=65535)
+    name: str = Field("", max_length=64)
+
+
+@router.post("/tunnels/detect/clean")
+def detect_clean(body: CleanIn):
+    from ..services import detect as dt
+    from ..ssh import SSHError
+
+    try:
+        return {"ok": True, "results": dt.clean(body.iran_id, body.transport, body.port, body.name)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except SSHError as e:
+        raise HTTPException(502, str(e))
+
+
 class AutoIn(BaseModel):
     foreign_id: int
     ports: str = ""

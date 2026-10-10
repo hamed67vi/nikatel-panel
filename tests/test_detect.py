@@ -2,6 +2,16 @@ import re
 
 import pytest
 
+
+def test_detect_clean_is_validated(client):
+    from nikatel.services import detect as dt
+
+    with pytest.raises(ValueError):   # read-only panel
+        dt.clean(1, "tcpmux", 9994)
+
+    assert client.post("/api/tunnels/detect/clean", json={"iran_id": 1, "transport": "udp", "port": 9994}).status_code == 422
+    assert client.post("/api/tunnels/detect/clean", json={"iran_id": 1, "transport": "tcpmux", "port": 9994}).status_code == 400
+
 from nikatel import ssh
 from nikatel.services import builder, detect
 from nikatel.services.detect import parse_scan

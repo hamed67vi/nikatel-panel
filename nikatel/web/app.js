@@ -117,11 +117,11 @@ async function refresh() {
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !cf.open && !cf.edit && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !state.detect && !cf.open && !cf.edit && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
-window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; hideModal(); refresh(); };
+window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null; hideModal(); refresh(); };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
 /* ---- dashboard */
@@ -364,15 +364,25 @@ PAGES.tunnelQuality = async () => {
 window.editPorts = async (id, cur) => { const v = prompt("Forwarded ports of this tunnel (Iran → foreign), e.g. 443, 443=2096, 10000-10009:", cur); if (v == null || !v.trim()) return; toast("Changing the ports… (the tunnel service restarts)"); try { const r = await api(`/api/tunnels/${id}/ports`, {method: "PUT", body: JSON.stringify({ports: v})}); toast("✓ Ports: " + r.mapping, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.detectTunnels = async () => { state.detect = {loading: true}; refresh(); try { state.detect = await api("/api/tunnels/detect"); } catch (e) { state.detect = {error: e.message}; } refresh(); };
 window.adoptPair = async i => { const p = state.detect.pairs[i]; try { const r = await api("/api/tunnels/adopt", {method: "POST", body: JSON.stringify(p)}); toast("✓ " + r.name + " added to the panel", "ok"); state.detect = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* Detect on servers: opens as a window. Complete pairs can be added to the panel; incomplete ones
+   (an Iran-side backhaul config whose foreign side no longer exists) can be removed from that server. */
 function detectHtml() {
-  const d = state.detect; if (!d) return "";
-  if (d.loading) return `<div class="card"><div class="fx-line run"><i></i>Scanning every server for tunnels…</div></div>`;
-  if (d.error) return `<div class="card"><div class="err">${esc(d.error)}</div></div>`;
-  const rows = d.pairs.filter(p => !p.in_panel);
-  return `<div class="card"><h3>Tunnels found on the servers <span class="sp"></span><span class="mut">${d.scanned} servers scanned · ${d.pairs.length} found · ${rows.length} not in the panel</span><button class="sm" onclick="state.detect=null;refresh()">Close</button></h3>
-    ${d.errors.length ? `<div class="err">${d.errors.map(e => esc(e.server) + ": " + esc(e.error)).join(" · ")}</div>` : ""}
-    ${rows.map((p, i) => `<div class="gw-row"><span><b>${esc(p.name)}</b> <small class="mut">${esc(p.transport)} · control ${p.port} · ports ${esc(p.ports.join(", ") || "—")} · GRE ${esc(p.iran_tunnel_ip || "?")} ⇄ ${esc(p.foreign_tunnel_ip || "?")}</small></span><span>${esc(p.iran_name)} ⇄ ${p.paired ? esc(p.foreign_name) : '<span class="err">no matching foreign side</span>'}</span><span class="ob-act">${p.paired ? `<button class="sm pri" onclick="adoptPair(${d.pairs.indexOf(p)})">Add to panel</button>` : ""}</span></div>`).join("") || '<div class="mut">Everything on the servers is already in the panel.</div>'}</div>`;
+  const d = state.detect; if (!d) { return ""; }
+  let body;
+  if (d.loading) body = `<div class="fx-line run"><i></i>Scanning every server for tunnels…</div>`;
+  else if (d.error) body = `<div class="err">${esc(d.error)}</div>`;
+  else {
+    const rows = d.pairs.filter(p => !p.in_panel), orphans = rows.filter(p => !p.paired);
+    body = `<div class="toolbar"><span class="mut">${d.scanned} servers scanned · ${d.pairs.length} tunnels found · <b>${rows.length}</b> not in the panel · <b class="${orphans.length ? "err" : ""}">${orphans.length}</b> incomplete</span><span class="sp"></span>${orphans.length ? `<button class="sm danger" onclick="detectCleanAll()">🗑 Remove all incomplete (${orphans.length})</button>` : ""}<button class="sm" onclick="detectTunnels()">↻ Scan again</button></div>
+      <small class="mut">A complete pair = an Iran server config + the foreign client that dials it. Incomplete = only the Iran side is left (the foreign side was removed or reinstalled); it holds a control port and a GRE link for nothing and can be removed from that server.</small>
+      ${d.errors.length ? `<div class="err">${d.errors.map(e => esc(e.server) + ": " + esc(e.error)).join(" · ")}</div>` : ""}
+      ${rows.map(p => `<div class="gw-row"><span><b>${esc(p.name)}</b> <small class="mut">${esc(p.transport)} · control ${p.port} · ports ${esc(p.ports.join(", ") || "—")} · GRE ${esc(p.iran_tunnel_ip || "?")} ⇄ ${esc(p.foreign_tunnel_ip || "?")}</small></span><span>${esc(p.iran_name)} ⇄ ${p.paired ? esc(p.foreign_name) : '<span class="err">no matching foreign side</span>'}</span><span class="ob-act">${p.paired ? `<button class="sm pri" onclick="adoptPair(${d.pairs.indexOf(p)})">Add to panel</button>` : `<button class="sm danger" onclick="detectClean(${d.pairs.indexOf(p)})" title="Remove this incomplete tunnel from ${esc(p.iran_name)}">Remove</button>`}</span></div>`).join("") || '<div class="mut">Everything on the servers is already in the panel.</div>'}`;
+  }
+  showModal(`<b>🔍 Tunnels found on the servers</b>`, body, "wide");
+  return "";
 }
+window.detectClean = async i => { const p = state.detect.pairs[i]; if (!confirm(`Remove the incomplete tunnel ${p.name} (${p.transport} ${p.port}) from ${p.iran_name}? Its units, config and GRE link go.`)) return; try { const r = await api("/api/tunnels/detect/clean", {method: "POST", body: JSON.stringify({iran_id: p.iran_id, transport: p.transport, port: p.port, name: p.name})}); toast("✓ " + r.results.join(" · "), "ok"); detectTunnels(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.detectCleanAll = async () => { const list = state.detect.pairs.filter(p => !p.in_panel && !p.paired); if (!list.length) return; if (prompt(`Remove ${list.length} incomplete tunnels from their Iran servers? Type REMOVE to confirm:`) !== "REMOVE") return; let ok = 0; for (const p of list) { try { await api("/api/tunnels/detect/clean", {method: "POST", body: JSON.stringify({iran_id: p.iran_id, transport: p.transport, port: p.port, name: p.name})}); ok++; } catch (e) { toast("✕ " + p.name + ": " + e.message, "bad"); } } toast(`✓ ${ok} of ${list.length} removed`, ok === list.length ? "ok" : "bad"); detectTunnels(); };
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); toast(`✓ ${r.results.filter(x => !x.error).length} measured`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 async function enginesLoad() {
@@ -406,14 +416,14 @@ PAGES.tunnelsList = async () => {
       <td class="num" title="${esc(t.last_error || (q.latency_ms != null ? q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "%" : ""))}">${q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score}</b>` : '<span class="mut">—</span>'}${t.last_error ? `<small class="err"> ${esc(t.last_error).slice(0, 30)}</small>` : ""}</td>
       <td class="td-act"><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();state.open=${t.id};state.wtab='info';refresh();fixTunnel(${t.id}, false)" title="Diagnose and repair">Fix</button><button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Latency, jitter, loss, speed, score">Quality</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></td></tr>`; };
   const creating = false;
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="qualityAll()" title="Latency, jitter, loss and a score over the GRE link of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Find tunnels that exist on the servers but not in this list">🔍 Detect on servers</button><button class="pri" onclick="openBuild()">＋ Create tunnel</button></div>
-    ${detectHtml()}
+  $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="qualityAll()" title="Latency, jitter, loss and a score of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Scan every server for tunnels that are not in this list - complete pairs can be added, incomplete leftovers removed">🔍 Detect on servers</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"></div>
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
     <table class="tbl lift tun-tbl"><colgroup><col style="width:13%"><col style="width:12%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:12%"><col style="width:9%"><col style="width:10%"><col><col style="width:250px"></colgroup>
       <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th>Score</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   const openT = list.find(t => t.id === state.open);
   if (openT) showModal(`<span class="st ${openT.state}"></span><b>${esc(openT.name)}</b> <span class="mut">${esc(openT.iran_name)} ⇄ ${esc(openT.foreign_name)}</span> <span class="pill">${esc(openT.type)}${openT.transport ? " · " + esc(openT.transport) : ""}</span>`, detailRow(openT), "wide");
+  else if (state.detect) detectHtml();
   else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b> <span class="mut">pick the servers, the ports and the type - the panel does the rest and removes everything when a build fails</span>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
   else hideModal();
   if (state.open) loadTunnelCharts(state.open);

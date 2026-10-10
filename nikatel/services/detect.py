@@ -122,6 +122,38 @@ def adopt(p: dict) -> str:
     return name
 
 
+def clean(iran_id: int, transport: str, port: int, name: str = "") -> list[str]:
+    """Remove an incomplete tunnel (an Iran-side backhaul config with no foreign side) from the Iran server:
+    its units, toml and GRE files. Only servers the panel knows; only when the panel is read-write."""
+    from ..config import get_settings
+    from ..ssh import run_action
+
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only")
+
+    if transport not in ("tcp", "tcpmux", "wsmux", "wssmux") or not 1 <= int(port) <= 65535:
+        raise ValueError("bad transport or port")
+
+    with session() as db:
+        s = db.get(Server, int(iran_id))
+
+        if s is None:
+            raise ValueError("server not found")
+
+        if any(t.iran_server_id == s.id and int(t.port or 0) == int(port) for t in db.scalars(select(Tunnel))):
+            raise ValueError("this control port belongs to a tunnel in the panel: remove it from the list instead")
+
+        node, label = Node(s.host, s.ssh_user, s.ssh_port), s.name
+
+    safe = re.sub(r"[^a-z0-9-]", "", str(name or "").lower())[:15] or "none"
+    out = run_action(node, "remove_tunnel_files", {"NAME": safe, "PORT": str(int(port)), "TRANSPORT": transport}, timeout=90)
+
+    with session() as db:
+        emit(db, "warn", "tunnels", f"Incomplete tunnel ({transport} {port}) removed from {label}.", f"{label}:{port}")
+
+    return [f"{label}: " + ("removed" if "REMOVED" in out else out.strip()[-80:])]
+
+
 # ------------------------------------------------------------------ automatic choice of the Iran server
 def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
     """Rank the Iran servers for a new tunnel to this foreign server: ping quality from each one (loss,
