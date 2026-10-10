@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.10 - 2026-10-11 - Tunnels and Nodes: one box
+
+* On Tunnels the All / Problems tabs and the search join the buttons in the one top box (the search is its own segment); the second box is gone. Nodes has its search in its box the same way.
+
 ## 1.14.9 - 2026-10-11 - Configs: one tidy box, a search that hides at once
 
 * On Configs the buttons, the view switch and the search are in one box, the search as its own segment. Searching hides cards / rows at once without redrawing the page, so the buttons do not jump.
