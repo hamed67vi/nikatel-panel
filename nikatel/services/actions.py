@@ -67,9 +67,20 @@ def _plan_steps(plan: Plan, iran, foreign) -> list[dict]:
 
 
 def recent_fixes(ref: str, seconds: int = 3600) -> int:
+    """Real repair attempts in the window - a fix that did nothing (refused, nothing to do, a server unreachable) is a "fix-skip"
+    and does not count, or a tunnel that stays down would never be restarted again."""
     with session() as db:
         return len(list(db.scalars(select(ActionLog.id).where(ActionLog.ref == ref, ActionLog.dry_run.is_(False),
                                                               ActionLog.action == "fix", ActionLog.ts >= int(time.time()) - seconds))))
+
+
+def _skip(aid: int) -> None:
+    """This fix did nothing: it is not counted against the hourly budget."""
+    with session() as db:
+        e = db.get(ActionLog, aid)
+
+        if e is not None:
+            e.action = "fix-skip"
 
 
 def fix(tunnel_id: int, source: str = "manual", dry_run: bool = False) -> int:
@@ -144,7 +155,8 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         _say(aid, "The panel is read-only: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server to allow repairs. Showing the plan as a dry run instead.")
         dry_run = True
 
-    if not dry_run and recent_fixes(name) >= MAX_PER_HOUR:
+    if not dry_run and recent_fixes(name) > MAX_PER_HOUR:          # this entry is already in the count
+        _skip(aid)
         _say(aid, f"Not repaired: this tunnel was already repaired {MAX_PER_HOUR} times in the last hour. A human should look at it.", done=True, ok=False)
         return
 
@@ -159,10 +171,12 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
     _say(aid, f"Found: {reason or 'everything looks fine on both servers'} (state {state})")
 
     if iran.error or foreign.error:
+        _skip(aid)
         _say(aid, "A server does not answer over SSH; restarting the other side cannot help. Nothing done.", done=True, ok=False)
         return
 
     if state == "up":
+        _skip(aid)
         _say(aid, "The tunnel is healthy: nothing to repair.", done=True, ok=True)
         return
 
@@ -191,6 +205,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
                     _say(aid, f"AI suggests {a['action']}: {a['reason']} (not done automatically)")
 
     if not steps:
+        _skip(aid)
         _say(aid, "No safe step applies to this problem. A human should look at it.", done=True, ok=False)
         return
 

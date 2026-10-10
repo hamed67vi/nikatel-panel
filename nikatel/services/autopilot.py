@@ -599,7 +599,8 @@ def auto_escalate() -> None:
         down = [(t.id, t.name, t.state_since) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down"))]
 
     for tid, name, since in down:
-        if name in muted or name in _BUSY or now - since < int(conf.get("after_seconds", 180)) + 600 or actions.recent_fixes(name) < actions.MAX_PER_HOUR:
+        # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb)
+        if name in muted or name in _BUSY or now - since < int(conf.get("after_seconds", 180)) + 600 or actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR:
             continue
 
         with session() as db:

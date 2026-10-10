@@ -109,3 +109,30 @@ def test_auto_repair_setting_needs_read_write(client):
     assert client.put("/api/settings/repair", json={"auto": True, "after_seconds": 180}).status_code == 400
     assert client.put("/api/settings/repair", json={"auto": False, "after_seconds": 300}).json()["after_seconds"] == 300
     assert client.get("/api/settings/repair").json()["read_only"] is True
+
+
+def test_fix_budget_counts_only_real_attempts(client, tmp_path, monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.db import session
+    from nikatel.models import ActionLog
+
+    _seed(tmp_path)
+    tid = client.get("/api/tunnels").json()[0]["id"]
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    now = int(time.time())
+
+    with session() as db:                                    # two real restarts in the last hour, plus refusals that must not count
+        for a in ("fix", "fix", "fix-skip", "fix-skip", "fix-skip"):
+            db.add(ActionLog(ref="t1", action=a, source="auto", dry_run=False, ts=now - 600, story=["x"]))
+
+    assert actions.recent_fixes("t1") == 2
+    aid = actions.fix(tid, source="auto")
+
+    for _ in range(50):
+        s = actions.status(aid)
+        if s["done"]:
+            break
+        time.sleep(0.1)
+
+    assert s["done"] and s["ok"] is False and "already repaired 2 times" in s["story"][-1] and s["action"] == "fix-skip"
+    assert actions.recent_fixes("t1") == 2                   # the refusal did not eat the budget
