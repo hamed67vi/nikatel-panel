@@ -12,19 +12,26 @@ const pct = (v, warn = 80, bad = 92) => v == null ? "—" : `<span class="bar"><
    so a slow page can no longer finish later and paint itself over the page the user moved to. Actions (POST/PUT/DELETE) and the progress polls are never cancelled. */
 let navCtl = new AbortController();
 const KEEP_ALIVE = /^\/api\/(actions\/\d+|tunnel-test\/)/;
+/* "while loading tunnels" / "while saving settings": what a failed request was doing, from its address */
+const API_NAMES = {tunnels: "tunnels", servers: "servers", configs: "configs", panels: "panels", shopbot: "the shop bot", settings: "settings", actions: "repairs", autopilot: "smart repair", events: "events", overview: "the dashboard", logs: "the logs", jobs: "the jobs", gateway: "the gateway", nodes: "the server tools", subscriptions: "subscriptions", engines: "the core versions", system: "the update", auth: "sign-in", alerts: "alerts", report: "the report", backup: "the backup", datacentres: "the data centres", radar: "the radar", maintenance: "maintenance windows", ai: "the AI"};
+function apiWhat(path, opts) {
+  const seg = String(path).split("?")[0].replace(/^\/api\//, "").split("/").filter(Boolean), name = API_NAMES[seg[0]] || ("/" + seg.join("/")), m = String((opts && opts.method) || "GET").toUpperCase();
+  return m === "GET" ? "while loading " + name : m === "DELETE" ? "while deleting in " + name : "while saving in " + name;
+}
 async function api(path, opts = {}) {
   const ctl = (!opts.method || String(opts.method).toUpperCase() === "GET") && !KEEP_ALIVE.test(path) ? navCtl : null;
   let r, body = null;
   try {
     r = await fetch(path, Object.assign({headers: {"Content-Type": "application/json"}}, opts, ctl ? {signal: ctl.signal} : {}));
     try { body = await r.json(); } catch (e) { if (e.name === "AbortError") throw e; /* no json body */ }
-  } catch (e) { if (e.name === "AbortError") return new Promise(() => {}); throw e; }
+  } catch (e) { if (e.name === "AbortError") return new Promise(() => {}); e.message = e.message + " — " + apiWhat(path, opts); throw e; }
   if (r.status === 401) { showLogin(); throw new Error("not logged in"); }
   if (!r.ok) {
     const rid = r.headers.get("X-Request-Id");
     let msg = (body && (body.detail || body.error)) || "HTTP " + r.status;
     if (Array.isArray(msg)) msg = msg.map(x => (x.loc || []).slice(-1)[0] + ": " + x.msg).join("; ");
-    throw new Error(msg + (rid && r.status >= 500 ? " · id " + rid : ""));
+    const bare = /^HTTP \d+$/.test(msg);   // the server said nothing: name what was being done, so the message is never just a number
+    throw new Error(msg + (bare ? " — " + apiWhat(path, opts) : "") + (rid && r.status >= 500 ? " · id " + rid : ""));
   }
   return body;
 }
