@@ -538,14 +538,16 @@ PAGES.tunnelTest = async () => {
       <label>Foreign server<select id="tt-foreign" ${running ? "disabled" : ""} onchange="tt.foreign=this.value;localStorage.setItem('nk.tt.foreign',this.value)">${opt("foreign", tt.foreign)}</select></label>
       <div class="frm-act">${running ? `<button class="danger" onclick="ttStop()">Stop</button>` : `<button class="pri" onclick="ttStart()">Start test</button>`}<small class="mut">${running ? "the current transport finishes, then the test stops; everything temporary is removed" : "each ticked transport is built as a temporary tunnel, measured, and removed again — one after the other"}</small></div>
     </div>
-    <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick a whole engine or single transports; each one is built as a temporary tunnel, measured, and removed</small></h4>
-      <div class="ttgrid">${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="ttg"><div class="ttg-head"><b>${esc(g)}</b><span class="sp"></span><a onclick="ttGroup('${esc(g)}', true)">all</a><a onclick="ttGroup('${esc(g)}', false)">none</a></div>${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> <b>${esc(k.label.replace(/^[^·]+· /, ""))}</b><small class="mut">${esc(k.note)}</small></label>`).join("")}</div>`).join("")}</div></div>
+    <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick the engines; Advanced opens every transport so single ones can be unticked</small><span class="sp"></span><a class="adv-btn" onclick="ttAdv()">Advanced ${tt.adv ? "▴" : "▾"}</a></h4>
+      <div class="tteng">${[...new Set(tt.kinds.map(k => k.group))].map((g, i) => `<label class="tte"><input type="checkbox" data-eng="${esc(g)}" ${running ? "disabled" : ""} onchange="ttGroup('${esc(g)}', this.checked)"><b>${esc(g)}</b><small class="mut" id="tte-n-${i}"></small></label>`).join("")}</div>
+      <div class="tta ${tt.adv ? "" : "hidden"}" id="tt-adv">${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="tta-row"><span class="tta-g">${esc(g)}</span><div class="tta-chips">${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk" title="${esc(k.note)}"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} onchange="ttSyncEng()" ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> ${esc(k.label.replace(/^[^·]+· /, ""))}</label>`).join("")}</div></div>`).join("")}</div></div>
     <div class="ob-sec"><h4>Which tunnel for which situation <small class="mut">— click one to open Create tunnel with it</small></h4>
       <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" title="${esc(why)}" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
       <small class="mut">Every engine ships with its many-users settings (multiplexing, 8 mux channels, 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels). Backhaul is measured with 30 pings over GRE and a download; the other engines through their test door, both ways. Nothing is added to your list; the story of each run stays in Repairs.</small></div></div>
     <div class="card tt-logcard"><h3>Live log <span class="sp"></span><small class="mut">fixed box: new lines come in here, the page stays where it is</small></h3><div class="tt-log" id="tt-log">${ttLogHtml()}</div></div>
     <div id="tt-results">${ttResultsHtml()}</div>`;
   const lg = $("#tt-log"); if (lg) lg.scrollTop = lg.scrollHeight;
+  ttSyncEng();
   if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
 };
 const ttRunPill = () => { const j = tt.job; return j && !j.done ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""; };
@@ -569,9 +571,15 @@ function ttPaint() {
   lg.scrollTop = atEnd ? lg.scrollHeight : keep;
   return true;
 }
-window.ttGroup = (g, on) => document.querySelectorAll(`#tt-kinds label[data-g="${g}"] input`).forEach(x => { if (!x.disabled) x.checked = on; });
+window.ttGroup = (g, on) => { document.querySelectorAll(`#tt-kinds label[data-g="${g}"] input`).forEach(x => { if (!x.disabled) x.checked = on; }); ttSyncEng(); };
+window.ttAdv = () => { tt.adv = !tt.adv; const el = $("#tt-adv"); if (el) el.classList.toggle("hidden", !tt.adv); const b = $("#tt-kinds .adv-btn"); if (b) b.textContent = "Advanced " + (tt.adv ? "▴" : "▾"); };
+window.ttSyncEng = () => document.querySelectorAll("#tt-kinds .tte input").forEach((e, i) => {   // an engine is ticked when all its transports are, half-ticked when some are
+  const all = [...document.querySelectorAll(`#tt-kinds label[data-g="${e.dataset.eng}"] input`)], on = all.filter(x => x.checked).length;
+  e.checked = on === all.length; e.indeterminate = on > 0 && on < all.length;
+  const n = $("#tte-n-" + i); if (n) n.textContent = `${on} / ${all.length}`;
+});
 window.ttStart = async () => {
-  const kinds = [...document.querySelectorAll("#tt-kinds input:checked")].map(x => x.value);
+  const kinds = [...document.querySelectorAll("#tt-kinds .ttk input:checked")].map(x => x.value);
   if (!kinds.length) { toast("Tick at least one transport", "bad"); return; }
   try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +$("#tt-iran").value, foreign_id: +$("#tt-foreign").value, kinds})}); tt.job = {id: r.id, kinds, results: [], current: kinds[0], done: false}; toast("Test started — about 2 minutes per transport"); refresh(); }
   catch (e) { toast("✕ " + e.message, "bad"); }
