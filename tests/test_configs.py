@@ -225,3 +225,14 @@ def test_imported_configs_join_the_group_even_when_the_sync_job_registered_them_
     r = configs.import_subscription("grp", "https://sub.example.net/x")
     assert sorted(r["added"] + r["skipped"]) == ["N1", "N2"] and r["failed"] == []
     assert {c["name"]: c["group"] for c in client.get("/api/configs").json()["configs"]} == {"N1": "grp", "N2": "grp"}
+
+
+def test_an_import_waits_for_a_delete_that_is_still_running():
+    import threading
+    import time
+
+    configs._PENDING.add("x")
+    threading.Timer(0.3, lambda: configs._PENDING.discard("x")).start()
+    t0 = time.monotonic()
+    configs.wait_for_deletes(5)
+    assert 0.2 < time.monotonic() - t0 < 3 and configs._PENDING == set()

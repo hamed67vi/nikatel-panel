@@ -273,7 +273,7 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label>Provider<input name="provider" value="${esc(s ? s.provider : "")}" placeholder="optional"></label>
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
     <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? "" : '<button type="button" onclick="cancelEdit()">Cancel</button>'}
-      ${s ? `<span class="sp"></span><button type="button" class="danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')">Remove from panel</button>` : ""}</div>
+      ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
     <small class="mut">Adding a server here only tells the panel to look at it. Put the panel's public key in its <code>authorized_keys</code> first (Settings shows the key).</small>
   </form>`;
 

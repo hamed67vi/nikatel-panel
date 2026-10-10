@@ -344,6 +344,8 @@ def add(uri: str, name: str = "", group: str = "") -> str:
     if not uri.startswith(_SCHEMES):
         raise ValueError("paste a vless://, vmess://, trojan:// or ss:// link")
 
+    wait_for_deletes()
+
     wanted = clean_name(name or link_name(uri))
 
     if not wanted:
@@ -413,6 +415,19 @@ def remove(name: str) -> None:
 
 _PENDING: set[str] = set()      # names being deleted on the probe right now: the sync must not bring them back meanwhile
 _PLOCK = threading.Lock()
+
+
+def wait_for_deletes(limit: float = 120.0) -> None:
+    """A delete told to the probe in the background must be finished before anything is added again (the probe would still hold the old config
+    and refuse the new one as "already exists")."""
+    end = time.monotonic() + limit
+
+    while time.monotonic() < end:
+        with _PLOCK:
+            if not _PENDING:
+                return
+
+        time.sleep(0.4)
 
 
 def _spawn(fn, *args) -> None:
@@ -488,6 +503,7 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
     if not name:
         raise ValueError("give the group a name")
 
+    wait_for_deletes()
     nodes = fetch_subscription(url)
     added, skipped, failed = [], [], []
 
