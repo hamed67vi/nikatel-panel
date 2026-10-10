@@ -671,3 +671,11 @@ button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):no
 button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):not(.lang-btn):hover::after { animation: curtain .75s ease-out; }
 @keyframes curtain { to { transform: translateX(130%); } }
 @media (prefers-reduced-motion: reduce) { button:hover::after { animation: none; } }
+
+/* the wand is a flex item of the button: its room opens on hover and pushes the text aside, so it can never sit on top of it */
+.ai-btn, .ai-btn.pri { display: inline-flex !important; align-items: center; justify-content: center; }
+.ai-btn::before { position: static !important; flex: none; width: 0; margin: 0; overflow: hidden; opacity: 0; transform: rotate(-40deg) scale(.5); transform-origin: 20% 90%; transition: width .3s cubic-bezier(.2, .9, .3, 1.2), margin .3s ease, opacity .25s ease; animation: none; }
+.ai-btn:hover { padding-left: revert !important; padding-right: revert !important; }
+.ai-btn:hover::before { width: 16px; margin-inline-end: 6px; opacity: 1; transform: rotate(0) scale(1); animation: wand-wave2 1.1s .3s ease-in-out infinite; }
+@keyframes wand-wave2 { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-16deg); } 55% { transform: rotate(10deg); } }
+html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important; }
