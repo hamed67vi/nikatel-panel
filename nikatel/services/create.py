@@ -98,8 +98,9 @@ def _follow(aid: int, build_aid: int, limit: int = 1500) -> bool:
 
 
 def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, opts: dict, replace_ids: list[int], dns_follow: bool,
-          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full") -> int:
+          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None) -> int:
     _ports(ports)                                   # a sentence for a bad list, before anything starts
+    dns_names = [n.strip().lower() for n in (dns_names or []) if n.strip()]
 
     with session() as db:
         f = db.get(Server, foreign_id)
@@ -161,7 +162,10 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
             return
 
         for p in plans:
-            failover.after_replace(aid, p)
+            failover.after_replace(aid, p, immediate=True)      # the operator ticked it: no second approval
+
+        if dns_names:
+            failover.point_names(aid, dns_names, chosen)
 
         autopilot._say(aid, "Done.", done=True, ok=True)
 

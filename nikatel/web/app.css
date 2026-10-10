@@ -724,3 +724,10 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 .bcheck { display: grid; gap: 6px; margin: 2px 0 8px; } .bcheck:empty { display: none; }
 .bcheck .err, .bconf { padding: 7px 10px; border-radius: 10px; font-size: 12.5px; } .bcheck .err { background: rgba(255,107,139,.09); } .bconf { background: rgba(255,190,70,.09); }
 .bcheck .chk { margin: 0; }
+
+/* ---- DNS names: the tick in Create tunnel, the small form on the DNS changes box */
+.bdns { padding: 7px 10px; border-radius: 10px; background: rgba(56,217,245,.06); margin: 2px 0 8px; display: grid; gap: 6px; } .bdns .chk { margin: 0; } .bdns input[name=dns_names] { width: 100%; box-sizing: border-box; }
+.dns-point { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); } .dns-point input { flex: 1; min-width: 180px; } .dns-point select { max-width: 220px; }
+
+/* ---- tunnel list: the reason under the state (the Score column is gone; the quality test stays in the Traffic cell's title) */
+.td-err { display: block; font-size: 10.5px; line-height: 1.2; margin-top: 2px; max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -31,7 +31,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Tunnel
+from ..models import ActionLog, Tunnel, TunnelCheck
 from ..ssh import Node, SSHError, run_script
 from . import actions, ai, build_other, builder, detect, tunnel_test
 from . import settings as st
@@ -79,8 +79,14 @@ def classify(d: dict) -> tuple[str, str]:
 
     loss_i, loss_f = d.get("under_loss_i"), d.get("under_loss_f")
 
+    if d.get("ext_blocked"):
+        return "route_cut", f"port {d.get('user_port') or ''} answers on the Iran server but not from another Iran server: it is blocked in front of the server, only another Iran server helps"
+
     if (loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50):
         return "route_cut", f"the two servers cannot reach each other (loss {loss_i}% / {loss_f}%): the route between them is cut or filtered"
+
+    if (d.get("flap_fails") or 0) >= 3 and d.get("state") != "down":
+        return "lossy_route", f"the link flaps: {d['flap_fails']} of the last {d.get('flap_n')} checks failed - the route is unstable, a restart does not cure that"
 
     if d.get("state") == "degraded" and max(v or 0 for v in (d.get("gre_loss"), loss_i, loss_f)) >= 15:
         return "lossy_route", f"the link loses packets (GRE {d.get('gre_loss')} %, servers {loss_i} % / {loss_f} %): the route between these two servers is poor, a restart does not cure that"
@@ -153,6 +159,14 @@ def diagnose(tunnel_id: int) -> dict:
     facts = {"state": info["state"], "last_error": info["last_error"], "iran_error": det.get("iran_error", ""), "foreign_error": det.get("foreign_error", ""),
              "units_bad": units_bad, "gre": gre, "gre_loss": det.get("loss_pct"), "port": info["port"]}
 
+    with session() as db:        # the recent history: a link that answers only now and then is a route problem, whatever this one check found
+        recent = [bool(c.ok) for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id).order_by(TunnelCheck.id.desc()).limit(10))]
+
+    facts["flap_fails"], facts["flap_n"] = sum(1 for ok in recent if not ok), len(recent)
+    facts["user_port"] = (info["ports"].split(",") or [""])[0]
+    facts["ext"] = det.get("ext")
+    facts["ext_blocked"] = bool(det.get("ext") and det["ext"].get("code") == "000" and det.get("ext_seen") and det.get("data_code") not in ("", "000"))
+
     if not facts["iran_error"] and not facts["foreign_error"]:
         with ThreadPoolExecutor(3) as ex:
             fi, ff = ex.submit(_ping_loss, iran, info["foreign_host"]), ex.submit(_ping_loss, foreign, info["iran_host"])
@@ -180,6 +194,16 @@ def diagnose(tunnel_id: int) -> dict:
 
     if gre:
         findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": "GRE link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
+
+    if facts["flap_n"]:
+        findings.append({"ok": facts["flap_fails"] < 3, "text": f"Last {facts['flap_n']} checks: {facts['flap_n'] - facts['flap_fails']} passed, {facts['flap_fails']} failed" + (" - the link flaps" if facts["flap_fails"] >= 3 else "")})
+
+    if facts["ext"]:
+        e = facts["ext"]
+        findings.append({"ok": e.get("code") != "000", "text": f"From {e.get('from')}: port {facts['user_port']} " + (f"answers (HTTP {e.get('code')}, {e.get('ms')} ms)" if e.get("code") != "000" else "does not answer - the users' path is blocked")})
+
+    if det.get("data_code"):
+        findings.append({"ok": det.get("data_code") != "000", "text": f"On the Iran server: port {facts['user_port']} " + (f"answers (HTTP {det.get('data_code')})" if det.get("data_code") != "000" else "does not answer through the tunnel")})
 
     if "port_open" in facts:
         findings.append({"ok": facts["port_open"] is not False, "text": f"Control port {info['port']} is " + ("reachable from the other side" if facts["port_open"] is not False else "BLOCKED from the other side")})
@@ -596,17 +620,19 @@ def auto_escalate() -> None:
     now = int(time.time())
 
     with session() as db:
-        down = [(t.id, t.name, t.state_since) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down"))]
+        # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link): restarts do not cure those, so they climb without them
+        down = [(t.id, t.name, t.state_since, t.state) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
+                if t.state == "down" or "flaps" in (t.last_error or "") or "loss" in (t.last_error or "")]
 
-    for tid, name, since in down:
+    for tid, name, since, st_ in down:
         # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb)
-        if name in muted or name in _BUSY or now - since < int(conf.get("after_seconds", 180)) + 600 or actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR:
+        if name in muted or name in _BUSY or now - since < int(conf.get("after_seconds", 180)) + 120 or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
             continue
 
         with session() as db:
             last = db.scalar(select(ActionLog.ts).where(ActionLog.ref == name, ActionLog.action == "autopilot").order_by(ActionLog.id.desc()).limit(1))
 
-        if last and now - last < 6 * 3600:
+        if last and now - last < 1800:         # one smart repair per half hour per tunnel - the operator asked for the panel to keep at it by itself
             continue
 
         log.info("auto smart repair of %s (down for %ss, level %s)", name, now - since, level)

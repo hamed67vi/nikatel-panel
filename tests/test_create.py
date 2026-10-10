@@ -58,6 +58,8 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
     monkeypatch.setattr(builder, "start_build", fake_build)
     monkeypatch.setattr(failover, "_notice", lambda text: None)
     monkeypatch.setattr(create, "_POLL", 0.05)
+    applied = []
+    monkeypatch.setattr(arvan, "apply", lambda domain, rid, old, new: applied.append((domain, rid, old, new)) or {"domain": domain, "id": rid, "name": rid, "old": old, "new": new})
     r = client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "8075", "kind": "backhaul", "transport": "tcpmux", "replace_ids": [w["old"]], "dns_follow": True})
     assert r.status_code == 202, r.text
     aid = r.json()["id"]
@@ -71,9 +73,10 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
     text = "\n".join(s["story"])
     assert s["done"] and s["ok"] is True and s["action"] == "create", text
     assert "Smart choice: ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
-    pend = st.get("failover")["pending"]
-    assert len(pend) == 1 and pend[0]["reason"] == "replace" and [d["fqdn"] for d in pend[0]["dns"]] == ["a.example.test"] and pend[0]["target"]["id"] == w["ir2"] and pend[0]["tunnels"] == []
-    assert "waits for your approval" in text
+    assert applied == [("example.test", "ra", "203.0.113.5", "203.0.113.9")] and "DNS (as ticked)" in text        # the tick is the approval: applied at once
+    hist, log = st.get("failover")["history"], st.get("failover")["dns_log"]
+    assert hist[-1]["reason"] == "replace" and hist[-1]["ok"] is True and hist[-1]["target"]["id"] == w["ir2"] and st.get("failover")["pending"] == []
+    assert log[-1]["fqdn"] == "a.example.test" and log[-1]["new"] == "203.0.113.9" and log[-1]["restored"] is False
     assert client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "80", "replace_ids": [99999]}).status_code == 400   # a tunnel that is gone
 
 
@@ -83,3 +86,45 @@ def test_build_accepts_an_empty_transport_for_backhaul(client):
     assert r.status_code == 400 and "transport must be" not in r.json()["detail"]        # refused only because the tests run read-only
     r = client.post("/api/tunnels", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9075", "kind": "backhaul", "transport": "nope"})
     assert r.status_code == 400 and "transport must be" in r.json()["detail"]
+
+
+class _Arvan:
+    def __init__(self):
+        self.rec = {"id": "r1", "type": "A", "name": "ca", "value": [{"ip": "203.0.113.5", "port": None, "weight": 100, "country": ""}], "ttl": 120, "cloud": True}
+
+    def req(self, method, path, body=None, params=None):
+        if path == "/domains":
+            return {"data": [{"domain": "example.test"}], "meta": {"last_page": 1}}
+
+        if path == "/domains/example.test/dns-records":
+            return {"data": [self.rec], "meta": {"last_page": 1}}
+
+        if path.endswith("/dns-records/r1"):
+            if method == "PUT":
+                self.rec = {**self.rec, **body}
+
+            return {"data": self.rec}
+
+        raise AssertionError(path)
+
+
+def test_point_names_changes_the_record_and_logs_it(client, monkeypatch):
+    from nikatel.api import failover as fapi
+
+    w = _world()
+    st.put("arvan", {"api_key": "k", "mode": "approve"})
+    fake = _Arvan()
+    monkeypatch.setattr(arvan, "_req", fake.req)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    said = []
+    monkeypatch.setattr(failover.autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    assert failover._domain_of("ca.example.test", ["example.test", "other.test"]) == "example.test" and failover._domain_of("x.nope.test", ["example.test"]) == ""
+    done = failover.point_names(7, ["CA.example.test", "nope.example.test", "x.other.test"], w["ir2"])
+    assert len(done) == 1 and fake.rec["value"][0]["ip"] == "203.0.113.9"
+    entry = st.get("failover")["dns_log"][-1]
+    assert entry["fqdn"] == "ca.example.test" and entry["old"] == "203.0.113.5" and entry["new"] == "203.0.113.9" and entry["server"] == "ir1" and entry["target"] == "ir2"
+    assert any("no A record" in x for x in said) and any("not in any domain" in x for x in said)
+    fapi._RECORDS["at"] = 0
+    r = client.get("/api/arvan/records").json()
+    assert r["records"][0]["fqdn"] == "ca.example.test" and r["records"][0]["ips"] == ["203.0.113.9"]
+    assert client.post("/api/tunnels", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9075", "dns_names": ["bad name!"]}).status_code == 400

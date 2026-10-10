@@ -403,8 +403,9 @@ def replace_plan(old_tunnel_id: int, new_iran_id: int) -> dict:
             "dns_error": dns_error, "problems": [dns_error] if dns_error else [], "made_at": now}
 
 
-def after_replace(aid: int, p: dict) -> None:
-    """After a manual replacement built fine: the DNS plan is applied now (mode auto), kept for approval (approve) or only told (off)."""
+def after_replace(aid: int, p: dict, immediate: bool = False) -> None:
+    """After a manual replacement built fine: the DNS plan is applied now (mode auto, or `immediate` = the operator ticked it in the
+    Create form), kept for approval (approve) or only told (off)."""
     mode = conf().get("mode", "off")
 
     if not p["dns"]:
@@ -414,8 +415,8 @@ def after_replace(aid: int, p: dict) -> None:
 
     names = ", ".join(d["fqdn"] for d in p["dns"])
 
-    if mode == "auto":
-        autopilot._say(aid, f"DNS (automatic): {names} → {p['target']['ip']}")
+    if mode == "auto" or (immediate and conf().get("api_key")):
+        autopilot._say(aid, f"DNS ({'as ticked' if immediate else 'automatic'}): {names} → {p['target']['ip']}")
         _work(aid, p, finish=False)
     elif mode == "approve":
         s = _state()
@@ -426,6 +427,86 @@ def after_replace(aid: int, p: dict) -> None:
         _notify_plan(p, f"{p['old_tunnel']} was replaced by a tunnel on {p['target']['name']}.")
     else:
         autopilot._say(aid, f"DNS: {names} still point at {p['ip']} (the failover is off: change them yourself, or switch it on under Smart repair → Failover · CDN).")
+
+
+def _domain_of(fqdn: str, domains: list[str]) -> str:
+    """Pure: the registered domain (from the account's list) that `fqdn` belongs to, longest match; '' when none."""
+    f = fqdn.lower().strip(".")
+    hits = [d for d in domains if f == d.lower() or f.endswith("." + d.lower())]
+    return max(hits, key=len) if hits else ""
+
+
+def point_names(aid: int, names: list[str], iran_id: int, tag: str = "create") -> list[dict]:
+    """Point the A records of these names at the Iran server `iran_id` - as asked by the operator (a tick in Create tunnel, or the
+    small form on the DNS changes box). Every change is written to `dns_log`, so it can be put back with Restore."""
+    with session() as db:
+        s = db.get(Server, iran_id)
+
+        if s is None or s.role != "iran":
+            raise ValueError("choose an Iran server")
+
+        target = {"id": s.id, "name": s.name, "ip": s.host}
+        hosts = {x.host: x.name for x in db.scalars(select(Server))}
+
+    if not conf().get("api_key"):
+        autopilot._say(aid, "DNS: no ArvanCloud key is saved (Smart repair → Failover · CDN), the names are not changed.")
+        return []
+
+    try:
+        domains = arvan.domains()
+    except RuntimeError as e:
+        autopilot._say(aid, f"DNS: ArvanCloud did not answer: {str(e)[:140]}")
+        return []
+
+    done, s_ = [], _state()
+    now = int(time.time())
+
+    for raw in names:
+        fqdn = raw.lower().strip().strip(".")
+        domain = _domain_of(fqdn, domains)
+
+        if not domain:
+            autopilot._say(aid, f"DNS {fqdn}: not in any domain of this ArvanCloud account ({', '.join(domains[:8]) or 'none'})")
+            continue
+
+        sub = "@" if fqdn == domain else fqdn[: -len(domain) - 1]
+
+        try:
+            recs = [r for r in arvan.records(domain) if str(r.get("type", "")).lower() == "a" and str(r.get("name") or "@") == sub]
+        except RuntimeError as e:
+            autopilot._say(aid, f"DNS {fqdn}: {str(e)[:140]}")
+            continue
+
+        if not recs:
+            autopilot._say(aid, f"DNS {fqdn}: no A record with this name in {domain}; nothing changed")
+            continue
+
+        for r in recs:
+            for old in {str(i.get("ip")) for i in (r.get("value") or []) if isinstance(i, dict) and i.get("ip")}:
+                if old == target["ip"]:
+                    autopilot._say(aid, f"DNS {fqdn}: already points at {old}")
+                    continue
+
+                try:
+                    res = arvan.apply(domain, r["id"], old, target["ip"])
+                except RuntimeError as e:
+                    autopilot._say(aid, f"DNS {fqdn}: not changed: {str(e)[:140]}")
+                    continue
+
+                done.append(res)
+                s_["dns_log"].append({"id": f"{tag}-{aid}:{r['id']}:{old}", "at": now, "plan_id": f"{tag}-{aid}", "server": hosts.get(old, old), "target": target["name"], "domain": domain,
+                                      "record_id": str(r["id"]), "fqdn": fqdn, "old": old, "new": target["ip"], "configs": [], "restored": False, "restored_at": None})
+                autopilot._say(aid, f"DNS {fqdn}: {old} → {target['ip']} ({target['name']})")
+
+    if done:
+        _save(s_)
+
+        with session() as db:
+            emit(db, "ok", "actions", f"DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}): {', '.join(sorted({d['fqdn'] for d in [x for x in s_['dns_log'] if x['plan_id'] == f'{tag}-{aid}']}))}.", target["name"])
+
+        _notice(f"🌐 DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}).")
+
+    return done
 
 
 def approve(plan_id: str) -> int:

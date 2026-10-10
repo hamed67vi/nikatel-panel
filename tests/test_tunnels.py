@@ -157,3 +157,39 @@ def test_repair_plan_for_active_services_without_data_restarts_the_tunnel_servic
 
     steps = _plan_steps(_plan(), parse_side(IRAN_OK.replace("NOW 1791566810", "DATA 80 000\nNOW 1791566810")), parse_side(FOREIGN_OK))
     assert [(s["side"], s["units"]) for s in steps] == [("iran", ["backhaul-iran-tcpmux-9443.service"]), ("foreign", ["backhaul-kharej-tcpmux-9443.service"])]
+
+
+def test_flapping_link_is_degraded_even_when_this_check_passed():
+    from nikatel.services.tunnels import flap
+
+    assert flap("up", [True] * 9) == ("up", "")
+    assert flap("up", [False, False, True, True, True, True, True, True, True]) == ("up", "")             # two old failures: still fine
+    state, why = flap("up", [False, False, False, True, True, True, True, True, True])
+    assert state == "degraded" and "3 of the last 10" in why                                              # three: the link flaps
+    assert flap("up", [False, False, False])[0] == "degraded"                                               # a short history counts too
+    assert flap("down", [False] * 9) == ("down", "") and flap("degraded", [False] * 9) == ("degraded", "")  # a real fault keeps its reason
+
+
+def test_judge_trusts_the_users_path_over_the_ping():
+    from nikatel.services.tunnels import parse_reach
+
+    plan = Plan(["backhaul-iran-tcpmux-9909.service", "nikatel-gre-x.service"], ["backhaul-kharej-tcpmux-9909.service", "nikatel-gre-x.service"], iface="x", iran_peer="10.2.0.2", ports=[8075])
+    iran, foreign = Side(), Side()
+    iran.units = {u: "active" for u in plan.iran_units}
+    foreign.units = {u: "active" for u in plan.foreign_units}
+    iran.iface_state, iran.loss_pct, iran.listen = "UP", 100.0, {8075: True}
+    iran.data_port, iran.data_code = 8075, "404"
+    assert judge(plan, iran, foreign, True, 0) == ("up", "")                                                   # the ping over the link is blocked, the users' request answers: up
+    assert judge(plan, iran, foreign, True, 0, ("404", 120.0, "ir9"), True, 0) == ("up", "")
+    st, why = judge(plan, iran, foreign, True, 0, ("000", None, "ir9"), True, 1)
+    assert st == "degraded" and "not from ir9" in why and "blocked in front" in why                          # answers on the server, not from Iran
+    assert judge(plan, iran, foreign, True, 0, ("000", None, "ir9"), True, 4)[0] == "down"
+    assert judge(plan, iran, foreign, True, 0, ("000", None, "ir9"), False, 1) == ("up", "")                 # never answered from outside: that port speaks another protocol
+    iran.loss_pct = 30.0
+    assert judge(plan, iran, foreign, True, 0, ("404", 120.0, "ir9"), True, 0)[0] == "degraded"             # data passes, but the link is lossy
+    iran.loss_pct, iran.data_code = 100.0, "000"
+    assert judge(plan, iran, foreign, True, 1)[0] == "down"                                                    # nothing passes and the link is silent
+    r = parse_reach("REACH 203.0.113.5 8075 404 0.1234\nREACH 203.0.113.6 80 000 0\nnoise")
+    assert r[("203.0.113.5", 8075)] == ("404", 123.4) and r[("203.0.113.6", 80)] == ("000", None)
+    s = parse_side("UNIT a.service active\nDATA 8075 404 0.2500\nNOW 5")
+    assert s.data_code == "404" and s.data_ms == 250.0

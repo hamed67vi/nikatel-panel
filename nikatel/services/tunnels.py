@@ -24,7 +24,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Tunnel, TunnelCheck
+from ..models import Server, Tunnel, TunnelCheck
 from ..ssh import Node, SSHError, run_script
 from .events import emit
 
@@ -35,6 +35,8 @@ GRACE_SECONDS = 180          # a tunnel younger than this is "starting", not "do
 DEGRADED_LOSS = 15.0         # % loss over the GRE link (20 pings) that counts as degraded; the Iran-abroad
                              # paths lose 3-10 % of packets on a normal day, that is not an event
 CONFIRM_CHECKS = 2           # up <-> degraded flips need this many consecutive checks that agree
+FLAP_WINDOW = 10             # the last checks looked at for flapping
+FLAP_BAD = 3                 # this many failed checks in the window: the link flaps - the tunnel is degraded even when this check passed
 
 
 @dataclass
@@ -96,6 +98,7 @@ class Side:
     listen: dict[int, bool] = field(default_factory=dict)
     data_port: int = 0           # the forwarded port that was asked for one HTTP answer
     data_code: str = ""          # its answer: an HTTP code, "000" = nothing came back, "" = not asked
+    data_ms: float | None = None  # how long that answer took (the latency of the users' path when the ping over the link is blocked)
     now: int = 0
     error: str = ""
 
@@ -132,6 +135,12 @@ def parse_side(out: str) -> Side:
             s.listen[int(p[1])] = p[2] != "0"
         elif p[0] == "DATA" and len(p) >= 3:
             s.data_port, s.data_code = int(p[1]), ("000" if set(p[2]) == {"0"} else p[2])      # curl prints 000 itself when it fails: "000000" and "0" mean the same
+
+            if len(p) >= 4 and s.data_code != "000":
+                try:
+                    s.data_ms = round(float(p[3]) * 1000, 1)
+                except ValueError:
+                    s.data_ms = None
         elif p[0] == "NOW" and len(p) >= 2:
             s.now = int(p[1])
 
@@ -141,9 +150,12 @@ def parse_side(out: str) -> Side:
 DATA_DOWN_AFTER = 4          # this many failed data probes in a row (4 minutes): the tunnel is down, not just degraded
 
 
-def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_fails: int = 0) -> tuple[str, str]:
+def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_fails: int = 0,
+          ext: tuple | None = None, ext_seen: bool = False, ext_fails: int = 0) -> tuple[str, str]:
     """(state, reason). Pure, so the rules are testable. `data_seen`: this tunnel has answered an HTTP request before (so silence now
-    is a fault, not a port that speaks another protocol); `data_fails`: consecutive probes without an answer, this one included."""
+    is a fault, not a port that speaks another protocol); `data_fails`: consecutive probes without an answer, this one included.
+    `ext`: (http code, ms, vantage name) of the same request made from ANOTHER Iran server - the path the users take; `ext_seen` /
+    `ext_fails` like data_seen / data_fails for it."""
     if iran.error and foreign.error:
         return "unknown", f"both servers do not answer ({iran.error})"
 
@@ -160,16 +172,34 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
             if st != "active":
                 return "down", f"{label}: {u} is {st}"
 
-    if plan.iface:
-        if iran.iface_state not in ("UP", "UNKNOWN"):
-            return "down", f"the GRE interface {plan.iface} is {iran.iface_state or 'missing'} on the Iran server"
+    if plan.iface and iran.iface_state not in ("UP", "UNKNOWN"):
+        return "down", f"the GRE interface {plan.iface} is {iran.iface_state or 'missing'} on the Iran server"
 
-        if plan.iran_peer:
-            if iran.loss_pct is None or iran.loss_pct >= 100:
-                return "down", "no answer from the foreign end over the GRE link"
+    # the users' path decides: an HTTP answer through the forwarded port - from another Iran server, or at least on the server itself -
+    # proves the tunnel carries data, whatever a ping over the link says (some routes drop ICMP inside GRE while TCP passes)
+    local_ok = iran.data_code not in ("", "000")
+    ext_code = ext[0] if ext else None
+    ext_ok = ext_code is not None and ext_code != "000"
+    ext_silent = ext_seen and ext_code == "000"
+    linked = bool(plan.iface and plan.iran_peer)
+    lossy = linked and iran.loss_pct is not None and DEGRADED_LOSS <= iran.loss_pct < 100
+    silent = linked and (iran.loss_pct is None or iran.loss_pct >= 100)
 
-            if iran.loss_pct >= DEGRADED_LOSS:
-                return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
+    if ext_ok or (local_ok and not ext_silent):
+        if lossy:
+            return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
+
+        return "up", ""
+
+    if ext_silent and local_ok:
+        why = f"port {iran.data_port} answers on the server but not from {ext[2] if ext and len(ext) > 2 and ext[2] else 'another Iran server'}: blocked in front of the server"
+        return ("down" if ext_fails >= DATA_DOWN_AFTER else "degraded"), why
+
+    if silent:
+        return "down", "no answer from the foreign end over the GRE link"
+
+    if lossy:
+        return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
 
     closed = [p for p, ok in iran.listen.items() if not ok]
 
@@ -203,6 +233,98 @@ def settle(old_state: str, judged: str, streak: dict | None) -> tuple[str, dict]
         return old_state, streak
 
     return judged, streak
+
+
+def flap(raw: str, recent_ok: list[bool]) -> tuple[str, str]:
+    """Pure: a check that passed on a link that failed FLAP_BAD of the last FLAP_WINDOW checks is 'degraded', not 'up'. Users of a
+    link that answers only now and then see cuts, and the row must not turn green between two failures."""
+    window = (list(recent_ok) + [raw == "up"])[-FLAP_WINDOW:]
+    fails = sum(1 for ok in window if not ok)
+
+    if raw == "up" and fails >= FLAP_BAD:
+        return "degraded", f"the link flaps: {fails} of the last {len(window)} checks failed, users see cuts"
+
+    return raw, ""
+
+
+EXT_FRESH = 240              # seconds an answer from the other Iran server is used for; older ones are ignored
+_EXT: dict = {"at": 0, "res": {}, "from": []}
+
+
+def parse_reach(out: str) -> dict[tuple[str, int], tuple[str, float | None]]:
+    """Pure: 'REACH host port code seconds' lines -> {(host, port): (code, ms)}; ms only when something answered."""
+    res: dict[tuple[str, int], tuple[str, float | None]] = {}
+
+    for line in str(out).splitlines():
+        p = line.split()
+
+        if len(p) >= 4 and p[0] == "REACH" and p[2].isdigit():
+            code = "000" if set(p[3]) <= {"0"} else p[3]
+            ms = None
+
+            if len(p) >= 5 and code != "000":
+                try:
+                    ms = round(float(p[4]) * 1000, 1)
+                except ValueError:
+                    ms = None
+
+            res[(p[1], int(p[2]))] = (code, ms)
+
+    return res
+
+
+def _vantages() -> list[tuple[int, str, Node]]:
+    """Up to two online Iran servers to look from: the probe server first (it sits in Iran like the users), then any other."""
+    from . import settings as st
+
+    pid = int(st.get("probe").get("server_id") or 0)
+
+    with session() as db:
+        rows = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))]
+
+    rows.sort(key=lambda r: 0 if r[0] == pid else 1)
+    return rows[:2]
+
+
+def external_probe_all() -> None:
+    """Once per cycle: from one or two other Iran servers, one HTTP request to every tunnel's first forwarded port on its Iran server -
+    the path the users take. The answers are kept in _EXT for the checks of this cycle; a server never looks at itself."""
+    with session() as db:
+        targets: dict[tuple[str, int], set[int]] = {}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
+            ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
+
+            if ports:
+                targets.setdefault((t.iran.host, ports[0]), set()).add(t.iran_server_id)
+
+    if not targets:
+        return
+
+    res: dict = {}
+    seen_from = []
+
+    for sid, name, node in _vantages():
+        mine = [f"{h}:{p}" for (h, p), owners in targets.items() if sid not in owners]
+
+        if not mine:
+            continue
+
+        try:
+            out = run_script(node, "reach_many", {"TARGETS": " ".join(mine)}, timeout=45)
+        except (SSHError, ValueError) as e:
+            log.warning("external probe from %s failed: %s", name, str(e)[:120])
+            continue
+
+        seen_from.append(name)
+
+        for key, (code, ms) in parse_reach(out).items():
+            cur = res.get(key)
+
+            if cur is None or (cur[0] == "000" and code != "000"):      # a vantage that got an answer wins over one that did not
+                res[key] = (code, ms, name)
+
+    _EXT["at"], _EXT["res"], _EXT["from"] = int(time.time()), res, seen_from
 
 
 def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
@@ -241,6 +363,7 @@ def check_tunnel(tunnel_id: int) -> None:
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         prev = dict(t.detail or {})
+        iran_host = t.iran.host
 
     with ThreadPoolExecutor(2) as ex:
         fi = ex.submit(_query, iran_node, plan, True)
@@ -253,7 +376,11 @@ def check_tunnel(tunnel_id: int) -> None:
 
     data_seen = bool(prev.get("data_seen")) or iran.data_code not in ("", "000")
     data_fails = int(prev.get("data_fails", 0)) + 1 if iran.data_code == "000" else 0
-    state, reason = judge(plan, iran, foreign, data_seen, data_fails)
+    # the same request from another Iran server (this cycle's external probe), when there is a fresh one for this port
+    ext = _EXT["res"].get((iran_host, iran.data_port or (plan.ports[0] if plan.ports else 0))) if time.time() - _EXT["at"] < EXT_FRESH else None
+    ext_seen = bool(prev.get("ext_seen")) or (ext is not None and ext[0] != "000")
+    ext_fails = (int(prev.get("ext_fails", 0)) + 1 if ext[0] == "000" else 0) if ext is not None else int(prev.get("ext_fails", 0))
+    state, reason = judge(plan, iran, foreign, data_seen, data_fails, ext, ext_seen, ext_fails)
     now = int(time.time())
     rx = tx = None
 
@@ -276,6 +403,14 @@ def check_tunnel(tunnel_id: int) -> None:
         if state in ("down", "unknown") and now - t.created_at < GRACE_SECONDS and old == "unknown":
             state = "starting"
 
+        raw = state                  # what this one check found; the stored rows keep this raw signal, never the flap verdict
+        recent = [bool(c.ok) for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= t.created_at + GRACE_SECONDS)
+                                                 .order_by(TunnelCheck.id.desc()).limit(FLAP_WINDOW - 1))][::-1]
+        state, flap_why = flap(raw, recent)
+
+        if flap_why:
+            reason = flap_why
+
         judged = state
         state, streak = settle(old, judged, prev.get("streak"))
 
@@ -284,14 +419,16 @@ def check_tunnel(tunnel_id: int) -> None:
 
         t.last_check_at = now
         t.last_error = reason[:300] if state != "up" else ""
-        t.rtt_ms = iran.rtt_ms
+        # latency: the ping over the link; when that is blocked, how long the users' request took (from the other Iran server, else on the server)
+        t.rtt_ms = iran.rtt_ms if iran.rtt_ms is not None else (ext[1] if ext is not None and ext[1] is not None else iran.data_ms)
         t.rx_mbps, t.tx_mbps = rx, tx
         t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state,
                     "loss_pct": iran.loss_pct, "listen": {str(k): v for k, v in iran.listen.items()},
                     "rx_bytes": iran.rx_bytes, "tx_bytes": iran.tx_bytes, "now": iran.now,
                     "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak,
-                    "data_seen": data_seen, "data_fails": data_fails, "data_code": iran.data_code}
-        db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=judged == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
+                    "data_seen": data_seen, "data_fails": data_fails, "data_code": iran.data_code, "data_ms": iran.data_ms,
+                    "ext": ({"code": ext[0], "ms": ext[1], "from": ext[2]} if ext is not None else None), "ext_seen": ext_seen, "ext_fails": ext_fails}
+        db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=raw == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
 
         if state != old:
             t.state = state
@@ -313,6 +450,11 @@ def check_tunnel(tunnel_id: int) -> None:
 def check_all() -> None:
     with session() as db:
         ids = list(db.scalars(select(Tunnel.id).where(Tunnel.enabled.is_(True))))
+
+    try:
+        external_probe_all()       # the users' path first: one look from another Iran server at every forwarded port
+    except Exception:
+        log.exception("external probe failed")
 
     with ThreadPoolExecutor(max(1, get_settings().ssh_workers // 2)) as ex:
         list(ex.map(check_tunnel, ids))

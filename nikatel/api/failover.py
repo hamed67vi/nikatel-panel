@@ -1,9 +1,11 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..config import get_settings
-from ..services import arvan, failover
+from ..services import arvan, autopilot, failover
 from ..services import settings as st
 
 router = APIRouter(tags=["failover"], dependencies=[Depends(current_user)])
@@ -101,6 +103,53 @@ def fo_undo(plan_id: str):
         return {"ok": True, "changed": failover.undo(plan_id)}
     except (ValueError, RuntimeError) as e:
         raise HTTPException(400, str(e))
+
+
+_RECORDS: dict = {"at": 0.0, "rows": []}
+
+
+@router.get("/arvan/records")
+def arvan_records():
+    """The A records of the account (read only, kept for five minutes): names to pick from in Create tunnel and on the DNS changes box."""
+    import time as _t
+
+    if _t.time() - _RECORDS["at"] > 300:
+        try:
+            rows = []
+
+            for d in arvan.domains():
+                for r in arvan.records(d):
+                    if str(r.get("type", "")).lower() == "a":
+                        name = str(r.get("name") or "@")
+                        rows.append({"fqdn": d if name == "@" else f"{name}.{d}", "domain": d, "ips": [str(i.get("ip")) for i in (r.get("value") or []) if isinstance(i, dict) and i.get("ip")]})
+
+            _RECORDS.update(at=_t.time(), rows=sorted(rows, key=lambda x: x["fqdn"]))
+        except RuntimeError as e:
+            raise HTTPException(502, str(e))
+
+    return {"ok": True, "records": _RECORDS["rows"]}
+
+
+class PointIn(BaseModel):
+    names: list[str] = Field(min_length=1, max_length=10)
+    iran_id: int
+
+
+@router.post("/failover/point")
+def fo_point(body: PointIn):
+    """Point these DNS names at an Iran server now (the operator asked): every change is listed with a Restore."""
+    _writable()
+    names = [n.strip().lower() for n in body.names if n.strip()]
+
+    if not names or any(len(n) > 253 or not re.fullmatch(r"[a-z0-9.*-]+", n) for n in names):
+        raise HTTPException(400, "a DNS name may only have letters, digits, dots and dashes")
+
+    try:
+        aid = autopilot._start("dns " + ", ".join(names)[:40], lambda aid: (failover.point_names(aid, names, body.iran_id), autopilot._say(aid, "Done.", done=True, ok=True)), action="create")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"ok": True, "action_id": aid}
 
 
 @router.post("/failover/dns/{log_id}/restore")

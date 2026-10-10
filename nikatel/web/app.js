@@ -711,19 +711,18 @@ PAGES.tunnelsList = async () => {
   const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state}${(d.loss_pct || 0) >= 15 ? " lossy" : ""}">
       <td class="name">${esc(t.name)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
-      <td><span class="st ${t.state}">${stText(t)}</span></td>
+      <td><span class="st ${t.state}">${stText(t)}</span>${t.last_error ? `<small class="err td-err" title="${esc(t.last_error)}">${esc(t.last_error).slice(0, 40)}</small>` : ""}</td>
       <td class="td-node"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
       <td class="td-node"><b>${esc(t.foreign_name)}</b><span class="mono mut">${esc(t.foreign_host)}</span></td>
       <td><div class="td-ports">${ports(t).slice(0, 6).map(p => `<i class="${d.listen && d.listen[parseInt(p)] === false ? "bad" : ""}">${esc(p)}</i>`).join("")}${ports(t).length > 6 ? `<i>+${ports(t).length - 6}</i>` : ""}${ports(t).length ? "" : '<span class="mut">—</span>'}</div></td>
       <td class="num"><b class="${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b>${d.loss_pct ? `<small class="loss ${d.loss_pct >= 15 ? "hi" : ""}" title="Packets lost on the GRE link of this tunnel"> ${d.loss_pct}% loss</small>` : ""}</td>
-      <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
-      <td class="num" title="${esc(t.last_error || (q.latency_ms != null ? q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "%" : ""))}">${q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score}</b>` : '<span class="mut">—</span>'}${t.last_error ? `<small class="err"> ${esc(t.last_error).slice(0, 30)}</small>` : ""}</td>
+      <td class="num hide-sm" title="${esc(q.latency_ms != null ? "quality test: " + q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "% · score " + q.score : "")}">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td><div class="td-act"><button class="sm" onclick="toggleDetail(${t.id})" title="Details, charts and actions of this tunnel">More</button><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();restartTunnel(${t.id}, '${esc(t.name)}')" title="Restart the tunnel service on both servers (the GRE link stays)">Restart</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></div></td></tr>`; };
   const creating = false;
   $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="qualityAll()" title="Latency, jitter, loss and a score of every tunnel (10 s each)">📊 Quality test all</button><button onclick="healthAll()" title="Health check of every tunnel now">Health all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><button onclick="detectTunnels()" title="Scan every server for tunnels that are not in this list - complete pairs can be added, incomplete leftovers removed">🔍 Detect on servers</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"></div>
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
-    <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:11%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:9%"><col style="width:48px"><col style="width:290px"></colgroup>
-      <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th>Score</th><th style="text-align:right">Actions</th></tr></thead>
+    <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:11%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:9%"><col style="width:290px"></colgroup>
+      <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);
@@ -820,6 +819,7 @@ async function buildFormHtml() {
       <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label>
       <label>Tunnel type <small>(the defaults are the many-users settings)</small>${typeSel}</label></div>
     <div id="auto-iran" class="mut"></div><div id="build-check" class="bcheck"></div>
+    ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server (ArvanCloud) <small class="mut">(comma separated; pick from the list)</small></label><input name="dns_names" list="dns-names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off"><datalist id="dns-names"></datalist></div>` : ""}
     <div class="badv"><a onclick="bkAdv()">${bk.adv ? "▾ Advanced settings" : "▸ Advanced settings"} <small class="mut">${bk.adv ? "— change a value only when you measured a reason" : "— keepalive, heartbeat, MTU, preset, UDP…"}</small></a>${bk.adv ? `<div class="bgrid" style="margin-top:8px">${options}</div>` : ""}</div>
     <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button></div>
   </form><div id="build-story" class="fix hidden"></div>`;
@@ -827,6 +827,12 @@ async function buildFormHtml() {
 /* the Create window redraws only its own body: no refresh of the page behind it, the typed values stay */
 async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) return refresh(); const form = $("#modal form.build"); if (form) bkKeep(form); const story = $("#build-story"), keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; body.innerHTML = await buildFormHtml(); { const fm = $("#modal form.build"); if (fm) bkCheck(fm, true); } if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
 window.bkAdv = () => { bk.adv = !bk.adv; bkRedraw(); };
+/* the A records of the ArvanCloud account, for the name lists (fetched once per page load, the server keeps them for five minutes) */
+async function dnsListLoad(id) {
+  const dl = document.getElementById(id); if (!dl) return;
+  try { bk.dnsRows = bk.dnsRows || (await api("/api/arvan/records")).records; dl.innerHTML = bk.dnsRows.map(r => `<option value="${esc(r.fqdn)}">${esc(r.ips.join(", "))}</option>`).join(""); } catch (e) { toast("✕ " + e.message, "bad"); }
+}
+window.bkDns = cb => { bk.chk.dns_set = cb.checked; const inp = cb.closest(".bdns").querySelector("input[name=dns_names]"); inp.classList.toggle("hidden", !cb.checked); if (cb.checked) { dnsListLoad("dns-names"); inp.focus(); } };
 window.bkType = v => { const [k, t] = v.split("|"); bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 const BP_MUXED = ["tcpmux", "wsmux", "wssmux"];
 bk.chk = {};   // every checkbox the form ever showed -> its last state (a box that is not on screen keeps its default)
@@ -902,6 +908,7 @@ window.startBuild = async e => {
     if (c.conflicts.length && !seen) { box.innerHTML = '<div class="fx-line plan"><b>›</b>A tunnel already carries this port to the foreign server: decide above (replace it or keep it), then press Build again.</div>'; return false; }
     body.replace_ids = [...form.querySelectorAll("input[name^=replace_]:checked")].map(x => +x.name.slice(8));
     body.dns_follow = body.replace_ids.length > 0 && !!form.querySelector("input[name=dns_follow]:checked");
+    body.dns_names = form.querySelector("input[name=dns_set]:checked") ? String(f.get("dns_names") || "").split(/[,\s]+/).filter(Boolean) : [];
     box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
     const r = await api("/api/tunnels", {method: "POST", body: JSON.stringify(body)});
     await followStory(r.id, box, 600);
@@ -979,12 +986,12 @@ PAGES.actions = async () => {
   $("#page").innerHTML = `<div class="card" data-tab="att"><h3>🩺 Tunnels that need attention <span class="sp"></span>${bad.length ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
       ${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
-      <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). A panel cannot change a server's public IP; when a route is cut, “Move” carries the tunnel on another Iran server.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
+      <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). Restart, rebuild and another tunnel type happen by themselves; only a move to another Iran server (with its CDN records) asks first - under Failover · CDN.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
     ${foCard(fo, av, irn)}
     <div class="grid2 ap-two" data-tab="att">
     <div class="card"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div>
-    ${dnsCard(fo)}</div>`;
+    ${dnsCard(fo, av, irn)}</div>`;
   const nPend = (fo && fo.pending.length) || 0;
   pageTabs("actions", [["att", "🩺 Needs attention"], ["fo", "🔁 Failover · CDN"]].filter(t => t[0] !== "fo" || fo), nPend ? "fo" : "att", {att: n, fo: nPend});
 };
@@ -1033,18 +1040,24 @@ function pageTabs(key, tabs, dflt, counts = {}) {
   return cur;
 }
 /* DNS changes (next to the history): every record the failover re-pointed in the CDN, each with its own Restore */
-const dnsCard = fo => {
+const dnsCard = (fo, av = {}, irn = []) => {
   const rows = (fo && fo.dns_log) || [];
+  const point = av.has_api_key ? `<div class="dns-point"><small class="mut">Point a name at a server now:</small><input id="dns-point-name" list="dns-names2" placeholder="ca.example.ir" autocomplete="off" onfocus="dnsListLoad('dns-names2')"><datalist id="dns-names2"></datalist><select id="dns-point-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select><button class="sm pri" onclick="foPoint()">Apply</button></div>` : "";
   const row = e => `<div class="dns-row ${e.restored ? "back" : "live"}"><time title="${when(e.at)}">${ago(e.at)} ago</time><i></i><span class="dns-t"><b>${esc(e.fqdn)}</b><small class="mut">${esc(e.old)} → ${esc(e.new)} · ${esc(e.server)} → ${esc(e.target)}${(e.configs || []).length ? " · " + e.configs.length + " config(s)" : ""}</small></span>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : `<span class="pill ok">active</span><button class="sm" onclick="foRestore('${esc(e.id)}')" title="Point this record back at ${esc(e.old)}">↩ Restore</button>`}</div>`;
   return `<div class="card"><h3>🌐 DNS changes · CDN <span class="sp"></span><small class="mut">every record the failover re-pointed</small></h3>
-    <div class="dns-list">${rows.map(row).join("") || '<div class="empty">No DNS record has been changed yet. When a failover moves the tunnels of a server, every record it re-points shows here and can be put back with one click.</div>'}</div></div>`;
+    <div class="dns-list">${rows.map(row).join("") || '<div class="empty">No DNS record has been changed yet. When a failover moves the tunnels of a server, every record it re-points shows here and can be put back with one click.</div>'}</div>${point}</div>`;
+};
+window.foPoint = async () => {
+  const names = String(($("#dns-point-name") || {}).value || "").split(/[,\s]+/).filter(Boolean), sel = $("#dns-point-srv");
+  if (!names.length || !sel) { toast("Type a DNS name first", "bad"); return; }
+  if (!await gconfirm(`Point ${names.join(", ")} at ${sel.options[sel.selectedIndex].textContent} now? Every change is listed below with a Restore.`, {danger: true})) return;
+  try { const r = await api("/api/failover/point", {method: "POST", body: JSON.stringify({names, iran_id: +sel.value})}); showModal("<b>🌐 DNS</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>'); followStory(r.action_id, $("#ap-story"), 120).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.foRestore = async id => {
   if (!await gconfirm("Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.", {danger: true})) return;
   try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + r.fqdn + " points at " + r.old + " again", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.apFixAll = async () => {
-  if (!await gconfirm("Diagnose and repair every tunnel that is down or degraded, one after the other? Restart first, then a rebuild where restarting is not enough. Users on a rebuilt tunnel reconnect after about a minute.", {danger: true})) return;
   try { const r = await api("/api/autopilot/fix-all", {method: "POST", body: JSON.stringify({level: "rebuild"})}); const box = $("#ap-all"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.apExplain = async tid => {
@@ -2048,7 +2061,7 @@ PAGES.settings = async () => {
         <label>…after it has been down for (seconds)<input name="after_seconds" type="number" min="60" max="3600" value="${rp_.after_seconds}"></label>
         <label>How far it may go<select name="level">${[["restart", "Restart only (safe)"], ["rebuild", "+ rebuild the tunnel if restarting did not help"], ["switch", "+ switch the tunnel type when the route blocks it (GRE / port filtered)"]].map(([k, l]) => `<option value="${k}" ${(rp_.level || "restart") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
-      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps run only after restarts failed, once per 6 hours per tunnel. When no tunnel type works on a route, the move to another Iran server (with the CDN records) goes through the failover on Smart repair → Failover · CDN: it asks first, or runs by itself when set so. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
+      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps (rebuild, another tunnel type) run by themselves once the restarts failed, and again after 30 minutes if needed - nothing asks for approval. When no tunnel type works on a route, the move to another Iran server (with the CDN records) goes through the failover on Smart repair → Failover · CDN: it asks first, or runs by itself when set so. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
 
     <div class="card"><h3>Daily report</h3>
       <form class="frm one" onsubmit="return saveReport(event)">

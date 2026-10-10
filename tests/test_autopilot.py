@@ -146,3 +146,15 @@ def test_explain_needs_a_key_and_hands_the_facts_to_the_ai(client, monkeypatch):
     r = client.post("/api/autopilot/explain", json={}).json()
     assert r["text"].startswith("Handle") and "<facts>" in seen["user"] and "configs_down" in seen["user"]
     assert ap.situation()["totals"]["tunnels"] == 0
+
+
+def test_classify_flapping_as_a_lossy_route():
+    cause, why = ap.classify({"state": "degraded", "flap_fails": 4, "flap_n": 10, "gre": True, "gre_loss": 0.0, "under_loss_i": 0, "under_loss_f": 0})
+    assert cause == "lossy_route" and "flaps" in why
+    assert ap.classify({"state": "up", "flap_fails": 1, "flap_n": 10, "gre": True, "gre_loss": 0.0})[0] == "healthy"
+    assert ap.classify({"state": "down", "flap_fails": 5, "flap_n": 10, "gre": True, "gre_loss": 100.0, "under_loss_i": 0, "under_loss_f": 0})[0] == "gre_blocked"
+
+
+def test_classify_a_port_blocked_in_front_of_the_server_as_a_cut_route():
+    cause, why = ap.classify({"state": "degraded", "ext_blocked": True, "user_port": "8075", "gre": True, "gre_loss": 0.0, "under_loss_i": 0, "under_loss_f": 0})
+    assert cause == "route_cut" and "8075" in why and "blocked in front" in why
