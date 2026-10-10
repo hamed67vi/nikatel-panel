@@ -855,7 +855,7 @@ function bkCheckRender(form) {
 window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 window.bkTransport = t => { bk.transport = t; bkRedraw(); };
 function bkBody(f) {
-  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: (f.get("ports") || "").trim(), kind: bk.kind, transport: f.get("transport") || "", opts: {}};
+  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: (f.get("ports") || "").trim(), kind: bk.kind, transport: bk.transport || f.get("transport") || "", opts: {}};   // the type select keeps kind|transport in bk, not in a field
   if (bk.kind === "backhaul") {
     body.mtu = +f.get("mtu") || 0; body.keepalive = +f.get("keepalive") || 75;
     body.nodelay = $("#modal [name=nodelay]") ? f.get("nodelay") === "on" : bk.chk.nodelay !== false;
@@ -872,7 +872,8 @@ function bkBody(f) {
 window.autoIran = async form => { const f = new FormData(form), box = $("#auto-iran"); box.innerHTML = '<div class="fx-line run"><i></i>Pinging the foreign server from every Iran server…</div>'; try { const r = await api("/api/tunnels/auto-iran", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || ""})}); const best = r.ranking.find(x => x.score > 0); if (best) form.querySelector("[name=iran_id]").value = best.id; box.innerHTML = `<div class="ob-inbounds">${r.ranking.map((x, i) => `<span><b class="${x.score >= 70 ? "gw-ok" : x.score ? "" : "err"}">${i + 1}. ${esc(x.name)} · ${x.score}</b> <small class="mut">${esc(x.reason)}</small></span>`).join("")}</div>${best ? `<small>Chosen: <b>${esc(best.name)}</b> — change it above if you prefer another.</small>` : '<small class="err">No Iran server can carry this tunnel right now.</small>'}`; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.startTest = async e => {
   const form = e.target.closest("form"), f = new FormData(form);
-  const kind = bk.kind === "backhaul" ? (f.get("transport") || "tcpmux") : bk.kind === "backpack" ? "bp:" + f.get("transport") : bk.kind === "backpack_direct" ? "bpd:" + f.get("transport") : bk.kind === "paqet" ? "paqet" : (f.get("transport") === "wss" ? "chisel:tls" : "chisel");
+  const trn = bk.transport || f.get("transport") || "tcpmux";
+  const kind = bk.kind === "backhaul" ? trn : bk.kind === "backpack" ? "bp:" + trn : bk.kind === "backpack_direct" ? "bpd:" + trn : bk.kind === "paqet" ? "paqet" : (trn === "wss" ? "chisel:tls" : "chisel");
   const box = $("#build-story"); box.classList.remove("hidden");
   let iranId = +f.get("iran_id") || 0;
   try {

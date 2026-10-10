@@ -75,3 +75,11 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
     assert len(pend) == 1 and pend[0]["reason"] == "replace" and [d["fqdn"] for d in pend[0]["dns"]] == ["a.example.test"] and pend[0]["target"]["id"] == w["ir2"] and pend[0]["tunnels"] == []
     assert "waits for your approval" in text
     assert client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "80", "replace_ids": [99999]}).status_code == 400   # a tunnel that is gone
+
+
+def test_build_accepts_an_empty_transport_for_backhaul(client):
+    w = _world()
+    r = client.post("/api/tunnels", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9075", "kind": "backhaul", "transport": ""})
+    assert r.status_code == 400 and "transport must be" not in r.json()["detail"]        # refused only because the tests run read-only
+    r = client.post("/api/tunnels", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9075", "kind": "backhaul", "transport": "nope"})
+    assert r.status_code == 400 and "transport must be" in r.json()["detail"]
