@@ -17,15 +17,14 @@ It asks for the port, an optional domain (Let's Encrypt) and the admin password,
 what is missing, and starts the panel on `https://<server>:9443`. Run it again to upgrade.
 Non-interactive: `curl … | bash -s -- --yes --port 9443`.
 
-## Read
+## Documentation
 
-* [`ARCHITECTURE.md`](ARCHITECTURE.md) - the map of the code and the rules.
-* [`SECURITY.md`](SECURITY.md) - what the panel protects and how, what to do when something is wrong.
-* [`docs/roadmap.md`](docs/roadmap.md) - milestones and issues, where we are.
-* [`docs/operations.md`](docs/operations.md) - run, upgrade, back up, read logs, the bot server.
-* [`docs/development.md`](docs/development.md) - change it, test it, ship it.
-* [`bot/miniapp/README.md`](bot/miniapp/README.md) - the Telegram Mini App of the shop bot.
-* [`docs/adr/`](docs/adr/) - why things are the way they are.
+| | |
+|---|---|
+| **Use it** | [`docs/features.md`](docs/features.md) what it does · [`docs/operations.md`](docs/operations.md) install, upgrade, back up, logs, the bot server · [`docs/shop-bot.md`](docs/shop-bot.md) the shop bot from the panel · [`bot/miniapp/README.md`](bot/miniapp/README.md) the Telegram Mini App |
+| **Trust it** | [`SECURITY.md`](SECURITY.md) protections and what to do when something is wrong |
+| **Change it** | [`ARCHITECTURE.md`](ARCHITECTURE.md) code map and rules · [`docs/development.md`](docs/development.md) · [`docs/logging.md`](docs/logging.md) · [`docs/adr/`](docs/adr/) decisions |
+| **Follow it** | [`CHANGELOG.md`](CHANGELOG.md) · [`docs/roadmap.md`](docs/roadmap.md) · index: [`docs/README.md`](docs/README.md) |
 
 ## Status
 
@@ -36,9 +35,9 @@ customers. Open: a real-life run of every tunnel engine on a spare pair, and the
 ## What it does
 
 **Dashboard** - infrastructure health rows (servers, tunnels, configs, panels, bot), a Problems
-box with the live state and *Fix all*, the activity feed with categories, and Data centres: one row
-per hosting provider your servers sit in (found from each address's registry data) with servers up,
-tunnels up and whether the provider's own website answers.
+box with the live state and *Fix all*, and the activity feed with categories. Each server's window
+shows its hosting provider (from registry data) with a link to the provider's site and whether that
+site answers.
 
 **Nodes** - Iran and foreign servers with facts every 2 minutes (CPU, RAM, disk, swap, load,
 traffic, busiest process, Abuse-Defender rules), 24 h charts, a console with presets, connect with

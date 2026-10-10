@@ -74,7 +74,7 @@ docs/              operations, development, logging, roadmap, adr/
 ## 2b. The UI, page by page
 
 * **Dashboard** - health rows, Problems box (live state, Fix with AI, Fix all), activity feed with
-  categories, Data centres box (providers, servers and tunnels there, site check); auto-refresh.
+  categories; auto-refresh.
 * **Nodes** - Iran / Foreign / Gateway & outbounds. More / Edit / Delete on every row; the More window
   has overview, charts, tunnels, filtering, tools (console, connect, reboot, Abuse-Defender, geo, launchers).
 * **Tunnels** - List (More window with quality and ports, Health / Restart / Rebuild), Create, Test (pair

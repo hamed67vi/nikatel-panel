@@ -68,6 +68,15 @@ server was really reinstalled, delete its line from `/var/lib/nikatel/data/known
 **Turn read-only off** (phase 3): `NIKATEL_READ_ONLY=false` in `/etc/nikatel/nikatel.env`,
 `systemctl restart nikatel`. On purpose this cannot be done from the UI.
 
+## Alerts
+
+Settings → Alerts → Alert rules. A thing goes DOWN once: after `tunnel_fails` / `server_fails` /
+`config_fails` failed checks in a row **and** at least `min_down_minutes` (default 4). UP is sent after it
+has been fine for `up_stable_seconds`. Reminders (`remind_hours`) are off by default (0). If something goes
+down `flap_max` (3) times within an hour you get one FLAPPING message and silence about it for
+`flap_quiet_hours` (6). Mute an item or add a maintenance window to silence it on purpose. Too many
+messages? Raise `min_down_minutes` or lower `flap_max`.
+
 ## The shop bot server
 
 Settings → Shop bot holds where the bot runs: host, SSH user / port, the bot directory (the one
