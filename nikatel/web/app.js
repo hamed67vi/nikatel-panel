@@ -921,7 +921,7 @@ function storyHtml(s) {
     (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "delete" ? "Removal" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 /* ---- Smart repair: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
-const ap = {job: null, tid: localStorage.getItem("nk.ap.tid") || "", timer: null};
+const ap = {tab: localStorage.getItem("nk.ap.tab") || "", job: null, tid: localStorage.getItem("nk.ap.tid") || "", timer: null};
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
@@ -945,6 +945,7 @@ PAGES.actions = async () => {
     <div class="card"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div>`;
   apAdvisor();
+  apTabs(n, !!fo, (fo && fo.pending.length) || 0);
 };
 const foForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
     <label>ArvanCloud API key <small>(empty keeps the saved one; stays on this server)</small><input name="api_key" type="password" placeholder="${av.has_api_key ? "•••••••• saved" : "paste the key here"}" autocomplete="off"></label>
@@ -980,7 +981,16 @@ window.foPreview = async () => {
   try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/approve", {method: "POST"}); showModal("<b>🔁 Failover</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.action_id, $("#ap-story"), 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.foDismiss = async id => { try { await api("/api/failover/" + encodeURIComponent(id) + "/dismiss", {method: "POST"}); toast("Plan dismissed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.foUndo = async id => { if (!await gconfirm("Point the DNS records back at the old server address? The tunnels stay where they are.", {danger: true})) return; try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/undo", {method: "POST"}); toast("✓ " + r.changed.length + " record(s) pointed back", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };window.apFixAll = async () => {
+window.foUndo = async id => { if (!await gconfirm("Point the DNS records back at the old server address? The tunnels stay where they are.", {danger: true})) return; try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/undo", {method: "POST"}); toast("✓ " + r.changed.length + " record(s) pointed back", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };/* the Smart repair page is one tab at a time: what needs attention, the failover, the network advisor, the history */
+const AP_TABS = [["att", "🩺 Needs attention"], ["fo", "🔁 Failover"], ["adv", "🧭 Network advisor"], ["his", "🗒 History"]];
+function apTabs(nBad, hasFo, nPending) {
+  const list = AP_TABS.filter(t => t[0] !== "fo" || hasFo), cards = [...document.querySelectorAll("#page > .card")];
+  if (cards.length !== list.length) return;
+  const cur = list.some(t => t[0] === ap.tab) ? ap.tab : (nPending ? "fo" : "att");
+  cards.forEach((c, i) => c.classList.toggle("hidden", list[i][0] !== cur));
+  const cnt = {att: nBad, fo: nPending};
+  $("#page").insertAdjacentHTML("afterbegin", `<div class="tabs set-tabs">${list.map(([k, l]) => `<button class="${k === cur ? "on" : ""}" onclick="ap.tab='${k}';localStorage.setItem('nk.ap.tab','${k}');refresh()">${l}${cnt[k] ? ` <i class="cnt">${cnt[k]}</i>` : ""}</button>`).join("")}</div>`);
+}window.apFixAll = async () => {
   if (!await gconfirm("Diagnose and repair every tunnel that is down or degraded, one after the other? Restart first, then a rebuild where restarting is not enough. Users on a rebuilt tunnel reconnect after about a minute.", {danger: true})) return;
   try { const r = await api("/api/autopilot/fix-all", {method: "POST", body: JSON.stringify({level: "rebuild"})}); const box = $("#ap-all"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
