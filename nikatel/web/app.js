@@ -203,7 +203,7 @@ async function refresh() {
 }
 setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !state.detect && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
-function showModal(title, body, cls = "", acts = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span>${acts}<button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
+function showModal(title, body, cls = "", acts = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
@@ -2178,3 +2178,34 @@ window.changePassword = async e => {
 
 /* the AI buttons (anything with ✨ in it) get the glass-gold look and the magic wand on hover (see .ai-btn in app.css) */
 (() => { let q = false; const mark = () => { q = false; document.querySelectorAll("button:not(.ai-btn)").forEach(b => { if (b.textContent.includes("✨")) b.classList.add("ai-btn"); }); }; new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(mark); } }).observe(document.documentElement, {childList: true, subtree: true, characterData: true}); mark(); })();
+
+/* ---- the task dock: a window (a repair, a build, a test) can be minimised to a chip at the bottom; it keeps running and the chip shows how far it is; a click brings the window back */
+const dock = {items: [], n: 0, timer: null};
+function dockStatus(it) {
+  const lines = [...it.ov.querySelectorAll(".fx-line, .tt-log > *")], run = !!it.ov.querySelector(".fx-line.run, .loading"), last = lines.filter(l => !l.classList.contains("run")).pop();
+  const bad = !run && !!it.ov.querySelector(".fx-line.bad:last-child, .err");
+  return {run, bad, text: last ? last.textContent.trim().replace(/\s+/g, " ").slice(0, 90) : run ? "working…" : "open"};
+}
+function dockRender() {
+  let el = $("#dock");
+  if (!dock.items.length) { if (el) el.remove(); clearInterval(dock.timer); dock.timer = null; return; }
+  if (!el) { el = document.createElement("div"); el.id = "dock"; document.body.appendChild(el); }
+  el.innerHTML = dock.items.map(it => { const s = dockStatus(it); return `<div class="dk ${s.run ? "run" : s.bad ? "bad" : "ok"}" onclick="dockOpen(${it.id})" title="${esc(s.text)}"><i class="dk-ic">${s.run ? "" : s.bad ? "!" : "✓"}</i><span class="dk-t"><b>${esc(it.title)}</b><small>${esc(s.text)}</small></span><button class="dk-x" onclick="event.stopPropagation();dockDrop(${it.id})" title="Remove from the bar">✕</button></div>`; }).join("");
+  if (!dock.timer) dock.timer = setInterval(dockRender, 1500);
+}
+window.minModal = () => {
+  const m = $("#modal"), ov = m && m.firstElementChild;
+  if (!ov) return;
+  const title = ((ov.querySelector(".modal-head b") || {}).textContent || "Task").replace(/^[^\w\u0600-\u06FF]+/, "").trim() || "Task";
+  m.removeChild(ov); ov.classList.add("docked");
+  dock.items.push({id: ++dock.n, title, ov});
+  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; cf.sub = null;
+  dockRender(); refresh();
+};
+window.dockOpen = id => {
+  const i = dock.items.findIndex(x => x.id === id); if (i < 0) return;
+  const it = dock.items.splice(i, 1)[0], m = $("#modal") || (() => { const x = document.createElement("div"); x.id = "modal"; document.body.appendChild(x); return x; })();
+  if (m.firstElementChild) minModal();            // what is open now goes into the bar first
+  m.innerHTML = ""; it.ov.classList.remove("docked"); m.appendChild(it.ov); dockRender();
+};
+window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dockRender(); };

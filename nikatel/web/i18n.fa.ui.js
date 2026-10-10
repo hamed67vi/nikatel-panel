@@ -27,7 +27,7 @@ I18N.add({
 "Update this panel from GitHub with one click, and the tunnel cores on your servers.": "پنل را با یک کلیک از گیت‌هاب به‌روز کنید، و هسته‌های تانل روی سرورها را.",
 
 /* ---- common buttons and words */
-"Save": "ذخیره", "Cancel": "انصراف", "Close": "بستن", "Delete": "حذف", "Edit": "ویرایش", "More": "بیشتر", "Add": "افزودن", "Apply": "اعمال", "Back": "بازگشت",
+"Save": "ذخیره", "Cancel": "انصراف", "Close": "بستن", "Minimise: it keeps running; click its chip at the bottom to come back": "کوچک کردن: کار ادامه دارد؛ برای برگشتن روی نوار پایین کلیک کنید", "Remove from the bar": "حذف از نوار", "working…": "در حال انجام…", "Delete": "حذف", "Edit": "ویرایش", "More": "بیشتر", "Add": "افزودن", "Apply": "اعمال", "Back": "بازگشت",
 "← Back": "← بازگشت", "Run": "اجرا", "Run now": "اجرا همین حالا", "Check": "بررسی", "Check now": "بررسی همین حالا", "Check again": "بررسی دوباره", "Test": "تست", "Test now": "تست همین حالا",
 "Restart": "ری‌استارت", "Rebuild": "بازسازی", "Repair": "تعمیر", "Remove": "حذف", "Reset": "بازنشانی", "Resume": "ادامه", "Retry": "تلاش دوباره", "Try again": "تلاش دوباره",
 "Enable": "فعال‌سازی", "Disable": "غیرفعال‌سازی", "Turn on": "روشن کردن", "Turn off": "خاموش کردن", "On": "روشن", "Off": "خاموش", "on": "روشن", "off": "خاموش", "Open": "باز کردن", "open": "باز کردن",
