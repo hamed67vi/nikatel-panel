@@ -137,7 +137,9 @@ code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255
 .grid2 > .card { margin-bottom: 0; height: 100%; box-sizing: border-box; } .kv.one { grid-template-columns: 1fr; }
 .set-desc { color: var(--mut); font-size: 12.5px; margin: 8px 4px 14px; }
 .set-sub { margin: -6px 0 14px; } .set-sub button { height: 30px; padding: 0 13px; font-size: 12.5px; border-radius: 10px; }
-.grid2.one { grid-template-columns: minmax(340px, 1fr); } .grid2.one > .card { grid-column: auto !important; height: auto; } .set-tabs { flex-wrap: wrap; } .set-tabs button { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 11px; }
+/* one card per settings tab: as wide as what is in it (a form, a table), never the whole page */
+.grid2.one { grid-template-columns: minmax(0, 1fr); justify-items: start; } .grid2.one > .card { grid-column: auto !important; height: auto; width: fit-content; min-width: min(100%, 560px); max-width: 100%; box-sizing: border-box; }
+.set-tabs { flex-wrap: wrap; } .set-tabs button { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 11px; }
 .subnav { margin: -4px 0 14px 2px; } .subnav .tabs { padding: 4px; border-radius: 16px; } .subnav .tabs button { height: 36px; padding: 0 16px; font-size: 13.5px; border-radius: 12px; }
 nav a { height: 38px; font-size: 13.5px; }
 /* configs: card grid + compact rows (the old Configs Checker displays) */
