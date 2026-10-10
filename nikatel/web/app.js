@@ -164,8 +164,9 @@ const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $
 (() => {
   const pg = $("#page"), d = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
   if (!pg || !d) return;
-  let last = null;
-  Object.defineProperty(pg, "innerHTML", {get() { return d.get.call(pg); }, set(v) { if (v === last && pg.childElementCount && !pg.querySelector(".loading, .page-err")) return; last = v; d.set.call(pg, v); }});
+  let last = null, lastDom = null;
+  // the same HTML again is skipped (no flicker) - but only while the page has not changed its own DOM since (Settings, Tools, lazy boxes do)
+  Object.defineProperty(pg, "innerHTML", {get() { return d.get.call(pg); }, set(v) { if (v === last && lastDom !== null && d.get.call(pg) === lastDom && pg.childElementCount && !pg.querySelector(".loading, .page-err")) return; last = v; d.set.call(pg, v); lastDom = d.get.call(pg); }});
 })();
 let navSeq = 0, retryT = null, retries = 0;
 const loadingBox = page => `<div class="loading"><i class="spin"></i><span>Loading ${esc((INFO[page] || ["…"])[0])}…</span></div>`;
@@ -227,8 +228,8 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 PAGES.dashboard = async () => {
   const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.cfgCache = cfg.configs;
-  const rd = state.radar || {loading: true};   // the radar comes from an outside site: it is fetched after the page is on screen and never holds it up
-  api("/api/radar").then(r => { state.radar = r; const b = $("#radar-box"); if (b) b.innerHTML = radarCard(r); }).catch(() => { const b = $("#radar-box"); if (b && !state.radar) b.innerHTML = radarCard(null); });
+  const rd = state.dcs || {loading: true};   // the data-centre box checks outside sites: it is fetched after the page is on screen and never holds it up
+  api("/api/datacentres").then(r => { state.dcs = r; const b = $("#radar-box"); if (b) b.innerHTML = dcCard(r, tl); }).catch(() => { const b = $("#radar-box"); if (b && !state.dcs) b.innerHTML = dcCard(null, tl); });
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
   $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
@@ -244,8 +245,26 @@ PAGES.dashboard = async () => {
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div><div id="radar-box">${radarCard(rd)}</div>`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div><div id="radar-box">${dcCard(rd, tl)}</div>`;
 };
+/* ---- the data centres our servers are hosted at: our servers and tunnels there, and whether the provider's own site answers */
+function dcCard(r, tl) {
+  const head = right => `<h3>Data centres <small class="mut">where your servers are</small><span class="sp"></span>${right}</h3>`;
+  if (r && r.loading) return `<div class="card radar">${head('<span class="pill">loading…</span>')}<div class="empty">Reading the providers…</div></div>`;
+  if (!r || !r.rows) return `<div class="card radar">${head('<span class="pill">not available</span>')}<div class="empty">The list could not be read right now.</div></div>`;
+  const state_ = d => { const s = d.site; if (!d.online && d.total) return "red"; if ((s && s.ok === false) || d.tunnels_bad) return "yellow"; if (d.online < d.total) return "yellow"; return "green"; };
+  const site = d => !d.domain ? '<span class="mut">no site known</span>' : !d.site || d.site.ok == null ? '<span class="mut">checking…</span>' : d.site.ok ? `<span class="gw-ok">✓ site answers</span> <small class="mut">${d.site.ms} ms</small>` : '<span class="err">✕ site does not answer</span>';
+  const row = d => `<div class="dc-row" title="${esc(d.servers.map(s => s.name + (s.online === false ? " (offline)" : "")).join(", "))}"><i class="dash-dot ${state_(d)}"></i>
+    <div class="dc-name">${d.country ? `<small class="cc">${esc(d.country)}</small> ` : ""}${d.domain ? `<a href="https://${esc(d.domain)}" target="_blank" rel="noopener">${esc(d.name)} ↗</a>` : `<b>${esc(d.name)}</b>`}${d.city ? `<small class="mut"> · ${esc(d.city)}</small>` : ""}</div>
+    <span class="dc-n ${d.online < d.total ? "err" : ""}">${d.online} / ${d.total} <small class="mut">servers up</small></span>
+    <span class="dc-n ${d.tunnels_bad ? "err" : ""}">${d.tunnels_total ? `${d.tunnels_total - d.tunnels_bad} / ${d.tunnels_total} <small class="mut">tunnels up</small>` : '<small class="mut">no tunnels</small>'}</span>
+    <span class="dc-site">${site(d)}</span></div>`;
+  const col = (g, title) => { const rows = r.rows.filter(x => g === "iran" ? x.role === "iran" : x.role !== "iran"); return rows.length ? `<div><h4>${title}</h4>${rows.map(row).join("")}</div>` : ""; };
+  const bad = r.rows.filter(x => state_(x) === "red").length, warn = r.rows.filter(x => state_(x) === "yellow").length;
+  return `<div class="card radar">${head(`<span class="pill ${bad ? "err" : warn ? "" : "ok"}">${bad ? bad + " down" : warn ? warn + " with trouble" : "all fine"}</span>${r.unknown ? ` <span class="pill" title="The provider of a server is found from its address's registry data, once an hour">${r.unknown} unknown yet</span>` : ""}`)}
+    <div class="rd-cols">${col("iran", "Iran")}${col("foreign", "Abroad")}</div>
+    <small class="mut">One row per hosting provider (found from each server's address). "site answers" = the provider's own website answers the panel server, checked every 10 minutes${r.at ? " · last " + ago(r.at) + " ago" : ""}.</small></div>`;
+}
 state.actBig = localStorage.getItem("nk.actbig") === "1";
 window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
 /* ---- the Problems box: only what is wrong right now (read from the live state, so a solved problem leaves it by itself), each with its way to fix it */
@@ -291,21 +310,6 @@ window.cfDiagnose = async id => {
         ${tn && tn.state !== "up" ? "" : '<div class="mut" style="padding:6px 0;font-size:12.5px">Nothing on your servers can change this: when an address is cut from inside Iran, the config needs another address (another foreign server or a CDN).</div>'}</div>`, "wide");
   } catch (e) { showModal("<b>✨ Diagnosis</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); }
 };
-/* ---- Arvan Radar: how ArvanCloud's points of presence reach well-known sites, per data centre */
-const RD_NAME = {ok: "reachable", warn: "some probes fail", bad: "failing", none: "no data"};
-function radarCard(r) {
-  const head = right => `<h3>Data-centre internet <small class="mut">Arvan Radar</small><span class="sp"></span>${right}<a class="mut" href="https://radar.arvancloud.ir/" target="_blank" rel="noopener" style="margin-left:10px">radar.arvancloud.ir ↗</a></h3>`;
-  if (r && r.loading) return `<div class="card radar">${head('<span class="pill">loading…</span>')}<div class="empty">Reading the radar…</div></div>`;
-  if (!r || !r.rows) return `<div class="card radar">${head('<span class="pill">not reachable</span>')}<div class="empty">The radar does not answer from the panel server right now.</div></div>`;
-  const row = d => `<div class="rd-row"><i class="dash-dot ${d.state === "ok" ? "green" : d.state === "warn" ? "yellow" : d.state === "bad" ? "red" : ""}"></i><b>${esc(d.name)}</b>
-    <span class="rd-sites">${d.sites.map(s => `<i class="rd-s ${s.state}" title="${esc(s.name)}: ${RD_NAME[s.state]}${s.avg != null ? " (level " + s.avg + ")" : ""}"></i>`).join("")}</span>
-    <span class="rd-strip" title="the last hour, two minutes per square">${d.strip.map(v => `<i class="${v == null ? "n" : v <= 0 ? "ok" : v < 1 ? "warn" : "bad"}"></i>`).join("")}</span></div>`;
-  const col = (g, title) => `<div><h4>${title}</h4>${r.rows.filter(x => x.group === g).map(row).join("")}</div>`;
-  const bad = r.rows.filter(x => x.state === "bad").length, warn = r.rows.filter(x => x.state === "warn").length;
-  return `<div class="card radar">${head(`<span class="pill ${bad ? "err" : warn ? "" : "ok"}">${bad ? bad + " disturbed" : warn ? warn + " with minor trouble" : "all calm"}</span>${r.stale ? ' <span class="pill">old data</span>' : ""}`)}
-    <div class="rd-cols">${col("iran", "Iran data centres")}${col("foreign", "Foreign data centres")}</div>
-    <small class="mut">Seen from ArvanCloud's points of presence: GitHub, Google, Bing, Wikipedia, PlayStation, Aparat, Digikala, Divar (one small square each, red = failing, grey = no data). It describes data centres, not home or mobile internet. Updated ${ago(r.at)} ago.</small></div>`;
-}
 function eventsHtml(list, open) {
   if (!list.length) return '<div class="empty">Nothing happened yet.</div>';
   return list.map(e => `<div class="ev ${e.level}${open ? " click" : ""}"${open ? ` onclick="evOpen(${e.id})" title="Click for details and Fix with AI"` : ""}><time title="${when(e.ts)}">${ago(e.ts)} ago</time><i></i><small>${esc(e.domain)}</small><span>${esc(e.text)}</span></div>`).join("");
@@ -394,10 +398,12 @@ function serverDetailHtml(s) {
   const tab = state.wtab || "overview";
   const tabs = `<div class="tabs wtabs">${[["overview", "Overview"], ["charts", "Charts 24 h"], ["tools", "Tools"], ["console", "⌨ Console"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
-  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools">${tool("♥", "Health check", "sample this server now", `checkServer(${s.id})`)}${tool("⇄", "GRE test", `<span id="tile-gre">${greTxt((s.extra || {}).gre)}</span>`, `greCheck(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>${resBox(s)}
-    <div class="wgroup"><h4>Open on my computer</h4><div class="wtools">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
-    ${s.role === "foreign" ? `<div class="wgroup"><h4>Security</h4><div class="wtools">${tool("🛰", "Check filtering in Iran", `<span id="tile-flt">${fltTxt((s.extra || {}).iran_filter)}</span>`, `srvFilter(${s.id})`)}${tool("🛡", abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender", abuseOn ? `${f.abuse_rules || ab.rules || "?"} ranges blocked now` : "drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)}</div></div>` : ""}
-    <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;
+  // every tile = icon + title + one short line; what a test found is shown only in "Last results", so the tiles stay the same size
+  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools uni">${tool("⇄", "GRE test", "do its GRE links answer?", `greCheck(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
+    ${s.role === "foreign" ? `<div class="wgroup"><h4>Security</h4><div class="wtools uni">${tool("🛰", "Check filtering in Iran", "ping from your Iran servers + check-host.net", `srvFilter(${s.id})`)}${tool("🛡", abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender", abuseOn ? "stop dropping traffic to abused ranges" : "drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)}</div></div>` : ""}
+    ${resBox(s)}
+    <div class="wgroup"><h4>Open on my computer</h4><div class="wtools uni">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
+    <div class="wgroup"><h4>Danger</h4><div class="wtools uni">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;
   if (tab === "console") { if (state.con !== s.id) state.con = s.id; return tabs + `<div class="fix" id="con-${s.id}"><div class="frm-act"><select id="con-preset-${s.id}" onchange="$('#con-cmd-${s.id}').value=this.value">${["", ...Object.keys(CON_PRESETS)].map(k => `<option value="${k ? esc(CON_PRESETS[k][1]) : ""}">${k ? esc(CON_PRESETS[k][0]) : "— preset —"}</option>`).join("")}</select><input id="con-cmd-${s.id}" style="flex:1" placeholder="command to run as ${esc(s.ssh_user)}…" onkeydown="if(event.key==='Enter')srvRun(${s.id})"><button class="pri sm" onclick="srvRun(${s.id})">Run</button></div><pre class="gl-out" id="con-out-${s.id}">${esc(state.conOut[s.id] || "")}</pre></div>`; }
   if (tab === "charts") return tabs + `<div class="charts" id="srv-charts-${s.id}"><div class="mut">loading 24 h…</div></div><div class="kv" id="srv-peaks-${s.id}"></div>`;
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
@@ -434,9 +440,12 @@ const FLT_LEVEL = {clean: ["gw-ok", "✓ Clean"], filtered: ["err", "✕ Filtere
 const greTxt = g => g ? `<b class="${g.ok || !g.links ? "gw-ok" : "err"}">${g.ok ? "✓ GRE OK" : g.links ? "✕ GRE not OK" : "✓ no GRE links"}</b> · ${esc(g.detail)} · ${ago(g.at)} ago` : "do the GRE links of this server answer?";
 const fltTxt = f => { if (!f) return "ping from your Iran servers + check-host.net"; const lv = FLT_LEVEL[f.level] || ["warn", "⚠ " + esc(f.level || "unknown")]; return `<b class="${lv[0]}">${lv[1]}</b> · ${esc(f.verdict || "")} · ${ago(f.checked_at)} ago`; };
 function resBox(s) {
-  const g = (s.extra || {}).gre, f = (s.extra || {}).iran_filter;
+  const x = s.extra || {}, g = x.gre, f = x.iran_filter, fc = s.facts || {}, ab = x.abuse || {};
+  const abuseOn = ab.installed || (fc.abuse_rules || 0) > 0, rules = fc.abuse_rules || ab.rules || 0;
   const row = (label, key, body) => `<div class="res-row"><span class="mut">${label}</span><span id="res-${key}">${body}</span></div>`;
-  return `<div class="wgroup"><h4>Last results</h4><div class="ibox res-box">${row("GRE", "gre", g ? greTxt(g) : '<span class="mut">not tested yet</span>')}${s.role === "foreign" ? row("Filtering in Iran", "flt", f ? fltTxt(f) : '<span class="mut">not checked yet</span>') : ""}</div></div>`;
+  return `<div class="wgroup"><h4>Last results</h4><div class="ibox res-box">${row("GRE", "gre", g ? greTxt(g) : '<span class="mut">not tested yet</span>')}
+    ${s.role === "foreign" ? row("Filtering in Iran", "flt", f ? fltTxt(f) : '<span class="mut">not checked yet</span>') + row("Abuse-Defender", "abuse", abuseOn ? `<b class="gw-ok">✓ Installed</b> · ${rules} ranges blocked${ab.updated_at ? " · list " + ago(ab.updated_at) + " ago" : ""}` : '<span class="mut">not installed</span>') : ""}
+    ${row("Last sample", "sample", s.checked_at || s.last_seen ? `${ago(s.checked_at || s.last_seen)} ago${fc.uptime ? " · up " + esc(String(fc.uptime)) : ""}` : '<span class="mut">never</span>')}</div></div>`;
 }window.greCheck = async id => { setRes("gre", '<span class="mut">⏳ checking… (up to 30 s)</span>'); toast("Checking GRE… (up to 30 s)"); try { const r = await api(`/api/servers/${id}/gre-check`, {method: "POST"}); toast((r.ok ? "✓ " : "✕ ") + r.detail, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.srvFilter = async id => { setRes("flt", '<span class="mut">⏳ pinging from your Iran servers… (about 30 s)</span>'); toast("Pinging from Iran… (about 30 s)"); try { const r = await api(`/api/servers/${id}/filter-check`, {method: "POST"}); toast((r.level === "clean" ? "✓ " : "⚠ ") + r.verdict, r.level === "clean" ? "ok" : "bad"); state.flt = id; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvReboot = async (id, name) => { if (!await gconfirm(`Reboot ${name}? Its tunnels are down until it is back (usually under a minute).`)) return; try { await api(`/api/servers/${id}/reboot`, {method: "POST"}); toast("✓ Reboot requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -1145,7 +1154,9 @@ function cfAddModal() {
 window.cfCancel = () => { cf.edit = null; cf.sub = null; cf.add = null; refresh(); };
 window.cfSync = async () => { toast("Asking the probe… (up to a minute)"); try { await api("/api/configs/sync", {method: "POST"}); toast("✓ Synced", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.cfAdd = async e => { e.preventDefault(); const f = new FormData(e.target); try { const r = await api("/api/configs", {method: "POST", body: JSON.stringify({uri: f.get("uri").trim(), name: f.get("name").trim(), group: f.get("group").trim()})}); toast("✓ " + r.name + " added — the probe tests it within a minute", "ok"); cf.edit = null; cf.add = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
-window.cfDel = async (id, name) => { if (!await gconfirm(`Delete ${name} from the probe? Its history goes too.`)) return; try { await api(`/api/configs/${id}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); cf.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.cfDel = async (id, name) => {   // one config goes at once, no question asked (Delete all still asks)
+  const row = document.querySelector(`[data-cf="${id}"]`); if (row) row.remove();
+  try { await api(`/api/configs/${id}`, {method: "DELETE"}); toast(`✓ ${name} deleted`, "ok"); cf.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };
 window.cfSpeed = async id => { toast("Measuring… (1–3 minutes)"); try { await api(`/api/configs/${id}/speedtest`, {method: "POST"}); toast("✓ Measured", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.cfCopy = async id => { try { const r = await api(`/api/configs/${id}/uri`); await navigator.clipboard.writeText(r.uri); toast("✓ Link copied", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.cfEdit = id => { cf.open = id; cf.edit = id; refresh(); };
@@ -1247,17 +1258,31 @@ window.cfSubManage = async group => {
     cfSubRender();
   } catch (e) { toast("✕ " + e.message, "bad"); }
 };
+/* the nodes of a subscription fall into categories by themselves: country nodes, then families like TCP-1…5 or Cloud-1…4, single ones under Other */
+function subCategory(name) {
+  if (cfFlag(name)) return "Countries";
+  const stem = String(name || "").replace(/[\s_-]*\d+(\.\d+)?\s*(GB|TB|MB)?$/i, "").replace(/[\s_-]+$/, "").trim();
+  return stem || "Other";
+}
 function cfSubRender() {
   const s = cf.subEdit; if (!s) return;
   const on = n => !s.excluded.includes(n.name);      // ticked = wanted: stays ticked after a delete, a sync loads it again
+  const cats = {};
+  s.nodes.forEach((n, i) => { const c = subCategory(n.name); (cats[c] = cats[c] || []).push(i); });
+  Object.keys(cats).forEach(c => { if (c !== "Countries" && c !== "Other" && cats[c].length < 2) { (cats.Other = cats.Other || []).push(...cats[c]); delete cats[c]; } });
+  const order = Object.keys(cats).sort((a, b) => (a === "Countries" ? -1 : b === "Countries" ? 1 : a === "Other" ? 1 : b === "Other" ? -1 : cats[b].length - cats[a].length || a.localeCompare(b)));
+  const node = i => { const n = s.nodes[i]; return `<label><input type="checkbox" data-i="${i}" ${on(n) ? "checked" : ""}> ${cfFlag(n.name)}${esc(n.name)} <small class="mut">${esc(n.proto)}${n.cfg ? ` · <b class="${n.cfg.status === "up" ? "gw-ok" : "err"}">${n.cfg.status}</b>${n.cfg.ping_ms != null && n.cfg.status === "up" ? " " + Math.round(n.cfg.ping_ms) + " ms" : ""}` : " · not on the probe"}</small></label>`; };
+  const group = c => `<div class="sub-cat" data-cat="${esc(c)}"><h4>${esc(c)} <small class="mut">${cats[c].filter(i => on(s.nodes[i])).length} of ${cats[c].length}</small><span class="sp"></span><a class="mut" onclick="subCatTick(this, true)">tick all</a><a class="mut" onclick="subCatTick(this, false)">untick all</a></h4><div class="ob-inbounds sub-nodes">${cats[c].map(node).join("")}</div></div>`;
   showModal(`<b>✎ ${esc(s.group)}</b> <span class="pill">${s.nodes.filter(on).length} of ${s.nodes.length} wanted · ${s.nodes.filter(n => n.cfg).length} on the probe</span>`,
     `<div class="toolbar"><a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=true)">tick all</a> · <a class="mut" onclick="document.querySelectorAll('#sub-nodes input').forEach(x=>x.checked=false)">untick all</a><span class="sp"></span><small class="mut">ticked = wanted: the group follows the subscription and keeps these. Unticked ones are removed and never come back with a sync.</small></div>
-     <div class="ob-inbounds sub-nodes" id="sub-nodes" style="max-height:50vh">${s.nodes.map((n, i) => `<label><input type="checkbox" data-i="${i}" ${on(n) ? "checked" : ""}> ${cfFlag(n.name)}${esc(n.name)} <small class="mut">${esc(n.proto)}${n.cfg ? ` · ${n.cfg.status}${n.cfg.ping_ms != null && n.cfg.status === "up" ? " " + Math.round(n.cfg.ping_ms) + " ms" : ""}` : " · not on the probe"}</small></label>`).join("")}</div>
+     <div id="sub-nodes" class="sub-cats" style="max-height:56vh;overflow:auto">${order.map(group).join("")}</div>
      <div class="frm-act"><button class="pri" onclick="cfSubApply()">Apply</button></div>`, "wide");
 }
+window.subCatTick = (a, val) => a.closest(".sub-cat").querySelectorAll("input").forEach(x => x.checked = val);
 window.cfSubApply = async () => {
   const s = cf.subEdit; if (!s) return;
-  const ticked = [...document.querySelectorAll("#sub-nodes input")].map(x => x.checked), unticked = s.nodes.filter((n, i) => !ticked[i]);
+  const ticked = []; document.querySelectorAll("#sub-nodes input").forEach(x => { ticked[+x.dataset.i] = x.checked; });   // by index: the boxes are shown in categories, not in subscription order
+  const unticked = s.nodes.filter((n, i) => !ticked[i]);
   const dropping = unticked.filter(n => n.cfg).length;
   if (dropping && !await gconfirm(`Remove ${dropping} configs of ${s.group} from the probe? They stay unticked and a sync will not bring them back.`)) return;
   toast("Applying…");
@@ -1283,7 +1308,7 @@ window.cfSubRefresh = async (id, name) => {
 window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
-const pn = {id: localStorage.getItem("nk.pn") || "", tab: "users", add: false, edit: false, users: null, uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostEdit: null, core: null, raw: false, logs: null};
+const pn = {id: localStorage.getItem("nk.pn") || "", tab: "overview", add: false, edit: false, users: null, usersKey: "", uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostsKey: "", hostEdit: null, core: null, raw: false, logs: null};
 INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
@@ -1311,11 +1336,20 @@ PAGES.panels = async () => {
       <div class="tile"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
       <div class="tile"><small>Load</small><b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b><span>cpu · ram ${s.mem_pct ?? "—"}%</span></div>
       <div class="tile"><small>Traffic</small><b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b><span>↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}</span></div></div>
-    <div class="tabs" style="margin-bottom:10px">${["users", "hosts"].map(t => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-    <div id="pn-body"><div class="mut">loading…</div></div>`;
+    <div class="tabs" style="margin-bottom:10px">${[["overview", "Overview"], ["users", `Users${s.users_total != null ? ` <small>${s.users_total}</small>` : ""}`], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>
+    <div id="pn-body">${pn.tab === "overview" ? pnOverviewHtml(p) : '<div class="loading"><i class="spin"></i><span>Loading…</span></div>'}</div>`;
+  // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
 };
+function pnOverviewHtml(p) {
+  const s = p.stats || {}, nodes = p.nodes || [], bad = nodes.filter(n => !["connected", "healthy", "disabled"].includes(n.status));
+  return `<div class="card"><h3>Nodes <span class="sp"></span><span class="pill ${bad.length ? "err" : "ok"}">${bad.length ? bad.length + " not connected" : nodes.length ? "all connected" : "none"}</span></h3>${pnNodesHtml(p)}</div>
+    <div class="card"><h3>About this panel</h3><div class="kv"><div><span>type</span> ${esc(p.type)} · <span>version</span> ${esc(p.version || "—")}</div><div><span>users</span> ${s.users_total ?? "—"} total · ${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now</div>
+      <div><span>test config</span> ${s.test_user ? `<b class="gw-ok">✓</b> <span class="mono">${esc(s.test_user)}</span> — kept alive and measured on the probe as the group <b>${esc(p.name)}</b>` : "none yet — press <b>Test config on probe</b> above"}</div>
+      <div><span>checked</span> ${p.checked_at ? ago(p.checked_at) + " ago" : "never"} · every 2 minutes${p.last_error ? ` · <span class="err">${esc(p.last_error)}</span>` : ""}</div></div>
+      <small class="mut">Open <b>Users</b> for the user list (search, status filter, edit, bulk actions) and <b>Hosts</b> for the address:port of every subscription link — they are read from the panel only when you open them.</small></div>`;
+}
 function fmtB(b) { if (b == null) return "—"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i >= 3 ? 2 : 0) + " " + u[i]; }
 function pnNodesHtml(p) {
   const rows = (p.nodes || []).map(n => { const ok = ["connected", "healthy", "disabled"].includes(n.status); return `<tr class="${ok ? (n.status === "disabled" ? "" : "up") : "down"}"><td class="name">${esc(n.name)}</td><td><span class="st ${ok ? (n.status === "disabled" ? "" : "up") : "down"}">${esc(n.status || "?")}</span></td><td class="mut">${esc(n.address)}</td><td class="mut">${esc(n.xray || "")}</td><td class="mut" title="${esc(n.message)}">${esc(n.message).slice(0, 60)}${n.fails ? ` <span class="pill err">${n.fails} checks</span>` : ""}</td>
@@ -1323,8 +1357,9 @@ function pnNodesHtml(p) {
   return `<table class="tbl"><colgroup><col style="width:18%"><col style="width:12%"><col style="width:18%"><col style="width:10%"><col><col style="width:150px"></colgroup><thead><tr><th>Node</th><th>Status</th><th>Address</th><th>Xray</th><th>Message</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="mut">no nodes</td></tr>'}</tbody></table>
     ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
 }
-window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.edit = pn.add = false; refresh(); };
+window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };
 window.pnTab = t => { pn.tab = t; pn.user = null; pn.hostEdit = null; refresh(); };
+window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added — making its test config on the probe…", "ok"); pn.add = false; pn.id = String(r.panel.id); refresh(); pnTestConfig(r.panel.id, r.panel.name, true); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnTestConfig = async (id, name, quiet) => { if (!quiet) toast("Creating the test user and importing its subscription… (up to a minute)"); try { const r = await api(`/api/panels/${id}/test-config`, {method: "POST"}); toast(`✓ ${name}: ${r.added.length} configs added to the probe${r.skipped.length ? ", " + r.skipped.length + " already there" : ""} (user ${r.username})`, "ok"); refresh(); } catch (e) { toast("✕ test config of " + name + ": " + e.message, "bad"); } };
@@ -1336,10 +1371,13 @@ window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (awa
 /* users */
 async function pnUsersLoad(id) {
   const box = $("#pn-body"); if (!box) return;
-  try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=40&sort=-created_at`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const key = `${id}|${pn.uq}|${pn.ustatus}|${pn.uoff}`;
+  if (!pn.users || pn.usersKey !== key) {   // read from the panel only when the question changed, not on every refresh
+    try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=40&sort=-created_at`); pn.usersKey = key; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
-  box.innerHTML = `<div class="toolbar"><input id="pn-uq" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut">${u.total} users</span><span class="sp"></span>
+  box.innerHTML = `<div class="toolbar"><input id="pn-uq" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
       <button class="sm" onclick="pnBulk(${id}, 'disable')">Disable ticked</button><button class="sm" onclick="pnBulk(${id}, 'enable')">Enable ticked</button><button class="sm" onclick="pnBulkRenew(${id})">Renew ticked…</button>
       <button class="sm" ${pn.uoff ? "" : "disabled"} onclick="pn.uoff=Math.max(0,pn.uoff-40);refresh()">‹</button><button class="sm" ${pn.uoff + 40 < u.total ? "" : "disabled"} onclick="pn.uoff+=40;refresh()">›</button></div>
     <table class="tbl"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:170px"></colgroup>
@@ -1369,8 +1407,10 @@ window.pnBulkRenew = async id => { const d = await gprompt("Add how many days to
 /* hosts */
 async function pnHostsLoad(id) {
   const box = $("#pn-body"); if (!box) return;
-  try { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  box.innerHTML = `<div class="toolbar"><span class="mut">${pn.hosts.length} hosts — the address:port that goes into every subscription link</span><span class="sp"></span><button class="sm" onclick="pnHostsToggle(${id}, true)">Disable ticked</button><button class="sm" onclick="pnHostsToggle(${id}, false)">Enable ticked</button></div>
+  if (!pn.hosts || pn.hostsKey !== String(id)) {
+    try { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; pn.hostsKey = String(id); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  }
+  box.innerHTML = `<div class="toolbar"><span class="mut">${pn.hosts.length} hosts — the address:port that goes into every subscription link</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span><button class="sm" onclick="pnHostsToggle(${id}, true)">Disable ticked</button><button class="sm" onclick="pnHostsToggle(${id}, false)">Enable ticked</button></div>
     <table class="tbl"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:14%"><col><col style="width:8%"><col style="width:10%"><col style="width:150px"></colgroup>
       <thead><tr><th></th><th>Remark</th><th>Inbound</th><th>Address</th><th>Port</th><th>State</th><th></th></tr></thead>
       <tbody>${pn.hosts.map(h => `<tr class="${h.disabled ? "" : "up"}"><td><input type="checkbox" class="pn-hchk" value="${esc(h.key)}"></td><td class="name">${esc(h.remark)}</td><td class="mut">${esc(h.tag)}</td><td class="mut">${esc(h.address)}</td><td class="num">${h.port ?? "—"}</td><td><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span></td>
@@ -1842,8 +1882,12 @@ PAGES.settings = async () => {
       <form class="frm one" onsubmit="return saveRules(event)">
         <label>Tunnel: failed checks in a row before DOWN <input name="tunnel_fails" type="number" min="1" max="20" value="${al.tunnel_fails}"></label>
         <label>Server: failed samples in a row before OFFLINE <input name="server_fails" type="number" min="1" max="20" value="${al.server_fails}"></label>
+        <label>Config: failed checks in a row before DOWN <input name="config_fails" type="number" min="1" max="20" value="${al.config_fails == null ? 3 : al.config_fails}"></label>
+        <label>…and down for at least (minutes) <small>(a blip shorter than this says nothing)</small><input name="min_down_minutes" type="number" min="0" max="1440" value="${al.min_down_minutes == null ? 4 : al.min_down_minutes}"></label>
         <label>UP message only after stable for (seconds) <input name="up_stable_seconds" type="number" min="0" max="86400" value="${al.up_stable_seconds}"></label>
-        <label>Remind while still down every (hours) <input name="remind_hours" type="number" min="1" max="168" value="${al.remind_hours}"></label>
+        <label>Remind while still down every (hours) <small>(0 = never: one DOWN, one UP, nothing in between)</small><input name="remind_hours" type="number" min="0" max="168" value="${al.remind_hours == null ? 0 : al.remind_hours}"></label>
+        <label>Flapping guard: outages within an hour before going quiet <small>(0 = off)</small><input name="flap_max" type="number" min="0" max="50" value="${al.flap_max == null ? 3 : al.flap_max}"></label>
+        <label>…then say nothing about it for (hours) <input name="flap_quiet_hours" type="number" min="1" max="168" value="${al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours}"></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
       <small class="mut">Muted: ${(al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false)">unmute</a>`).join(" · ") || "nothing"}. Mute a tunnel from its detail row.</small></div>
 
@@ -2042,7 +2086,7 @@ const formJson = (e, nums = [], bools = []) => { const f = new FormData(e.target
 const put = async (e, path, body, okText) => { e.preventDefault(); try { await api(path, {method: "PUT", body: JSON.stringify(body)}); toast(okText, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveTelegram = e => put(e, "/api/settings/telegram", formJson(e, [], ["enabled"]), "✓ Telegram saved");
 window.testTelegram = async () => { toast("Sending…"); try { await api("/api/settings/telegram/test", {method: "POST"}); toast("✓ Test message sent", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["tunnel_fails", "server_fails", "up_stable_seconds", "remind_hours"]), "✓ Rules saved");
+window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["tunnel_fails", "server_fails", "config_fails", "min_down_minutes", "up_stable_seconds", "remind_hours", "flap_max", "flap_quiet_hours"]), "✓ Rules saved");
 window.muteRef = async (ref, on) => { try { await api(`/api/settings/alerts/mute?ref=${encodeURIComponent(ref)}&muted=${on}`, {method: "POST"}); toast(on ? "✓ Muted " + ref : "✓ Unmuted " + ref, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.addWindow = async e => { e.preventDefault(); const f = new FormData(e.target); const b = {start: Math.floor(new Date(f.get("start") + "Z").getTime() / 1000), end: Math.floor(new Date(f.get("end") + "Z").getTime() / 1000), note: f.get("note")}; try { await api("/api/maintenance", {method: "POST", body: JSON.stringify(b)}); toast("✓ Window added", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.delWindow = async id => { try { await api(`/api/maintenance/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };

@@ -54,8 +54,12 @@ def telegram_test():
 class RulesIn(BaseModel):
     tunnel_fails: int = Field(3, ge=1, le=20)
     server_fails: int = Field(2, ge=1, le=20)
+    config_fails: int = Field(3, ge=1, le=20)
+    min_down_minutes: int = Field(4, ge=0, le=1440)      # down for at least this long before DOWN
     up_stable_seconds: int = Field(600, ge=0, le=86400)
-    remind_hours: int = Field(6, ge=1, le=168)
+    remind_hours: int = Field(0, ge=0, le=168)            # 0 = never remind
+    flap_max: int = Field(3, ge=0, le=50)                 # outages per hour before FLAPPING + quiet; 0 = off
+    flap_quiet_hours: int = Field(6, ge=1, le=168)
 
 
 @router.get("/settings/alerts")

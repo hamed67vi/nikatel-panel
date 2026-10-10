@@ -36,8 +36,9 @@ customers. Open: a real-life run of every tunnel engine on a spare pair, and the
 ## What it does
 
 **Dashboard** - infrastructure health rows (servers, tunnels, configs, panels, bot), a Problems
-box with the live state and *Fix all*, the activity feed with categories, Arvan Radar (the state of
-the Iranian data centres and routes, refreshed in the background).
+box with the live state and *Fix all*, the activity feed with categories, and Data centres: one row
+per hosting provider your servers sit in (found from each address's registry data) with servers up,
+tunnels up and whether the provider's own website answers.
 
 **Nodes** - Iran and foreign servers with facts every 2 minutes (CPU, RAM, disk, swap, load,
 traffic, busiest process, Abuse-Defender rules), 24 h charts, a console with presets, connect with

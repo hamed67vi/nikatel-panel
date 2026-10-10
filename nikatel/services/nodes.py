@@ -300,17 +300,55 @@ def reboot(server_id: int) -> None:
 
 
 # ------------------------------------------------------------------ country of foreign servers
-def _geo_sources(host: str) -> list[tuple[str, str, str, str]]:
+_RIR_DOMAINS = ("ripe.net", "arin.net", "apnic.net", "lacnic.net", "afrinic.net", "iana.org", "rdap.org", "example.com")
+
+
+def provider_from(source: str, d: dict) -> dict:
+    """Pure: the hosting provider (name, domain, asn) one geo service tells about an address."""
+    p = {"isp": "", "org": "", "domain": "", "asn": ""}
+
+    if source == "ipwho":
+        c = d.get("connection") or {}
+        p.update(isp=str(c.get("isp") or ""), org=str(c.get("org") or ""), domain=str(c.get("domain") or ""), asn=str(c.get("asn") or ""))
+    elif source == "ip-api":
+        m = re.match(r"AS(\d+)\s*(.*)", str(d.get("as") or ""))
+        p.update(isp=str(d.get("isp") or ""), org=str(d.get("org") or ""), asn=m.group(1) if m else "")
+    elif source == "ipinfo":
+        m = re.match(r"AS(\d+)\s*(.*)", str(d.get("org") or ""))
+        p.update(org=m.group(2) if m else str(d.get("org") or ""), asn=m.group(1) if m else "")
+
+    p = {k: v.strip() for k, v in p.items()}
+    p["domain"] = p["domain"].lower().removeprefix("www.")
+    return p
+
+
+def domain_from_rdap(doc: dict) -> str:
+    """Pure: the provider's domain from the e-mail addresses in an RDAP answer (the registries' own domains are not it)."""
+    found: dict[str, int] = {}
+
+    def walk(x):
+        if isinstance(x, dict):
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            if len(x) >= 4 and x[0] == "email" and isinstance(x[3], str) and "@" in x[3]:
+                dom = x[3].rsplit("@", 1)[1].lower().strip(". ")
+
+                if dom and not any(dom == r or dom.endswith("." + r) for r in _RIR_DOMAINS):
+                    found[dom] = found.get(dom, 0) + 1
+
+            for v in x:
+                walk(v)
+
+    walk(doc)
+    return max(found.items(), key=lambda kv: kv[1])[0] if found else ""
+
+
+def _geo_sources(host: str) -> list[dict]:
     out = []
 
-    def add(name, code, country="", city=""):
-        code = str(code or "").strip().upper()
-
-        if re.fullmatch(r"[A-Z]{2}", code):
-            out.append((name, code, str(country or "").strip(), str(city or "").strip()))
-
     for name, url, pick in (
-        ("ip-api", f"http://ip-api.com/json/{host}?fields=status,country,countryCode,city", lambda d: (d.get("countryCode"), d.get("country"), d.get("city")) if d.get("status") == "success" else None),
+        ("ip-api", f"http://ip-api.com/json/{host}?fields=status,country,countryCode,city,isp,org,as", lambda d: (d.get("countryCode"), d.get("country"), d.get("city")) if d.get("status") == "success" else None),
         ("ipwho", f"https://ipwho.is/{host}", lambda d: (d.get("country_code"), d.get("country"), d.get("city")) if d.get("success") else None),
         ("ipinfo", f"https://ipinfo.io/{host}/json", lambda d: (d.get("country"), "", d.get("city"))),
         ("country.is", f"https://api.country.is/{host}", lambda d: (d.get("country"), "", "")),
@@ -318,41 +356,59 @@ def _geo_sources(host: str) -> list[tuple[str, str, str, str]]:
         try:
             d = httpx.get(url, timeout=8, headers={"User-Agent": "nikatel-panel", "Accept": "application/json"}).json()
             r = pick(d) if isinstance(d, dict) else None
-
-            if r:
-                add(name, *r)
         except (httpx.HTTPError, ValueError):
             continue
+
+        if not r:
+            continue
+
+        code = str(r[0] or "").strip().upper()
+
+        if re.fullmatch(r"[A-Z]{2}", code):
+            out.append({"source": name, "code": code, "country": str(r[1] or "").strip(), "city": str(r[2] or "").strip(), **provider_from(name, d)})
 
     return out
 
 
-def lookup(host: str) -> dict:
-    """Country / city by majority vote of up to four services."""
+def _rdap_domain(host: str) -> str:
+    try:
+        d = httpx.get(f"https://rdap.org/ip/{host}", timeout=8, follow_redirects=True, headers={"User-Agent": "nikatel-panel", "Accept": "application/rdap+json, application/json"}).json()
+        return domain_from_rdap(d) if isinstance(d, dict) else ""
+    except (httpx.HTTPError, ValueError):
+        return ""
+
+
+def lookup(host: str, want_provider: bool = True) -> dict:
+    """Country / city by majority vote of up to four services, plus the hosting provider (name, website domain, ASN)."""
     src = _geo_sources(host)
     votes: dict[str, list] = {}
 
     for s in src:
-        votes.setdefault(s[1], []).append(s)
+        votes.setdefault(s["code"], []).append(s)
+
+    first = lambda key: next((s[key] for s in src if s.get(key)), "")
+    provider = {"provider": first("isp") or first("org"), "domain": first("domain"), "asn": first("asn")}
+
+    if want_provider and src and not provider["domain"]:
+        provider["domain"] = _rdap_domain(host)
 
     if not votes:
-        return {"country_code": "", "country": "", "city": "", "sources": 0, "total": len(src)}
+        return {"country_code": "", "country": "", "city": "", "sources": 0, "total": len(src), **provider}
 
-    code, group = max(votes.items(), key=lambda kv: (len(kv[1]), any(x[0] == "ip-api" for x in kv[1])))
-    return {"country_code": code, "country": next((x[2] for x in group if x[2]), ""), "city": next((x[3] for x in group if x[3]), ""), "sources": len(group), "total": len(src)}
+    code, group = max(votes.items(), key=lambda kv: (len(kv[1]), any(x["source"] == "ip-api" for x in kv[1])))
+    return {"country_code": code, "country": next((x["country"] for x in group if x["country"]), ""), "city": next((x["city"] for x in group if x["city"]), ""), "sources": len(group), "total": len(src), **provider}
 
 
 def geo_refresh(only_missing: bool = False) -> list[dict]:
+    """Country of the foreign servers and the hosting provider of every server (`only_missing`: just the ones not known yet)."""
     with session() as db:
-        targets = [(s.id, s.host, s.country) for s in db.scalars(select(Server).where(Server.role == "foreign")) if not (only_missing and s.country)]
+        targets = [(s.id, s.host, s.country, s.role) for s in db.scalars(select(Server))
+                   if not only_missing or (s.role == "foreign" and not s.country) or not ((s.extra or {}).get("geo") or {}).get("provider_at")]
 
     changes = []
 
-    for sid, host, old in targets:
+    for sid, host, old, role in targets:
         loc = lookup(host)
-
-        if not loc["country_code"] or (loc["sources"] < 2 and old):
-            continue
 
         with session() as db:
             s = db.get(Server, sid)
@@ -360,19 +416,32 @@ def geo_refresh(only_missing: bool = False) -> list[dict]:
             if s is None:
                 continue
 
-            if s.country != loc["country_code"]:
-                changes.append({"name": s.name, "from": s.country, "to": loc["country_code"], "city": loc["city"]})
-
-            s.country = loc["country_code"]
             d = dict(s.extra or {})
-            d["geo"] = {"country": loc["country"], "city": loc["city"], "agree": f"{loc['sources']}/{loc['total']}", "at": int(time.time())}
+            g = dict(d.get("geo") or {})
+
+            if loc["provider"] or loc["domain"]:
+                g.update(provider=loc["provider"], domain=loc["domain"], asn=loc["asn"])
+
+            g["provider_at"] = int(time.time())
+
+            if role == "foreign" and loc["country_code"] and not (loc["sources"] < 2 and old):
+                if s.country != loc["country_code"]:
+                    changes.append({"name": s.name, "from": s.country, "to": loc["country_code"], "city": loc["city"]})
+
+                s.country = loc["country_code"]
+                g.update(country=loc["country"], city=loc["city"], agree=f"{loc['sources']}/{loc['total']}", at=int(time.time()))
+            elif loc["country"]:
+                g.setdefault("country", loc["country"])
+                g.setdefault("city", loc["city"])
+
+            d["geo"] = g
             s.extra = d
 
     return changes
 
 
 def geo_missing_job() -> None:
-    """Fill in the country of foreign servers that have none (runs once an hour, does nothing when all are known)."""
+    """Fill in the country of foreign servers that have none and the provider of servers that have none (runs once an hour)."""
     geo_refresh(only_missing=True)
 
 

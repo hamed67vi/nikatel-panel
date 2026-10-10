@@ -37,6 +37,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (7, "servers.extra column", lambda db: _add_column(db, "servers", "extra", "JSON DEFAULT '{}'")),
     (8, "configs.meta column", lambda db: _add_column(db, "configs", "meta", "JSON DEFAULT '{}'")),
     (9, "subscriptions.excluded column", lambda db: _add_column(db, "subscriptions", "excluded", "JSON DEFAULT '[]'")),
+    (10, "alert_states flapping guard columns", lambda db: [_add_column(db, "alert_states", c, "INTEGER DEFAULT 0") for c in ("flips", "flap_since", "quiet_until")]),
 ]
 
 

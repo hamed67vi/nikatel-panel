@@ -140,6 +140,9 @@ class AlertState(Base):
     bad_since: Mapped[int] = mapped_column(Integer, default=0)
     good_since: Mapped[int] = mapped_column(Integer, default=0)
     last_notice: Mapped[int] = mapped_column(Integer, default=0)
+    flips: Mapped[int] = mapped_column(Integer, default=0)          # DOWNs inside the current flapping window
+    flap_since: Mapped[int] = mapped_column(Integer, default=0)
+    quiet_until: Mapped[int] = mapped_column(Integer, default=0)    # flapping guard: nothing is said until then
 
 
 class Maintenance(Base):

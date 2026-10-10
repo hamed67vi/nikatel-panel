@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import nodes
+from ..services import dcs, nodes
 from ..ssh import SSHError
 
 router = APIRouter(tags=["nodes"], dependencies=[Depends(current_user)])
@@ -15,6 +15,12 @@ def _wrap(fn, *a, **kw):
         raise HTTPException(400, str(e))
     except (SSHError, RuntimeError) as e:
         raise HTTPException(502, str(e))
+
+
+@router.get("/datacentres")
+def datacentres():
+    """The providers our servers are hosted at: servers and tunnels there, and whether the provider's website answers."""
+    return {"ok": True, **dcs.fetch()}
 
 
 @router.get("/nodes/presets")

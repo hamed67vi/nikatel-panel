@@ -45,7 +45,9 @@ nikatel/
     configs.py       configs on the probe, subscriptions, group sync; probe.py probe API client; probe_install.py
     panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
     core.py          Xray core outbounds of a panel with backup / rollback
-    radar.py         Arvan Radar (state of the Iranian data centres), cached, refreshed in the background
+    radar.py         Arvan Radar (state of the Iranian data centres), cached, refreshed in the background (API only)
+    dcs.py           the hosting providers our servers sit in (from the geo lookup's provider / domain), servers and
+                     tunnels per provider, the provider's website checked from the panel server (cached)
     shopbot.py       the shop bot's server over SSH: services, switches, users, SQL, backups, DB import
     shopbot_admin.py the bot's administration: payments (approve / decline like the bot), orders, users, plans,
                      categories, servers, discounts, gifts, broadcasts, tickets, texts (overrides), settings
@@ -72,7 +74,7 @@ docs/              operations, development, logging, roadmap, adr/
 ## 2b. The UI, page by page
 
 * **Dashboard** - health rows, Problems box (live state, Fix with AI, Fix all), activity feed with
-  categories, Arvan Radar box; auto-refresh.
+  categories, Data centres box (providers, servers and tunnels there, site check); auto-refresh.
 * **Nodes** - Iran / Foreign / Gateway & outbounds. More / Edit / Delete on every row; the More window
   has overview, charts, tunnels, filtering, tools (console, connect, reboot, Abuse-Defender, geo, launchers).
 * **Tunnels** - List (More window with quality and ports, Health / Restart / Rebuild), Create, Test (pair

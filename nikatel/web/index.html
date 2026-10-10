@@ -39,14 +39,14 @@
 
 <div id="app" class="app hidden">
   <aside class="side">
-    <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
+    <div class="brand"><i class="logo">N</i><div><b>NIKATEL</b><small>control panel</small></div></div>
     <nav id="nav">
-      <a data-page="dashboard" class="on" data-icon="▦" data-short="Home"><span>▦ Dashboard</span></a>
-      <a data-page="nodes" data-icon="🖥" data-short="Nodes"><span>🖥 Nodes</span> <i id="n-servers"></i></a>
-      <a data-page="tunnels" data-icon="⇄" data-short="Tunnels"><span>⇄ Tunnels</span> <i id="n-tunnels"></i></a>
-      <a data-page="configs" data-icon="🧩" data-short="Panels"><span>🧩 Panels</span> <i id="n-configs"></i></a>
-      <a data-page="bot" data-icon="🛒" data-short="Bot"><span>🛒 Shop bot</span></a>
-      <a data-page="settings" data-icon="⚙" data-short="Settings"><span>⚙ Settings</span></a>
+      <a data-page="dashboard" class="on" data-icon="▦" data-short="Home"><i class="ic">▦</i><span>Dashboard</span></a>
+      <a data-page="nodes" data-icon="🖥" data-short="Nodes"><i class="ic">🖥</i><span>Nodes</span><i id="n-servers" class="cnt"></i></a>
+      <a data-page="tunnels" data-icon="⇄" data-short="Tunnels"><i class="ic">⇄</i><span>Tunnels</span><i id="n-tunnels" class="cnt"></i></a>
+      <a data-page="configs" data-icon="🧩" data-short="Panels"><i class="ic">🧩</i><span>Panels</span><i id="n-configs" class="cnt"></i></a>
+      <a data-page="bot" data-icon="🛒" data-short="Bot"><i class="ic">🛒</i><span>Shop bot</span></a>
+      <a data-page="settings" data-icon="⚙" data-short="Settings"><i class="ic">⚙</i><span>Settings</span></a>
     </nav>
     <div class="side-foot">
       <span id="ro-badge" class="badge hidden">read-only</span>
@@ -62,12 +62,12 @@
       <div><h1 id="title">Dashboard</h1><p id="subtitle" class="mut"></p></div>
       <div class="head-r"><span id="updated" class="hidden"></span><button id="mode-btn" onclick="toggleMode()" title="Day / night">☀</button></div>
     </header>
+    <div id="statusbar" class="statusbar" title="Messages of the panel: click for the last ones" onclick="sbHistory()"><i class="sb-dot"></i><span class="sb-text">Ready</span><span class="sb-time"></span></div>
     <div id="subnav" class="subnav hidden"></div>
     <section id="page" class="page"></section>
   </main>
 </div>
 
-<div id="statusbar" class="statusbar" title="Messages of the panel: click for the last ones" onclick="sbHistory()"><i class="sb-dot"></i><span class="sb-text">Ready</span><span class="sb-time"></span></div>
 <script src="/static/app.js"></script>
 </body>
 </html>

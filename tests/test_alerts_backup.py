@@ -41,6 +41,36 @@ def test_decide_up_only_after_stable_and_reminders():
     assert v == "up" and t.alerted is False and t.fails == 0
 
 
+def test_decide_waits_for_the_minimum_down_time_and_never_reminds_when_off():
+    rules = Rules(fails=1, up_stable_seconds=60, remind_seconds=0, min_bad_seconds=240)
+    t = Track()
+    t, v1 = decide(t, True, 1000, rules)           # one failed check, but only 0 s down
+    t, v2 = decide(t, True, 1120, rules)           # 2 min
+    t, v3 = decide(t, True, 1250, rules)           # 4 min 10 s -> now it counts
+    assert (v1, v2, v3) == (None, None, "down") and t.bad_since == 1000
+    t, v = decide(t, True, 90000, rules)           # down for a day: no reminder, reminders are off
+    assert v is None
+    t, v = decide(t, False, 90100, rules)
+    t, v = decide(t, False, 90200, rules)
+    assert v == "up"
+    # a blip: bad for 2 minutes, then good again -> not a word
+    t, v = decide(Track(), True, 2000, rules); t, v2 = decide(t, True, 2100, rules); t, v3 = decide(t, False, 2200, rules); t, v4 = decide(t, False, 2300, rules)
+    assert (v, v2, v3, v4) == (None, None, None, None) and not t.alerted
+
+
+def test_decide_flapping_guard_says_it_once_then_keeps_quiet():
+    rules = Rules(fails=1, up_stable_seconds=0, remind_seconds=0, min_bad_seconds=0, flap_max=3, flap_window=3600, flap_quiet=6 * 3600)
+    t, out = Track(), []
+    for i in range(10):                             # down / up every 5 minutes for 50 minutes
+        t, v = decide(t, i % 2 == 0, 1000 + i * 300, rules)
+        out.append(v)
+    assert out[:4] == ["down", "up", "down", "up"]
+    assert out[4] == "flapping" and t.quiet_until == 1000 + 4 * 300 + 6 * 3600
+    assert all(v is None for v in out[5:])         # quiet: no more DOWN / UP about it
+    t, v = decide(t, True, t.quiet_until + 10, rules)
+    assert v == "down" and t.flips == 1            # the quiet period is over and the window started again
+
+
 def test_maintenance_window():
     assert in_maintenance(100, [(50, 150)]) and not in_maintenance(200, [(50, 150)])
 
@@ -71,7 +101,9 @@ def test_settings_api_masks_token(client):
 
 def test_alert_rules_mute_and_maintenance_api(client):
     r = client.put("/api/settings/alerts", json={"tunnel_fails": 4, "server_fails": 2, "up_stable_seconds": 300, "remind_hours": 2})
-    assert r.status_code == 200 and r.json()["tunnel_fails"] == 4
+    assert r.status_code == 200 and r.json()["tunnel_fails"] == 4 and r.json()["flap_max"] == 3 and r.json()["min_down_minutes"] == 4
+    assert client.put("/api/settings/alerts", json={"remind_hours": 0, "flap_max": 0}).status_code == 200      # reminders and the guard can be switched off
+    assert client.put("/api/settings/alerts", json={"remind_hours": -1}).status_code == 422
     assert client.post("/api/settings/alerts/mute?ref=t1").json()["muted"] == ["t1"]
     assert client.post("/api/settings/alerts/mute?ref=t1&muted=false").json()["muted"] == []
     now = int(time.time())

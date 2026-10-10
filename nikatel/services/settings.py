@@ -11,7 +11,7 @@ from ..models import Setting
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "telegram": {"enabled": False, "token": "", "chat_id": ""},
-    "alerts": {"tunnel_fails": 3, "server_fails": 2, "up_stable_seconds": 600, "remind_hours": 6, "muted": []},
+    "alerts": {"tunnel_fails": 3, "server_fails": 2, "config_fails": 3, "min_down_minutes": 4, "up_stable_seconds": 600, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True},
     # auto-repair stays off until the old panel no longer repairs the same tunnels
