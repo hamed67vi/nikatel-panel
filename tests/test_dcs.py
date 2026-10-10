@@ -33,6 +33,10 @@ def test_group_servers_by_provider_with_tunnels():
     fi = rows[1]
     assert fi["domain"] == "example-host.com" and fi["city"] == "Helsinki" and fi["tunnels_total"] == 2 and fi["tunnels_bad"] == 1
     assert rows[2]["total"] == 1 and rows[2]["domain"] == ""
+    # the same autonomous system under two spellings is one provider
+    same = dcs.group([{"name": "a", "role": "foreign", "online": True, "provider": "Example AG", "domain": "example.de", "asn": "24940"},
+                      {"name": "b", "role": "foreign", "online": True, "provider": "Example GmbH", "domain": "example.com", "asn": "24940"}])
+    assert len(same) == 1 and same[0]["total"] == 2 and same[0]["name"] == "Example AG" and same[0]["domain"] == "example.de"
 
 
 def test_datacentres_api(client, monkeypatch):

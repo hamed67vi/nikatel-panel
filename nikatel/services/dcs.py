@@ -25,17 +25,21 @@ _lock = threading.Lock()
 
 
 def _key(s: dict) -> str:
+    """One provider = one autonomous system when known ("Hetzner Online AG" and "... GmbH" are the same network), else its domain, else its name."""
+    if s.get("asn"):
+        return "as" + str(s["asn"])
+
     return (s.get("domain") or s.get("provider") or "unknown").lower()
 
 
 def group(servers: list[dict], tunnels: list[dict] | None = None) -> list[dict]:
-    """Pure: servers [{name, role, online, country, provider, domain, city}] -> one row per provider.
+    """Pure: servers [{name, role, online, country, provider, domain, asn, city}] -> one row per provider.
     tunnels [{name, state, iran, foreign}] add how many tunnels through that provider's servers are not up."""
     rows: dict[str, dict] = {}
 
     for s in servers:
         k = _key(s)
-        r = rows.setdefault(k, {"key": k, "name": s.get("provider") or s.get("domain") or "unknown provider", "domain": s.get("domain") or "", "country": "", "city": "", "roles": set(), "servers": [], "online": 0, "total": 0, "tunnels_total": 0, "tunnels_bad": 0})
+        r = rows.setdefault(k, {"key": k, "name": s.get("provider") or s.get("domain") or "unknown provider", "domain": s.get("domain") or "", "asn": str(s.get("asn") or ""), "country": "", "city": "", "roles": set(), "servers": [], "online": 0, "total": 0, "tunnels_total": 0, "tunnels_bad": 0})
 
         if not r["domain"] and s.get("domain"):
             r["domain"] = s["domain"]
@@ -119,7 +123,7 @@ def sites(domains: list[str]) -> dict[str, dict]:
 def fetch() -> dict:
     with session() as db:
         servers = [{"name": s.name, "role": s.role, "online": s.online, "country": s.country or ("IR" if s.role == "iran" else ""), "city": ((s.extra or {}).get("geo") or {}).get("city", ""),
-                    "provider": ((s.extra or {}).get("geo") or {}).get("provider", ""), "domain": ((s.extra or {}).get("geo") or {}).get("domain", "")}
+                    "provider": ((s.extra or {}).get("geo") or {}).get("provider", ""), "domain": ((s.extra or {}).get("geo") or {}).get("domain", ""), "asn": ((s.extra or {}).get("geo") or {}).get("asn", "")}
                    for s in db.scalars(select(Server).where(Server.enabled.is_(True)))]
         tunnels = [{"name": t.name, "state": t.state, "iran": t.iran.name, "foreign": t.foreign.name} for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
 
