@@ -779,3 +779,6 @@ html.bye #app::after { content: ""; position: fixed; inset: 0; pointer-events: n
 @keyframes bye-app { 0% { opacity: 1; transform: none; filter: none; } 100% { opacity: 0; transform: perspective(1200px) translateY(60px) rotateX(18deg) scale(.86); filter: blur(10px) saturate(1.4); } }
 @keyframes bye-side { to { transform: perspective(900px) translateX(-80px) rotateY(32deg); opacity: .2; } }
 @keyframes bye-sweep { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+
+.sc-ver:empty { display: none; }
+
