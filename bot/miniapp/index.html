@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>فروشگاه</title>
+<script src="https://telegram.org/js/telegram-web-app.js?58"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css?v=2.0.0">
+</head>
+<body>
+<header class="hdr" id="hdr">
+  <div class="who"><div class="ava" id="ava">👤</div><div><div class="name" id="hello">سلام 👋</div><div class="sub" id="sub">در حال اتصال…</div></div></div>
+  <button class="wal" id="walbtn" onclick="setTab('wallet')"><small>کیف پول</small><b id="wallet">—</b><span>تومان</span></button>
+</header>
+
+<main id="app" class="app"><div class="loading"><i class="spin"></i>در حال بارگذاری…</div></main>
+
+<nav class="nav" id="nav">
+  <button data-t="home" class="on" onclick="setTab('home')"><i>🏠</i>خانه</button>
+  <button data-t="buy" onclick="setTab('buy')"><i>🛍</i>خرید</button>
+  <button data-t="services" onclick="setTab('services')"><i>📦</i>سرویس‌ها</button>
+  <button data-t="wallet" onclick="setTab('wallet')"><i>💳</i>کیف پول</button>
+  <button data-t="more" onclick="setTab('more')"><i>☰</i>بیشتر</button>
+</nav>
+
+<div class="sheet-wrap" id="sheet" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheet-body"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
+<script src="app.js?v=2.0.0"></script>
+</body>
+</html>

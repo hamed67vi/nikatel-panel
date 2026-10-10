@@ -222,12 +222,22 @@ echo "SNI $ip own=$(c '@HOST@') control=$(c example.com)"
 
     # the shop bot (PHP + MariaDB on the bot server): services, cron, counts, states, logs - as JSON.
     # DB credentials are read on that server from its own env file; nothing secret leaves it.
+    # the Mini App installed next to the bot: which files, their fingerprints, the version in index.html, whether the PHP parses, the public URL
+    "bot_miniapp_info": (r"""cd '@DIR@' 2>/dev/null || { echo NO_DIR; exit 0; }
+[ -d app ] || { echo NOT_INSTALLED; exit 0; }
+for f in api.php index.html app.js app.css; do if [ -f "app/$f" ]; then echo "FILE $f $(stat -c %s "app/$f") $(sha256sum "app/$f" | cut -c1-16)"; else echo "MISSING $f"; fi; done
+grep -oE 'app\.js\?v=[0-9.]+' app/index.html 2>/dev/null | head -1 | sed 's/.*v=/VERSION /'
+[ -f app/api.php ] && { php -l app/api.php >/dev/null 2>&1 && echo PHP_OK || echo PHP_BAD; }
+grep -oE "botUrl *= *'[^']+'" baseInfo.php 2>/dev/null | head -1 | sed "s/.*'\(.*\)'/URL \1/"
+[ -f settings/miniapp_error.log ] && echo "ERRORS $(grep -c . settings/miniapp_error.log) $(tail -n 1 settings/miniapp_error.log | cut -c1-200)"; true
+""", {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$"}),
+
     "bot_info": (r"""set -a; [ -f '@ENV@' ] && . '@ENV@'; set +a
 Q() { mysql --batch --raw -N --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "$1" 2>/dev/null; }
 echo "INSTALLED $([ -d '@DIR@' ] && [ -n "$DB_PASS" ] && echo 1 || echo 0)"
 for u in php8.3-fpm php8.2-fpm php-fpm mariadb mysql caddy nginx; do echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
 echo "CRON $([ -f /etc/cron.d/nikabot ] && grep -c '^[^#]' /etc/cron.d/nikabot || echo 0)"
-echo "COUNTS $(Q "SELECT CONCAT((SELECT COUNT(*) FROM users),' ',(SELECT COUNT(*) FROM orders_list),' ',(SELECT COUNT(*) FROM pays WHERE state='pending'),' ',(SELECT COUNT(*) FROM pays WHERE state IN ('confirmed','approved')),' ',(SELECT COUNT(*) FROM server_plans),' ',(SELECT COUNT(*) FROM server_config))")"
+echo "COUNTS $(Q "SELECT CONCAT((SELECT COUNT(*) FROM users),' ',(SELECT COUNT(*) FROM orders_list),' ',(SELECT COUNT(*) FROM pays WHERE state='have_sent'),' ',(SELECT COUNT(*) FROM pays WHERE state IN ('confirmed','approved')),' ',(SELECT COUNT(*) FROM server_plans),' ',(SELECT COUNT(*) FROM server_config))")"
 echo "STAGE $(mysql -N -e "SELECT COUNT(*) FROM nikabot_stage.users" 2>/dev/null || echo -)"
 echo "STATES $(Q "SELECT value FROM setting WHERE type='BOT_STATES' LIMIT 1" | head -c 4000)"
 echo "PANELS $(Q "SELECT CONCAT(id,'|',type,'|',SUBSTRING_INDEX(SUBSTRING_INDEX(panel_url,'/',3),'/',-1)) FROM server_config" | tr '\n' ' ')"
@@ -748,6 +758,13 @@ echo '@B64@' | base64 -d | curl -s -m 20 -X POST "https://api.telegram.org/bot$T
 php -r 'exit(json_decode(file_get_contents("@PATH@.tmp"), true) === null ? 1 : 0);' || { unlink '@PATH@.tmp'; echo BAD_JSON; exit 1; }
 mv -f '@PATH@.tmp' '@PATH@'; chown www-data:www-data '@PATH@' 2>/dev/null; chmod 0640 '@PATH@'; echo "WROTE @PATH@"
 """, {"PATH": r"^/var/www/[A-Za-z0-9._-]{1,40}/settings/(text|button)_overrides\.json$", "B64": _B64}),
+
+    # the Mini App (bot/miniapp in this repository) goes to <bot dir>/app/ one file at a time; PHP is syntax-checked before it replaces the old file
+    "bot_miniapp_put": (r"""set -e; mkdir -p "$(dirname '@PATH@')"; echo '@B64@' | base64 -d > '@PATH@.tmp'
+case '@PATH@' in *.php) php -l '@PATH@.tmp' >/dev/null 2>&1 || { unlink '@PATH@.tmp'; echo PHP_SYNTAX; exit 1; };; esac
+[ -f '@PATH@' ] && cp -f '@PATH@' '@PATH@.prev' || true
+mv -f '@PATH@.tmp' '@PATH@'; chown www-data:www-data '@PATH@' 2>/dev/null || true; chmod 0644 '@PATH@'; echo "WROTE @PATH@ $(stat -c %s '@PATH@')"
+""", {"PATH": r"^/var/www/[A-Za-z0-9._-]{1,40}/app/(api\.php|index\.html|app\.js|app\.css)$", "B64": _B64}),
 
     # make the bot read settings/text_overrides.json on top of its values.php: one line in config.php, put there once, checked with php -l
     "bot_texts_hook": (r"""set -e; cd '@DIR@'

@@ -195,3 +195,35 @@ def test_admin_api_routes(client, monkeypatch, db):
     monkeypatch.setattr(adm, "run_script", lambda node, name, params=None, timeout=40: "BACKUP manual-20261010-120000.sql.gz 2048\n")
     b = client.get("/api/shopbot/backups").json()["backups"]
     assert b[0]["name"] == "manual-20261010-120000.sql.gz" and b[0]["size"] == 2048 and b[0]["at"] > 0
+
+
+def test_miniapp_status_compares_the_bot_server_with_the_repository(monkeypatch):
+    local = {n: adm._fingerprint((adm.miniapp_dir() / n).read_bytes()) for n in adm.MINIAPP_FILES}
+    assert len(local) == 4 and adm._version_in((adm.miniapp_dir() / "index.html").read_text(encoding="utf-8"))    # the repository ships the four files
+    out = "\n".join(f"FILE {n} 1000 {h}" for n, h in local.items()) + "\nVERSION 2.0.0\nPHP_OK\nURL https://shop.example/bot/\n"
+    st = adm.parse_miniapp_info(out, local)
+    assert st["installed"] and st["up_to_date"] and st["php_ok"] and st["url"] == "https://shop.example/bot/app/" and st["version"] == "2.0.0"
+    st = adm.parse_miniapp_info("FILE api.php 900 0000000000000000\nMISSING app.css\nPHP_BAD\nERRORS 3 miniapp buy: panel refused\n", local)
+    assert st["installed"] and not st["up_to_date"] and st["php_ok"] is False and st["errors"] == 3 and "panel refused" in st["last_error"]
+    assert [f["current"] for f in st["files"]] == [False, False]
+    assert not adm.parse_miniapp_info("NOT_INSTALLED\n", local)["installed"]
+
+
+def test_miniapp_deploy_sends_every_file_through_the_reviewed_action(monkeypatch, db):
+    calls = []
+
+    def fake_action(node, name, params=None, timeout=90):
+        calls.append((name, dict(params or {})))
+        return f"WROTE {params['PATH']} 1\n"
+
+    monkeypatch.setattr(adm, "run_action", fake_action)
+    monkeypatch.setattr(adm, "run_script", lambda node, name, params=None, timeout=40: "FILE api.php 1 x\nVERSION 2.0.0\nPHP_OK\n")
+    monkeypatch.setattr(shopbot, "conf", lambda: {"host": "9.9.9.9", "dir": "/var/www/mybot", "env": "/opt/mybot/db.env", "ssh_user": "root", "ssh_port": 22})
+    st = adm.miniapp_deploy()
+    rules = ssh.ACTIONS["bot_miniapp_put"][1]
+    assert [c[0] for c in calls] == ["bot_miniapp_put"] * 4
+    for _, p in calls:
+        assert re.match(rules["PATH"], p["PATH"]) and re.match(rules["B64"], p["B64"]), p["PATH"]
+        name = p["PATH"].rsplit("/", 1)[1]
+        assert base64.b64decode(p["B64"]) == (adm.miniapp_dir() / name).read_bytes()
+    assert st["installed"] and st["version"] == "2.0.0"

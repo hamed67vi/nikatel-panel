@@ -7,13 +7,15 @@ go through the bot's own token on the bot server (the panel never holds it)."""
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import time
+from pathlib import Path
 
 from ..db import session
 from ..log import get_logger
-from ..ssh import run_action, run_script
+from ..ssh import SSHError, run_action, run_script
 from . import shopbot
 from .events import emit
 
@@ -117,7 +119,8 @@ def _event(level: str, text: str, ref: str = "") -> None:
 
 # ------------------------------------------------------------------ payments (card to card and the others the admin confirms)
 def pays(state: str = "pending", page: int = 0, q: str = "") -> dict:
-    where = {"pending": 'p.state = "pending"', "approved": 'p.state = "approved"', "declined": 'p.state = "declined"', "all": "1 = 1"}.get(state, 'p.state = "pending"')
+    # the bot's states: pending = asked, no receipt yet; have_sent = receipt sent, waits for an admin; approved / declined; expired_*
+    where = {"confirm": 'p.state = "have_sent"', "pending": 'p.state = "pending"', "approved": 'p.state = "approved"', "declined": 'p.state = "declined"', "all": "1 = 1"}.get(state, 'p.state = "have_sent"')
     e = re.sub(r"[;'\"`\\%]", "", str(q or ""))
 
     if e:
@@ -253,11 +256,11 @@ def user_message(userid: str, text: str) -> dict:
 
 
 # ------------------------------------------------------------------ plans
-PLAN_FIELDS = {"title": str, "catid": int, "server_id": int, "days": float, "volume": float, "price": int, "acount": int, "limitip": int, "active": int, "descr": str, "type": str, "protocol": str, "inbound_id": int, "step": int}
+PLAN_FIELDS = {"title": str, "catid": int, "server_id": int, "days": float, "volume": float, "price": int, "acount": int, "limitip": int, "active": int, "descr": str, "type": str, "protocol": str, "inbound_id": int, "step": int, "custom_sni": str}
 
 
 def plans() -> list[dict]:
-    return read("SELECT p.id, p.title, p.catid, c.title AS category, p.server_id, s.title AS server, p.days, p.volume, p.price, p.acount, p.limitip, p.active, p.descr, p.type, p.protocol, p.inbound_id, p.step, p.date, "
+    return read("SELECT p.id, p.title, p.catid, c.title AS category, p.server_id, s.title AS server, p.days, p.volume, p.price, p.acount, p.limitip, p.active, p.descr, p.type, p.protocol, p.inbound_id, p.step, p.date, p.custom_sni, "
                 "(SELECT COUNT(*) FROM orders_list o WHERE o.fileid = p.id) AS sold FROM server_plans p LEFT JOIN server_categories c ON c.id = p.catid LEFT JOIN server_info s ON s.id = p.server_id ORDER BY p.catid, p.price, p.id")
 
 
@@ -742,6 +745,93 @@ def backups() -> list[dict]:
             rows.append({"name": name, "size": size, "at": time.mktime(time.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S")) if m else 0})
 
     return sorted(rows, key=lambda r: r["name"], reverse=True)
+
+
+# ------------------------------------------------------------------ the Mini App (bot/miniapp in this repository) on the bot server
+MINIAPP_FILES = ("api.php", "index.html", "app.js", "app.css")
+
+
+def miniapp_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "bot" / "miniapp"
+
+
+def _fingerprint(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _version_in(html: str) -> str:
+    m = re.search(r"app\.js\?v=([0-9.]+)", html)
+    return m.group(1) if m else ""
+
+
+def parse_miniapp_info(out: str, local: dict[str, str]) -> dict:
+    """Pure: the bot_miniapp_info output + the fingerprints of the repository's files -> status."""
+    st: dict = {"installed": False, "files": [], "version": "", "php_ok": None, "url": "", "errors": 0, "last_error": "", "up_to_date": False}
+
+    for ln in out.splitlines():
+        p = ln.split(maxsplit=3)
+
+        if not p:
+            continue
+
+        if p[0] == "FILE" and len(p) >= 4:
+            st["installed"] = True
+            st["files"].append({"name": p[1], "size": int(p[2]) if p[2].isdigit() else 0, "hash": p[3], "current": local.get(p[1]) == p[3]})
+        elif p[0] == "MISSING" and len(p) >= 2:
+            st["files"].append({"name": p[1], "size": 0, "hash": "", "current": False})
+        elif p[0] == "VERSION" and len(p) >= 2:
+            st["version"] = p[1]
+        elif p[0] in ("PHP_OK", "PHP_BAD"):
+            st["php_ok"] = p[0] == "PHP_OK"
+        elif p[0] == "URL" and len(p) >= 2:
+            st["url"] = p[1].rstrip("/") + "/app/"
+        elif p[0] == "ERRORS" and len(p) >= 2:
+            st["errors"] = int(p[1]) if p[1].isdigit() else 0
+            st["last_error"] = ln.split(maxsplit=2)[2] if len(ln.split(maxsplit=2)) > 2 else ""
+
+    st["up_to_date"] = st["installed"] and len(st["files"]) == len(MINIAPP_FILES) and all(f["current"] for f in st["files"])
+    return st
+
+
+def _local_files() -> dict[str, bytes]:
+    d = miniapp_dir()
+    return {name: (d / name).read_bytes() for name in MINIAPP_FILES if (d / name).is_file()}
+
+
+def miniapp_status() -> dict:
+    c = shopbot.conf()
+    out = run_script(shopbot._node(), "bot_miniapp_info", {"DIR": c["dir"]}, timeout=40)
+    local = _local_files()
+    st = parse_miniapp_info(out, {k: _fingerprint(v) for k, v in local.items()})
+    st["local_version"] = _version_in(local.get("index.html", b"").decode("utf-8", "replace"))
+    try:
+        st["mini_app_switch"] = setting_get("BOT_STATES").get("miniAppState", "on") == "on"
+    except (SSHError, RuntimeError, ValueError):   # the switch is a detail; the status must still come back
+        st["mini_app_switch"] = None
+
+    return st
+
+
+def miniapp_deploy() -> dict:
+    """Copies the repository's Mini App into <bot dir>/app/ over the reviewed action, one file at a time (php -l before replacing)."""
+    c = shopbot.conf()
+    local = _local_files()
+
+    if len(local) != len(MINIAPP_FILES):
+        raise RuntimeError("the Mini App files are missing from this installation of the panel (bot/miniapp)")
+
+    written = []
+
+    for name in MINIAPP_FILES:
+        out = run_action(shopbot._node(), "bot_miniapp_put", {"PATH": f"{c['dir']}/app/{name}", "B64": base64.b64encode(local[name]).decode()}, timeout=90)
+
+        if "WROTE" not in out:
+            raise RuntimeError(f"{name}: " + (out.strip().splitlines() or ["not written"])[-1][:160])
+
+        written.append(name)
+
+    _event("info", "Mini App installed / updated on the bot server (" + ", ".join(written) + ").", "")
+    return miniapp_status()
 
 
 COMMANDS = [{"command": "start", "description": "منوی اصلی"}, {"command": "buy", "description": "خرید اشتراک"}, {"command": "mysubs", "description": "اشتراک‌های من"},

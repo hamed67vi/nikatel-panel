@@ -64,11 +64,15 @@ always installable; a milestone ends with a tag.
 - [x] #40 Configs like the old panel (group bar, inline tunnel / CDN port, flags, stat cards) and Settings in eight tidy tabs
 
 ## M8 · The other tunnel engines and the last details
-- [ ] #41 Create tunnel: BackPack (reverse, all transports), BackPack Direct (udp / quic / pck / sni / xdi), Paqet, Chisel - ported from the old panel, bugs fixed, remove / rebuild per type
-- [ ] #42 Tunnel test over every engine, grouped (Backhaul / BackPack / BackPack Direct / Paqet / Chisel), with cleanup
+- [x] #41 Create tunnel: BackPack (reverse, all transports), BackPack Direct (udp / quic / pck / sni / xdi), Paqet, Chisel - ported from the old panel, bugs fixed, remove / rebuild per type
+- [x] #42 Tunnel test over every engine, grouped (Backhaul / BackPack / BackPack Direct / Paqet / Chisel), with cleanup
 - [ ] #43 Real test of every tunnel type on a pair without users; fix what breaks
-- [ ] #44 Shop bot: the panel's own bot pages, fully customised (no dependency on the bot's original layout)
+- [x] #44 Shop bot: the panel's own bot pages, fully customised (payments, orders, users, plans, categories, servers, discounts, gifts, broadcast, tickets, texts, settings, tools)
 - [ ] #45 Language switch (English / Persian)
+- [x] #46 Telegram Mini App for the bot's customers (`bot/miniapp/`): services, buying from the wallet, top-up with receipt, renew / extra volume / days, tickets, referral, apps, wheel; installed from the panel
+- [x] #47 Smart repair rewritten: one attention list, Fix all with AI, Explain; the dashboard's Problems box
+- [x] #48 UI robustness: page switches never show the old page, automatic retry, status bar, fixed log boxes, hover fade, phone layout; CSP and session-only API docs
+- [ ] #49 Import the real bot database (the operator provides it) and run the bot pages + Mini App against it
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

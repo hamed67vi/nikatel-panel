@@ -3,6 +3,7 @@ status and sales numbers, bot switches (BOT_STATES), users of the bot, tables, a
 backups, and the one-time import of the real database from the staging copy."""
 from __future__ import annotations
 
+import base64
 import json
 import re
 import time
@@ -223,7 +224,20 @@ def user_action(action: str, userid: str, value=None) -> dict:
         if not 0 <= v <= 100:
             raise ValueError("discount is a percent between 0 and 100")
 
-        write(f"UPDATE users SET discount_percent = {v} WHERE userid = \"{uid}\"")
+        # the bot keeps this field as JSON ({"normal": %, "plans": {...}, "servers": {...}}); the other keys are kept
+        rows = query(f'SELECT discount_percent FROM users WHERE userid = "{uid}"')
+        cur: dict = {}
+
+        try:
+            cur = json.loads(rows[0]["discount_percent"]) if rows and rows[0].get("discount_percent") not in (None, "", "NULL") else {}
+        except ValueError:
+            cur = {}
+
+        if not isinstance(cur, dict):
+            cur = {}
+
+        cur["normal"] = v
+        write(f'UPDATE users SET discount_percent = FROM_BASE64("{base64.b64encode(json.dumps(cur).encode()).decode()}") WHERE userid = "{uid}"')
     elif action == "wallet":
         write(f"UPDATE users SET wallet = GREATEST(0, COALESCE(wallet, 0) + {int(float(value or 0))}) WHERE userid = \"{uid}\"")
     elif action == "wallet_set":

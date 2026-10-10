@@ -432,3 +432,13 @@ def backups():
 @router.post("/shopbot/commands")
 def set_commands():
     return {"ok": True, **_wrap(adm.set_commands)}
+
+
+@router.get("/shopbot/miniapp")
+def miniapp():
+    return {"ok": True, **_wrap(adm.miniapp_status)}
+
+
+@router.post("/shopbot/miniapp/deploy")
+def miniapp_deploy():
+    return {"ok": True, **_wrap(adm.miniapp_deploy)}

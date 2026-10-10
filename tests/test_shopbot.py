@@ -67,6 +67,8 @@ def test_info_users_and_import_through_api(client, monkeypatch):
                 return "id\tuserid\tname\twallet\n1\t555\tAli\t1000\n"
             if "SELECT 1 AS x" in sql:
                 return "x\n1\n"
+            if "discount_percent FROM users" in sql:
+                return "discount_percent\n{\"normal\": 5, \"plans\": {\"3\": 20}}\n"
             if "SELECT userid, name" in sql:
                 return "userid\tname\twallet\n555\tAli\t6000\n"
             if "BOT_STATES" in sql:
@@ -104,6 +106,12 @@ def test_info_users_and_import_through_api(client, monkeypatch):
     r = client.post("/api/shopbot/users/action", json={"action": "wallet", "userid": "555", "value": 5000})
     assert r.status_code == 200 and r.json()["user"]["wallet"] == "6000"
     assert any(c[1] == "bot_sql" and "wallet = GREATEST" in c[2]["SQL"] for c in calls)
+    r = client.post("/api/shopbot/users/action", json={"action": "discount", "userid": "555", "value": 15})
+    assert r.status_code == 200
+    sql = next(c[2]["SQL"] for c in calls if c[1] == "bot_sql" and "discount_percent = FROM_BASE64" in c[2]["SQL"])
+    import base64 as _b
+    doc = __import__("json").loads(_b.b64decode(sql.split('FROM_BASE64("')[1].split('")')[0]))
+    assert doc == {"normal": 15, "plans": {"3": 20}}              # the other keys the bot keeps are untouched
     assert client.post("/api/shopbot/users/action", json={"action": "drop", "userid": "555"}).status_code == 400
     assert client.post("/api/shopbot/users/action", json={"action": "ban", "userid": "x;y"}).status_code == 400
 

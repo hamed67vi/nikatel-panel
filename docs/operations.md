@@ -67,3 +67,26 @@ server was really reinstalled, delete its line from `/var/lib/nikatel/data/known
 
 **Turn read-only off** (phase 3): `NIKATEL_READ_ONLY=false` in `/etc/nikatel/nikatel.env`,
 `systemctl restart nikatel`. On purpose this cannot be done from the UI.
+
+## The shop bot server
+
+Settings → Shop bot holds where the bot runs: host, SSH user / port, the bot directory (the one
+with `baseInfo.php`), the env file and the public URL of `bot.php`. The panel's SSH key must be in
+that server's `authorized_keys`. What the Shop bot pages need there:
+
+| | |
+|---|---|
+| `<env file>` (e.g. `/opt/<bot>/db.env`) | `DB_USER=…`, `DB_PASS=…`, `DB_NAME=…` - read only by the scripts, never copied |
+| `<bot dir>/baseInfo.php` | the bot's own config; the token is read from it on the bot server for Telegram calls |
+| `<bot dir>/settings/text_overrides.json`, `button_overrides.json` | written by Texts; the first save adds one `include` line to `config.php` (a backup `config.php.bak-texts-*` is kept, `php -l` checked) |
+| `/opt/<bot>/backups/` | dumps made by *Dump DB* and before every import (`gzip`) |
+| `<bot dir>/app/` | the Mini App (`api.php`, `index.html`, `app.js`, `app.css`); previous files kept as `.prev`; its errors in `<bot dir>/settings/miniapp_error.log` |
+
+**Install / update the Mini App**: Shop bot → Tools → Mini App → *Install* / *Update* (the files
+come from this repository on the panel server), or by hand from a checkout:
+`bash scripts/deploy-miniapp.sh root@<bot host> /var/www/<bot>`. The bot shows the button when
+`BOT_STATES.miniAppState` is on (Shop bot → Settings → Extras) and `$botUrl` is set in
+`baseInfo.php`; the app's address is `<botUrl>/app/`.
+
+**The real database**: Shop bot → Overview → *Import the real database* copies every table of the
+staging database over the live one (dump first; broadcast queues left out).
