@@ -232,6 +232,13 @@ html[data-size="small"] body { font-size: 12px; } html[data-size="large"] body {
 html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] *::after { animation: none !important; transition: none !important; }
 #mode-btn { width: 36px; padding: 0; }
 /* the glass window */
+#ask .overlay { z-index: 90; align-items: center; padding: 20px; background: rgba(4,6,18,.62); backdrop-filter: blur(10px); }
+.ask-box { width: min(440px, 100%); padding: 22px 24px 18px; border-radius: 22px; text-align: center; display: grid; gap: 14px; justify-items: center; animation: rise .22s var(--ease) both; }
+.ask-ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 21px; color: #fff; background: var(--grad); box-shadow: 0 8px 22px rgba(124,131,255,.4); } .ask-ic.bad { background: linear-gradient(135deg, #ff6b8b, #ff9a6b); box-shadow: 0 8px 22px rgba(255,107,139,.4); }
+.ask-text { font-size: 14px; line-height: 1.55; white-space: pre-line; max-width: 100%; word-break: break-word; }
+.ask-in { width: 100%; text-align: center; }
+.ask-act { display: flex; gap: 10px; justify-content: center; margin-top: 4px; width: 100%; } .ask-act button { min-width: 110px; height: 36px; }
+button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(255,107,139,.35), inset 0 1px 0 rgba(255,255,255,.35); }
 .overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center; padding: 48px 20px; background: rgba(4,6,18,.55); backdrop-filter: blur(6px); overflow: auto; animation: fade .2s var(--ease) both; }
 .modal { width: min(840px, 100%); max-height: calc(100vh - 96px); display: flex; flex-direction: column; border-radius: 22px; background: var(--glass-hi); border: 1px solid rgba(255,255,255,.2); backdrop-filter: var(--blur); box-shadow: 0 30px 80px rgba(0,0,0,.5), var(--edge); animation: rise .28s var(--ease) both; }
 .modal.wide { width: min(960px, 100%); }
