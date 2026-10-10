@@ -4,10 +4,13 @@ from nikatel.services import netwatch
 
 
 def test_net_level():
-    assert netwatch.net_level(0, 0, 0) == "ok" and netwatch.net_level(0, 3, 5) == "ok"
-    assert netwatch.net_level(0, 9, 2) == "weak" and netwatch.net_level(25, 0, 0) == "bad" and netwatch.net_level(0, 0, 30) == "bad" and netwatch.net_level(0, 40, 0) == "bad"
-    assert netwatch.net_level(100, 0, 0) == "down" and netwatch.net_level(None, None, None) == "unknown"
-    assert netwatch.net_level(None, 0, 2) == "ok"                                      # an anchor that did not answer ping is not a cut by itself
+    assert netwatch.net_level(0, [0, 0], [0, 0]) == "ok" and netwatch.net_level(0, [3, 0], [5, 2]) == "ok"
+    assert netwatch.net_level(0, [9, 0], [2, 0]) == "weak" and netwatch.net_level(25, [0], [0, 0]) == "bad"
+    assert netwatch.net_level(0, [0, 0], [30, 40]) == "bad" and netwatch.net_level(0, [40, 50], [0]) == "bad"              # most targets lossy
+    assert netwatch.net_level(0, [0, 0], [100, 0]) == "weak"                                                                # one dead target of two is that target's own trouble
+    assert netwatch.net_level(0, [0, 0], [100, 0, 60]) == "bad" and netwatch.net_level(0, [], [70]) == "bad" and netwatch.net_level(0, [], [40]) == "weak"
+    assert netwatch.net_level(100, [0], [0]) == "down" and netwatch.net_level(None, [], []) == "unknown"
+    assert netwatch.net_level(None, [0], [2]) == "ok"                                                                       # an anchor that did not answer ping is not a cut by itself
 
 
 def test_the_tunnels_together_tell_which_server_is_disturbed():

@@ -193,3 +193,12 @@ def test_judge_trusts_the_users_path_over_the_ping():
     assert r[("203.0.113.5", 8075)] == ("404", 123.4) and r[("203.0.113.6", 80)] == ("000", None)
     s = parse_side("UNIT a.service active\nDATA 8075 404 0.2500\nNOW 5")
     assert s.data_code == "404" and s.data_ms == 250.0
+
+
+def test_a_long_lossy_stretch_is_not_called_flapping():
+    from nikatel.services.tunnels import flap
+
+    state, why = flap("up", [False] * 9)
+    assert state == "degraded" and "lost packets in 9 of the last 10" in why and "flaps" not in why                         # bad for a long time: not switching on and off
+    state, why = flap("up", [False, True, False, True, False, True, False, True, False])
+    assert state == "degraded" and "the link flaps" in why                                                                  # alternating: flapping

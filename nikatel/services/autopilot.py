@@ -755,6 +755,24 @@ def outage_state() -> dict:
     return {"servers_offline": offline, "tunnels_down": down, "tunnels": len(tunnels), "storm": storm}
 
 
+def repairing_names() -> list[str]:
+    """The tunnels a smart repair or a restart is working on right now (a read-only look is not counted)."""
+    with _LOCK:
+        busy = dict(_BUSY)
+
+    names = set(actions._RUNNING)
+
+    if busy:
+        with session() as db:
+            for label, aid in busy.items():
+                e = db.get(ActionLog, aid)
+
+                if e is not None and e.action not in ("observe",) and not label.startswith(("create ", "failover ", "install ", "dns ")):
+                    names.add(label)
+
+    return sorted(names)
+
+
 def storm_now() -> bool:
     return outage_state()["storm"]
 
@@ -849,7 +867,7 @@ def auto_escalate() -> None:
     with session() as db:
         # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link): restarts do not cure those, so they climb without them
         down = [(t.id, t.name, t.state_since, t.state) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
-                if t.state == "down" or "flaps" in (t.last_error or "") or "loss" in (t.last_error or "")]
+                if t.state == "down" or any(w in (t.last_error or "") for w in ("flaps", "loss", "lost packets"))]
 
     down.sort(key=lambda r: (r[3] != "down", r[2]))      # the tunnels that are down first, the longest-down first
 

@@ -242,7 +242,12 @@ def flap(raw: str, recent_ok: list[bool]) -> tuple[str, str]:
     fails = sum(1 for ok in window if not ok)
 
     if raw == "up" and fails >= FLAP_BAD:
-        return "degraded", f"the link flaps: {fails} of the last {len(window)} checks failed, users see cuts"
+        switches = sum(1 for i in range(1, len(window)) if window[i] != window[i - 1])
+
+        if switches >= 3:        # on and off again and again
+            return "degraded", f"the link flaps: {fails} of the last {len(window)} checks failed, users see cuts"
+
+        return "degraded", f"the link lost packets in {fails} of the last {len(window)} checks (it was bad for a while and is not stable yet)"
 
     return raw, ""
 

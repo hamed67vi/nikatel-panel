@@ -29,20 +29,30 @@ MIN_TUNNELS = 2         # ... with at least this many tunnels (one tunnel alone 
 LABEL = {"ok": "fine", "weak": "weak", "bad": "disturbed", "down": "cut off"}
 
 
-def net_level(anchor: float | None, domestic: float | None, foreign: float | None) -> str:
-    """Pure: the state of an Iran server's connectivity from its mean loss (%) toward the internet, other Iran servers and foreign servers."""
-    known = [x for x in (anchor, domestic, foreign) if x is not None]
+TARGET_BAD = 25.0      # % loss toward one target that counts as bad
 
-    if not known:
+
+def _share_bad(values: list) -> bool:
+    """Pure: most of the targets that answered are lossy. One bad target among two is that target's own trouble (it may be down, or filter ping), not the server's."""
+    seen = [v for v in values if v is not None]
+    return bool(seen) and (sum(1 for v in seen if v >= TARGET_BAD) / len(seen) > 0.5 if len(seen) >= 2 else seen[0] >= 60)
+
+
+def net_level(anchor: float | None, domestic: list, foreign: list) -> str:
+    """Pure: the state of an Iran server's connectivity: mean loss (%) toward the two internet anchors, and the losses toward each other Iran server
+    and each foreign server (bad only when MOST of those targets lose packets)."""
+    seen = [x for x in [anchor] + list(domestic) + list(foreign) if x is not None]
+
+    if not seen:
         return "unknown"
 
     if anchor is not None and anchor >= 80:
         return "down"
 
-    if (anchor or 0) >= 20 or (foreign or 0) >= 25 or (domestic or 0) >= 25:
+    if (anchor or 0) >= 20 or _share_bad(domestic) or _share_bad(foreign):
         return "bad"
 
-    return "weak" if max(known) >= 8 else "ok"
+    return "weak" if max(seen) >= 8 else "ok"
 
 
 def _mean(values: list) -> float | None:
@@ -82,8 +92,11 @@ def probe_one(item) -> dict:
     def mean(group):
         return _mean([(res.get(h) or {}).get("loss") for h in targets.get(group, [])])
 
+    def each(group):
+        return [(res.get(h) or {}).get("loss") for h in targets.get(group, [])]
+
     anchor, domestic, foreign = mean("anchor"), mean("domestic"), mean("foreign")
-    return {"id": sid, "name": name, "anchor": anchor, "domestic": domestic, "foreign": foreign, "level": net_level(anchor, domestic, foreign)}
+    return {"id": sid, "name": name, "anchor": anchor, "domestic": domestic, "foreign": foreign, "level": net_level(anchor, each("domestic"), each("foreign"))}
 
 
 def probe_all() -> None:
