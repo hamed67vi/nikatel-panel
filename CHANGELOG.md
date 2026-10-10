@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.4 - 2026-10-10 - Needs attention becomes Working now
+
+* The first tab of Smart repair is **Working now**: the tunnels in trouble, each marked *repairing* (the turning wrench), *looking at it* or *watching* (the repair starts by itself when needed), with a Live button.
+
 ## 1.11.3 - 2026-10-10 - No yellow for history or latency
 
 * A tunnel whose loss is over is **up** again at once: a stretch of loss in the last checks makes it *degraded* only when the link really switches on and off. A high latency alone no longer colours a row.

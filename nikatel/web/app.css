@@ -874,3 +874,5 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 .nw-title { font-size: 12px; letter-spacing: .4px; text-transform: uppercase; color: var(--mut); }
 .work-box { border-color: rgba(124,131,255,.45); background: rgba(124,131,255,.07); } .work-line { flex: 1; min-width: 0; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .work-box .nw-row { align-items: center; }
+
+.work-chip { padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; background: rgba(124,131,255,.18); border: 1px solid rgba(124,131,255,.4); } .work-chip.watch { background: none; border-color: var(--line); font-weight: 500; }
