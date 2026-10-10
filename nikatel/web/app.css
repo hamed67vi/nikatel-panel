@@ -164,7 +164,7 @@ nav a { height: 38px; font-size: 13.5px; }
 /* core update: one row per core */
 .eng-head, .eng-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.6fr 150px; gap: 10px; align-items: center; padding: 8px 12px; }
 .eng-head { font-size: 10.5px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); font-weight: 700; padding-bottom: 4px; }
-.eng-row { border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); margin-bottom: 6px; font-size: 12.5px; } .eng-name b { display: block; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-family: var(--mono); font-size: 12px; } .eng-act { text-align: right; } .eng-st .warn { color: var(--warn); }
+.eng-row { border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); margin-bottom: 6px; font-size: 12.5px; } .eng-name b { display: block; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-family: var(--mono); font-size: 12px; } .eng-act { text-align: right; } .eng-act button { white-space: nowrap; } .eng-st .warn { color: var(--warn); }
 @media (max-width: 900px) { .eng-head { display: none; } .eng-row { grid-template-columns: 1fr 1fr; } }
 /* tunnel list like the old dense table */
 .td-type { font-size: 10.5px; font-weight: 800; letter-spacing: .5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); } .td-node b { display: block; font-size: 12.5px; } .td-node span { font-size: 10.5px; }

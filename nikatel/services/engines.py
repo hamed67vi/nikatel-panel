@@ -41,7 +41,7 @@ def parse_versions(out: str) -> dict:
             p = ln.split(" ", 2)
 
             if len(p) == 3:
-                m = re.search(r"v?\d+\.\d+(\.\d+)?", p[2])
+                m = re.search(r"v?\d+\.\d+(\.\d+)?(-[0-9A-Za-z.]+)?", p[2])   # keeps a pre-release suffix: v1.0.0-alpha.21 is not v1.0.0
                 d[p[1]] = (("v" + m.group(0).lstrip("v")) if m else ("none" if "NONE" in p[2] else p[2].strip()[:20]))
 
     return d

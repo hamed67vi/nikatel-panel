@@ -22,6 +22,9 @@ def test_ai_settings_api_masks_key(client, monkeypatch):
 def test_engine_versions_parse():
     v = engines.parse_versions("ENGINE backhaul backhaul version v0.6.5\nENGINE xray NONE\n")
     assert v == {"backhaul": "v0.6.5", "xray": "none"}
+    # a pre-release suffix stays part of the version, and a plain "1.12.0" gets its v
+    v = engines.parse_versions("ENGINE paqet Version:    v1.0.0-alpha.21\nENGINE chisel 1.12.0\nENGINE backpack v1.8.5\n")
+    assert v == {"paqet": "v1.0.0-alpha.21", "chisel": "v1.12.0", "backpack": "v1.8.5"}
 
 
 def test_engines_check_api(client, monkeypatch):
