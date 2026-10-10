@@ -72,3 +72,9 @@ def test_launcher_and_abuse_guards(client, monkeypatch):
     assert r.status_code == 200 and r.json()["rules"] == 4321
     s = client.get("/api/servers/2").json()
     assert s["extra"]["abuse"]["installed"] is True and s["extra"]["abuse"]["rules"] == 4321
+
+
+def test_gre_links_are_read_from_the_scan():
+    out = "BH iran-tcpmux-9900 server 10.1.2.1:9900 tcpmux 80,\nGRE fi-ir1 10.1.2.1/30 203.0.113.9 active\nGRE gre0 - - none\nEND\n"
+    assert nodes.parse_gre_links(out) == [{"iface": "fi-ir1", "addr": "10.1.2.1", "peer": "10.1.2.2", "unit": "active"}]
+    assert nodes.parse_gre_links("END") == []

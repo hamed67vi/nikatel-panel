@@ -478,6 +478,66 @@ def verdict(rows: list[dict]) -> tuple[str, str]:
     return "clean", f"Not filtered - all {len(done)} Iranian locations 4/4"
 
 
+def parse_gre_links(out: str) -> list[dict]:
+    """GRE lines of the scan_tunnels script -> [{iface, addr, peer, unit}]; peer = the other host of the link's /30."""
+    import ipaddress
+
+    links = []
+
+    for ln in str(out).splitlines():
+        p = ln.split()
+
+        if p and p[0] == "GRE" and len(p) >= 3 and "/" in p[2]:
+            try:
+                itf = ipaddress.ip_interface(p[2])
+                peer = next((str(h) for h in itf.network.hosts() if h != itf.ip), "")
+            except ValueError:
+                continue
+
+            links.append({"iface": p[1], "addr": str(itf.ip), "peer": peer, "unit": p[-1] if len(p) >= 5 else "none"})
+
+    return links
+
+
+def gre_check(server_id: int) -> dict:
+    """Is GRE fine on this server: every GRE link it has is up and the other end of each answers 8 of 10 pings.
+    The answer is kept in the server's extra data so the list can show it."""
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        node, name = Node(s.host, s.ssh_user, s.ssh_port), s.name
+
+    links = parse_gre_links(run_script(node, "scan_tunnels", timeout=30))
+    bad = []
+
+    for ln in links:
+        try:
+            got = re.search(r"(\d+) received", run_script(node, "gre_verify", {"IFACE": ln["iface"], "PEER": ln["peer"]}, timeout=40))
+            ok = bool(got and int(got.group(1)) >= 8)
+        except (SSHError, ValueError):
+            ok = False
+
+        if not ok:
+            bad.append(ln["iface"])
+
+    res = {"ok": bool(links) and not bad, "links": len(links), "bad": bad, "at": int(time.time()),
+           "detail": "no GRE link on this server" if not links else ("GRE not OK: " + ", ".join(bad)) if bad else f"{len(links)} GRE link(s) answer"}
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is not None:
+            d = dict(s.extra or {})
+            d["gre"] = res
+            s.extra = d
+            emit(db, "ok" if res["ok"] else "warn", "servers", f"GRE check of {name}: {res['detail']}.", name)
+
+    return res
+
+
 def filter_check(server_id: int, wait: int = 28) -> dict:
     _node, name, _role, host = _srv(server_id)
     rows = _own_rows(host)
