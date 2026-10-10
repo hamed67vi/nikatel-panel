@@ -247,7 +247,7 @@ def flap(raw: str, recent_ok: list[bool]) -> tuple[str, str]:
         if switches >= 3:        # on and off again and again
             return "degraded", f"the link flaps: {fails} of the last {len(window)} checks failed, users see cuts"
 
-        return "degraded", f"the link lost packets in {fails} of the last {len(window)} checks (it was bad for a while and is not stable yet)"
+    # a stretch of loss that is over (this check is clean, the link is not switching on and off) is history, not a fault: the tunnel is up again
 
     return raw, ""
 

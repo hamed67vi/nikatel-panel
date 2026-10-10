@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.3 - 2026-10-10 - No yellow for history or latency
+
+* A tunnel whose loss is over is **up** again at once: a stretch of loss in the last checks makes it *degraded* only when the link really switches on and off. A high latency alone no longer colours a row.
+
 ## 1.11.2 - 2026-10-10 - Working now; quiet colours under 20 % loss
 
 * Smart repair → Needs attention starts with **Working now**: every tunnel the smart repair is looking at or repairing, with the last line of its story and a Live button; the network disturbances sit under their own title.

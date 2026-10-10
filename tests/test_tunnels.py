@@ -163,10 +163,9 @@ def test_flapping_link_is_degraded_even_when_this_check_passed():
     from nikatel.services.tunnels import flap
 
     assert flap("up", [True] * 9) == ("up", "")
-    assert flap("up", [False, False, True, True, True, True, True, True, True]) == ("up", "")             # two old failures: still fine
-    state, why = flap("up", [False, False, False, True, True, True, True, True, True])
-    assert state == "degraded" and "3 of the last 10" in why                                              # three: the link flaps
-    assert flap("up", [False, False, False])[0] == "degraded"                                               # a short history counts too
+    state, why = flap("up", [False, True, False, True, True, False, True, True, True])                       # switching on and off: flapping
+    assert state == "degraded" and "the link flaps" in why and "4 of the last 10" in why or "3 of the last 10" in why
+    assert flap("up", [False, False, False, True, True, True, True, True, True]) == ("up", "")              # a stretch of loss that is over is history
     assert flap("down", [False] * 9) == ("down", "") and flap("degraded", [False] * 9) == ("degraded", "")  # a real fault keeps its reason
 
 
@@ -193,12 +192,3 @@ def test_judge_trusts_the_users_path_over_the_ping():
     assert r[("203.0.113.5", 8075)] == ("404", 123.4) and r[("203.0.113.6", 80)] == ("000", None)
     s = parse_side("UNIT a.service active\nDATA 8075 404 0.2500\nNOW 5")
     assert s.data_code == "404" and s.data_ms == 250.0
-
-
-def test_a_long_lossy_stretch_is_not_called_flapping():
-    from nikatel.services.tunnels import flap
-
-    state, why = flap("up", [False] * 9)
-    assert state == "degraded" and "lost packets in 9 of the last 10" in why and "flaps" not in why                         # bad for a long time: not switching on and off
-    state, why = flap("up", [False, True, False, True, False, True, False, True, False])
-    assert state == "degraded" and "the link flaps" in why                                                                  # alternating: flapping
