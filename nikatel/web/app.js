@@ -29,8 +29,17 @@ async function api(path, opts = {}) {
   return body;
 }
 
+/* Messages of the panel go to a status bar at the bottom (not into a pop-up in the corner): bright for a few seconds, then quiet but still readable. Click it for the last ones. */
 let toastT;
-function toast(text, cls) { const t = $("#toast"); t.textContent = text; t.className = "toast " + (cls || ""); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add("hidden"), 3500); }
+const MSGS = [];
+function toast(text, cls) {
+  const bar = $("#statusbar"); if (!bar) return;
+  MSGS.unshift({t: Date.now(), text: String(text), cls: cls || ""}); MSGS.length = Math.min(MSGS.length, 40);
+  bar.className = "statusbar live " + (cls || "");
+  $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
+  clearTimeout(toastT); toastT = setTimeout(() => bar.classList.remove("live"), 7000);
+}
+window.sbHistory = () => showModal("<b>Messages</b>", MSGS.length ? MSGS.map(m => `<div class="ev ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">No message yet.</div>');
 
 /* a tiny inline chart: values -> svg polyline, optional threshold colouring */
 function spark(values, opts = {}) {

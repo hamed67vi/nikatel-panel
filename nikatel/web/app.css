@@ -405,3 +405,12 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 /* ---- Tools window: last results */
 .res-box { padding: 4px 12px; } .res-row { display: flex; align-items: baseline; gap: 14px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12.5px; } .res-row:first-child { border-top: 0; } .res-row > .mut { flex: none; width: 130px; }
 
+
+/* ---- status bar: the panel's messages (replaces the pop-up in the corner) */
+.statusbar { position: fixed; left: 246px; right: 14px; bottom: 10px; height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 12px; background: rgba(14,16,28,.82); border: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); color: var(--mut); font-size: 12.5px; z-index: 45; cursor: pointer; transition: color .4s ease, border-color .4s ease, box-shadow .4s ease; }
+.statusbar .sb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--unk, rgba(255,255,255,.25)); flex: none; transition: background-color .4s ease, box-shadow .4s ease; }
+.statusbar .sb-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .statusbar .sb-time { flex: none; font-family: var(--mono); font-size: 11px; opacity: .6; }
+.statusbar.live { color: var(--text); border-color: rgba(124,131,255,.45); box-shadow: 0 0 18px rgba(124,131,255,.18); } .statusbar.live .sb-dot { background: var(--acc, #7c83ff); box-shadow: 0 0 10px var(--acc, #7c83ff); }
+.statusbar.ok .sb-dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); } .statusbar.bad .sb-dot { background: var(--bad); box-shadow: 0 0 10px var(--bad); } .statusbar.live.bad { border-color: rgba(255,107,139,.5); } .statusbar.live.ok { border-color: rgba(61,220,151,.45); }
+.main { padding-bottom: 54px; }
+@media (max-width: 900px) { .statusbar { left: 10px; right: 10px; } }
