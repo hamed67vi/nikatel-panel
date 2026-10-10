@@ -290,7 +290,12 @@ def auto_repair() -> None:
 
     now = int(time.time())
 
+    down.sort(key=lambda r: r[2])
+
     for tid, name, since in down:
+        if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
+            break
+
         if name in muted or now - since < int(conf.get("after_seconds", 180)) or name in _RUNNING or recent_fixes(name) >= MAX_PER_HOUR:
             continue
 

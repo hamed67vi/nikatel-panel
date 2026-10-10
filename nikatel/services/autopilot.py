@@ -31,7 +31,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Tunnel, TunnelCheck
+from ..models import ActionLog, Server, Tunnel, TunnelCheck
 from ..ssh import Node, SSHError, run_script
 from . import actions, ai, build_other, builder, detect, tunnel_test
 from . import settings as st
@@ -539,6 +539,10 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
     healed = False
 
     for step in steps:
+        if step in ("rebuild", "relink", "switch") and storm_now():
+            _say(aid, "Mass disruption right now (several servers offline or many tunnels down): this tunnel is not deleted or rebuilt. The repair waits until the servers answer, then looks again.")
+            break
+
         if step == "restart":
             ok, story = _wait(actions.fix(tunnel_id, source=source), 300)
             _say(aid, "Restart: " + (story[-1] if story else "no result"))
@@ -712,6 +716,43 @@ def ranking(tunnel_id: int) -> list[dict]:
     return [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r["id"] != snap["iran_id"]]
 
 
+# ------------------------------------------------------------------ mass disruption
+STORM_SERVERS = 3       # this many servers offline at once ...
+STORM_FRACTION = 0.25   # ... or this share of the tunnels down: a mass disruption, not one broken tunnel
+MAX_AUTO_REPAIRS = 2    # smart repairs running at the same time
+_STORM = {"told": 0}
+
+
+def outage_state() -> dict:
+    """What the repair sees of the whole system. Pure facts + the verdict `storm`."""
+    with session() as db:
+        servers = list(db.scalars(select(Server).where(Server.enabled.is_(True))))
+        tunnels = list(db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))))
+
+    offline = [s.name for s in servers if s.online is False]
+    down = [t.name for t in tunnels if t.state == "down"]
+    storm = len(offline) >= STORM_SERVERS or (len(tunnels) >= 4 and len(down) >= max(4, STORM_FRACTION * len(tunnels)))
+    return {"servers_offline": offline, "tunnels_down": down, "tunnels": len(tunnels), "storm": storm}
+
+
+def storm_now() -> bool:
+    return outage_state()["storm"]
+
+
+def _tell_storm(o: dict) -> None:
+    """Once per half hour, in the events: the repair is holding back and why."""
+    now = int(time.time())
+
+    if now - _STORM["told"] < 1800:
+        return
+
+    _STORM["told"] = now
+
+    with session() as db:
+        emit(db, "warn", "actions", f"Mass disruption: {len(o['servers_offline'])} server(s) offline, {len(o['tunnels_down'])} of {o['tunnels']} tunnels down. "
+             "No tunnel is deleted or rebuilt while it lasts; the repair waits for the servers and then restarts what did not come back by itself.", "")
+
+
 # ------------------------------------------------------------------ observing: as soon as a loss is seen
 OBSERVE_FROM = 5.0       # % loss on the link that starts the looking (the log of the Live window)
 ACT_FROM = 15.0          # % loss users feel (the degraded level): from here the repair acts
@@ -745,12 +786,15 @@ def observe_all() -> None:
 
     now = int(time.time())
 
+    if storm_now():
+        return
+
     with session() as db:
         cands = [(t.id, t.name) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))
-                 if t.state in ("degraded", "down") or ((t.detail or {}).get("loss_pct") or 0) >= OBSERVE_FROM]
+                 if t.state in ("degraded", "down") or ((t.detail or {}).get("loss_pct") or 0) >= OBSERVE_FROM][:6]
 
     for tid, name in cands:
-        if name in _BUSY:
+        if name in _BUSY or len(_BUSY) >= MAX_AUTO_REPAIRS:
             continue
 
         with session() as db:
@@ -776,13 +820,23 @@ def auto_escalate() -> None:
 
     muted = set(st.get("alerts").get("muted") or [])
     now = int(time.time())
+    out = outage_state()
+
+    if out["storm"]:                       # several servers gone: deleting or rebuilding now would do harm, not good
+        _tell_storm(out)
+        return
 
     with session() as db:
         # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link): restarts do not cure those, so they climb without them
         down = [(t.id, t.name, t.state_since, t.state) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
                 if t.state == "down" or "flaps" in (t.last_error or "") or "loss" in (t.last_error or "")]
 
+    down.sort(key=lambda r: (r[3] != "down", r[2]))      # the tunnels that are down first, the longest-down first
+
     for tid, name, since, st_ in down:
+        if len(_BUSY) >= MAX_AUTO_REPAIRS:                # a few at a time: one repair cannot starve the servers of the others
+            break
+
         # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb)
         if name in muted or name in _BUSY or now - since < (int(conf.get("after_seconds", 180)) + 120 if st_ == "down" else 600) or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
             continue

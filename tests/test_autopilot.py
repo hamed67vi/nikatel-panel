@@ -190,3 +190,43 @@ def test_a_swap_needs_a_clearly_better_candidate_and_a_quiet_moment():
     assert ap.choose_better(None, [{"kind": "x", "ok": True, "score": 40}]) is None                              # nothing good enough
     assert ap.quiet_ok(0.4, 0.3, 12.0) is True and ap.quiet_ok(9.0, 1.0, 12.0) is False       # busy: wait
     assert ap.quiet_ok(9.0, 1.0, 35.0) is True and ap.quiet_ok(None, None, 20.0) is True        # very bad loss, or no traffic data: go
+
+
+def test_mass_disruption_is_detected_and_holds_the_repair_back(client, monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+
+    with session() as db:
+        iran = [Server(name=f"i{n}", host=f"10.0.1.{n}", role="iran", online=True) for n in range(1, 5)]
+        foreign = [Server(name=f"f{n}", host=f"10.0.2.{n}", role="foreign", online=True) for n in range(1, 5)]
+        db.add_all(iran + foreign)
+        db.flush()
+
+        for n in range(4):
+            db.add(Tunnel(name=f"t{n}", type="backhaul", iran_server_id=iran[n].id, foreign_server_id=foreign[n].id, state="up"))
+
+        db.flush()
+        assert ap.outage_state()["storm"] is False
+        iran[0].online = iran[1].online = False                          # two servers gone: still a local trouble
+        db.flush()
+
+    assert ap.outage_state()["storm"] is False
+
+    with session() as db:
+        db.get(Server, iran[2].id).online = False                        # the third: a mass disruption
+
+    o = client.get("/api/autopilot/outage").json()
+    assert o["storm"] is True and len(o["servers_offline"]) == 3
+    called = []
+    monkeypatch.setattr(ap, "smart_fix_start", lambda *a, **k: called.append(a))
+    monkeypatch.setattr(ap.st, "get", lambda key: {"auto": True, "level": "switch", "after_seconds": 180} if key == "repair" else {"muted": []})
+
+    with session() as db:                                                # a tunnel that has been down a long time would be repaired in a normal day
+        t = db.scalar(__import__("sqlalchemy").select(Tunnel).where(Tunnel.name == "t3"))
+        t.state, t.state_since = "down", 1
+
+    ap.auto_escalate()
+    assert called == []                                                  # nothing is started in a storm

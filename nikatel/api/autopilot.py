@@ -55,6 +55,12 @@ def explain(body: ExplainIn):
     return {"ok": True, **_wrap(autopilot.explain, body.tunnel_id)}
 
 
+@router.get("/autopilot/outage")
+def outage():
+    """Is there a mass disruption (several servers offline / many tunnels down): the repair holds back from deleting or rebuilding."""
+    return {"ok": True, **autopilot.outage_state()}
+
+
 @router.get("/autopilot/situation")
 def situation():
     return {"ok": True, **_wrap(autopilot.situation)}

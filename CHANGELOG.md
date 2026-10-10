@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.1 - 2026-10-10 - Mass disruption
+
+* **Several servers gone at once** (3 or more offline, or a quarter of the tunnels down) is a mass disruption: the repair deletes and rebuilds nothing while it lasts (a tunnel is never removed because its server cannot be reached), says so once per half hour in the events and in a banner on Smart repair, and waits. When the servers answer again the tunnels that did not come back by themselves are restarted, a few at a time (at most 4 restarts, 2 smart repairs at once, the longest-down first).
+* A finished repair says **All done - the problem is fixed.**
+
 ## 1.10.0 - 2026-10-10 - The repair looks early and swaps gently
 
 * **Looks as soon as loss appears**: a tunnel with 5 % loss or more (or degraded / down) gets a read-only look every half hour: the diagnosis, where the loss is, and the decision, written to the tunnel's *Live* window. It only watches under 15 % (the level users feel).
