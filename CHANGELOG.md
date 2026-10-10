@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.1 - 2026-10-11 - A disabled server is shown, not hidden
+
+* Create tunnel and the tunnel test list **disabled servers too**, greyed and marked *(disabled: enable it in Nodes → Edit)*, instead of leaving them out without a word.
+
 ## 1.12.0 - 2026-10-11 - Plain status words, live
 
 * *DEGRADED* is **UNSTABLE** with a short plain reason under it (*keeps dropping*, *12% packets lost*, *port closed*, *no data*). While the smart repair works on a tunnel the status cell says *checking…* or *repairing…* with a turning spinner, live (the list looks again every 4 seconds).

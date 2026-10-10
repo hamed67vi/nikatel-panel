@@ -634,7 +634,7 @@ const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || 
 PAGES.tunnelTest = async () => {
   const [servers, kd, tl] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds"), api("/api/tunnels").catch(() => [])]);
   tt.kinds = kd.kinds;
-  const opt = (role, cur) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
+  const opt = (role, cur) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const j = tt.job, running = j && !j.done;
   $("#page").innerHTML = `<div class="card" data-tab="test"><h3>🧪 Tunnel test <span class="sp"></span><span id="tt-run">${ttRunPill()}</span></h3>
     <div class="frm">
@@ -876,7 +876,7 @@ async function buildFormHtml() {
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
   void srvOpt;
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
-  const opt = (role, name) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
+  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
   const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(name in bk.chk ? bk.chk[name] : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
   const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
