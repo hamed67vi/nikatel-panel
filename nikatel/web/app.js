@@ -74,7 +74,7 @@ const NAV_ALIAS = {servers: "nodes", gateway: "nodes", monitor: "nodes", actions
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
   nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
-  tunnels: [["list", "⇄ Tunnel list", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type."], ["create", "＋ Create tunnel", "GRE (local IPs) + Backhaul with the best settings between two of your servers."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Repairs", "Every repair the panel planned or performed, with its full story."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -87,7 +87,7 @@ function renderSub() {
   box.innerHTML = `<div class="tabs">${list.map(([k, label]) => `<button class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${label}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
-window.setSub = (page, k) => { state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.q = ""; refresh(); };
+window.setSub = (page, k) => { state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
 function go(page) {
   if (NAV_ALIAS[page]) {               // an old page name: open the page that holds it, on the right sub-tab
     const target = NAV_ALIAS[page];
@@ -117,11 +117,11 @@ async function refresh() {
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !cf.open && !cf.edit && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !cf.open && !cf.edit && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
-window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; cf.open = null; cf.edit = null; cf.subEdit = null; hideModal(); refresh(); };
+window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; hideModal(); refresh(); };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
 /* ---- dashboard */
@@ -277,8 +277,9 @@ let qT; window.setQ = v => { state.q = v.trim().toLowerCase(); clearTimeout(qT);
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
-window.cancelEdit = () => { state.edit = null; if (state.page === "tunnels" && sub("tunnels") === "create") { setSub("tunnels", "list"); return; } refresh(); };
-window.newTunnel = () => setSub("tunnels", "create");
+window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
+window.openBuild = () => { state.build = true; state.open = null; refresh(); };
+window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "list") { state.build = true; go("tunnels"); state.sub.tunnels = "list"; refresh(); } else openBuild(); };
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
@@ -307,7 +308,7 @@ PAGES.tunnels = async () => {
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
   if (s === "test") return PAGES.tunnelTest();
-  if (s === "create") { $("#page").innerHTML = `<div class="card" id="build-card"><h3>⇄ Create tunnel <span class="sp"></span><small class="mut">pick the servers, the ports and the tunnel type - the panel does the rest and removes everything when a build fails</small></h3>${await buildFormHtml()}</div>`; return; }
+  if (s === "create") { state.sub.tunnels = "list"; state.build = true; }
   return PAGES.tunnelsList();
 };
 PAGES.configs = async () => { renderSub(); return sub("configs") === "panels" ? PAGES.panels() : PAGES.configsList(); };
@@ -330,7 +331,7 @@ PAGES.tunnelTest = async () => {
     <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick a whole engine or single transports; each one is built as a temporary tunnel, measured, and removed</small></h4>
       <div class="ttgrid">${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="ttg"><div class="ttg-head"><b>${esc(g)}</b><span class="sp"></span><a onclick="ttGroup('${esc(g)}', true)">all</a><a onclick="ttGroup('${esc(g)}', false)">none</a></div>${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> <b>${esc(k.label.replace(/^[^·]+· /, ""))}</b><small class="mut">${esc(k.note)}</small></label>`).join("")}</div>`).join("")}</div></div>
     <div class="ob-sec"><h4>Which tunnel for which situation <small class="mut">— click one to open Create tunnel with it</small></h4>
-      <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" onclick="bkPick('${k}', '${t}');setSub('tunnels','create')"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
+      <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
       <small class="mut">Every engine ships with its many-users settings (multiplexing, 8 mux channels, 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels). Backhaul is measured with 30 pings over GRE and a download; the other engines through their test door, both ways. Nothing is added to your list; the story of each run stays in Repairs.</small></div></div>
     ${j ? `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
       <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
@@ -405,14 +406,16 @@ PAGES.tunnelsList = async () => {
       <td class="num" title="${esc(t.last_error || (q.latency_ms != null ? q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "%" : ""))}">${q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score}</b>` : '<span class="mut">—</span>'}${t.last_error ? `<small class="err"> ${esc(t.last_error).slice(0, 30)}</small>` : ""}</td>
       <td class="td-act"><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();state.open=${t.id};state.wtab='info';refresh();fixTunnel(${t.id}, false)" title="Diagnose and repair">Fix</button><button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Latency, jitter, loss, speed, score">Quality</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></td></tr>`; };
   const creating = false;
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="qualityAll()" title="Latency, jitter, loss and a score over the GRE link of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Find tunnels that exist on the servers but not in this list">🔍 Detect on servers</button><button class="pri" onclick="setSub('tunnels', 'create')">＋ Create tunnel</button></div>
+  $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="qualityAll()" title="Latency, jitter, loss and a score over the GRE link of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Find tunnels that exist on the servers but not in this list">🔍 Detect on servers</button><button class="pri" onclick="openBuild()">＋ Create tunnel</button></div>
     ${detectHtml()}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
     <table class="tbl lift tun-tbl"><colgroup><col style="width:13%"><col style="width:12%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:12%"><col style="width:9%"><col style="width:10%"><col><col style="width:250px"></colgroup>
       <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th>Score</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   const openT = list.find(t => t.id === state.open);
-  if (openT) showModal(`<span class="st ${openT.state}"></span><b>${esc(openT.name)}</b> <span class="mut">${esc(openT.iran_name)} ⇄ ${esc(openT.foreign_name)}</span> <span class="pill">${esc(openT.type)}${openT.transport ? " · " + esc(openT.transport) : ""}</span>`, detailRow(openT), "wide"); else hideModal();
+  if (openT) showModal(`<span class="st ${openT.state}"></span><b>${esc(openT.name)}</b> <span class="mut">${esc(openT.iran_name)} ⇄ ${esc(openT.foreign_name)}</span> <span class="pill">${esc(openT.type)}${openT.transport ? " · " + esc(openT.transport) : ""}</span>`, detailRow(openT), "wide");
+  else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b> <span class="mut">pick the servers, the ports and the type - the panel does the rest and removes everything when a build fails</span>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
+  else hideModal();
   if (state.open) loadTunnelCharts(state.open);
 };
 function detailRow(t) {
