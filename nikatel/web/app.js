@@ -793,8 +793,8 @@ const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp
   "backpack_direct:udp": "low latency, voice, games", "backpack_direct:quic": "low latency, UDP open", "backpack_direct:pck": "Iran throttles TCP (root)", "backpack_direct:sni": "Iran only allows a domain", "backpack_direct:xdi": "UDP and TCP both blocked",
   "paqet:kcp": "ordinary TCP stalls, raw sockets", "chisel:ws": "small group, simplest", "chisel:wss": "small group, looks like HTTPS"};
 async function buildFormHtml() {
-  const [servers, kd] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds")]);
-  bk.kinds = kd.kinds;
+  const [servers, kd, av] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds"), api("/api/settings/arvan").catch(() => ({}))]);
+  bk.kinds = kd.kinds; bk.arvan = !!av.has_api_key; bk.arvanMode = av.mode || "off";
   const K = bk.kinds.find(k => k.key === bk.kind) || bk.kinds[0]; bk.kind = K.key;
   const tr = K.transports.find(t => t.key === bk.transport) || K.transports[0]; bk.transport = tr.key;
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
@@ -815,22 +815,43 @@ async function buildFormHtml() {
   const typeSel = `<select name="ttype" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
   return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
     <div class="bgrid">
-      <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran", "iran_id")}</select></label>
-      <label>Foreign server<select name="foreign_id" required>${opt("foreign", "foreign_id")}</select></label>
+      <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required onchange="bkCheck(this.closest('form'))"><option value="0" ${String(v.iran_id) === "0" ? "selected" : ""}>✨ Smart — the best Iran server for this foreign server</option>${opt("iran", "iran_id")}</select></label>
+      <label>Foreign server<select name="foreign_id" required onchange="bkCheck(this.closest('form'))">${opt("foreign", "foreign_id")}</select></label>
       <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label>
       <label>Tunnel type <small>(the defaults are the many-users settings)</small>${typeSel}</label></div>
-    <div id="auto-iran" class="mut"></div>
+    <div id="auto-iran" class="mut"></div><div id="build-check" class="bcheck"></div>
     <div class="badv"><a onclick="bkAdv()">${bk.adv ? "▾ Advanced settings" : "▸ Advanced settings"} <small class="mut">${bk.adv ? "— change a value only when you measured a reason" : "— keepalive, heartbeat, MTU, preset, UDP…"}</small></a>${bk.adv ? `<div class="bgrid" style="margin-top:8px">${options}</div>` : ""}</div>
     <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button></div>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
 /* the Create window redraws only its own body: no refresh of the page behind it, the typed values stay */
-async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) return refresh(); const form = $("#modal form.build"); if (form) bkKeep(form); const story = $("#build-story"), keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; body.innerHTML = await buildFormHtml(); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
+async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) return refresh(); const form = $("#modal form.build"); if (form) bkKeep(form); const story = $("#build-story"), keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; body.innerHTML = await buildFormHtml(); { const fm = $("#modal form.build"); if (fm) bkCheck(fm, true); } if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
 window.bkAdv = () => { bk.adv = !bk.adv; bkRedraw(); };
 window.bkType = v => { const [k, t] = v.split("|"); bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 const BP_MUXED = ["tcpmux", "wsmux", "wssmux"];
 bk.chk = {};   // every checkbox the form ever showed -> its last state (a box that is not on screen keeps its default)
-window.bkKeep = form => { const f = new FormData(form); bk.v = {__t: "1"}; for (const [k, x] of f.entries()) bk.v[k] = x; form.querySelectorAll("input[type=checkbox]").forEach(cb => { bk.chk[cb.name] = cb.checked; }); };
+window.bkKeep = form => { const f = new FormData(form); bk.v = {__t: "1"}; for (const [k, x] of f.entries()) bk.v[k] = x; form.querySelectorAll("input[type=checkbox]").forEach(cb => { bk.chk[cb.name] = cb.checked; }); clearTimeout(bk.ckT); bk.ckT = setTimeout(() => bkCheck(form), 500); };
+/* the port check under the form: a port already used on the chosen Iran server (by a tunnel of the panel; on Build also by any process) stops the build,
+   a tunnel that already carries the port to the foreign server can be replaced (removed first), and its CDN records can follow the new server */
+const bkKey = f => (+f.get("iran_id") || 0) + "|" + (+f.get("foreign_id") || 0) + "|" + (f.get("ports") || "").trim();
+window.bkCheck = async (form, force) => {
+  const f = new FormData(form), box = $("#build-check"); if (!box) return;
+  const key = bkKey(f), ports = (f.get("ports") || "").trim();
+  if (!+f.get("foreign_id") || !ports) { box.innerHTML = ""; bk.ckKey = ""; return; }
+  if (!force && key === bk.ckKey) return;
+  bk.ckKey = key; bk.ck = null;
+  try { bk.ck = await api("/api/tunnels/precheck", {method: "POST", body: JSON.stringify({iran_id: +f.get("iran_id") || 0, foreign_id: +f.get("foreign_id"), ports, live: false})}); }
+  catch (e) { if (key === bk.ckKey) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (key === bk.ckKey) bkCheckRender(form);
+};
+function bkCheckRender(form) {
+  const box = $("#build-check"), c = bk.ck, btn = form.querySelector("button.pri"); if (!box || !c) return;
+  const busy = c.busy.map(b => `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
+  const conf = c.conflicts.map(t => `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${t.id}" ${t.replaceable ? "checked" : ""}> ⚠ Port ${t.ports.join(", ")} already goes to this foreign server through ${esc(t.name)} (${esc(t.iran)}, ${esc(t.state)}${t.state !== "up" && t.since ? " for " + ago(t.since) : ""}) — remove it first and replace it</label></div>`).join("");
+  const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Smart repair → Failover)"}</small></label>` : "";
+  box.innerHTML = busy + conf + dns + (c.error ? `<div class="mut">${esc(c.error)}</div>` : "");
+  if (btn) btn.disabled = !!c.busy.length;
+}
 window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 window.bkTransport = t => { bk.transport = t; bkRedraw(); };
 function bkBody(f) {
@@ -850,20 +871,39 @@ function bkBody(f) {
 }
 window.autoIran = async form => { const f = new FormData(form), box = $("#auto-iran"); box.innerHTML = '<div class="fx-line run"><i></i>Pinging the foreign server from every Iran server…</div>'; try { const r = await api("/api/tunnels/auto-iran", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || ""})}); const best = r.ranking.find(x => x.score > 0); if (best) form.querySelector("[name=iran_id]").value = best.id; box.innerHTML = `<div class="ob-inbounds">${r.ranking.map((x, i) => `<span><b class="${x.score >= 70 ? "gw-ok" : x.score ? "" : "err"}">${i + 1}. ${esc(x.name)} · ${x.score}</b> <small class="mut">${esc(x.reason)}</small></span>`).join("")}</div>${best ? `<small>Chosen: <b>${esc(best.name)}</b> — change it above if you prefer another.</small>` : '<small class="err">No Iran server can carry this tunnel right now.</small>'}`; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.startTest = async e => {
-  const f = new FormData(e.target.closest("form"));
+  const form = e.target.closest("form"), f = new FormData(form);
   const kind = bk.kind === "backhaul" ? (f.get("transport") || "tcpmux") : bk.kind === "backpack" ? "bp:" + f.get("transport") : bk.kind === "backpack_direct" ? "bpd:" + f.get("transport") : bk.kind === "paqet" ? "paqet" : (f.get("transport") === "wss" ? "chisel:tls" : "chisel");
-  const box = $("#build-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Building a temporary tunnel…</div>';
-  try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), kinds: [kind]})}); tt.job = {id: r.id, kinds: [kind], results: [], current: kind, done: false}; toast("Test started — the result shows in Tunnel test"); setSub("tunnels", "test"); }
-  catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; }
+  const box = $("#build-story"); box.classList.remove("hidden");
+  let iranId = +f.get("iran_id") || 0;
+  try {
+    if (!iranId) {   // the smart choice: rank the Iran servers for this foreign server first
+      box.innerHTML = '<div class="fx-line run"><i></i>Choosing the Iran server…</div>';
+      const r = await api("/api/tunnels/auto-iran", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || ""})});
+      const best = r.ranking.find(x => x.score > 0);
+      if (!best) { box.innerHTML = '<div class="fx-line bad"><b>!</b>No Iran server can carry this tunnel right now.</div>'; return; }
+      iranId = best.id; form.querySelector("[name=iran_id]").value = best.id; bkKeep(form);
+    }
+    box.innerHTML = '<div class="fx-line run"><i></i>Building a temporary tunnel…</div>';
+    const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: iranId, foreign_id: +f.get("foreign_id"), kinds: [kind]})}); tt.job = {id: r.id, kinds: [kind], results: [], current: kind, done: false}; toast("Test started — the result shows in Tunnel test"); setSub("tunnels", "test");
+  } catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; }
 };
 window.newTunnel = () => { state.edit = "newtunnel"; state.open = null; refresh(); };
 window.startBuild = async e => {
   e.preventDefault();
-  const body = bkBody(new FormData(e.target));
-  const box = $("#build-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
+  const form = e.target, f = new FormData(form), body = bkBody(f);
+  const box = $("#build-story"); box.classList.remove("hidden");
   try {
+    const seen = bk.ckKey === bkKey(f) && !!bk.ck;        // the notice under the form already shows the conflicts for exactly these fields
+    box.innerHTML = '<div class="fx-line run"><i></i>Checking the ports…</div>';
+    const c = await api("/api/tunnels/precheck", {method: "POST", body: JSON.stringify({iran_id: body.iran_id, foreign_id: body.foreign_id, ports: body.ports, live: !!body.iran_id})});
+    bk.ck = c; bk.ckKey = bkKey(f); bkCheckRender(form);
+    if (c.busy.length) { box.innerHTML = `<div class="fx-line bad"><b>!</b>Port ${c.busy[0].port} is already in use on ${esc(c.iran)} (${esc(c.busy[0].by)}): choose another Iran server or another port. Nothing was built.</div>`; return false; }
+    if (c.conflicts.length && !seen) { box.innerHTML = '<div class="fx-line plan"><b>›</b>A tunnel already carries this port to the foreign server: decide above (replace it or keep it), then press Build again.</div>'; return false; }
+    body.replace_ids = [...form.querySelectorAll("input[name^=replace_]:checked")].map(x => +x.name.slice(8));
+    body.dns_follow = body.replace_ids.length > 0 && !!form.querySelector("input[name=dns_follow]:checked");
+    box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
     const r = await api("/api/tunnels", {method: "POST", body: JSON.stringify(body)});
-    await followStory(r.id, box, 400);
+    await followStory(r.id, box, 600);
   } catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; }
   return false;
 };
@@ -921,7 +961,7 @@ window.fixTunnel = async (id, dry) => {
 function storyHtml(s) {
   const cls = l => /healthy|works|finished|succeeded/i.test(l) ? "ok" : /not repaired|failed|still|does not answer|No safe|read-only|Stopped/i.test(l) ? "bad" : /^Plan:|^\[dry run\]/.test(l) ? "plan" : "do";
   return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
-    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "delete" ? "Removal" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
+    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 /* ---- Smart repair: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
 const ap = {job: null, tid: localStorage.getItem("nk.ap.tid") || "", timer: null};

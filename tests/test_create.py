@@ -1,0 +1,77 @@
+"""Create tunnel with the smart choices: the port precheck, the smart Iran choice, replacing a dead tunnel, the DNS follow-up."""
+import time
+
+from nikatel.db import session
+from nikatel.models import ActionLog, Config, Server, Tunnel
+from nikatel.services import arvan, builder, create, detect, failover
+from nikatel.services import settings as st
+
+
+def _world():
+    with session() as db:
+        ir1, ir2, fi1 = Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="ir2", host="203.0.113.9", role="iran", online=True), Server(name="fi1", host="203.0.113.50", role="foreign", online=True)
+        db.add_all([ir1, ir2, fi1])
+        db.flush()
+        old = Tunnel(name="fi1-ir1", type="backhaul", transport="tcpmux", iran_server_id=ir1.id, foreign_server_id=fi1.id, state="down", state_since=int(time.time()) - 2400, forwarded_ports=[8075])
+        other = Tunnel(name="fi1-ir1-b", type="backhaul", transport="tcpmux", iran_server_id=ir1.id, foreign_server_id=fi1.id, state="up", forwarded_ports=[443])
+        db.add_all([old, other])
+        db.flush()
+        db.add_all([Config(name="cA", status="down", meta={"address": "a.example.test", "port": 8075}), Config(name="cB", status="up", meta={"address": "b.example.test", "port": 443})])
+        return {"ir1": ir1.id, "ir2": ir2.id, "fi1": fi1.id, "old": old.id, "other": other.id}
+
+
+def test_precheck_sees_busy_ports_and_replaceable_tunnels(client):
+    w = _world()
+    r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir1"], "foreign_id": w["fi1"], "ports": "8075"}).json()
+    assert r["busy"][0]["by"] == "tunnel fi1-ir1" and r["busy"][0]["state"] == "down" and r["can_build"] is False and r["iran"] == "ir1"
+    assert [c["name"] for c in r["conflicts"]] == ["fi1-ir1"] and r["conflicts"][0]["replaceable"] is True and r["conflicts"][0]["iran"] == "ir1" and r["conflicts"][0]["ports"] == [8075]
+    r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "8075"}).json()
+    assert r["busy"] == [] and r["can_build"] is True and r["conflicts"][0]["id"] == w["old"]          # free on ir2; the dead tunnel on fi1 can be replaced
+    r = client.post("/api/tunnels/precheck", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "443"}).json()
+    assert r["busy"] == [] and r["conflicts"][0]["replaceable"] is False                                 # smart choice: no Iran side yet; an up tunnel is not ticked by default
+    assert client.post("/api/tunnels/precheck", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "nope"}).status_code == 400
+    assert client.post("/api/tunnels/precheck", json={"iran_id": w["fi1"], "foreign_id": w["fi1"], "ports": "80"}).status_code == 400
+
+
+def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(client, monkeypatch):
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    w = _world()
+    st.put("arvan", {"api_key": "k", "mode": "approve"})
+    monkeypatch.setattr(arvan, "find_by_ip", lambda ip, only=None: [{"domain": "example.test", "id": "ra", "name": "a", "fqdn": "a.example.test", "ip": ip, "ttl": 120, "cloud": True},
+                                                                     {"domain": "example.test", "id": "rb", "name": "b", "fqdn": "b.example.test", "ip": ip, "ttl": 120, "cloud": True}])
+    monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": w["ir1"], "name": "ir1", "score": 0, "reason": "port 8075 already used here"},
+                                                                           {"id": w["ir2"], "name": "ir2", "score": 81, "reason": "60 ms, 0% loss, 1 tunnels, cpu 5%"}])
+    gone, built = [], []
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, keep_record=False: gone.append(tid) or ["Iran: removed", "foreign: removed"])
+
+    def fake_build(iran_id, foreign_id, ports, transport, mtu=0, keepalive=75, forced_name="", nodelay=True, opts=None):
+        built.append((iran_id, foreign_id, ports, transport))
+
+        with session() as db:
+            e = ActionLog(ref="new", action="build", source="manual", story=["Built."], ok=True, finished_at=int(time.time()))
+            db.add(e)
+            db.flush()
+            return e.id
+
+    monkeypatch.setattr(builder, "start_build", fake_build)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    monkeypatch.setattr(create, "_POLL", 0.05)
+    r = client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "8075", "kind": "backhaul", "transport": "tcpmux", "replace_ids": [w["old"]], "dns_follow": True})
+    assert r.status_code == 202, r.text
+    aid = r.json()["id"]
+
+    for _ in range(100):
+        s = client.get(f"/api/actions/{aid}").json()
+        if s["done"]:
+            break
+        time.sleep(0.1)
+
+    text = "\n".join(s["story"])
+    assert s["done"] and s["ok"] is True and s["action"] == "create", text
+    assert "Smart choice: ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
+    pend = st.get("failover")["pending"]
+    assert len(pend) == 1 and pend[0]["reason"] == "replace" and [d["fqdn"] for d in pend[0]["dns"]] == ["a.example.test"] and pend[0]["target"]["id"] == w["ir2"] and pend[0]["tunnels"] == []
+    assert "waits for your approval" in text
+    assert client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "80", "replace_ids": [99999]}).status_code == 400   # a tunnel that is gone

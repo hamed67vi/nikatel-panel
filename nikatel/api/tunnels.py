@@ -14,7 +14,7 @@ router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
 
 
 class BuildIn(BaseModel):
-    iran_id: int
+    iran_id: int = Field(ge=0)                                  # 0 = the smart choice: the Iran server that ranks best for this foreign server
     foreign_id: int
     ports: str = Field(min_length=1, max_length=300)
     kind: str = Field("backhaul", pattern=r"^(backhaul|backpack|backpack_direct|paqet|chisel)$")
@@ -23,25 +23,52 @@ class BuildIn(BaseModel):
     keepalive: int = Field(75, ge=10, le=600)
     nodelay: bool = True
     opts: dict = Field(default_factory=dict)
+    replace_ids: list[int] = Field(default_factory=list, max_length=5)   # tunnels (same foreign server and port) removed before the build
+    dns_follow: bool = False                                     # the CDN records that served only a replaced tunnel follow the new Iran server
 
 
 @router.post("/tunnels", status_code=202)
 def build(body: BuildIn):
     try:
-        if body.kind == "backhaul":
-            if body.transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
-                raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
+        if body.kind == "backhaul" and body.transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
+            raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
+        other_opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+        measure = "full" if body.opts.get("measure") != "latency" else "latency"
+
+        if body.iran_id == 0 or body.replace_ids or body.dns_follow:
+            from ..services import create
+
+            aid = create.start(body.iran_id, body.foreign_id, body.ports, body.kind, body.transport, body.opts if body.kind == "backhaul" else other_opts,
+                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure)
+        elif body.kind == "backhaul":
             aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, body.transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=body.opts)
         else:
             from ..services import build_other
 
-            opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
-            aid = build_other.start_build(body.iran_id, body.foreign_id, body.ports, body.kind, body.transport, opts, measure="full" if body.opts.get("measure") != "latency" else "latency")
+            aid = build_other.start_build(body.iran_id, body.foreign_id, body.ports, body.kind, body.transport, other_opts, measure=measure)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
     return {"ok": True, "id": aid}
+
+
+class PrecheckIn(BaseModel):
+    iran_id: int = Field(0, ge=0)
+    foreign_id: int
+    ports: str = Field(min_length=1, max_length=300)
+    live: bool = False                                           # also look at the Iran server itself (one SSH call)
+
+
+@router.post("/tunnels/precheck")
+def precheck(body: PrecheckIn):
+    """Before a build: ports already used on the Iran server, and tunnels that already carry these ports to the foreign server."""
+    from ..services import create
+
+    try:
+        return {"ok": True, **create.precheck(body.iran_id, body.foreign_id, body.ports, body.live)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/tunnels/kinds")

@@ -223,7 +223,7 @@ def _notify_plan(p: dict, headline: str) -> None:
 
 def _busy(s: dict, sid: int, now: int) -> bool:
     """A plan for this server is waiting, or one was handled in the last 6 hours."""
-    return any(p["server_id"] == sid for p in s["pending"]) or any(h["server_id"] == sid and now - h["at"] < 6 * 3600 for h in s["history"])
+    return any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]) or any(h["server_id"] == sid and h.get("reason") != "replace" and now - h["at"] < 6 * 3600 for h in s["history"])
 
 
 # ------------------------------------------------------------------ the job: dead servers
@@ -313,7 +313,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
     ok = moved == len(p["tunnels"]) and not errors
     s = _state()
     s["dns_log"].extend(logged)
-    s["pending"] = [x for x in s["pending"] if x["server_id"] != p["server_id"]]
+    s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
     s["history"].append({"id": p["id"], "at": int(time.time()), "server_id": p["server_id"], "server": p["server"], "ip": p["ip"], "reason": p.get("reason", "down"), "target": p["target"],
                          "moved": moved, "tunnels": len(p["tunnels"]), "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
     _save(s)
@@ -355,7 +355,7 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
 
     s = _state()
 
-    if any(x["server_id"] == p["server_id"] for x in s["pending"]):
+    if any(x["server_id"] == p["server_id"] and x.get("reason") != "replace" for x in s["pending"]):
         autopilot._say(aid, f"A failover plan for {p['server']} is already waiting for approval on Smart repair → Failover.")
         return False
 
@@ -377,6 +377,57 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
     return False
 
 
+def replace_plan(old_tunnel_id: int, new_iran_id: int) -> dict:
+    """The DNS part of a manual replacement (Create tunnel on another Iran server, same foreign server and ports): the records that
+    serve ONLY the replaced tunnel follow the new Iran server. A record that also serves a tunnel that stays is left alone and listed."""
+    with session() as db:
+        t = db.get(Tunnel, old_tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        old, new = db.get(Server, t.iran_server_id), db.get(Server, new_iran_id)
+
+        if new is None or new.role != "iran":
+            raise ValueError("choose an Iran server")
+
+        info = {"server_id": old.id, "server": old.name, "ip": old.host, "old_tunnel": t.name}
+        target = {"id": new.id, "name": new.name, "ip": new.host}
+
+    recs, dns_error = _records(info["ip"], _tunnels_of(info["server_id"]))
+    dns = [r for r in recs if r["tunnels"] == [old_tunnel_id]]
+    left = [{"fqdn": r["fqdn"], "configs": r["configs"]} for r in recs if r not in dns and old_tunnel_id in r["tunnels"]]
+    now = int(time.time())
+    return {**info, "id": f"{info['server_id']}-{now}", "reason": "replace", "why": f"{info['old_tunnel']} was replaced by a tunnel on {target['name']}", "whole": False,
+            "tunnels": [], "move": [], "pulled": [], "target": target, "dns": [{k: v for k, v in r.items() if k != "tunnels"} for r in dns], "left_alone": left,
+            "dns_error": dns_error, "problems": [dns_error] if dns_error else [], "made_at": now}
+
+
+def after_replace(aid: int, p: dict) -> None:
+    """After a manual replacement built fine: the DNS plan is applied now (mode auto), kept for approval (approve) or only told (off)."""
+    mode = conf().get("mode", "off")
+
+    if not p["dns"]:
+        autopilot._say(aid, f"DNS: no CDN record served only {p['old_tunnel']}" + (f" (left alone, they also serve tunnels that stay: {', '.join(d['fqdn'] for d in p['left_alone'])})" if p["left_alone"] else "")
+                       + (f"; {p['dns_error']}" if p.get("dns_error") else "") + ".")
+        return
+
+    names = ", ".join(d["fqdn"] for d in p["dns"])
+
+    if mode == "auto":
+        autopilot._say(aid, f"DNS (automatic): {names} → {p['target']['ip']}")
+        _work(aid, p, finish=False)
+    elif mode == "approve":
+        s = _state()
+        s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
+        s["pending"].append(p)
+        _save(s)
+        autopilot._say(aid, f"DNS: {names} still point at {p['ip']}; the plan to point them at {p['target']['ip']} waits for your approval on Smart repair → Failover · CDN.")
+        _notify_plan(p, f"{p['old_tunnel']} was replaced by a tunnel on {p['target']['name']}.")
+    else:
+        autopilot._say(aid, f"DNS: {names} still point at {p['ip']} (the failover is off: change them yourself, or switch it on under Smart repair → Failover · CDN).")
+
+
 def approve(plan_id: str) -> int:
     s = _state()
     p = next((x for x in s["pending"] if x["id"] == plan_id), None)
@@ -385,6 +436,10 @@ def approve(plan_id: str) -> int:
         raise ValueError("this plan is no longer pending")
 
     reason = p.get("reason", "down")        # the world may have changed since the plan was made: plan again, same tunnels
+
+    if reason == "replace":                 # DNS only, for a tunnel that is already gone: run it as it was made
+        return run_plan(p)
+
     fresh = _make_plan(p["server_id"], None if reason == "down" else set(p.get("move") or [t["id"] for t in p["tunnels"]]), reason)
     fresh["id"], fresh["down_since"] = p["id"], p.get("down_since")
     return run_plan(fresh)

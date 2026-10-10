@@ -217,3 +217,13 @@ def test_check_forgets_a_server_that_answers_again(monkeypatch):
 
     failover.check()
     assert st.get("failover")["seen"] == {}                                                   # forgotten - and saved
+
+
+def test_replace_plan_follows_only_the_records_of_the_replaced_tunnel(monkeypatch):
+    ids = _servers_and_tunnels()
+    st.put("arvan", {"api_key": "k", "mode": "approve"})
+    monkeypatch.setattr(arvan, "find_by_ip", _fake_records)
+    p = failover.replace_plan(ids["t2"], ids["ir2"])          # t2 is served by b.example.test alone
+    assert [d["fqdn"] for d in p["dns"]] == ["b.example.test"] and p["left_alone"] == [] and p["tunnels"] == [] and p["target"]["id"] == ids["ir2"] and p["reason"] == "replace" and p["old_tunnel"] == "t2"
+    p = failover.replace_plan(ids["t1"], ids["ir2"])          # a.example.test also serves t3, which stays: left alone
+    assert p["dns"] == [] and [d["fqdn"] for d in p["left_alone"]] == ["a.example.test"]

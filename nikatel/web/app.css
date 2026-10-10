@@ -719,3 +719,8 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 .dns-t { display: flex; flex-direction: column; min-width: 0; } .dns-t b, .dns-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dns-row.back { opacity: .72; }
 @media (max-width: 700px) { .dns-row { grid-template-columns: 56px 10px minmax(0, 1fr); } .dns-row .pill, .dns-row button { grid-column: 3; justify-self: start; } }
+
+/* ---- Create tunnel: the port check under the form (a used port stops the build; a tunnel on the same port to the same foreign server can be replaced) */
+.bcheck { display: grid; gap: 6px; margin: 2px 0 8px; } .bcheck:empty { display: none; }
+.bcheck .err, .bconf { padding: 7px 10px; border-radius: 10px; font-size: 12.5px; } .bcheck .err { background: rgba(255,107,139,.09); } .bconf { background: rgba(255,190,70,.09); }
+.bcheck .chk { margin: 0; }

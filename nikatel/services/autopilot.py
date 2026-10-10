@@ -318,7 +318,7 @@ def _wait(aid: int, limit: int = 900) -> tuple[bool, list[str]]:
     return False, ["timed out"]
 
 
-def _start(label: str, fn, *args) -> int:
+def _start(label: str, fn, *args, action: str = "autopilot") -> int:
     """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server")
@@ -328,7 +328,7 @@ def _start(label: str, fn, *args) -> int:
             raise ValueError("a smart repair of this tunnel is already running")
 
         with session() as db:
-            entry = ActionLog(ref=label, action="autopilot", source="manual", story=["Starting…"])
+            entry = ActionLog(ref=label, action=action, source="manual", story=["Starting…"])
             db.add(entry)
             db.flush()
             aid = entry.id
