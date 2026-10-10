@@ -23,7 +23,16 @@ from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import engines
-from .builder import PortMap, _node, _put, _say, _unit, parse_ports, pretty_name
+from .builder import (
+    PortMap,
+    _node,
+    _put,
+    _say,
+    _unit,
+    parse_ports,
+    pretty_name,
+    server_locks,
+)
 from .events import emit
 from .tunnels import check_tunnel
 
@@ -468,7 +477,8 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
 
 def _worker(b: Build, pair: str) -> None:
     try:
-        _build(b)
+        with server_locks([b.iran.id, b.foreign.id], b.aid):
+            _build(b)
     except Exception as e:  # thread boundary
         log.exception("build #%s crashed", b.aid)
         _rollback(b)

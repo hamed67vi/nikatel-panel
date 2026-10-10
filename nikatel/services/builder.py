@@ -26,7 +26,7 @@ from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import settings as st
 from .events import emit
-from .tunnels import check_tunnel
+from .tunnels import check_tunnel, parse_side
 
 log = get_logger("builder")
 GRE_HOLD_WAIT = 10
@@ -580,9 +580,39 @@ def resume_pending() -> int:
     return started
 
 
+_SRV_LOCKS: dict[int, threading.Lock] = {}
+
+
+class server_locks:
+    """A build holds both of its servers for its whole run. Two builds that touch the same server (a test and a real build to the same foreign server) would
+    choose the same free control port, write the same unit and config names and - worse - the one that finishes first (a temporary test removes its files
+    by port) would delete the other's: the second build waits for the first."""
+
+    def __init__(self, ids: list[int], aid: int):
+        self.locks = [_SRV_LOCKS.setdefault(i, threading.Lock()) for i in sorted(set(ids))]
+        self.aid, self.held = aid, []
+
+    def __enter__(self):
+        for lock in self.locks:
+            if not lock.acquire(blocking=False):
+                _say(self.aid, "Another build is using one of these servers: waiting for it to finish (builds on the same server run one after the other)…")
+                lock.acquire()
+
+            self.held.append(lock)
+
+        return self
+
+    def __exit__(self, *exc):
+        for lock in reversed(self.held):
+            lock.release()
+
+        return False
+
+
 def _build_worker(b: Build, pair: str) -> None:
     try:
-        _build(b)
+        with server_locks([b.iran.id, b.foreign.id], b.aid):
+            _build(b)
     except Exception as e:  # thread boundary
         log.exception("build #%s crashed", b.aid)
         _rollback(b)
@@ -742,7 +772,22 @@ def _build(b: Build) -> None:
 
     _say(aid, f"Data path through port {first.listen}: {data}")
 
-    # 7. record
+    # 6b. still alive a few seconds later: a tunnel that was started and then stopped by something else is not ready
+    time.sleep(8)
+
+    for label, node, unit in (("Iran", iran, iran_unit), ("foreign", foreign, foreign_unit)):
+        side = parse_side(run_script(node, "tunnel_side", {"UNITS": unit, "IFACE": "", "PEER": "", "PORTS": ""}, timeout=35))
+
+        if side.units.get(unit) != "active":
+            logs = run_script(node, "unit_log", {"UNIT": unit}, timeout=20)
+            raise RuntimeError(f"the backhaul service on the {label} server stopped again after it had started ({side.units.get(unit, 'missing')}): {logs[-300:]}")
+
+    if foreign_ip not in run_script(iran, "estab_check", {"PORT": str(port)}, timeout=20):
+        raise RuntimeError("the control connection dropped again a few seconds after it was established: the tunnel is not stable")
+
+    _say(aid, "Still running 8 seconds later: stable")
+
+    # 7. record the tunnel
     with session() as db:
         t = Tunnel(name=b.name, enabled=not is_temp(b.name), type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],

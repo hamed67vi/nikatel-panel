@@ -181,3 +181,37 @@ def test_retune_changes_two_lines_only_and_only_for_multiplexed_tunnels():
     plain_i, plain_f = backhaul_texts("10.9.9.1", 9901, "tok", "tcp", [PortMap(80)])
     assert retune_texts(plain_i, plain_f) == (plain_i, plain_f, False)                                                                       # a plain tcp tunnel is not touched
     assert retune_texts("garbage", "garbage") == ("garbage", "garbage", False)
+
+
+def test_server_locks_serialize_builds_on_one_server(monkeypatch):
+    import threading
+    import time
+
+    from nikatel.services import builder
+
+    monkeypatch.setattr(builder, "_say", lambda *a, **k: None)
+    order = []
+
+    def run(tag, ids):
+        with builder.server_locks(ids, 1):
+            order.append(tag + "-in")
+            time.sleep(0.15)
+            order.append(tag + "-out")
+
+    a = threading.Thread(target=run, args=("a", [901, 902]))
+    b = threading.Thread(target=run, args=("b", [902, 903]))
+    a.start()
+    time.sleep(0.05)
+    b.start()
+    a.join()
+    b.join()
+    assert order == ["a-in", "a-out", "b-in", "b-out"]
+
+
+def test_server_locks_do_not_block_other_servers(monkeypatch):
+    from nikatel.services import builder
+
+    monkeypatch.setattr(builder, "_say", lambda *a, **k: None)
+
+    with builder.server_locks([911, 912], 1), builder.server_locks([913, 914], 2):
+        pass
