@@ -423,3 +423,12 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 #page.enter > * { animation: pgIn .28s ease both; }
 .main, .modal-body, .act-list, .pb-list, .hl-list { overflow-anchor: none; }
 
+
+
+/* ---- "which tunnel for which situation": every box has the same fixed size and does not change on hover (the explanation is a tooltip) */
+.ob-sec .bguide { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.ob-sec .bg-row { height: 78px; box-sizing: border-box; overflow: hidden; align-content: start; padding: 8px 11px; }
+.ob-sec .bg-row b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; min-height: 31px; }
+.ob-sec .bg-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-sec .bg-row small, .ob-sec .bg-row:hover small { display: none; }
+
