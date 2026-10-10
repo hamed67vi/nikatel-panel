@@ -125,6 +125,22 @@ def meta_from_uri(uri: str) -> dict:
     return m
 
 
+def assign_groups() -> int:
+    """A config without a group whose name starts with a subscription's name ("<group> <node>") belongs to that group."""
+    with session() as db:
+        groups = sorted({s.name for s in db.scalars(select(Subscription))} | {c.group for c in db.scalars(select(Config)) if c.group}, key=len, reverse=True)
+        n = 0
+
+        for c in db.scalars(select(Config).where(Config.group == "")):
+            g = next((x for x in groups if x and c.name.startswith(x + " ")), None)
+
+            if g:
+                c.group = g
+                n += 1
+
+    return n
+
+
 def fill_meta(limit: int = 20) -> int:
     """Read the link of configs that have no meta yet (from the probe) and keep the readable facts. A few per run."""
     with session() as db:
@@ -158,6 +174,7 @@ def sync() -> None:
         _sync()
     finally:
         try:
+            assign_groups()
             fill_meta()
         except Exception:
             log.exception("meta fill failed")

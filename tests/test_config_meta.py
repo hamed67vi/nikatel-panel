@@ -18,6 +18,19 @@ def test_meta_from_links():
     assert configs.meta_from_uri("garbage")["port"] == 0
 
 
+def test_group_is_found_from_the_name(client):
+    from nikatel.db import session
+    from nikatel.models import Config, Subscription
+
+    with session() as db:
+        db.add(Subscription(name="Nikatel-bot", url="https://sub.example.net/x", nodes=[]))
+        db.add_all([Config(name="Nikatel-bot Fastly"), Config(name="Nikatel-bot TCP-4", group="other"), Config(name="Poland"), Config(name="Nikatel-botanical")])
+
+    assert configs.assign_groups() == 1
+    got = {c["name"]: c["group"] for c in client.get("/api/configs").json()["configs"]}
+    assert got == {"Nikatel-bot Fastly": "Nikatel-bot", "Nikatel-bot TCP-4": "other", "Poland": "", "Nikatel-botanical": ""}
+
+
 def test_meta_is_filled_from_the_probe(client, monkeypatch):
     monkeypatch.setattr(probe, "add_config", lambda uri, push_url="": {"ok": True})
     assert client.post("/api/configs", json={"uri": "vless://u@h.example:443?type=ws&security=tls#A", "group": "g"}).status_code == 201
