@@ -230,7 +230,7 @@ PAGES.servers = async () => {
       const g = (s.extra || {}).gre;
       if (!g) return `<button class="sm" onclick="event.stopPropagation();greCheck(${s.id})" title="Look for GRE links on this server and ping their other end">check</button>`;
       const tip = `${g.detail} · checked ${ago(g.at)} ago - click to check again`;
-      return g.ok ? `<b class="gw-ok" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✓</b>` : g.links ? `<b class="err" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✕ not OK</b>` : `<span class="mut" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">no GRE</span>`;
+      return g.ok ? `<b class="gw-ok" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✓</b> <small class="mut">${g.links}</small>` : g.links ? `<b class="err" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✕ not OK</b>` : `<span style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})"><b class="gw-ok">GRE ✓</b> <small class="mut">0</small></span>`;
     }
     const up = ts.filter(t => t.state === "up").length, bad = ts.filter(t => t.state === "down").length;
     const cls = bad === ts.length ? "err" : bad || up < ts.length ? "warn" : "gw-ok", txt = bad === ts.length ? "GRE ✕" : bad ? "GRE ✓/✕" : up === ts.length ? "GRE ✓" : "GRE ~";

@@ -1,4 +1,4 @@
-﻿from nikatel.models import Tunnel
+from nikatel.models import Tunnel
 from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for, settle
 
 IRAN_OK = """UNIT backhaul-iran-tcpmux-9443.service active
@@ -111,3 +111,13 @@ def test_judge_catches_a_tunnel_that_runs_but_passes_no_data():
     # a port that never answered HTTP (another protocol) is not judged by this probe; an old script without DATA is fine too
     assert judge(_plan(), parse_side(broken), parse_side(FOREIGN_OK), False, 9) == ("up", "")
     assert judge(_plan(), parse_side(IRAN_OK), parse_side(FOREIGN_OK), True, 9) == ("up", "")
+
+
+def test_a_tunnel_found_on_the_servers_is_judged_without_the_nikatel_gre_unit():
+    t = Tunnel(name="pfi", type="backhaul", transport="tcpmux", port=9994, forwarded_ports=[80], record={"legacy_gre": True})
+    plan = plan_for(t)
+    assert plan.iran_units == ["backhaul-iran-tcpmux-9994.service"] and plan.iface == "" and plan.iran_peer == ""
+    iran = parse_side("UNIT backhaul-iran-tcpmux-9994.service active\nLISTEN 80 1\nDATA 80 404\nNOW 1\n")
+    foreign = parse_side("UNIT backhaul-kharej-tcpmux-9994.service active\nNOW 1\n")
+    assert judge(plan, iran, foreign, True, 0) == ("up", "")
+    assert plan_for(Tunnel(name="pfi", type="backhaul", transport="tcpmux", port=9994, record={})).iface == "pfi"

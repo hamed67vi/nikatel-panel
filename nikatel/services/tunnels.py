@@ -49,6 +49,9 @@ def plan_for(t: Tunnel) -> Plan:
     name, typ, tr, port = t.name, t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
     ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
 
+    if typ == "backhaul" and (t.record or {}).get("legacy_gre"):   # found on the servers: its GRE link is not run by a nikatel-gre unit, so only backhaul and the data path are judged
+        return Plan([f"backhaul-iran-{tr}-{port}.service"], [f"backhaul-kharej-{tr}-{port}.service"], ports=ports)
+
     if typ == "backhaul":
         return Plan([f"backhaul-iran-{tr}-{port}.service", f"nikatel-gre-{name}.service"],
                     [f"backhaul-kharej-{tr}-{port}.service", f"nikatel-gre-{name}.service"],

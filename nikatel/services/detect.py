@@ -126,7 +126,7 @@ def adopt(p: dict) -> str:
         ports = [int(x.split("=")[0]) for x in p.get("ports", []) if str(x).split("=")[0].isdigit()]
         t = Tunnel(name=name, type="backhaul", transport=str(p.get("transport") or "tcpmux"), engine="backhaul", iran_server_id=iran.id, foreign_server_id=foreign.id,
                    port=int(p.get("port") or 0), iran_tunnel_ip=str(p.get("iran_tunnel_ip") or ""), foreign_tunnel_ip=str(p.get("foreign_tunnel_ip") or ""),
-                   forwarded_ports=ports, record={"port_mapping": ",".join(p.get("ports", [])), "adopted_at": int(time.time())})
+                   forwarded_ports=ports, record={"port_mapping": ",".join(p.get("ports", [])), "adopted_at": int(time.time()), **({"legacy_gre": True} if p.get("gre_unit") != "active" else {})})
         db.add(t)
         emit(db, "info", "tunnels", f"Tunnel {name} ({iran.name} ⇄ {foreign.name}) found on the servers and added to the panel.", name)
 
