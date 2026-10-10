@@ -159,7 +159,10 @@ nav a { height: 38px; font-size: 13.5px; }
 .srv-th { min-height: 22px; border: 0 !important; background: none !important; cursor: default; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); box-shadow: none !important; } .srv-th:hover { background-size: 0% 100%; }
 .srv-name { display: flex; align-items: center; gap: 8px; min-width: 0; } .srv-name b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .srv-name .pill { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
 .srv-st { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .srv-ip { font-family: var(--mono); font-size: 12px; color: var(--mut); cursor: copy; } .srv-ip:hover { color: var(--text); }
-.tbl .mchip { margin-left: 6px; } .mchip { padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid var(--line); } .mchip.ok { color: var(--ok); border-color: rgba(52,211,153,.4); } .mchip.bad { color: var(--bad); border-color: rgba(255,107,139,.45); }
+.srv-tbl { table-layout: fixed; } .srv-tbl td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pbar { display: flex; align-items: center; gap: 8px; } .pbar .bar { flex: 1; width: auto; min-width: 20px; margin: 0; } .pbar b { flex: none; min-width: 42px; text-align: right; font-weight: 600; }
+.pcell .mchip { margin-left: 0; margin-right: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
+.tbl .mchip { margin-left: 0; } .mchip { padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid var(--line); } .mchip.ok { color: var(--ok); border-color: rgba(52,211,153,.4); } .mchip.bad { color: var(--bad); border-color: rgba(255,107,139,.45); }
 @media (max-width: 900px) { .srv-th { display: none; } .srv-row { grid-template-columns: 1fr 1fr; row-gap: 6px; padding: 10px 12px; } .srv-name, .srv-st { grid-column: 1 / -1; } }
 /* core update: one row per core */
 .eng-head, .eng-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.6fr 150px; gap: 10px; align-items: center; padding: 8px 12px; }

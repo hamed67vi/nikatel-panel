@@ -236,16 +236,19 @@ PAGES.servers = async () => {
   const byIp = {};
   (pnl.panels || []).forEach(p => (p.nodes || []).forEach(n => { const ip = String(n.address || "").trim(); if (ip) (byIp[ip] = byIp[ip] || []).push({panel: p.name, status: n.status, name: n.name}); }));
   const chips = s => (byIp[s.host] || []).map(x => { const ok = x.status === "connected"; return `<span class="mchip ${ok ? "ok" : "bad"}" title="Node ${esc(x.name)} in panel ${esc(x.panel)}: ${esc(x.status || "?")}">${ok ? "Panel ✓" : "Panel ✕"} ${esc(x.panel)}</span>`; }).join("");
-  const row = s => {   // the old panel's columns - Server | Status | IPv4 | GRE | RAM | CPU | Disk - in this panel's own look
+  const pbar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<div class="pbar"><span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b>${v}%</b></div>`;
+  const foreignTab = state.tab === "foreign";
+  const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
     return `<tr class="${cls} click" onclick="toggleDetail(${s.id})" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</td>
-      <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>${blocked ? ' <span class="pill err" title="Not reachable from inside Iran">filtered</span>' : ""}${chips(s)}</td>
+      <td><span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span></td>
+      ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
+      <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
-      <td>${pct(f.ram, 80, 90)}</td><td>${pct(f.cpu, 80, 92)}</td><td>${pct(f.disk, 85, 95)}</td></tr>`;
-  };
-  const openSrv = list.find(s => s.id === state.open);
+      <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td></tr>`;
+  };  const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else hideModal();
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile ${online < mine.length ? "bad" : "ok"}"><small>Online</small><b>${online} / ${mine.length}</b><span>${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}</span></div>
@@ -256,9 +259,9 @@ PAGES.servers = async () => {
       <div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>
       <span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="newServer()">+ Add server</button><button onclick="srvMany()" title="Several servers at once, connected with one password">+ Several</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a></div>
     ${state.edit === "new" ? `<div class="card">${SERVER_FORM(null, state.tab)}</div>` : state.edit === "many" ? `<div class="card">${MANY_FORM()}</div>` : ""}
-    <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:16%"><col style="width:13%"><col style="width:9%"><col style="width:13%"><col style="width:13%"><col style="width:12%"></colgroup>
-      <thead><tr><th>Server</th><th>Status</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th></tr></thead>
-      <tbody>${rows.map(row).join("") || '<tr><td colspan="7" class="empty">No server.</td></tr>'}</tbody></table>`;
+    <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:17%"><col style="width:6%"><col style="width:6%"><col style="width:17%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:12%"><col style="width:13%">' : '<col style="width:19%"><col style="width:7%"><col style="width:19%"><col style="width:11%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%">'}</colgroup>
+      <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th></tr></thead>
+      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 9 : 8}" class="empty">No server.</td></tr>`}</tbody></table>`;;
   const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
@@ -899,7 +902,7 @@ window.cfSubRefresh = async (id, name) => { cf.sub = {name, url: "", nodes: null
 window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription record? The configs stay.")) return; await api(`/api/subscriptions/${id}`, {method: "DELETE"}); refresh(); };
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
-const pn = {id: localStorage.getItem("nk.pn") || "", tab: "nodes", add: false, edit: false, users: null, uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostEdit: null, core: null, raw: false, logs: null};
+const pn = {id: localStorage.getItem("nk.pn") || "", tab: "users", add: false, edit: false, users: null, uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostEdit: null, core: null, raw: false, logs: null};
 INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
@@ -927,8 +930,8 @@ PAGES.panels = async () => {
       <div class="tile"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
       <div class="tile"><small>Load</small><b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b><span>cpu · ram ${s.mem_pct ?? "—"}%</span></div>
       <div class="tile"><small>Traffic</small><b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b><span>↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}</span></div></div>
-    <div class="tabs" style="margin-bottom:10px">${["nodes", "users", "hosts"].map(t => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-    <div id="pn-body">${pn.tab === "nodes" ? pnNodesHtml(p) : '<div class="mut">loading…</div>'}</div>`;
+    <div class="tabs" style="margin-bottom:10px">${["users", "hosts"].map(t => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div id="pn-body"><div class="mut">loading…</div></div>`;
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
 };
