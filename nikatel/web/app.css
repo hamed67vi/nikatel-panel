@@ -400,3 +400,8 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 /* ---- config lists: the country code as small text */
 .cc { display: inline-block; min-width: 20px; margin-right: 3px; font-size: 10px; font-weight: 800; letter-spacing: .6px; color: var(--mut); vertical-align: 1px; }
 
+
+
+/* ---- Tools window: last results */
+.res-box { padding: 4px 12px; } .res-row { display: flex; align-items: baseline; gap: 14px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12.5px; } .res-row:first-child { border-top: 0; } .res-row > .mut { flex: none; width: 130px; }
+
