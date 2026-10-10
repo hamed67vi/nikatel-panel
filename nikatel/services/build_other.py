@@ -793,8 +793,9 @@ def _build(b: Build) -> None:
         db.add(t)
         db.flush()
         tid = t.id
-        emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: {tlabel}, ports {', '.join(p.spec() for p in b.ports)}"
-             + (f", {b.quality.get('latency_ms')} ms" if b.quality.get("latency_ms") is not None else "") + ".", b.name)
+        if not is_temp(b.name):
+            emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: {tlabel}, ports {', '.join(p.spec() for p in b.ports)}"
+                 + (f", {b.quality.get('latency_ms')} ms" if b.quality.get("latency_ms") is not None else "") + ".", b.name)
 
     check_tunnel(tid)
     _say(aid, f"Tunnel {b.name} is ready.", done=True, ok=True)

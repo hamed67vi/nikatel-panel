@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.5 - 2026-10-10 - Test tunnels leave no trace in the lists
+
+* The temporary test tunnels (test-N) are not listed, not checked, not repaired and no longer write *built* events; the tests themselves run exactly as before (build, measure, remove).
+
 ## 1.11.4 - 2026-10-10 - Needs attention becomes Working now
 
 * The first tab of Smart repair is **Working now**: the tunnels in trouble, each marked *repairing* (the turning wrench), *looking at it* or *watching* (the repair starts by itself when needed), with a Live button.

@@ -752,7 +752,8 @@ def _build(b: Build) -> None:
         db.add(t)
         db.flush()
         tid = t.id
-        emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: ports {', '.join(p.spec() for p in b.ports)}, {rtt} ms over GRE.", b.name)
+        if not is_temp(b.name):          # a temporary test tunnel is not an event
+            emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: ports {', '.join(p.spec() for p in b.ports)}, {rtt} ms over GRE.", b.name)
 
     check_tunnel(tid)
     _say(aid, f"Tunnel {b.name} is ready.", done=True, ok=True)
