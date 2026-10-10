@@ -110,3 +110,26 @@ def test_a_wrong_password_is_remembered_as_the_servers_error(client, monkeypatch
     assert r.status_code == 502 and "wrong user or password" in r.json()["detail"]
     s = client.get(f"/api/servers/{sid}").json()
     assert s["last_error"] == "SSH login failed: wrong user or password" and s["online"] is None
+
+
+def test_change_password_action_and_api(client, monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import nodes
+    from nikatel.ssh import render_action
+
+    b64 = base64.b64encode(b"root:S3cret pass:word").decode()
+    script = render_action("set_password", {"USER": "root", "B64": b64})
+    assert "chpasswd" in script and b64 in script and "BAD_USER" in script
+    with pytest.raises(ValueError):
+        render_action("set_password", {"USER": "root; reboot", "B64": b64})
+
+    sid = _server()
+    assert client.post(f"/api/servers/{sid}/password", json={"password": "short"}).status_code == 422
+    seen = {}
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90: seen.update(name=name, params=dict(params)) or "PASSWORD_SET\n")
+    r = client.post(f"/api/servers/{sid}/password", json={"password": "N3w-strong-pass"})
+    assert r.status_code == 200 and r.json()["user"] == "root" and seen["name"] == "set_password"
+    assert base64.b64decode(seen["params"]["B64"]).decode() == "root:N3w-strong-pass"
+    monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90: "BAD_USER\n")
+    assert client.post(f"/api/servers/{sid}/password", json={"password": "N3w-strong-pass"}).status_code == 502

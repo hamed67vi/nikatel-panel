@@ -830,6 +830,11 @@ if [ "$ok" = 1 ]; then echo "MZNODE_OK $(docker ps --format '{{.Names}} {{.Statu
 cd /; rm -rf "$d"
 """, {"B64": _B64}),
 
+    # change the login password of the SSH user (the payload is base64 of "user:password"; it never appears in the logs). The panel logs in with its key, so it is not affected.
+    "set_password": (r"""set -e; u=$(echo '@B64@' | base64 -d | cut -d: -f1); [ "$u" = '@USER@' ] || { echo BAD_USER; exit 1; }
+echo '@B64@' | base64 -d | chpasswd && echo PASSWORD_SET
+""", {"B64": _B64, "USER": r"^[a-z_][a-z0-9_-]{0,31}$"}),
+
     # the gateway directory must exist before the binary is copied in
     "xgw_mkdir": (r"""mkdir -p /opt/nikatel-xgw && chmod 755 /opt/nikatel-xgw && echo OK
 """, {}),
@@ -859,7 +864,7 @@ def run_action(node: Node, name: str, params: Mapping[str, str] | None = None, t
 
         script = script.replace(f"@{key}@", value)
 
-    log.info("action %s on %s params=%s", name, node.host, dict(params))
+    log.info("action %s on %s params=%s", name, node.host, {k: ("…" if k in ("B64", "KEY", "TOKEN") else v) for k, v in params.items()})   # payloads (files, passwords, keys) stay out of the log
     return _exec(node, script, timeout)
 
 

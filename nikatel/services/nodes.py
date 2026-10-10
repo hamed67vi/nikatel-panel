@@ -141,6 +141,26 @@ def connect(server_id: int, password: str) -> dict:
     return {"hostname": hostname}
 
 
+def set_password(server_id: int, password: str) -> dict:
+    """Change the login password of the server's SSH user (after the server was added). The panel itself logs in with its key."""
+    import base64
+
+    if not 8 <= len(password) <= 128 or any(ord(c) < 32 or ord(c) == 127 for c in password):
+        raise ValueError("the password must be 8 to 128 characters, without control characters")
+
+    node, name, _role, _host = _srv(server_id)
+    user = node.user or "root"
+    out = run_action(node, "set_password", {"USER": user, "B64": base64.b64encode(f"{user}:{password}".encode()).decode()}, timeout=30)
+
+    if "PASSWORD_SET" not in out:
+        raise RuntimeError("the server did not accept the new password: " + out.strip()[-120:])
+
+    with session() as db:
+        emit(db, "ok", "nodes", f"SSH password of {user}@{name} changed.", name)
+
+    return {"user": user}
+
+
 def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", ssh_port: int = 22) -> list[dict]:
     """Lines of `name host [user] [port]`; every server is added to the panel and, with a password, connected in parallel."""
     if role not in ("iran", "foreign"):

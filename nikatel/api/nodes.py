@@ -83,6 +83,16 @@ def install_extras(server_id: int, body: InstallIn):
         raise HTTPException(400, str(e))
 
 
+class NewPw(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/servers/{server_id}/password")
+def change_password(server_id: int, body: NewPw):
+    """Change the SSH login password of this server (Tools → Change SSH password)."""
+    return {"ok": True, **_wrap(nodes.set_password, server_id, body.password)}
+
+
 @router.post("/servers/{server_id}/connect")
 def connect(server_id: int, body: Pw):
     return {"ok": True, **_wrap(nodes.connect, server_id, body.password)}

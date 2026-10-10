@@ -409,7 +409,7 @@ function serverDetailHtml(s) {
   const tabs = `<div class="tabs wtabs">${[["overview", "Overview"], ["charts", "Charts 24 h"], ["tools", "Tools"], ["console", "⌨ Console"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
   // every tile = icon + title + one short line; what a test found is shown only in "Last results", so the tiles stay the same size
-  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools uni">${tool("⇄", "GRE test", "do its GRE links answer?", `greCheck(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
+  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools uni">${tool("⇄", "GRE test", "do its GRE links answer?", `greCheck(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("🔐", "Change SSH password", "set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
     ${s.role === "foreign" ? `<div class="wgroup"><h4>Security</h4><div class="wtools uni">${tool("🛰", "Check filtering in Iran", "ping from your Iran servers + check-host.net", `srvFilter(${s.id})`)}${tool("🛡", abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender", abuseOn ? "stop dropping traffic to abused ranges" : "drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)}</div></div>` : ""}
     ${resBox(s)}
     <div class="wgroup"><h4>Open on my computer</h4><div class="wtools uni">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
@@ -587,6 +587,18 @@ window.saveServer = async (e, id) => {
     } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
+};
+window.srvPassword = async (id, name) => {
+  const typed = await gprompt(`New SSH password for ${name} (8 characters or more). Leave empty to generate a strong one.`, "", {password: true});
+  if (typed == null) return;
+  if (typed !== "" && typed.length < 8) { toast("✕ The password must be at least 8 characters", "bad"); return; }
+  let pw = typed;
+  if (!pw) { const a = new Uint32Array(20), cs = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"; crypto.getRandomValues(a); pw = [...a].map(x => cs[x % cs.length]).join(""); }
+  try {
+    await api(`/api/servers/${id}/password`, {method: "POST", body: JSON.stringify({password: pw})});
+    toast("✓ SSH password changed on " + name, "ok");
+    if (!typed) showModal(`<b>🔐 New password of ${esc(name)}</b>`, `<div class="ob-inbounds"><span><b class="mono" id="newpw" style="user-select:all;font-size:15px">${esc(pw)}</b></span></div><div class="frm-act"><button class="sm pri" onclick="navigator.clipboard.writeText($('#newpw').textContent).then(() => toast('✓ Copied', 'ok'))">Copy</button></div><small class="mut">Shown only now - the panel does not keep it (it logs in with its own key).</small>`);
+  } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.deleteServer = async (id, name) => {
   if (!await gconfirm(`Remove ${name} from the panel? Nothing changes on the server itself.`)) return;
