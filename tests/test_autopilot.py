@@ -230,3 +230,29 @@ def test_mass_disruption_is_detected_and_holds_the_repair_back(client, monkeypat
 
     ap.auto_escalate()
     assert called == []                                                  # nothing is started in a storm
+
+
+def test_a_busy_tunnel_test_makes_the_repair_wait_not_fail(monkeypatch):
+    calls = []
+
+    def fake_start(iran_id, foreign_id, kinds, measure="latency"):
+        calls.append(1)
+
+        if len(calls) < 3:
+            raise ValueError("another tunnel test is still running")
+
+        return "job1"
+
+    monkeypatch.setattr(ap.tunnel_test, "compare_start", fake_start)
+    monkeypatch.setattr(ap.tunnel_test, "compare_status", lambda jid: {"done": True, "results": [{"kind": "tcpmux", "ok": True, "score": 70}]})
+    monkeypatch.setattr(ap, "_say", lambda *a, **k: None)
+    monkeypatch.setattr(ap.time, "sleep", lambda s: None)
+    assert ap._recommend_now(1, 1, 2, ["tcpmux"])[0]["score"] == 70 and len(calls) == 3
+    monkeypatch.setattr(ap.tunnel_test, "compare_start", lambda *a, **k: (_ for _ in ()).throw(ValueError("the pair has no tunnel")))
+    try:
+        ap._recommend_now(1, 1, 2, ["tcpmux"])
+        raised = False
+    except ValueError:
+        raised = True
+
+    assert raised

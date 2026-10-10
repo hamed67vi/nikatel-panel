@@ -246,7 +246,7 @@ def diagnose(tunnel_id: int) -> dict:
 
     advice = ai.advise(json.dumps({"tunnel": info["name"], "type": kind, "cause": cause, "summary": why, "facts": {k: v for k, v in facts.items() if k != "last_error"}, "last_error": str(info["last_error"] or "")[:200]}, ensure_ascii=False)) if cause != "healthy" else None
 
-    return {**info, "kind": kind, "cause": cause, "summary": why, "findings": findings, "ai": (advice or {}).get("diagnosis", ""),
+    return {**info, "where": facts.get("where"), "kind": kind, "cause": cause, "summary": why, "findings": findings, "ai": (advice or {}).get("diagnosis", ""),
             "ladder": ladder_for(cause, kind), "can_switch": cause in ("gre_blocked", "port_blocked", "unknown", "lossy_route") and cause != "healthy",
             "can_move": cause in ("route_cut", "server_unreachable", "lossy_route") or cause == "unknown"}
 
@@ -450,8 +450,24 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
     return False
 
 
-def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str]) -> list[dict]:
-    jid = tunnel_test.compare_start(iran_id, foreign_id, kinds, measure="latency")
+def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], patience: int = 1200) -> list[dict]:
+    """Test the candidate types. Only one tunnel test runs at a time on the panel, so when another repair is testing, wait for its turn."""
+    end_wait, said = time.time() + patience, False
+
+    while True:
+        try:
+            jid = tunnel_test.compare_start(iran_id, foreign_id, kinds, measure="latency")
+            break
+        except ValueError as e:
+            if "still running" not in str(e) or time.time() > end_wait:
+                raise
+
+            if not said:
+                _say(aid, "Another tunnel test is running (one at a time): waiting for my turn…")
+                said = True
+
+            time.sleep(20)
+
     _say(aid, f"Testing {len(kinds)} tunnel types between the two servers (latency only, about a minute each)…")
     end = time.time() + 1500
 
@@ -560,6 +576,10 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         elif step == "switch":
             lossy = d["cause"] == "lossy_route"          # still carries data: test beside it, swap only for something clearly better, at a quiet moment
             current = None
+
+            if lossy and d.get("where") in ("iran_side", "foreign_side", "both"):
+                _say(aid, "The loss is not on this pair's route but on one server's own network (see above): another tunnel type or a new link would suffer the same, so nothing is built or swapped. The tunnel stays and is watched; the repair looks again later.")
+                continue
 
             if lossy:
                 try:

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.4 - 2026-10-10 - Two repairs no longer trip over each other
+
+* Only one tunnel test runs at a time; a repair that wanted to test while another was testing stopped with an error. It now waits its turn (up to 20 minutes). When the diagnosis finds the loss on one server's own network (Iran side, foreign side or both), no candidate is built or swapped - another type would suffer the same - and the tunnel is only watched.
+
 ## 1.10.3 - 2026-10-10 - Colours: loss yellow, outage red
 
 * Packet loss of any size shows **yellow** (rows, the loss badge, Check all); only a full outage (tunnel down, server offline or without login) is **red**.
