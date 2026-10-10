@@ -275,8 +275,9 @@ echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
 """, {"PORT": r"^\d{1,5}$"}),
 
     # 30 pings with per-packet times (for jitter) over the GRE interface
-    "gre_pings": (r"""ping -c 30 -i 0.2 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | grep -E 'time=|packets transmitted'
-""", {"IFACE": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}$", "PEER": _IPV4}),
+    "gre_pings": (r"""I=""; [ -n '@IFACE@' ] && I="-I @IFACE@"
+ping -c 30 -i 0.2 -W 1 $I '@PEER@' 2>&1 | grep -E 'time=|packets transmitted'
+""", {"IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": _IPV4}),
 
     # pull from a sink through a forwarded port for 10 s; bytes per second
     "speed_pull": (r"""echo "SPEED=$(curl -s -m 12 -o /dev/null -w '%{speed_download}' 'http://127.0.0.1:@PORT@/' 2>/dev/null || echo 0)"

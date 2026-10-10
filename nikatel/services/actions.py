@@ -277,3 +277,69 @@ def auto_repair() -> None:
 
         log.info("auto repair of %s (down for %ss)", name, now - since)
         fix(tid, source="auto")
+
+
+def restart_now(tunnel_id: int, source: str = "manual") -> dict:
+    """Restart the tunnel service on both sides (the Iran end first, then the foreign end; the GRE link is left alone), wait a few
+    seconds and check the tunnel again. Refused while the panel is read-only or when a server does not answer."""
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only: nothing is changed")
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        plan, name = plan_for(t), t.name
+        iran_node, foreign_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
+
+    def main(units):
+        return [u for u in units if not u.startswith("nikatel-gre-")] or list(units)
+
+    done = []
+
+    for side, node, units in (("Iran", iran_node, main(plan.iran_units)), ("foreign", foreign_node, main(plan.foreign_units))):
+        try:
+            out = run_action(node, "restart_units", {"UNITS": " ".join(units)})
+            bad = [ln.split()[1] for ln in out.splitlines() if ln.startswith("UNIT ") and len(ln.split()) >= 3 and ln.split()[2] != "active"]
+            done.append(f"{side}: " + ("restarted" if not bad else "not active after the restart: " + ", ".join(bad)))
+        except (SSHError, ValueError) as e:
+            done.append(f"{side}: {str(e)[:80]}")
+
+    time.sleep(6)
+    check_tunnel(tunnel_id)
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        state, why = t.state, t.last_error or ""
+        emit(db, "ok" if state == "up" else "warn", "actions", f"Restart of {name} ({source}): {state}" + (f" - {why}" if why else ""), name)
+
+    return {"id": tunnel_id, "name": name, "state": state, "why": why, "steps": done}
+
+
+def restart_all() -> list[dict]:
+    """restart_now on every enabled tunnel, four at a time (every server is touched by only a few of them at once)."""
+    with session() as db:
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
+
+    def one(tid):
+        try:
+            return restart_now(tid, "restart all")
+        except (ValueError, SSHError) as e:
+            return {"id": tid, "name": str(tid), "state": "unknown", "why": str(e)[:100], "steps": []}
+
+    with ThreadPoolExecutor(4) as ex:
+        return list(ex.map(one, ids))
+
+
+def health_all() -> list[dict]:
+    """check_tunnel on every enabled tunnel, eight at a time; the list of states afterwards."""
+    with session() as db:
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
+
+    with ThreadPoolExecutor(8) as ex:
+        list(ex.map(check_tunnel, ids))
+
+    with session() as db:
+        return [{"id": t.id, "name": t.name, "state": t.state, "why": t.last_error or ""} for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]

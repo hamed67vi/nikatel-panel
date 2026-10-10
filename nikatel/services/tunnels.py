@@ -13,6 +13,7 @@ Unit names follow the conventions of the servers (see docs/tunnels.md):
 """
 from __future__ import annotations
 
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -45,12 +46,26 @@ class Plan:
     ports: list[int] = field(default_factory=list)
 
 
+def link_of(t: Tunnel) -> tuple[str, str]:
+    """(GRE interface, address to ping from the Iran side) of a tunnel. A tunnel found on the servers keeps the interface
+    it already had (none when its foreign end has no such link; then the foreign server's own address is pinged, for the latency only)."""
+    rec = t.record or {}
+
+    if rec.get("legacy_gre"):
+        iface = str(rec.get("legacy_iface") or "")
+        peer = t.foreign_tunnel_ip if iface else (t.foreign.host if t.foreign else "")
+        return iface, peer if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", peer or "") else ""
+
+    return t.name, t.foreign_tunnel_ip or ""
+
+
 def plan_for(t: Tunnel) -> Plan:
     name, typ, tr, port = t.name, t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
     ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
 
-    if typ == "backhaul" and (t.record or {}).get("legacy_gre"):   # found on the servers: its GRE link is not run by a nikatel-gre unit, so only backhaul and the data path are judged
-        return Plan([f"backhaul-iran-{tr}-{port}.service"], [f"backhaul-kharej-{tr}-{port}.service"], ports=ports)
+    if typ == "backhaul" and (t.record or {}).get("legacy_gre"):   # found on the servers: its GRE link is not run by a nikatel-gre unit, so only backhaul, the data path and (when it has one) the link are judged
+        iface, peer = link_of(t)
+        return Plan([f"backhaul-iran-{tr}-{port}.service"], [f"backhaul-kharej-{tr}-{port}.service"], iface=iface, iran_peer=peer if iface else "", ports=ports)
 
     if typ == "backhaul":
         return Plan([f"backhaul-iran-{tr}-{port}.service", f"nikatel-gre-{name}.service"],

@@ -71,7 +71,7 @@ def pair(scans: dict[int, dict], servers: dict[int, Server]) -> list[dict]:
             out.append({"iran_id": sid, "iran_name": servers[sid].name, "foreign_id": match[0] if match else None, "foreign_name": servers[match[0]].name if match else "",
                         "name": gre["iface"] if gre else bh["file"], "transport": bh["transport"], "port": bh["port"], "ports": bh["ports"],
                         "iran_tunnel_ip": gre["ip"] if gre else "", "foreign_tunnel_ip": fgre["ip"] if fgre else (gre["remote"] if gre else ""),
-                        "paired": bool(match), "gre_unit": gre["unit"] if gre else "none"})
+                        "paired": bool(match), "gre_unit": gre["unit"] if gre else "none", "iface": gre["iface"] if gre else "", "foreign_gre": bool(fgre)})
 
     return out
 
@@ -126,7 +126,7 @@ def adopt(p: dict) -> str:
         ports = [int(x.split("=")[0]) for x in p.get("ports", []) if str(x).split("=")[0].isdigit()]
         t = Tunnel(name=name, type="backhaul", transport=str(p.get("transport") or "tcpmux"), engine="backhaul", iran_server_id=iran.id, foreign_server_id=foreign.id,
                    port=int(p.get("port") or 0), iran_tunnel_ip=str(p.get("iran_tunnel_ip") or ""), foreign_tunnel_ip=str(p.get("foreign_tunnel_ip") or ""),
-                   forwarded_ports=ports, record={"port_mapping": ",".join(p.get("ports", [])), "adopted_at": int(time.time()), **({"legacy_gre": True} if p.get("gre_unit") != "active" else {})})
+                   forwarded_ports=ports, record={"port_mapping": ",".join(p.get("ports", [])), "adopted_at": int(time.time()), **({"legacy_gre": True, "legacy_iface": str(p.get("iface") or "") if p.get("foreign_gre") else ""} if p.get("gre_unit") != "active" else {})})
         db.add(t)
         emit(db, "info", "tunnels", f"Tunnel {name} ({iran.name} ⇄ {foreign.name}) found on the servers and added to the panel.", name)
 

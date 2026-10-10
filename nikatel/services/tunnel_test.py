@@ -14,6 +14,7 @@ from ..log import get_logger
 from ..models import ActionLog, Tunnel
 from ..ssh import Node, SSHError, run_action, run_script
 from . import builder
+from .tunnels import link_of
 
 log = get_logger("tunnel-test")
 TEST_PORT = 39400          # forwarded port used by the speed test (listen on Iran, sink on foreign)
@@ -57,17 +58,19 @@ def quality(tunnel_id: int) -> dict:
 
         has_door = bool((t.record or {}).get("test_port") and (t.secrets or {}).get("test_key"))
 
-        if not has_door and (not t.foreign_tunnel_ip or t.type not in ("backhaul", "gre")):
+        iface, peer = link_of(t)
+
+        if not has_door and (not peer or t.type not in ("backhaul", "gre")):
             raise ValueError("this tunnel has no GRE link or test door to measure")
 
-        node, name, peer = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name, t.foreign_tunnel_ip
+        node, name = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name
 
     if has_door:   # BackPack / Paqet / Chisel: through the real tunnel, speed included
         from . import build_other
 
         return build_other.quality(tunnel_id)
 
-    out = run_script(node, "gre_pings", {"IFACE": name, "PEER": peer}, timeout=45)
+    out = run_script(node, "gre_pings", {"IFACE": iface, "PEER": peer}, timeout=45)
     avg, jit, loss = jitter_from_pings(out)
     q = {"latency_ms": avg, "jitter_ms": jit, "loss_pct": loss, "score": score(avg, jit, loss, None), "at": int(time.time())}
 

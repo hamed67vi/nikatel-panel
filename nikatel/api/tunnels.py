@@ -297,6 +297,36 @@ def checks(tunnel_id: int, hours: int = 24):
                 "checks": [[r.ts, r.ok, r.rtt_ms, r.rx_mbps, r.tx_mbps, r.error] for r in rows]}
 
 
+@router.post("/tunnels/health-all")
+def health_all():
+    from ..services import actions
+
+    rows = actions.health_all()
+    return {"ok": True, "results": rows, **{k: sum(1 for r in rows if r["state"] == k) for k in ("up", "degraded", "down", "unknown")}}
+
+
+@router.post("/tunnels/restart-all")
+def restart_all():
+    from ..services import actions
+
+    try:
+        rows = actions.restart_all()
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+    return {"ok": True, "results": rows, **{k: sum(1 for r in rows if r["state"] == k) for k in ("up", "degraded", "down", "unknown")}}
+
+
+@router.post("/tunnels/{tunnel_id}/restart")
+def restart_one(tunnel_id: int):
+    from ..services import actions
+
+    try:
+        return {"ok": True, **actions.restart_now(tunnel_id)}
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+
 @router.post("/tunnels/{tunnel_id}/check", response_model=TunnelOut)
 def check_now(tunnel_id: int):
     check_tunnel(tunnel_id)

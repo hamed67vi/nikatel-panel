@@ -1,4 +1,4 @@
-from nikatel.models import Tunnel
+﻿from nikatel.models import Tunnel
 from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for, settle
 
 IRAN_OK = """UNIT backhaul-iran-tcpmux-9443.service active
@@ -121,3 +121,31 @@ def test_a_tunnel_found_on_the_servers_is_judged_without_the_nikatel_gre_unit():
     foreign = parse_side("UNIT backhaul-kharej-tcpmux-9994.service active\nNOW 1\n")
     assert judge(plan, iran, foreign, True, 0) == ("up", "")
     assert plan_for(Tunnel(name="pfi", type="backhaul", transport="tcpmux", port=9994, record={})).iface == "pfi"
+
+
+def test_link_of_a_tunnel_found_on_the_servers():
+    from nikatel.models import Server
+    from nikatel.services.tunnels import link_of
+
+    foreign = Server(name="f", host="203.0.113.9", role="foreign")
+    with_link = Tunnel(name="t1-a", type="backhaul", foreign_tunnel_ip="10.8.0.2", record={"legacy_gre": True, "legacy_iface": "lk"})
+    with_link.foreign = foreign
+    assert link_of(with_link) == ("lk", "10.8.0.2") and plan_for(with_link).iface == "lk"
+    no_link = Tunnel(name="t2-b", type="backhaul", foreign_tunnel_ip="203.0.113.9", record={"legacy_gre": True, "legacy_iface": ""})
+    no_link.foreign = foreign
+    assert link_of(no_link) == ("", "203.0.113.9") and plan_for(no_link).iface == "" and plan_for(no_link).iran_peer == ""
+    assert link_of(Tunnel(name="t3-c", type="backhaul", foreign_tunnel_ip="10.1.1.2", record={})) == ("t3-c", "10.1.1.2")
+
+
+def test_restart_all_and_health_all_report_the_states(client, monkeypatch):
+    from nikatel.services import actions
+
+    rows = [{"id": 1, "name": "a", "state": "up", "why": ""}, {"id": 2, "name": "b", "state": "down", "why": "x"}]
+    monkeypatch.setattr(actions, "restart_all", lambda: rows)
+    monkeypatch.setattr(actions, "health_all", lambda: rows)
+
+    for path in ("restart-all", "health-all"):
+        j = client.post(f"/api/tunnels/{path}").json()
+        assert j["up"] == 1 and j["down"] == 1 and j["degraded"] == 0 and len(j["results"]) == 2
+
+    assert client.post("/api/tunnels/999/restart").status_code == 409
