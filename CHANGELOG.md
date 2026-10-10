@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.17 - 2026-10-11 - The tiles are in a box too
+
+* The tile rows (Online / Problems / Average load / Traffic and the like) sit in one soft framed box on every page, like the toolbar and the lists.
+
 ## 1.14.16 - 2026-10-11 - Bigger centred tunnel arrows; folder tabs on Configs
 
 * The tunnel arrow is bigger and sits in a column of its own, centred between the Iran node and the foreign node.

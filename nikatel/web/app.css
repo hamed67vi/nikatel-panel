@@ -935,3 +935,7 @@ body.tabbed .subnav .tabs button.on { height: 40px; margin-bottom: -1px; backgro
 body.tabbed #page > .toolbar:first-child { border-top-left-radius: 0; margin-top: 0; }
 /* the arrow column between the Iran node and the foreign node: a big arrow in the middle of its cell */
 .td-arrow { text-align: center !important; padding: 0 !important; } .td-arrow .tun-arr { font-size: 26px; margin: 0; display: inline-block; }
+/* the tiles (Online / Problems / Average load / Traffic ...) sit in one soft framed box, like the toolbar and the lists */
+.tiles { box-sizing: border-box; padding: 10px; border-radius: 18px; border: 1px solid transparent; box-shadow: 0 10px 30px rgba(0,0,0,.22);
+  background: linear-gradient(rgba(14,17,28,.6), rgba(14,17,28,.6)) padding-box, linear-gradient(100deg, rgba(255,255,255,.20), rgba(255,255,255,.07) 55%, rgba(255,255,255,0)) border-box; }
+html[data-mode="light"] .tiles { background: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55)) padding-box, linear-gradient(100deg, rgba(60,70,120,.22), rgba(60,70,120,.06) 55%, rgba(60,70,120,0)) border-box; }
