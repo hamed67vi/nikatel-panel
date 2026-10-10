@@ -395,3 +395,8 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .dash-cols > .card > h3, .dash-cols > .card > .act-cats { flex: none; }
 .dash-cols .hl-list, .dash-cols .pb-list, .dash-cols .act-list { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
 .dash-cols > .card.act.big { height: calc(100vh - 150px) !important; }
+
+
+/* ---- config lists: the country code as small text */
+.cc { display: inline-block; min-width: 20px; margin-right: 3px; font-size: 10px; font-weight: 800; letter-spacing: .6px; color: var(--mut); vertical-align: 1px; }
+
