@@ -127,10 +127,10 @@ nav i { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 99
 .frm label small { font-weight: 400; text-transform: none; letter-spacing: 0; }
 input[type=checkbox] { height: 16px; width: 16px; accent-color: var(--acc); box-shadow: none; }
 code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 6px; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; } .kv.one { grid-template-columns: 1fr; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; } @media (max-width: 980px) { .grid2 { grid-template-columns: 1fr; } }   /* every box in a row: same width, same height */
+.grid2 > .card { margin-bottom: 0; height: 100%; box-sizing: border-box; } .kv.one { grid-template-columns: 1fr; }
 .set-desc { color: var(--mut); font-size: 12.5px; margin: 8px 4px 14px; }
-.grid2.one { grid-template-columns: minmax(340px, 900px); } .grid2.one > .card { grid-column: auto !important; } .set-tabs { flex-wrap: wrap; } .set-tabs button { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 11px; }
-.grid2 > .card { align-self: start; }
+.grid2.one { grid-template-columns: minmax(340px, 1fr); } .grid2.one > .card { grid-column: auto !important; height: auto; } .set-tabs { flex-wrap: wrap; } .set-tabs button { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 11px; }
 .subnav { margin: -4px 0 14px 2px; } .subnav .tabs { padding: 4px; border-radius: 16px; } .subnav .tabs button { height: 36px; padding: 0 16px; font-size: 13.5px; border-radius: 12px; }
 nav a { height: 38px; font-size: 13.5px; }
 /* configs: card grid + compact rows (the old Configs Checker displays) */
