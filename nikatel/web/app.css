@@ -526,6 +526,7 @@ button::after { transition: opacity .3s ease; }
   .tiles { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; } .tile { padding: 10px 12px; } .page .tiles .tile b, .tile b { font-size: 17px; } .tile span { font-size: 10.5px; }
   .subnav { margin: 0 0 10px; } .subnav .tabs { width: 100%; box-sizing: border-box; overflow-x: auto; scrollbar-width: none; } .subnav .tabs::-webkit-scrollbar { display: none; } .subnav .tabs button { height: 32px; padding: 0 12px; font-size: 12.5px; white-space: nowrap; }
   .toolbar { gap: 6px; } .toolbar input { width: 100%; flex: 1 1 100%; } .toolbar button { height: 30px; padding: 0 10px; font-size: 12px; }
+  .toolbar .tabs { flex: 1 1 100%; display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .toolbar .tabs::-webkit-scrollbar { display: none; } .toolbar .tabs button { flex: 0 0 auto; white-space: nowrap; }
   .frm, .frm.one { grid-template-columns: 1fr; } .frm label[style*="grid-column"] { grid-column: auto !important; }
   .grid2, .mgrid, .iboxes, .dash-cols, .rd-cols, .sb-set .grid2 { grid-template-columns: 1fr; }
   .dash-cols > .card { height: auto; max-height: 360px; } .card.health { max-height: none; }
