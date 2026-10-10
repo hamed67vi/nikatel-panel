@@ -55,7 +55,7 @@ starts the panel on `https://<server>:9443`. Run it again to upgrade. Non-intera
 |---|---|
 | **Dashboard** | health of everything, only the problems that exist *now*, one-click *Fix with AI* / *Fix all*, the event feed |
 | **Nodes** | Iran and foreign servers: CPU, RAM, disk, load, traffic every 2 minutes, 24 h charts, console, tools, the Iran gateway |
-| **Tunnels** | build, monitor every minute, alert, repair, test, update — five engines, 30+ transports |
+| **Tunnels** | build, monitor every minute, alert, repair, test, update — five engines, 24 transports |
 | **Panels** | client configs on the probe (ping, speed, history, subscriptions) and the Marzban / PasarGuard panels (users, hosts, nodes, outbounds) |
 | **Shop bot** | payments, orders, users, plans, categories, discounts, gift codes, broadcast, tickets, every text and switch |
 | **Mini App** | the customers' Telegram app: buy, renew, top up, tickets, referral |
@@ -133,7 +133,7 @@ The PHP shop bot runs on its own server; the panel administers it through review
 One Python process with SQLite (WAL, numbered migrations). The UI is three files with no build step
 (`index.html`, `app.css`, `app.js`, one function per page). Layers call downward only (`api → services → db / ssh`),
 parsing and judging are pure functions with tests, every network call has a timeout, jobs never die. Full map:
-[`ARCHITECTURE.md`](ARCHITECTURE.md). 170+ tests, ruff, JS and shell syntax checks and a secrets scan run in CI.
+[`ARCHITECTURE.md`](ARCHITECTURE.md). 160+ tests, ruff, JS and shell syntax checks and a secrets scan run in CI.
 
 ## Security
 
