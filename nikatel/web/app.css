@@ -257,8 +257,10 @@ button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); bord
 .modal .frm-act { margin-top: 14px; flex-wrap: wrap; gap: 6px; } .modal .ob-inbounds { margin-top: 10px; }
 /* window tabs and tool groups (server / tunnel windows) */
 /* info windows: every group of facts in its own box */
-.iboxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin-bottom: 4px; align-items: start; }
-.ibox { padding: 10px 14px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); } .ibox.wide-box { margin-top: 10px; }
+.iboxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 4px; align-items: stretch; }   /* two equal columns, the two boxes of a row are equally tall, a lone last box takes the full width */
+.iboxes > .ibox:last-child:nth-child(odd) { grid-column: 1 / -1; } @media (max-width: 760px) { .iboxes { grid-template-columns: 1fr; } }
+.ibox { padding: 10px 14px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); box-sizing: border-box; } .ibox.wide-box { margin-top: 10px; }
+.iboxes > .ibox:last-child:nth-child(odd) .irow > div { white-space: nowrap; }
 .ibox h5 { margin: 0 0 6px; padding-bottom: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); border-bottom: 1px solid var(--line); } .ibox h5 i { font-style: normal; font-size: 14px; } .ibox h5 small { margin-left: auto; text-transform: none; letter-spacing: 0; }
 .irow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; font-size: 12.5px; } .irow > span { color: var(--mut); flex: none; } .irow > div { text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .irow + .irow { border-top: 1px solid rgba(255,255,255,.04); } .irow .td-ports { justify-content: flex-end; }
