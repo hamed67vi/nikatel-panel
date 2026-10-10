@@ -574,7 +574,7 @@ PAGES.tunnels = async () => {
 PAGES.configs = async () => { renderSub(); return sub("configs") === "panels" ? PAGES.panels() : PAGES.configsList(); };
 const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || "", foreign: localStorage.getItem("nk.tt.foreign") || ""};
 PAGES.tunnelTest = async () => {
-  const [servers, kd] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds")]);
+  const [servers, kd, tl] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds"), api("/api/tunnels").catch(() => [])]);
   tt.kinds = kd.kinds;
   const opt = (role, cur) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
   const j = tt.job, running = j && !j.done;
@@ -590,10 +590,12 @@ PAGES.tunnelTest = async () => {
     <div class="ob-sec"><h4>Which tunnel for which situation <small class="mut">— click one to open Create tunnel with it</small></h4>
       <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" title="${esc(why)}" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
       <small class="mut">Every engine ships with its many-users settings (multiplexing, 8 mux channels, 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels). Backhaul is measured with 30 pings over GRE and a download; the other engines through their test door, both ways. Nothing is added to your list; the story of each run stays in Repairs.</small></div></div>
+    ${apAdvisorCard(tl, tl.find(x => String(x.id) === ap.tid) || tl.find(x => x.state !== "up") || tl[0])}
     <div class="card tt-logcard"><h3>Live log <span class="sp"></span><small class="mut">fixed box: new lines come in here, the page stays where it is</small></h3><div class="tt-log" id="tt-log">${ttLogHtml()}</div></div>
     <div id="tt-results">${ttResultsHtml()}</div>`;
   const lg = $("#tt-log"); if (lg) lg.scrollTop = lg.scrollHeight;
   ttSyncEng();
+  apAdvisor();
   if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
 };
 const ttRunPill = () => { const j = tt.job; return j && !j.done ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""; };
@@ -937,14 +939,9 @@ PAGES.actions = async () => {
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
       <small class="mut">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). A panel cannot change a server's public IP; when a route is cut, “Move” carries the tunnel on another Iran server.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
     ${foCard(fo, av, irn)}
-    <div class="card"><h3>🧭 Network advisor — which tunnel is best today <span class="sp"></span></h3>
-      <div class="frm"><label>Tunnel <small>(its two servers are tested)</small><select id="ap-tun" onchange="ap.tid=this.value;localStorage.setItem('nk.ap.tid',this.value)">${tl.map(t => `<option value="${t.id}" ${pick && t.id === pick.id ? "selected" : ""}>${esc(t.name)} — ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(t.type)})</option>`).join("")}</select></label>
-        <div class="frm-act" style="align-self:end"><button class="pri" onclick="apRecommend()" ${tl.length ? "" : "disabled"}>Find the best tunnel today</button></div></div>
-      <small class="mut">Builds a temporary tunnel of each type between the two servers (TCP Mux over GRE, BackPack TCP Mux, BackPack WS TLS Mux, Chisel TLS, BackPack Direct UDP), measures latency and loss, removes it again. About a minute per type. Nothing of your real tunnel changes until you press “Use”.</small>
-      <div id="ap-adv"></div></div>
+
     <div class="card"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div>`;
-  apAdvisor();
   apTabs(n, !!fo, (fo && fo.pending.length) || 0);
 };
 const foForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
@@ -956,15 +953,16 @@ const foForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
   <details class="mut" style="margin-top:6px"><summary>How to get the key</summary><ol style="margin:6px 18px;line-height:1.7"><li>panel.arvancloud.ir → profile menu → <b>Machine Users</b> → create one.</li><li>Open it → <b>Access rules</b> and give it the <b>CDN</b> service with a manager role (not only “server manager”).</li><li>Create an access key for it, copy it at once (shown once) and paste it above.</li></ol></details>`;
 const foCard = (fo, av = {}, irn = []) => {
   if (!fo) return "";
-  const st = av.status || {}, conn = st.ok ? `<div class="ai-stat ok"><div class="ai-head">● Connected</div><div class="ai-grid"><span class="mut">Domains</span><span>${st.domains}</span><span class="mut">DNS records</span><span>${st.records}</span></div></div>` : av.has_api_key ? `<div class="ai-stat bad"><div class="ai-head">● Not connected</div><div class="err">${esc(st.error || "press “Test the key”")}</div></div>` : "";  const plan = p => `<div class="ap-row" style="flex-wrap:wrap;gap:6px"><span class="st down">down</span><b>${esc(p.server)}</b><span class="mut">${esc(p.ip)}</span><span class="sp"></span><button class="sm pri" onclick="foApprove('${esc(p.id)}')" ${p.target ? "" : "disabled"}>✓ Approve</button><button class="sm" onclick="foDismiss('${esc(p.id)}')">Dismiss</button>
+  const st = av.status || {}, conn = st.ok ? `<div class="ai-stat ok"><div class="ai-head">● Connected · ArvanCloud CDN</div><div class="ai-grid"><span class="mut">Domains</span><span>${st.domains}</span><span class="mut">DNS records</span><span>${st.records}</span></div></div>` : av.has_api_key ? `<div class="ai-stat bad"><div class="ai-head">● Not connected · ArvanCloud CDN</div><div class="err">${esc(st.error || "press “Test the key”")}</div></div>` : "";  const plan = p => `<div class="ap-row" style="flex-wrap:wrap;gap:6px"><span class="st down">down</span><b>${esc(p.server)}</b><span class="mut">${esc(p.ip)}</span><span class="sp"></span><button class="sm pri" onclick="foApprove('${esc(p.id)}')" ${p.target ? "" : "disabled"}>✓ Approve</button><button class="sm" onclick="foDismiss('${esc(p.id)}')">Dismiss</button>
     <div class="mut" style="flex-basis:100%">${p.target ? `Move ${p.tunnels.length} tunnel(s) (${p.tunnels.map(t => esc(t.name)).join(", ") || "none"}) to <b>${esc(p.target.name)}</b> (${esc(p.target.ip)}).` : '<span class="err">No other Iran server can carry all of its tunnels.</span>'}
     ${p.dns.length ? ` Then point ${p.dns.length} DNS record(s) at ${p.target ? esc(p.target.ip) : "the new server"}: ${p.dns.map(d => `<b>${esc(d.fqdn)}</b>${d.configs.length ? " (" + d.configs.length + " config" + (d.configs.length > 1 ? "s" : "") + ")" : ""}`).join(", ")}.` : " No DNS record points at this server (or no ArvanCloud key)."}
     ${p.problems.length ? `<div class="err">${p.problems.map(esc).join("<br>")}</div>` : ""}</div></div>`;
   const his = h => `<div class="ev ${h.ok === true ? "ok" : h.ok === false ? "bad" : "warn"}"><time title="${when(h.at)}">${ago(h.at)} ago</time><i></i><small>${h.dismissed ? "dismissed" : h.undone ? "undone" : "done"}</small><span><b>${esc(h.server)}</b> ${h.dismissed ? "" : `→ ${h.target ? esc(h.target.name) : "?"}: ${h.moved}/${h.tunnels} tunnels, ${h.dns.length} DNS record(s)${h.errors.length ? ", errors: " + esc(h.errors.join("; ")) : ""}`} ${h.dns.length && !h.undone ? `<a class="mut" onclick="foUndo('${esc(h.id)}')">↩ point the DNS back</a>` : ""}</span></div>`;
   const label = {off: "off", approve: "asks first", auto: "automatic"}[fo.mode] || fo.mode;
-  return `<div class="card"><h3>🔁 Iran server failover <span class="sp"></span><span class="pill ${fo.mode === "off" ? "" : "ok"}">${label}</span></h3>
+  return `<div class="card"><h3>🔁 Iran server failover · CDN <span class="sp"></span><span class="pill ${fo.mode === "off" ? "" : "ok"}">${label}</span></h3>
     ${fo.pending.map(plan).join("") || `<div class="mut" style="padding:4px 0">${fo.mode === "off" ? "Off. " : `Watching the Iran servers: one that stays down for ${fo.confirm_minutes} minutes gets a plan here. `}</div>`}
     ${fo.history.map(his).join("")}
+    <small class="mut" style="display:block;margin:8px 0">CDN is ArvanCloud's service that holds the DNS records of your domains - the names your configs use. When an Iran server dies, the panel changes the IP of its records there, so users reach the new server without touching their config.</small>
     ${conn}
     ${st.ok ? `<div class="frm-act" style="margin-top:8px"><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button type="button" class="sm" onclick="foPreview()">👁 Preview: what would happen if it went down</button></div>` : ""}
     <details ${st.ok ? "" : "open"} style="margin-top:8px"><summary class="mut">⚙ Settings of the failover</summary>${foForm(av)}</details></div>`;
@@ -982,7 +980,7 @@ window.foPreview = async () => {
 };
 window.foDismiss = async id => { try { await api("/api/failover/" + encodeURIComponent(id) + "/dismiss", {method: "POST"}); toast("Plan dismissed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.foUndo = async id => { if (!await gconfirm("Point the DNS records back at the old server address? The tunnels stay where they are.", {danger: true})) return; try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/undo", {method: "POST"}); toast("✓ " + r.changed.length + " record(s) pointed back", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };/* the Smart repair page is one tab at a time: what needs attention, the failover, the network advisor, the history */
-const AP_TABS = [["att", "🩺 Needs attention"], ["fo", "🔁 Failover"], ["adv", "🧭 Network advisor"]];   // the history (the last card) is shown under the first tab
+const AP_TABS = [["att", "🩺 Needs attention"], ["fo", "🔁 Failover"]];   // the history (the last card) is shown under the first tab
 function apTabs(nBad, hasFo, nPending) {
   const list = AP_TABS.filter(t => t[0] !== "fo" || hasFo), cards = [...document.querySelectorAll("#page > .card")];
   if (cards.length !== list.length + 1) return;
@@ -1001,6 +999,11 @@ window.apExplain = async tid => {
 };
 window.cfDiagnoseByName = name => { const c = (state.cfgCache || []).find(x => x.name === name); if (c) cfDiagnose(c.id); else api("/api/configs").then(d => { const x = d.configs.find(y => y.name === name); if (x) cfDiagnose(x.id); }); };
 INFO.actions = ["Smart repair", "Finds why a tunnel is down and fixes it: restart, rebuild, another tunnel type or another Iran server - and says which tunnel is best on today's network."];
+const apAdvisorCard = (tl, pick) => `<div class="card"><h3>🧭 Network advisor — which tunnel is best today <span class="sp"></span></h3>
+      <div class="frm"><label>Tunnel <small>(its two servers are tested)</small><select id="ap-tun" onchange="ap.tid=this.value;localStorage.setItem('nk.ap.tid',this.value)">${tl.map(t => `<option value="${t.id}" ${pick && t.id === pick.id ? "selected" : ""}>${esc(t.name)} — ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(t.type)})</option>`).join("")}</select></label>
+        <div class="frm-act" style="align-self:end"><button class="pri" onclick="apRecommend()" ${tl.length ? "" : "disabled"}>Find the best tunnel today</button></div></div>
+      <small class="mut">Builds a temporary tunnel of each type between the two servers (TCP Mux over GRE, BackPack TCP Mux, BackPack WS TLS Mux, Chisel TLS, BackPack Direct UDP), measures latency and loss, removes it again. About a minute per type. Nothing of your real tunnel changes until you press “Use”.</small>
+      <div id="ap-adv"></div></div>`;
 function apAdvisor() {
   const box = $("#ap-adv"), j = ap.job; if (!box || !j) return;
   const rs = [...(j.results || [])].sort((a, b) => (b.score || 0) - (a.score || 0)), best = rs.find(r => r.ok);
