@@ -1,8 +1,10 @@
 """Data centres: the hosting providers our servers sit in, grouped, with how our servers and tunnels there are doing
-and whether the provider's own website answers (checked from the panel server, cached, refreshed in the background).
+and whether the provider's own website answers - foreign providers checked from the panel server (HTTPS), Iranian
+providers from one of our Iran servers (TCP 443, because many Iranian sites do not answer visitors from abroad).
+Cached, refreshed in the background.
 
 The provider of a server comes from the geo lookup (`nodes.geo_refresh`: isp / org, website domain, ASN) and is kept
-in `Server.extra["geo"]`. `group()` is pure and tested."""
+in `Server.extra["geo"]`. `group()` and `parse_reach()` are pure and tested."""
 from __future__ import annotations
 
 import threading
@@ -15,6 +17,7 @@ from sqlalchemy import select
 from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel
+from ..ssh import Node, SSHError, run_script
 
 log = get_logger("dcs")
 TTL = 600
@@ -81,20 +84,60 @@ def check_site(domain: str) -> dict:
     for url in (f"https://{domain}", f"https://www.{domain}", f"http://{domain}"):
         try:
             r = httpx.get(url, timeout=7, follow_redirects=True, headers={"User-Agent": "nikatel-panel (site check)"})
-            return {"ok": r.status_code < 500, "code": r.status_code, "ms": int((time.time() - t0) * 1000), "at": int(time.time())}
+            return {"ok": r.status_code < 500, "code": r.status_code, "ms": int((time.time() - t0) * 1000), "at": int(time.time()), "via": ""}
         except httpx.HTTPError:
             continue
 
-    return {"ok": False, "code": 0, "ms": int((time.time() - t0) * 1000), "at": int(time.time())}
+    return {"ok": False, "code": 0, "ms": int((time.time() - t0) * 1000), "at": int(time.time()), "via": ""}
 
 
-def _refresh_sites(domains: list[str]) -> None:
+def parse_reach(out: str) -> dict[str, dict]:
+    """Pure: the lines of the tcp_reach script ("REACH host:port 1 ms" / "REACH host:port 0 0") -> {host: {ok, ms}}."""
+    res = {}
+
+    for ln in out.splitlines():
+        p = ln.split()
+
+        if len(p) == 4 and p[0] == "REACH" and ":" in p[1] and p[3].isdigit():
+            res[p[1].rsplit(":", 1)[0]] = {"ok": p[2] == "1", "ms": int(p[3])}
+
+    return res
+
+
+def check_from_iran(domains: list[str]) -> dict[str, dict]:
+    """TCP 443 to each site from one of our Iran servers; the panel server's own HTTPS check when none is online."""
+    now = int(time.time())
+
+    with session() as db:
+        srv = db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name)).first()
+        who = (srv.name, Node(srv.host, srv.ssh_user, srv.ssh_port)) if srv else None
+
+    if not who:
+        return {d: check_site(d) for d in domains}
+
+    try:
+        out = run_script(who[1], "tcp_reach", {"TARGETS": " ".join(f"{d}:443" for d in domains[:40])}, timeout=30)
+    except (SSHError, ValueError) as e:
+        log.warning("site check from %s failed: %s", who[0], e)
+        return {d: check_site(d) for d in domains}
+
+    got = parse_reach(out)
+    return {d: {"ok": got[d]["ok"], "ms": got[d]["ms"], "code": 0, "at": now, "via": who[0]} if d in got else check_site(d) for d in domains}
+
+
+def _refresh_sites(items: list[tuple[str, str]]) -> None:
     global _sites_at, _refreshing
 
     try:
-        with ThreadPoolExecutor(max_workers=min(8, max(1, len(domains)))) as ex:
-            for dom, res in zip(domains, ex.map(check_site, domains)):
+        abroad = sorted({d for d, role in items if d and role != "iran"})
+        iran = sorted({d for d, role in items if d and role == "iran"})
+
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(abroad)))) as ex:
+            for dom, res in zip(abroad, ex.map(check_site, abroad)):
                 _sites[dom] = res
+
+        if iran:
+            _sites.update(check_from_iran(iran))
     except Exception:
         log.warning("site check failed", exc_info=True)
     finally:
@@ -102,22 +145,22 @@ def _refresh_sites(domains: list[str]) -> None:
         _refreshing = False
 
 
-def sites(domains: list[str]) -> dict[str, dict]:
-    """Cached site states; the first call waits, later calls answer at once and refresh in the background after TTL."""
+def sites(items: list[tuple[str, str]]) -> dict[str, dict]:
+    """Cached site states for (domain, role) pairs; the first call waits, later calls answer at once and refresh in the background after TTL."""
     global _refreshing
-    domains = sorted({d for d in domains if d})
-    missing = [d for d in domains if d not in _sites]
+    items = [(d, r) for d, r in items if d]
+    missing = [d for d, _ in items if d not in _sites]
     stale = time.time() - _sites_at > TTL
 
     with _lock:
         if missing and not _sites:
             _refreshing = True
-            _refresh_sites(domains)
+            _refresh_sites(items)
         elif (missing or stale) and not _refreshing:
             _refreshing = True
-            threading.Thread(target=_refresh_sites, args=(domains,), daemon=True, name="dc-sites").start()
+            threading.Thread(target=_refresh_sites, args=(items,), daemon=True, name="dc-sites").start()
 
-    return {d: _sites.get(d, {"ok": None}) for d in domains}
+    return {d: _sites.get(d, {"ok": None}) for d, _ in items}
 
 
 def fetch() -> dict:
@@ -128,7 +171,7 @@ def fetch() -> dict:
         tunnels = [{"name": t.name, "state": t.state, "iran": t.iran.name, "foreign": t.foreign.name} for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
 
     rows = group(servers, tunnels)
-    st = sites([r["domain"] for r in rows])
+    st = sites([(r["domain"], r["role"]) for r in rows])
 
     for r in rows:
         r["site"] = st.get(r["domain"]) if r["domain"] else None

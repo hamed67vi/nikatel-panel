@@ -39,7 +39,12 @@ def test_group_servers_by_provider_with_tunnels():
     assert len(same) == 1 and same[0]["total"] == 2 and same[0]["name"] == "Example AG" and same[0]["domain"] == "example.de"
 
 
+def test_parse_reach():
+    got = dcs.parse_reach("REACH example-host.com:443 1 118\nREACH other.example:443 0 0\nnoise\n")
+    assert got == {"example-host.com": {"ok": True, "ms": 118}, "other.example": {"ok": False, "ms": 0}}
+
+
 def test_datacentres_api(client, monkeypatch):
-    monkeypatch.setattr(dcs, "sites", lambda domains: {d: {"ok": True, "code": 200, "ms": 120, "at": 1} for d in domains})
+    monkeypatch.setattr(dcs, "sites", lambda items: {d: {"ok": True, "code": 200, "ms": 120, "at": 1, "via": ""} for d, _ in items})
     r = client.get("/api/datacentres")
     assert r.status_code == 200 and r.json()["ok"] is True and isinstance(r.json()["rows"], list)

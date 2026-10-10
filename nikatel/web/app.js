@@ -253,7 +253,7 @@ function dcCard(r, tl) {
   if (r && r.loading) return `<div class="card radar">${head('<span class="pill">loading…</span>')}<div class="empty">Reading the providers…</div></div>`;
   if (!r || !r.rows) return `<div class="card radar">${head('<span class="pill">not available</span>')}<div class="empty">The list could not be read right now.</div></div>`;
   const state_ = d => { const s = d.site; if (!d.online && d.total) return "red"; if ((s && s.ok === false) || d.tunnels_bad) return "yellow"; if (d.online < d.total) return "yellow"; return "green"; };
-  const site = d => !d.domain ? '<span class="mut">no site known</span>' : !d.site || d.site.ok == null ? '<span class="mut">checking…</span>' : d.site.ok ? `<span class="gw-ok">✓ site answers</span> <small class="mut">${d.site.ms} ms</small>` : '<span class="err">✕ site does not answer</span>';
+  const site = d => !d.domain ? '<span class="mut">no site known</span>' : !d.site || d.site.ok == null ? '<span class="mut">checking…</span>' : d.site.ok ? `<span class="gw-ok">✓ site answers</span> <small class="mut">${d.site.ms} ms${d.site.via ? " from " + esc(d.site.via) : ""}</small>` : `<span class="err">✕ site does not answer</span>${d.site.via ? ` <small class="mut">from ${esc(d.site.via)}</small>` : ""}`;
   const row = d => `<div class="dc-row" title="${esc(d.servers.map(s => s.name + (s.online === false ? " (offline)" : "")).join(", "))}"><i class="dash-dot ${state_(d)}"></i>
     <div class="dc-name">${d.country ? `<small class="cc">${esc(d.country)}</small> ` : ""}${d.domain ? `<a href="https://${esc(d.domain)}" target="_blank" rel="noopener" title="${esc(d.name)}${d.asn ? " · AS" + esc(d.asn) : ""}">${esc(d.domain)} ↗</a> <small class="mut">${esc(d.name)}</small>` : `<b>${esc(d.name)}</b>`}${d.city ? `<small class="mut"> · ${esc(d.city)}</small>` : ""}</div>
     <span class="dc-n ${d.online < d.total ? "err" : ""}">${d.online} / ${d.total} <small class="mut">servers up</small></span>
@@ -263,7 +263,7 @@ function dcCard(r, tl) {
   const bad = r.rows.filter(x => state_(x) === "red").length, warn = r.rows.filter(x => state_(x) === "yellow").length;
   return `<div class="card radar">${head(`<span class="pill ${bad ? "err" : warn ? "" : "ok"}">${bad ? bad + " down" : warn ? warn + " with trouble" : "all fine"}</span>${r.unknown ? ` <span class="pill" title="The provider of a server is found from its address's registry data, once an hour">${r.unknown} unknown yet</span>` : ""}`)}
     <div class="rd-cols">${col("iran", "Iran")}${col("foreign", "Abroad")}</div>
-    <small class="mut">One row per hosting provider (found from each server's address). "site answers" = the provider's own website answers the panel server, checked every 10 minutes${r.at ? " · last " + ago(r.at) + " ago" : ""}.</small></div>`;
+    <small class="mut">One row per hosting provider (found from each server's address). "site answers" = the provider's own website answers: foreign ones asked from the panel server, Iranian ones from one of your Iran servers (many Iranian sites ignore visitors from abroad); checked every 10 minutes${r.at ? " · last " + ago(r.at) + " ago" : ""}.</small></div>`;
 }
 state.actBig = localStorage.getItem("nk.actbig") === "1";
 window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
