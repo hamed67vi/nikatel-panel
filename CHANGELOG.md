@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.0 - 2026-10-10 - Failover of an Iran server with ArvanCloud DNS
+
+* **Failover**: an Iran server that stays down (default 5 minutes) gets a plan: all its tunnels move to the best other Iran server (same names, ports and types) and the ArvanCloud A records that pointed at the dead server are pointed at the new one. Only the address of a record changes; every other field is sent back as read, and the result is read back to be sure. The DNS is touched only after every tunnel moved.
+* **Starts with approval**: the plan waits on Smart repair (Approve / Dismiss) and a Telegram notice is sent. Mode "automatic" exists but only runs clean plans. A finished failover can be undone (DNS back to the old address).
+* **Settings → Repairs & AI → ArvanCloud failover**: API key (kept on the server, never shown again), mode, minutes, optional domain list, a read-only key test, and a short guide to creating the key.
+* **Windows open with a spring animation**: blur clears, the box rises and settles, a light passes over it once.
 ## 1.6.0 - 2026-10-10 - Persian and English, glass-gold AI buttons, animated buttons
 
 * **Two languages**: a *فا / EN* button in the header (and on the sign-in page) switches the whole panel between English and Persian, right to left with the Vazirmatn font. One dictionary (`i18n.fa.ui.js` for the interface, `i18n.fa.msg.js` for what the server says) translates everything that reaches the screen - events, repair and build stories, errors; curl, ssh and TLS errors are explained in plain Persian, cause first. The choice is remembered per browser.

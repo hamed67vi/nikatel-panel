@@ -22,13 +22,16 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
     # the AI assistant (Anthropic): advises inside Fix; `actions` lets its suggested steps be added to the plan
     "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {}},   # status: the result of the last key test
+    # ArvanCloud DNS: the failover of an Iran server points the records that used its address at the replacement (mode: off | approve | auto)
+    "arvan": {"api_key": "", "mode": "off", "confirm_minutes": 5, "domains": [], "status": {}},
+    "failover": {"seen": {}, "pending": [], "history": []},
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
     # the secret entry path: when set, the panel answers 404 to everything until the browser has opened /<entry_path>
     "security": {"entry_path": ""},
 }
 
-SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",)}
+SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",)}
 
 
 def get(key: str) -> dict:
@@ -78,7 +81,7 @@ def public(key: str) -> dict:
 
     for f in SECRET_FIELDS.get(key, ()):
         d[f"has_{f}"] = bool(d.get(f))
-        if key == "ai":
+        if key in ("ai", "arvan"):
             d[f"{f}_tail"] = str(d.get(f) or "")[-4:] if len(str(d.get(f) or "")) >= 12 else ""   # the last four characters tell which key it is
 
         d[f] = ""

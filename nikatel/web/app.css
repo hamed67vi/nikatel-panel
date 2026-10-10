@@ -679,3 +679,15 @@ button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):no
 .ai-btn:hover::before { width: 16px; margin-inline-end: 6px; opacity: 1; transform: rotate(0) scale(1); animation: wand-wave2 1.1s .3s ease-in-out infinite; }
 @keyframes wand-wave2 { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-16deg); } 55% { transform: rotate(10deg); } }
 html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important; }
+
+/* ---- windows: they open with a soft spring from the front (blur clears, the box rises and settles, a light passes over the top edge once) */
+.overlay { animation: ov-in .35s ease both; }
+@keyframes ov-in { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; } }
+.modal, #ask .modal.ask-box { transform-origin: 50% 40%; animation: win-in .52s cubic-bezier(.2, .9, .25, 1.15) both; position: relative; }
+@keyframes win-in { 0% { opacity: 0; transform: perspective(900px) translateY(34px) rotateX(14deg) scale(.92); filter: blur(6px); } 55% { opacity: 1; filter: blur(0); } 100% { opacity: 1; transform: none; filter: none; } }
+.modal::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 215, 130, .20) 50%, transparent 65%) no-repeat; background-size: 250% 100%; background-position: 140% 0; animation: win-shine 1.1s .25s ease-out 1 both; }
+@keyframes win-shine { to { background-position: -40% 0; } }
+.modal-head { animation: win-head .5s .12s ease both; }
+.modal-body { animation: win-head .55s .2s ease both; }
+@keyframes win-head { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .overlay, .modal, .modal::after, .modal-head, .modal-body { animation: none !important; } }

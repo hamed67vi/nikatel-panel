@@ -25,6 +25,7 @@ from .services import (
     builder,
     configs,
     facts,
+    failover,
     nodes,
     panels,
     probe,
@@ -77,6 +78,7 @@ def _register_jobs() -> None:
     jobs.register("backup", 600, backup.scheduled)
     jobs.register("auto-repair", 60, actions.auto_repair)
     jobs.register("smart-repair", 300, autopilot.auto_escalate)
+    jobs.register("failover", 60, failover.check)
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 120, panels.check_all)
     jobs.register("geo", 3600, nodes.geo_missing_job)
