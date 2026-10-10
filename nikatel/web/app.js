@@ -333,9 +333,9 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
   </form>`;
 
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
-/* severity colours of the rows: red = down or critical, yellow = bearable (a little loss, high load) - the same rule everywhere */
+/* severity colours of the rows: red = fully down (or a server that cannot be reached / is critical), yellow = everything else that is wrong - packet loss of any size, degraded, slow, loaded */
 const srvSev = s => { if (!s.enabled) return ""; const f = s.facts || {}; if (s.online === false || noLogin(s) || (f.cpu || 0) >= 92 || (f.ram || 0) >= 92 || (f.disk || 0) >= 95) return "sev-red"; return (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };
-const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.state === "down" || loss >= 15) return "sev-red"; return t.state === "degraded" || t.state === "unknown" || t.state === "starting" || loss >= 5 || (t.rtt_ms || 0) > 150 ? "sev-yellow" : ""; };
+const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.state === "down") return "sev-red"; return t.state === "degraded" || t.state === "unknown" || t.state === "starting" || loss >= 5 || (t.rtt_ms || 0) > 150 ? "sev-yellow" : ""; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
@@ -734,7 +734,7 @@ window.checkAll = async () => {
   showModal("<b>🔍 Checking every tunnel</b>", '<div class="loading"><i class="spin"></i><span>Is each tunnel up, and how many packets does it lose? (about a minute)</span></div>', "wide");
   try {
     const r = await api("/api/tunnels/full-check", {method: "POST"});
-    const loss = x => x.loss_pct == null ? '<span class="mut">—</span>' : `<b class="${x.loss === "high" ? "err" : x.loss === "some" ? "warn" : "gw-ok"}">${x.loss_pct}%</b>${x.loss === "high" ? ' <small class="err">users feel it</small>' : x.loss === "some" ? ' <small class="warn">some</small>' : ""}`;
+    const loss = x => x.loss_pct == null ? '<span class="mut">—</span>' : `<b class="${x.loss ? "warn" : "gw-ok"}">${x.loss_pct}%</b>${x.loss === "high" ? ' <small class="warn">users feel it</small>' : x.loss === "some" ? ' <small class="warn">some</small>' : ""}`;
     showModal(`<b>🔍 All tunnels</b> <span class="pill ${r.down || r.high_loss ? "err" : "ok"}">${r.up} up · ${r.degraded} degraded · ${r.down} down${r.unknown ? " · " + r.unknown + " unknown" : ""}</span>${r.high_loss ? ` <span class="pill err">${r.high_loss} with high packet loss</span>` : ""}`,
       `<table class="tbl"><thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Latency</th><th>Packet loss</th></tr></thead><tbody>${r.rows.map(x => `<tr class="${x.state}"><td class="name">${esc(x.name)}</td><td><span class="st ${x.state}">${esc(x.state)}</span>${x.why ? `<small class="err td-err" title="${esc(x.why)}">${esc(x.why).slice(0, 44)}</small>` : ""}</td><td class="mut">${esc(x.iran)} ⇄ ${esc(x.foreign)}</td><td class="num">${x.latency_ms != null ? Math.round(x.latency_ms) + " ms" : '<span class="mut">—</span>'}</td><td class="num">${loss(x)}</td></tr>`).join("")}</tbody></table>
       <small class="mut">Packet loss of ${LOSS_HIGH_PCT} % or more is felt by users (stalls, slow pages); it is only shown here - the smart repair acts on it by itself when it is the route.</small>`, "wide");

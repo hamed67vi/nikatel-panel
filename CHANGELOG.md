@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.3 - 2026-10-10 - Colours: loss yellow, outage red
+
+* Packet loss of any size shows **yellow** (rows, the loss badge, Check all); only a full outage (tunnel down, server offline or without login) is **red**.
+
 ## 1.10.2 - 2026-10-10 - Fix: Nodes page error
 
 * The All / Problems tabs of the tunnel list had landed in the Nodes page ("tmode is not defined", Foreign and Iran tabs did not load); they are now in the tunnel list, where they belong.
