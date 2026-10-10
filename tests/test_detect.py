@@ -3,6 +3,23 @@ import re
 import pytest
 
 
+def test_a_server_that_binds_everywhere_still_pairs_with_its_client():
+    """Regression: a connected tunnel was shown as 'incomplete' (and removed) because its config binds 0.0.0.0 while
+    the foreign client dials the GRE inner address."""
+    from types import SimpleNamespace
+
+    from nikatel.services import detect as dt
+
+    servers = {1: SimpleNamespace(role="iran", name="ir1", host="203.0.113.5"), 2: SimpleNamespace(role="foreign", name="fo1", host="203.0.113.9")}
+    scans = {1: {"bh": [{"file": "iran-tcpmux-9997", "role": "server", "addr": "0.0.0.0:9997", "host": "0.0.0.0", "port": 9997, "transport": "tcpmux", "ports": ["80"]}],
+                 "gre": [{"iface": "PNL", "ip": "10.72.63.1", "remote": "203.0.113.9", "unit": "inactive"}]},
+             2: {"bh": [{"file": "kharej-tcpmux-9997", "role": "client", "addr": "10.72.63.1:9997", "host": "10.72.63.1", "port": 9997, "transport": "tcpmux", "ports": []}], "gre": [{"iface": "PNL", "ip": "10.72.63.2", "remote": "203.0.113.5", "unit": "none"}]}}
+    p = dt.pair(scans, servers)
+    assert len(p) == 1 and p[0]["paired"] and p[0]["foreign_name"] == "fo1" and p[0]["name"] == "PNL" and p[0]["iran_tunnel_ip"] == "10.72.63.1"
+    scans[2]["bh"][0]["port"] = 9000          # a client of another tunnel does not count
+    assert not dt.pair(scans, servers)[0]["paired"]
+
+
 def test_detect_clean_is_validated(client):
     from nikatel.services import detect as dt
 

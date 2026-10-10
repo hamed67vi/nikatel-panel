@@ -36,8 +36,19 @@ def parse_scan(out: str) -> dict:
     return d
 
 
+WILDCARD = ("0.0.0.0", "::", "")
+
+
+def iran_addresses(sc: dict, server: Server, bind_host: str) -> set[str]:
+    """Every address a foreign client may use to reach this Iran server's control port: where the config binds
+    (unless it binds everywhere), the server's own address, and the inner address of each of its GRE links."""
+    return ({bind_host} - set(WILDCARD)) | {server.host} | {g["ip"] for g in sc["gre"]}
+
+
 def pair(scans: dict[int, dict], servers: dict[int, Server]) -> list[dict]:
-    """Iran [server] tomls matched with foreign [client] tomls by transport + control port + the Iran GRE ip."""
+    """Iran [server] tomls matched with foreign [client] tomls by transport + control port + the address the client dials.
+    A config that binds 0.0.0.0 is matched through the Iran server's own address or the inner address of one of its GRE links
+    (a server with a connected client must never look 'incomplete')."""
     out = []
     foreign_clients = [(sid, bh) for sid, sc in scans.items() if servers[sid].role == "foreign" for bh in sc["bh"] if bh["role"] == "client"]
 
@@ -49,8 +60,9 @@ def pair(scans: dict[int, dict], servers: dict[int, Server]) -> list[dict]:
             if bh["role"] != "server":
                 continue
 
-            gre = next((g for g in sc["gre"] if g["ip"] == bh["host"]), None)
-            match = next(((fid, fb) for fid, fb in foreign_clients if fb["port"] == bh["port"] and fb["transport"] == bh["transport"] and fb["host"] == bh["host"]), None)
+            mine = iran_addresses(sc, servers[sid], bh["host"])
+            match = next(((fid, fb) for fid, fb in foreign_clients if fb["port"] == bh["port"] and fb["transport"] == bh["transport"] and fb["host"] in mine), None)
+            gre = next((g for g in sc["gre"] if g["ip"] == (match[1]["host"] if match else bh["host"])), None)
             fgre = None
 
             if match:
@@ -62,7 +74,6 @@ def pair(scans: dict[int, dict], servers: dict[int, Server]) -> list[dict]:
                         "paired": bool(match), "gre_unit": gre["unit"] if gre else "none"})
 
     return out
-
 
 def scan() -> dict:
     with session() as db:
@@ -144,6 +155,29 @@ def clean(iran_id: int, transport: str, port: int, name: str = "") -> list[str]:
             raise ValueError("this control port belongs to a tunnel in the panel: remove it from the list instead")
 
         node, label = Node(s.host, s.ssh_user, s.ssh_port), s.name
+
+    # last line of defence: look at every foreign server again; a client that still dials this control port means the tunnel is alive
+    with session() as db:
+        servers = {s.id: s for s in db.scalars(select(Server).where(Server.enabled.is_(True)))}
+        nodes = {sid: Node(s.host, s.ssh_user, s.ssh_port) for sid, s in servers.items()}
+
+    def look(sid: int) -> dict:
+        try:
+            return parse_scan(run_script(nodes[sid], "scan_tunnels", timeout=30))
+        except (SSHError, ValueError):
+            return {"bh": [], "gre": [], "failed": True}
+
+    with ThreadPoolExecutor(10) as ex:
+        scans = dict(zip(servers, ex.map(look, servers)))
+
+    mine = iran_addresses(scans.get(iran_id, {"gre": []}), servers[iran_id], "")
+
+    for sid, sc in scans.items():
+        if servers[sid].role == "foreign" and any(b["role"] == "client" and b["port"] == int(port) and b["transport"] == transport and b["host"] in mine for b in sc["bh"]):
+            raise ValueError(f"the foreign server {servers[sid].name} still has a client dialling this control port: the tunnel is not incomplete, nothing was removed")
+
+    if any(sc.get("failed") and servers[sid].role == "foreign" for sid, sc in scans.items()):
+        raise ValueError("a foreign server could not be checked, so nothing was removed (a tunnel must never be removed while one of its possible partners is unknown)")
 
     safe = re.sub(r"[^a-z0-9-]", "", str(name or "").lower())[:15] or "none"
     out = run_action(node, "remove_tunnel_files", {"NAME": safe, "PORT": str(int(port)), "TRANSPORT": transport}, timeout=90)
