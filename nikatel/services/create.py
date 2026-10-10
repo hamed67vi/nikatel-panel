@@ -21,6 +21,7 @@ from ..ssh import Node, SSHError, run_script
 from . import autopilot, build_other, builder, detect, failover
 
 log = get_logger("create")
+MAX_TRIES = 4          # Iran servers tried one after the other when the build on one fails
 _POLL = 2.0
 
 
@@ -122,52 +123,70 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
         raise ValueError("a tunnel to replace is not in the list any more")
 
     def work(aid: int) -> None:
-        chosen = iran_id
+        candidates = [iran_id] if iran_id else []
 
-        if not chosen:
+        if not iran_id:
             autopilot._say(aid, f"Choosing the Iran server: pinging {fname} from every Iran server, looking at load, tunnels and free ports…")
             ranking = detect.auto_iran(foreign_id, ports)
-            best = next((r for r in ranking if r.get("score", 0) > 0), None)
+            usable = [r for r in ranking if r.get("score", 0) > 0]
 
-            if best is None:
+            if not usable:
                 autopilot._say(aid, "No Iran server can carry this tunnel right now: " + ("; ".join(f"{r['name']}: {r.get('reason', '')}" for r in ranking[:6]) or "no Iran server is online"), done=True, ok=False)
                 return
 
-            chosen = best["id"]
-            autopilot._say(aid, f"Smart choice: {best['name']} ({best.get('reason', '')}, score {best.get('score')})")
+            candidates = [r["id"] for r in usable[:MAX_TRIES]]
+            autopilot._say(aid, "Order (quality first, then free resources): " + ", ".join(f"{r['name']} ({r.get('reason', '')})" for r in usable[:MAX_TRIES]))
 
         plans = []
 
         for tid, name in replace:
             if dns_follow:
                 try:
-                    plans.append(failover.replace_plan(tid, chosen))
+                    plans.append(failover.replace_plan(tid, candidates[0]))
                 except (ValueError, RuntimeError) as e:
                     autopilot._say(aid, f"DNS of {name}: no plan: {str(e)[:120]}")
 
             res = builder.delete_tunnel(tid)
             autopilot._say(aid, f"Removed {name}: " + "; ".join(res))
 
-        with session() as db:
-            iname = db.get(Server, chosen).name
+        chosen = 0
 
-        autopilot._say(aid, f"Building {kind} · {transport or 'default'} {iname} ⇄ {fname}, ports {ports}")
+        for n, cand in enumerate(candidates):
+            with session() as db:
+                srv = db.get(Server, cand)
+                iname = srv.name if srv is not None else str(cand)
 
-        if kind == "backhaul":
-            build_aid = builder.start_build(chosen, foreign_id, ports, transport, mtu, keepalive, nodelay=nodelay, opts=opts)
-        else:
-            build_aid = build_other.start_build(chosen, foreign_id, ports, kind, transport, opts, measure=measure)
+            autopilot._say(aid, f"{'Trying' if n else 'Building'} {kind} · {transport or 'default'} {iname} ⇄ {fname}, ports {ports}")
 
-        if not _follow(aid, build_aid):
+            try:
+                if kind == "backhaul":
+                    build_aid = builder.start_build(cand, foreign_id, ports, transport, mtu, keepalive, nodelay=nodelay, opts=opts)
+                else:
+                    build_aid = build_other.start_build(cand, foreign_id, ports, kind, transport, opts, measure=measure)
+            except ValueError as e:
+                autopilot._say(aid, f"{iname}: skipped - {str(e)[:140]}")
+                continue
+
+            if _follow(aid, build_aid):
+                chosen = cand
+                break
+
+            autopilot._say(aid, f"{iname}: did not work" + (" - trying the next Iran server" if n < len(candidates) - 1 else ""))
+
+        if not chosen:
             autopilot._say(aid, "The build did not succeed." + (" The removed tunnel(s) are not rebuilt: build again, or on another server." if replace else ""), done=True, ok=False)
             return
 
+        with session() as db:
+            final = db.get(Server, chosen)
+            target = {"id": final.id, "name": final.name, "ip": final.host}
+
         for p in plans:
+            p["target"] = target                               # the server that finally worked
             failover.after_replace(aid, p, immediate=True)      # the operator ticked it: no second approval
 
         if dns_names:
             failover.point_names(aid, dns_names, chosen)
 
         autopilot._say(aid, "Done.", done=True, ok=True)
-
     return autopilot._start(f"create {ports} → {fname}", work, action="create")

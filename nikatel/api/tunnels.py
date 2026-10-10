@@ -186,6 +186,17 @@ def quality(tunnel_id: int):
         raise HTTPException(502, str(e))
 
 
+@router.post("/tunnels/retune", status_code=202)
+def retune():
+    """Apply the newer Backhaul defaults to the tunnels that exist - one at a time, at quiet moments, each checked and rolled back if worse."""
+    from ..services import retune as rt
+
+    try:
+        return {"ok": True, "id": rt.start()}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/tunnels/full-check")
 def full_check():
     """Check every tunnel (up / down, data path) and measure its packet loss; display only."""

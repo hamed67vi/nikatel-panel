@@ -80,7 +80,7 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
 
     text = "\n".join(s["story"])
     assert s["done"] and s["ok"] is True and s["action"] == "create", text
-    assert "Smart choice: ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
+    assert "Order (quality first" in text and "ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
     assert applied == [("example.test", "ra", "203.0.113.5", "203.0.113.9")] and "DNS (as ticked)" in text        # the tick is the approval: applied at once
     hist, log = st.get("failover")["history"], st.get("failover")["dns_log"]
     assert hist[-1]["reason"] == "replace" and hist[-1]["ok"] is True and hist[-1]["target"]["id"] == w["ir2"] and st.get("failover")["pending"] == []
@@ -136,3 +136,46 @@ def test_point_names_changes_the_record_and_logs_it(client, monkeypatch):
     r = client.get("/api/arvan/records").json()
     assert r["records"][0]["fqdn"] == "ca.example.test" and r["records"][0]["ips"] == ["203.0.113.9"]
     assert client.post("/api/tunnels", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9075", "dns_names": ["bad name!"]}).status_code == 400
+
+
+def test_the_smart_choice_order_is_quality_first_then_resources():
+    rows = [{"name": "a", "score": 70, "quality": 92, "resources": 40, "unused": 80}, {"name": "b", "score": 66, "quality": 95, "resources": 85, "unused": 40},
+            {"name": "c", "score": 60, "quality": 78, "resources": 99, "unused": 99}, {"name": "d", "score": 0, "quality": 99, "resources": 99, "unused": 99}, {"name": "e", "score": 50, "quality": 91, "resources": 20, "unused": 90}]
+    assert [r["name"] for r in sorted(rows, key=detect.rank_key)] == ["b", "a", "e", "c", "d"]        # b and a: same quality step -> b has more resources; c: lower quality step; d: unusable last
+    assert detect.rank_key(rows[0]) > detect.rank_key(rows[1])
+
+
+def test_the_smart_choice_goes_on_to_the_next_server_when_a_build_fails(client, monkeypatch):
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    w = _world()
+    monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": w["ir1"], "name": "ir1", "score": 90, "quality": 95, "resources": 50, "unused": 50, "reason": "ok"},
+                                                                           {"id": w["ir2"], "name": "ir2", "score": 80, "quality": 90, "resources": 60, "unused": 60, "reason": "ok"}])
+    tried = []
+
+    def fake_build(iran_id, foreign_id, ports, transport, mtu=0, keepalive=75, forced_name="", nodelay=True, opts=None):
+        tried.append(iran_id)
+
+        with session() as db:
+            ok = iran_id == w["ir2"]                                            # the first server fails, the second works
+            e = ActionLog(ref="b", action="build", source="manual", story=["Built." if ok else "Stopped: no GRE on this route"], ok=ok, finished_at=int(time.time()))
+            db.add(e)
+            db.flush()
+            return e.id
+
+    monkeypatch.setattr(builder, "start_build", fake_build)
+    monkeypatch.setattr(create, "_POLL", 0.05)
+    r = client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "9075", "kind": "backhaul", "transport": "tcpmux"})
+    s = None
+
+    for _ in range(100):
+        s = client.get(f"/api/actions/{r.json()['id']}").json()
+
+        if s["done"]:
+            break
+
+        time.sleep(0.1)
+
+    text = "\n".join(s["story"])
+    assert s["ok"] is True and tried == [w["ir1"], w["ir2"]] and "ir1: did not work - trying the next Iran server" in text and "Order (quality first" in text

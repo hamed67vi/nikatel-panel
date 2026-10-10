@@ -297,7 +297,7 @@ def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: l
     o = opts or {}
     mux = transport != "tcp"
     nd = "true" if nodelay else "false"
-    mv, fs, rb, sb = o.get("mux_version", 2), o.get("mux_framesize", 32768), o.get("mux_recievebuffer", 8388608), o.get("mux_streambuffer", 262144)
+    mv, fs, rb, sb = o.get("mux_version", 2), o.get("mux_framesize", 32768), o.get("mux_recievebuffer", 8388608), o.get("mux_streambuffer", 524288)
     mux_server = (f"mux_con = {o.get('mux_con', 8)}\nmux_version = {mv}\nmux_framesize = {fs}\nmux_recievebuffer = {rb}\nmux_streambuffer = {sb}\n") if mux else ""
     mux_client = (f"mux_version = {mv}\nmux_framesize = {fs}\nmux_recievebuffer = {rb}\nmux_streambuffer = {sb}\n") if mux else ""
     port_lines = "\n".join(f'    "{p.entry()}",' for p in ports)
@@ -321,7 +321,7 @@ ports = [
 remote_addr = "{iran_ip}:{port}"
 transport = "{transport}"
 token = "{token}"
-connection_pool = {o.get('connection_pool', 16 if mux else 32)}
+connection_pool = {o.get('connection_pool', 24 if mux else 32)}
 aggressive_pool = {"true" if o.get('aggressive_pool') else "false"}
 keepalive_period = {keepalive}
 dial_timeout = {o.get('dial_timeout', 10)}

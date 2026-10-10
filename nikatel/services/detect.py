@@ -189,6 +189,12 @@ def clean(iran_id: int, transport: str, port: int, name: str = "") -> list[str]:
 
 
 # ------------------------------------------------------------------ automatic choice of the Iran server
+def rank_key(r: dict) -> tuple:
+    """Pure: the order of the Iran servers for a new tunnel - the unusable last; then QUALITY first (ping and loss to the foreign server, in steps of 10 points,
+    so that two servers of about the same quality count as equal); inside a step the one with MORE free resources; then the one that carries fewer tunnels."""
+    return (r.get("score", 0) <= 0, -(r.get("quality", 0) // 10), -r.get("resources", 0), -r.get("unused", 0), r.get("name", ""))
+
+
 def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
     """Rank the Iran servers for a new tunnel to this foreign server: ping quality from each one (loss,
     rtt), free resources, how many tunnels it already carries, and whether the wanted ports are free."""
@@ -240,4 +246,4 @@ def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
     with ThreadPoolExecutor(8) as ex:
         rows = list(ex.map(one, iran))
 
-    return sorted(rows, key=lambda r: -r["score"])
+    return sorted(rows, key=rank_key)

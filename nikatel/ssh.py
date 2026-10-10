@@ -189,6 +189,10 @@ __NK_PY__
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
 
     # 4 pings to a host (used from the Iran servers: is a foreign address reachable / filtered?)
+    # the text of one Backhaul config file, base64 (the re-tune reads the real file, changes two lines and can put the original back). Read-only.
+    "read_cfg": (r"""base64 -w0 '@PATH@'
+""", {"PATH": r"^/etc/backhaul/[A-Za-z0-9._-]{1,80}\.toml$"}),
+
     # how far a detached install (install_btblock / install_marzban_node) is: "STATE running|ok|failed|none" and the last lines of its log or result. Read-only.
     "install_status": (r"""d=/var/lib/nikatel-install; n=@NAME@; s="$n"; [ "$n" = btblock ] && s=btblock; [ "$n" = mznode ] && s=mznode
 if [ -f $d/$n.ok ]; then echo "STATE ok"; cat $d/$n.out 2>/dev/null | tail -n 3
@@ -435,7 +439,7 @@ ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
 
     # write one file (base64 payload) atomically into an allowed directory
     "put_file": (r"""set -e; mkdir -p "$(dirname '@PATH@')"; echo '@B64@' | base64 -d > '@PATH@.nikatel-tmp'; chmod @MODE@ '@PATH@.nikatel-tmp'; mv -f '@PATH@.nikatel-tmp' '@PATH@'; echo "WROTE @PATH@"
-""", {"PATH": _PATH, "B64": _B64, "MODE": r"^0[67][04][04]$"}),
+""", {"PATH": _PATH, "B64": _B64, "MODE": r"^0[67][0145][0145]$"}),
 
     # (re)load systemd, enable and restart one unit, report its state
     "unit_enable_restart": (r"""systemctl daemon-reload; systemctl enable '@UNIT@' >/dev/null 2>&1 || true; systemctl restart '@UNIT@' 2>&1 | tail -2; sleep 2; echo "UNIT @UNIT@ $(systemctl is-active '@UNIT@' 2>/dev/null || echo unknown)"
