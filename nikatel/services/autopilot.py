@@ -120,11 +120,8 @@ def ladder_for(cause: str, kind: str, level: str = "switch") -> list[str]:
         if rank >= 2:
             steps.append("switch")
     elif cause == "lossy_route":
-        if rank >= 1:
-            steps.append("relink")
-
         if rank >= 2:
-            steps.append("switch")      # another tunnel type may cross the same route better; it is only kept when it measures better
+            steps.append("switch")      # a tunnel that still carries data is not cut for a guess: candidates (a fresh GRE link and the other types) are TESTED beside it, and it is replaced only by one that measures clearly better
 
         steps.append("move")            # the move goes through the failover: approval first, or automatic (Smart repair → Failover · CDN)
     elif cause == "route_cut":
@@ -468,6 +465,57 @@ def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str]) ->
     return []
 
 
+BETTER_BY = 10          # a candidate must score this much more than the tunnel it replaces
+QUIET_MBPS = 1.5        # below this traffic (both ways together) a swap hardly disturbs anyone
+VERY_BAD_LOSS = 30.0    # at this loss users are already suffering: no waiting for a quiet moment
+
+
+def choose_better(current_score: float | None, results: list[dict], min_score: int = 45) -> dict | None:
+    """Pure: the best working candidate - but for a tunnel that still works only when it is clearly better (BETTER_BY points) than the current one."""
+    best = next((r for r in rank_results(results) if r.get("ok") and (r.get("score") or 0) >= min_score), None)
+
+    if best is None:
+        return None
+
+    if current_score is not None and (best.get("score") or 0) < current_score + BETTER_BY:
+        return None
+
+    return best
+
+
+def quiet_ok(rx: float | None, tx: float | None, loss: float | None) -> bool:
+    """Pure: may the tunnel be swapped now? Yes when little traffic flows, or when the loss is so bad that waiting costs more than a swap."""
+    if (loss or 0) >= VERY_BAD_LOSS:
+        return True
+
+    if rx is None and tx is None:
+        return True
+
+    return (rx or 0) + (tx or 0) < QUIET_MBPS
+
+
+def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800) -> bool:
+    """Wait (up to `limit` s) for a quiet moment before the swap, so that customers are not cut while they use the tunnel."""
+    end, said = time.time() + limit, False
+
+    while True:
+        with session() as db:
+            t = db.get(Tunnel, tunnel_id)
+            rx, tx, loss = (t.rx_mbps, t.tx_mbps, (t.detail or {}).get("loss_pct")) if t is not None else (None, None, None)
+
+        if quiet_ok(rx, tx, loss):
+            return True
+
+        if not said:
+            _say(aid, f"Waiting for a quiet moment to swap it: {(rx or 0) + (tx or 0):.1f} Mb/s flow now (under {QUIET_MBPS} Mb/s is quiet), so customers are not cut.")
+            said = True
+
+        if time.time() > end:
+            return False
+
+        time.sleep(30)
+
+
 def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", finish: bool = True) -> bool:
     """Diagnose, then climb the ladder up to `level`. With finish=False the story entry is left open (a run over several tunnels)."""
     snap = _snapshot(tunnel_id)
@@ -506,11 +554,23 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
             _say(aid, "New link: " + (plan_line.replace("Plan: ", "") + " → " if plan_line else "") + (story[-1] if story else "no result"))
             healed = ok
         elif step == "switch":
-            results = _recommend_now(aid, snap["iran_id"], snap["foreign_id"], NO_GRE if d["cause"] == "gre_blocked" else [k for k in CANDIDATES if k != d["kind"]])
-            best = next((r for r in rank_results(results) if r.get("ok") and (r.get("score") or 0) >= 45), None)
+            lossy = d["cause"] == "lossy_route"          # still carries data: test beside it, swap only for something clearly better, at a quiet moment
+            current = None
+
+            if lossy:
+                try:
+                    current = tunnel_test.quality(tunnel_id).get("score")
+                    _say(aid, f"The current tunnel scores {current}/100; a candidate must beat it by {BETTER_BY} points.")
+                except (ValueError, SSHError) as e:
+                    _say(aid, f"The current tunnel could not be measured ({str(e)[:80]}): any working candidate counts.")
+
+            results = _recommend_now(aid, snap["iran_id"], snap["foreign_id"], NO_GRE if d["cause"] == "gre_blocked" else CANDIDATES if lossy else [k for k in CANDIDATES if k != d["kind"]])
+            best = choose_better(current if lossy else None, results)
 
             if best is None:
-                _say(aid, "No other tunnel type works well on this route today. A human should look at it.")
+                _say(aid, "No candidate is clearly better than what runs now: the tunnel stays as it is, nothing was cut." if lossy else "No other tunnel type works well on this route today. A human should look at it.")
+            elif lossy and not _wait_quiet(aid, tunnel_id):
+                _say(aid, f"{best['kind']} would be better (score {best.get('score')}), but the tunnel is busy: it is swapped at the next quiet moment.")
             else:
                 healed = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], best["kind"], f"Best type today: {best['kind']} (score {best.get('score')}).")
 
@@ -652,6 +712,59 @@ def ranking(tunnel_id: int) -> list[dict]:
     return [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r["id"] != snap["iran_id"]]
 
 
+# ------------------------------------------------------------------ observing: as soon as a loss is seen
+OBSERVE_FROM = 5.0       # % loss on the link that starts the looking (the log of the Live window)
+ACT_FROM = 15.0          # % loss users feel (the degraded level): from here the repair acts
+
+
+def observe(aid: int, tunnel_id: int) -> None:
+    """Read-only: the diagnosis (with where the loss is) written as a story, and the decision - act, or keep watching."""
+    snap = _snapshot(tunnel_id)
+    d = diagnose(tunnel_id)
+    _say(aid, f"{snap['name']}: {d['summary']}.")
+
+    for f in d["findings"]:
+        _say(aid, ("✓ " if f["ok"] else "✕ ") + f["text"])
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        loss = (t.detail or {}).get("loss_pct") if t is not None else None
+
+    if d["cause"] == "healthy":
+        _say(aid, "Nothing to do.", done=True, ok=True)
+    elif (loss or 0) < ACT_FROM and d["cause"] == "lossy_route":
+        _say(aid, f"The loss ({loss}%) is under the level users feel ({ACT_FROM:g}%): only watching. The repair starts by itself when it stays above that.", done=True, ok=True)
+    else:
+        _say(aid, "This is past the level users feel: the repair acts by itself (tests first, a swap only for something clearly better, at a quiet moment).", done=True, ok=True)
+
+
+def observe_all() -> None:
+    """Job hook (every 5 minutes): a tunnel that shows packet loss gets looked at at once, at most every 30 minutes."""
+    if not st.get("repair").get("auto") or get_settings().read_only:
+        return
+
+    now = int(time.time())
+
+    with session() as db:
+        cands = [(t.id, t.name) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))
+                 if t.state in ("degraded", "down") or ((t.detail or {}).get("loss_pct") or 0) >= OBSERVE_FROM]
+
+    for tid, name in cands:
+        if name in _BUSY:
+            continue
+
+        with session() as db:
+            last = db.scalar(select(ActionLog.ts).where(ActionLog.ref == name, ActionLog.action.in_(("observe", "autopilot"))).order_by(ActionLog.id.desc()).limit(1))
+
+        if last and now - last < 1800:
+            continue
+
+        try:
+            _start(name, observe, tid, action="observe")
+        except ValueError:
+            continue
+
+
 # ------------------------------------------------------------------ automatic escalation (Settings -> Repairs, level)
 def auto_escalate() -> None:
     """Job hook: a tunnel that plain restarts could not heal gets a smart repair, once per 6 hours, never `move`."""
@@ -671,7 +784,7 @@ def auto_escalate() -> None:
 
     for tid, name, since, st_ in down:
         # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb)
-        if name in muted or name in _BUSY or now - since < int(conf.get("after_seconds", 180)) + 120 or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
+        if name in muted or name in _BUSY or now - since < (int(conf.get("after_seconds", 180)) + 120 if st_ == "down" else 600) or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
             continue
 
         with session() as db:

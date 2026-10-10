@@ -31,7 +31,7 @@ def test_ladder_is_limited_by_the_level():
     assert ap.ladder_for("gre_blocked", "tcpmux", "rebuild") == ["relink"]                                  # the link again from scratch: new inner network, new GRE key
     assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["relink", "switch"] and ap.ladder_for("port_blocked", "bp:tcp", "switch") == ["relink", "switch"]
     assert ap.ladder_for("route_cut", "tcpmux", "switch") == ["move"]          # the move goes through the failover, which asks first
-    assert ap.ladder_for("lossy_route", "tcpmux", "switch") == ["relink", "switch", "move"] and ap.ladder_for("lossy_route", "tcpmux", "restart") == ["move"]
+    assert ap.ladder_for("lossy_route", "tcpmux", "switch") == ["switch", "move"] and ap.ladder_for("lossy_route", "tcpmux", "restart") == ["move"]      # a lossy tunnel is never cut for a relink
     assert ap.ladder_for("healthy", "tcpmux") == [] and ap.ladder_for("server_unreachable", "tcpmux") == []
 
 
@@ -180,3 +180,13 @@ def test_clean_ping_but_dead_gre_is_a_gre_filter_not_a_flapping_route():
     cause, why = ap.classify({"state": "down", "flap_fails": 9, "flap_n": 10, "gre": True, "gre_loss": 100.0, "under_loss_i": 0.0, "under_loss_f": 0.0})
     assert cause == "gre_blocked" and "protocol 47" in why
     assert ap.classify({"state": "degraded", "flap_fails": 4, "flap_n": 10, "gre": True, "gre_loss": 0.0, "under_loss_i": 0.0, "under_loss_f": 0.0})[0] == "lossy_route"      # a flapping link without a dead GRE ping stays a route problem
+
+
+def test_a_swap_needs_a_clearly_better_candidate_and_a_quiet_moment():
+    res = [{"kind": "tcpmux", "ok": True, "score": 62}, {"kind": "bp:tcpmux", "ok": True, "score": 55}, {"kind": "chisel:tls", "ok": False, "score": 90}]
+    assert ap.choose_better(None, res)["kind"] == "tcpmux"                      # a dead tunnel: the best working candidate
+    assert ap.choose_better(50, res)["kind"] == "tcpmux"                        # 62 beats 50 by 12
+    assert ap.choose_better(55, res) is None                                    # only 7 better: it stays
+    assert ap.choose_better(None, [{"kind": "x", "ok": True, "score": 40}]) is None                              # nothing good enough
+    assert ap.quiet_ok(0.4, 0.3, 12.0) is True and ap.quiet_ok(9.0, 1.0, 12.0) is False       # busy: wait
+    assert ap.quiet_ok(9.0, 1.0, 35.0) is True and ap.quiet_ok(None, None, 20.0) is True        # very bad loss, or no traffic data: go

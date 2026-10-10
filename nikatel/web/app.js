@@ -1131,9 +1131,9 @@ window.apLive = async (id, name) => {
   /* the live log of what the smart repair does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
   showModal(`<b>📡 ${esc(name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Looking for the repair of this tunnel…</div></div><div class="frm-act" style="margin-top:8px"><button class="sm" onclick="apDiagnose('+id+')">🩺 Check the tunnel now</button></div>', "wide");
   try {
-    const list = (await api("/api/actions?limit=60")).actions.filter(a => a.ref === name && ["autopilot", "fix", "build", "create"].includes(a.action));
+    const list = (await api("/api/actions?limit=60")).actions.filter(a => a.ref === name && ["autopilot", "observe", "fix", "build", "create"].includes(a.action));
     const box = $("#ap-story"), a = list.find(x => !x.done) || list[0];
-    if (!a) { box.innerHTML = '<div class="mut" style="padding:8px">No repair of this tunnel yet. The smart repair starts by itself a few minutes after it went down or lossy; this window shows what it does as it happens.</div>'; return; }
+    if (!a) { box.innerHTML = '<div class="mut" style="padding:8px">Nothing to show yet. As soon as this tunnel shows packet loss (5 % or more) the smart repair looks at it and writes what it sees here; it acts by itself only when the loss is high enough for users to feel (15 %) or the tunnel is down.</div>'; return; }
     box.innerHTML = storyHtml(a);
     if (!a.done) followStory(a.id, box, 900).then(() => refresh());
   } catch (e) { const box = $("#ap-story"); if (box) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }

@@ -78,6 +78,7 @@ def _register_jobs() -> None:
     jobs.register("backup", 600, backup.scheduled)
     jobs.register("auto-repair", 60, actions.auto_repair)
     jobs.register("smart-repair", 300, autopilot.auto_escalate)
+    jobs.register("observe", 300, autopilot.observe_all)
     jobs.register("failover", 60, failover.check)
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 120, panels.check_all)
