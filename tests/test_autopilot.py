@@ -69,3 +69,24 @@ def test_diagnose_config_names_the_likely_cause(client):
     assert autopilot.diagnose_config(ids["c4"])["summary"] == "this config works now"
     assert client.get(f"/api/autopilot/diagnose-config/{ids['c1']}").json()["ok"] is True
     assert client.get("/api/autopilot/diagnose-config/9999").status_code == 400
+
+
+def test_diagnose_config_tells_a_filtered_name_from_a_filtered_address(client, monkeypatch):
+    from sqlalchemy import select
+
+    from nikatel.db import session
+    from nikatel.models import Config, Server
+    from nikatel.services import autopilot
+
+    with session() as db:
+        db.add(Server(name="i1", host="10.0.0.1", role="iran"))
+        db.add(Config(name="cdn1", status="down", meta={"address": "x.example", "port": 2087, "network": "ws", "security": "tls"}))
+        cid = db.scalar(select(Config)).id
+
+    for out, word in (("SNI 203.0.113.7 own=0 control=1", "is blocked from Iran"), ("SNI 203.0.113.7 own=0 control=0", "nothing else shares this address"), ("SNI 203.0.113.7 own=1 control=1", "nothing else shares this address")):
+        monkeypatch.setattr(autopilot, "run_script", lambda node, name, params=None, timeout=25, o=out: o)
+        d = autopilot.diagnose_config(cid)
+        assert word in d["summary"], (out, d["summary"])
+
+    monkeypatch.setattr(autopilot, "run_script", lambda node, name, params=None, timeout=25: "SNI 203.0.113.7 own=0 control=1")
+    assert any("the name is filtered" in f["text"] for f in autopilot.diagnose_config(cid)["findings"])
