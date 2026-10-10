@@ -731,3 +731,12 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 
 /* ---- tunnel list: the reason under the state (the Score column is gone; the quality test stays in the Traffic cell's title) */
 .td-err { display: block; font-size: 10.5px; line-height: 1.2; margin-top: 2px; max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- menu text in 3D: an extruded edge (stacked shadows going down-right), a soft drop shadow, and a small tilt towards the pointer */
+nav { perspective: 700px; }
+nav a > span { text-shadow: 0 1px 0 rgba(255,255,255,.12), 1px 2px 0 rgba(0,0,0,.55), 2px 3px 0 rgba(0,0,0,.42), 3px 4px 0 rgba(0,0,0,.30), 4px 6px 8px rgba(0,0,0,.45); transform-origin: left center; transition: transform .3s var(--ease), text-shadow .3s ease, color .25s ease; }
+nav a:hover > span { transform: translateZ(14px) rotateY(-9deg) translateX(2px); text-shadow: 0 1px 0 rgba(255,255,255,.2), 1px 2px 0 rgba(0,0,0,.6), 2px 3px 0 rgba(0,0,0,.5), 3px 4px 0 rgba(0,0,0,.4), 4px 5px 0 rgba(0,0,0,.3), 6px 9px 12px rgba(0,0,0,.5); }
+nav a.on > span { text-shadow: 0 1px 0 rgba(255,255,255,.25), 1px 2px 0 rgba(255,190,70,.38), 2px 3px 0 rgba(0,0,0,.55), 3px 4px 0 rgba(0,0,0,.42), 4px 6px 10px rgba(0,0,0,.5); }
+:root[data-mode="light"] nav a > span { text-shadow: 0 1px 0 rgba(255,255,255,.9), 1px 2px 0 rgba(0,0,0,.18), 2px 3px 0 rgba(0,0,0,.12), 3px 5px 6px rgba(0,0,0,.18); }
+:root[data-anim="off"] nav a:hover > span { transform: none; }
+@media (prefers-reduced-motion: reduce) { nav a:hover > span { transform: none; } }
