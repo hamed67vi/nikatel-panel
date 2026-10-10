@@ -228,8 +228,6 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 PAGES.dashboard = async () => {
   const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.cfgCache = cfg.configs;
-  const rd = state.dcs || {loading: true};   // the data-centre box checks outside sites: it is fetched after the page is on screen and never holds it up
-  api("/api/datacentres").then(r => { state.dcs = r; const b = $("#radar-box"); if (b) b.innerHTML = dcCard(r, tl); }).catch(() => { const b = $("#radar-box"); if (b && !state.dcs) b.innerHTML = dcCard(null, tl); });
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
   $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
@@ -245,28 +243,8 @@ PAGES.dashboard = async () => {
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div><div id="radar-box">${dcCard(rd, tl)}</div>`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>`;
 };
-/* ---- the data centres our servers are hosted at: our servers and tunnels there, and whether the provider's own site answers */
-function dcCard(r, tl) {
-  const head = right => `<h3>Data centres <small class="mut">where your servers are</small><span class="sp"></span>${right}</h3>`;
-  if (r && r.loading) return `<div class="card radar">${head('<span class="pill">loading…</span>')}<div class="empty">Reading the providers…</div></div>`;
-  if (!r || !r.rows) return `<div class="card radar">${head('<span class="pill">not available</span>')}<div class="empty">The list could not be read right now.</div></div>`;
-  const state_ = d => { const s = d.site; if (!d.online && d.total) return "red"; if ((s && s.ok === false) || d.tunnels_bad) return "yellow"; if (d.online < d.total) return "yellow"; return "green"; };
-  const site = d => !d.domain ? '<span class="mut">no site known</span>' : !d.site || d.site.ok == null ? '<span class="mut">checking…</span>' : d.site.ok ? `<span class="gw-ok">✓ site answers</span> <small class="mut">${d.site.ms} ms${d.site.via ? " from " + esc(d.site.via) : ""}</small>` : `<span class="err">✕ site does not answer</span>${d.site.via ? ` <small class="mut">from ${esc(d.site.via)}</small>` : ""}`;
-  const row = d => `<div class="dc-row" title="${esc(d.servers.map(s => s.name + (s.online === false ? " (offline)" : "")).join(", "))}"><i class="dash-dot ${state_(d)}"></i>
-    <div class="dc-name">${d.country ? `<small class="cc">${esc(d.country)}</small> ` : ""}${d.domain ? `<a href="https://${esc(d.domain)}" target="_blank" rel="noopener" title="${esc(d.name)}${d.asn ? " · AS" + esc(d.asn) : ""}">${esc(d.domain)} ↗</a> <small class="mut">${esc(d.name)}</small>` : `<b>${esc(d.name)}</b>`}${d.city ? `<small class="mut"> · ${esc(d.city)}</small>` : ""}</div>
-    <span class="dc-n ${d.online < d.total ? "err" : ""}">${d.online} / ${d.total} <small class="mut">servers up</small></span>
-    <span class="dc-n ${d.tunnels_bad ? "err" : ""}">${d.tunnels_total ? `${d.tunnels_total - d.tunnels_bad} / ${d.tunnels_total} <small class="mut">tunnels up</small>` : '<small class="mut">no tunnels</small>'}</span>
-    <span class="dc-site">${site(d)}</span></div>`;
-  const col = (g, title) => { const rows = r.rows.filter(x => g === "iran" ? x.role === "iran" : x.role !== "iran"); return rows.length ? `<div><h4>${title}</h4>${rows.map(row).join("")}</div>` : ""; };
-  const bad = r.rows.filter(x => state_(x) === "red").length, warn = r.rows.filter(x => state_(x) === "yellow").length;
-  return `<div class="card radar">${head(`<span class="pill ${bad ? "err" : warn ? "" : "ok"}">${bad ? bad + " down" : warn ? warn + " with trouble" : "all fine"}</span>${r.unknown ? ` <span class="pill" title="The provider of a server is found from its address's registry data, once an hour">${r.unknown} unknown yet</span>` : ""}`)}
-    <div class="rd-cols">${col("iran", "Iran")}${col("foreign", "Abroad")}</div>
-    <small class="mut">One row per hosting provider (found from each server's address). "site answers" = the provider's own website answers: foreign ones asked from the panel server, Iranian ones from one of your Iran servers (many Iranian sites ignore visitors from abroad); checked every 10 minutes${r.at ? " · last " + ago(r.at) + " ago" : ""}.</small></div>`;
-}
-state.actBig = localStorage.getItem("nk.actbig") === "1";
-window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
 /* ---- the Problems box: only what is wrong right now (read from the live state, so a solved problem leaves it by itself), each with its way to fix it */
 function problemsCard(o, tl, srv, configs, filtered) {
   const rows = [];
@@ -415,11 +393,23 @@ function serverDetailHtml(s) {
   const boxes = [
     ibox("🖥", "System", [irow("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), irow("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), irow("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"), irow("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), irow("Connections", f.conn != null ? f.conn : "—"), irow("Busiest process", esc(f.top || "—"))]),
     ibox("📊", "Resources", [irow("CPU", pct(f.cpu, 80, 92)), irow("RAM", `${pct(f.ram, 80, 90)} <small class="mut">${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""}</small>`), irow("Swap", f.swap != null ? f.swap + "%" : "—"), irow("Disk", `${pct(f.disk, 85, 95)} <small class="mut">${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""}</small>`), irow("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—")]),
-    ibox("🔑", "Access", [irow("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), irow("Last seen", when(s.last_seen_at)), irow("Role", esc(s.role)), irow("Provider", esc(s.provider || s.asn || "—"))]),
+    ibox("🔑", "Access", [irow("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), irow("Last seen", when(s.last_seen_at)), irow("Role", esc(s.role)), irow("Provider", provCell(s))]),
     s.role === "foreign" ? ibox("🛡", "Location & security", [irow("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")} ${geo.agree ? `<small class="mut">(${esc(geo.agree)} agree)</small>` : ""}`), irow("Abuse-Defender", abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off"), irow("Filtered in Iran?", fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : "not checked yet")]) : "",
   ].join("");
   return tabs + `<div class="iboxes">${boxes}</div>    ${fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : ""}
     ${mine.length ? `<div class="ibox wide-box"><h5><i>⇄</i>Tunnels on this server <small>${mine.length}</small></h5><div class="ichips">${mine.map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div></div>` : ""}`;
+}
+/* the hosting provider of a server: its website (a link), its registry name, and whether the site answers (read lazily, cached by the panel) */
+function provCell(s) {
+  const g = (s.extra || {}).geo || {}, name = g.provider || s.provider || "", dom = g.domain || "";
+  if (!name && !dom) return '<span class="mut">not found yet (looked up once an hour)</span>';
+  setTimeout(() => provSite(s.name), 0);
+  return `${dom ? `<a href="https://${esc(dom)}" target="_blank" rel="noopener">${esc(dom)} ↗</a>` : ""} <small class="mut">${esc(name)}${g.asn ? " · AS" + esc(g.asn) : ""}</small> <span class="prov-site" data-srv="${esc(s.name)}"><small class="mut">checking site…</small></span>`;
+}
+async function provSite(name) {
+  let d = state.dcs; if (!d || !d.rows) { try { d = state.dcs = await api("/api/datacentres"); } catch (e) { d = null; } }
+  const row = d && d.rows && d.rows.find(r => r.servers.some(x => x.name === name)), st = row && row.site;
+  document.querySelectorAll(".prov-site").forEach(el => { if (el.dataset.srv === name) el.innerHTML = !st || st.ok == null ? '<small class="mut">site not checked</small>' : st.ok ? `<b class="gw-ok">✓ site answers</b> <small class="mut">${st.ms} ms${st.via ? " from " + esc(st.via) : ""}</small>` : `<b class="err">✕ site does not answer</b>${st.via ? ` <small class="mut">from ${esc(st.via)}</small>` : ""}`; });
 }
 /* a window tab only redraws the window body - no API call, the list behind it stays as it is */
 window.copyText = t => { const done = () => toast("✓ Copied " + t, "ok"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => {}); else { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) { /* no clipboard */ } ta.remove(); } };
