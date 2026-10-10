@@ -132,7 +132,7 @@ function go(page) {
     page = target;
   }
   if (!PAGES[page]) page = "dashboard";
-  if (state.page !== page) { navCtl.abort(); navCtl = new AbortController(); }   // what the page we leave still waits for is dropped
+  if (state.page !== page) { navCtl.abort(); navCtl = new AbortController(); state.resetScroll = true; const m = $(".main"); if (m) m.scrollTop = 0; const pg = $("#page"); if (pg) { pg.classList.remove("enter"); void pg.offsetWidth; pg.classList.add("enter"); } }   // what the page we leave still waits for is dropped; the new page starts at the top
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
@@ -149,9 +149,17 @@ PAGES.nodes = async () => {
 document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.page));
 
 
+/* A refresh rebuilds the page from fresh data. Every scrolling box keeps its position through it (the page, a window, the lists inside the dashboard, the logs),
+   so nothing jumps back to the top when new data arrives. Opening another page starts at the top. */
+const SCROLLERS = [".main", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".sub-nodes", ".ob-inbounds", ".fix"];
+const scrollSnapshot = () => SCROLLERS.map(sel => { const el = $(sel); return el ? [sel, el.scrollTop, el.scrollTop + el.clientHeight >= el.scrollHeight - 12 && sel === ".tt-log"] : null; }).filter(Boolean);
+const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $(sel); if (el) el.scrollTop = atEnd ? el.scrollHeight : top; });
 async function refresh() {
+  const snap = state.resetScroll ? [] : scrollSnapshot();
+  state.resetScroll = false;
   try {
     await PAGES[state.page]();
+    scrollRestore(snap);
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
 }
@@ -524,11 +532,7 @@ PAGES.tunnelTest = async () => {
   tt.kinds = kd.kinds;
   const opt = (role, cur) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
   const j = tt.job, running = j && !j.done;
-  const row = r => { const sc = r.score == null ? null : r.score; return `<tr class="${r.ok ? "up" : "down"}"><td class="name">${esc((tt.kinds.find(k => k.key === r.kind) || {}).label || r.kind)}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor / failed"}</span></td>
-      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? "↓" + r.down_mbps + (r.up_mbps != null ? " ↑" + r.up_mbps : "") + " Mb/s" : "—"}</td>
-      <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc + " / 100"}</b></td><td class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 60))}</td></tr>`; };
-  const best = j && j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0];
-  $("#page").innerHTML = `<div class="card"><h3>🧪 Tunnel test <span class="sp"></span>${running ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""}</h3>
+  $("#page").innerHTML = `<div class="card"><h3>🧪 Tunnel test <span class="sp"></span><span id="tt-run">${ttRunPill()}</span></h3>
     <div class="frm">
       <label>Iran server<select id="tt-iran" ${running ? "disabled" : ""} onchange="tt.iran=this.value;localStorage.setItem('nk.tt.iran',this.value)">${opt("iran", tt.iran)}</select></label>
       <label>Foreign server<select id="tt-foreign" ${running ? "disabled" : ""} onchange="tt.foreign=this.value;localStorage.setItem('nk.tt.foreign',this.value)">${opt("foreign", tt.foreign)}</select></label>
@@ -539,13 +543,32 @@ PAGES.tunnelTest = async () => {
     <div class="ob-sec"><h4>Which tunnel for which situation <small class="mut">— click one to open Create tunnel with it</small></h4>
       <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
       <small class="mut">Every engine ships with its many-users settings (multiplexing, 8 mux channels, 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels). Backhaul is measured with 30 pings over GRE and a download; the other engines through their test door, both ways. Nothing is added to your list; the story of each run stays in Repairs.</small></div></div>
-    ${j ? `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
-      <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
-        <thead><tr><th>Transport</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Download</th><th>Score</th><th>Verdict</th></tr></thead>
-        <tbody>${[...j.results].sort((a, b) => (b.score || 0) - (a.score || 0)).map(row).join("")}${running ? `<tr><td class="name">${esc(j.current)}</td><td colspan="7" class="mut">measuring…</td></tr>` : ""}</tbody></table>
-      ${running && j.story && j.story.length ? `<div class="fix">${j.story.map(l => `<div class="fx-line"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div>` : ""}</div>` : ""}`;
+    <div class="card tt-logcard"><h3>Live log <span class="sp"></span><small class="mut">fixed box: new lines come in here, the page stays where it is</small></h3><div class="tt-log" id="tt-log">${ttLogHtml()}</div></div>
+    <div id="tt-results">${ttResultsHtml()}</div>`;
+  const lg = $("#tt-log"); if (lg) lg.scrollTop = lg.scrollHeight;
   if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
 };
+const ttRunPill = () => { const j = tt.job; return j && !j.done ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""; };
+const ttLogHtml = () => { const j = tt.job; return j && j.story && j.story.length ? j.story.map(l => `<div class="fx-line"><b>·</b><span>${esc(l)}</span></div>`).join("") : `<div class="mut" style="padding:8px 2px">${j && !j.done ? "starting…" : "Start a test and its story shows up here."}</div>`; };
+function ttResultsHtml() {
+  const j = tt.job; if (!j) return "";
+  const running = !j.done, best = j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0];
+  const row = r => { const sc = r.score == null ? null : r.score; return `<tr class="${r.ok ? "up" : "down"}"><td class="name">${esc((tt.kinds.find(k => k.key === r.kind) || {}).label || r.kind)}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor / failed"}</span></td>
+      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? "↓" + r.down_mbps + (r.up_mbps != null ? " ↑" + r.up_mbps : "") + " Mb/s" : "—"}</td>
+      <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc + " / 100"}</b></td><td class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 60))}</td></tr>`; };
+  return `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
+    <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
+      <thead><tr><th>Transport</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Download</th><th>Score</th><th>Verdict</th></tr></thead>
+      <tbody>${[...j.results].sort((a, b) => (b.score || 0) - (a.score || 0)).map(row).join("")}${running ? `<tr><td class="name">${esc(j.current)}</td><td colspan="7" class="mut">measuring…</td></tr>` : ""}</tbody></table></div>`;
+}
+/* a poll repaints only the pill, the results and the log box: the page itself is not rebuilt, so nothing jumps */
+function ttPaint() {
+  const r = $("#tt-run"), res = $("#tt-results"), lg = $("#tt-log"); if (!r || !res || !lg) return false;
+  const atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 12, keep = lg.scrollTop;
+  r.innerHTML = ttRunPill(); res.innerHTML = ttResultsHtml(); lg.innerHTML = ttLogHtml();
+  lg.scrollTop = atEnd ? lg.scrollHeight : keep;
+  return true;
+}
 window.ttGroup = (g, on) => document.querySelectorAll(`#tt-kinds label[data-g="${g}"] input`).forEach(x => { if (!x.disabled) x.checked = on; });
 window.ttStart = async () => {
   const kinds = [...document.querySelectorAll("#tt-kinds input:checked")].map(x => x.value);
@@ -553,7 +576,14 @@ window.ttStart = async () => {
   try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +$("#tt-iran").value, foreign_id: +$("#tt-foreign").value, kinds})}); tt.job = {id: r.id, kinds, results: [], current: kinds[0], done: false}; toast("Test started — about 2 minutes per transport"); refresh(); }
   catch (e) { toast("✕ " + e.message, "bad"); }
 };
-window.ttPoll = async () => { if (!tt.job || tt.job.done) return; try { tt.job = await api(`/api/tunnel-test/compare/${tt.job.id}`); } catch (e) { tt.job.done = true; } if (state.page === "tunnels" && sub("tunnels") === "test") refresh(); };
+window.ttPoll = async () => {
+  if (!tt.job || tt.job.done) return;
+  try { tt.job = await api(`/api/tunnel-test/compare/${tt.job.id}`); } catch (e) { tt.job.done = true; }
+  if (state.page !== "tunnels" || sub("tunnels") !== "test") return;
+  if (tt.job.done) { refresh(); return; }          // finished: rebuild once so the controls come back
+  if (!ttPaint()) { refresh(); return; }
+  clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000);
+};
 window.ttStop = async () => { if (!tt.job) return; try { await api(`/api/tunnel-test/compare/${tt.job.id}/stop`, {method: "POST"}); toast("Stopping after the current transport…"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelQuality = async () => {
   const list = await api("/api/tunnels");

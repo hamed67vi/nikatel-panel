@@ -414,3 +414,12 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .statusbar.ok .sb-dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); } .statusbar.bad .sb-dot { background: var(--bad); box-shadow: 0 0 10px var(--bad); } .statusbar.live.bad { border-color: rgba(255,107,139,.5); } .statusbar.live.ok { border-color: rgba(61,220,151,.45); }
 .main { padding-bottom: 54px; }
 @media (max-width: 900px) { .statusbar { left: 10px; right: 10px; } }
+
+
+/* ---- tunnel test: a fixed log box; smooth page entry */
+.tt-log { height: 240px; overflow-y: auto; overflow-anchor: none; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,.2); font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }
+.tt-log .fx-line { margin: 0; padding: 1px 0; } .tt-logcard h3 small { font-weight: 500; text-transform: none; letter-spacing: 0; }
+@keyframes pgIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+#page.enter > * { animation: pgIn .28s ease both; }
+.main, .modal-body, .act-list, .pb-list, .hl-list { overflow-anchor: none; }
+
