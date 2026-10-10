@@ -797,6 +797,39 @@ sleep 3; for u in nikatel-speed-api nikatel-probe-manager nikatel-probe-monitor;
     "probe_speed": (r"""timeout 180 /usr/local/bin/nikatel-probe speed '@NAME@' 2>&1 | tail -n 5
 """, {"NAME": r"^[\w .\-]{1,32}$"}),
 
+    # after adding a server: stop torrent trackers (the public script of Heclalava/blockpublictorrent-iptables: a tracker list, DROP rules in a daily cron job, hosts entries).
+    # The script writes the cron job but does not run it, so it is run once here to make the rules active now.
+    "install_btblock": (r"""set -e; export DEBIAN_FRONTEND=noninteractive
+command -v wget >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq wget >/dev/null; }
+command -v iptables >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq iptables >/dev/null; }
+d=$(mktemp -d); cd "$d"
+wget -q https://github.com/Heclalava/blockpublictorrent-iptables/raw/main/bt.sh && chmod +x bt.sh && bash bt.sh >/dev/null 2>&1
+[ -x /etc/cron.daily/denypublic ] || { echo BT_FAILED; exit 1; }
+bash /etc/cron.daily/denypublic >/dev/null 2>&1 || true
+echo "BT_OK drop_rules=$(iptables -S 2>/dev/null | grep -c -- '-j DROP')"
+cd /; rm -rf "$d"
+""", {}),
+
+    # after adding a server: a Marzban node (the official installer of Gozargah/Marzban-scripts). It reads the panel's certificate from stdin, then asks about REST (Enter = yes)
+    # and the two ports (Enter = 62050 / 62051), and ends in `logs -f`, which never returns: it runs in the background and is stopped as soon as the container is up.
+    "install_marzban_node": (r"""set -e; export DEBIAN_FRONTEND=noninteractive
+[ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
+[ -d /opt/marzban-node ] && { echo MZNODE_EXISTS; exit 0; }
+d=$(mktemp -d); cd "$d"
+echo '@B64@' | base64 -d | sed '/^[[:space:]]*$/d' > cert.txt
+grep -q 'BEGIN CERTIFICATE' cert.txt || { echo BAD_CERT; exit 1; }
+command -v curl >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null; }
+curl -fsSL https://github.com/Gozargah/Marzban-scripts/raw/master/marzban-node.sh -o mz.sh
+[ -s mz.sh ] || { echo DOWNLOAD_FAILED; exit 1; }
+( cat cert.txt; printf '\n\n\n\n\n' ) | setsid bash mz.sh install > install.log 2>&1 &
+ok=0
+for i in $(seq 1 90); do sleep 3; if docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -qi 'marzban-node.* Up'; then ok=1; break; fi; done
+sleep 3
+pkill -f 'docker.* logs' 2>/dev/null || true; pkill -f 'bash mz.sh' 2>/dev/null || true
+if [ "$ok" = 1 ]; then echo "MZNODE_OK $(docker ps --format '{{.Names}} {{.Status}}' | grep -i marzban-node | head -1)"; else echo MZNODE_FAILED; tail -n 12 install.log; exit 1; fi
+cd /; rm -rf "$d"
+""", {"B64": _B64}),
+
     # the gateway directory must exist before the binary is copied in
     "xgw_mkdir": (r"""mkdir -p /opt/nikatel-xgw && chmod 755 /opt/nikatel-xgw && echo OK
 """, {}),

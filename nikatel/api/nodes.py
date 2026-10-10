@@ -41,6 +41,22 @@ class Pw(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class InstallIn(BaseModel):
+    items: list[str] = Field(min_length=1, max_length=4)
+    cert: str = Field("", max_length=8000)
+
+
+@router.post("/servers/{server_id}/install")
+def install_extras(server_id: int, body: InstallIn):
+    """Install the torrent block and/or a Marzban node on a server (Add server → Install after adding)."""
+    from ..services import extras
+
+    try:
+        return {"ok": True, "id": extras.start(server_id, body.items, body.cert)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/servers/{server_id}/connect")
 def connect(server_id: int, body: Pw):
     return {"ok": True, **_wrap(nodes.connect, server_id, body.password)}

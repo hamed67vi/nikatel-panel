@@ -97,6 +97,7 @@ $("#login-form").onsubmit = async e => {
     showApp(); go(state.page);
   } catch (er) { err.style.color = ""; err.textContent = er.message; }
 };
+api("/api/health").then(h => { const v = $("#version"); if (v && h && h.version && !v.textContent) v.textContent = "v" + h.version; }).catch(() => {});
 $("#logout").onclick = async () => {
   /* the way out: the panel folds away in 3D, a light sweeps over it, then the sign-in page rises */
   const quiet = document.documentElement.dataset.anim === "off" || matchMedia("(prefers-reduced-motion: reduce)").matches, root = document.documentElement;
@@ -319,6 +320,10 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}"></label>
     ${s ? `<label>Provider<input name="provider" value="${esc(s.provider)}" placeholder="optional"></label>` : `<label>SSH password <small>(optional)</small><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the server"></label>`}
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
+    ${s ? "" : `<div class="srv-extra"><b>Install after adding</b> <small class="mut">(optional, needs root; the server is added first, then these run and tell what they did)</small>
+      <label class="chk"><input name="x_bt" type="checkbox"> Block public torrents <small class="mut">(iptables DROP rules for tracker addresses, refreshed daily - Heclalava/blockpublictorrent-iptables)</small></label>
+      <label class="chk"><input name="x_node" type="checkbox" onchange="this.closest('.srv-extra').querySelector('.x-cert').classList.toggle('hidden', !this.checked)"> Marzban node <small class="mut">(Docker + the official Gozargah installer; ports 62050 / 62051)</small></label>
+      <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----"></textarea></label></div>`}
     <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>
       ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
     <small class="mut">${s ? "Changing a server here only changes how the panel looks at it." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
@@ -541,18 +546,26 @@ window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
   const body = {name: f.get("name").trim(), host: f.get("host").trim(), role: f.get("role"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
+  const items = [f.get("x_bt") === "on" ? "btblock" : "", f.get("x_node") === "on" ? "marzban_node" : ""].filter(Boolean), cert = f.get("x_cert") || "";
+  if (!id && items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;
+    let connected = true;
     if (id) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
       toast("Server added — connecting with the password…");
       try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Added and connected: " + r.hostname, "ok"); }
-      catch (err) { toast("Added, but not connected: " + err.message, "bad"); }
+      catch (err) { connected = false; toast("Added, but not connected: " + err.message, "bad"); }
     } else {          // no password: the panel's key must already be on the server - try it
-      try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
+      try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
     refresh();
+    if (!id && items.length && connected) {   // the extras run in one story the operator can follow (and minimise)
+      const r = await api(`/api/servers/${saved.id}/install`, {method: "POST", body: JSON.stringify({items, cert})});
+      showModal(`<b>⬇ Installing on ${esc(body.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
+      followStory(r.id, $("#ap-story"), 400).then(() => refresh());
+    } else if (!id && items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
