@@ -121,7 +121,12 @@ setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidde
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
-window.closeModal = () => { state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null; hideModal(); refresh(); };
+window.closeModal = () => {
+  const quiet = (state.page === "nodes" || state.page === "tunnels") && !state.edit && !state.build && !state.detect;   // just close: the list behind is still current
+  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null;
+  hideModal();
+  if (!quiet) refresh();
+};
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
 /* ---- dashboard */
@@ -171,7 +176,7 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
   const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
-  state.tunnelsCache = tl;
+  state.tunnelsCache = tl; state.serversCache = list;
   const mine = list.filter(s => s.role === state.tab);
   const rows = mine.filter(s => (state.mtab !== "problems" || srvProblem(s)) && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
   const nProb = mine.filter(srvProblem).length, online = mine.filter(s => s.online).length;
@@ -198,7 +203,7 @@ PAGES.servers = async () => {
       <td><button class="sm" onclick="event.stopPropagation();checkServer(${s.id})" title="Sample this server now">Health</button> <button class="sm" onclick="event.stopPropagation();srvConsole(${s.id})" title="Open the console">⌨</button></td></tr>`;
   };
   const openSrv = list.find(s => s.id === state.open);
-  if (openSrv) { const s = openSrv, f = s.facts || {}; showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`, `<div id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide"); } else hideModal();
+  if (openSrv) srvModal(openSrv); else hideModal();
   $("#page").innerHTML = `<div class="tiles">
       <div class="tile ${online < mine.length ? "bad" : "ok"}"><small>Online</small><b>${online} / ${mine.length}</b><span>${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}</span></div>
       <div class="tile ${nProb ? "warn" : ""}"><small>Problems</small><b>${nProb}</b><span>offline, or CPU > 85 %, RAM > 90 %, disk > 85 %</span></div>
@@ -215,6 +220,8 @@ PAGES.servers = async () => {
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
 };
+function srvModal(s) { const f = s.facts || {}; showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`, `<div id="srv-detail-${s.id}">${state.edit === s.id ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide"); }
+function tunModal(t) { showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide"); }
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="https://flagcdn.com/20x15/${cc.toLowerCase()}.png" srcset="https://flagcdn.com/40x30/${cc.toLowerCase()}.png 2x" width="20" height="15" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
 const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? flagImg(cc) + " " + cc : "";
@@ -242,11 +249,18 @@ function serverDetailHtml(s) {
     ${(state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).length ? `<div class="ob-inbounds" style="margin:6px 0 0"><b class="mut" style="font-size:11px;letter-spacing:.8px;text-transform:uppercase">Tunnels on this server</b>${(state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div>` : ""}
     <div class="frm-act"><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('tools')">🧰 Tools</button><button class="sm" onclick="wtab('console')">⌨ Console</button>${s.role === "foreign" ? `<button class="sm" onclick="srvFilter(${s.id})">Check filtering in Iran</button>` : ""}<span class="sp"></span><button class="sm danger" onclick="srvReboot(${s.id}, '${esc(s.name)}')">Reboot</button></div>`;
 }
-window.wtab = k => { state.wtab = k; refresh(); };
+/* a window tab only redraws the window body - no API call, the list behind it stays as it is */
+window.wtab = k => {
+  state.wtab = k;
+  const body = $("#modal .modal-body");
+  if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { body.innerHTML = `<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k === "charts") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
+  if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); if (k === "charts") loadTunnelCharts(t.id); return; } }
+  refresh();
+};
 let CON_PRESETS = {};
 api("/api/nodes/presets").then(d => { d.presets.forEach(p => CON_PRESETS[p.key] = [p.label, p.command]); }).catch(() => {});
 state.conOut = {};
-window.srvConsole = id => { state.con = id; state.open = id; state.wtab = "console"; refresh(); };
+window.srvConsole = id => { state.con = id; if (state.open === id && $("#modal .modal-body")) { wtab("console"); return; } state.open = id; state.wtab = "console"; refresh(); };
 window.srvRun = async id => { const cmd = $(`#con-cmd-${id}`).value.trim(); if (!cmd) return; const out = $(`#con-out-${id}`); out.textContent = "running…"; try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: cmd})}); state.conOut[id] = `$ ${cmd}\n${r.output}${r.code ? "\n[exit " + r.code + "]" : ""}\n(${r.ms} ms)`; } catch (e) { state.conOut[id] = "✕ " + e.message; } out.textContent = state.conOut[id]; };
 window.srvConnect = async (id, name) => { const pw = prompt(`SSH password of ${name} (used once to install the panel's key, not stored):`); if (!pw) return; toast("Connecting…"); try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Nodes → 'My SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
@@ -401,6 +415,7 @@ window.engineCheck = async () => { toast("Asking every server… (up to a minute
 window.engineUpdate = async k => { if (!confirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
   const list = await api("/api/tunnels");
+  state.tunnelsCache = list;
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
   const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "DEGRADED" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
@@ -422,7 +437,7 @@ PAGES.tunnelsList = async () => {
       <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th>Score</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   const openT = list.find(t => t.id === state.open);
-  if (openT) showModal(`<span class="st ${openT.state}"></span><b>${esc(openT.name)}</b> <span class="mut">${esc(openT.iran_name)} ⇄ ${esc(openT.foreign_name)}</span> <span class="pill">${esc(openT.type)}${openT.transport ? " · " + esc(openT.transport) : ""}</span>`, detailRow(openT), "wide");
+  if (openT) tunModal(openT);
   else if (state.detect) detectHtml();
   else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b> <span class="mut">pick the servers, the ports and the type - the panel does the rest and removes everything when a build fails</span>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
   else hideModal();
@@ -562,7 +577,15 @@ window.rebuildTunnel = async (id, name) => {
   try { const r = await api(`/api/tunnels/${id}/rebuild`, {method: "POST"}); await followStory(r.id, box, 400); } catch (e) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
   state.edit = null;
 };
-window.toggleDetail = id => { state.open = state.open === id ? null : id; state.edit = null; refresh(); };
+/* opening a window uses what the page already holds - no API call, no redraw of the list behind it */
+window.toggleDetail = id => {
+  state.edit = null; state.wtab = null;
+  if (state.open === id) { state.open = null; hideModal(); return; }
+  state.open = id;
+  if (state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === id); if (s) { srvModal(s); return; } }
+  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); return; } }
+  refresh();
+};
 window.fixTunnel = async (id, dry) => {
   if (!dry && !confirm("Repair this tunnel now? The panel restarts only the units that are not working, one at a time, and checks after each step.")) return;
   const box = document.getElementById("fix-" + id);
