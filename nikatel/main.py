@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, auth, jobs
@@ -111,7 +111,20 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
         @app.get("/", include_in_schema=False)
         def index():
-            return FileResponse(WEB / "index.html")
+            # the script and stylesheet carry the time they were last changed, so a deploy never shows an old copy
+            from fastapi.responses import HTMLResponse
+
+            html = (WEB / "index.html").read_text(encoding="utf-8")
+
+            for name in ("app.js", "app.css"):
+                try:
+                    stamp = int((WEB / name).stat().st_mtime)
+                except OSError:
+                    stamp = 0
+
+                html = html.replace(f"/static/{name}", f"/static/{name}?v={stamp}")
+
+            return HTMLResponse(html)
 
     return app
 
