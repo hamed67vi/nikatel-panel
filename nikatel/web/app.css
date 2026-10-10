@@ -454,3 +454,13 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 /* the situations: one row, every box the same size */
 .ob-sec .bguide { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(170px, 1fr); overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
 
+
+
+/* ---- every log is a box of fixed size with its own scrollbar: new lines come in there and the page stays where it is */
+.fix { max-height: 300px; overflow-y: auto; overflow-anchor: none; }
+.modal .fix, #ap-story { height: 280px; max-height: none; }
+.fix::-webkit-scrollbar, .tt-log::-webkit-scrollbar, .act-list::-webkit-scrollbar { width: 8px; }
+/* a tunnel with packet loss: the number is red, a lossy one (15 % or more) is tinted */
+.loss { color: var(--bad); font-weight: 700; } .loss.hi { background: rgba(255,107,139,.16); padding: 1px 8px; border-radius: 999px; }
+.tbl tr.lossy td { background: rgba(255,107,139,.07); }
+

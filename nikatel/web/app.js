@@ -659,14 +659,14 @@ PAGES.tunnelsList = async () => {
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
   const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "DEGRADED" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
-  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} click" onclick="toggleDetail(${t.id})">
+  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} click${(d.loss_pct || 0) >= 15 ? " lossy" : ""}" onclick="toggleDetail(${t.id})">
       <td class="name">${esc(t.name)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
       <td><span class="st ${t.state}">${stText(t)}</span></td>
       <td class="td-node"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
       <td class="td-node"><b>${esc(t.foreign_name)}</b><span class="mono mut">${esc(t.foreign_host)}</span></td>
       <td><div class="td-ports">${ports(t).slice(0, 6).map(p => `<i class="${d.listen && d.listen[parseInt(p)] === false ? "bad" : ""}">${esc(p)}</i>`).join("")}${ports(t).length > 6 ? `<i>+${ports(t).length - 6}</i>` : ""}${ports(t).length ? "" : '<span class="mut">—</span>'}</div></td>
-      <td class="num"><b class="${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b>${d.loss_pct ? `<small class="mut"> ${d.loss_pct}% loss</small>` : ""}</td>
+      <td class="num"><b class="${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b>${d.loss_pct ? `<small class="loss ${d.loss_pct >= 15 ? "hi" : ""}" title="Packets lost on the GRE link of this tunnel"> ${d.loss_pct}% loss</small>` : ""}</td>
       <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td class="num" title="${esc(t.last_error || (q.latency_ms != null ? q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "%" : ""))}">${q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score}</b>` : '<span class="mut">—</span>'}${t.last_error ? `<small class="err"> ${esc(t.last_error).slice(0, 30)}</small>` : ""}</td>
       <td><div class="td-act"><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();restartTunnel(${t.id}, '${esc(t.name)}')" title="Restart the tunnel service on both servers (the GRE link stays)">Restart</button><button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Latency, jitter, loss, speed, score">Quality</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></div></td></tr>`; };
@@ -822,7 +822,9 @@ async function followStory(aid, box, maxPolls) {
   for (let i = 0; i < maxPolls; i++) {
     await new Promise(res => setTimeout(res, 1500));
     const s = await api(`/api/actions/${aid}`);
+    const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 12;
     box.innerHTML = storyHtml(s);
+    if (atEnd) box.scrollTop = box.scrollHeight;      // a fixed box that follows the end of the log, unless you scrolled up to read
     if (s.done) return s;
   }
 }
@@ -859,7 +861,9 @@ window.fixTunnel = async (id, dry) => {
     for (let i = 0; i < 150; i++) {
       await new Promise(res => setTimeout(res, 1500));
       const s = await api(`/api/actions/${r.id}`);
-      box.innerHTML = storyHtml(s);
+      const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 12;
+    box.innerHTML = storyHtml(s);
+    if (atEnd) box.scrollTop = box.scrollHeight;      // a fixed box that follows the end of the log, unless you scrolled up to read
       if (s.done) break;
     }
   } catch (e) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
