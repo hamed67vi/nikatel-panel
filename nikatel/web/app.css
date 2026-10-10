@@ -807,3 +807,9 @@ nav a:not(.on):hover > span { background-image: linear-gradient(100deg, #8d96c4 
 .side-ver:hover::after { animation: ver-sweep .9s ease-out 1; } @keyframes ver-sweep { to { background-position: -50% 0; } }
 .side-ver .sc-by b { transition: letter-spacing .35s var(--ease); } .side-ver:hover .sc-by b { letter-spacing: 2.2px; }
 @media (prefers-reduced-motion: reduce) { nav a:not(.on):hover > span, .side-ver:hover::after { animation: none; } }
+
+/* ---- the menu in Poppins, larger (Persian letters fall back to Vazirmatn) */
+nav a { font-family: "Poppins", "Vazirmatn", "Inter", system-ui, sans-serif; font-size: 16px; height: 46px; gap: 12px; letter-spacing: .1px; }
+nav a > span { font-weight: 600; } nav a.on > span { font-weight: 700; }
+nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins", "Inter", sans-serif; font-size: 11.5px; }
+@media (max-width: 700px) { nav a { font-size: 13px; height: auto; } }
