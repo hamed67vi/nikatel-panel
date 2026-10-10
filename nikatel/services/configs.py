@@ -492,12 +492,14 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
     added, skipped, failed = [], [], []
 
     with session() as db:
-        existing = {c.name for c in db.scalars(select(Config))}
+        rows_now = list(db.scalars(select(Config)))
+        existing = {c.name for c in rows_now}
+        ungrouped = {c.name for c in rows_now if not c.group}      # on the probe already, but in no group yet (the sync job registered them first)
         sub = db.scalar(select(Subscription).where(Subscription.name == name)) or Subscription(name=name, url=url)
         sub.url = url
         db.add(sub)
 
-    todo = []
+    todo, regroup = [], []
 
     for n in nodes:
         if picks is not None and n["name"] not in picks:
@@ -507,6 +509,10 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
 
         if full in existing:
             skipped.append(full)
+
+            if full in ungrouped:
+                regroup.append(full)
+
             continue
 
         todo.append((full, n["uri"]))
@@ -524,14 +530,22 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
                 failed.append(f"{full}: {str(why)[:60]}")
                 continue
 
+            regroup.append(full)            # the sync job may have registered it a moment ago without a group: it joins this one
+
             try:
                 with session() as db:
-                    db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(uri)))
-            except IntegrityError:          # the sync job registered it a moment ago: it is there, that is all we need
+                    if db.scalar(select(Config).where(Config.name == full)) is None:
+                        db.add(Config(name=full, group=name, status="unknown", status_since=int(time.time()), meta=meta_from_uri(uri)))
+            except IntegrityError:          # registered by the sync job in the same instant: the regroup below puts it in the group
                 pass
 
             added.append(full)
             existing.add(full)
+    if regroup:
+        with session() as db:
+            for c in db.scalars(select(Config).where(Config.name.in_(regroup), Config.group == "")):
+                c.group = name
+
     with session() as db:
         sub = db.scalar(select(Subscription).where(Subscription.name == name))
         sub.nodes = sorted(set(list(sub.nodes or []) + added + skipped))

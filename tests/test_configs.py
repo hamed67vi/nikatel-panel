@@ -200,3 +200,28 @@ def test_a_direct_tcp_config_is_down_only_when_its_port_does_not_open(client, mo
     configs.sync()
     st, err = status()
     assert st == "down" and "does not open from Iran" in err
+
+
+def test_bulk_calls_read_the_probe_answer_the_way_it_is_nested(monkeypatch):
+    real = {"results": {"add": [{"name": "A", "ok": True}, {"name": "B", "ok": False, "error": "config 'B' already exists"}], "update": [],
+                        "delete": [{"name": "C", "ok": True}, {"name": "D", "ok": False, "error": "not found"}]}, "restarted": False, "ok": True}
+    monkeypatch.setattr(probe, "request", lambda *a, **k: real)
+    assert probe.add_many([{"uri": "u", "name": "A"}, {"uri": "u", "name": "B"}]) == {"A": None, "B": "config 'B' already exists"}
+    assert probe.delete_many(["C", "D"]) == {"C": None, "D": None}          # a name the probe does not know is gone as well
+
+
+def test_imported_configs_join_the_group_even_when_the_sync_job_registered_them_first(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import Config
+
+    nodes = [{"name": "N1", "uri": "vless://u@h.example:80?type=ws#N1", "proto": "vless"}, {"name": "N2", "uri": "vless://u@h.example:81?type=ws#N2", "proto": "vless"}]
+    monkeypatch.setattr(configs, "fetch_subscription", lambda url: nodes)
+    monkeypatch.setattr(probe, "add_many", lambda items: {i["name"]: None for i in items})
+
+    with session() as db:       # N1 was registered by the sync job in the meantime (no group), N2 was already there from an older import without group
+        db.add(Config(name="N1", status="unknown", meta={}))
+        db.add(Config(name="N2", status="unknown", meta={}))
+
+    r = configs.import_subscription("grp", "https://sub.example.net/x")
+    assert sorted(r["added"] + r["skipped"]) == ["N1", "N2"] and r["failed"] == []
+    assert {c["name"]: c["group"] for c in client.get("/api/configs").json()["configs"]} == {"N1": "grp", "N2": "grp"}

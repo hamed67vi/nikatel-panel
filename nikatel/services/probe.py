@@ -144,7 +144,7 @@ def add_many(items: list[dict]) -> dict:
 
     res = {i["name"]: "no answer for this one" for i in items}
 
-    for it in d.get("add", []):
+    for it in (d.get("results") or d).get("add", []):
         res[str(it.get("name", ""))] = None if it.get("ok") else str(it.get("error", "failed"))[:100]
 
     return res
@@ -185,7 +185,7 @@ def delete_many(names: list[str]) -> dict:
 
     res = {n: "no answer for this one" for n in names}
 
-    for it in d.get("delete", []):
+    for it in (d.get("results") or d).get("delete", []):
         n = str(it.get("name", ""))
         res[n] = None if it.get("ok") or it.get("error") == "not found" else str(it.get("error", "failed"))[:100]
 
