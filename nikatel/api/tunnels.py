@@ -235,6 +235,7 @@ class TunnelOut(BaseModel):
     detail: dict
     units: dict
     quality: dict = {}
+    record: dict = {}       # port mapping, direction, test door, engine options - never secrets
 
 
 def _out(t: Tunnel) -> TunnelOut:
@@ -245,6 +246,7 @@ def _out(t: Tunnel) -> TunnelOut:
                      forwarded_ports=t.forwarded_ports or [], enabled=t.enabled, created_at=t.created_at,
                      state=t.state, state_since=t.state_since, last_check_at=t.last_check_at, last_error=t.last_error,
                      rtt_ms=t.rtt_ms, rx_mbps=t.rx_mbps, tx_mbps=t.tx_mbps, detail=t.detail or {}, quality=(t.record or {}).get("quality") or {},
+                     record={k: v for k, v in (t.record or {}).items() if k != "quality"},
                      units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface})
 
 

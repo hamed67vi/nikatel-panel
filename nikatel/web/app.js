@@ -391,21 +391,25 @@ window.engineUpdate = async k => { if (!confirm(`Update ${k} on every outdated s
 PAGES.tunnelsList = async () => {
   const list = await api("/api/tunnels");
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
-  const row = t => `<tr class="${t.state} click" onclick="toggleDetail(${t.id})">
-      <td class="name">${esc(t.name)}${t.transport ? `<span class="pill">${esc(t.transport)}</span>` : ""}</td>
-      <td><span class="st ${t.state}">${esc(t.state)}</span></td>
-      <td>${esc(t.iran_name)} <span class="mut">⇄</span> ${esc(t.foreign_name)}</td>
-      <td class="num">${t.port || "—"}</td>
-      <td class="num">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</td>
+  const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "DEGRADED" : t.state === "starting" ? "STARTING" : "UNKNOWN";
+  const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
+  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} click" onclick="toggleDetail(${t.id})">
+      <td class="name">${esc(t.name)}</td>
+      <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
+      <td><span class="st ${t.state}">${stText(t)}</span></td>
+      <td class="td-node"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
+      <td class="td-node"><b>${esc(t.foreign_name)}</b><span class="mono mut">${esc(t.foreign_host)}</span></td>
+      <td class="td-ports">${ports(t).slice(0, 6).map(p => `<i class="${d.listen && d.listen[parseInt(p)] === false ? "bad" : ""}">${esc(p)}</i>`).join("")}${ports(t).length > 6 ? `<i>+${ports(t).length - 6}</i>` : ""}${ports(t).length ? "" : "—"}</td>
+      <td class="num"><b class="${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b>${d.loss_pct ? `<small class="mut"> ${d.loss_pct}% loss</small>` : ""}</td>
       <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
-      <td class="mut" title="${esc(t.last_error)}">${t.quality && t.quality.score != null ? `<b class="${t.quality.score >= 70 ? "gw-ok" : t.quality.score >= 40 ? "" : "err"}" title="quality score">${t.quality.score}</b> · ` : ""}${t.last_error ? esc(t.last_error).slice(0, 44) : (t.state === "up" ? "since " + ago(t.state_since) : "")}</td>
-      <td><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button> <button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Quality: latency, jitter, loss, score">Quality</button></td></tr>`;
+      <td class="num" title="${esc(t.last_error || (q.latency_ms != null ? q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "%" : ""))}">${q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score}</b>` : '<span class="mut">—</span>'}${t.last_error ? `<small class="err"> ${esc(t.last_error).slice(0, 30)}</small>` : ""}</td>
+      <td class="td-act"><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();state.open=${t.id};state.wtab='info';refresh();fixTunnel(${t.id}, false)" title="Diagnose and repair">Fix</button><button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Latency, jitter, loss, speed, score">Quality</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></td></tr>`; };
   const creating = false;
   $("#page").innerHTML = `<div class="toolbar"><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"><button onclick="qualityAll()" title="Latency, jitter, loss and a score over the GRE link of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Find tunnels that exist on the servers but not in this list">🔍 Detect on servers</button><button class="pri" onclick="setSub('tunnels', 'create')">＋ Create tunnel</button></div>
     ${detectHtml()}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
-    <table class="tbl lift"><colgroup><col style="width:22%"><col style="width:9%"><col style="width:17%"><col style="width:7%"><col style="width:8%"><col style="width:12%"><col><col style="width:190px"></colgroup>
-      <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Port</th><th>RTT</th><th>Traffic</th><th>Quality · note</th><th></th></tr></thead>
+    <table class="tbl lift tun-tbl"><colgroup><col style="width:13%"><col style="width:12%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:12%"><col style="width:9%"><col style="width:10%"><col><col style="width:250px"></colgroup>
+      <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th>Score</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   const openT = list.find(t => t.id === state.open);
   if (openT) showModal(`<span class="st ${openT.state}"></span><b>${esc(openT.name)}</b> <span class="mut">${esc(openT.iran_name)} ⇄ ${esc(openT.foreign_name)}</span> <span class="pill">${esc(openT.type)}${openT.transport ? " · " + esc(openT.transport) : ""}</span>`, detailRow(openT), "wide"); else hideModal();
@@ -414,7 +418,15 @@ PAGES.tunnelsList = async () => {
 function detailRow(t) {
   const d = t.detail || {}, u = t.units || {};
   const unit = (side, name) => `<div><span>${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b></div>`;
-  return `<div class="kv">
+  const tab = state.wtab || "info";
+  const tabs = `<div class="tabs wtabs">${[["info", "Info"], ["charts", "Charts 24 h"], ["actions", "Actions"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
+  const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
+  if (tab === "charts") return tabs + `<div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>`;
+  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Repair</h4><div class="wtools">${tool("🛠", "Fix", "diagnose and repair step by step", `fixTunnel(${t.id}, false)`)}${tool("👁", "Dry run", "show what Fix would do, change nothing", `fixTunnel(${t.id}, true)`)}${tool("📊", "Quality", "latency, jitter, loss, speed, score", `qualityOne(${t.id})`)}${tool("🔔", "Mute alerts", "no Telegram alerts until unmuted in Settings", `muteRef('${esc(t.name)}', true)`)}</div></div>
+    <div class="wgroup"><h4>Change</h4><div class="wtools">${t.type === "backhaul" ? tool("⇅", "Ports", "change the forwarded ports", `editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')`) : ""}${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
+    <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("🗑", "Remove", "from both servers; users lose their connection", `deleteTunnel(${t.id}, '${esc(t.name)}')`, "danger")}</div></div>
+    <div id="fix-${t.id}" class="fix hidden"></div>`;
+  return tabs + `<div class="kv">
       <div><span>Iran</span> <b>${esc(t.iran_name)}</b> <span class="mono">${esc(t.iran_host)}</span></div>
       <div><span>Foreign</span> <b>${esc(t.foreign_name)}</b> <span class="mono">${esc(t.foreign_host)}</span></div>
       ${t.type === "backhaul" || t.type === "gre" ? `<div><span>GRE</span> ${esc(u.iface || "—")} ${d.iface ? "· " + esc(d.iface) : ""} · ${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</div>` : `<div><span>Engine</span> ${esc((t.record || {}).transport_label || t.type)} · ${esc((t.record || {}).direction || "")}${(t.record || {}).test_port ? " · test door " + (t.record || {}).test_port : ""}${t.iran_tunnel_ip ? " · " + esc(t.iran_tunnel_ip) + " ⇄ " + esc(t.foreign_tunnel_ip) : ""}</div>`}
@@ -423,8 +435,8 @@ function detailRow(t) {
       ${(u.iran || []).map(n => unit("iran", n)).join("")}${(u.foreign || []).map(n => unit("foreign", n)).join("")}
       <div><span>Checked</span> ${when(t.last_check_at)} · <span>created</span> ${when(t.created_at)}</div>
       ${d.iran_error ? `<div class="err">Iran: ${esc(d.iran_error)}</div>` : ""}${d.foreign_error ? `<div class="err">Foreign: ${esc(d.foreign_error)}</div>` : ""}
-    </div><div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>
-    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step (needs read-write mode)">🛠 Fix</button><button class="sm" onclick="fixTunnel(${t.id}, true)" title="Show what Fix would do, change nothing">Dry run</button><button class="sm" onclick="muteRef('${esc(t.name)}', true)" title="No Telegram alerts for this tunnel until unmuted in Settings">Mute alerts</button><button class="sm" onclick="qualityOne(${t.id})" title="Latency, jitter, loss over the GRE link and a score">📊 Quality</button>${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports of this tunnel">Ports</button>` : ""}<span class="sp"></span><button class="sm" onclick="rebuildTunnel(${t.id}, '${esc(t.name)}')" title="Remove and build again with the same name and ports">Rebuild</button><button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')">Remove</button><a class="mut" onclick="go('actions')">history →</a></div>
+    </div>
+    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step">🛠 Fix</button><button class="sm" onclick="qualityOne(${t.id})">📊 Quality</button><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('actions')">🧰 Actions</button><span class="sp"></span><button class="sm" onclick="closeModal()">← Back</button></div>
     <div id="fix-${t.id}" class="fix hidden"></div>`;
 }
 async function loadTunnelCharts(id) {

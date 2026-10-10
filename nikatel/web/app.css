@@ -146,6 +146,11 @@ nav a { height: 38px; font-size: 13.5px; }
 .nk-gbadge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); font-size: 10px; font-weight: 700; color: var(--mut); vertical-align: middle; }
 .live { display: inline-block; margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .6px; } .live.up { color: var(--ok); } .live.down { color: var(--bad); } .live.unk { color: var(--mut); }
 .cf-nm { font-weight: 700; } .cf-grp { font-size: 11.5px; }
+/* tunnel list like the old dense table */
+.td-type { font-size: 10.5px; font-weight: 800; letter-spacing: .5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); } .td-node b { display: block; font-size: 12.5px; } .td-node span { font-size: 10.5px; }
+.td-ports { display: flex; flex-wrap: wrap; gap: 3px; } .td-ports i { font-style: normal; font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 6px; background: rgba(255,255,255,.06); border: 1px solid var(--line); } .td-ports i.bad { color: var(--bad); border-color: rgba(255,90,120,.5); }
+.td-act { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; } .td-act button.sm { height: 26px; padding: 0 9px; font-size: 11.5px; }
+.tun-tbl .st { font-size: 10.5px; letter-spacing: .5px; font-weight: 800; }
 .flg { width: 20px; height: 15px; border-radius: 3px; vertical-align: -2px; box-shadow: 0 0 0 1px rgba(255,255,255,.12); object-fit: cover; } .flgt { font-size: 10px; font-weight: 800; letter-spacing: .5px; color: var(--mut); vertical-align: 1px; }
 .sub-nodes { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; } .sub-nodes label { padding: 5px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); } .cf-card .cf-grp { display: block; margin-top: 2px; } .cf-rf { cursor: pointer; margin-left: 4px; } .cf-rf:hover { color: var(--text); }
 .cf-tun, .cf-cdn { height: 28px; padding: 0 8px; font-size: 12px; border-radius: 9px; width: 100%; max-width: 150px; } .cf-cdn { max-width: 90px; font-family: var(--mono); }
