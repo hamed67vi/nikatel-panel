@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.11 - 2026-10-11 - Nodes: one list, common buttons
+
+* Nodes has one **Servers** page instead of an Iran page and a Foreign page. The buttons (Add server, GRE check all, Countries, My SSH key) and the search are one line at the top and work for every server; **All / Iran / Foreign** (with counts) and the Problems switch sit under them. Add server asks Iran or Foreign when the list shows All. The old saved Iran / Foreign tab opens as the new page.
+
 ## 1.14.10 - 2026-10-11 - Tunnels and Nodes: one box
 
 * On Tunnels the All / Problems tabs and the search join the buttons in the one top box (the search is its own segment); the second box is gone. Nodes has its search in its box the same way.
