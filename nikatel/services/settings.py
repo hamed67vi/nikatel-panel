@@ -24,7 +24,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {}},   # status: the result of the last key test
     # ArvanCloud DNS: the failover of an Iran server points the records that used its address at the replacement (mode: off | approve | auto)
     "arvan": {"api_key": "", "mode": "off", "confirm_minutes": 5, "domains": [], "status": {}},
-    "failover": {"seen": {}, "pending": [], "history": []},
+    "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
     # the secret entry path: when set, the panel answers 404 to everything until the browser has opened /<entry_path>

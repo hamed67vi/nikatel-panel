@@ -82,7 +82,7 @@ What happens to each tunnel:
 
 * **Build** — preflight of both servers, port and network allocation, engine install (verified download), configs and units on both sides, two-way and data-path proof, **rollback of everything on failure**.
 * **Monitor** — every minute: units on both sides, carrier interface, 20 pings, forwarded ports, one real HTTP request through the tunnel; state changes need two agreeing checks so a single lost packet never flaps.
-* **Repair** — *Smart repair* diagnoses both ends, restarts only what is broken (Iran first), rebuilds, tries another transport and tells you when only a move to another Iran server helps. *Fix with AI*, *Fix all*, *Explain*, a network advisor that ranks every type on today's network, auto-repair with limits (2 per tunnel per hour, never when a server is down).
+* **Repair** — *Smart repair* diagnoses both ends, restarts only what is broken (Iran first), rebuilds, tries another transport and tells you when only a move to another Iran server helps. *Fix with AI*, *Fix all*, *Explain*, a network advisor that ranks every type on today's network, auto-repair with limits (2 per tunnel per hour, never when a server is down). *Failover · CDN*: an Iran server that stays down gets its tunnels moved to another Iran server and its ArvanCloud DNS records pointed at the new one - with your approval first, every change listed, and a *Restore* per record.
 * **Test** — builds a temporary tunnel per chosen transport (22 kinds in 5 groups), measures latency, jitter, loss and download speed, scores 0–100, removes it and compares them in one table.
 * **Change** — edit forwarded ports, rebuild, remove, adopt tunnels already running on the servers, update Backhaul / Xray on every server.
 

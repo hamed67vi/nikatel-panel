@@ -710,3 +710,12 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 .msg-row time { color: var(--mut); font: 12px ui-monospace, Consolas, monospace; padding-top: 1px; }
 .msg-row i { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--mut); } .msg-row.bad i { background: var(--bad); } .msg-row.ok i { background: var(--ok); }
 .msg-row span { overflow-wrap: anywhere; white-space: pre-wrap; } .msg-row.bad span { color: var(--bad); }
+
+/* ---- DNS changes (Smart repair, next to the history): one re-pointed record per row; Restore puts the previous address back */
+.ap-two { margin-bottom: 14px; }
+.dns-list { display: flex; flex-direction: column; gap: 4px; max-height: 420px; overflow: auto; }
+.dns-row { display: grid; grid-template-columns: 64px 10px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 12.5px; }
+.dns-row time { color: var(--mut); font-family: var(--mono); font-size: 11px; } .dns-row i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px rgba(61,220,151,.6); } .dns-row.back i { background: var(--unk); box-shadow: none; }
+.dns-t { display: flex; flex-direction: column; min-width: 0; } .dns-t b, .dns-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dns-row.back { opacity: .72; }
+@media (max-width: 700px) { .dns-row { grid-template-columns: 56px 10px minmax(0, 1fr); } .dns-row .pill, .dns-row button { grid-column: 3; justify-self: start; } }

@@ -101,3 +101,14 @@ def fo_undo(plan_id: str):
         return {"ok": True, "changed": failover.undo(plan_id)}
     except (ValueError, RuntimeError) as e:
         raise HTTPException(400, str(e))
+
+
+@router.post("/failover/dns/{log_id}/restore")
+def fo_restore(log_id: str):
+    """One re-pointed DNS record back to the address it had before the failover."""
+    _writable()
+
+    try:
+        return {"ok": True, **failover.restore(log_id)}
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(400, str(e))

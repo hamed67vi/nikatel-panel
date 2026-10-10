@@ -85,3 +85,40 @@ def test_dismiss_and_state(client):
     j = client.get("/api/failover").json()
     assert j["pending"] == [] and j["history"][0]["dismissed"] is True
     assert client.post("/api/failover/1-1/dismiss").status_code == 400
+
+
+def test_restore_puts_one_record_back_and_marks_the_failover_undone(client, monkeypatch):
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    fake = FakeArvan()
+    fake.rec["value"][0]["ip"] = "203.0.113.9"                              # the failover already pointed it at the new server
+    monkeypatch.setattr(arvan, "_req", fake.req)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    entry = {"id": "1-1:r1", "at": 1, "plan_id": "1-1", "server": "ir1", "target": "ir2", "domain": "example.test", "record_id": "r1", "fqdn": "ir.example.test",
+             "old": "203.0.113.5", "new": "203.0.113.9", "configs": ["c1"], "restored": False, "restored_at": None}
+    hist = {"id": "1-1", "at": 1, "server_id": 1, "server": "ir1", "ip": "203.0.113.5", "target": {"id": 2, "name": "ir2", "ip": "203.0.113.9"}, "moved": 1, "tunnels": 1, "dns": [], "errors": [], "ok": True, "undone": False}
+    st.put("failover", {"dns_log": [entry], "history": [hist]})
+    j = client.get("/api/failover").json()
+    assert j["dns_log"][0]["fqdn"] == "ir.example.test" and j["dns_log"][0]["restored"] is False and j["history"][0]["undone"] is False
+    r = client.post("/api/failover/dns/1-1%3Ar1/restore")
+    assert r.status_code == 200, r.text
+    assert r.json()["old"] == "203.0.113.5" and fake.rec["value"][0]["ip"] == "203.0.113.5"
+    j = client.get("/api/failover").json()
+    assert j["dns_log"][0]["restored"] is True and j["dns_log"][0]["restored_at"] and j["history"][0]["undone"] is True
+    assert client.post("/api/failover/dns/1-1%3Ar1/restore").status_code == 400          # already back
+    assert client.post("/api/failover/1-1/undo").status_code == 400                       # nothing left to undo
+    assert client.post("/api/failover/dns/nope/restore").status_code == 400
+
+
+def test_undo_restores_every_record_of_one_failover(monkeypatch):
+    fake = FakeArvan()
+    fake.rec["value"][0]["ip"] = "203.0.113.9"
+    monkeypatch.setattr(arvan, "_req", fake.req)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    e = {"id": "1-1:r1", "at": 1, "plan_id": "1-1", "server": "ir1", "target": "ir2", "domain": "example.test", "record_id": "r1", "fqdn": "ir.example.test", "old": "203.0.113.5", "new": "203.0.113.9", "configs": [], "restored": False, "restored_at": None}
+    st.put("failover", {"dns_log": [e], "history": []})
+    back = failover.undo("1-1")
+    assert len(back) == 1 and back[0]["restored"] is True and fake.rec["value"][0]["ip"] == "203.0.113.5"
+    with pytest.raises(ValueError):
+        failover.undo("1-1")

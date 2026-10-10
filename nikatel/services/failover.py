@@ -5,7 +5,11 @@ records that pointed at it are pointed at the new one.
   check()           the job (every minute): a server offline for `confirm_minutes` -> a plan; mode "approve" waits for
                     a click in the panel (and says so on Telegram), mode "auto" runs it
   approve(id)       run the pending plan: move every tunnel (same name, ports and type), then - only when all moved - the DNS
-  undo(id)          point the DNS records back at the old address (the tunnels are left where they are)
+  restore(log_id)   point ONE changed record back at the address it had before (the tunnels are left where they are)
+  undo(plan_id)     the same for every record of one failover
+
+Every record the failover re-points is written to `dns_log` (old and new address, which server, when), so the panel can
+list the changes and put any of them back with one click.
 
 The DNS is touched only after every tunnel moved: a record pointing at a server that does not carry its tunnels would
 break the configs. Every step is told in the repair story and written as an event."""
@@ -107,16 +111,18 @@ def _state() -> dict:
     s.setdefault("seen", {})
     s.setdefault("pending", [])
     s.setdefault("history", [])
+    s.setdefault("dns_log", [])
     return s
 
 
 def _save(s: dict) -> None:
-    st.put("failover", {"seen": s["seen"], "pending": s["pending"], "history": s["history"][-30:]})
+    st.put("failover", {"seen": s["seen"], "pending": s["pending"], "history": s["history"][-30:], "dns_log": s["dns_log"][-100:]})
 
 
 def state() -> dict:
     s = _state()
-    return {"mode": conf().get("mode", "off"), "confirm_minutes": conf().get("confirm_minutes", 5), "pending": s["pending"], "history": list(reversed(s["history"]))[:15]}
+    return {"mode": conf().get("mode", "off"), "confirm_minutes": conf().get("confirm_minutes", 5), "pending": s["pending"], "history": list(reversed(s["history"]))[:15],
+            "dns_log": list(reversed(s["dns_log"]))[:50]}
 
 
 def _notice(text: str) -> None:
@@ -202,7 +208,7 @@ def run_plan(p: dict) -> int:
             except (ValueError, RuntimeError) as e:
                 autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
 
-        done_dns, errors = [], []
+        done_dns, errors, logged = [], [], []
 
         if moved < len(p["tunnels"]):
             autopilot._say(aid, f"{moved} of {len(p['tunnels'])} tunnels moved: the DNS is NOT changed (records must not point at a server that does not carry all of its tunnels).")
@@ -210,6 +216,8 @@ def run_plan(p: dict) -> int:
             for d in p["dns"]:
                 try:
                     done_dns.append(arvan.apply(d["domain"], d["id"], p["ip"], p["target"]["ip"]))
+                    logged.append({"id": f"{p['id']}:{d['id']}", "at": int(time.time()), "plan_id": p["id"], "server": p["server"], "target": p["target"]["name"], "domain": d["domain"],
+                                   "record_id": str(d["id"]), "fqdn": d["fqdn"], "old": p["ip"], "new": p["target"]["ip"], "configs": d.get("configs", []), "restored": False, "restored_at": None})
                     autopilot._say(aid, f"DNS {d['fqdn']}: {p['ip']} → {p['target']['ip']}")
                 except RuntimeError as e:
                     errors.append(str(e)[:160])
@@ -217,6 +225,7 @@ def run_plan(p: dict) -> int:
 
         ok = moved == len(p["tunnels"]) and not errors
         s = _state()
+        s["dns_log"].extend(logged)
         s["pending"] = [x for x in s["pending"] if x["server_id"] != p["server_id"]]
         s["history"].append({"id": p["id"], "at": int(time.time()), "server_id": p["server_id"], "server": p["server"], "ip": p["ip"], "target": p["target"], "moved": moved, "tunnels": len(p["tunnels"]), "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
         _save(s)
@@ -254,19 +263,40 @@ def dismiss(plan_id: str) -> None:
     _save(s)
 
 
-def undo(plan_id: str) -> list[dict]:
-    """Point the DNS records of a finished failover back at the old address."""
+def restore(log_id: str) -> dict:
+    """Point one re-pointed record back at the address it had before the failover. The tunnels stay where they are."""
     s = _state()
-    h = next((x for x in s["history"] if x["id"] == plan_id), None)
+    e = next((x for x in s["dns_log"] if x["id"] == log_id), None)
 
-    if h is None or not h.get("dns") or h.get("undone"):
-        raise ValueError("nothing to undo for this entry")
+    if e is None:
+        raise ValueError("this DNS change is not in the list any more")
 
-    back = [arvan.apply(d["domain"], d["id"], d["new"], d["old"]) for d in h["dns"]]
-    h["undone"] = True
+    if e.get("restored"):
+        raise ValueError(f"{e['fqdn']} already points at {e['old']} again")
+
+    arvan.apply(e["domain"], e["record_id"], e["new"], e["old"])
+    e["restored"], e["restored_at"] = True, int(time.time())
+
+    if not any(x["plan_id"] == e["plan_id"] and not x.get("restored") for x in s["dns_log"]):
+        for h in s["history"]:
+            if h["id"] == e["plan_id"]:
+                h["undone"] = True              # every record of that failover is back
+
     _save(s)
 
     with session() as db:
-        emit(db, "warn", "actions", f"Failover of {h['server']} undone: {len(back)} DNS record(s) point at {h['ip']} again (the tunnels stay where they are).", h["server"])
+        emit(db, "warn", "actions", f"DNS {e['fqdn']} points at {e['old']} ({e['server']}) again; the tunnels stay on {e['target']}.", e["server"])
 
-    return back
+    _notice(f"↩ DNS {e['fqdn']} points at {e['old']} ({e['server']}) again. The tunnels stay on {e['target']}.")
+    return dict(e)
+
+
+def undo(plan_id: str) -> list[dict]:
+    """Point every record of a finished failover back at the old address (the tunnels are left where they are)."""
+    s = _state()
+    todo = [x["id"] for x in s["dns_log"] if x["plan_id"] == plan_id and not x.get("restored")]
+
+    if not todo:
+        raise ValueError("nothing to undo for this entry")
+
+    return [restore(i) for i in todo]
