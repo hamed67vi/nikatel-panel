@@ -830,3 +830,12 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 
 .ap-auto { margin: 0 8px 0 0; font-weight: 600; white-space: nowrap; }
 
+
+/* ---- severity: a row is red when the tunnel/server is down or critical, yellow when it is bearable; hovering a row or a card fades it up softly */
+.tbl tr.sev-red td { background: rgba(255,90,120,.10); } .tbl tr.sev-red td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+.tbl tr.sev-yellow td { background: rgba(255,200,70,.075); } .tbl tr.sev-yellow td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.tbl tr.sev-red:hover td { background: rgba(255,90,120,.20); } .tbl tr.sev-yellow:hover td { background: rgba(255,200,70,.16); }
+.tbl tr td { transition: background-color .45s ease, box-shadow .45s ease; }
+.tbl tr:not(.sev-red):not(.sev-yellow):hover td { background: rgba(255,255,255,.055); }
+.tile, .gw-row, .ap-row, .dns-row, .hl-row { transition: background-color .45s ease, box-shadow .45s ease, opacity .45s ease, transform .35s var(--ease); }
+.tile:hover, .gw-row:hover, .ap-row:hover { background-color: rgba(255,255,255,.075); transform: translateY(-1px); }

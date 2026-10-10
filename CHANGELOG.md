@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.6 - 2026-10-10 - Severity colours
+
+* Server and tunnel rows are **red** when down or critical (tunnel: down or 15 % loss or more; server: offline, no login, CPU/RAM 92 % or more, disk 95 % or more) and **yellow** when bearable (degraded or 5 % loss or more, slow, CPU 80 %, RAM/disk 85 %, not checked yet). Rows and cards fade up softly under the pointer.
+
 ## 1.9.5 - 2026-10-10 - Automatic repair on by default, with a switch
 
 * The smart repair is **on by default** (level: everything up to another tunnel type). Smart repair → Needs attention has an **Automatic repair** switch: off, the panel only watches and shows Diagnose / Fix with AI to work by hand.

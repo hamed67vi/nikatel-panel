@@ -333,6 +333,9 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
   </form>`;
 
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
+/* severity colours of the rows: red = down or critical, yellow = bearable (a little loss, high load) - the same rule everywhere */
+const srvSev = s => { if (!s.enabled) return ""; const f = s.facts || {}; if (s.online === false || noLogin(s) || (f.cpu || 0) >= 92 || (f.ram || 0) >= 92 || (f.disk || 0) >= 95) return "sev-red"; return (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };
+const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.state === "down" || loss >= 15) return "sev-red"; return t.state === "degraded" || t.state === "unknown" || t.state === "starting" || loss >= 5 || (t.rtt_ms || 0) > 150 ? "sev-yellow" : ""; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
@@ -364,7 +367,7 @@ PAGES.servers = async () => {
   const foreignTab = state.tab === "foreign";
   const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
-    const cls = !s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "";
+    const cls = (!s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}</td>
       <td>${noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
@@ -769,7 +772,7 @@ PAGES.tunnelsList = async () => {
   const rows = list.filter(t => !state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q));
   const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "DEGRADED" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
-  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state}${(d.loss_pct || 0) >= 15 ? " lossy" : ""}">
+  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}">
       <td class="name">${esc(t.name)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
       <td><span class="st ${t.state}">${stText(t)}</span>${t.last_error ? `<small class="err td-err" title="${esc(t.last_error)}">${esc(t.last_error).slice(0, 40)}</small>` : ""}</td>
