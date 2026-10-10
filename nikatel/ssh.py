@@ -192,6 +192,10 @@ __NK_PY__
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
 
+    # packet loss from this server to several hosts at once (20 pings each, in parallel): "LOSS host sent received avg_ms". Read-only.
+    "loss_many": (r"""for h in @HOSTS@; do ( o=$(ping -c 20 -i 0.2 -W 1 -q "$h" 2>&1); t=$(echo "$o" | sed -n 's/^\([0-9]*\) packets transmitted, \([0-9]*\) received.*/\1 \2/p'); a=$(echo "$o" | awk -F/ '/^rtt/{print $5}'); echo "LOSS $h ${t:-20 0} ${a:--}" ) & done; wait
+""", {"HOSTS": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}( [A-Za-z0-9][A-Za-z0-9.\-]{0,120}){0,11}$"}),
+
     # one side of a tunnel: unit states, the GRE interface, its counters, a ping to the other end,
     # and the forwarded ports (only on the Iran side, where users connect)
     "tunnel_side": (r"""for u in @UNITS@; do echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done

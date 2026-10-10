@@ -839,3 +839,10 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 .tbl tr:not(.sev-red):not(.sev-yellow):hover td { background: rgba(255,255,255,.055); }
 .tile, .gw-row, .ap-row, .dns-row, .hl-row { transition: background-color .45s ease, box-shadow .45s ease, opacity .45s ease, transform .35s var(--ease); }
 .tile:hover, .gw-row:hover, .ap-row:hover { background-color: rgba(255,255,255,.075); transform: translateY(-1px); }
+
+/* ---- hovering a row or a small card makes it a little bigger (and lifts it above its neighbours) */
+.tbl tr, .tile, .gw-row, .ap-row, .hl-row, .wtool, .dns-row { transition: transform .3s var(--ease), background-color .45s ease, box-shadow .45s ease; }
+.tbl tbody tr:hover { transform: scale(1.012); position: relative; z-index: 3; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+.tile:hover, .gw-row:hover, .ap-row:hover, .hl-row:hover, .wtool:hover, .dns-row:hover { transform: scale(1.025) !important; position: relative; z-index: 3; box-shadow: 0 12px 30px rgba(0,0,0,.38); }
+:root[data-anim="off"] .tbl tbody tr:hover, :root[data-anim="off"] .tile:hover { transform: none !important; }
+@media (prefers-reduced-motion: reduce) { .tbl tbody tr:hover, .tile:hover, .gw-row:hover, .ap-row:hover, .wtool:hover { transform: none !important; } }

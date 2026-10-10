@@ -159,3 +159,18 @@ def test_classify_flapping_as_a_lossy_route():
 def test_classify_a_port_blocked_in_front_of_the_server_as_a_cut_route():
     cause, why = ap.classify({"state": "degraded", "ext_blocked": True, "user_port": "8075", "gre": True, "gre_loss": 0.0, "under_loss_i": 0, "under_loss_f": 0})
     assert cause == "route_cut" and "8075" in why and "blocked in front" in why
+
+
+def test_pathscan_locates_the_loss():
+    from nikatel.services import pathscan
+
+    ok, bad = 0.0, 40.0
+    assert pathscan.locate({"pair_ab": bad, "pair_ba": ok, "iran_to_other_foreign": [ok, ok, ok], "other_iran_to_foreign": [ok, ok, ok], "iran_anchor": [ok, ok], "foreign_anchor": [ok, ok], "iran_domestic": [ok, ok]})["where"] == "pair_route"
+    assert pathscan.locate({"pair_ab": bad, "pair_ba": bad, "iran_to_other_foreign": [bad, bad, ok], "other_iran_to_foreign": [ok, ok], "iran_anchor": [ok, ok], "foreign_anchor": [ok, ok], "iran_domestic": [ok]})["where"] == "iran_side"
+    assert pathscan.locate({"pair_ab": bad, "pair_ba": ok, "iran_to_other_foreign": [ok, ok], "other_iran_to_foreign": [bad, bad, ok], "iran_anchor": [ok, ok], "foreign_anchor": [ok, ok], "iran_domestic": [ok]})["where"] == "foreign_side"
+    assert pathscan.locate({"pair_ab": bad, "pair_ba": bad, "iran_to_other_foreign": [bad, bad], "other_iran_to_foreign": [bad, bad], "iran_anchor": [ok, ok], "foreign_anchor": [ok, ok]})["where"] == "both"
+    assert pathscan.locate({"pair_ab": ok, "pair_ba": ok, "iran_to_other_foreign": [ok], "other_iran_to_foreign": [ok]})["where"] == "none"
+    assert pathscan.locate({"pair_ab": None, "pair_ba": None, "iran_to_other_foreign": [], "other_iran_to_foreign": []})["where"] == "unknown"
+    assert pathscan.locate({"pair_ab": bad, "pair_ba": ok, "iran_to_other_foreign": [ok, ok, ok], "other_iran_to_foreign": [ok, ok], "iran_anchor": [bad, bad], "foreign_anchor": [ok, ok]})["where"] == "iran_side"      # even toward the internet
+    r = pathscan.parse_loss("LOSS 203.0.113.9 20 17 93.512\nLOSS 1.1.1.1 20 0 -\nnoise")
+    assert r["203.0.113.9"] == {"loss": 15.0, "avg_ms": 93.512} and r["1.1.1.1"]["loss"] == 100.0 and r["1.1.1.1"]["avg_ms"] is None

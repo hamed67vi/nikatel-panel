@@ -171,6 +171,19 @@ def diagnose(tunnel_id: int) -> dict:
 
     facts["flap_fails"], facts["flap_n"] = sum(1 for ok in recent if not ok), len(recent)
     facts["user_port"] = (info["ports"].split(",") or [""])[0]
+    scan_res = None
+
+    if not facts["iran_error"] and not facts["foreign_error"] and (info["state"] != "up" or facts["flap_fails"] >= 3 or (det.get("loss_pct") or 0) >= 5):
+        try:     # where is the loss: Iran side, foreign side or this pair only (read only, about 8 s)
+            from . import pathscan
+
+            scan_res = pathscan.scan(tunnel_id)
+        except Exception:
+            log.warning("path scan failed", exc_info=True)
+
+    facts["where"] = (scan_res or {}).get("where")
+    facts["where_text"] = (scan_res or {}).get("text", "")
+    facts["scan_rows"] = [{"label": r["label"], "from": r["from"], "to": r["to"], "loss": r["loss"]} for r in (scan_res or {}).get("rows", [])]
     facts["ext"] = det.get("ext")
     facts["ext_blocked"] = bool(det.get("ext") and det["ext"].get("code") == "000" and det.get("ext_seen") and det.get("data_code") not in ("", "000"))
 
@@ -188,6 +201,10 @@ def diagnose(tunnel_id: int) -> dict:
                 facts["port_open"] = None
 
     cause, why = classify(facts)
+
+    if facts["where"] in ("iran_side", "foreign_side", "pair_route", "both") and cause not in ("healthy", "units_down", "server_unreachable"):
+        why = f"{why}. Where: {facts['where_text']}"
+
     kind = kind_of(info["type"], info["transport"], rec)
     findings = [
         {"ok": not facts["iran_error"], "text": "Iran server answers over SSH" if not facts["iran_error"] else "Iran server: " + facts["iran_error"]},
@@ -214,6 +231,18 @@ def diagnose(tunnel_id: int) -> dict:
 
     if "port_open" in facts:
         findings.append({"ok": facts["port_open"] is not False, "text": f"Control port {info['port']} is " + ("reachable from the other side" if facts["port_open"] is not False else "BLOCKED from the other side")})
+
+    if scan_res and scan_res.get("rows"):
+        groups: dict[str, list[str]] = {}
+
+        for r in scan_res["rows"]:
+            groups.setdefault(r["label"], []).append(f"{r['to']} " + ("?" if r["loss"] is None else f"{r['loss']:g}%"))
+
+        for label, items in groups.items():
+            vals = [r["loss"] for r in scan_res["rows"] if r["label"] == label and r["loss"] is not None]
+            findings.append({"ok": not any(v >= 10 for v in vals), "text": f"{label}: " + ", ".join(items)})
+
+        findings.append({"ok": scan_res["where"] in ("none", "unknown"), "text": "Where the loss is: " + scan_res["text"]})
 
     advice = ai.advise(json.dumps({"tunnel": info["name"], "type": kind, "cause": cause, "summary": why, "facts": {k: v for k, v in facts.items() if k != "last_error"}, "last_error": str(info["last_error"] or "")[:200]}, ensure_ascii=False)) if cause != "healthy" else None
 
