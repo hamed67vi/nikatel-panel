@@ -41,6 +41,32 @@ class Pw(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class NodesIn(BaseModel):
+    marzban_cert: str = Field("", max_length=8000)
+
+
+@router.get("/settings/nodes")
+def nodes_get():
+    from ..services import settings as st
+
+    return {"ok": True, **st.get("nodes")}
+
+
+@router.put("/settings/nodes")
+def nodes_put(body: NodesIn):
+    """The certificate that Add server → Marzban node fills in by default (empty = none)."""
+    from ..services import extras
+    from ..services import settings as st
+
+    try:
+        cert = extras.check_cert(body.marzban_cert) if body.marzban_cert.strip() else ""
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    st.put("nodes", {"marzban_cert": cert})
+    return {"ok": True, **st.get("nodes")}
+
+
 class InstallIn(BaseModel):
     items: list[str] = Field(min_length=1, max_length=4)
     cert: str = Field("", max_length=8000)

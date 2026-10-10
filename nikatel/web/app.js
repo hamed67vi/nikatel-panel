@@ -65,7 +65,7 @@ function strip(flags) {   /* up/down history as a strip of small blocks */
 
 /* ---- auth */
 function showLogin() { $("#login").classList.remove("hidden"); $("#app").classList.add("hidden"); }
-function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); }
+function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); api("/api/settings/nodes").then(r => { window.NODE_CERT = r.marzban_cert || ""; }).catch(() => {}); }
 
 /* sign-in has three steps: password -> (authenticator code) ; or "forgot the password" */
 const ls = {step: "pass", ticket: ""};
@@ -312,6 +312,7 @@ function eventsHtml(list, open) {
 }
 
 /* ---- servers */
+window.NODE_CERT = "";   // the default Marzban certificate (Settings of the panel, loaded after sign-in)
 const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
     <label>Name<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value="${esc(s ? s.name : "")}" placeholder="ir7"></label>
     <label>Host / IP<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10"></label>
@@ -322,8 +323,9 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
     <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
     ${s ? "" : `<div class="srv-extra"><b>Install after adding</b> <small class="mut">(optional, needs root; the server is added first, then these run and tell what they did)</small>
       <label class="chk"><input name="x_bt" type="checkbox"> Block public torrents <small class="mut">(iptables DROP rules for tracker addresses, refreshed daily - Heclalava/blockpublictorrent-iptables)</small></label>
-      <label class="chk"><input name="x_node" type="checkbox" onchange="this.closest('.srv-extra').querySelector('.x-cert').classList.toggle('hidden', !this.checked)"> Marzban node <small class="mut">(Docker + the official Gozargah installer; ports 62050 / 62051)</small></label>
-      <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----"></textarea></label></div>`}
+      <label class="chk"><input name="x_node" type="checkbox" onchange="this.closest('.srv-extra').querySelectorAll('.x-cert').forEach(e => e.classList.toggle('hidden', !this.checked))"> Marzban node <small class="mut">(Docker + the official Gozargah installer; ports 62050 / 62051)</small></label>
+      <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
+      <label class="chk x-cert hidden"><input name="x_cert_save" type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>`}
     <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>
       ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
     <small class="mut">${s ? "Changing a server here only changes how the panel looks at it." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
@@ -548,6 +550,7 @@ window.saveServer = async (e, id) => {
   const body = {name: f.get("name").trim(), host: f.get("host").trim(), role: f.get("role"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
   const items = [f.get("x_bt") === "on" ? "btblock" : "", f.get("x_node") === "on" ? "marzban_node" : ""].filter(Boolean), cert = f.get("x_cert") || "";
   if (!id && items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
+  if (!id && items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;

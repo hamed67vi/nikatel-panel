@@ -86,3 +86,12 @@ def test_install_api_refuses_what_it_cannot_do(client):
     assert client.post(f"/api/servers/{sid}/install", json={"items": ["rm-everything"]}).status_code == 400                    # unknown item
     assert client.post("/api/servers/99999/install", json={"items": ["btblock"]}).status_code == 400                           # no such server
     assert client.post(f"/api/servers/{sid}/install", json={"items": ["btblock"]}).status_code == 400                           # read-only in the tests
+
+
+def test_default_marzban_certificate_is_kept_and_checked(client):
+    assert client.get("/api/settings/nodes").json()["marzban_cert"] == ""
+    assert client.put("/api/settings/nodes", json={"marzban_cert": "nope"}).status_code == 400
+    r = client.put("/api/settings/nodes", json={"marzban_cert": CERT})
+    assert r.status_code == 200 and r.json()["marzban_cert"].startswith("-----BEGIN CERTIFICATE-----") and "\n\n" not in r.json()["marzban_cert"]
+    assert client.get("/api/settings/nodes").json()["marzban_cert"] == r.json()["marzban_cert"]
+    assert client.put("/api/settings/nodes", json={"marzban_cert": ""}).json()["marzban_cert"] == ""

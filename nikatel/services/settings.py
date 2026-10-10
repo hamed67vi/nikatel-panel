@@ -29,6 +29,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "pending_builds": {"items": []},
     # the secret entry path: when set, the panel answers 404 to everything until the browser has opened /<entry_path>
     "security": {"entry_path": ""},
+    # Add server → Marzban node: the certificate of the Marzban panel that is filled in by default (a public certificate, kept in the panel database only)
+    "nodes": {"marzban_cert": ""},
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",)}
