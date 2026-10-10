@@ -28,6 +28,13 @@ def fresh_db():
             pass
 
     db.init_db()
+
+    from nikatel import auth
+    from nikatel.services import gate
+
+    auth._FAILS.clear()
+    auth._RESET.clear()
+    gate._CACHE.update({"at": 0.0, "path": ""})
     yield
     db.reset_for_tests()
 

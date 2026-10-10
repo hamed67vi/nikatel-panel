@@ -12,9 +12,27 @@
 <div id="login" class="login hidden">
   <form id="login-form" class="login-box" autocomplete="on">
     <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
-    <label>User<input name="user" value="admin" autocomplete="username"></label>
-    <label>Password<input name="password" type="password" autocomplete="current-password" autofocus></label>
-    <button class="pri" type="submit">Sign in</button>
+    <div id="ls-pass" class="lstep">
+      <label>User<input name="user" value="admin" autocomplete="username"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" autofocus></label>
+      <button class="pri" type="submit">Sign in</button>
+      <a class="lnk" id="to-recover">Forgot the password?</a>
+    </div>
+    <div id="ls-2fa" class="lstep hidden">
+      <p class="lhint">Two-step sign-in. Open your authenticator app and type the 6-digit code for <b>Nikatel</b> - or one of your recovery codes.</p>
+      <label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></label>
+      <button class="pri" type="submit">Verify</button>
+      <a class="lnk" data-back>← Back</a>
+    </div>
+    <div id="ls-recover" class="lstep hidden">
+      <p class="lhint">Set a new password. You need a <b>recovery code</b>, or a code sent to your Telegram. Two-step sign-in stays on.</p>
+      <button type="button" id="rc-tg" class="hidden">Send a code to my Telegram</button>
+      <label>Code<input name="rcode" autocomplete="off" placeholder="Telegram code or recovery code"></label>
+      <label>New password<input name="rnew" type="password" autocomplete="new-password"></label>
+      <label>Repeat<input name="rnew2" type="password" autocomplete="new-password"></label>
+      <button class="pri" type="submit">Set the new password</button>
+      <a class="lnk" data-back>← Back</a>
+    </div>
     <div id="login-err" class="err"></div>
   </form>
 </div>

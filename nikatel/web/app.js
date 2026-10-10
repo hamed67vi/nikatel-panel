@@ -43,14 +43,35 @@ function strip(flags) {   /* up/down history as a strip of small blocks */
 function showLogin() { $("#login").classList.remove("hidden"); $("#app").classList.add("hidden"); }
 function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); }
 
+/* sign-in has three steps: password -> (authenticator code) ; or "forgot the password" */
+const ls = {step: "pass", ticket: ""};
+function loginStep(s) {
+  ls.step = s;
+  for (const k of ["pass", "2fa", "recover"]) $("#ls-" + k).classList.toggle("hidden", k !== s);
+  $("#login-err").textContent = "";
+  const first = $("#ls-" + s + " input:not([type=hidden])"); if (first) setTimeout(() => first.focus(), 30);
+}
+$("#to-recover").onclick = async () => { loginStep("recover"); try { const o = await fetch("/api/auth/recovery-options").then(r => r.json()); $("#rc-tg").classList.toggle("hidden", !o.telegram); } catch (e) { /* offline */ } };
+document.querySelectorAll("#login-form [data-back]").forEach(a => a.onclick = () => { ls.ticket = ""; loginStep("pass"); });
+$("#rc-tg").onclick = async () => { try { await api("/api/auth/recover/telegram", {method: "POST"}); $("#login-err").textContent = "A code was sent to your Telegram (valid 10 minutes)."; } catch (err) { $("#login-err").textContent = err.message; } };
 $("#login-form").onsubmit = async e => {
   e.preventDefault();
-  const f = new FormData(e.target);
+  const f = new FormData(e.target), err = $("#login-err");
+  err.textContent = "";
   try {
-    await api("/api/auth/login", {method: "POST", body: JSON.stringify({user: f.get("user"), password: f.get("password")})});
-    $("#login-err").textContent = "";
+    if (ls.step === "pass") {
+      const r = await api("/api/auth/login", {method: "POST", body: JSON.stringify({user: f.get("user"), password: f.get("password")})});
+      if (r.need_2fa) { ls.ticket = r.ticket; loginStep("2fa"); return; }
+    } else if (ls.step === "2fa") {
+      await api("/api/auth/login/2fa", {method: "POST", body: JSON.stringify({ticket: ls.ticket, code: f.get("code")})});
+    } else {
+      if (f.get("rnew") !== f.get("rnew2")) { err.textContent = "the two passwords differ"; return; }
+      await api("/api/auth/recover", {method: "POST", body: JSON.stringify({code: f.get("rcode"), new: f.get("rnew")})});
+      loginStep("pass"); err.textContent = "✓ The password is changed. Sign in with the new one."; err.style.color = "var(--ok)"; return;
+    }
+    ls.ticket = ""; e.target.reset(); loginStep("pass");
     showApp(); go(state.page);
-  } catch (err) { $("#login-err").textContent = err.message; }
+  } catch (er) { err.style.color = ""; err.textContent = er.message; }
 };
 $("#logout").onclick = async () => { await api("/api/auth/logout", {method: "POST"}); showLogin(); };
 
@@ -123,13 +144,13 @@ function showModal(title, body, cls = "") { let m = $("#modal"); if (!m) { m = d
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
-function glassAsk(text, {input = false, value = "", danger} = {}) {
+function glassAsk(text, {input = false, value = "", danger, password = false} = {}) {
   return new Promise(resolve => {
     const old = $("#ask"); if (old) old.remove();
     const el = document.createElement("div"); el.id = "ask";
     const verb = (String(text).match(ASK_VERB) || [""])[0], bad = danger != null ? danger : /^(Remove|Delete|Reboot|Forget|Rebuild|Clear|Import)\b/i.test(text) || /cannot be undone|type [A-Z]+ to confirm/i.test(text);
     const label = input ? "OK" : verb ? verb[0].toUpperCase() + verb.slice(1).toLowerCase() : "OK";
-    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${input ? `<input class="ask-in" value="${esc(value)}" autocomplete="off" spellcheck="false">` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
+    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${input ? `<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "current-password" : "off"}" spellcheck="false">` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
     document.body.appendChild(el);
     const inp = $(".ask-in", el), done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
     const yes = () => done(input ? inp.value : true), no = () => done(input ? null : false);
@@ -141,7 +162,7 @@ function glassAsk(text, {input = false, value = "", danger} = {}) {
   });
 }
 window.gconfirm = (text, o) => glassAsk(text, o);
-window.gprompt = (text, value = "") => glassAsk(text, {input: true, value});
+window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({input: true, value}, o));
 window.closeModal = () => {
   const quiet = (state.page === "nodes" || state.page === "tunnels") && !state.edit && !state.build && !state.detect;   // just close: the list behind is still current
   state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null;
@@ -269,8 +290,7 @@ function serverDetailHtml(s) {
     s.role === "foreign" ? ibox("🛡", "Location & security", [irow("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")} ${geo.agree ? `<small class="mut">(${esc(geo.agree)} agree)</small>` : ""}`), irow("Abuse-Defender", abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off"), irow("Filtered in Iran?", fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : "not checked yet")]) : "",
   ].join("");
   return tabs + `<div class="iboxes">${boxes}</div>    ${fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : ""}
-    ${mine.length ? `<div class="ibox wide-box"><h5><i>⇄</i>Tunnels on this server <small>${mine.length}</small></h5><div class="ichips">${mine.map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div></div>` : ""}
-    <div class="frm-act"><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('tools')">🧰 Tools</button><button class="sm" onclick="wtab('console')">⌨ Console</button>${s.role === "foreign" ? `<button class="sm" onclick="srvFilter(${s.id})">Check filtering in Iran</button>` : ""}<span class="sp"></span><button class="sm danger" onclick="srvReboot(${s.id}, '${esc(s.name)}')">Reboot</button></div>`;
+    ${mine.length ? `<div class="ibox wide-box"><h5><i>⇄</i>Tunnels on this server <small>${mine.length}</small></h5><div class="ichips">${mine.map(t => `<span><span class="st ${t.state}">${esc(t.name)}</span> <small class="mut">${esc(t.iran_name === s.name ? "⇄ " + t.foreign_name : "⇄ " + t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div></div>` : ""}`;
 }
 /* a window tab only redraws the window body - no API call, the list behind it stays as it is */
 window.copyText = t => { const done = () => toast("✓ Copied " + t, "ok"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => {}); else { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) { /* no clipboard */ } ta.remove(); } };
@@ -460,7 +480,7 @@ PAGES.tunnelsList = async () => {
       <td class="num"><b class="${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b>${d.loss_pct ? `<small class="mut"> ${d.loss_pct}% loss</small>` : ""}</td>
       <td class="num hide-sm">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td class="num" title="${esc(t.last_error || (q.latency_ms != null ? q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "%" : ""))}">${q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score}</b>` : '<span class="mut">—</span>'}${t.last_error ? `<small class="err"> ${esc(t.last_error).slice(0, 30)}</small>` : ""}</td>
-      <td><div class="td-act"><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();state.open=${t.id};state.wtab='info';refresh();fixTunnel(${t.id}, false)" title="Diagnose and repair">Fix</button><button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Latency, jitter, loss, speed, score">Quality</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></div></td></tr>`; };
+      <td><div class="td-act"><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();qualityOne(${t.id})" title="Latency, jitter, loss, speed, score">Quality</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></div></td></tr>`; };
   const creating = false;
   $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="qualityAll()" title="Latency, jitter, loss and a score of every tunnel (10 s each)">📊 Quality test all</button><button onclick="detectTunnels()" title="Scan every server for tunnels that are not in this list - complete pairs can be added, incomplete leftovers removed">🔍 Detect on servers</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"></div>
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
@@ -481,7 +501,7 @@ function detailRow(t) {
   const tabs = `<div class="tabs wtabs">${[["info", "Info"], ["charts", "Charts 24 h"], ["actions", "Actions"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
   if (tab === "charts") return tabs + `<div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>`;
-  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Repair</h4><div class="wtools">${tool("🛠", "Fix", "diagnose and repair step by step", `fixTunnel(${t.id}, false)`)}${tool("👁", "Dry run", "show what Fix would do, change nothing", `fixTunnel(${t.id}, true)`)}${tool("📊", "Quality", "latency, jitter, loss, speed, score", `qualityOne(${t.id})`)}${tool("🔔", "Mute alerts", "no Telegram alerts until unmuted in Settings", `muteRef('${esc(t.name)}', true)`)}</div></div>
+  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Repair</h4><div class="wtools">${t.state === "up" ? tool("🛠", "Fix", "nothing to fix: the tunnel is healthy", "", "disabled") + tool("👁", "Dry run", "nothing to fix: the tunnel is healthy", "", "disabled") : tool("🛠", "Fix", "diagnose and repair step by step: restarts only what is not working", `fixTunnel(${t.id}, false)`) + tool("👁", "Dry run", "show what Fix would do, change nothing", `fixTunnel(${t.id}, true)`)}${tool("📊", "Quality", "latency, jitter, loss, speed, score", `qualityOne(${t.id})`)}${tool("🔔", "Mute alerts", "no Telegram alerts until unmuted in Settings", `muteRef('${esc(t.name)}', true)`)}</div></div>
     <div class="wgroup"><h4>Change</h4><div class="wtools">${t.type === "backhaul" ? tool("⇅", "Ports", "change the forwarded ports", `editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')`) : ""}${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
     <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("🗑", "Remove", "from both servers; users lose their connection", `deleteTunnel(${t.id}, '${esc(t.name)}')`, "danger")}</div></div>
     <div id="fix-${t.id}" class="fix hidden"></div>`;
@@ -494,8 +514,7 @@ function detailRow(t) {
     ibox("⚙", "Services", [...(u.iran || []).map(n => unitRow("iran", "Iran", n)), ...(u.foreign || []).map(n => unitRow("foreign", "Foreign", n))]),
     ibox("🕒", "Status", [irow("State", `<span class="st ${t.state}">${esc(t.state)}</span>`), irow("Since", t.state_since ? ago(t.state_since) + " ago" : "—"), irow("Checked", when(t.last_check_at)), irow("Created", when(t.created_at)), irow("RTT", t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"), irow("Traffic", t.rx_mbps != null ? `↓ ${mbps(t.rx_mbps)} ↑ ${mbps(t.tx_mbps)}` : "—"), d.iran_error ? irow("Iran error", `<span class="err">${esc(d.iran_error)}</span>`) : "", d.foreign_error ? irow("Foreign error", `<span class="err">${esc(d.foreign_error)}</span>`) : "", t.last_error ? irow("Last error", `<span class="err">${esc(t.last_error)}</span>`) : ""]),
   ].join("");
-  return tabs + `<div class="iboxes">${boxes}</div>    <div class="frm-act"><button class="sm pri" onclick="fixTunnel(${t.id}, false)" title="Diagnose and repair step by step">🛠 Fix</button><button class="sm" onclick="qualityOne(${t.id})">📊 Quality</button><button class="sm" onclick="wtab('charts')">📈 Charts</button><button class="sm" onclick="wtab('actions')">🧰 Actions</button><span class="sp"></span><button class="sm" onclick="closeModal()">← Back</button></div>
-    <div id="fix-${t.id}" class="fix hidden"></div>`;
+  return tabs + `<div class="iboxes">${boxes}</div>    <div id="fix-${t.id}" class="fix hidden"></div>`;
 }
 async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
@@ -1277,6 +1296,8 @@ PAGES.settings = async () => {
       <div class="frm-act"><button class="pri" onclick="panelUpdate()">Update from GitHub</button><button onclick="aboutLoad()">↻ Check</button><small class="mut">pull, tests, restart, health check — rolls back by itself when the new version does not start</small></div>
       <pre class="gl-out hidden" id="about-log"></pre></div>
 
+    <div class="card"><h3>Security <span class="sp"></span><span class="pill" id="sec-pill">…</span></h3><div id="sec-box"><div class="mut">loading…</div></div></div>
+
     <div class="card"><h3>Password</h3>
       <form class="frm one" onsubmit="return changePassword(event)">
         <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
@@ -1297,7 +1318,35 @@ PAGES.settings = async () => {
   </div>`;
   settingsTabs();
   if (state.stab === "update") { aboutLoad(); enginesLoad(); }
+  if ($("#sec-box")) secLoad();
 };
+/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
+const sec = {setup: null, codes: null};
+async function secLoad() {
+  const box = $("#sec-box"); if (!box) return;
+  const [s, lg] = await Promise.all([api("/api/auth/security"), api("/api/auth/security-log").catch(() => ({events: []}))]);
+  const pill = $("#sec-pill"); if (pill) { pill.textContent = s.totp_enabled ? "2-step on" : "2-step OFF"; pill.className = "pill " + (s.totp_enabled ? "ok" : "err"); }
+  const url = s.entry_path ? location.origin + "/" + s.entry_path : "";
+  const codes = sec.codes ? `<div class="sec-sec" style="border-color:var(--warn)"><h4>⚠ Your recovery codes - shown once</h4><small class="mut">Each code works one time: to sign in without the app, or to reset a forgotten password. Keep them somewhere safe and offline.</small><div class="sec-codes">${sec.codes.map(c => `<code>${esc(c)}</code>`).join("")}</div><div class="frm-act"><button class="sm" onclick="secDownloadCodes()">⬇ Download .txt</button><button class="sm pri" onclick="sec.codes=null;secLoad()">I saved them</button></div></div>` : "";
+  const twofa = sec.setup ? `<div class="sec-qr">${sec.setup.qr_svg || ""}<div style="flex:1;min-width:240px"><b>1.</b> Open Google Authenticator (or any TOTP app) → add an account → scan the picture, or type this key:<div class="sec-key">${esc(sec.setup.secret.replace(/(.{4})/g, "$1 ").trim())}</div><div style="margin-top:10px"><b>2.</b> Type the 6-digit code the app shows:</div><div class="frm-act"><input id="sec-code" inputmode="numeric" maxlength="7" placeholder="123456" style="width:140px" onkeydown="if(event.key==='Enter')secEnable()"><button class="pri" onclick="secEnable()">Turn on</button><button onclick="sec.setup=null;secLoad()">Cancel</button></div></div></div>`
+    : s.totp_enabled ? `<div class="irow"><span>Status</span><div><b class="gw-ok">On</b> - every sign-in asks for the app's code</div></div><div class="frm-act"><button class="sm danger" onclick="secOff()">Turn off</button></div>`
+    : `<div class="irow"><span>Status</span><div><b class="err">Off</b> - only the password protects the panel</div></div><small class="mut">Strongly recommended: a stolen or guessed password is then not enough.</small><div class="frm-act"><button class="pri" onclick="secSetup()">Turn on with Google Authenticator</button></div>`;
+  box.innerHTML = `${codes}
+    <div class="sec-sec"><h4>Two-step sign-in</h4>${twofa}</div>
+    <div class="sec-sec"><h4>Recovery <span class="sp"></span><span class="pill">${s.recovery_left} codes left</span></h4><small class="mut">If you forget the password: on the sign-in page choose “Forgot the password?” and use a recovery code or a code sent to your Telegram. Last resort on the server: <code>nikatel set-password</code>.</small><div class="frm-act"><button class="sm" onclick="secNewCodes()">Make new recovery codes</button></div></div>
+    <div class="sec-sec"><h4>Secret entry path</h4><small class="mut">With a path set, the panel answers “404 Not Found” to everyone, on every address, until the browser has opened the secret address once. Scanners and bots find nothing.</small>
+      ${url ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a><small class="err">Write this address down. If you lose it: <code>nikatel entry-path --clear</code> on the server.</small>` : '<div class="irow"><span>Status</span><div><b class="err">Off</b> - the panel answers on its normal address</div></div>'}
+      <div class="frm-act"><button class="sm pri" onclick="secPath(true)">${url ? "Change the path" : "Turn on with a random path"}</button>${url ? '<button class="sm" onclick="secPath(false)">Choose my own</button><button class="sm danger" onclick="secPathOff()">Turn off</button>' : '<button class="sm" onclick="secPath(false)">Choose my own</button>'}</div></div>
+    <div class="sec-sec"><h4>Security log</h4>${(lg.events || []).map(e => `<div class="ev ${e.level === "bad" ? "bad" : e.level === "warn" ? "warn" : "info"}"><time>${ago(e.ts)} ago</time><i></i><span>${esc(e.text)}</span></div>`).join("") || '<div class="mut">Nothing yet.</div>'}</div>`;
+}
+const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
+window.secSetup = async () => { const pw = await askPw(); if (!pw) return; try { sec.setup = await api("/api/auth/2fa/setup", {method: "POST", body: JSON.stringify({password: pw})}); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.secEnable = async () => { try { const r = await api("/api/auth/2fa/enable", {method: "POST", body: JSON.stringify({password: "", code: $("#sec-code").value})}); sec.setup = null; sec.codes = r.recovery_codes; toast("✓ Two-step sign-in is on", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.secOff = async () => { const pw = await askPw(); if (!pw) return; const code = await gprompt("A code from the app, or a recovery code:"); if (!code) return; try { await api("/api/auth/2fa/disable", {method: "POST", body: JSON.stringify({password: pw, code})}); toast("Two-step sign-in is off", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.secNewCodes = async () => { if (!await gconfirm("Make new recovery codes? The old ones stop working.", {danger: false})) return; const pw = await askPw(); if (!pw) return; try { sec.codes = (await api("/api/auth/recovery/regenerate", {method: "POST", body: JSON.stringify({password: pw})})).recovery_codes; secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.secDownloadCodes = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["Nikatel recovery codes (each works once)\n\n" + (sec.codes || []).join("\n") + "\n"], {type: "text/plain"})); a.download = "nikatel-recovery-codes.txt"; document.body.appendChild(a); a.click(); a.remove(); };
+window.secPath = async random => { let path = ""; if (random) { const b = new Uint8Array(9); crypto.getRandomValues(b); path = "nk-" + [...b].map(x => x.toString(36).padStart(2, "0")).join("").slice(0, 14); } else { path = await gprompt("The secret path (8-64 letters, digits, - and _):"); if (!path) return; } const pw = await askPw(); if (!pw) return; try { const r = await api("/api/auth/entry-path", {method: "PUT", body: JSON.stringify({path, password: pw})}); toast("✓ The panel now lives at /" + r.path, "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.secPathOff = async () => { if (!await gconfirm("Turn the secret path off? The panel answers on its normal address again.")) return; const pw = await askPw(); if (!pw) return; try { await api("/api/auth/entry-path", {method: "PUT", body: JSON.stringify({path: "", password: pw})}); toast("Secret path off", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.saveAi = e => put(e, "/api/settings/ai", formJson(e, [], ["enabled", "actions"]), "✓ AI settings saved");
 window.testAi = async () => { toast("Asking Anthropic…"); try { const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
@@ -1312,7 +1361,7 @@ window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode 
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  account: ["👤 Account", "Your password and the settings the service was started with.", ["Password", "Effective settings"]],
+  account: ["👤 Account", "Your password, two-step sign-in, recovery codes, the secret entry path, and the settings the service was started with.", ["Security", "Password", "Effective settings"]],
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows and the daily report.", ["Telegram", "Alert rules", "Daily report", "Maintenance windows"]],
   backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],

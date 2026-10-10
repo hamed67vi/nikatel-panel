@@ -232,6 +232,13 @@ html[data-size="small"] body { font-size: 12px; } html[data-size="large"] body {
 html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] *::after { animation: none !important; transition: none !important; }
 #mode-btn { width: 36px; padding: 0; }
 /* the glass window */
+.lstep { display: grid; gap: 12px; } .lstep.hidden { display: none; } .lnk { text-align: center; font-size: 12.5px; color: var(--mut); cursor: pointer; } .lnk:hover { color: var(--text); }
+.lhint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--mut); } .lhint b { color: var(--text); }
+/* settings -> security */
+.sec-sec { padding: 12px 14px; margin-bottom: 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); } .sec-sec h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); display: flex; align-items: center; gap: 8px; } .sec-sec h4 .sp { flex: 1; }
+.sec-qr { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; } .sec-qr svg { width: 190px; height: 190px; background: #fff; border-radius: 12px; padding: 6px; } .sec-key { font-family: var(--mono); font-size: 14px; letter-spacing: 2px; word-break: break-all; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
+.sec-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin: 10px 0; } .sec-codes code { padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.06); border: 1px solid var(--line); text-align: center; font-size: 13px; letter-spacing: 1px; }
+.sec-url { display: block; padding: 8px 10px; margin: 8px 0; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; word-break: break-all; }
 #ask .overlay { z-index: 90; align-items: center; padding: 20px; background: rgba(4,6,18,.62); backdrop-filter: blur(10px); }
 .ask-box { width: min(440px, 100%); padding: 22px 24px 18px; border-radius: 22px; text-align: center; display: grid; gap: 14px; justify-items: center; animation: rise .22s var(--ease) both; }
 .ask-ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 21px; color: #fff; background: var(--grad); box-shadow: 0 8px 22px rgba(124,131,255,.4); } .ask-ic.bad { background: linear-gradient(135deg, #ff6b8b, #ff9a6b); box-shadow: 0 8px 22px rgba(255,107,139,.4); }
@@ -258,6 +265,7 @@ button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); bord
 .wtools { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 .wtool { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 9px 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; transition: background .2s, border-color .2s; }
 .wtool i { grid-row: 1 / 3; font-style: normal; font-size: 17px; text-align: center; } .wtool b { font-size: 12.5px; } .wtool small { font-size: 10.5px; color: var(--mut); line-height: 1.3; }
+.wtool.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
 .wtool:hover { filter: brightness(1.07); border-color: var(--line-hi); } .wtool.danger { border-color: rgba(255,90,120,.4); } .wtool.danger b { color: var(--bad); }
 .modal-head > b, .modal-head > span:not(.sp) { white-space: nowrap; } .modal-head button { flex: none; white-space: nowrap; }
 .modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 15px; } .modal-head .sp { flex: 1; } .modal-head .st::before { width: 10px; height: 10px; }
