@@ -464,3 +464,12 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .loss { color: var(--bad); font-weight: 700; } .loss.hi { background: rgba(255,107,139,.16); padding: 1px 8px; border-radius: 999px; }
 .tbl tr.lossy td { background: rgba(255,107,139,.07); }
 
+
+
+/* ---- list rows (tunnels, servers, configs): a slow fade in and out when the mouse comes and goes */
+.tbl td { transition: background-color .45s ease, border-color .45s ease; }
+.tbl.lift tbody tr:not(.detail) { transition: filter .45s ease; }
+.tbl.lift tbody tr:not(.detail):hover { filter: brightness(1.1); }
+.tbl.lift tbody tr:not(.detail):hover td { background: rgba(124,131,255,.12); border-color: rgba(124,131,255,.28); transition-duration: .3s; }
+.tbl.lift tbody tr.lossy:not(.detail):hover td { background: rgba(255,107,139,.14); border-color: rgba(255,107,139,.3); }
+
