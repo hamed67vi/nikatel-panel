@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.7 - 2026-10-11 - Soft framed filter strip
+
+* The tabs and the search box of Tunnels sit together in one soft frame whose edge fades out (it fades in when the page opens); the search bar of Nodes and Configs gets the same frame.
+
 ## 1.14.6 - 2026-10-11 - Deleting a tunnel asks once
 
 * Delete on a tunnel asks one question only; the second box where the tunnel name had to be typed is gone.
