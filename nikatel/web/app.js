@@ -1090,7 +1090,6 @@ async function followStory(aid, box, maxPolls) {
 }
 window.deleteTunnel = async (id, name) => {
   if (!await gconfirm(`Remove the tunnel ${name} from BOTH servers? Users on it lose their connection. This cannot be undone.`)) return;
-  if (await gprompt(`Type the tunnel name to confirm:`) !== name) { toast("Not removed", "bad"); return; }
   toast("Removing…");
   try { const r = await api(`/api/tunnels/${id}`, {method: "DELETE"}); toast("✓ " + r.results.join(" · "), "ok"); state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };

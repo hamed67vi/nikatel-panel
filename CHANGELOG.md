@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.6 - 2026-10-11 - Deleting a tunnel asks once
+
+* Delete on a tunnel asks one question only; the second box where the tunnel name had to be typed is gone.
+
 ## 1.14.5 - 2026-10-11 - A second tunnel to the same foreign server is asked about
 
 * Create tunnel: when the foreign server already has a tunnel (and it is not ticked for replacing), pressing Build opens a box: **Remove it and replace it** or **Add as a second tunnel** (or Cancel). Nothing is built silently any more.
