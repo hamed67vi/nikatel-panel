@@ -981,10 +981,10 @@ PAGES.actions = async () => {
   const [d, tl, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= 15), pick = tl.find(t => String(t.id) === ap.tid) || bad[0] || tl[0];
-  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b><span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span><button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button></div>`;
+  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b><span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the smart repair is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
-  $("#page").innerHTML = `<div class="card" data-tab="att"><h3>🩺 Tunnels that need attention <span class="sp"></span>${bad.length ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
+  $("#page").innerHTML = `<div class="card" data-tab="att"><h3>🩺 Tunnels that need attention <span class="sp"></span>${bad.length && !rp.auto ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
       <div class="ap-att">${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
       </div>
@@ -1058,6 +1058,17 @@ window.foPoint = async () => {
 window.foRestore = async id => {
   if (!await gconfirm("Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.", {danger: true})) return;
   try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + r.fqdn + " points at " + r.old + " again", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.apLive = async (id, name) => {
+  /* the live log of what the smart repair does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
+  showModal(`<b>📡 ${esc(name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Looking for the repair of this tunnel…</div></div><div class="frm-act" style="margin-top:8px"><button class="sm" onclick="apDiagnose('+id+')">🩺 Check the tunnel now</button></div>', "wide");
+  try {
+    const list = (await api("/api/actions?limit=60")).actions.filter(a => a.ref === name && ["autopilot", "fix", "build", "create"].includes(a.action));
+    const box = $("#ap-story"), a = list.find(x => !x.done) || list[0];
+    if (!a) { box.innerHTML = '<div class="mut" style="padding:8px">No repair of this tunnel yet. The smart repair starts by itself a few minutes after it went down or lossy; this window shows what it does as it happens.</div>'; return; }
+    box.innerHTML = storyHtml(a);
+    if (!a.done) followStory(a.id, box, 900).then(() => refresh());
+  } catch (e) { const box = $("#ap-story"); if (box) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 };
 window.apFixAll = async () => {
   try { const r = await api("/api/autopilot/fix-all", {method: "POST", body: JSON.stringify({level: "rebuild"})}); const box = $("#ap-all"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
