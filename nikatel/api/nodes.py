@@ -91,6 +91,11 @@ def geo_refresh(only_missing: bool = False):
     return {"ok": True, "changes": _wrap(nodes.geo_refresh, only_missing)}
 
 
+@router.post("/servers/gre-check-all")
+def gre_check_all(role: str = ""):
+    return {"ok": True, **_wrap(nodes.gre_check_all, role)}
+
+
 @router.post("/servers/{server_id}/gre-check")
 def gre_check(server_id: int):
     return {"ok": True, **_wrap(nodes.gre_check, server_id)}

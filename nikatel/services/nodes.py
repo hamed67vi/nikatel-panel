@@ -1,4 +1,4 @@
-"""Node tools that the old panel had: console, connect with a password (installs the panel's key),
+﻿"""Node tools that the old panel had: console, connect with a password (installs the panel's key),
 add many servers at once, open-in-PuTTY/ssh launchers with the operator's own key, Abuse-Defender,
 reboot, country lookup of foreign servers, "is it filtered in Iran?" checks."""
 from __future__ import annotations
@@ -191,7 +191,7 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
                 out = run_script(node, "ping", timeout=25)
                 it.update(ok=True, detail=out.replace("HOST=", "").strip()[:80])
         except (RuntimeError, ValueError) as e:
-            it.update(ok=False, error=str(e)[:160] + ("" if password else " — the panel key is not on this server yet: add it with a password"))
+            it.update(ok=False, error=str(e)[:160] + ("" if password else " â€” the panel key is not on this server yet: add it with a password"))
 
         return it
 
@@ -536,6 +536,33 @@ def gre_check(server_id: int) -> dict:
             emit(db, "ok" if res["ok"] else "warn", "servers", f"GRE check of {name}: {res['detail']}.", name)
 
     return res
+
+
+def gre_check_all(role: str = "") -> dict:
+    """gre_check on every enabled server (of one role when given), ten at a time. Servers that do not answer count as failed."""
+    with session() as db:
+        stmt = select(Server).where(Server.enabled.is_(True))
+
+        if role in ("iran", "foreign"):
+            stmt = stmt.where(Server.role == role)
+
+        todo = [(s.id, s.name) for s in db.scalars(stmt)]
+
+    def one(item):
+        sid, name = item
+
+        try:
+            return {"server": name, **gre_check(sid)}
+        except (SSHError, ValueError) as e:   # an unreachable server must not stop the others
+            return {"server": name, "ok": False, "links": 0, "bad": [], "detail": f"check failed: {str(e)[:80]}"}
+
+    with ThreadPoolExecutor(10) as ex:
+        rows = list(ex.map(one, todo))
+
+    ok = [r for r in rows if r["ok"]]
+    nolinks = [r for r in rows if not r["ok"] and not r.get("links") and not r["detail"].startswith("check failed")]
+    bad = [r for r in rows if not r["ok"] and r not in nolinks]
+    return {"rows": rows, "total": len(rows), "ok": len(ok), "no_gre": len(nolinks), "bad": [f"{r['server']}: {r['detail']}" for r in bad]}
 
 
 def filter_check(server_id: int, wait: int = 28) -> dict:

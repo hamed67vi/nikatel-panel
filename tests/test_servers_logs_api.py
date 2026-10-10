@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 
 from nikatel.config import get_settings
@@ -72,3 +72,30 @@ def test_settings_view_has_no_secrets(client):
     body = r.json()
     assert body["read_only"] is True and "tunnel_check_interval" in body
     assert "secret_key" not in body and "ssh_key" not in body
+
+
+def test_gre_check_all_counts_every_server_and_survives_a_dead_one(client, monkeypatch):
+    from nikatel.services import nodes
+    from nikatel.ssh import SSHError
+
+    for n, role in (("a1", "iran"), ("a2", "iran"), ("a3", "iran"), ("f1", "foreign")):
+        assert client.post("/api/servers", json={"name": n, "host": f"9.9.9.{ord(n[0]) + ord(n[1])}", "role": role}).status_code == 201
+
+    def fake(sid):
+        name = {s["id"]: s["name"] for s in client.get("/api/servers").json()}.get(sid, "")
+
+        if name == "a1":
+            return {"ok": True, "links": 2, "bad": [], "detail": "2 GRE link(s) answer"}
+
+        if name == "a2":
+            return {"ok": False, "links": 1, "bad": ["gre-x"], "detail": "GRE not OK: gre-x"}
+
+        raise SSHError("ssh timeout")
+
+    monkeypatch.setattr(nodes, "gre_check", fake)
+    r = client.post("/api/servers/gre-check-all?role=iran")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["total"] == 3 and j["ok"] == 1 and j["no_gre"] == 0
+    assert any("a2" in b for b in j["bad"]) and any("a3" in b and "check failed" in b for b in j["bad"])
+    assert client.post("/api/servers/gre-check-all?role=foreign").json()["total"] == 1
