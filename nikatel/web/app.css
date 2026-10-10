@@ -473,3 +473,31 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .tbl.lift tbody tr:not(.detail):hover td { background: rgba(124,131,255,.12); border-color: rgba(124,131,255,.28); transition-duration: .3s; }
 .tbl.lift tbody tr.lossy:not(.detail):hover td { background: rgba(255,107,139,.14); border-color: rgba(255,107,139,.3); }
 
+
+/* ---- a page that is loading or could not load says so (the previous page never stays on screen) */
+.loading { display: flex; align-items: center; gap: 12px; padding: 40px 18px; color: var(--mut); font-weight: 600; }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,.15); border-top-color: var(--acc-2, #7c83ff); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.page-err { display: grid; gap: 8px; justify-items: start; padding: 26px 22px; border-radius: 16px; border: 1px solid rgba(255,107,139,.35); background: rgba(255,107,139,.06); margin: 10px 0; } .page-err b { font-size: 14px; } .page-err span { color: var(--mut); font-family: var(--mono); font-size: 12px; }
+
+/* ---- every button and clickable chip fades (colour, border, glow) when the mouse comes and goes */
+button, .tabs button, .set-tabs button, .subnav .tabs button, .gchip, .gchip button, .gchip a, .wtool, .tte, .ttk, .bg-row, .dash-action, #nav a, .adv-btn, .lnk, a.mut, .mchip, .pill, .cf-card, .rd-row, .ev.click, .pb-row, .srv-row { transition: background-color .3s ease, color .3s ease, border-color .3s ease, box-shadow .3s ease, filter .3s ease, opacity .3s ease, transform .15s ease; }
+button::after { transition: opacity .3s ease; }
+
+/* ---- tunnel test, advanced list: compact rows and chips */
+.tteng { gap: 6px; } .tte { height: 34px; padding: 0 10px; }
+.tta { gap: 6px; } .tta-row { padding: 6px 10px; grid-template-columns: 128px 1fr; gap: 8px; border-radius: 12px; } .tta-g { font-size: 10.5px; } .tta-g::before { height: 14px; }
+.tta-chips { gap: 5px; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); } .tta-chips .ttk { height: 26px; font-size: 11.5px; padding: 0 8px; border-radius: 8px; gap: 5px; } .tta-chips .ttk input { width: 13px; height: 13px; margin: 0; }
+
+/* ---- shop bot: tabs that wrap, settings grid, texts editor, ticket thread */
+.sb-tabs { flex-wrap: wrap; margin-bottom: 10px; } .sb-tabs button small { margin-left: 4px; padding: 0 5px; border-radius: 999px; background: rgba(255,255,255,.18); font-size: 10px; }
+.sb-top .pill { margin-right: 2px; }
+.sb-grid { display: grid; grid-template-columns: 1fr; gap: 6px; } .sb-grid label { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(120px, .9fr); align-items: center; gap: 10px; font-size: 12.5px; }
+.sb-grid label span small { display: block; font-size: 10.5px; } .sb-grid input, .sb-grid select { height: 30px; font-size: 12.5px; }
+.sb-acts { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.tx-list { display: grid; gap: 6px; } .tx-row { display: grid; grid-template-columns: 220px 1fr; gap: 10px; align-items: start; padding: 6px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.025); }
+.tx-row.changed { border-color: rgba(124,131,255,.45); background: rgba(124,131,255,.06); } .tx-key { display: grid; gap: 4px; font-size: 11.5px; word-break: break-all; } .tx-key a { cursor: pointer; font-size: 11px; }
+.tx-row textarea { width: 100%; box-sizing: border-box; min-height: 30px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(5,8,20,.4); color: var(--text); font-size: 12.5px; line-height: 1.5; resize: vertical; direction: rtl; }
+.tk-msgs { display: grid; gap: 8px; max-height: 45vh; overflow: auto; padding: 4px; } .tk-msg { max-width: 80%; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,.06); border: 1px solid var(--line); justify-self: start; white-space: pre-wrap; direction: rtl; text-align: right; }
+.tk-msg.me { justify-self: end; background: rgba(124,131,255,.16); border-color: rgba(124,131,255,.35); } .tk-msg small { display: block; direction: ltr; text-align: left; margin-bottom: 3px; }
+.sb-set .card { margin-bottom: 0; } .sb-set .grid2 { align-items: start; }

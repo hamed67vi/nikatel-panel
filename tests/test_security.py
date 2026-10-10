@@ -146,3 +146,14 @@ def test_password_rules_and_first_start_file(tmp_path):
     auth.set_password("long-enough-password")
     assert not f.exists()                   # the first-start password file goes when a password is set
     assert create_app(run_jobs=False) is not None
+
+
+def test_api_docs_need_a_session_and_every_answer_carries_a_csp(client):
+    from fastapi.testclient import TestClient
+
+    anon = TestClient(client.app)
+    assert anon.get("/api/docs").status_code == 401 and anon.get("/api/openapi.json").status_code == 401
+    assert client.get("/api/openapi.json").status_code == 200
+    r = anon.get("/api/health")
+    assert r.status_code == 200 and "frame-ancestors 'none'" in r.headers["Content-Security-Policy"] and "connect-src 'self'" in r.headers["Content-Security-Policy"]
+    assert r.headers["X-Frame-Options"] == "DENY"

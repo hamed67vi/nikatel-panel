@@ -236,6 +236,9 @@ echo "WEEK $(Q "SELECT CONCAT(COUNT(*),' ',COALESCE(SUM(amount),0)) FROM orders_
 echo "MONTH $(Q "SELECT CONCAT(COUNT(*),' ',COALESCE(SUM(amount),0)) FROM orders_list WHERE date >= UNIX_TIMESTAMP()-30*86400")"
 echo "NEWUSERS $(Q "SELECT CONCAT((SELECT COUNT(*) FROM users WHERE date >= UNIX_TIMESTAMP(CURDATE())),' ',(SELECT COUNT(*) FROM users WHERE date >= UNIX_TIMESTAMP()-7*86400))")"
 echo "BACKUPS $(ls -1 /opt/nikabot/backups 2>/dev/null | tail -n 5 | tr '\n' ' ')"
+echo "TICKETS $(Q "SELECT COUNT(*) FROM chats WHERE state=1")"
+echo "QUEUE $(Q "SELECT COUNT(*) FROM send_list WHERE state IN (1,2)")"
+echo "HOOKED $(grep -c text_overrides.json '@DIR@/config.php' 2>/dev/null || echo 0)"
 echo "LOG_ERRORS"; tail -n 20 '@DIR@/error_log.txt' 2>/dev/null | cut -c1-240
 echo "LOG_PHP"; tail -n 10 '@DIR@/php_errors.log' 2>/dev/null | cut -c1-240
 echo "LOG_END"
@@ -251,6 +254,18 @@ curl -s -m 20 "https://api.telegram.org/bot$TOK/@METHOD@" | head -c 4000
     "bot_query": (r"""set -a; [ -f '@ENV@' ] && . '@ENV@'; set +a
 mysql --batch --raw --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e @SQL@ 2>&1 | head -c 200000
 """, {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "SQL": r"^'(SELECT|SHOW|DESCRIBE)\b[^;'`\\]{0,1500}'$"}),
+
+    # the bot's own texts and button labels (values.php, read by PHP itself) and the panel's overrides next to them
+    "bot_texts": (r"""cd '@DIR@' || exit 1
+echo "DEFAULTS $(php -r 'include "settings/values.php"; echo json_encode(["texts" => $mainValues, "buttons" => $buttonValues], JSON_UNESCAPED_UNICODE);' 2>/dev/null | head -c 600000)"
+echo "TEXT_OVERRIDES $(cat settings/text_overrides.json 2>/dev/null | tr -d '\n' | head -c 300000)"
+echo "BUTTON_OVERRIDES $(cat settings/button_overrides.json 2>/dev/null | tr -d '\n' | head -c 300000)"
+echo "HOOKED $(grep -c text_overrides.json config.php 2>/dev/null || echo 0)"
+""", {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$"}),
+
+    # the database dumps of the bot
+    "bot_backups": (r"""for f in /opt/nikabot/backups/*.sql.gz; do [ -f "$f" ] && echo "BACKUP $(basename "$f") $(stat -c %s "$f")"; done; true
+""", {}),
 
     # what the tunnel builder must know about a server before it touches it
     "build_facts": (r"""echo "IPS=$(ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
@@ -692,7 +707,7 @@ rm -f /root/abuse-defender-update.sh; mkdir -p /etc/iptables; iptables-save > /e
     # shop bot: one UPDATE/INSERT with validated values (statement chosen here, values are quoted by the regexes)
     "bot_sql": (r"""set -a; [ -f '@ENV@' ] && . '@ENV@'; set +a
 mysql --batch --raw --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e @SQL@ 2>&1 | head -c 20000; echo DONE
-""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "SQL": r"^'(UPDATE|INSERT INTO|DELETE FROM|CREATE TABLE IF NOT EXISTS) [^;`\\]{1,6000}'$"}),
+""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "SQL": r"^'(UPDATE|INSERT INTO|DELETE FROM|CREATE TABLE IF NOT EXISTS) [^;`\\]{1,20000}'$"}),
 
     # shop bot: dump the live database (before an import, or on request)
     "bot_backup": (r"""set -e; set -a; . '@ENV@'; set +a; mkdir -p /opt/nikabot/backups
@@ -721,6 +736,27 @@ echo IMPORTED
 [ -n "$TOK" ] || { echo '{"ok":false,"description":"no bot token in baseInfo.php"}'; exit 0; }
 curl -s -m 20 -X POST "https://api.telegram.org/bot$TOK/@METHOD@" -H 'Content-Type: application/json' -d @BODY@ | head -c 4000
 """, {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$", "METHOD": r"^(setWebhook|setMyCommands|setChatMenuButton|deleteWebhook)$", "BODY": r"^'\{[^'`\\$]{0,3000}\}'$"}),
+
+    # the same with the JSON body as base64 (messages with any text, keyboards): methods that send or edit, never ones that read the chats
+    "bot_tg_json": (r"""TOK=$(grep -oE "botToken *= *'[^']+'" '@DIR@/baseInfo.php' | head -1 | sed "s/.*'\(.*\)'/\1/")
+[ -n "$TOK" ] || { echo '{"ok":false,"description":"no bot token in baseInfo.php"}'; exit 0; }
+echo '@B64@' | base64 -d | curl -s -m 20 -X POST "https://api.telegram.org/bot$TOK/@METHOD@" -H 'Content-Type: application/json' -d @- | head -c 4000
+""", {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$", "METHOD": r"^(sendMessage|editMessageReplyMarkup|editMessageText|setMyCommands|setChatMenuButton|setWebhook|deleteWebhook|pinChatMessage)$", "B64": _B64}),
+
+    # one of the two override files the bot reads (texts, buttons); checked as JSON, owned by the web server user
+    "bot_put_json": (r"""set -e; echo '@B64@' | base64 -d > '@PATH@.tmp'
+php -r 'exit(json_decode(file_get_contents("@PATH@.tmp"), true) === null ? 1 : 0);' || { unlink '@PATH@.tmp'; echo BAD_JSON; exit 1; }
+mv -f '@PATH@.tmp' '@PATH@'; chown www-data:www-data '@PATH@' 2>/dev/null; chmod 0640 '@PATH@'; echo "WROTE @PATH@"
+""", {"PATH": r"^/var/www/[A-Za-z0-9._-]{1,40}/settings/(text|button)_overrides\.json$", "B64": _B64}),
+
+    # make the bot read settings/text_overrides.json on top of its values.php: one line in config.php, put there once, checked with php -l
+    "bot_texts_hook": (r"""set -e; cd '@DIR@'
+grep -q text_overrides.json config.php && { echo HOOKED; exit 0; }
+cp config.php "config.php.bak-texts-$(date +%s)"
+sed -i '0,/include_once "settings\/values.php";/s//include_once "settings\/values.php"; if(is_file(__DIR__ . "\/settings\/text_overrides.json")){ $__tv = json_decode((string) file_get_contents(__DIR__ . "\/settings\/text_overrides.json"), true); if(is_array($__tv)) $mainValues = array_merge($mainValues, $__tv); }/' config.php
+php -l config.php >/dev/null 2>&1 || { cp "$(ls -t config.php.bak-texts-* | head -1)" config.php; echo SYNTAX_ERROR; exit 1; }
+grep -q text_overrides.json config.php && echo HOOKED || { echo NOT_HOOKED; exit 1; }
+""", {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$"}),
 
     # probe install: directories, python deps, then start everything
     "probe_prepare": (r"""set -e; mkdir -p /opt/nikatel-probe-manager/{configs,health-state,speed-state,logs} /opt/nikatel-probe/xray /etc/systemd/system

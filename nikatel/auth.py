@@ -138,6 +138,14 @@ def current_user(request: Request, nikatel_session: str | None = Cookie(default=
     return str(data.get("u", ""))
 
 
+def session_user(request: Request) -> str | None:
+    """The signed-in user of a request, or None - the same check as `current_user`, usable outside a dependency."""
+    try:
+        return current_user(request, request.cookies.get(COOKIE))
+    except HTTPException:
+        return None
+
+
 def make_ticket(user: str) -> str:
     """Step between the password and the 2FA code: valid 5 minutes."""
     return _serializer("2fa").dumps({"u": user, "e": epoch()})

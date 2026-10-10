@@ -62,6 +62,10 @@ def _harden(resp) -> None:
     h["Cross-Origin-Resource-Policy"] = "same-origin"
     h["Strict-Transport-Security"] = "max-age=31536000"
     h["X-Robots-Tag"] = "noindex, nofollow"
+    # what the browser may load and where it may send: only this origin (plus the two fonts and the flag pictures), never inside a frame
+    h["Content-Security-Policy"] = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                                    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://flagcdn.com; connect-src 'self'; "
+                                    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 
 
 def _register_jobs() -> None:
@@ -135,6 +139,9 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
             if not gate.allowed(request):
                 return JSONResponse({"detail": "Not Found"}, status_code=404, headers={"X-Request-Id": rid})   # looks exactly like a missing page
+
+            if p in ("/api/docs", "/api/openapi.json") and not auth.session_user(request):   # the API description is for the signed-in operator only
+                return JSONResponse({"detail": "not logged in"}, status_code=401, headers={"X-Request-Id": rid})
 
             response = await call_next(request)
         except Exception:  # the boundary: never a traceback to the browser

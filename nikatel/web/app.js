@@ -132,7 +132,12 @@ function go(page) {
     page = target;
   }
   if (!PAGES[page]) page = "dashboard";
-  if (state.page !== page) { navCtl.abort(); navCtl = new AbortController(); state.resetScroll = true; const m = $(".main"); if (m) m.scrollTop = 0; const pg = $("#page"); if (pg) { pg.classList.remove("enter"); void pg.offsetWidth; pg.classList.add("enter"); } }   // what the page we leave still waits for is dropped; the new page starts at the top
+  if (state.page !== page) {   // leaving a page: drop what it still waits for, start the new one at the top and show at once that it is loading (the old page never stays on screen)
+    navCtl.abort(); navCtl = new AbortController(); navSeq++; retries = 0; clearTimeout(retryT); state.resetScroll = true;
+    const m = $(".main"); if (m) m.scrollTop = 0;
+    const pg = $("#page"); if (pg) { pg.innerHTML = loadingBox(page); pg.classList.remove("enter"); void pg.offsetWidth; pg.classList.add("enter"); }
+    hideModal();
+  }   // what the page we leave still waits for is dropped; the new page starts at the top
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
@@ -154,14 +159,36 @@ document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.
 const SCROLLERS = [".main", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".sub-nodes", ".ob-inbounds", ".fix"];
 const scrollSnapshot = () => SCROLLERS.map(sel => { const el = $(sel); return el ? [sel, el.scrollTop, el.scrollTop + el.clientHeight >= el.scrollHeight - 12 && sel === ".tt-log"] : null; }).filter(Boolean);
 const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $(sel); if (el) el.scrollTop = atEnd ? el.scrollHeight : top; });
+/* The page is painted only when its HTML really changed: a refresh that brings the same data touches nothing (no flicker, no lost hover or selection).
+   Pages assign `$("#page").innerHTML` as before; this setter on the element does the comparison. */
+(() => {
+  const pg = $("#page"), d = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+  if (!pg || !d) return;
+  let last = null;
+  Object.defineProperty(pg, "innerHTML", {get() { return d.get.call(pg); }, set(v) { if (v === last && pg.childElementCount && !pg.querySelector(".loading, .page-err")) return; last = v; d.set.call(pg, v); }});
+})();
+let navSeq = 0, retryT = null, retries = 0;
+const loadingBox = page => `<div class="loading"><i class="spin"></i><span>Loading ${esc((INFO[page] || ["…"])[0])}…</span></div>`;
+const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "The panel does not answer right now" : "This page could not be loaded"}</b><span>${esc(msg)}</span><small class="mut">${transient ? "It is probably restarting after an update; trying again by itself…" : ""}</small><button class="sm" onclick="retries=0;refresh()">Try again</button></div>`;
 async function refresh() {
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
+  const seq = navSeq;
   try {
     await PAGES[state.page]();
+    if (seq !== navSeq) return;                 // another page was opened meanwhile: this one is history
+    if (retries) toast("✓ Connected again", "ok");
+    retries = 0; clearTimeout(retryT);
     scrollRestore(snap);
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
-  } catch (e) { if (e.message !== "not logged in") toast("✕ " + e.message, "bad"); }
+  } catch (e) {
+    if (e.message === "not logged in" || seq !== navSeq) return;
+    const transient = /HTTP 50\d|Failed to fetch|NetworkError|Load failed|network/i.test(e.message);
+    const pg = $("#page");
+    if (pg && (!pg.childElementCount || pg.querySelector(".loading, .page-err"))) pg.innerHTML = errorBox(e.message, transient);   // nothing of this page is on screen yet: say so instead of leaving the old page
+    toast("✕ " + e.message, "bad");
+    if (transient) { clearTimeout(retryT); retryT = setTimeout(() => { if (seq === navSeq) refresh(); }, Math.min(8000, 1500 * 2 ** Math.min(retries++, 3))); }
+  }
 }
 setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !state.detect && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
@@ -198,8 +225,10 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 
 /* ---- dashboard */
 PAGES.dashboard = async () => {
-  const [o, ev, cfg, srv, tl, rd] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => []), api("/api/radar").catch(() => null)]);
+  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.cfgCache = cfg.configs;
+  const rd = state.radar || {loading: true};   // the radar comes from an outside site: it is fetched after the page is on screen and never holds it up
+  api("/api/radar").then(r => { state.radar = r; const b = $("#radar-box"); if (b) b.innerHTML = radarCard(r); }).catch(() => { const b = $("#radar-box"); if (b && !state.radar) b.innerHTML = radarCard(null); });
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
   $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
@@ -215,7 +244,7 @@ PAGES.dashboard = async () => {
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>${radarCard(rd)}`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div><div id="radar-box">${radarCard(rd)}</div>`;
 };
 state.actBig = localStorage.getItem("nk.actbig") === "1";
 window.actBig = () => { state.actBig = !state.actBig; localStorage.setItem("nk.actbig", state.actBig ? "1" : "0"); refresh(); };
@@ -265,6 +294,7 @@ window.cfDiagnose = async id => {
 const RD_NAME = {ok: "reachable", warn: "some probes fail", bad: "failing", none: "no data"};
 function radarCard(r) {
   const head = right => `<h3>Data-centre internet <small class="mut">Arvan Radar</small><span class="sp"></span>${right}<a class="mut" href="https://radar.arvancloud.ir/" target="_blank" rel="noopener" style="margin-left:10px">radar.arvancloud.ir ↗</a></h3>`;
+  if (r && r.loading) return `<div class="card radar">${head('<span class="pill">loading…</span>')}<div class="empty">Reading the radar…</div></div>`;
   if (!r || !r.rows) return `<div class="card radar">${head('<span class="pill">not reachable</span>')}<div class="empty">The radar does not answer from the panel server right now.</div></div>`;
   const row = d => `<div class="rd-row"><i class="dash-dot ${d.state === "ok" ? "green" : d.state === "warn" ? "yellow" : d.state === "bad" ? "red" : ""}"></i><b>${esc(d.name)}</b>
     <span class="rd-sites">${d.sites.map(s => `<i class="rd-s ${s.state}" title="${esc(s.name)}: ${RD_NAME[s.state]}${s.avg != null ? " (level " + s.avg + ")" : ""}"></i>`).join("")}</span>
@@ -1362,83 +1392,312 @@ window.pnCoreRestore = async (id, file) => { if (!await gconfirm("Put this backu
 window.pnCoreRaw = id => { let cfg; try { cfg = JSON.parse($("#pn-core-raw").value); } catch (e) { toast("✕ not valid JSON: " + e.message, "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core`, {method: "PUT", body: JSON.stringify({config: cfg, note: "manual edit"})})); };
 
 /* ---- shop bot (PHP bot on its own server, over SSH) */
-const sb = {tab: "status", info: null, tg: null, stats: null, uq: "", users: null, table: "users", tpage: 0, tq: "", trows: null, sql: "", qres: null};
-INFO.bot = ["Shop bot", "Our own dedicated sales bot: is it alive, today's sales, the switches, its users and tables — and the one-time import of the real database."];
+INFO.bot = ["Shop bot", "Your sales bot, run from here: payments to confirm, orders, users, plans and prices, the panels it sells from, discounts and gift codes, broadcasts, tickets, every text and switch."];
+const sb = {tab: localStorage.getItem("nk.sb.tab") || "overview", info: null, infoAt: 0, uq: "", table: "users", tpage: 0, tq: "", sql: "", qres: null, payState: "pending", payPage: 0, payQ: "", ordQ: "", ordPage: 0, ordActive: false,
+            tkState: "open", tkPage: 0, txKind: "text", txQ: "", txData: null, tool: "backups", stData: null};
+const SB_TABS = [["overview", "Overview"], ["payments", "Payments"], ["orders", "Orders"], ["users", "Users"], ["plans", "Plans"], ["categories", "Categories"], ["servers", "Servers"], ["discounts", "Discounts"], ["gifts", "Gift codes"], ["broadcast", "Broadcast"], ["tickets", "Tickets"], ["texts", "Texts"], ["settings", "Settings"], ["tools", "Tools"]];
+const fmt = n => (+n || 0).toLocaleString();
+const money = v => v == null ? "—" : fmt(v) + " T";
+const tsFa = v => { const n = +v; return n > 1000000000 ? when(n) : (v || "—"); };
+const sbT = (k, v) => `<td title="${esc(v == null ? "" : v)}">${esc(v == null || v === "NULL" ? "" : v)}</td>`;
+const sbPager = (page, total, fn) => total > 40 ? `<span class="sp"></span><small class="mut">${fmt(total)} rows</small><button class="sm" ${page ? "" : "disabled"} onclick="${fn}(${page - 1})">‹</button><button class="sm" ${(page + 1) * 40 < total ? "" : "disabled"} onclick="${fn}(${page + 1})">›</button>` : `<span class="sp"></span><small class="mut">${fmt(total)} rows</small>`;
+window.sbTab = t => { sb.tab = t; localStorage.setItem("nk.sb.tab", t); refresh(); };
 PAGES.bot = async () => {
   const pg = $("#page");
-  try { sb.info = await api("/api/shopbot"); } catch (e) { pg.innerHTML = `<div class="empty">${esc(e.message)}${/Settings/.test(e.message) ? ' — <a onclick="go(\'settings\')">open Settings</a>' : ""}</div>`; return; }
+  if (!sb.info || Date.now() - sb.infoAt > 60000) {   // the bot's state comes over SSH: kept a minute so the tabs switch at once
+    try { sb.info = await api("/api/shopbot"); sb.infoAt = Date.now(); } catch (e) { pg.innerHTML = `<div class="empty">${esc(e.message)}${/Settings/.test(e.message) ? ' — <a onclick="go(\'settings\')">open Settings</a>' : ""}</div>`; return; }
+  }
   const d = sb.info, c = d.counts || {}, s = d.sales || {}, u = d.units || {};
   const php = Object.keys(u).find(k => /php/.test(k)), dbu = Object.keys(u).find(k => /mariadb|mysql/.test(k)), web = Object.keys(u).find(k => /caddy|nginx/.test(k));
   const unit = k => k ? `<span class="pill ${u[k] === "active" ? "ok" : "err"}">${esc(k)} ${esc(u[k])}</span>` : '<span class="pill err">missing</span>';
-  const money = v => v == null ? "—" : (v / 1000).toLocaleString() + " k";
-  pg.innerHTML = `<div class="toolbar">${d.installed ? '<span class="pill ok">● installed</span>' : '<span class="pill err">● not installed</span>'}${unit(php)}${unit(dbu)}${unit(web)}<span class="pill ${d.cron ? "ok" : "err"}">cron ${d.cron ? d.cron + " jobs" : "off"}</span><span class="sp"></span>
-      <button class="sm" onclick="sbAct('webhook')">Set webhook</button><button class="sm" onclick="sbAct('restart')">Restart PHP</button><button class="sm" onclick="sbAct('backup')">Dump DB</button><button class="sm" onclick="sbAct('clearlogs')">Clear logs</button></div>
-    <div class="tiles">
-      <div class="tile"><small>Users</small><b>${c.users ?? "—"}</b><span>+${s.new_users_today ?? "—"} today · +${s.new_users_week ?? "—"} this week</span></div>
+  const n = {pending: c.pending_pays || 0, tickets: d.tickets || 0, queue: d.queue || 0};
+  pg.innerHTML = `<div class="toolbar sb-top">${d.installed ? '<span class="pill ok">● installed</span>' : '<span class="pill err">● not installed</span>'}${unit(php)}${unit(dbu)}${unit(web)}<span class="pill ${d.cron ? "ok" : "err"}">cron ${d.cron ? d.cron + " jobs" : "off"}</span><span class="sp"></span>
+      ${n.pending ? `<button class="sm pri" onclick="sbTab('payments')">💳 ${n.pending} payment${n.pending > 1 ? "s" : ""} to confirm</button>` : ""}${n.tickets ? `<button class="sm" onclick="sbTab('tickets')">🎫 ${n.tickets} open ticket${n.tickets > 1 ? "s" : ""}</button>` : ""}${n.queue ? `<button class="sm" onclick="sbTab('broadcast')">📣 ${n.queue} broadcast running</button>` : ""}<button class="sm" onclick="sb.infoAt=0;refresh()" title="Read the bot's state again">↻</button></div>
+    <div class="tiles sb-tiles">
+      <div class="tile"><small>Users</small><b>${fmt(c.users)}</b><span>+${s.new_users_today ?? "—"} today · +${s.new_users_week ?? "—"} this week</span></div>
       <div class="tile ok"><small>Today</small><b>${money((s.today || {}).income)}</b><span>${(s.today || {}).orders ?? "—"} orders</span></div>
       <div class="tile"><small>7 days</small><b>${money((s.week || {}).income)}</b><span>${(s.week || {}).orders ?? "—"} orders</span></div>
-      <div class="tile"><small>30 days</small><b>${money((s.month || {}).income)}</b><span>${(s.month || {}).orders ?? "—"} orders · ${c.pending_pays ?? "—"} payments pending</span></div></div>
-    ${d.stage_users != null && d.stage_users > (c.users || 0) ? `<div class="gw-out"><b>Real database waiting:</b> the staging copy on the bot server holds ${d.stage_users} users, the live bot has ${c.users}. <button class="pri sm" onclick="sbImport()">Import the real database now</button> <small class="mut">(the live database is dumped to /opt/nikabot/backups first; broadcast queues are not copied)</small></div>` : ""}
-    <div class="tabs" style="margin-bottom:10px">${["status", "switches", "users", "tables", "sql", "stats"].map(t => `<button class="${sb.tab === t ? "on" : ""}" onclick="sb.tab='${t}';refresh()">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
-    <div id="sb-body">${sb.tab === "status" ? sbStatusHtml(d) : sb.tab === "switches" ? sbSwitchesHtml(d) : '<div class="mut">loading…</div>'}</div>`;
-  if (sb.tab === "status") sbTgLoad();
-  if (sb.tab === "users") sbUsersLoad();
-  if (sb.tab === "tables") sbTableLoad();
-  if (sb.tab === "sql") sbSqlHtml();
-  if (sb.tab === "stats") sbStatsLoad();
+      <div class="tile"><small>30 days</small><b>${money((s.month || {}).income)}</b><span>${(s.month || {}).orders ?? "—"} orders · ${fmt(c.orders)} in all</span></div></div>
+    ${d.stage_users != null && d.stage_users > (c.users || 0) ? `<div class="gw-out"><b>Real database waiting:</b> the staging copy on the bot server holds ${fmt(d.stage_users)} users, the live bot has ${fmt(c.users)}. <button class="pri sm" onclick="sbImport()">Import the real database now</button> <small class="mut">(the live database is dumped first; broadcast queues are not copied)</small></div>` : ""}
+    <div class="tabs sb-tabs">${SB_TABS.map(([k, label]) => `<button class="${sb.tab === k ? "on" : ""}" onclick="sbTab('${k}')">${label}${k === "payments" && n.pending ? ` <small>${n.pending}</small>` : k === "tickets" && n.tickets ? ` <small>${n.tickets}</small>` : ""}</button>`).join("")}</div>
+    <div id="sb-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;
+  const load = {overview: sbOverview, payments: sbPays, orders: sbOrders, users: sbUsersLoad, plans: sbPlans, categories: sbCategories, servers: sbServers, discounts: sbDiscounts, gifts: sbGifts, broadcast: sbBroadcast, tickets: sbTickets, texts: sbTexts, settings: sbSettings, tools: sbTools}[sb.tab] || sbOverview;
+  try { await load(); } catch (e) { const b = $("#sb-body"); if (b) b.innerHTML = `<div class="page-err"><b>This tab could not be loaded</b><span>${esc(e.message)}</span><button class="sm" onclick="refresh()">Try again</button></div>`; }
 };
-function sbStatusHtml(d) {
-  return `<div class="grid2"><div class="card"><h3>Telegram</h3><div id="sb-tg" class="kv"><div class="mut">asking Telegram…</div></div></div>
-    <div class="card"><h3>Panels the bot sells from</h3>${(d.panels || []).map(p => `<div class="gw-row"><span><b>#${esc(p.id)}</b> ${esc(p.type)}</span><span class="mut">${esc(p.host)}</span><span></span></div>`).join("") || '<div class="mut">none</div>'}</div></div>
-    <div class="card"><h3>Latest bot errors <span class="sp"></span><small class="mut">${(d.backups || []).length ? "backups: " + esc(d.backups.join(", ")) : ""}</small></h3><pre class="gl-out">${esc((d.logs.errors || []).join("\n") || "(no errors logged)")}</pre>${(d.logs.php || []).length ? `<pre class="gl-out">${esc(d.logs.php.join("\n"))}</pre>` : ""}</div>`;
+const sbBody = html => { const b = $("#sb-body"); if (b) b.innerHTML = html; };
+/* ---- overview */
+async function sbOverview() {
+  const d = sb.info;
+  sbBody(`<div class="grid2"><div class="card"><h3>Telegram</h3><div id="sb-tg" class="kv"><div class="mut">asking Telegram…</div></div></div>
+    <div class="card"><h3>Panels the bot sells from <span class="sp"></span><a class="mut" onclick="sbTab('servers')">manage</a></h3>${(d.panels || []).map(p => `<div class="gw-row"><span><b>#${esc(p.id)}</b> ${esc(p.type)}</span><span class="mut">${esc(p.host)}</span><span></span></div>`).join("") || '<div class="mut">none yet — add one in Servers</div>'}</div></div>
+    <div class="card"><h3>Latest bot errors <span class="sp"></span><small class="mut">${(d.backups || []).length ? "backups: " + esc(d.backups.join(", ")) : ""}</small></h3><pre class="gl-out">${esc((d.logs.errors || []).join("\n") || "(no errors logged)")}</pre>${(d.logs.php || []).length ? `<pre class="gl-out">${esc(d.logs.php.join("\n"))}</pre>` : ""}</div>`);
+  try { const t = await api("/api/shopbot/telegram"); const box = $("#sb-tg"); if (box) box.innerHTML = `<div><span>bot</span> @${esc(t.bot.username || "?")} ${esc(t.bot.name || "")}</div><div><span>webhook</span> ${esc(t.webhook.url || "not set")}</div><div><span>pending updates</span> ${t.webhook.pending}</div>${t.webhook.last_error ? `<div><span>last error</span> <b class="err">${esc(t.webhook.last_error)}</b> ${ago(t.webhook.last_error_at)} ago</div>` : ""}`; }
+  catch (e) { const box = $("#sb-tg"); if (box) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
-async function sbTgLoad() { const box = $("#sb-tg"); if (!box) return; try { const t = await api("/api/shopbot/telegram"); box.innerHTML = `<div><span>bot</span> @${esc(t.bot.username || "?")} ${esc(t.bot.name || "")}</div><div><span>webhook</span> ${esc(t.webhook.url || "not set")}</div><div><span>pending updates</span> ${t.webhook.pending}</div>${t.webhook.last_error ? `<div><span>last error</span> <b class="err">${esc(t.webhook.last_error)}</b> ${ago(t.webhook.last_error_at)} ago</div>` : ""}`; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } }
-const SB_SWITCHES = [["cashbackPercent", "Cashback percent on every purchase (0 = off)"], ["wheelState", "Lucky wheel (on / off)"], ["wheelPrizes", "Wheel prizes, comma separated (Toman)"], ["wheelHours", "Hours between two spins"], ["giftState", "Gift codes (on / off)"], ["testState", "Free test accounts (on / off)"], ["botState", "Whole bot (on / off)"]];
-function sbSwitchesHtml(d) {
-  const st = d.states || {}, known = SB_SWITCHES.map(x => x[0]), other = Object.keys(st).filter(k => !known.includes(k)).sort();
-  return `<div class="card"><h3>Switches <small class="mut">— BOT_STATES in the bot's database, read by the bot on every message</small></h3><form class="frm" onsubmit="return sbSaveStates(event)">
-    ${SB_SWITCHES.map(([k, label]) => `<label>${label}<input name="${k}" value="${esc(st[k] == null ? "" : st[k])}" placeholder="not set"></label>`).join("")}
-    ${other.map(k => `<label>${esc(k)}<input name="${esc(k)}" value="${esc(st[k])}"></label>`).join("")}
-    <div class="frm-act"><button class="pri" type="submit">Save changed switches</button></div></form></div>`;
+/* ---- payments */
+async function sbPays() {
+  const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}`);
+  const st = s => s === "pending" ? '<span class="pill">pending</span>' : s === "approved" ? '<span class="pill ok">approved</span>' : s === "declined" ? '<span class="pill err">declined</span>' : `<span class="pill">${esc(s)}</span>`;
+  sbBody(`<div class="toolbar"><div class="tabs">${["pending", "approved", "declined", "all"].map(k => `<button class="${sb.payState === k ? "on" : ""}" onclick="sb.payState='${k}';sb.payPage=0;refresh()">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div><input placeholder="user id, name, hash…" value="${esc(sb.payQ)}" oninput="sb.payQ=this.value.trim();sb.payPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)">${sbPager(r.page, r.total, "sbPayPage")}</div>
+    <table class="tbl"><colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col></colgroup><thead><tr><th>#</th><th>User</th><th>Amount</th><th>Type</th><th>Asked</th><th>State</th><th></th></tr></thead>
+    <tbody>${r.rows.map(p => `<tr class="${p.state === "pending" ? "" : p.state === "approved" ? "up" : "down"}"><td class="num">${esc(p.id)}</td><td class="name"><a class="mut" onclick="sbUser('${esc(p.user_id)}')">${esc(p.name || p.user_id)}</a> <small class="mut">${p.username ? "@" + esc(p.username) : esc(p.user_id)}</small></td><td class="num"><b>${money(p.price)}</b></td><td>${esc(p.type || "")}</td><td class="mut">${tsFa(p.request_date)}</td><td>${st(p.state)}</td>
+      <td><div class="td-act">${p.state === "pending" ? `<button class="sm pri" onclick="sbPayDo(${p.id}, 'approve')">✓ Approve</button><button class="sm danger" onclick="sbPayDo(${p.id}, 'decline')">✕ Decline</button>` : p.approved_by && p.approved_by !== "NULL" ? `<small class="mut">by ${esc(p.approved_by)}</small>` : ""}</div></td></tr>`).join("") || '<tr><td colspan="7" class="empty">Nothing here.</td></tr>'}</tbody></table>`);
 }
-window.sbSaveStates = async e => { e.preventDefault(); const f = new FormData(e.target), st = sb.info.states || {}, ch = {}; for (const [k, v] of f.entries()) { if (String(st[k] == null ? "" : st[k]) !== String(v)) ch[k] = v; } if (!Object.keys(ch).length) { toast("nothing changed"); return false; } try { await api("/api/shopbot/states", {method: "PUT", body: JSON.stringify({changes: ch})}); toast("✓ " + Object.keys(ch).join(", ") + " saved", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbPayPage = p => { sb.payPage = p; refresh(); };
+window.sbPayDo = async (id, act) => {
+  let body = {};
+  if (act === "approve") { if (!await gconfirm(`Approve payment #${id}? The amount goes to the user's wallet and the user is told on Telegram.`)) return; }
+  else { const why = await gprompt("Why is it declined? (the user reads this)", ""); if (why == null) return; body = {reason: why}; }
+  try { const r = await api(`/api/shopbot/pays/${id}/${act}`, {method: "POST", body: JSON.stringify(body)}); toast(act === "approve" ? `✓ Approved — wallet now ${money(r.wallet)}` : "✓ Declined", "ok"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+/* ---- orders */
+async function sbOrders() {
+  const r = await api(`/api/shopbot/orders?q=${encodeURIComponent(sb.ordQ)}&page=${sb.ordPage}&active=${sb.ordActive}`);
+  sbBody(`<div class="toolbar"><input placeholder="user id, name, remark…" value="${esc(sb.ordQ)}" oninput="sb.ordQ=this.value.trim();sb.ordPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)"><label class="chk"><input type="checkbox" ${sb.ordActive ? "checked" : ""} onchange="sb.ordActive=this.checked;sb.ordPage=0;refresh()"> active only</label>${sbPager(r.page, r.total, "sbOrdPage")}</div>
+    <table class="tbl"><colgroup><col style="width:6%"><col style="width:20%"><col style="width:16%"><col style="width:12%"><col style="width:10%"><col style="width:14%"><col style="width:8%"><col></colgroup><thead><tr><th>#</th><th>User</th><th>Remark</th><th>Server</th><th>Paid</th><th>Expires</th><th>State</th><th></th></tr></thead>
+    <tbody>${r.rows.map(o => `<tr class="${o.status === "1" ? "up" : "down"}"><td class="num">${esc(o.id)}</td><td class="name"><a class="mut" onclick="sbUser('${esc(o.userid)}')">${esc(o.name || o.userid)}</a> <small class="mut">${o.username ? "@" + esc(o.username) : ""}</small></td><td class="mono">${esc(o.remark || "")}</td><td>${esc(o.server || o.server_id || "")}</td><td class="num">${money(o.amount)}</td><td class="mut">${tsFa(o.expire_date)}</td><td>${o.status === "1" ? '<span class="pill ok">active</span>' : '<span class="pill">off</span>'}</td>
+      <td><div class="td-act"><button class="sm ${o.status === "1" ? "danger" : ""}" onclick="sbOrderStatus(${o.id}, ${o.status === "1" ? "false" : "true"})">${o.status === "1" ? "Disable" : "Enable"}</button></div></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No order.</td></tr>'}</tbody></table>`);
+}
+window.sbOrdPage = p => { sb.ordPage = p; refresh(); };
+window.sbOrderStatus = async (id, active) => { try { await api(`/api/shopbot/orders/${id}/status`, {method: "PUT", body: JSON.stringify({active})}); toast("✓ Changed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- users */
 async function sbUsersLoad() {
-  const box = $("#sb-body"); if (!box) return;
   const rows = sb.uq ? (await api("/api/shopbot/users?q=" + encodeURIComponent(sb.uq)).catch(e => { toast("✕ " + e.message, "bad"); return {users: []}; })).users : [];
-  box.innerHTML = `<div class="toolbar"><input id="sb-uq" placeholder="Telegram id, username, name or phone…" value="${esc(sb.uq)}" oninput="sbUQ(this.value)"><span class="mut">${sb.uq ? rows.length + " found" : "type to search the bot's users"}</span></div>
-    ${rows.length ? `<table class="tbl"><colgroup><col style="width:14%"><col style="width:22%"><col style="width:12%"><col style="width:8%"><col style="width:8%"><col style="width:10%"><col></colgroup><thead><tr><th>Telegram id</th><th>Name</th><th>Wallet</th><th>Orders</th><th>Agent</th><th>Discount</th><th></th></tr></thead>
-      <tbody>${rows.map(r => `<tr class="${r.step === "banned" ? "down" : "up"}"><td class="num">${esc(r.userid)}</td><td class="name">${esc(r.name || "")} <small class="mut">${r.username ? "@" + esc(r.username) : ""}</small></td><td class="num">${(+r.wallet || 0).toLocaleString()}</td><td class="num">${esc(r.orders)}</td><td>${r.is_agent === "1" ? '<span class="pill ok">agent</span>' : ""}</td><td class="num">${esc(r.discount_percent || 0)}%</td>
-        <td><button class="sm" onclick="(async()=>sbU('${esc(r.userid)}', 'wallet', await gprompt('Add to the wallet (Toman, negative to take)', '10000')))()">± wallet</button> <button class="sm" onclick="(async()=>sbU('${esc(r.userid)}', 'discount', await gprompt('Discount percent', '${esc(r.discount_percent || 0)}')))()">discount</button> <button class="sm" onclick="sbU('${esc(r.userid)}', '${r.is_agent === "1" ? "agent_off" : "agent_on"}')">${r.is_agent === "1" ? "agent off" : "agent on"}</button> <button class="sm ${r.step === "banned" ? "" : "danger"}" onclick="sbU('${esc(r.userid)}', '${r.step === "banned" ? "unban" : "ban"}')">${r.step === "banned" ? "unban" : "ban"}</button></td></tr>`).join("")}</tbody></table>` : ""}`;
+  sbBody(`<div class="toolbar"><input id="sb-uq" placeholder="Telegram id, username, name or phone…" value="${esc(sb.uq)}" oninput="sbUQ(this.value)"><span class="mut">${sb.uq ? rows.length + " found" : "type to search the bot's users"}</span></div>
+    ${rows.length ? `<table class="tbl"><colgroup><col style="width:13%"><col style="width:22%"><col style="width:11%"><col style="width:7%"><col style="width:8%"><col style="width:9%"><col></colgroup><thead><tr><th>Telegram id</th><th>Name</th><th>Wallet</th><th>Orders</th><th>Agent</th><th>Discount</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr class="${r.step === "banned" ? "down" : "up"}"><td class="num"><a class="mut" onclick="sbUser('${esc(r.userid)}')">${esc(r.userid)}</a></td><td class="name"><a onclick="sbUser('${esc(r.userid)}')">${esc(r.name || "")}</a> <small class="mut">${r.username ? "@" + esc(r.username) : ""}</small></td><td class="num">${fmt(r.wallet)}</td><td class="num">${esc(r.orders)}</td><td>${r.is_agent === "1" ? '<span class="pill ok">agent</span>' : ""}</td><td class="num">${esc(r.discount_percent || 0)}%</td>
+        <td><div class="td-act"><button class="sm" onclick="sbUser('${esc(r.userid)}')">More</button><button class="sm" onclick="(async()=>sbU('${esc(r.userid)}', 'wallet', await gprompt('Add to the wallet (Toman, negative to take)', '10000')))()">± wallet</button><button class="sm ${r.step === "banned" ? "" : "danger"}" onclick="sbU('${esc(r.userid)}', '${r.step === "banned" ? "unban" : "ban"}')">${r.step === "banned" ? "Unban" : "Ban"}</button></div></td></tr>`).join("")}</tbody></table>` : ""}`);
   const q = $("#sb-uq"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
 window.sbUQ = v => { sb.uq = v.trim(); clearTimeout(qT); qT = setTimeout(refresh, 350); };
-window.sbU = async (uid, action, value) => { if ((action === "wallet" || action === "discount") && (value == null || value === "")) return; try { await api("/api/shopbot/users/action", {method: "POST", body: JSON.stringify({action, userid: uid, value})}); toast("✓ " + action + " done", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbU = async (uid, action, value) => { if ((action === "wallet" || action === "discount" || action === "wallet_set") && (value == null || value === "")) return; try { await api("/api/shopbot/users/action", {method: "POST", body: JSON.stringify({action, userid: uid, value})}); toast("✓ " + action.replace("_", " ") + " done", "ok"); if ($("#modal .sb-user")) sbUser(uid); else refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbUser = async uid => {
+  showModal(`<b>User ${esc(uid)}</b>`, '<div class="sb-user loading"><i class="spin"></i><span>Reading…</span></div>', "wide");
+  try {
+    const d = await api(`/api/shopbot/users/${encodeURIComponent(uid)}`), u = d.user;
+    showModal(`<span class="st ${u.step === "banned" ? "down" : "up"}"></span><b>${esc(u.name || uid)}</b> <span class="mono mut">${esc(uid)}</span> ${u.username ? `<span class="pill">@${esc(u.username)}</span>` : ""}${u.is_agent === "1" ? '<span class="pill ok">agent</span>' : ""}${u.step === "banned" ? '<span class="pill err">banned</span>' : ""}`, `<div class="sb-user">
+      <div class="grid2">${ibox("👤", "Account", [irow("Wallet", `<b>${money(u.wallet)}</b>`), irow("Phone", esc(u.phone || "—")), irow("Joined", tsFa(u.date)), irow("Discount", esc(u.discount_percent || 0) + " %"), irow("Referred by", esc(u.refered_by && u.refered_by !== "NULL" && u.refered_by !== "0" ? u.refered_by : "—")), irow("Brought in", esc(d.referred) + " users"), irow("Free trial", esc(u.freetrial || "—")), irow("Step", `<small class="mono">${esc((u.step || "").slice(0, 40))}</small>`)])}
+      ${ibox("🛠", "Actions", [`<div class="wtools sb-acts"><a class="wtool" onclick="(async()=>sbU('${esc(uid)}', 'wallet', await gprompt('Add to the wallet (Toman, negative to take)', '10000')))()"><i>💰</i><b>± Wallet</b><small>add or take</small></a><a class="wtool" onclick="(async()=>sbU('${esc(uid)}', 'wallet_set', await gprompt('Set the wallet to (Toman)', '${esc(u.wallet || 0)}')))()"><i>🎯</i><b>Set wallet</b><small>exact amount</small></a><a class="wtool" onclick="(async()=>sbU('${esc(uid)}', 'discount', await gprompt('Discount percent', '${esc(u.discount_percent || 0)}')))()"><i>%</i><b>Discount</b><small>on every plan</small></a><a class="wtool" onclick="sbU('${esc(uid)}', '${u.is_agent === "1" ? "agent_off" : "agent_on"}')"><i>🤝</i><b>${u.is_agent === "1" ? "Agent off" : "Make agent"}</b><small>reseller prices</small></a><a class="wtool" onclick="sbMsg('${esc(uid)}')"><i>✉</i><b>Message</b><small>send a Telegram message</small></a><a class="wtool ${u.step === "banned" ? "" : "danger"}" onclick="sbU('${esc(uid)}', '${u.step === "banned" ? "unban" : "ban"}')"><i>⛔</i><b>${u.step === "banned" ? "Unban" : "Ban"}</b><small>${u.step === "banned" ? "let the user back in" : "the bot ignores the user"}</small></a></div>`])}</div>
+      <div class="ibox" style="margin-top:10px"><h5><i>🧾</i>Subscriptions <small class="mut">${d.orders.length}</small></h5>${d.orders.map(o => irow(`<b>${esc(o.remark || "#" + o.id)}</b> <small class="mut">${esc(o.server || "")}</small>`, `${money(o.amount)} · until ${tsFa(o.expire_date)} · ${o.status === "1" ? '<b class="gw-ok">active</b>' : '<span class="mut">off</span>'}`)).join("") || '<div class="mut">none</div>'}</div>
+      <div class="grid2" style="margin-top:10px">${ibox("💳", "Payments", d.pays.map(p => irow(`#${esc(p.id)} ${esc(p.type || "")}`, `${money(p.price)} · ${esc(p.state)} · ${tsFa(p.request_date)}`)).length ? d.pays.map(p => irow(`#${esc(p.id)} ${esc(p.type || "")}`, `${money(p.price)} · ${esc(p.state)}`)) : ['<div class="mut">none</div>'])}${ibox("🎁", "Extras", [...d.wheel.map(w => irow("Wheel prize", money(w.prize) + " · " + tsFa(w.at))), ...d.cashback.map(c => irow("Cashback", money(c.cashback) + " on " + money(c.order_amount)))].length ? [...d.wheel.map(w => irow("Wheel prize", money(w.prize))), ...d.cashback.map(c => irow("Cashback", money(c.cashback) + " on " + money(c.order_amount)))] : ['<div class="mut">none</div>'])}</div></div>`, "wide");
+  } catch (e) { showModal(`<b>User ${esc(uid)}</b>`, `<div class="err">${esc(e.message)}</div>`); }
+};
+window.sbMsg = async uid => { const text = await gprompt(`Message to ${uid} (sent by the bot):`, ""); if (!text) return; try { await api(`/api/shopbot/users/${encodeURIComponent(uid)}/message`, {method: "POST", body: JSON.stringify({text})}); toast("✓ Sent", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- plans */
+async function sbPlans() {
+  const r = await api("/api/shopbot/plans");
+  sb.cats = r.categories; sb.servers = r.servers;
+  sbBody(`<div class="toolbar"><button class="pri" onclick="sbPlanEdit(null)">＋ Add plan</button><span class="mut">${r.plans.length} plans · ${r.plans.filter(p => p.active === "1").length} active</span></div>
+    <table class="tbl"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:13%"><col style="width:13%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:7%"><col style="width:6%"><col></colgroup><thead><tr><th>#</th><th>Plan</th><th>Category</th><th>Server</th><th>Days</th><th>GB</th><th>Price</th><th>Sold</th><th>On</th><th></th></tr></thead>
+    <tbody>${r.plans.map(p => `<tr class="${p.active === "1" ? "up" : "down"}"><td class="num">${esc(p.id)}</td><td class="name">${esc(p.title)}${p.descr && p.descr !== "NULL" ? ` <small class="mut" title="${esc(p.descr)}">${esc(p.descr.slice(0, 40))}</small>` : ""}</td><td>${esc(p.category || p.catid)}</td><td>${esc(p.server || p.server_id)}</td><td class="num">${esc(p.days)}</td><td class="num">${esc(p.volume)}</td><td class="num"><b>${money(p.price)}</b></td><td class="num">${esc(p.sold)}</td><td>${p.active === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td>
+      <td><div class="td-act"><button class="sm" onclick="sbPlanEdit(${p.id})">Edit</button><button class="sm" onclick="sbPlanToggle(${p.id}, ${p.active === "1" ? 0 : 1})">${p.active === "1" ? "Off" : "On"}</button><button class="sm danger" onclick="sbPlanDel(${p.id}, '${esc(p.title)}')">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="10" class="empty">No plan yet.</td></tr>'}</tbody></table>`);
+  sb.plans = r.plans;
+}
+const sel = (name, options, cur, blank) => `<select name="${name}">${blank ? `<option value="0">${blank}</option>` : ""}${options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+window.sbPlanEdit = id => {
+  const p = (sb.plans || []).find(x => +x.id === +id) || {};
+  showModal(`<b>${id ? "Edit plan #" + id : "New plan"}</b>`, `<form class="frm" onsubmit="return sbPlanSave(event, ${id || "null"})">
+    <label>Title<input name="title" required value="${esc(p.title || "")}" placeholder="30 days · 50 GB"></label>
+    <label>Category${sel("catid", (sb.cats || []).map(c => [c.id, c.title]), p.catid, "— none —")}</label>
+    <label>Server (panel)${sel("server_id", (sb.servers || []).map(s => [s.id, s.title + " · " + (s.type || "")]), p.server_id, "— none —")}</label>
+    <label>Days<input name="days" type="number" min="0" step="1" required value="${esc(p.days || 30)}"></label>
+    <label>Volume (GB, 0 = unlimited)<input name="volume" type="number" min="0" step="0.5" required value="${esc(p.volume || 0)}"></label>
+    <label>Price (Toman)<input name="price" type="number" min="0" step="1000" required value="${esc(p.price || 0)}"></label>
+    <label>Stock (0 = unlimited)<input name="acount" type="number" min="0" value="${esc(p.acount || 0)}"></label>
+    <label>Max devices (IP limit)<input name="limitip" type="number" min="0" value="${esc(p.limitip || 1)}"></label>
+    <label class="chk"><input name="active" type="checkbox" ${!id || p.active === "1" ? "checked" : ""}> active (shown in the bot)</label>
+    <label style="grid-column:1/-1">Description<textarea name="descr" class="ob-raw" style="min-height:70px">${esc(p.descr && p.descr !== "NULL" ? p.descr : "")}</textarea></label>
+    <div class="frm-act"><button class="pri" type="submit">${id ? "Save" : "Add plan"}</button></div></form>`);
+};
+window.sbPlanSave = async (e, id) => { e.preventDefault(); const f = formJson(e, ["catid", "server_id", "days", "volume", "price", "acount", "limitip"], ["active"]); try { await api(id ? `/api/shopbot/plans/${id}` : "/api/shopbot/plans", {method: id ? "PUT" : "POST", body: JSON.stringify({fields: f})}); toast("✓ Plan saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbPlanToggle = async (id, active) => { try { await api(`/api/shopbot/plans/${id}`, {method: "PUT", body: JSON.stringify({fields: {active}})}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbPlanDel = async (id, title) => { if (!await gconfirm(`Delete the plan ${title}? Existing subscriptions are not touched.`)) return; try { await api(`/api/shopbot/plans/${id}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- categories */
+async function sbCategories() {
+  const r = await api("/api/shopbot/categories"); sb.cats = r.categories;
+  sbBody(`<div class="toolbar"><button class="pri" onclick="sbCatEdit(null)">＋ Add category</button><span class="mut">the groups the user picks from before the plans</span></div>
+    <table class="tbl"><colgroup><col style="width:6%"><col style="width:40%"><col style="width:18%"><col style="width:10%"><col style="width:8%"><col></colgroup><thead><tr><th>#</th><th>Title</th><th>Inside</th><th>Plans</th><th>On</th><th></th></tr></thead>
+    <tbody>${r.categories.map(c => `<tr class="${c.active === "1" ? "up" : "down"}"><td class="num">${esc(c.id)}</td><td class="name">${esc(c.title)}</td><td>${c.parent !== "0" ? esc((r.categories.find(x => x.id === c.parent) || {}).title || c.parent) : '<span class="mut">top level</span>'}</td><td class="num">${esc(c.plans)}</td><td>${c.active === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td>
+      <td><div class="td-act"><button class="sm" onclick="sbCatEdit(${c.id})">Edit</button><button class="sm danger" onclick="sbCatDel(${c.id}, '${esc(c.title)}')">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="6" class="empty">No category yet.</td></tr>'}</tbody></table>`);
+}
+window.sbCatEdit = id => { const c = (sb.cats || []).find(x => +x.id === +id) || {}; showModal(`<b>${id ? "Edit category" : "New category"}</b>`, `<form class="frm" onsubmit="return sbCatSave(event, ${id || "null"})"><label>Title<input name="title" required value="${esc(c.title || "")}" placeholder="Germany"></label><label>Inside${sel("parent", (sb.cats || []).filter(x => +x.id !== +id).map(x => [x.id, x.title]), c.parent, "— top level —")}</label><label class="chk"><input name="active" type="checkbox" ${!id || c.active === "1" ? "checked" : ""}> active</label><div class="frm-act"><button class="pri" type="submit">${id ? "Save" : "Add"}</button></div></form>`); };
+window.sbCatSave = async (e, id) => { e.preventDefault(); const f = formJson(e, ["parent"], ["active"]); try { await api(id ? `/api/shopbot/categories/${id}` : "/api/shopbot/categories", {method: id ? "PUT" : "POST", body: JSON.stringify(f)}); toast("✓ Saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbCatDel = async (id, title) => { if (!await gconfirm(`Delete the category ${title}?`)) return; try { await api(`/api/shopbot/categories/${id}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- servers (the panels the bot sells from) */
+async function sbServers() {
+  const r = await api("/api/shopbot/servers"); sb.servers = r.servers; sb.knownPanels = r.panels;
+  sbBody(`<div class="toolbar"><button class="pri" onclick="sbSrvEdit(null)">＋ Add server</button>${r.panels.length ? `<button onclick="sbSrvFromPanel()" title="Make a bot server from a panel this control panel already manages">＋ From a managed panel</button>` : ""}<span class="mut">a server = a Marzban / PasarGuard panel the bot creates accounts on</span></div>
+    <table class="tbl"><colgroup><col style="width:5%"><col style="width:20%"><col style="width:11%"><col style="width:24%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col></colgroup><thead><tr><th>#</th><th>Title</th><th>Type</th><th>Panel</th><th>Capacity</th><th>Active subs</th><th>On</th><th></th></tr></thead>
+    <tbody>${r.servers.map(s => `<tr class="${s.active === "1" && s.state === "1" ? "up" : "down"}"><td class="num">${esc(s.id)}</td><td class="name">${esc(s.flag || "")} ${esc(s.title)}${s.remark && s.remark !== "NULL" ? ` <small class="mut">${esc(s.remark)}</small>` : ""}</td><td>${esc(s.type || "?")}</td><td class="mono" title="${esc(s.panel_url || "")}">${esc((s.panel_url || "").replace(/^https?:\/\//, "").slice(0, 40))}</td><td class="num">${esc(s.ucount)}</td><td class="num">${esc(s.active_orders)}</td><td>${s.active === "1" && s.state === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td>
+      <td><div class="td-act"><button class="sm" onclick="sbSrvEdit(${s.id})">Edit</button><button class="sm" onclick="sbSrvToggle(${s.id}, ${s.active === "1" ? 0 : 1})">${s.active === "1" ? "Off" : "On"}</button><button class="sm danger" onclick="sbSrvDel(${s.id}, '${esc(s.title)}')">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No server yet.</td></tr>'}</tbody></table>`);
+}
+window.sbSrvEdit = id => {
+  const s = (sb.servers || []).find(x => +x.id === +id) || {};
+  showModal(`<b>${id ? "Edit server #" + id : "New server"}</b>`, `<form class="frm" onsubmit="return sbSrvSave(event, ${id || "null"})">
+    <label>Title<input name="title" required value="${esc(s.title || "")}" placeholder="Germany 1"></label><label>Flag / emoji<input name="flag" value="${esc(s.flag && s.flag !== "NULL" ? s.flag : "")}" placeholder="🇩🇪"></label><label>Note<input name="remark" value="${esc(s.remark && s.remark !== "NULL" ? s.remark : "")}"></label>
+    <label>Type${sel("type", [["pasarguard", "PasarGuard"], ["marzban", "Marzban"], ["marzneshin", "Marzneshin"], ["sanaei", "3x-ui (sanaei)"], ["alireza", "x-ui (alireza)"]], s.type || "pasarguard")}</label>
+    <label style="grid-column:span 2">Panel address<input name="panel_url" value="${esc(s.panel_url && s.panel_url !== "NULL" ? s.panel_url : "")}" placeholder="https://panel.example.com:8000"></label>
+    <label>Panel user<input name="username" value="${esc(s.username && s.username !== "NULL" ? s.username : "")}"></label><label>Panel password <small>(empty keeps)</small><input name="password" type="password" autocomplete="new-password"></label><label>SNI <small>(optional)</small><input name="sni" value="${esc(s.sni && s.sni !== "NULL" ? s.sni : "")}"></label>
+    <label>Capacity (accounts)<input name="ucount" type="number" min="0" value="${esc(s.ucount || 1000)}"></label><label class="chk"><input name="active" type="checkbox" ${!id || s.active === "1" ? "checked" : ""}> active</label><label class="chk"><input name="state" type="checkbox" ${!id || s.state === "1" ? "checked" : ""}> selling (state)</label>
+    <div class="frm-act"><button class="pri" type="submit">${id ? "Save" : "Add server"}</button></div></form>`);
+};
+window.sbSrvSave = async (e, id) => { e.preventDefault(); const f = formJson(e, ["ucount"], ["active", "state"]); const info = {title: f.title, flag: f.flag, remark: f.remark, ucount: f.ucount, active: f.active ? 1 : 0, state: f.state ? 1 : 0}, config = {type: f.type, panel_url: f.panel_url, username: f.username, password: f.password, sni: f.sni}; try { await api(id ? `/api/shopbot/servers/${id}` : "/api/shopbot/servers", {method: id ? "PUT" : "POST", body: JSON.stringify({info, config})}); toast("✓ Server saved", "ok"); closeModal(); sb.infoAt = 0; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbSrvToggle = async (id, active) => { try { await api(`/api/shopbot/servers/${id}`, {method: "PUT", body: JSON.stringify({info: {active}, config: {}})}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbSrvDel = async (id, title) => { if (!await gconfirm(`Remove the server ${title} from the bot, with its plans? Refused while subscriptions live on it.`)) return; try { await api(`/api/shopbot/servers/${id}`, {method: "DELETE"}); toast("✓ Removed", "ok"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbSrvFromPanel = () => showModal("<b>Server from a managed panel</b>", `<form class="frm" onsubmit="return sbSrvFromPanelGo(event)"><label>Panel${sel("panel_id", (sb.knownPanels || []).map(p => [p.id, p.name + " · " + p.type]), "")}</label><label>Title in the bot<input name="title" placeholder="same as the panel"></label><label>Capacity<input name="ucount" type="number" value="1000"></label><div class="frm-act"><button class="pri" type="submit">Add</button></div><small class="mut">The panel's address, user and password are copied into the bot's database on the bot server.</small></form>`);
+window.sbSrvFromPanelGo = async e => { e.preventDefault(); const f = formJson(e, ["panel_id", "ucount"]); try { await api("/api/shopbot/servers/from-panel", {method: "POST", body: JSON.stringify(f)}); toast("✓ Server added", "ok"); closeModal(); sb.infoAt = 0; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+/* ---- discounts */
+const AUD = {all: "everyone", agents: "agents", non_agents: "non-agents", buyers: "buyers", non_buyers: "never bought", has_active_order: "has an active subscription", no_active_order: "no active subscription", user: "one user"};
+async function sbDiscounts() {
+  const r = await api("/api/shopbot/discounts"); sb.discounts = r.discounts;
+  sbBody(`<div class="toolbar"><button class="pri" onclick="sbDiscEdit(null)">＋ Add code</button><span class="mut">${r.discounts.length} codes</span></div>
+    <table class="tbl"><colgroup><col style="width:14%"><col style="width:12%"><col style="width:20%"><col style="width:14%"><col style="width:10%"><col style="width:8%"><col style="width:6%"><col></colgroup><thead><tr><th>Code</th><th>Off</th><th>Who</th><th>Until</th><th>Uses</th><th>Per user</th><th>On</th><th></th></tr></thead>
+    <tbody>${r.discounts.map(d => `<tr class="${d.is_active === "1" ? "up" : "down"}"><td class="mono"><b>${esc(d.hash_id)}</b></td><td>${d.type === "percent" ? esc(d.amount) + " %" : money(d.amount)}${+d.max_discount ? ` <small class="mut">max ${money(d.max_discount)}</small>` : ""}${+d.min_price ? ` <small class="mut">from ${money(d.min_price)}</small>` : ""}</td><td>${esc(AUD[d.audience_type] || d.audience_type)}${d.audience_type === "user" ? " " + esc(d.audience_user_id) : ""}${d.target_type !== "all" ? ` <small class="mut">· ${esc(d.target_type)} #${esc(d.target_id)}</small>` : ""}</td><td class="mut">${+d.expire_date ? tsFa(d.expire_date) : "no end"}</td><td class="num">${esc(d.uses)}${+d.expire_count ? " / " + esc(d.expire_count) : ""}</td><td class="num">${esc(d.can_use)}</td><td>${d.is_active === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td>
+      <td><div class="td-act"><button class="sm" onclick="sbDiscEdit(${d.id})">Edit</button><button class="sm danger" onclick="sbDiscDel(${d.id}, '${esc(d.hash_id)}')">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No discount code yet.</td></tr>'}</tbody></table>`);
+}
+window.sbDiscEdit = id => {
+  const d = (sb.discounts || []).find(x => +x.id === +id) || {};
+  const daysLeft = +d.expire_date ? Math.max(0, Math.ceil((+d.expire_date - Date.now() / 1000) / 86400)) : 0;
+  showModal(`<b>${id ? "Edit discount code" : "New discount code"}</b>`, `<form class="frm" onsubmit="return sbDiscSave(event, ${id || "null"})">
+    <label>Code<input name="hash_id" required pattern="[A-Za-z0-9_-]+" value="${esc(d.hash_id || "")}" placeholder="SPRING20"></label><label>Kind${sel("type", [["percent", "percent off"], ["amount", "fixed amount off (Toman)"]], d.type || "percent")}</label><label>Amount<input name="amount" type="number" min="1" required value="${esc(d.amount || 10)}"></label>
+    <label>Valid for (days, 0 = no end)<input name="days" type="number" min="0" value="${daysLeft}"></label><label>Total uses (0 = unlimited)<input name="expire_count" type="number" min="0" value="${esc(d.expire_count || 0)}"></label><label>Uses per user<input name="can_use" type="number" min="1" value="${esc(d.can_use || 1)}"></label>
+    <label>Who may use it${sel("audience_type", Object.entries(AUD), d.audience_type || "all")}</label><label>User id (for "one user")<input name="audience_user_id" value="${esc(d.audience_user_id && d.audience_user_id !== "0" ? d.audience_user_id : "")}"></label>
+    <label>Applies to${sel("target_type", [["all", "every plan"], ["plan", "one plan"], ["category", "one category"], ["server", "one server"]], d.target_type || "all")}</label><label>Plan / category / server id<input name="target_id" type="number" min="0" value="${esc(d.target_id || 0)}"></label>
+    <label>Minimum price<input name="min_price" type="number" min="0" value="${esc(d.min_price || 0)}"></label><label>Maximum discount (Toman, 0 = none)<input name="max_discount" type="number" min="0" value="${esc(d.max_discount || 0)}"></label>
+    <label class="chk"><input name="is_active" type="checkbox" ${!id || d.is_active === "1" ? "checked" : ""}> active</label>
+    <div class="frm-act"><button class="pri" type="submit">${id ? "Save" : "Add code"}</button></div></form>`);
+};
+window.sbDiscSave = async (e, id) => { e.preventDefault(); const f = formJson(e, ["amount", "days", "expire_count", "can_use", "target_id", "min_price", "max_discount"], ["is_active"]); f.is_active = f.is_active ? 1 : 0; try { await api(id ? `/api/shopbot/discounts/${id}` : "/api/shopbot/discounts", {method: id ? "PUT" : "POST", body: JSON.stringify({fields: f})}); toast("✓ Saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbDiscDel = async (id, code) => { if (!await gconfirm(`Delete the discount code ${code}?`)) return; try { await api(`/api/shopbot/discounts/${id}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- gift codes */
+async function sbGifts() {
+  const r = await api("/api/shopbot/gifts");
+  sbBody(`<div class="toolbar"><button class="pri" onclick="sbGiftNew()">＋ Add gift code</button><span class="mut">a gift code puts money in the wallet of whoever redeems it</span></div>
+    <table class="tbl"><colgroup><col style="width:18%"><col style="width:14%"><col style="width:12%"><col style="width:16%"><col style="width:16%"><col><col style="width:90px"></colgroup><thead><tr><th>Code</th><th>Amount</th><th>Used</th><th>Expires</th><th>Made</th><th>Note</th><th></th></tr></thead>
+    <tbody>${r.gifts.map(g => `<tr class="${+g.used >= +g.max_uses || (+g.expires && +g.expires < Date.now() / 1000) ? "down" : "up"}"><td class="mono"><b>${esc(g.code)}</b></td><td class="num">${money(g.amount)}</td><td class="num">${esc(g.used)} / ${esc(g.max_uses)}</td><td class="mut">${+g.expires ? tsFa(g.expires) : "never"}</td><td class="mut">${tsFa(g.created)}</td><td>${esc(g.note && g.note !== "NULL" ? g.note : "")}</td><td><div class="td-act"><button class="sm danger" onclick="sbGiftDel(${g.id}, '${esc(g.code)}')">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="7" class="empty">No gift code yet.</td></tr>'}</tbody></table>`);
+}
+window.sbGiftNew = () => showModal("<b>New gift code</b>", `<form class="frm" onsubmit="return sbGiftSave(event)"><label>Code <small>(empty = random)</small><input name="code" pattern="[A-Za-z0-9_-]*" placeholder="WELCOME50"></label><label>Amount (Toman)<input name="amount" type="number" min="1000" step="1000" required value="50000"></label><label>How many users may use it<input name="max_uses" type="number" min="1" value="1"></label><label>Valid for (days, 0 = no end)<input name="days" type="number" min="0" value="30"></label><label style="grid-column:1/-1">Note<input name="note" placeholder="spring campaign"></label><div class="frm-act"><button class="pri" type="submit">Add</button></div></form>`);
+window.sbGiftSave = async e => { e.preventDefault(); const f = formJson(e, ["amount", "max_uses", "days"]); try { await api("/api/shopbot/gifts", {method: "POST", body: JSON.stringify(f)}); toast("✓ Gift code added", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbGiftDel = async (id, code) => { if (!await gconfirm(`Delete the gift code ${code}?`)) return; try { await api(`/api/shopbot/gifts/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- broadcast */
+const BC_STATE = {0: ["draft", ""], 1: ["queued", ""], 2: ["sending", "ok"], 3: ["done", "ok"], 4: ["cancelled", "err"]};
+async function sbBroadcast() {
+  const r = await api("/api/shopbot/broadcasts");
+  sbBody(`<div class="card"><h3>New broadcast <small class="mut">— the bot's cron sends it, one user at a time, within minutes</small></h3><form class="frm" onsubmit="return sbBcSend(event)">
+      <label>Title (for this list)<input name="title" placeholder="October news"></label><label>To${sel("group", Object.entries(r.groups), "all")}</label>
+      <label style="grid-column:1/-1">Message <small>(Telegram HTML allowed: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;)</small><textarea name="text" class="ob-raw" style="min-height:110px" required placeholder="سلام 👋 …"></textarea></label>
+      <div class="frm-act"><button class="pri" type="submit">📣 Send to ${r.groups.all ? "the chosen users" : "users"}</button></div></form></div>
+    <table class="tbl"><colgroup><col style="width:6%"><col style="width:20%"><col style="width:12%"><col style="width:14%"><col style="width:12%"><col style="width:16%"><col><col style="width:90px"></colgroup><thead><tr><th>#</th><th>Title</th><th>To</th><th>State</th><th>Sent</th><th>Made</th><th>Text</th><th></th></tr></thead>
+    <tbody>${r.broadcasts.map(b => { const st = BC_STATE[b.state] || [b.state, ""]; return `<tr><td class="num">${esc(b.id)}</td><td class="name">${esc(b.title || "")}</td><td>${esc(r.groups[b.target_group] || b.target_group)}</td><td><span class="pill ${st[1]}">${esc(st[0])}</span></td><td class="num">${esc(b.sent || 0)}${+b.total_cnt ? " / " + esc(b.total_cnt) : ""}</td><td class="mut">${tsFa(b.created_at)}</td><td class="mut" title="${esc(b.text || "")}">${esc((b.text || "").slice(0, 60))}</td><td><div class="td-act">${+b.state <= 2 ? `<button class="sm danger" onclick="sbBcCancel(${b.id})">Cancel</button>` : ""}</div></td></tr>`; }).join("") || '<tr><td colspan="8" class="empty">No broadcast yet.</td></tr>'}</tbody></table>`);
+}
+window.sbBcSend = async e => { e.preventDefault(); const f = formJson(e); if (!await gconfirm(`Send this message to ${f.group === "all" ? "EVERY user of the bot" : "the chosen users"}? It cannot be unsent.`, {danger: true})) return false; try { const r = await api("/api/shopbot/broadcasts", {method: "POST", body: JSON.stringify(f)}); toast(`✓ Broadcast #${r.id} queued`, "ok"); sb.infoAt = 0; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbBcCancel = async id => { if (!await gconfirm(`Cancel broadcast #${id}? Messages already sent stay.`)) return; try { await api(`/api/shopbot/broadcasts/${id}/cancel`, {method: "POST"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- tickets */
+async function sbTickets() {
+  const r = await api(`/api/shopbot/tickets?state=${sb.tkState}&page=${sb.tkPage}`);
+  sbBody(`<div class="toolbar"><div class="tabs">${["open", "closed", "all"].map(k => `<button class="${sb.tkState === k ? "on" : ""}" onclick="sb.tkState='${k}';sb.tkPage=0;refresh()">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>${sbPager(r.page, r.total, "sbTkPage")}</div>
+    <table class="tbl"><colgroup><col style="width:6%"><col style="width:22%"><col style="width:30%"><col style="width:12%"><col style="width:8%"><col style="width:14%"><col></colgroup><thead><tr><th>#</th><th>User</th><th>Title</th><th>Category</th><th>Msgs</th><th>Last</th><th></th></tr></thead>
+    <tbody>${r.rows.map(t => `<tr class="${t.state === "1" ? "" : "down"} click" onclick="sbTicket(${t.id})"><td class="num">${esc(t.id)}</td><td class="name">${esc(t.name || t.user_id)} <small class="mut">${t.username ? "@" + esc(t.username) : ""}</small></td><td>${esc(t.title || "")}</td><td class="mut">${esc(t.category || "")}</td><td class="num">${esc(t.messages)}</td><td class="mut">${ago(+t.last_at || +t.create_date)} ago</td><td><div class="td-act"><button class="sm" onclick="event.stopPropagation();sbTicket(${t.id})">Open</button></div></td></tr>`).join("") || '<tr><td colspan="7" class="empty">No ticket.</td></tr>'}</tbody></table>`);
+  sb.tickets = r.rows;
+}
+window.sbTkPage = p => { sb.tkPage = p; refresh(); };
+window.sbTicket = async id => {
+  const t = (sb.tickets || []).find(x => +x.id === +id) || {};
+  showModal(`<b>🎫 #${id} ${esc(t.title || "")}</b> <span class="mut">${esc(t.name || t.user_id || "")}</span>`, '<div class="loading"><i class="spin"></i><span>Reading…</span></div>', "wide", t.state === "1" ? `<button class="sm" onclick="sbTicketClose(${id})">Close ticket</button>` : "");
+  try {
+    const r = await api(`/api/shopbot/tickets/${id}`);
+    showModal(`<b>🎫 #${id} ${esc(t.title || "")}</b> <span class="mut">${esc(t.name || t.user_id || "")}</span>`, `<div class="tk-msgs">${r.messages.map(m => `<div class="tk-msg ${m.msg_type === "ADMIN" ? "me" : ""}"><small class="mut">${m.msg_type === "ADMIN" ? "support" : "user"} · ${tsFa(m.sent_date)}</small><div>${esc(m.text)}</div></div>`).join("") || '<div class="mut">no message</div>'}</div>
+      ${t.state === "1" ? `<form class="frm one" onsubmit="return sbTicketReply(event, ${id})"><label>Reply<textarea name="text" class="ob-raw" style="min-height:80px" required></textarea></label><div class="frm-act"><button class="pri" type="submit">Send reply</button></div></form>` : '<div class="mut" style="margin-top:8px">This ticket is closed.</div>'}`, "wide", t.state === "1" ? `<button class="sm" onclick="sbTicketClose(${id})">Close ticket</button>` : "");
+    const box = $(".tk-msgs"); if (box) box.scrollTop = box.scrollHeight;
+  } catch (e) { showModal(`<b>🎫 #${id}</b>`, `<div class="err">${esc(e.message)}</div>`); }
+};
+window.sbTicketReply = async (e, id) => { e.preventDefault(); const f = formJson(e); try { await api(`/api/shopbot/tickets/${id}/reply`, {method: "POST", body: JSON.stringify(f)}); toast("✓ Reply sent", "ok"); sbTicket(id); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbTicketClose = async id => { if (!await gconfirm(`Close ticket #${id}? The user is told.`)) return; try { await api(`/api/shopbot/tickets/${id}/close`, {method: "POST"}); toast("✓ Closed", "ok"); closeModal(); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- texts and buttons */
+async function sbTexts() {
+  if (!sb.txData) sb.txData = await api("/api/shopbot/texts");
+  const d = sb.txData, base = sb.txKind === "text" ? d.texts : d.buttons, ov = sb.txKind === "text" ? d.text_overrides : d.button_overrides, q = sb.txQ.toLowerCase();
+  const keys = Object.keys(base).filter(k => !q || k.toLowerCase().includes(q) || String(base[k]).toLowerCase().includes(q) || String(ov[k] || "").toLowerCase().includes(q));
+  sbBody(`<div class="toolbar"><div class="tabs"><button class="${sb.txKind === "text" ? "on" : ""}" onclick="sb.txKind='text';refresh()">Texts <small>${Object.keys(d.texts).length}</small></button><button class="${sb.txKind === "button" ? "on" : ""}" onclick="sb.txKind='button';refresh()">Buttons <small>${Object.keys(d.buttons).length}</small></button></div><input placeholder="search a key or a text…" value="${esc(sb.txQ)}" oninput="sb.txQ=this.value;clearTimeout(qT);qT=setTimeout(refresh,250)"><span class="mut">${Object.keys(ov).length} changed</span><span class="sp"></span><button class="sm" onclick="sb.txData=null;refresh()">↻</button><button class="pri sm" onclick="sbTextsSave()">Save changed</button></div>
+    ${d.hooked || sb.txKind === "button" ? "" : '<div class="gw-out"><b>First save:</b> the bot is made to read the panel\'s text file (one line in its config, checked before it is kept).</div>'}
+    <div class="tx-list">${keys.slice(0, 400).map(k => `<div class="tx-row ${k in ov ? "changed" : ""}"><div class="tx-key"><code>${esc(k)}</code>${k in ov ? `<a class="mut" onclick="sbTextReset('${esc(k)}')">reset</a>` : ""}</div><textarea data-key="${esc(k)}" spellcheck="false" rows="${Math.min(8, Math.max(1, (String(ov[k] ?? base[k]).match(/\n/g) || []).length + 1))}">${esc(ov[k] ?? base[k])}</textarea></div>`).join("")}${keys.length > 400 ? '<div class="mut">narrow the search to see the rest</div>' : ""}</div>`);
+}
+window.sbTextsSave = async () => {
+  const d = sb.txData, base = sb.txKind === "text" ? d.texts : d.buttons, ov = sb.txKind === "text" ? d.text_overrides : d.button_overrides, ch = {};
+  document.querySelectorAll(".tx-list textarea").forEach(t => { const k = t.dataset.key, v = t.value; if (v !== (ov[k] ?? base[k])) ch[k] = v === base[k] ? "" : v; });
+  if (!Object.keys(ch).length) { toast("Nothing changed"); return; }
+  try { await api("/api/shopbot/texts", {method: "PUT", body: JSON.stringify({kind: sb.txKind, changes: ch})}); toast(`✓ ${Object.keys(ch).length} saved — the bot uses them from the next message`, "ok"); sb.txData = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.sbTextReset = async k => { try { await api("/api/shopbot/texts", {method: "PUT", body: JSON.stringify({kind: sb.txKind, changes: {[k]: ""}})}); sb.txData = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* ---- settings (switches, prices, payment details) */
+async function sbSettings() {
+  const d = await api("/api/shopbot/settings"); sb.stData = d;
+  const field = i => i.kind === "onoff" ? `<select name="${i.key}" data-was="${esc(i.value)}"><option value="on" ${i.value === "on" ? "selected" : ""}>on</option><option value="off" ${i.value === "off" || !i.value ? "selected" : ""}>off</option></select>` : `<input name="${i.key}" data-was="${esc(i.value)}" value="${esc(i.value)}" ${i.kind === "number" ? 'inputmode="numeric"' : ""}>`;
+  sbBody(`<form class="sb-set" onsubmit="return sbSettingsSave(event)"><div class="toolbar" style="margin-bottom:6px"><span class="mut">Every switch the bot reads on each message. Only what you change is written.</span><span class="sp"></span><button class="pri sm" type="submit">Save changed</button></div>
+    <div class="grid2">${d.groups.map(g => `<div class="card"><h3>${esc(g.title)}</h3><div class="sb-grid">${g.items.map(i => `<label title="${esc(i.hint)}"><span>${esc(i.label)}${i.hint ? ` <small class="mut">${esc(i.hint)}</small>` : ""}</span>${field(i)}</label>`).join("")}</div></div>`).join("")}
+    <div class="card"><h3>Payment details <small class="mut">— what the bot shows for card to card, and the gateway keys</small></h3><div class="sb-grid">${[["bankAccount", "Card number"], ["holderName", "Card holder"], ["zarinpal", "ZarinPal merchant id"], ["nextpay", "NextPay key"], ["nowpayment", "NowPayments key"], ["tronwallet", "TRON wallet address"]].map(([k, l]) => `<label><span>${l}</span><input name="pk:${k}" data-was="${esc(d.payment_keys[k] || "")}" value="${esc(d.payment_keys[k] || "")}"></label>`).join("")}</div></div>
+    ${Object.keys(d.other).length ? `<div class="card"><h3>Other keys</h3><div class="sb-grid">${Object.entries(d.other).map(([k, v]) => `<label><span><code>${esc(k)}</code></span><input name="${esc(k)}" data-was="${esc(v)}" value="${esc(v)}"></label>`).join("")}</div></div>` : ""}</div></form>`);
+}
+window.sbSettingsSave = async e => {
+  e.preventDefault(); const states = {}, keys = {};
+  e.target.querySelectorAll("input, select").forEach(el => { if (el.value !== el.dataset.was) { if (el.name.startsWith("pk:")) keys[el.name.slice(3)] = el.value; else states[el.name] = el.value; } });
+  if (!Object.keys(states).length && !Object.keys(keys).length) { toast("Nothing changed"); return false; }
+  try { if (Object.keys(states).length) await api("/api/shopbot/settings", {method: "PUT", body: JSON.stringify({changes: states})}); if (Object.keys(keys).length) await api("/api/shopbot/payment-keys", {method: "PUT", body: JSON.stringify({changes: keys})}); toast("✓ Saved: " + [...Object.keys(states), ...Object.keys(keys)].join(", "), "ok"); sb.infoAt = 0; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};
+/* ---- tools: apps list, top-up prices, backups, tables, SQL, stats, service actions */
+async function sbTools() {
+  const tabs = [["backups", "Backups"], ["apps", "Apps list"], ["topups", "Top-up prices"], ["tables", "Tables"], ["sql", "SQL"], ["stats", "Stats"]];
+  sbBody(`<div class="toolbar"><div class="tabs">${tabs.map(([k, l]) => `<button class="${sb.tool === k ? "on" : ""}" onclick="sb.tool='${k}';refresh()">${l}</button>`).join("")}</div><span class="sp"></span>
+      <button class="sm" onclick="sbAct('webhook')">Set webhook</button><button class="sm" onclick="sbCommands()" title="The / command menu of the bot">Set commands</button><button class="sm" onclick="sbAct('restart')">Restart PHP</button><button class="sm" onclick="sbAct('backup')">Dump DB</button><button class="sm" onclick="sbAct('clearlogs')">Clear logs</button></div><div id="sb-tool"></div>`);
+  await ({backups: sbBackups, apps: sbApps, topups: sbTopups, tables: sbTableLoad, sql: sbSqlHtml, stats: sbStatsLoad}[sb.tool] || sbBackups)();
+}
+const sbTool = html => { const b = $("#sb-tool"); if (b) b.innerHTML = html; };
+async function sbBackups() {
+  const r = await api("/api/shopbot/backups");
+  sbTool(`<table class="tbl"><colgroup><col style="width:50%"><col style="width:20%"><col></colgroup><thead><tr><th>Dump</th><th>Size</th><th>Made</th></tr></thead><tbody>${r.backups.map(b => `<tr><td class="mono">${esc(b.name)}</td><td class="num">${(b.size / 1024).toFixed(0)} KB</td><td class="mut">${b.at ? when(b.at) : "—"}</td></tr>`).join("") || '<tr><td colspan="3" class="empty">No dump yet — press Dump DB.</td></tr>'}</tbody></table><small class="mut">On the bot server in /opt/nikabot/backups; the live database is dumped before every import as well.</small>`);
+}
+async function sbApps() {
+  const r = await api("/api/shopbot/apps"); sb.apps = r.apps;
+  sbTool(`<div class="toolbar"><button class="pri sm" onclick="sbAppEdit(null)">＋ Add app</button><span class="mut">the download links the bot offers under “apps”</span></div><table class="tbl"><colgroup><col style="width:30%"><col><col style="width:8%"><col style="width:120px"></colgroup><thead><tr><th>Title</th><th>Link</th><th>On</th><th></th></tr></thead><tbody>${r.apps.map(a => `<tr class="${a.status === "1" ? "up" : "down"}"><td class="name">${esc(a.title)}</td><td class="mono"><a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.link)}</a></td><td>${a.status === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td><td><div class="td-act"><button class="sm" onclick="sbAppEdit(${a.id})">Edit</button><button class="sm danger" onclick="sbAppDel(${a.id})">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="4" class="empty">No app yet.</td></tr>'}</tbody></table>`);
+}
+window.sbAppEdit = id => { const a = (sb.apps || []).find(x => +x.id === +id) || {}; showModal(`<b>${id ? "Edit app" : "New app"}</b>`, `<form class="frm" onsubmit="return sbAppSave(event, ${id || "null"})"><label>Title<input name="title" required value="${esc(a.title || "")}" placeholder="v2rayNG (Android)"></label><label>Link<input name="link" required value="${esc(a.link || "")}" placeholder="https://…"></label><label class="chk"><input name="status" type="checkbox" ${!id || a.status === "1" ? "checked" : ""}> shown</label><div class="frm-act"><button class="pri" type="submit">${id ? "Save" : "Add"}</button></div></form>`); };
+window.sbAppSave = async (e, id) => { e.preventDefault(); const f = formJson(e, [], ["status"]); try { await api(id ? `/api/shopbot/apps/${id}` : "/api/shopbot/apps", {method: id ? "PUT" : "POST", body: JSON.stringify(f)}); toast("✓ Saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.sbAppDel = async id => { if (!await gconfirm("Delete this app link?")) return; try { await api(`/api/shopbot/apps/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+async function sbTopups() {
+  const r = await api("/api/shopbot/topups");
+  const list = (kind, rows, unit) => `<div class="card"><h3>Extra ${unit} <span class="sp"></span><button class="sm pri" onclick="sbTopupNew('${kind}')">＋ Add</button></h3>${rows.map(x => `<div class="gw-row"><span><b>${esc(kind === "volume" ? x.volume : x.days)} ${unit}</b></span><span>${money(x.price)}</span><span><button class="sm danger" onclick="sbTopupDel('${kind}', ${x.id})">Delete</button></span></div>`).join("") || '<div class="mut">none — the bot cannot sell extra ' + unit + '</div>'}</div>`;
+  sbTool(`<div class="grid2">${list("volume", r.volume, "GB")}${list("days", r.days, "days")}</div>`);
+}
+window.sbTopupNew = async kind => { const amount = await gprompt(kind === "volume" ? "How many GB?" : "How many days?", kind === "volume" ? "10" : "30"); if (!amount) return; const price = await gprompt("Price (Toman)", "50000"); if (!price) return; try { await api("/api/shopbot/topups", {method: "POST", body: JSON.stringify({kind, price: +price, amount: +amount})}); toast("✓ Added", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbTopupDel = async (kind, id) => { try { await api(`/api/shopbot/topups/${kind}/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 async function sbTableLoad() {
-  const box = $("#sb-body"); if (!box) return;
+  const box = $("#sb-tool"); if (!box) return;
   const tables = ["users", "orders_list", "pays", "server_plans", "server_config", "server_categories", "discounts", "setting", "send_list", "add_link", "increase_order", "gift_codes", "wheel_log", "cashback_log"];
   let t; try { t = await api(`/api/shopbot/table/${sb.table}?page=${sb.tpage}&q=${encodeURIComponent(sb.tq)}`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   box.innerHTML = `<div class="toolbar"><select onchange="sb.table=this.value;sb.tpage=0;sb.tq='';refresh()">${tables.map(x => `<option ${x === sb.table ? "selected" : ""}>${x}</option>`).join("")}</select><input id="sb-tq" placeholder="filter…" value="${esc(sb.tq)}" oninput="sbTQ(this.value)"><span class="mut">${t.total} rows</span><span class="sp"></span><button class="sm" ${sb.tpage ? "" : "disabled"} onclick="sb.tpage--;refresh()">‹</button><button class="sm" ${(sb.tpage + 1) * 40 < t.total ? "" : "disabled"} onclick="sb.tpage++;refresh()">›</button></div>
-    <div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${t.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${t.rows.map(r => `<tr>${t.columns.map(c => `<td title="${esc(r[c])}" style="max-width:260px">${esc(r[c] == null ? "" : r[c])}</td>`).join("")}</tr>`).join("") || `<tr><td class="mut">empty</td></tr>`}</tbody></table></div>`;
+    <div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${t.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${t.rows.map(r => `<tr>${t.columns.map(c => sbT(c, r[c])).join("")}</tr>`).join("") || `<tr><td class="mut">empty</td></tr>`}</tbody></table></div>`;
   const q = $("#sb-tq"); if (q && sb.tq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
 window.sbTQ = v => { sb.tq = v.trim(); sb.tpage = 0; clearTimeout(qT); qT = setTimeout(refresh, 350); };
 function sbSqlHtml() {
-  const box = $("#sb-body"); if (!box) return;
+  const box = $("#sb-tool"); if (!box) return;
   const r = sb.qres;
   box.innerHTML = `<div class="card"><h3>Read-only SQL <small class="mut">— one SELECT or SHOW; string literals in double quotes; 200 rows max</small></h3><textarea id="sb-sql" class="ob-raw" spellcheck="false" placeholder='SELECT userid, name, wallet FROM users WHERE wallet > 100000 ORDER BY wallet DESC'>${esc(sb.sql)}</textarea><div class="frm-act"><button class="pri" onclick="sbRun()">Run</button></div></div>
-    ${r ? (r.error ? `<div class="err">${esc(r.error)}</div>` : `<div class="mut">${r.rows.length} rows</div><div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${r.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${r.rows.map(x => `<tr>${r.columns.map(c => `<td style="max-width:260px" title="${esc(x[c])}">${esc(x[c] == null ? "" : x[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`) : ""}`;
+    ${r ? (r.error ? `<div class="err">${esc(r.error)}</div>` : `<div class="mut">${r.rows.length} rows</div><div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${r.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${r.rows.map(x => `<tr>${r.columns.map(c => sbT(c, x[c])).join("")}</tr>`).join("")}</tbody></table></div>`) : ""}`;
 }
 window.sbRun = async () => { sb.sql = $("#sb-sql").value; try { sb.qres = await api("/api/shopbot/query", {method: "POST", body: JSON.stringify({sql: sb.sql})}); } catch (e) { sb.qres = {error: e.message}; } sbSqlHtml(); };
 async function sbStatsLoad() {
-  const box = $("#sb-body"); if (!box) return;
+  const box = $("#sb-tool"); if (!box) return;
   let s; try { s = await api("/api/shopbot/stats"); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   const list = (title, rows, f) => `<div class="card"><h3>${title}</h3>${rows.map(r => `<div class="gw-row"><span>${f(r)}</span><span></span><span></span></div>`).join("") || '<div class="mut">nothing</div>'}</div>`;
   box.innerHTML = `<div class="card"><h3>Income per day, 30 days</h3>${spark(s.daily.map(d => +d.income / 1000), {fmt: v => v.toFixed(0) + " k"})}<div class="mut">${s.daily.length ? s.daily[0].day + " → " + s.daily[s.daily.length - 1].day : ""}</div></div>
-    <div class="grid2">${list("Top buyers", s.top_buyers, r => `<b>${esc(r.name || r.userid)}</b> <small class="mut">${r.orders} orders · ${(+r.spent / 1000).toLocaleString()} k</small>`)}${list("Biggest wallets", s.top_wallets, r => `<b>${esc(r.name || r.userid)}</b> <small class="mut">${(+r.wallet / 1000).toLocaleString()} k</small>`)}</div>
-    ${list("Pending payments", s.pending_pays, r => `<b>#${esc(r.id)}</b> ${esc(r.name || r.user_id)} <small class="mut">${(+r.price / 1000).toLocaleString()} k · ${esc(r.type)}</small>`)}`;
+    <div class="grid2">${list("Top buyers", s.top_buyers, r => `<b>${esc(r.name || r.userid)}</b> <small class="mut">${r.orders} orders · ${money(r.spent)}</small>`)}${list("Biggest wallets", s.top_wallets, r => `<b>${esc(r.name || r.userid)}</b> <small class="mut">${money(r.wallet)}</small>`)}</div>`;
 }
-window.sbAct = async act => { const msgs = {webhook: "Point the Telegram webhook at the bot's public URL?", restart: "Restart PHP on the bot server?", backup: "Dump the bot's database to /opt/nikabot/backups?", clearlogs: "Clear the bot's log files?"}; if (!await gconfirm(msgs[act])) return; toast("Working…"); try { const r = await api(`/api/shopbot/action/${act}`, {method: "POST"}); toast((r.done ? "✓ " : "✕ ") + (r.message || act), r.done ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.sbImport = async () => { if (!await gconfirm("Import the real database over the live one?\n\nThe live database is dumped first. Users, orders, payments, plans, panels and settings are replaced; broadcast queues are not copied. The bot then serves the real customers.")) return; toast("Dumping and importing… (1–3 minutes)"); try { const r = await api("/api/shopbot/import-stage", {method: "POST"}); toast(`✓ Imported: ${r.tables.users} users, ${r.tables.orders_list} orders · backup ${r.backup.split("/").pop()}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbAct = async act => { const msgs = {webhook: "Point the Telegram webhook at the bot's public URL?", restart: "Restart PHP on the bot server?", backup: "Dump the bot's database to /opt/nikabot/backups?", clearlogs: "Clear the bot's log files?"}; if (!await gconfirm(msgs[act])) return; toast("Working…"); try { const r = await api(`/api/shopbot/action/${act}`, {method: "POST"}); toast((r.done ? "✓ " : "✕ ") + (r.message || act), r.done ? "ok" : "bad"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbCommands = async () => { if (!await gconfirm("Set the bot's / command menu (start, buy, mysubs, wallet, support, help)?")) return; try { const r = await api("/api/shopbot/commands", {method: "POST"}); toast("✓ Commands set: " + r.commands.join(", "), "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.sbImport = async () => { if (!await gconfirm("Import the real database over the live one?\n\nThe live database is dumped first. Users, orders, payments, plans, panels and settings are replaced; broadcast queues are not copied. The bot then serves the real customers.")) return; toast("Dumping and importing… (1–3 minutes)"); try { const r = await api("/api/shopbot/import-stage", {method: "POST"}); toast(`✓ Imported: ${r.tables.users} users, ${r.tables.orders_list} orders · backup ${r.backup.split("/").pop()}`, "ok"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+
 
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
 const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};

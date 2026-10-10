@@ -122,6 +122,10 @@ def parse_info(out: str) -> dict:
                 d["sales"]["new_users_today"], d["sales"]["new_users_week"] = int(n[0]), int(n[1])
         elif key == "BACKUPS":
             d["backups"] = rest.split()
+        elif key in ("TICKETS", "QUEUE"):
+            d[key.lower()] = int(rest) if rest.strip().isdigit() else 0
+        elif key == "HOOKED":
+            d["texts_hooked"] = rest.strip() not in ("", "0")
 
     return d
 
@@ -171,7 +175,7 @@ def set_states(changes: dict) -> dict:
         if not _KEY.match(str(k)):
             raise ValueError("bad key")
 
-        cur[k] = str(v)[:300]
+        cur[k] = re.sub(r"[\"'`\\\\;]", "", str(v))[:300]      # the value travels inside a quoted SQL literal: no quote may break it
 
     val = json.dumps(cur, ensure_ascii=False)
 
@@ -193,7 +197,7 @@ def find_users(q: str) -> list[dict]:
     if not q:
         return []
 
-    e = re.sub(r"[;'`\\%]", "", q)
+    e = re.sub(r"[;'\"`\\%]", "", q)
     return query(f"SELECT u.id, u.userid, u.name, u.username, u.wallet, u.is_agent, u.discount_percent, u.step, u.phone, u.date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid) AS orders FROM users u WHERE u.userid = \"{e}\" OR u.username LIKE \"%{e}%\" OR u.name LIKE \"%{e}%\" OR u.phone LIKE \"%{e}%\" ORDER BY u.id DESC LIMIT 30")
 
 
@@ -244,7 +248,7 @@ def table(name: str, page: int = 0, q: str = "") -> dict:
 
     if q:
         cols = [r.get("Field") for r in query(f"SHOW COLUMNS FROM {name}")][:12]
-        e = re.sub(r"[;'`\\%]", "", str(q))
+        e = re.sub(r"[;'\"`\\%]", "", str(q))
         where = " WHERE " + " OR ".join(f'{c} LIKE "%{e}%"' for c in cols if c)
 
     total = int(query(f"SELECT COUNT(*) AS n FROM {name}{where}")[0]["n"])

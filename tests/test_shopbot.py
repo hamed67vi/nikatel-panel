@@ -20,6 +20,9 @@ WEEK 80 21000000
 MONTH 300 90000000
 NEWUSERS 4 31
 BACKUPS before-import-1.sql.gz manual-2.sql.gz
+TICKETS 3
+QUEUE 1
+HOOKED 0
 LOG_ERRORS
 [09-Oct] something failed
 LOG_PHP
@@ -34,6 +37,7 @@ def test_parse_info():
     assert d["states"]["wheelState"] == "on" and d["panels"][1]["type"] == "pasarguard"
     assert d["sales"]["week"] == {"orders": 80, "income": 21000000} and d["sales"]["new_users_week"] == 31
     assert d["backups"] == ["before-import-1.sql.gz", "manual-2.sql.gz"] and d["logs"]["errors"] == ["[09-Oct] something failed"]
+    assert d["tickets"] == 3 and d["queue"] == 1 and d["texts_hooked"] is False
 
 
 def test_sql_scripts_accept_only_safe_statements():

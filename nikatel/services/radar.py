@@ -66,19 +66,16 @@ def _one(item) -> dict:
     key, name, group = item
 
     try:
-        r = httpx.get(URL, params={"isp": key}, timeout=15, headers={"user-agent": "nikatel-panel"})
+        r = httpx.get(URL, params={"isp": key}, timeout=8, headers={"user-agent": "nikatel-panel"})
         r.raise_for_status()
         return summarize(key, name, group, r.json())
     except (httpx.HTTPError, ValueError) as e:
         return {**summarize(key, name, group, None), "error": str(e)[:80]}
 
 
-def fetch(force: bool = False) -> dict:
-    with _lock:
-        if not force and _cache["data"] is not None and time.time() - _cache["at"] < TTL:
-            return _cache["data"]
-
-    with ThreadPoolExecutor(6) as ex:
+def _load() -> dict:
+    """Ask the radar for every data centre (all at once) and keep the answer when it is any good."""
+    with ThreadPoolExecutor(len(DCS)) as ex:
         rows = list(ex.map(_one, DCS))
 
     data = {"at": int(time.time()), "source": "https://radar.arvancloud.ir/", "rows": rows,
@@ -87,7 +84,39 @@ def fetch(force: bool = False) -> dict:
     with _lock:
         if not data["error"]:
             _cache.update({"at": time.time(), "data": data})
-        elif _cache["data"] is not None:
-            return {**_cache["data"], "stale": True}
+
+    return data
+
+
+_refreshing = {"on": False}
+
+
+def _refresh_bg() -> None:
+    try:
+        _load()
+    finally:
+        with _lock:
+            _refreshing["on"] = False
+
+
+def fetch(force: bool = False) -> dict:
+    """The last answer at once; when it is older than TTL a background thread fetches a new one (nobody waits for an outside site).
+    Only the very first call, or `force`, waits for the radar itself."""
+    with _lock:
+        cached, age = _cache["data"], time.time() - _cache["at"]
+
+        if cached is not None and not force:
+            if age >= TTL and not _refreshing["on"]:
+                _refreshing["on"] = True
+                threading.Thread(target=_refresh_bg, name="radar-refresh", daemon=True).start()
+
+            return cached if age < TTL else {**cached, "stale": True}
+
+    data = _load()
+
+    if data["error"]:
+        with _lock:
+            if _cache["data"] is not None:
+                return {**_cache["data"], "stale": True}
 
     return data

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..services import settings as st
 from ..services import shopbot
+from ..services import shopbot_admin as adm
 from ..ssh import SSHError
 
 router = APIRouter(tags=["shopbot"], dependencies=[Depends(current_user)])
@@ -112,3 +113,322 @@ def settings_put(body: BotSettings):
 
     st.put("shopbot", body.model_dump())
     return settings_get()
+
+
+# ------------------------------------------------------------------ the shop itself: payments, orders, users
+@router.get("/shopbot/pays")
+def pays(state: str = "pending", page: int = 0, q: str = ""):
+    return {"ok": True, **_wrap(adm.pays, state, page, q)}
+
+
+class Reason(BaseModel):
+    reason: str = Field("", max_length=500)
+
+
+@router.post("/shopbot/pays/{pay_id}/approve")
+def pay_approve(pay_id: int):
+    return {"ok": True, **_wrap(adm.pay_approve, pay_id)}
+
+
+@router.post("/shopbot/pays/{pay_id}/decline")
+def pay_decline(pay_id: int, body: Reason):
+    return {"ok": True, **_wrap(adm.pay_decline, pay_id, body.reason)}
+
+
+@router.get("/shopbot/orders")
+def orders(q: str = "", page: int = 0, active: bool = False):
+    return {"ok": True, **_wrap(adm.orders, q, page, active)}
+
+
+class Active(BaseModel):
+    active: bool
+
+
+@router.put("/shopbot/orders/{order_id}/status")
+def order_status(order_id: int, body: Active):
+    _wrap(adm.order_status, order_id, body.active)
+    return {"ok": True}
+
+
+@router.get("/shopbot/users/{userid}")
+def user_detail(userid: str):
+    return {"ok": True, **_wrap(adm.user_detail, userid)}
+
+
+class Text(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+@router.post("/shopbot/users/{userid}/message")
+def user_message(userid: str, body: Text):
+    return {"ok": True, **_wrap(adm.user_message, userid, body.text)}
+
+
+# ------------------------------------------------------------------ catalogue: plans, categories, servers
+class Fields(BaseModel):
+    fields: dict
+
+
+@router.get("/shopbot/plans")
+def plans():
+    return {"ok": True, "plans": _wrap(adm.plans), "categories": _wrap(adm.categories), "servers": _wrap(adm.servers)}
+
+
+@router.post("/shopbot/plans", status_code=201)
+def plan_add(body: Fields):
+    return {"ok": True, "id": _wrap(adm.plan_save, None, body.fields)}
+
+
+@router.put("/shopbot/plans/{plan_id}")
+def plan_edit(plan_id: int, body: Fields):
+    return {"ok": True, "id": _wrap(adm.plan_save, plan_id, body.fields)}
+
+
+@router.delete("/shopbot/plans/{plan_id}")
+def plan_delete(plan_id: int):
+    _wrap(adm.plan_delete, plan_id)
+    return {"ok": True}
+
+
+class CategoryIn(BaseModel):
+    title: str = Field(min_length=1, max_length=50)
+    parent: int = 0
+    active: bool = True
+
+
+@router.get("/shopbot/categories")
+def categories():
+    return {"ok": True, "categories": _wrap(adm.categories)}
+
+
+@router.post("/shopbot/categories", status_code=201)
+def category_add(body: CategoryIn):
+    return {"ok": True, "id": _wrap(adm.category_save, None, body.title, body.parent, int(body.active))}
+
+
+@router.put("/shopbot/categories/{cat_id}")
+def category_edit(cat_id: int, body: CategoryIn):
+    return {"ok": True, "id": _wrap(adm.category_save, cat_id, body.title, body.parent, int(body.active))}
+
+
+@router.delete("/shopbot/categories/{cat_id}")
+def category_delete(cat_id: int):
+    _wrap(adm.category_delete, cat_id)
+    return {"ok": True}
+
+
+class ServerIn(BaseModel):
+    info: dict = Field(default_factory=dict)
+    config: dict = Field(default_factory=dict)
+
+
+@router.get("/shopbot/servers")
+def servers():
+    return {"ok": True, "servers": _wrap(adm.servers), "panels": _wrap(adm.panels_known)}
+
+
+@router.post("/shopbot/servers", status_code=201)
+def server_add(body: ServerIn):
+    return {"ok": True, "id": _wrap(adm.server_save, None, body.info, body.config)}
+
+
+@router.put("/shopbot/servers/{server_id}")
+def server_edit(server_id: int, body: ServerIn):
+    return {"ok": True, "id": _wrap(adm.server_save, server_id, body.info, body.config)}
+
+
+@router.delete("/shopbot/servers/{server_id}")
+def server_delete(server_id: int):
+    _wrap(adm.server_delete, server_id)
+    return {"ok": True}
+
+
+class FromPanel(BaseModel):
+    panel_id: int
+    title: str = Field("", max_length=200)
+    ucount: int = 1000
+
+
+@router.post("/shopbot/servers/from-panel", status_code=201)
+def server_from_panel(body: FromPanel):
+    return {"ok": True, "id": _wrap(adm.server_from_panel, body.panel_id, body.title, body.ucount)}
+
+
+# ------------------------------------------------------------------ discounts, gift codes, broadcasts
+@router.get("/shopbot/discounts")
+def discounts():
+    return {"ok": True, "discounts": _wrap(adm.discounts)}
+
+
+@router.post("/shopbot/discounts", status_code=201)
+def discount_add(body: Fields):
+    return {"ok": True, "id": _wrap(adm.discount_save, None, body.fields)}
+
+
+@router.put("/shopbot/discounts/{disc_id}")
+def discount_edit(disc_id: int, body: Fields):
+    return {"ok": True, "id": _wrap(adm.discount_save, disc_id, body.fields)}
+
+
+@router.delete("/shopbot/discounts/{disc_id}")
+def discount_delete(disc_id: int):
+    _wrap(adm.discount_delete, disc_id)
+    return {"ok": True}
+
+
+class GiftIn(BaseModel):
+    code: str = Field("", max_length=40)
+    amount: int
+    max_uses: int = 1
+    days: int = 0
+    note: str = Field("", max_length=190)
+
+
+@router.get("/shopbot/gifts")
+def gifts():
+    return {"ok": True, "gifts": _wrap(adm.gifts)}
+
+
+@router.post("/shopbot/gifts", status_code=201)
+def gift_add(body: GiftIn):
+    return {"ok": True, "id": _wrap(adm.gift_save, body.code, body.amount, body.max_uses, body.days, body.note)}
+
+
+@router.delete("/shopbot/gifts/{gift_id}")
+def gift_delete(gift_id: int):
+    _wrap(adm.gift_delete, gift_id)
+    return {"ok": True}
+
+
+class BroadcastIn(BaseModel):
+    title: str = Field("", max_length=200)
+    text: str = Field(min_length=1, max_length=4000)
+    group: str = "all"
+
+
+@router.get("/shopbot/broadcasts")
+def broadcasts():
+    return {"ok": True, "broadcasts": _wrap(adm.broadcasts), "groups": adm.GROUPS}
+
+
+@router.post("/shopbot/broadcasts", status_code=201)
+def broadcast_add(body: BroadcastIn):
+    return {"ok": True, "id": _wrap(adm.broadcast_create, body.title, body.text, body.group)}
+
+
+@router.post("/shopbot/broadcasts/{bid}/cancel")
+def broadcast_cancel(bid: int):
+    _wrap(adm.broadcast_cancel, bid)
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ tickets
+@router.get("/shopbot/tickets")
+def tickets(state: str = "open", page: int = 0):
+    return {"ok": True, **_wrap(adm.tickets, state, page)}
+
+
+@router.get("/shopbot/tickets/{chat_id}")
+def ticket_messages(chat_id: int):
+    return {"ok": True, "messages": _wrap(adm.ticket_messages, chat_id)}
+
+
+@router.post("/shopbot/tickets/{chat_id}/reply")
+def ticket_reply(chat_id: int, body: Text):
+    return {"ok": True, **_wrap(adm.ticket_reply, chat_id, body.text)}
+
+
+@router.post("/shopbot/tickets/{chat_id}/close")
+def ticket_close(chat_id: int):
+    _wrap(adm.ticket_close, chat_id)
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ texts, settings documents, apps, top-ups, backups, tools
+@router.get("/shopbot/texts")
+def texts():
+    return {"ok": True, **_wrap(adm.texts)}
+
+
+class TextChanges(BaseModel):
+    kind: str = Field(pattern=r"^(text|button)$")
+    changes: dict
+
+
+@router.put("/shopbot/texts")
+def texts_set(body: TextChanges):
+    return {"ok": True, **_wrap(adm.texts_set, body.kind, body.changes)}
+
+
+@router.get("/shopbot/settings")
+def bot_settings():
+    return {"ok": True, **_wrap(adm.states_structured), "payment_keys": _wrap(adm.payment_keys_get)}
+
+
+@router.put("/shopbot/settings")
+def bot_settings_set(body: States):
+    return {"ok": True, "states": _wrap(adm.states_set, body.changes)}
+
+
+@router.put("/shopbot/payment-keys")
+def payment_keys_set(body: States):
+    return {"ok": True, "payment_keys": _wrap(adm.payment_keys_set, body.changes)}
+
+
+class AppIn(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    link: str = Field(min_length=8, max_length=250)
+    status: bool = True
+
+
+@router.get("/shopbot/apps")
+def apps():
+    return {"ok": True, "apps": _wrap(adm.apps)}
+
+
+@router.post("/shopbot/apps", status_code=201)
+def app_add(body: AppIn):
+    return {"ok": True, "id": _wrap(adm.app_save, None, body.title, body.link, int(body.status))}
+
+
+@router.put("/shopbot/apps/{app_id}")
+def app_edit(app_id: int, body: AppIn):
+    return {"ok": True, "id": _wrap(adm.app_save, app_id, body.title, body.link, int(body.status))}
+
+
+@router.delete("/shopbot/apps/{app_id}")
+def app_delete(app_id: int):
+    _wrap(adm.app_delete, app_id)
+    return {"ok": True}
+
+
+class TopupIn(BaseModel):
+    kind: str = Field(pattern=r"^(volume|days)$")
+    price: int
+    amount: float
+
+
+@router.get("/shopbot/topups")
+def topups():
+    return {"ok": True, **_wrap(adm.topups)}
+
+
+@router.post("/shopbot/topups", status_code=201)
+def topup_add(body: TopupIn):
+    return {"ok": True, "id": _wrap(adm.topup_save, body.kind, body.price, body.amount)}
+
+
+@router.delete("/shopbot/topups/{kind}/{row_id}")
+def topup_delete(kind: str, row_id: int):
+    _wrap(adm.topup_delete, kind, row_id)
+    return {"ok": True}
+
+
+@router.get("/shopbot/backups")
+def backups():
+    return {"ok": True, "backups": _wrap(adm.backups)}
+
+
+@router.post("/shopbot/commands")
+def set_commands():
+    return {"ok": True, **_wrap(adm.set_commands)}
