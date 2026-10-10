@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.6 - 2026-10-10 - connecting… / installing…
+
+* A new server's row says **connecting…** while the password login runs and **installing…** (with what: torrent block, Marzban node) while the installs run, instead of a dash; the list looks again every 3 seconds until it is done.
+
 ## 1.11.5 - 2026-10-10 - Test tunnels leave no trace in the lists
 
 * The temporary test tunnels (test-N) are not listed, not checked, not repaired and no longer write *built* events; the tests themselves run exactly as before (build, measure, remove).

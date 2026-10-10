@@ -53,6 +53,11 @@ def _set_extra(server_id: int, **kw) -> None:
             s.extra = d
 
 
+def set_busy(server_id: int, what: str = "", detail: str = "") -> None:
+    """What the panel is doing with this server right now (connecting, installing): shown in the list instead of a dash. Empty `what` clears it."""
+    _set_extra(server_id, busy=({"what": what, "detail": detail, "at": int(time.time())} if what else None))
+
+
 # ------------------------------------------------------------------ console
 def console(server_id: int, command: str) -> dict:
     """Run one command on a server (read-write mode only). Every command is logged with the server name."""
@@ -93,6 +98,19 @@ def _pubkey() -> str:
 
 
 def connect(server_id: int, password: str) -> dict:
+    """Connect with the SSH password; the list shows *connecting…* meanwhile."""
+    if not password:
+        raise ValueError("enter the SSH password of the server")
+
+    set_busy(server_id, "connecting")
+
+    try:
+        return _connect(server_id, password)
+    finally:
+        set_busy(server_id, "")
+
+
+def _connect(server_id: int, password: str) -> dict:
     """Put the panel's public key on the server using the SSH password once (sshpass); the password is not kept."""
     if not password:
         raise ValueError("enter the SSH password of the server")

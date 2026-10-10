@@ -86,14 +86,21 @@ def start(server_id: int, items: list[str], cert: str = "") -> int:
     cert = check_cert(cert) if "marzban_node" in items else ""
 
     def work(aid: int) -> None:
+        from . import nodes
+
         autopilot._say(aid, f"Installing on {name}: " + ", ".join(LABEL[i] for i in items))
         results = {}
 
-        if "btblock" in items:
-            results["btblock"] = _install_bt(aid, node)
+        try:
+            if "btblock" in items:
+                nodes.set_busy(server_id, "installing", LABEL["btblock"])
+                results["btblock"] = _install_bt(aid, node)
 
-        if "marzban_node" in items:
-            results["marzban_node"] = _install_node(aid, node, ip, cert)
+            if "marzban_node" in items:
+                nodes.set_busy(server_id, "installing", LABEL["marzban_node"])
+                results["marzban_node"] = _install_node(aid, node, ip, cert)
+        finally:
+            nodes.set_busy(server_id, "")
 
         ok = all(results.values())
 

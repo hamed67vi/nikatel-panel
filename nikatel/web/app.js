@@ -337,6 +337,8 @@ const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(
 const srvSev = s => { if (!s.enabled) return ""; const f = s.facts || {}; if (s.online === false || noLogin(s) || (f.cpu || 0) >= 92 || (f.ram || 0) >= 92 || (f.disk || 0) >= 95) return "sev-red"; return (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };
 const SHOW_LOSS = 20;   // packet loss under this is normal for the Iran-abroad paths: not shown, not coloured
 const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.state === "down") return "sev-red"; return t.state === "unknown" || t.state === "starting" || loss >= SHOW_LOSS ? "sev-yellow" : ""; };
+/* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
+const srvBusy = s => { const b = (s.extra || {}).busy; return b && b.what && Date.now() / 1000 - b.at < 900 ? b : null; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
@@ -366,12 +368,13 @@ PAGES.servers = async () => {
   const chips = s => (byIp[s.host] || []).map(x => { const ok = x.status === "connected"; return `<span class="mchip ${ok ? "ok" : "bad"}" title="Node ${esc(x.name)} in panel ${esc(x.panel)}: ${esc(x.status || "?")}">${esc(x.panel)}</span>`; }).join("");
   const pbar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<div class="pbar"><span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b>${v}%</b></div>`;
   const foreignTab = state.tab === "foreign";
+  if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (state.page === "nodes") refresh(); }, 3000); }
   const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = (!s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
-      <td>${noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
+      <td>${srvBusy(s) ? `<span class="busy-chip"><i class="spin"></i>${esc(srvBusy(s).what)}…</span>${srvBusy(s).detail ? `<small class="mut td-err">${esc(srvBusy(s).detail)}</small>` : ""}` : noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono">${esc(s.host)}</td><td>${greCell(s)}</td>
@@ -574,6 +577,7 @@ window.saveServer = async (e, id) => {
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;
+    if (!id) refresh();          // the new row appears at once; it says "connecting…" while the password login runs
     let connected = true;
     if (id && !pw) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)

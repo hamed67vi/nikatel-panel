@@ -133,3 +133,22 @@ def test_change_password_action_and_api(client, monkeypatch):
     assert base64.b64decode(seen["params"]["B64"]).decode() == "root:N3w-strong-pass"
     monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90: "BAD_USER\n")
     assert client.post(f"/api/servers/{sid}/password", json={"password": "N3w-strong-pass"}).status_code == 502
+
+
+def test_the_server_row_says_what_the_panel_is_doing(client, monkeypatch):
+    from nikatel.services import nodes
+
+    sid = _server()
+    seen = []
+
+    def spy(server_id, what="", detail=""):
+        seen.append(what)
+
+    monkeypatch.setattr(nodes, "set_busy", spy)
+    monkeypatch.setattr(nodes, "_connect", lambda server_id, password: {"hostname": "h"})
+    assert nodes.connect(sid, "pw") == {"hostname": "h"} and seen == ["connecting", ""]                  # set, then cleared
+    monkeypatch.undo()
+    nodes.set_busy(sid, "installing", "Marzban node")
+    assert client.get(f"/api/servers/{sid}").json()["extra"]["busy"]["what"] == "installing"
+    nodes.set_busy(sid, "")
+    assert client.get(f"/api/servers/{sid}").json()["extra"]["busy"] is None
