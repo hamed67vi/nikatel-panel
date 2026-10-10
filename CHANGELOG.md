@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.13 - 2026-10-11 - 3D gold button, no numbers in the menu
+
+* The primary button (Create tunnel and the others like it) has dark text on gold so it reads, a raised 3D look, a light sweep on hover, grows a little when the mouse is on it and sinks when pressed.
+* The numbers beside Nodes, Tunnels and Panels in the left menu are gone.
+
 ## 1.14.12 - 2026-10-11 - Nodes: Iran and Foreign are separate pages again
 
 * Undone on request: the single mixed Servers list of 1.14.11. Iran and Foreign are separate tabs at the top again; the buttons and the search stay in one line, with All / Problems on the right of that box.

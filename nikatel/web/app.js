@@ -293,7 +293,7 @@ PAGES.dashboard = async () => {
   const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.serversCache = srv;
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
-  $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
+ 
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
   const clean = checked.filter(s => s.extra.iran_filter.level === "clean"), bad = checked.filter(s => ["filtered", "blocked"].includes(s.extra.iran_filter.level));
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
@@ -1336,7 +1336,7 @@ const pingCls = v => v == null ? "mut" : v < 800 ? "ok" : v < 1000 ? "warn" : "b
 const mb = v => v == null ? "—" : Number(v).toFixed(v >= 100 ? 0 : 1);
 PAGES.configsList = async () => {
   const [d, subs, tl] = await Promise.all([api("/api/configs"), api("/api/subscriptions"), api("/api/tunnels").catch(() => [])]);
-  $("#n-configs").textContent = d.configs.length;
+  
   const names = [...new Set([...subs.subscriptions.map(s => s.name), ...d.configs.map(c => c.group).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
   if (cf.group !== "__all" && !names.includes(cf.group)) cf.group = "__all";
   const searched = d.configs;     // the search hides rows / cards at once (applyQ), it does not redraw
