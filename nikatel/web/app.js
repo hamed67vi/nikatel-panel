@@ -1551,9 +1551,20 @@ window.sbMsg = async uid => { const text = await gprompt(`Message to ${uid} (sen
 async function sbPlans() {
   const r = await api("/api/shopbot/plans");
   sb.cats = r.categories; sb.servers = r.servers;
-  sbBody(`<div class="toolbar"><button class="pri" onclick="sbPlanEdit(null)">＋ Add plan</button><span class="mut">${r.plans.length} plans · ${r.plans.filter(p => p.active === "1").length} active</span></div>
-    <table class="tbl"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:13%"><col style="width:13%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:7%"><col style="width:6%"><col></colgroup><thead><tr><th>#</th><th>Plan</th><th>Category</th><th>Server</th><th>Days</th><th>GB</th><th>Price</th><th>Sold</th><th>On</th><th></th></tr></thead>
-    <tbody>${r.plans.map(p => `<tr class="${p.active === "1" ? "up" : "down"}"><td class="num">${esc(p.id)}</td><td class="name">${esc(p.title)}${p.descr && p.descr !== "NULL" ? ` <small class="mut" title="${esc(p.descr)}">${esc(p.descr.slice(0, 40))}</small>` : ""}</td><td>${esc(p.category || p.catid)}</td><td>${esc(p.server || p.server_id)}</td><td class="num">${esc(p.days)}</td><td class="num">${esc(p.volume)}</td><td class="num"><b>${money(p.price)}</b></td><td class="num">${esc(p.sold)}</td><td>${p.active === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td>
+  const lastP = r.plans[r.plans.length - 1] || {}, pre = (list, cur) => list.includes(String(cur)) ? "" : "selected";
+  const DAYS = [1, 7, 15, 30, 60, 90, 180, 365], GBS = [1, 5, 10, 20, 30, 50, 100, 200, 500];
+  sbBody(`<div class="card sb-quick"><h3>Add a plan to the bot <small class="mut">pick the category, time and volume — it appears in the Telegram bot and the Mini App at once</small></h3>
+      <form class="qa-row" onsubmit="return sbQuickPlan(event)">
+        <label>Category<span class="qa-cat">${sel("catid", (r.categories || []).map(c => [c.id, c.title]), lastP.catid, "— none —")}<button type="button" class="sm" onclick="sbCatQuick()" title="Make a new category">＋</button></span></label>
+        <label>Server${sel("server_id", (r.servers || []).map(s => [s.id, s.title]), lastP.server_id)}</label>
+        <label>Time<select name="days">${DAYS.map(d => `<option value="${d}" ${d === 30 ? "selected" : ""}>${d} days</option>`).join("")}<option value="0">no limit</option></select></label>
+        <label>Volume<select name="volume">${GBS.map(g => `<option value="${g}" ${g === 20 ? "selected" : ""}>${g} GB</option>`).join("")}<option value="0">unlimited</option></select></label>
+        <label>Price (Toman)<input name="price" type="number" min="0" step="1000" required placeholder="150000"></label>
+        <button class="pri" type="submit">＋ Add</button></form>
+      <small class="mut">The title is made for you (“۲۰ گیگ · ۳۰ روز”); use Edit afterwards for a custom title, description or stock. The panel settings are copied from the other plans of the same server.</small></div>
+    <div class="toolbar"><span class="mut">${r.plans.length} plans · ${r.plans.filter(p => p.active === "1").length} active</span><span class="sp"></span><button class="sm" onclick="sbPlanEdit(null)">Detailed form…</button></div>
+    <table class="tbl"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:7%"><col style="width:10%"><col style="width:6%"><col style="width:5%"><col style="width:190px"></colgroup><thead><tr><th>#</th><th>Plan</th><th>Category</th><th>Server</th><th>Days</th><th>GB</th><th>Price</th><th>Sold</th><th>On</th><th></th></tr></thead>
+    <tbody>${r.plans.map(p => `<tr class="${p.active === "1" ? "up" : "down"}"><td class="num">${esc(p.id)}</td><td class="name">${esc(p.title)}${p.descr && p.descr !== "NULL" ? ` <small class="mut" title="${esc(p.descr)}">${esc(p.descr.slice(0, 40))}</small>` : ""}</td><td>${p.category && p.category !== "NULL" ? esc(p.category) : '<span class="mut">— none —</span>'}</td><td>${esc(p.server || p.server_id)}</td><td class="num">${+p.days ? esc(p.days) : "∞"}</td><td class="num">${+p.volume ? esc(p.volume) : "∞"}</td><td class="num"><b>${money(p.price)}</b></td><td class="num">${esc(p.sold)}</td><td>${p.active === "1" ? '<b class="gw-ok">✓</b>' : '<span class="mut">off</span>'}</td>
       <td><div class="td-act"><button class="sm" onclick="sbPlanEdit(${p.id})">Edit</button><button class="sm" onclick="sbPlanToggle(${p.id}, ${p.active === "1" ? 0 : 1})">${p.active === "1" ? "Off" : "On"}</button><button class="sm danger" onclick="sbPlanDel(${p.id}, '${esc(p.title)}')">Delete</button></div></td></tr>`).join("") || '<tr><td colspan="10" class="empty">No plan yet.</td></tr>'}</tbody></table>`);
   sb.plans = r.plans;
 }
@@ -1575,6 +1586,16 @@ window.sbPlanEdit = id => {
     <div class="frm-act"><button class="pri" type="submit">${id ? "Save" : "Add plan"}</button></div></form>`);
 };
 window.sbPlanSave = async (e, id) => { e.preventDefault(); const f = formJson(e, ["catid", "server_id", "days", "volume", "price", "acount", "limitip"], ["active"]); try { await api(id ? `/api/shopbot/plans/${id}` : "/api/shopbot/plans", {method: id ? "PUT" : "POST", body: JSON.stringify({fields: f})}); toast("✓ Plan saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+const FA = n => String(n).replace(/\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]);
+window.sbQuickPlan = async e => {   // category + server + time + volume + price -> a complete plan (title, panel settings and type copied from a plan of the same server)
+  e.preventDefault(); const f = formJson(e, ["catid", "server_id", "days", "volume", "price"]);
+  if (!f.server_id) { toast("✕ Pick the server (panel) the account is made on", "bad"); return false; }
+  const srv = (sb.servers || []).find(s => +s.id === f.server_id) || {}, tpl = (sb.plans || []).find(p => +p.server_id === f.server_id && p.custom_sni && p.custom_sni !== "NULL") || {};
+  const fields = {title: `${f.volume ? FA(f.volume) + " گیگ" : "نامحدود"} · ${f.days ? FA(f.days) + " روز" : "بدون محدودیت زمان"}`, catid: f.catid, server_id: f.server_id, days: f.days, volume: f.volume, price: f.price, acount: 1000, limitip: 0, active: 1,
+    type: tpl.type || (["marzban", "pasarguard", "marzneshin"].includes(srv.type) ? "marzban" : "normal"), protocol: tpl.protocol || "vless", inbound_id: 0, custom_sni: tpl.custom_sni || ""};
+  try { await api("/api/shopbot/plans", {method: "POST", body: JSON.stringify({fields})}); toast("✓ Plan added to the bot", "ok"); sb.plans = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false;
+};
+window.sbCatQuick = async () => { const title = await gprompt("Name of the new category (what the customer sees):", ""); if (!title) return; try { await api("/api/shopbot/categories", {method: "POST", body: JSON.stringify({title, parent: 0, active: true})}); toast("✓ Category added", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.sbPlanToggle = async (id, active) => { try { await api(`/api/shopbot/plans/${id}`, {method: "PUT", body: JSON.stringify({fields: {active}})}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.sbPlanDel = async (id, title) => { if (!await gconfirm(`Delete the plan ${title}? Existing subscriptions are not touched.`)) return; try { await api(`/api/shopbot/plans/${id}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* ---- categories */

@@ -510,6 +510,14 @@ button::after { transition: opacity .3s ease; }
 /* ---- shop bot: tabs that wrap, settings grid, texts editor, ticket thread */
 .sb-tabs { flex-wrap: wrap; margin-bottom: 10px; } .sb-tabs button small { margin-left: 4px; padding: 0 5px; border-radius: 999px; background: rgba(255,255,255,.18); font-size: 10px; }
 .sb-top .pill { margin-right: 2px; }
+/* the bot section: one size for tabs, toolbar buttons and row buttons, nothing clipped */
+.sb-tabs { gap: 4px; padding: 4px; } .sb-tabs button { height: 30px; padding: 0 12px; font-size: 12.5px; border-radius: 10px; }
+.page .toolbar button, .sb-quick button { height: 32px; font-size: 12.5px; padding: 0 14px; } .page .toolbar button.sm { height: 28px; padding: 0 11px; font-size: 12px; }
+.td-act { min-width: max-content; } .td-act button.sm { height: 26px; min-width: 46px; padding: 0 10px; font-size: 11.5px; }
+.sb-quick h3 small { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; }
+.qa-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 10px; align-items: end; margin: 6px 0 8px; } .qa-row label { display: grid; gap: 4px; font-size: 11.5px; color: var(--mut); min-width: 0; }
+.qa-row select, .qa-row input { height: 34px; font-size: 13px; } .qa-cat { display: flex; gap: 6px; } .qa-cat select { flex: 1; min-width: 0; } .qa-cat button { height: 34px; width: 34px; padding: 0; flex: none; }
+@media (max-width: 980px) { .qa-row { grid-template-columns: 1fr 1fr; } .qa-row > button { grid-column: 1 / -1; } }
 .sb-grid { display: grid; grid-template-columns: 1fr; gap: 6px; } .sb-grid label { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(120px, .9fr); align-items: center; gap: 10px; font-size: 12.5px; }
 .sb-grid label span small { display: block; font-size: 10.5px; } .sb-grid input, .sb-grid select { height: 30px; font-size: 12.5px; }
 .sb-acts { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }

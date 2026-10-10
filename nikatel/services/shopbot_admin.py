@@ -256,7 +256,7 @@ def user_message(userid: str, text: str) -> dict:
 
 
 # ------------------------------------------------------------------ plans
-PLAN_FIELDS = {"title": str, "catid": int, "server_id": int, "days": float, "volume": float, "price": int, "acount": int, "limitip": int, "active": int, "descr": str, "type": str, "protocol": str, "inbound_id": int, "step": int, "custom_sni": str}
+PLAN_FIELDS = {"title": str, "catid": int, "server_id": int, "days": float, "volume": float, "price": int, "acount": int, "limitip": int, "active": int, "descr": str, "type": str, "protocol": str, "inbound_id": int, "step": int, "custom_sni": str, "fileid": str, "pic": str, "custom_port": int}
 
 
 def plans() -> list[dict]:
@@ -294,6 +294,14 @@ def plan_save(plan_id: int | None, fields: dict) -> int:
         f.setdefault("step", 5)
         f.setdefault("type", "normal")
         f.setdefault("limitip", 1)
+        f.setdefault("protocol", "vless")
+        f.setdefault("inbound_id", 0)
+        f.setdefault("catid", 0)
+
+        for k in ("fileid", "pic"):   # NOT NULL columns without a default in the bot's schema
+            f.setdefault(k, "")
+
+        f.setdefault("custom_port", 0)
         cols = ", ".join(ident(k) for k in f) + ", date"
         vals = ", ".join(lit(v) for v in f.values()) + f", {int(time.time())}"
         write(f"INSERT INTO server_plans ({cols}) VALUES ({vals})")
