@@ -122,7 +122,7 @@ def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
         db.flush()
         aid = entry.id
 
-    threading.Thread(target=_worker, args=(aid, build_aid, name), name=f"tunnel-test-{name}", daemon=True).start()
+    threading.Thread(target=_worker, args=(aid, build_aid, name, iran_id, foreign_id), name=f"tunnel-test-{name}", daemon=True).start()
     return aid
 
 
@@ -142,7 +142,7 @@ def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) 
     log.info("tunnel test #%s: %s", aid, line)
 
 
-def _worker(aid: int, build_aid: int, name: str) -> None:
+def _worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign_id: int = 0) -> None:
     """Measure, then remove, then mark the test as done - so 'done' always means 'nothing is left behind'."""
     ok: bool | None = False
     verdict = ""
@@ -154,16 +154,21 @@ def _worker(aid: int, build_aid: int, name: str) -> None:
         verdict = f"Stopped: {str(e)[:160]}"
         ok = False
     finally:
-        _cleanup(aid, name)
+        _cleanup(aid, name, iran_id, foreign_id)
         _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 
-def _cleanup(aid: int, name: str) -> None:
+def _cleanup(aid: int, name: str, iran_id: int = 0, foreign_id: int = 0) -> None:
+    """Remove the temporary tunnel: the one with the test's name and - should the builder have given it another name - any tunnel
+    of the pair that forwards only the test port."""
     with session() as db:
-        t = db.scalar(select(Tunnel).where(Tunnel.name == name))
-        tid = t.id if t else None
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.name == name))]
 
-    if tid is not None:
+        if iran_id and foreign_id:
+            ids += [t.id for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == iran_id, Tunnel.foreign_server_id == foreign_id))
+                    if t.id not in ids and [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()] == [TEST_PORT]]
+
+    for tid in ids:
         try:
             res = builder.delete_tunnel(tid)
             _say(aid, "Removed the temporary tunnel: " + "; ".join(res))
@@ -290,11 +295,11 @@ def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full")
         db.flush()
         aid = entry.id
 
-    threading.Thread(target=_other_worker, args=(aid, build_aid, name), name=f"tunnel-test-{name}", daemon=True).start()
+    threading.Thread(target=_other_worker, args=(aid, build_aid, name, iran_id, foreign_id), name=f"tunnel-test-{name}", daemon=True).start()
     return aid
 
 
-def _other_worker(aid: int, build_aid: int, name: str) -> None:
+def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign_id: int = 0) -> None:
     ok: bool | None = False
     verdict = ""
 
@@ -327,7 +332,7 @@ def _other_worker(aid: int, build_aid: int, name: str) -> None:
         log.exception("tunnel test #%s crashed", aid)
         verdict, ok = f"Stopped: {str(e)[:160]}", False
     finally:
-        _cleanup(aid, name)
+        _cleanup(aid, name, iran_id, foreign_id)
         _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 

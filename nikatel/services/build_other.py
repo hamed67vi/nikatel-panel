@@ -497,8 +497,41 @@ def _rollback(b: Build) -> None:
             log.warning("rollback on %s failed: %s", node.host, e)
 
 
+def _owns(unit: str, eng: str, name: str) -> bool:
+    """Is this unit (with or without .service) one of the two units of the tunnel `name` built by engine `eng`?"""
+    return unit in (f"{eng}-{name}", f"{eng}-{name}-kharej") or unit.startswith((f"{eng}-{name}.", f"{eng}-{name}-kharej."))
+
+
+def _clear_leftovers(b: Build, iran: Node, foreign: Node, fi: dict, ff: dict) -> tuple[dict, dict]:
+    """A forced name (a temporary test, a rebuild under the same name) must stay. Units of that name still on a server from an
+    interrupted earlier run are orphans - no tunnel in the list carries the name - and are removed before the ports are checked,
+    so that neither the name nor the ports they hold get in the way."""
+    if not b.name:
+        return fi, ff
+
+    with session() as db:
+        if db.scalar(select(Tunnel).where(Tunnel.name == b.name)) is not None:
+            return fi, ff
+
+    eng = _engine(b.kind)
+    sides = [(label, node) for label, node, f in (("Iran", iran, fi), ("foreign", foreign, ff)) if any(_owns(u, eng, b.name) for u in f["units"])]
+
+    if not sides:
+        return fi, ff
+
+    for _, node in sides:
+        run_action(node, "other_remove", {"NAME": b.name, "KIND": eng, "PORT": "0", "PROTO": "tcp"}, timeout=90)
+
+    _say(b.aid, "Leftovers of an interrupted earlier run removed first on the " + " and ".join(label for label, _ in sides) + " side")
+    labels = {label for label, _ in sides}
+    fi = parse_simple_facts(run_script(iran, "simple_facts", timeout=45)) if "Iran" in labels else fi
+    ff = parse_simple_facts(run_script(foreign, "simple_facts", timeout=45)) if "foreign" in labels else ff
+    return fi, ff
+
+
 def _preflight(b: Build, iran: Node, foreign: Node) -> tuple[dict, dict]:
     fi, ff = parse_simple_facts(run_script(iran, "simple_facts", timeout=45)), parse_simple_facts(run_script(foreign, "simple_facts", timeout=45))
+    fi, ff = _clear_leftovers(b, iran, foreign, fi, ff)
 
     for label, f, srv in (("Iran", fi, b.iran), ("Foreign", ff, b.foreign)):
         if not f["root"]:
@@ -525,13 +558,13 @@ def _plan(b: Build, fi: dict, ff: dict) -> None:
         used_ports = {int(t.port or 0) for t in rows} | {int((t.record or {}).get("test_port") or 0) for t in rows}
         used_nets = {int((t.record or {}).get("inner_net") or 0) for t in rows}
 
-    if not b.name:
-        b.name = pretty_name(b.foreign.name, b.iran.name, taken_names)
-
     eng = _engine(b.kind)
 
-    while any(u.startswith(f"{eng}-{b.name}") for u in fi["units"] + ff["units"]):
-        b.name = pretty_name(b.foreign.name, b.iran.name, taken_names | {b.name})
+    if not b.name:          # a forced name (a test, a rebuild under the same name) is kept: its leftovers were removed in the preflight
+        b.name = pretty_name(b.foreign.name, b.iran.name, taken_names)
+
+        while any(_owns(u, eng, b.name) for u in fi["units"] + ff["units"]):
+            b.name = pretty_name(b.foreign.name, b.iran.name, taken_names | {b.name})
 
     taken_i = fi["tcp"] | fi["udp"] | used_ports | {p.listen for p in b.ports}
     taken_f = ff["tcp"] | ff["udp"] | used_ports

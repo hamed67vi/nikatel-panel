@@ -34,3 +34,28 @@ def test_speed_sink_is_validated():
 def test_tunnel_test_api_read_only(client):
     r = client.post("/api/tunnel-test", json={"iran_id": 1, "foreign_id": 2})
     assert r.status_code == 400 and "read-only" in r.json()["detail"]
+
+
+def test_cleanup_also_removes_a_renamed_temporary_tunnel(monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import ActionLog, Server, Tunnel
+    from nikatel.services import builder, tunnel_test
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        db.add(Tunnel(name="f1-i1-2", type="backpack", iran_server_id=a.id, foreign_server_id=b.id, forwarded_ports=[tunnel_test.TEST_PORT]))   # the test's tunnel under another name
+        db.add(Tunnel(name="f1-i1", type="backhaul", iran_server_id=a.id, foreign_server_id=b.id, forwarded_ports=[80]))                           # a real one
+        e = ActionLog(ref="nkt1", action="tunnel_test", source="manual", story=[])
+        db.add(e)
+        db.flush()
+        aid, ia, ib = e.id, a.id, b.id
+
+    gone = []
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, keep_record=False: gone.append(tid) or ["Iran: removed", "foreign: removed"])
+    tunnel_test._cleanup(aid, "nkt1", ia, ib)
+
+    with session() as db:
+        assert {db.get(Tunnel, t).name for t in gone} == {"f1-i1-2"}
+        assert "Removed the temporary tunnel" in db.get(ActionLog, aid).story[-1]

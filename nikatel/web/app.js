@@ -956,11 +956,13 @@ const foForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
   <details class="mut" style="margin-top:6px"><summary>How to get the key</summary><ol style="margin:6px 18px;line-height:1.7"><li>panel.arvancloud.ir → profile menu → <b>Machine Users</b> → create one.</li><li>Open it → <b>Access rules</b> and give it the <b>CDN</b> service with a manager role (not only “server manager”).</li><li>Create an access key for it, copy it at once (shown once) and paste it above.</li></ol></details>`;
 const foCard = (fo, av = {}, irn = []) => {
   if (!fo) return "";
-  const st = av.status || {}, conn = st.ok ? `<div class="ai-stat ok"><div class="ai-head">● Connected · ArvanCloud CDN</div><div class="ai-grid"><span class="mut">Domains</span><span>${st.domains}</span><span class="mut">DNS records</span><span>${st.records}</span></div></div>` : av.has_api_key ? `<div class="ai-stat bad"><div class="ai-head">● Not connected · ArvanCloud CDN</div><div class="err">${esc(st.error || "press “Test the key”")}</div></div>` : "";  const plan = p => `<div class="ap-row" style="flex-wrap:wrap;gap:6px"><span class="st down">down</span><b>${esc(p.server)}</b><span class="mut">${esc(p.ip)}</span><span class="sp"></span><button class="sm pri" onclick="foApprove('${esc(p.id)}')" ${p.target ? "" : "disabled"}>✓ Approve</button><button class="sm" onclick="foDismiss('${esc(p.id)}')">Dismiss</button>
-    <div class="mut" style="flex-basis:100%">${p.target ? `Move ${p.tunnels.length} tunnel(s) (${p.tunnels.map(t => esc(t.name)).join(", ") || "none"}) to <b>${esc(p.target.name)}</b> (${esc(p.target.ip)}).` : '<span class="err">No other Iran server can carry all of its tunnels.</span>'}
+  const st = av.status || {}, conn = st.ok ? `<div class="ai-stat ok"><div class="ai-head">● Connected · ArvanCloud CDN</div><div class="ai-grid"><span class="mut">Domains</span><span>${st.domains}</span><span class="mut">DNS records</span><span>${st.records}</span></div></div>` : av.has_api_key ? `<div class="ai-stat bad"><div class="ai-head">● Not connected · ArvanCloud CDN</div><div class="err">${esc(st.error || "press “Test the key”")}</div></div>` : "";  const plan = p => `<div class="ap-row" style="flex-wrap:wrap;gap:6px"><span class="st down">${p.reason && p.reason !== "down" ? "route" : "down"}</span><b>${esc(p.server)}</b><span class="mut">${esc(p.ip)}${p.why ? " · " + esc(p.why) : ""}</span><span class="sp"></span><button class="sm pri" onclick="foApprove('${esc(p.id)}')" ${p.target ? "" : "disabled"}>✓ Approve</button><button class="sm" onclick="foDismiss('${esc(p.id)}')">Dismiss</button>
+    <div class="mut" style="flex-basis:100%">${p.target ? `Move ${p.tunnels.length} tunnel(s) (${p.tunnels.map(t => esc(t.name)).join(", ") || "none"}) to <b>${esc(p.target.name)}</b> (${esc(p.target.ip)}).` : '<span class="err">No other Iran server can carry these tunnels.</span>'}
+    ${(p.pulled || []).length ? ` Also moved to keep the DNS consistent: <b>${p.pulled.map(esc).join(", ")}</b>.` : ""}
     ${p.dns.length ? ` Then point ${p.dns.length} DNS record(s) at ${p.target ? esc(p.target.ip) : "the new server"}: ${p.dns.map(d => `<b>${esc(d.fqdn)}</b>${d.configs.length ? " (" + d.configs.length + " config" + (d.configs.length > 1 ? "s" : "") + ")" : ""}`).join(", ")}.` : " No DNS record points at this server (or no ArvanCloud key)."}
+    ${(p.left_alone || []).length ? ` Left alone (no known config uses them, or they serve tunnels that stay): ${p.left_alone.map(d => esc(d.fqdn)).join(", ")}.` : ""}
     ${p.problems.length ? `<div class="err">${p.problems.map(esc).join("<br>")}</div>` : ""}</div></div>`;
-  const his = h => `<div class="ev ${h.ok === true ? "ok" : h.ok === false ? "bad" : "warn"}"><time title="${when(h.at)}">${ago(h.at)} ago</time><i></i><small>${h.dismissed ? "dismissed" : h.undone ? "undone" : "done"}</small><span><b>${esc(h.server)}</b> ${h.dismissed ? "" : `→ ${h.target ? esc(h.target.name) : "?"}: ${h.moved}/${h.tunnels} tunnels, ${h.dns.length} DNS record(s)${h.errors.length ? ", errors: " + esc(h.errors.join("; ")) : ""}`} ${h.dns.length && !h.undone ? `<a class="mut" onclick="foUndo('${esc(h.id)}')">↩ point the DNS back</a>` : ""}</span></div>`;
+  const his = h => `<div class="ev ${h.ok === true ? "ok" : h.ok === false ? "bad" : "warn"}"><time title="${when(h.at)}">${ago(h.at)} ago</time><i></i><small>${h.reason && h.reason !== "down" ? "route · " : ""}${h.dismissed ? "dismissed" : h.undone ? "undone" : "done"}</small><span><b>${esc(h.server)}</b> ${h.dismissed ? "" : `→ ${h.target ? esc(h.target.name) : "?"}: ${h.moved}/${h.tunnels} tunnels, ${h.dns.length} DNS record(s)${h.errors.length ? ", errors: " + esc(h.errors.join("; ")) : ""}`} ${h.dns.length && !h.undone ? `<a class="mut" onclick="foUndo('${esc(h.id)}')">↩ point the DNS back</a>` : ""}</span></div>`;
   const label = {off: "off", approve: "asks first", auto: "automatic"}[fo.mode] || fo.mode;
   return `<div class="card" data-tab="fo"><h3>🔁 Iran server failover · CDN <span class="sp"></span><span class="pill ${fo.mode === "off" ? "" : "ok"}">${label}</span></h3>
     ${fo.pending.map(plan).join("") || `<div class="mut" style="padding:4px 0">${fo.mode === "off" ? "Off. " : `Watching the Iran servers: one that stays down for ${fo.confirm_minutes} minutes gets a plan here. `}</div>`}
@@ -2005,7 +2007,7 @@ PAGES.settings = async () => {
         <label>…after it has been down for (seconds)<input name="after_seconds" type="number" min="60" max="3600" value="${rp_.after_seconds}"></label>
         <label>How far it may go<select name="level">${[["restart", "Restart only (safe)"], ["rebuild", "+ rebuild the tunnel if restarting did not help"], ["switch", "+ switch the tunnel type when the route blocks it (GRE / port filtered)"]].map(([k, l]) => `<option value="${k}" ${(rp_.level || "restart") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
-      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps run only after restarts failed, once per 6 hours per tunnel; moving a tunnel to another Iran server is never automatic. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
+      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps run only after restarts failed, once per 6 hours per tunnel. When no tunnel type works on a route, the move to another Iran server (with the CDN records) goes through the failover on Smart repair → Failover · CDN: it asks first, or runs by itself when set so. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
 
     <div class="card"><h3>Daily report</h3>
       <form class="frm one" onsubmit="return saveReport(event)">
@@ -2215,13 +2217,29 @@ const dock = {items: [], n: 0, timer: null};
 function dockStatus(it) {
   const lines = [...it.ov.querySelectorAll(".fx-line, .tt-log > *")], run = !!it.ov.querySelector(".fx-line.run, .loading"), last = lines.filter(l => !l.classList.contains("run")).pop();
   const bad = !run && !!it.ov.querySelector(".fx-line.bad:last-child, .err");
-  return {run, bad, text: last ? last.textContent.trim().replace(/\s+/g, " ").slice(0, 90) : run ? "working…" : "open"};
+  const text = last ? ((last.querySelector("span") || last).textContent || "").trim().replace(/\s+/g, " ").slice(0, 90) : run ? "working…" : "open";   // the text only, without the "·" marker
+  return {run, bad, text};
 }
 function dockRender() {
   let el = $("#dock");
   if (!dock.items.length) { if (el) el.remove(); clearInterval(dock.timer); dock.timer = null; return; }
   if (!el) { el = document.createElement("div"); el.id = "dock"; document.body.appendChild(el); }
-  el.innerHTML = dock.items.map(it => { const s = dockStatus(it); return `<div class="dk ${s.run ? "run" : s.bad ? "bad" : "ok"}" onclick="dockOpen(${it.id})" title="${esc(s.text)}"><i class="dk-ic">${s.run ? "" : s.bad ? "!" : "✓"}</i><span class="dk-t"><b>${esc(it.title)}</b><small>${esc(s.text)}</small></span><button class="dk-x" onclick="event.stopPropagation();dockDrop(${it.id})" title="Remove from the bar">✕</button></div>`; }).join("");
+  // a chip is created once (its entry animation plays once) and then only its text and colour are updated in place: no jump every tick
+  [...el.children].forEach(c => { if (!dock.items.some(it => String(it.id) === c.dataset.id)) c.remove(); });
+  dock.items.forEach(it => {
+    const s = dockStatus(it);
+    let c = el.querySelector(`.dk[data-id="${it.id}"]`);
+    if (!c) {
+      c = document.createElement("div"); c.className = "dk"; c.dataset.id = it.id; c.onclick = () => dockOpen(it.id);
+      c.innerHTML = `<i class="dk-ic"></i><span class="dk-t"><b>${esc(it.title)}</b><small></small></span><button class="dk-x" title="Remove from the bar">✕</button>`;
+      c.querySelector(".dk-x").onclick = e => { e.stopPropagation(); dockDrop(it.id); };
+      el.appendChild(c);
+    }
+    const cls = "dk " + (s.run ? "run" : s.bad ? "bad" : "ok"), ic = s.run ? "" : s.bad ? "!" : "✓", icEl = c.querySelector(".dk-ic"), sm = c.querySelector("small");
+    if (c.className !== cls) c.className = cls;
+    if (icEl.textContent !== ic) icEl.textContent = ic;
+    if (sm.textContent !== s.text) { sm.textContent = s.text; c.title = s.text; }
+  });
   if (!dock.timer) dock.timer = setInterval(dockRender, 1500);
 }
 window.minModal = () => {

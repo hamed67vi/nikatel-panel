@@ -110,9 +110,9 @@ def ladder_for(cause: str, kind: str, level: str = "switch") -> list[str]:
         if rank >= 2:
             steps.append("switch")      # another tunnel type may cross the same route better; it is only kept when it measures better
 
-        steps.append("move")            # never automatic: the operator chooses the server
+        steps.append("move")            # the move goes through the failover: approval first, or automatic (Smart repair → Failover · CDN)
     elif cause == "route_cut":
-        steps.append("move")        # never automatic: the operator chooses the server
+        steps.append("move")        # the move goes through the failover: approval first, or automatic (Smart repair → Failover · CDN)
 
     return steps
 
@@ -447,6 +447,11 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
         if healed:
             break
+
+    if not healed and d["cause"] in ("gre_blocked", "route_cut", "lossy_route", "port_blocked"):
+        from . import failover  # imported here: failover builds on this module
+
+        healed = failover.after_ladder(aid, tunnel_id, d["cause"])     # the move to another Iran server, with the DNS: asks first unless the failover is automatic
 
     with session() as db:
         emit(db, "ok" if healed else "bad", "actions", f"Smart repair of {snap['label']} " + ("succeeded." if healed else "did not heal it."), snap["name"])

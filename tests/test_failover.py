@@ -122,3 +122,98 @@ def test_undo_restores_every_record_of_one_failover(monkeypatch):
     assert len(back) == 1 and back[0]["restored"] is True and fake.rec["value"][0]["ip"] == "203.0.113.5"
     with pytest.raises(ValueError):
         failover.undo("1-1")
+
+
+def _fake_records(ip, only=None):
+    mk = lambda n: {"domain": "example.test", "id": "r-" + n, "name": n, "fqdn": f"{n}.example.test", "ip": ip, "ttl": 120, "cloud": True}
+    return [mk("a"), mk("b"), mk("c")]
+
+
+def _servers_and_tunnels():
+    """ir1 carries t1 (port 80, down), t2 (port 8075, up), t3 (port 443, up); ir2 is the other Iran server; fi1 is abroad.
+    Config cA uses a.example.test:80 (t1), cB b.example.test:8075 (t2), cC a.example.test:443 (t3): record a serves t1 AND t3."""
+    from nikatel.db import session
+    from nikatel.models import Config, Server, Tunnel
+
+    with session() as db:
+        ir1, ir2, fi1 = Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="ir2", host="203.0.113.9", role="iran", online=True), Server(name="fi1", host="203.0.113.50", role="foreign", online=True)
+        db.add_all([ir1, ir2, fi1])
+        db.flush()
+        t1 = Tunnel(name="t1", type="backhaul", transport="tcpmux", iran_server_id=ir1.id, foreign_server_id=fi1.id, state="down", forwarded_ports=[80])
+        t2 = Tunnel(name="t2", type="backhaul", transport="tcpmux", iran_server_id=ir1.id, foreign_server_id=fi1.id, state="up", forwarded_ports=[8075])
+        t3 = Tunnel(name="t3", type="backhaul", transport="tcpmux", iran_server_id=ir1.id, foreign_server_id=fi1.id, state="up", forwarded_ports=[443])
+        db.add_all([t1, t2, t3])
+        db.flush()
+        db.add_all([Config(name="cA", status="down", meta={"address": "a.example.test", "port": 80}),
+                    Config(name="cB", status="up", meta={"address": "b.example.test", "port": 8075}),
+                    Config(name="cC", status="up", meta={"address": "a.example.test", "port": 443})])
+        return {"ir1": ir1.id, "ir2": ir2.id, "fi1": fi1.id, "t1": t1.id, "t2": t2.id, "t3": t3.id}
+
+
+def test_closure_pulls_tunnels_that_share_a_record():
+    recs = [{"tunnels": [1, 3]}, {"tunnels": [2]}, {"tunnels": []}, {"tunnels": [3, 4]}]
+    assert failover.closure({1}, recs) == {1, 3, 4}
+    assert failover.closure({2}, recs) == {2}
+    assert failover.closure(set(), recs) == set()
+
+
+def test_route_plan_moves_the_broken_tunnels_and_the_records_that_serve_only_them(monkeypatch):
+    from nikatel.services import autopilot
+
+    ids = _servers_and_tunnels()
+    st.put("arvan", {"api_key": "k", "mode": "approve"})
+    monkeypatch.setattr(arvan, "find_by_ip", _fake_records)
+    monkeypatch.setattr(autopilot, "ranking", lambda tid: [{"id": ids["ir2"], "name": "ir2", "score": 80}])
+    p = failover.route_plan(ids["t1"], "gre_blocked")
+    assert sorted(t["name"] for t in p["tunnels"]) == ["t1", "t3"]            # t3 shares record a with t1, so it moves too; t2 stays
+    assert p["pulled"] == ["t3"] and p["whole"] is False and p["reason"] == "gre_blocked" and "GRE" in p["why"]
+    assert [d["fqdn"] for d in p["dns"]] == ["a.example.test"] and p["dns"][0]["configs"] == ["cA", "cC"] and "tunnels" not in p["dns"][0]
+    assert sorted(d["fqdn"] for d in p["left_alone"]) == ["b.example.test", "c.example.test"]
+    assert p["target"] == {"id": ids["ir2"], "name": "ir2", "ip": "203.0.113.9"} and p["problems"] == []
+    whole = failover.plan_for(ids["ir1"])
+    assert whole["whole"] is True and len(whole["tunnels"]) == 3 and whole["pulled"] == [] and whole["left_alone"] == []
+    assert [d["fqdn"] for d in whole["dns"]] == ["a.example.test", "b.example.test", "c.example.test"]
+
+
+def test_after_ladder_queues_a_plan_for_approval(monkeypatch):
+    from nikatel.services import autopilot
+
+    ids = _servers_and_tunnels()
+    monkeypatch.setattr(arvan, "find_by_ip", _fake_records)
+    monkeypatch.setattr(autopilot, "ranking", lambda tid: [{"id": ids["ir2"], "name": "ir2", "score": 80}])
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(failover, "_notice", lambda text: said.append("TG " + text))
+    st.put("arvan", {"api_key": "k", "mode": "off"})
+    assert failover.after_ladder(1, ids["t1"], "gre_blocked") is False and st.get("failover")["pending"] == [] and "off" in said[-1]
+    st.put("arvan", {"mode": "approve"})
+    assert failover.after_ladder(1, ids["t1"], "gre_blocked") is False
+    pend = st.get("failover")["pending"]
+    assert len(pend) == 1 and pend[0]["reason"] == "gre_blocked" and sorted(t["name"] for t in pend[0]["tunnels"]) == ["t1", "t3"] and pend[0]["move"]
+    assert any(x.startswith("TG") and "approve" in x for x in said) and any("waiting for your approval" in x for x in said)
+    assert failover.after_ladder(1, ids["t1"], "gre_blocked") is False and len(st.get("failover")["pending"]) == 1     # not queued twice
+
+
+def test_check_forgets_a_server_that_answers_again(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.db import session
+    from nikatel.models import Server
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    st.put("arvan", {"api_key": "k", "mode": "approve", "confirm_minutes": 5})
+
+    with session() as db:
+        s = Server(name="ir9", host="203.0.113.77", role="iran", online=False)
+        db.add(s)
+        db.flush()
+        sid = s.id
+
+    failover.check()
+    assert str(sid) in st.get("failover")["seen"] and st.get("failover")["pending"] == []     # seen, but the waiting time has not passed
+
+    with session() as db:
+        db.get(Server, sid).online = True
+
+    failover.check()
+    assert st.get("failover")["seen"] == {}                                                   # forgotten - and saved

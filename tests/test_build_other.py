@@ -91,3 +91,23 @@ def test_build_other_refused_in_read_only(client):
     assert [k["key"] for k in kinds] == ["backhaul", "backpack", "backpack_direct", "paqet", "chisel"] and len(kinds[1]["transports"]) == 12
     groups = {k["group"] for k in client.get("/api/tunnel-test/kinds").json()["kinds"]}
     assert "Paqet" in groups and "BackPack Direct" in groups
+
+
+def test_forced_name_leftovers_are_removed_before_the_port_check(monkeypatch):
+    from nikatel.services import build_other as bo
+
+    calls = []
+    monkeypatch.setattr(bo, "run_action", lambda node, action, params, timeout=0: calls.append((node, action, params["NAME"])) or "REMOVED")
+    monkeypatch.setattr(bo, "run_script", lambda node, script, timeout=0: "fresh")
+    monkeypatch.setattr(bo, "parse_simple_facts", lambda out: {"units": [], "tcp": set(), "udp": set(), "root": True, "python": True, "arch": "x86_64", "ips": []})
+    monkeypatch.setattr(bo, "_say", lambda aid, line, done=None, ok=None: None)
+    fi = {"units": ["backpack-nkt1.service", "backpack-other.service"], "tcp": {39400}, "udp": set(), "root": True, "python": True, "arch": "x86_64", "ips": []}
+    ff = {"units": [], "tcp": set(), "udp": set(), "root": True, "python": True, "arch": "x86_64", "ips": []}
+    b = bo.Build(aid=1, kind="backpack", iran=None, foreign=None, ports=[], transport="tcpmux", name="nkt1")
+    fi2, ff2 = bo._clear_leftovers(b, "iran-node", "foreign-node", fi, ff)
+    assert calls == [("iran-node", "other_remove", "nkt1")]              # only the side that had the leftover, only this name
+    assert fi2["units"] == [] and fi2["tcp"] == set() and ff2 is ff        # the Iran facts were read again, the foreign ones kept
+    auto = bo.Build(aid=1, kind="backpack", iran=None, foreign=None, ports=[], transport="tcpmux", name="")
+    assert bo._clear_leftovers(auto, "i", "f", fi, ff) == (fi, ff) and len(calls) == 1      # no forced name: nothing is touched
+    assert bo._owns("backpack-nkt1.service", "backpack", "nkt1") and bo._owns("backpack-nkt1-kharej.service", "backpack", "nkt1") and bo._owns("backpack-nkt1", "backpack", "nkt1")
+    assert not bo._owns("backpack-nkt10.service", "backpack", "nkt1") and not bo._owns("chisel-nkt1.service", "backpack", "nkt1")
