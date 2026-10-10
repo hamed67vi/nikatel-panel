@@ -134,3 +134,34 @@ def test_a_rebuild_interrupted_by_a_restart_is_resumed_once(client, monkeypatch)
     builder.pending_put(item)
     builder.pending_drop("f1-i1")                    # a build that ended (well or badly) removes its note
     assert builder.resume_pending() == 0
+
+
+def test_rebuild_with_a_fresh_link_avoids_the_old_inner_network(client, monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services import builder
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        t = Tunnel(name="f1-i1", type="backhaul", transport="tcpmux", iran_server_id=a.id, foreign_server_id=b.id, port=9909, forwarded_ports=[80],
+                   record={"network": "10.237.77.0/30", "mtu": 1360, "keepalive": 75, "opts": {"tune": True}, "port_mapping": "80"})
+        db.add(t)
+        db.flush()
+        tid = t.id
+
+    seen = {}
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tunnel_id, keep_record=False: ["removed"])
+    monkeypatch.setattr(builder, "pending_put", lambda item: seen.setdefault("pending", item))
+    monkeypatch.setattr(builder, "start_build", lambda iran_id, foreign_id, ports, transport, mtu, keepalive, forced_name="", nodelay=True, opts=None: seen.update(opts=dict(opts or {}), name=forced_name) or 5)
+    assert builder.rebuild_tunnel(tid, fresh_link=True) == 5
+    assert seen["opts"]["avoid_net"] == "10.237.77.0/30" and seen["opts"]["tune"] is True and seen["name"] == "f1-i1"
+    seen.clear()
+    builder.rebuild_tunnel(tid)
+    assert "avoid_net" not in seen["opts"]                                                                  # a plain rebuild keeps its old behaviour
+    net, _, _ = builder.allocate_network(["10.237.77.0/30"])
+    assert net != "10.237.77.0/30"

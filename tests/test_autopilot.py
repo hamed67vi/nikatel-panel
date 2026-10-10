@@ -27,10 +27,11 @@ def test_classification_picks_the_real_cause():
 def test_ladder_is_limited_by_the_level():
     assert ap.ladder_for("units_down", "tcpmux", "restart") == ["restart"]
     assert ap.ladder_for("units_down", "tcpmux", "rebuild") == ["restart", "rebuild"]
-    assert ap.ladder_for("gre_blocked", "tcpmux", "rebuild") == []
-    assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["switch"] and ap.ladder_for("port_blocked", "bp:tcp", "switch") == ["switch"]
-    assert ap.ladder_for("route_cut", "tcpmux", "switch") == ["move"]          # moving is never automatic, but it is the advice
-    assert ap.ladder_for("lossy_route", "tcpmux", "switch") == ["switch", "move"] and ap.ladder_for("lossy_route", "tcpmux", "restart") == ["move"]
+    assert ap.ladder_for("gre_blocked", "tcpmux", "restart") == []
+    assert ap.ladder_for("gre_blocked", "tcpmux", "rebuild") == ["relink"]                                  # the link again from scratch: new inner network, new GRE key
+    assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["relink", "switch"] and ap.ladder_for("port_blocked", "bp:tcp", "switch") == ["relink", "switch"]
+    assert ap.ladder_for("route_cut", "tcpmux", "switch") == ["move"]          # the move goes through the failover, which asks first
+    assert ap.ladder_for("lossy_route", "tcpmux", "switch") == ["relink", "switch", "move"] and ap.ladder_for("lossy_route", "tcpmux", "restart") == ["move"]
     assert ap.ladder_for("healthy", "tcpmux") == [] and ap.ladder_for("server_unreachable", "tcpmux") == []
 
 

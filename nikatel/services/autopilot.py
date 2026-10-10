@@ -110,9 +110,16 @@ def ladder_for(cause: str, kind: str, level: str = "switch") -> list[str]:
 
         if rank >= 1:
             steps.append("rebuild")
-    elif cause in ("gre_blocked", "port_blocked") and rank >= 2:
-        steps.append("switch")
+    elif cause in ("gre_blocked", "port_blocked"):
+        if rank >= 1:
+            steps.append("relink")      # the link again from scratch: a new inner network and a new GRE key, in case a filter learnt the old ones
+
+        if rank >= 2:
+            steps.append("switch")
     elif cause == "lossy_route":
+        if rank >= 1:
+            steps.append("relink")
+
         if rank >= 2:
             steps.append("switch")      # another tunnel type may cross the same route better; it is only kept when it measures better
 
@@ -459,6 +466,12 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         elif step == "rebuild":
             ok, story = _wait(builder.rebuild_tunnel(tunnel_id))
             _say(aid, "Rebuild: " + (story[-1] if story else "no result"))
+            healed = ok
+        elif step == "relink":
+            _say(aid, "Removing the link and building it again with a new inner network and a new GRE key…")
+            ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=True))
+            plan_line = next((ln for ln in story if ln.startswith("Plan:")), "")
+            _say(aid, "New link: " + (plan_line.replace("Plan: ", "") + " → " if plan_line else "") + (story[-1] if story else "no result"))
             healed = ok
         elif step == "switch":
             results = _recommend_now(aid, snap["iran_id"], snap["foreign_id"], NO_GRE if d["cause"] == "gre_blocked" else [k for k in CANDIDATES if k != d["kind"]])

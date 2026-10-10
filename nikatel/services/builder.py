@@ -660,7 +660,8 @@ def _build(b: Build) -> None:
     if not b.name:
         b.name = pretty_name(b.foreign.name, b.iran.name, taken_names)
 
-    network, iran_ip, foreign_ip = allocate_network(taken_nets + fi["ips"] + ff["ips"])
+    avoid = [str(b.opts.pop("avoid_net"))] if b.opts.get("avoid_net") else []          # a rebuild for repair: never the inner network the broken link had
+    network, iran_ip, foreign_ip = allocate_network(taken_nets + fi["ips"] + ff["ips"] + avoid)
     key = random.randint(1, 2147483647)
     token = secrets.token_hex(16)
     _say(aid, f"Plan: {b.name}, inner network {network} (Iran {iran_ip}, foreign {foreign_ip})")
@@ -810,8 +811,9 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False) -> list[str]:
     return results
 
 
-def rebuild_tunnel(tunnel_id: int) -> int:
-    """Same pair, same name, same ports: remove, then build again. Returns the build action id."""
+def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
+    """Same pair, same name, same ports: remove, then build again. `fresh_link`: a GRE tunnel gets a different inner network (and, as
+    always, a new GRE key) - a repair step for a link that a filter has learnt. Returns the build action id."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -827,14 +829,19 @@ def rebuild_tunnel(tunnel_id: int) -> int:
 
     other = typ in ("backpack", "paqet", "chisel")
     kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
+    opts = dict(rec.get("opts") or {})
+
+    if fresh_link and not other and rec.get("network"):
+        opts["avoid_net"] = rec["network"]
+
     pending_put({"name": name, "kind": "other" if other else "backhaul",
                  "args": {"iran_id": iran_id, "foreign_id": foreign_id, "ports_text": ports_text, "transport": transport.replace("l3:", "") if other else transport, "kind": kind, "mtu": mtu,
-                          "keepalive": keepalive, "nodelay": bool(rec.get("nodelay", True)), "opts": rec.get("opts") or {}}})
+                          "keepalive": keepalive, "nodelay": bool(rec.get("nodelay", True)), "opts": opts}})
     delete_tunnel(tunnel_id)
 
     if other:
         from . import build_other
 
-        return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), rec.get("opts") or {}, forced_name=name)
+        return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), opts, forced_name=name)
 
-    return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)), opts=rec.get("opts") or {})
+    return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)), opts=opts)

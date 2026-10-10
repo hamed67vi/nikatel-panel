@@ -1109,7 +1109,7 @@ window.apDiagnose = async (id, opts = {}) => {
       ${d.ai ? `<div class="ibox" style="margin-top:10px"><h5><i>✨</i>AI</h5><div style="padding:6px 0;font-size:13px">${esc(d.ai)}</div></div>` : ""}
       <div class="ibox" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5>${d.findings.map(f => irow(esc(f.text), f.ok ? '<b class="gw-ok">✓</b>' : '<b class="err">✕</b>')).join("")}</div>
       ${d.cause === "healthy" ? "" : `<div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">
-        ${d.ladder.includes("restart") ? `<a class="wtool" onclick="apRun(${id}, 'rebuild')"><i>🛠</i><b>Smart fix</b><small>restart what is not running, then rebuild if needed</small></a>` : ""}
+        ${d.ladder.includes("restart") || d.ladder.includes("relink") ? `<a class="wtool" onclick="apRun(${id}, '${d.ladder.includes("switch") ? "switch" : "rebuild"}')"><i>🛠</i><b>Smart fix</b><small>${d.ladder.includes("restart") ? "restart what is not running, then rebuild if needed" : "build the link again with a new inner network and key, then try the other types"}</small></a>` : ""}
         ${sw ? `<a class="wtool" onclick="apRun(${id}, 'switch')"><i>🔀</i><b>Switch the tunnel type</b><small>test the other types on this route today and keep the best that works</small></a>` : ""}
         ${mv ? `<a class="wtool" onclick="apMove(${id})"><i>🚚</i><b>Move to another Iran server</b><small>when the route to this foreign server is cut from that Iran server</small></a>` : ""}
         <a class="wtool" onclick="closeModal();apTune(${id})"><i>🧭</i><b>Network advisor</b><small>rank every tunnel type on today's network</small></a>
@@ -1128,7 +1128,6 @@ async function apStart(id, level) {
 }
 window.apTune = id => { ap.tid = String(id); localStorage.setItem("nk.ap.tid", ap.tid); refresh(); };
 window.apRun = async (id, level) => {
-  if (!await gconfirm(level === "switch" ? "Test the other tunnel types and replace this tunnel with the best one that works? Users reconnect after about a minute. If the new one fails, the old type is built again." : "Repair this tunnel now? Restarts first, then a rebuild when restarting is not enough.", {danger: true})) return;
   try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.apMove = async id => {
