@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.9 - 2026-10-11 - What is being installed, in the chip
+
+* The *installing…* chip names what is being installed, shortened inside the chip; the full name opens, very faint, under the pointer.
+
 ## 1.11.8 - 2026-10-11 - Quieter busy chip
 
 * The *installing…* chip in the server list has no second line under it.
