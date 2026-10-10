@@ -982,12 +982,12 @@ window.foPreview = async () => {
 };
 window.foDismiss = async id => { try { await api("/api/failover/" + encodeURIComponent(id) + "/dismiss", {method: "POST"}); toast("Plan dismissed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.foUndo = async id => { if (!await gconfirm("Point the DNS records back at the old server address? The tunnels stay where they are.", {danger: true})) return; try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/undo", {method: "POST"}); toast("✓ " + r.changed.length + " record(s) pointed back", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };/* the Smart repair page is one tab at a time: what needs attention, the failover, the network advisor, the history */
-const AP_TABS = [["att", "🩺 Needs attention"], ["fo", "🔁 Failover"], ["adv", "🧭 Network advisor"], ["his", "🗒 History"]];
+const AP_TABS = [["att", "🩺 Needs attention"], ["fo", "🔁 Failover"], ["adv", "🧭 Network advisor"]];   // the history (the last card) is shown under the first tab
 function apTabs(nBad, hasFo, nPending) {
   const list = AP_TABS.filter(t => t[0] !== "fo" || hasFo), cards = [...document.querySelectorAll("#page > .card")];
-  if (cards.length !== list.length) return;
+  if (cards.length !== list.length + 1) return;
   const cur = list.some(t => t[0] === ap.tab) ? ap.tab : (nPending ? "fo" : "att");
-  cards.forEach((c, i) => c.classList.toggle("hidden", list[i][0] !== cur));
+  cards.forEach((c, i) => c.classList.toggle("hidden", i === list.length ? cur !== "att" : list[i][0] !== cur));
   const cnt = {att: nBad, fo: nPending};
   $("#page").insertAdjacentHTML("afterbegin", `<div class="tabs set-tabs">${list.map(([k, l]) => `<button class="${k === cur ? "on" : ""}" onclick="ap.tab='${k}';localStorage.setItem('nk.ap.tab','${k}');refresh()">${l}${cnt[k] ? ` <i class="cnt">${cnt[k]}</i>` : ""}</button>`).join("")}</div>`);
 }window.apFixAll = async () => {
