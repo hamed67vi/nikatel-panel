@@ -1,5 +1,7 @@
 # Changelog
 
+## 1.13.3 - 2026-10-11 - Re-tune takes the idlest tunnels first
+
 ## 1.13.2 - 2026-10-11 - Re-tune can start with one tunnel
 
 * The re-tune can be started for the first N tunnels only (a pilot before the rest).

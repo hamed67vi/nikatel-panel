@@ -65,9 +65,11 @@ def _read(node: Node, path: str) -> str:
 
 def candidates() -> list[int]:
     with session() as db:
-        return [t.id for t in db.scalars(select(Tunnel).order_by(Tunnel.name))
+        rows = [t for t in db.scalars(select(Tunnel).order_by(Tunnel.name))
                 if t.enabled and not is_temp(t.name) and t.state == "up" and t.type == "backhaul" and (t.record or {}).get("built_by") == "nikatel-panel"
                 and not (t.record or {}).get("legacy_gre") and ((t.detail or {}).get("loss_pct") or 0) < autopilot.ACT_FROM and t.iran.online is not False and t.foreign.online is not False]
+        rows.sort(key=lambda t: (t.rx_mbps or 0) + (t.tx_mbps or 0))         # the idlest first: they are the ones that can be changed without cutting anybody
+        return [t.id for t in rows]
 
 
 def _measure(tid: int) -> dict:
