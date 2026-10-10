@@ -538,8 +538,11 @@ def _checkhost_rows(host: str, wait: int = 28) -> list[dict]:
 
 
 def verdict(rows: list[dict]) -> tuple[str, str]:
+    """A server is filtered when MANY Iranian locations cannot reach it, not when a few lose a ping: a lost packet or one weak ISP route is normal
+    (a clean address shows 1-3 of 21 locations with some loss). Per location: dead = no reply, bad = half or more of the pings lost, weak = any loss."""
     done = [r for r in rows if not r["pending"]]
-    bad = [r for r in done if r["ok"] < r["total"]]
+    weak = [r for r in done if r["ok"] < r["total"]]
+    bad = [r for r in done if r["ok"] * 2 <= r["total"]]
     dead = [r for r in done if r["ok"] == 0]
 
     if not done:
@@ -548,10 +551,11 @@ def verdict(rows: list[dict]) -> tuple[str, str]:
     if len(dead) == len(done):
         return "blocked", "Blocked in Iran (0 replies everywhere)"
 
-    if bad:
-        return "filtered", f"Filtered in Iran - {len(bad)} of {len(done)} locations lose packets" + (f" ({len(dead)} fully blocked)" if dead else "")
+    if len(bad) / len(done) >= 0.4 or len(dead) >= max(3, 0.25 * len(done)):
+        return "filtered", f"Filtered in Iran - {len(bad)} of {len(done)} locations lose half or more of the packets" + (f" ({len(dead)} fully blocked)" if dead else "")
 
-    return "clean", f"Not filtered - all {len(done)} Iranian locations 4/4"
+    note = f"; {len(weak)} lose a few packets (a weak route of that ISP, not a filter)" if weak else ""
+    return "clean", f"Not filtered - {len(done) - len(bad)} of {len(done)} Iranian locations answer well{note}"
 
 
 def parse_gre_links(out: str) -> list[dict]:

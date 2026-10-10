@@ -20,7 +20,11 @@ def test_ping_parse_and_verdict():
     assert parse_ping("4 packets transmitted, 0 received, 100% packet loss") == (4, 0, None)
     ok = {"ok": 4, "total": 4, "pending": False}
     assert verdict([ok, ok])[0] == "clean"
-    assert verdict([ok, {"ok": 2, "total": 4, "pending": False}])[0] == "filtered"
+    assert verdict([ok, {"ok": 2, "total": 4, "pending": False}])[0] == "filtered"                              # half of two locations is a lot
+    many = [dict(ok, total=4, ok=4) for _ in range(18)] + [{"ok": 3, "total": 4, "pending": False}, {"ok": 2, "total": 4, "pending": False}, {"ok": 1, "total": 4, "pending": False}]
+    assert verdict(many)[0] == "clean" and "not a filter" in verdict(many)[1]                                  # 3 of 21 with some loss: a clean address
+    cut = [dict(ok, total=4, ok=4) for _ in range(12)] + [{"ok": 0, "total": 4, "pending": False} for _ in range(9)]
+    assert verdict(cut)[0] == "filtered"                                                                        # 9 of 21 dead: filtered
     assert verdict([{"ok": 0, "total": 4, "pending": False}])[0] == "blocked"
     assert verdict([{"ok": 0, "total": 4, "pending": True}])[0] == "unknown"
 
