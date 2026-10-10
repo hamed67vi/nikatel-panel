@@ -18,7 +18,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel
 from ..ssh import Node, SSHError, run_script
-from . import autopilot, build_other, builder, detect, failover
+from . import autopilot, build_other, builder, detect, failover, tunnel_test
 
 log = get_logger("create")
 MAX_TRIES = 4          # Iran servers tried one after the other when the build on one fails
@@ -96,6 +96,85 @@ def _follow(aid: int, build_aid: int, limit: int = 1500) -> bool:
 
     autopilot._say(aid, "The build takes too long; look at its own entry in the history.")
     return False
+
+
+PASS_SCORE = 50          # a pair that scores at least this is good enough: the Smart test stops there
+
+
+def smart_test(foreign_id: int, ports: str, kind: str) -> int:
+    """"Test this pair first" with Smart as the Iran server: the Iran servers are tried in the order of the ranking (quality first, then resources); a server whose
+    test is poor is left and the next one is tested; the first that scores well is the answer (else the best of those tried). One story, nothing is built for real."""
+    _ports(ports)
+
+    with session() as db:
+        f = db.get(Server, foreign_id)
+
+        if f is None or f.role != "foreign":
+            raise ValueError("choose a foreign server")
+
+        fname = f.name
+
+    def work(aid: int) -> None:
+        autopilot._say(aid, f"Smart test: ranking the Iran servers for {fname} (ping, load, tunnels, free ports)…")
+        usable = [r for r in detect.auto_iran(foreign_id, ports) if r.get("score", 0) > 0][:MAX_TRIES]
+
+        if not usable:
+            autopilot._say(aid, "No Iran server can carry this tunnel right now.", done=True, ok=False)
+            return
+
+        autopilot._say(aid, "Order (quality first, then free resources): " + ", ".join(r["name"] for r in usable))
+        tried = []
+
+        for n, r in enumerate(usable):
+            autopilot._say(aid, f"Testing {r['name']} ({n + 1}/{len(usable)}): a temporary tunnel is built, measured and removed…")
+            res = None
+
+            for _ in range(60):                                   # only one tunnel test runs at a time: wait for the turn
+                try:
+                    jid = tunnel_test.compare_start(r["id"], foreign_id, [kind], measure="full")
+                    break
+                except ValueError as e:
+                    if "still running" not in str(e):
+                        autopilot._say(aid, f"{r['name']}: not tested - {str(e)[:120]}")
+                        jid = None
+                        break
+
+                    time.sleep(10)
+            else:
+                jid = None
+
+            end = time.time() + 900
+
+            while jid and time.time() < end:
+                time.sleep(5)
+                job = tunnel_test.compare_status(jid)
+
+                if job["done"]:
+                    res = (job.get("results") or [None])[0]
+                    break
+
+            if not res or res.get("score") is None:
+                autopilot._say(aid, f"{r['name']}: the test gave no result" + (" - trying the next Iran server" if n < len(usable) - 1 else ""))
+                continue
+
+            tried.append((res.get("score") or 0, r["name"]))
+            line = f"{r['name']}: {res.get('latency_ms')} ms, {res.get('loss_pct')} % loss" + (f", ↓{res['down_mbps']} Mb/s" if res.get("down_mbps") is not None else "") + f", score {res.get('score')}/100"
+
+            if (res.get("score") or 0) >= PASS_SCORE:
+                autopilot._say(aid, line + " - good")
+                autopilot._say(aid, f"Best server: {r['name']}", done=True, ok=True)
+                return
+
+            autopilot._say(aid, line + (" - poor, trying the next Iran server" if n < len(usable) - 1 else " - poor"))
+
+        if tried:
+            score, name = max(tried)
+            autopilot._say(aid, f"No server scored {PASS_SCORE}+; the best of those tested is {name} ({score}/100).")
+            autopilot._say(aid, f"Best server: {name}", done=True, ok=False)
+        else:
+            autopilot._say(aid, "No server could be tested.", done=True, ok=False)
+
+    return autopilot._start(f"smart test → {fname}", work, action="create")
 
 
 def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, opts: dict, replace_ids: list[int], dns_follow: bool,

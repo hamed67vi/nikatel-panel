@@ -964,12 +964,13 @@ window.startTest = async e => {
   const box = $("#build-story"); box.classList.remove("hidden");
   let iranId = +f.get("iran_id") || 0;
   try {
-    if (!iranId) {   // the smart choice: rank the Iran servers for this foreign server first
-      box.innerHTML = '<div class="fx-line run"><i></i>Choosing the Iran server…</div>';
-      const r = await api("/api/tunnels/auto-iran", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || ""})});
-      const best = r.ranking.find(x => x.score > 0);
-      if (!best) { box.innerHTML = '<div class="fx-line bad"><b>!</b>No Iran server can carry this tunnel right now.</div>'; return; }
-      iranId = best.id; form.querySelector("[name=iran_id]").value = best.id; bkKeep(form);
+    if (!iranId) {   // Smart: the Iran servers are tested one after the other, best first; a poor one is left for the next
+      box.innerHTML = '<div class="fx-line run"><i></i>Smart test: starting…</div>';
+      const r = await api("/api/tunnels/smart-test", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || "", kind})});
+      const s = await followStory(r.id, box, 900);
+      const win = s && (s.story || []).slice().reverse().find(l => l.startsWith("Best server: "));
+      if (win) { const name = win.replace("Best server: ", ""), sel = form.querySelector("[name=iran_id]"), opt = [...sel.options].find(o => o.textContent.trim().startsWith(name + " ")); if (opt) { sel.value = opt.value; bkKeep(form); } }
+      return;
     }
     box.innerHTML = '<div class="fx-line run"><i></i>Building a temporary tunnel…</div>';
     const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: iranId, foreign_id: +f.get("foreign_id"), kinds: [kind]})}); tt.job = {id: r.id, kinds: [kind], results: [], current: kind, done: false};

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.0 - 2026-10-11 - Smart test goes on to the next server
+
+* *Test this pair first* with **Smart** as the Iran server no longer stops at the first server: the Iran servers are tested one after the other in the order of the ranking (quality first, then free resources); a server whose test scores under 50 is left for the next one, the first that scores 50 or more is the answer and is selected in the form (else the best of those tested is named). Up to 4 servers; every result is a line of one story.
+
 ## 1.13.4 - 2026-10-11 - The steps of a test are shown
 
 * A tunnel test now writes the steps of its temporary build into its own story as they happen (preflight, GRE, backhaul, data path), so the Test window never sits on one line.

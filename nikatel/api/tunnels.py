@@ -69,6 +69,23 @@ class PrecheckIn(BaseModel):
     live: bool = False                                           # also look at the Iran server itself (one SSH call)
 
 
+class SmartTestIn(BaseModel):
+    foreign_id: int
+    ports: str = Field(min_length=1, max_length=300)
+    kind: str = Field("tcpmux", pattern=r"^[a-z0-9:]{1,16}$")
+
+
+@router.post("/tunnels/smart-test", status_code=202)
+def smart_test(body: SmartTestIn):
+    """Test the Iran servers one after the other (best first) with the chosen tunnel type; the first that scores well wins."""
+    from ..services import create
+
+    try:
+        return {"ok": True, "id": create.smart_test(body.foreign_id, body.ports, body.kind)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/tunnels/precheck")
 def precheck(body: PrecheckIn):
     """Before a build: ports already used on the Iran server, and tunnels that already carry these ports to the foreign server."""

@@ -179,3 +179,37 @@ def test_the_smart_choice_goes_on_to_the_next_server_when_a_build_fails(client, 
 
     text = "\n".join(s["story"])
     assert s["ok"] is True and tried == [w["ir1"], w["ir2"]] and "ir1: did not work - trying the next Iran server" in text and "Order (quality first" in text
+
+
+def test_the_smart_test_leaves_a_poor_server_and_takes_the_next(client, monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import tunnel_test
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    w = _world()
+    monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": w["ir1"], "name": "ir1", "score": 90, "quality": 95, "resources": 50, "unused": 50, "reason": "ok"},
+                                                                           {"id": w["ir2"], "name": "ir2", "score": 80, "quality": 90, "resources": 60, "unused": 60, "reason": "ok"}])
+    tested = []
+    scores = {w["ir1"]: 47, w["ir2"]: 71}
+
+    def fake_start(iran_id, foreign_id, kinds, measure="latency"):
+        tested.append(iran_id)
+        return f"job{iran_id}"
+
+    monkeypatch.setattr(tunnel_test, "compare_start", fake_start)
+    monkeypatch.setattr(tunnel_test, "compare_status", lambda jid: {"done": True, "results": [{"kind": "tcpmux", "ok": True, "score": scores[int(jid[3:])], "latency_ms": 100, "loss_pct": 0}]})
+    monkeypatch.setattr(create.time, "sleep", lambda s: None)
+    r = client.post("/api/tunnels/smart-test", json={"foreign_id": w["fi1"], "ports": "9075", "kind": "tcpmux"})
+    assert r.status_code == 202, r.text
+    s = None
+
+    for _ in range(100):
+        s = client.get(f"/api/actions/{r.json()['id']}").json()
+
+        if s["done"]:
+            break
+
+        time.sleep(0.1)
+
+    text = "\n".join(s["story"])
+    assert tested == [w["ir1"], w["ir2"]] and "ir1: 100 ms, 0 % loss, score 47/100 - poor, trying the next Iran server" in text and s["story"][-1] == "Best server: ir2" and s["ok"] is True
