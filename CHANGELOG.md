@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.16 - 2026-10-11 - Bigger centred tunnel arrows; folder tabs on Configs
+
+* The tunnel arrow is bigger and sits in a column of its own, centred between the Iran node and the foreign node.
+* The folder tabs (Configs / Panels) stick to the box with the buttons on the Configs page too; the tiles moved under that box.
+
 ## 1.14.15 - 2026-10-11 - Folder tabs on Tunnels and Nodes
 
 * The sub tabs (Tunnel manager / Tunnel test / Smart repair, and on Nodes Iran / Foreign / Gateway) stand on the box under them like folder tabs; the open tab is one piece with the box. On Nodes the box with the buttons now comes first and the tiles under it.
