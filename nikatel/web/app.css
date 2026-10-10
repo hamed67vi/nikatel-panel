@@ -920,3 +920,9 @@ button.pri:not(.ai-btn):hover::before { opacity: 1; animation: priSweep .9s ease
 button.pri:not(.ai-btn):active { transform: translateY(2px) scale(1.02); box-shadow: inset 0 2px 4px rgba(120,70,0,.35), 0 1px 0 #8d6812, 0 4px 10px rgba(203,152,43,.3); transition-duration: .08s; }
 button.pri:not(.ai-btn):disabled { transform: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 0 #8d6812; }
 @keyframes priSweep { from { left: -70%; } to { left: 130%; } }
+/* the tunnel arrow between the Iran node and the foreign node, in the colour of the tunnel's state */
+.fnode { display: flex; align-items: center; gap: 9px; } .fnode .ftxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; } .fnode .ftxt b { display: block; }
+.tun-arr { flex: none; font-size: 17px; line-height: 1; font-weight: 800; color: var(--unk, #8b93a7); margin-left: -4px; transition: color .4s, text-shadow .4s; }
+.tun-arr.up { color: var(--ok); text-shadow: 0 0 10px rgba(52,211,153,.55); animation: tunFlow 2.4s ease-in-out infinite; }
+.tun-arr.degraded { color: var(--warn); text-shadow: 0 0 10px rgba(251,191,36,.5); } .tun-arr.down { color: var(--bad); text-shadow: 0 0 10px rgba(255,107,139,.5); }
+@keyframes tunFlow { 0%, 100% { transform: translateX(-1px); opacity: .75; } 50% { transform: translateX(2px); opacity: 1; } }

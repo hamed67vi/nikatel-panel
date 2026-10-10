@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.14 - 2026-10-11 - The tunnel arrow between the nodes
+
+* In the tunnel list a **⇄** arrow sits between the Iran node and the foreign node, green (and gently moving) when the tunnel is up, yellow when unstable, red when down; hover shows the tunnel.
+
 ## 1.14.13 - 2026-10-11 - 3D gold button, no numbers in the menu
 
 * The primary button (Create tunnel and the others like it) has dark text on gold so it reads, a raised 3D look, a light sweep on hover, grows a little when the mouse is on it and sinks when pressed.
