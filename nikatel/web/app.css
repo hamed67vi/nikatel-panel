@@ -849,3 +849,7 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 
 .tf-tabs { margin: 0 0 10px; }
 
+
+/* one edge bar per row: the severity colour replaces the state colour (no double bar) */
+.tbl tr.sev-red td:first-child, .tbl tr.sev-yellow td:first-child { box-shadow: none; }
+.tbl tr.sev-red td:first-child { border-left-color: var(--bad); } .tbl tr.sev-yellow td:first-child { border-left-color: var(--warn); }
