@@ -158,7 +158,8 @@ nav a { height: 38px; font-size: 13.5px; }
 .cf-card .cf-acts { justify-content: flex-start; } .cf-card .cf-acts .sp { flex: 1; }
 .cf-card .cf-top b { display: flex; align-items: center; gap: 2px; min-width: 0; } .cf-card .cf-top b .nk-gbadge { flex: none; }
 /* Create tunnel: three numbered sections, engine tiles */
-.frm.build { display: block; } .bsec { padding: 12px 14px; margin-bottom: 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); }
+.frm.build { display: block; } .frm.build .bgrid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); } .frm.build .bgrid label.chk { align-self: end; height: 32px; }
+.bhint { margin: 10px 0 4px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; } .bhint b { color: var(--acc-2); } .bsec { padding: 12px 14px; margin-bottom: 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); }
 .bsec h4 { margin: 0 0 10px; font-size: 12px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); display: flex; align-items: center; gap: 8px; }
 .bsec h4 i { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--grad); color: #fff; font-style: normal; font-size: 11px; }
 .bgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; } .bgrid label.chk { align-self: end; }
@@ -172,7 +173,10 @@ nav a { height: 38px; font-size: 13.5px; }
 .bg-row { display: grid; gap: 2px; padding: 9px 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; transition: background .2s, border-color .2s; }
 .bg-row b { font-size: 12.5px; } .bg-row span { font-size: 11.5px; color: var(--acc-2); font-weight: 600; } .bg-row small { font-size: 10.5px; color: var(--mut); line-height: 1.35; }
 .bg-row:hover { filter: brightness(1.06); } .bg-row.on { border-color: var(--line-hi); background: var(--glass-hi); }
-.ttg { margin-bottom: 8px; } .ttg-head { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; font-size: 11.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
+.ttgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 6px; }
+.ttg { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ttg-head { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 11.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
+.ttk { display: grid !important; grid-template-columns: 18px 1fr; column-gap: 8px; align-items: center; padding: 4px 0; font-size: 12.5px; } .ttk input { grid-row: 1 / 3; } .ttk small { font-size: 10.5px; line-height: 1.3; }
+.ob-sec .bguide { margin-top: 4px; } .ob-sec > small.mut { display: block; margin-top: 8px; }
 .ttg-head b { color: var(--text); } .ttg-head a { font-size: 10.5px; text-transform: none; letter-spacing: 0; cursor: pointer; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); } .ttg-head a:hover { color: var(--text); }
 .tbl.compact { border-spacing: 0 3px; } .tbl.compact td { height: 28px; font-size: 12px; }
 /* dashboard like the old one */

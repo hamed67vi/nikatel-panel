@@ -300,7 +300,7 @@ PAGES.tunnels = async () => {
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
   if (s === "test") return PAGES.tunnelTest();
-  if (s === "create") { $("#page").innerHTML = `<div class="card" id="build-card"><h3>⇄ Create tunnel <span class="sp"></span><small class="mut">GRE (local IPs) + Backhaul with the best settings</small></h3>${await buildFormHtml()}</div>`; return; }
+  if (s === "create") { $("#page").innerHTML = `<div class="card" id="build-card"><h3>⇄ Create tunnel <span class="sp"></span><small class="mut">pick the servers, the ports and the tunnel type - the panel does the rest and removes everything when a build fails</small></h3>${await buildFormHtml()}</div>`; return; }
   return PAGES.tunnelsList();
 };
 PAGES.configs = async () => { renderSub(); return sub("configs") === "panels" ? PAGES.panels() : PAGES.configsList(); };
@@ -320,9 +320,11 @@ PAGES.tunnelTest = async () => {
       <label>Foreign server<select id="tt-foreign" ${running ? "disabled" : ""} onchange="tt.foreign=this.value;localStorage.setItem('nk.tt.foreign',this.value)">${opt("foreign", tt.foreign)}</select></label>
       <div class="frm-act">${running ? `<button class="danger" onclick="ttStop()">Stop</button>` : `<button class="pri" onclick="ttStart()">Start test</button>`}<small class="mut">${running ? "the current transport finishes, then the test stops; everything temporary is removed" : "each ticked transport is built as a temporary tunnel, measured, and removed again — one after the other"}</small></div>
     </div>
-    <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick a whole engine or single transports</small></h4>
-      ${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="ttg"><div class="ttg-head"><b>${esc(g)}</b><a onclick="ttGroup('${esc(g)}', true)">all</a><a onclick="ttGroup('${esc(g)}', false)">none</a></div><div class="ob-inbounds">${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> <b>${esc(k.label.replace(/^[^·]+· /, ""))}</b> <small class="mut">${esc(k.note)}</small></label>`).join("")}</div></div>`).join("")}</div>
-    <small class="mut">For every ticked transport the panel builds a temporary tunnel of that engine between the two servers, measures latency / jitter / loss and speed through it (Backhaul: 30 pings over GRE + a download; the others: through the tunnel's test door, both ways), gives a 0-100 score, and removes everything again. Nothing is added to your list; the full story of each run stays in Repairs.</small></div>
+    <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick a whole engine or single transports; each one is built as a temporary tunnel, measured, and removed</small></h4>
+      <div class="ttgrid">${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="ttg"><div class="ttg-head"><b>${esc(g)}</b><span class="sp"></span><a onclick="ttGroup('${esc(g)}', true)">all</a><a onclick="ttGroup('${esc(g)}', false)">none</a></div>${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> <b>${esc(k.label.replace(/^[^·]+· /, ""))}</b><small class="mut">${esc(k.note)}</small></label>`).join("")}</div>`).join("")}</div></div>
+    <div class="ob-sec"><h4>Which tunnel for which situation <small class="mut">— click one to open Create tunnel with it</small></h4>
+      <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" onclick="bkPick('${k}', '${t}');setSub('tunnels','create')"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
+      <small class="mut">Every engine ships with its many-users settings (multiplexing, 8 mux channels, 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels). Backhaul is measured with 30 pings over GRE and a download; the other engines through their test door, both ways. Nothing is added to your list; the story of each run stays in Repairs.</small></div></div>
     ${j ? `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
       <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
         <thead><tr><th>Transport</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Download</th><th>Score</th><th>Verdict</th></tr></thead>
@@ -432,6 +434,7 @@ async function loadTunnelCharts(id) {
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
 const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
 /* what to pick, and why - the defaults below every engine are already the many-users settings (mux, 8 mux channels, 16-24 pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels) */
+window.bkPick = (k, t) => { bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); };
 const BK_GUIDE = [
   ["⭐ Many users, clean route", "Backhaul over GRE · TCP Mux", "backhaul", "tcpmux", "hundreds of users over a few connections; the GRE link hides the real traffic. The default for every tunnel in this panel."],
   ["GRE filtered between the two servers", "BackPack · TCP Mux", "backpack", "tcpmux", "same multiplexing as backhaul, but over a plain TCP control port - works where GRE is dropped."],
@@ -442,12 +445,18 @@ const BK_GUIDE = [
   ["Small group, simplest setup", "Chisel · TLS WebSocket", "chisel", "wss", "one HTTPS port on the Iran server, key pinned; fine for tens of users, CDN-able."],
   ["Everything else is blocked", "BackPack · xDi (ICMP)", "backpack", "xdi", "KCP inside ping packets; slow, last resort."],
 ];
-window.bkPick = (k, t) => { bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); refresh(); };
+/* two or three words per type, shown in the drop-down */
+const BK_FOR = {"backhaul:tcpmux": "many users ⭐", "backhaul:tcp": "few users, plain", "backhaul:wsmux": "CDN-able, clear", "backhaul:wssmux": "CDN-able, TLS",
+  "backpack:tcpmux": "many users, GRE blocked", "backpack:tcp": "plain TCP", "backpack:stealth": "heavy filtering", "backpack:pck": "TCP stalls (root)", "backpack:kcp": "lossy route, games", "backpack:udp": "UDP services", "backpack:quic": "QUIC, UDP open", "backpack:ws": "behind your TLS", "backpack:wsmux": "WebSocket, mux", "backpack:wss": "looks like HTTPS", "backpack:wssmux": "HTTPS + mux, CDN", "backpack:xdi": "last resort, slow",
+  "backpack_direct:udp": "low latency, voice", "backpack_direct:quic": "low latency, QUIC", "backpack_direct:pck": "TCP throttled (root)", "backpack_direct:sni": "whitelisted domain", "backpack_direct:xdi": "UDP + TCP blocked",
+  "paqet:kcp": "provider stalls TCP", "chisel:ws": "small group, simple", "chisel:wss": "small group, TLS"};
 async function buildFormHtml() {
   const [servers, kd] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds")]);
   bk.kinds = kd.kinds;
   const K = bk.kinds.find(k => k.key === bk.kind) || bk.kinds[0]; bk.kind = K.key;
   const tr = K.transports.find(t => t.key === bk.transport) || K.transports[0]; bk.transport = tr.key;
+  const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
+  void srvOpt;
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
   const opt = (role, name) => servers.filter(s => s.role === role && s.enabled).map(s => `<option value="${s.id}" ${String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
@@ -458,23 +467,19 @@ async function buildFormHtml() {
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>SNI domain <small>(a domain your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "") + (tr.key === "pck" || tr.key === "sni" ? num("mtu", "Carrier MTU", 1380, 1000, 1500) : "") + chk("accept_udp", "Forward UDP too");
   else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode">${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
   else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
-  return `<div class="bsec guide"><h4><i>?</i> Which tunnel for which situation <span class="sp"></span><a class="mut" onclick="bk.guide=!bk.guide;refresh()">${bk.guide ? "hide" : "show"}</a></h4>
-    ${bk.guide ? `<div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row ${bk.kind === k && bk.transport === t ? "on" : ""}" onclick="bkPick('${k}', '${t}')"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
-    <small class="mut">All engines ship with their many-users settings: multiplexing where the transport has it, 8 mux channels, a 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq tuning on both kernels. Change a value only when you measured a reason.</small>` : ""}</div>
-  <form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
-    <div class="bsec"><h4><i>1</i> Servers and ports</h4><div class="bgrid">
+  const typeSel = `<select name="ttype" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
+    <div class="bgrid">
       <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required>${opt("iran", "iran_id")}</select></label>
       <label>Foreign server<select name="foreign_id" required>${opt("foreign", "foreign_id")}</select></label>
-      <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label></div>
-      <div id="auto-iran" class="mut"></div></div>
-    <div class="bsec"><h4><i>2</i> Engine</h4><div class="bkinds">${bk.kinds.map(k => `<label class="bkind ${k.key === K.key ? "on" : ""}"><input type="radio" name="kind" value="${k.key}" ${k.key === K.key ? "checked" : ""} onchange="bkKind(this.value)"><b>${BK_ICON[k.key] || "•"} ${esc(k.title)}</b><small>${esc(k.note)}</small><em>${k.direction === "direct" ? "Iran dials the foreign server" : "the foreign server dials Iran"}</em></label>`).join("")}</div></div>
-    <div class="bsec"><h4><i>3</i> Transport and options</h4><div class="bgrid">
-      <label>${K.transports.length > 1 ? "Transport" : "Transport"}<select name="transport" onchange="bkTransport(this.value)">${K.transports.map(t => `<option value="${t.key}" ${t.key === tr.key ? "selected" : ""}>${esc(t.label)} — ${esc(t.note)}</option>`).join("")}</select></label>
-      ${options}</div></div>
-    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button>
-      <small class="mut">${K.key === "backhaul" ? "GRE link with local IPs, then backhaul: the panel measures the MTU, tunes both kernels, verifies the GRE link holds, starts backhaul on both sides and tests the data path." : "Both servers are inspected, the engine is installed when missing, a test door is opened on the foreign side, the services start and the panel waits until data really passes, then measures latency / jitter / loss and speed through the tunnel."} A failed build removes everything it created.</small></div>
+      <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label>
+      <label>Tunnel type${typeSel}</label>
+      ${options}</div>
+    <div id="auto-iran" class="mut"></div>
+    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" onclick="cancelEdit()">Cancel</button></div>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
+window.bkType = v => { const [k, t] = v.split("|"); bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); refresh(); };
 window.bkKeep = form => { const f = new FormData(form); bk.v = {}; for (const [k, x] of f.entries()) bk.v[k] = x; };
 window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); refresh(); };
 window.bkTransport = t => { bk.transport = t; refresh(); };
