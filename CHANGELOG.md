@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.4 - 2026-10-11 - Search boxes in their own bar, a small search on the dashboard
+
+* The search box of Nodes, Tunnels and Configs now sits in its own bar under the buttons. On Nodes and Tunnels it hides rows at once without redrawing the page, so the buttons beside it no longer jump.
+* The Dashboard has a small search: type a few letters and the servers, tunnels and configs whose name (or a part of it) starts with them are listed; a click opens it (arrow keys + Enter work too).
+
 ## 1.14.3 - 2026-10-11 - A cut tunnel is tested from one other Iran server; duplicates are marked
 
 * When a cut tunnel could not be healed and moving it is off, the Smart repair now builds ONE temporary test tunnel from the best other Iran server to the same foreign server (hidden from the cards, removed again) and says what it means: the foreign server works from there = the route / the Iran server is the fault; it is poor there too = the foreign server or its provider. Nothing is moved and no server IP is changed (the DNS switch stays off).

@@ -245,9 +245,38 @@ window.closeModal = () => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
 /* ---- dashboard */
+/* the small search of the dashboard: a few letters, and the servers / tunnels / configs whose name (or a part of it) starts with them are listed; a click opens it */
+state.dq = ""; let dqSel = 0;
+function dqItems(q) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const starts = n => { n = String(n || "").toLowerCase(); return n.startsWith(q) || n.split(/[-_ .]+/).some(w => w.startsWith(q)); };
+  const out = [];
+  (state.serversCache || []).filter(s => starts(s.name)).forEach(s => out.push({kind: "server", name: s.name, sub: s.role === "iran" ? "Iran server" : "foreign server", st: s.enabled === false ? "" : s.online === false ? "down" : s.online ? "up" : "", role: s.role}));
+  (state.tunnelsCache || []).filter(t => starts(t.name)).forEach(t => out.push({kind: "tunnel", name: t.name, sub: `tunnel · ${t.iran_name} ⇄ ${t.foreign_name}`, st: t.state}));
+  (state.cfgCache || []).filter(c => starts(c.name)).forEach(c => out.push({kind: "config", name: c.name, sub: "config", st: c.status === "up" ? "up" : c.status === "down" ? "down" : ""}));
+  return out.slice(0, 8);
+}
+const dqHtml = q => { const it = dqItems(q); if (!q.trim()) return ""; return it.length ? it.map((x, i) => `<a class="${i === dqSel ? "on" : ""}" onmousedown="dqPick(${i})"><span class="st ${x.st}"></span>${esc(x.name)}<small>${esc(x.sub)}</small></a>`).join("") : '<div class="none">Nothing starts with that.</div>'; };
+const dashSearch = () => `<div class="dsearch"><input id="dq" type="search" placeholder="Search a server, tunnel or config…" value="${esc(state.dq)}" oninput="dqType(this.value)" onkeydown="dqKey(event)" onblur="setTimeout(()=>{const l=$('#dq-list');if(l)l.innerHTML=''},150)" autocomplete="off" spellcheck="false"><div class="dq-list" id="dq-list">${dqHtml(state.dq)}</div></div>`;
+window.dqType = v => { state.dq = v; dqSel = 0; $("#dq-list").innerHTML = dqHtml(v); };
+window.dqKey = e => {
+  const n = dqItems(state.dq).length;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (n) { dqSel = (dqSel + (e.key === "ArrowDown" ? 1 : n - 1)) % n; $("#dq-list").innerHTML = dqHtml(state.dq); } }
+  else if (e.key === "Enter") { e.preventDefault(); dqPick(dqSel); }
+  else if (e.key === "Escape") { state.dq = ""; e.target.value = ""; $("#dq-list").innerHTML = ""; }
+};
+window.dqPick = i => {
+  const x = dqItems(state.dq)[i]; if (!x) return;
+  state.dq = "";
+  if (x.kind === "server") { go("nodes"); state.tab = x.role; localStorage.setItem("nk.tab", x.role); }
+  else if (x.kind === "tunnel") go("tunnels");
+  else { go("configs"); cf.q = x.name.toLowerCase(); }
+  if (x.kind !== "config") state.q = x.name.toLowerCase();
+  refresh();
+};
 PAGES.dashboard = async () => {
   const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
-  state.tunnelsCache = tl; state.cfgCache = cfg.configs;
+  state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.serversCache = srv;
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
   $("#n-servers").textContent = o.servers.total; $("#n-tunnels").textContent = o.tunnels.total; $("#n-configs").textContent = cfg.configs.length;
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
@@ -255,6 +284,7 @@ PAGES.dashboard = async () => {
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   $("#page").innerHTML = `
+    ${dashSearch()}
     <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " degraded" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
@@ -347,7 +377,7 @@ PAGES.servers = async () => {
   const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.serversCache = list;
   const mine = list.filter(s => s.role === state.tab);
-  const rows = mine.filter(s => (state.mtab !== "problems" || srvProblem(s)) && (!state.q || (s.name + s.host + s.provider).toLowerCase().includes(state.q)));
+  const rows = mine.filter(s => (state.mtab !== "problems" || srvProblem(s)));
   const hostN = {}; list.forEach(s => { hostN[s.host] = (hostN[s.host] || 0) + 1; });   // the same address added as two servers
   const dupHost = s => hostN[s.host] > 1 ? `<span class="pill err" title="Another server in the list has the same address (${esc(s.host)}): a duplicate?">duplicate IP</span>` : "";
   const nProb = mine.filter(srvProblem).length, online = mine.filter(s => s.online).length;
@@ -376,7 +406,7 @@ PAGES.servers = async () => {
   const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = (!s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
-    return `<tr class="${cls}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
+    return `<tr class="${cls}" data-q="${esc((s.name + " " + s.host + " " + (s.provider || "")).toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
       <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}<span class="pill">${esc(s.provider || s.asn || "")}</span>${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
       <td>${srvBusy(s) ? `<span class="busy-chip" title="${esc(srvBusy(s).what + (srvBusy(s).detail ? ": " + srvBusy(s).detail : ""))}"><i class="spin"></i>${esc(srvBusy(s).what)}…${srvBusy(s).detail ? `<span class="busy-detail">${esc(srvBusy(s).detail)}</span>` : ""}</span>` : noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
@@ -393,11 +423,12 @@ PAGES.servers = async () => {
       <div class="tile"><small>Traffic now</small><b>${sumNet.toFixed(0)} Mb/s</b><span>sum of ↓ and ↑ over all ${state.tab} servers</span></div></div>
     <div class="toolbar">
       <button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a>
-      <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"></div>
+      <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div></div>
+    ${searchBar()}
     <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:17%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:16%">'}</colgroup>
       <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
       <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;;
-  const q = $("#q"); if (q && state.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  applyQ();
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
 };
@@ -551,7 +582,17 @@ async function loadServerCharts(id) {
     <div class="mgrid">${chartCard("CPU", series("cpu"), {max: 100, unit: "%", warn: 70, bad: 85, fmt: v => Math.round(v)})}${chartCard("RAM", series("ram"), {max: 100, unit: "%", warn: 80, bad: 90, fmt: v => Math.round(v)})}${chartCard("Disk", series("disk"), {max: 100, unit: "%", warn: 75, bad: 85, fmt: v => Math.round(v)})}${chartCard("Load (1 min)", series("load1"), {fmt: v => (Math.round(v * 100) / 100)})}${chartCard("Download ↓", series("rx_mbps"), {unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {unit: " Mb/s"})}${chartCard("Connections", series("conn"), {fmt: v => Math.round(v)})}</div>`;
 }
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
-let qT; window.setQ = v => { state.q = v.trim().toLowerCase(); clearTimeout(qT); qT = setTimeout(refresh, 150); };
+let qT;
+/* the search box of Nodes and Tunnels sits in its own bar and hides rows at once: nothing is redrawn, so nothing around it moves */
+const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" spellcheck="false"></div>`;
+function applyQ() {
+  const q = (state.q || "").trim(); let shown = 0, total = 0;
+  document.querySelectorAll("#page tr[data-q]").forEach(tr => { const hit = !q || tr.dataset.q.includes(q); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });
+  document.querySelectorAll("#page .nk-ghead").forEach(h => { const tb = h.nextElementSibling; if (tb && tb.matches("table")) h.classList.toggle("q-hide", !!q && !tb.querySelector("tr[data-q]:not(.q-hide)")); });
+  document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
+  const sb = $(".searchbar"); if (sb) sb.dataset.n = q ? shown + " / " + total : "";
+}
+window.setQ = v => { state.q = v.trim().toLowerCase(); applyQ(); };
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
@@ -790,10 +831,10 @@ PAGES.tunnelsList = async () => {
   const fcount = {}; list.forEach(t => { fcount[t.foreign_name] = (fcount[t.foreign_name] || 0) + 1; });   // how many tunnels end on the same foreign server
   const dupMark = t => fcount[t.foreign_name] > 1 ? `<span class="dup" title="This foreign server ends ${fcount[t.foreign_name]} tunnels (${esc(list.filter(x => x.foreign_name === t.foreign_name).map(x => x.name).join(", "))}). Is that on purpose?">⚠ ×${fcount[t.foreign_name]}</span>` : "";
   const wrench = t => fixing.has(t.name) ? '<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span>' : "";
-  const rows = list.filter(t => (!state.q || (t.name + t.iran_name + t.foreign_name + t.type).toLowerCase().includes(state.q)) && (tmode === "all" || tunSev(t)));
+  const rows = list.filter(t => tmode === "all" || tunSev(t));
   const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "UNSTABLE" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
-  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}">
+  const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}" data-q="${esc((t.name + " " + t.iran_name + " " + t.foreign_name + " " + t.type + " " + (t.iran_host || "") + " " + (t.foreign_host || "")).toLowerCase())}">
       <td class="name">${esc(t.name)}${wrench(t)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
       <td>${workMap.has(t.name) ? `<span class="busy-chip" title="The smart repair is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>` : `<span class="st ${t.state}">${stText(t)}</span>${t.last_error && t.state !== "up" ? `<small class="${t.state === "down" ? "err" : "mut"} td-err" title="${esc(t.last_error)}">${esc(t.state === "degraded" ? shortWhy(t) : t.last_error.slice(0, 40))}</small>` : ""}`}</td>
@@ -804,13 +845,15 @@ PAGES.tunnelsList = async () => {
       <td class="num hide-sm" title="${esc(q.latency_ms != null ? "quality test: " + q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "% · score " + q.score : "")}">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td><div class="td-act"><button class="sm" onclick="toggleDetail(${t.id})" title="Details, charts and actions of this tunnel">More</button><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();restartTunnel(${t.id}, '${esc(t.name)}')" title="Restart the tunnel service on both servers (the GRE link stays)">Restart</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></div></td></tr>`; };
   const creating = false;
-  $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="retuneAll()" title="Applies the newer tunnel defaults (more parallel connections, a bigger stream buffer) to the tunnels that exist - one at a time, at quiet moments, each checked and put back if it gets worse">⚡ Tune all</button><button onclick="checkAll()" title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">🔍 Check all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><button onclick="detectTunnels()" title="Scan every server for tunnels that are not in this list - complete pairs can be added, incomplete leftovers removed">🔍 Detect on servers</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><input id="q" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)"></div>
+  $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="retuneAll()" title="Applies the newer tunnel defaults (more parallel connections, a bigger stream buffer) to the tunnels that exist - one at a time, at quiet moments, each checked and put back if it gets worse">⚡ Tune all</button><button onclick="checkAll()" title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">🔍 Check all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><button onclick="detectTunnels()" title="Scan every server for tunnels that are not in this list - complete pairs can be added, incomplete leftovers removed">🔍 Detect on servers</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span></div>
+    ${searchBar()}
     <div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
     <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:11%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:9%"><col style="width:290px"></colgroup>
       <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th>Foreign node</th><th>Ports</th><th>Latency</th><th>Traffic</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
+  applyQ();
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);
   else if (state.detect) detectHtml();
@@ -1321,9 +1364,10 @@ PAGES.configsList = async () => {
       <div class="tile ok"><small>Online</small><b>${up.length}</b><span>answer from inside Iran</span></div>
       <div class="tile ${down.length ? "bad" : ""}"><small>Offline</small><b>${down.length}</b><span>${down.length ? down.slice(0, 3).map(c => esc(c.name)).join(", ") + (down.length > 3 ? "…" : "") : "none"}</span></div>
       <div class="tile"><small>Average live ping</small><b>${pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) + " ms" : "—"}</b><span>over ${pings.length} online configs</span></div></div>
-    <div class="toolbar"><input id="cq" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)">
+    <div class="toolbar">
       <button class="${cf.edit === "new" ? "on" : ""}" onclick="cfNew()">＋ Add</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config in this view, one after the other" ${list.length ? "" : "disabled"}>⚡ Test all</button><button class="danger" onclick="cfDeleteAll()" ${list.length ? "" : "disabled"}>🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
       <span class="sp"></span><div class="tabs" title="Display">${[["grid", "▦ Grid"], ["compact", "▤ Compact"], ["list", "☰ List"]].map(([k, l]) => `<button class="${cf.view === k ? "on" : ""}" onclick="cfView('${k}')">${l}</button>`).join("")}</div></div>
+    <div class="searchbar"><input id="cq" type="search" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)" autocomplete="off" spellcheck="false"></div>
     ${gbar}
     ${cf.sub && cf.edit !== "new" ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
