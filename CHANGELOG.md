@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.15 - 2026-10-11 - Folder tabs on Tunnels and Nodes
+
+* The sub tabs (Tunnel manager / Tunnel test / Smart repair, and on Nodes Iran / Foreign / Gateway) stand on the box under them like folder tabs; the open tab is one piece with the box. On Nodes the box with the buttons now comes first and the tiles under it.
+
 ## 1.14.14 - 2026-10-11 - The tunnel arrow between the nodes
 
 * In the tunnel list a **⇄** arrow sits between the Iran node and the foreign node, green (and gently moving) when the tunnel is up, yellow when unstable, red when down; hover shows the tunnel.

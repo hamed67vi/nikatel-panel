@@ -926,3 +926,10 @@ button.pri:not(.ai-btn):disabled { transform: none; box-shadow: inset 0 1px 0 rg
 .tun-arr.up { color: var(--ok); text-shadow: 0 0 10px rgba(52,211,153,.55); animation: tunFlow 2.4s ease-in-out infinite; }
 .tun-arr.degraded { color: var(--warn); text-shadow: 0 0 10px rgba(251,191,36,.5); } .tun-arr.down { color: var(--bad); text-shadow: 0 0 10px rgba(255,107,139,.5); }
 @keyframes tunFlow { 0%, 100% { transform: translateX(-1px); opacity: .75; } 50% { transform: translateX(2px); opacity: 1; } }
+/* the sub tabs (Tunnels, Nodes) are folder tabs: they stand on the box under them, and the open one is one piece with it */
+body.tabbed .subnav { margin: -4px 0 -1px 2px; position: relative; z-index: 3; }
+body.tabbed .subnav .tabs { display: flex; gap: 4px; padding: 0; border-radius: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+body.tabbed .subnav .tabs button { height: 38px; padding: 0 20px; border-radius: 15px 15px 0 0; border: 1px solid var(--line); border-bottom: 0; background: rgba(255,255,255,.035); color: var(--mut); box-shadow: none; transform: none; }
+body.tabbed .subnav .tabs button:hover { background: rgba(255,255,255,.07); color: var(--text); transform: none; box-shadow: none; }
+body.tabbed .subnav .tabs button.on { height: 40px; margin-bottom: -1px; background: #1b1e2b; color: #f6dc8a; border-color: var(--line-hi, rgba(255,255,255,.22)); box-shadow: inset 0 2px 0 #e9bf55, 0 -6px 18px rgba(233,191,85,.10); }
+body.tabbed #page > .toolbar:first-child { border-top-left-radius: 0; margin-top: 0; }
