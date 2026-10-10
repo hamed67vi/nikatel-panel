@@ -371,3 +371,8 @@ nav a > span:first-child { display: inline-flex; align-items: center; gap: 8px; 
 button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .dash-action, .tile.click, .ev.click, .rd-row, tbody tr, .mchip, a.mut {
   transition: background-color .32s ease, color .32s ease, border-color .32s ease, box-shadow .32s ease, opacity .32s ease, filter .32s ease;
 }
+
+/* ---- server list: the number sits right after its own bar, columns are kept apart; a flag has a clear gap before the name */
+.pbar { gap: 7px; } .pbar .bar { flex: 0 1 112px; min-width: 24px; } .pbar b { flex: none; min-width: 48px; text-align: left; }
+.srv-tbl td:has(.pbar) { padding-right: 30px; }
+.flg { margin-right: 4px; }
