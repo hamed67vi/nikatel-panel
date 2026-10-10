@@ -151,6 +151,9 @@ nav a { height: 38px; font-size: 13.5px; }
 .nk-gbadge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); font-size: 10px; font-weight: 700; color: var(--mut); vertical-align: middle; }
 .live { display: inline-block; margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .6px; } .live.up { color: var(--ok); } .live.down { color: var(--bad); } .live.unk { color: var(--mut); }
 .cf-nm { font-weight: 700; } .cf-grp { font-size: 11.5px; }
+.addpick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } @media (max-width: 640px) { .addpick { grid-template-columns: 1fr; } }
+.addpick a { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 26px 18px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; transition: border-color .25s, filter .25s, background .25s; }
+.addpick a:hover { border-color: var(--line-hi); filter: brightness(1.08); } .addpick i { font-style: normal; font-size: 34px; } .addpick b { font-size: 15px; } .addpick small { color: var(--mut); font-size: 12px; line-height: 1.45; }
 /* server rows like the old panel: Server | Status | IPv4 | GRE | RAM | CPU | Disk; a colour bar on the left, an accent sweep on hover */
 .srv-list { display: grid; gap: 4px; }
 .srv-row { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(170px, 1.2fr) 130px 100px repeat(3, minmax(110px, 1fr)); column-gap: 12px; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background-color: rgba(255,255,255,.035); background-image: linear-gradient(90deg, rgba(124,131,255,.2), rgba(124,131,255,.05) 42%, transparent 62%); background-repeat: no-repeat; background-size: 0% 100%; font-size: 12.5px; cursor: pointer; transition: background-size .4s cubic-bezier(.22,.8,.3,1), border-color .25s; }
