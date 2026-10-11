@@ -2116,3 +2116,8 @@ html[data-mode="light"] input[type=checkbox].sw::before { background: rgba(0,0,0
 /* the settings frame is paler */
 #page .set-wrap > .card.sf { background: rgba(255,255,255,.015) !important; border-color: rgba(255,255,255,.06) !important; box-shadow: none !important; } html[data-mode="light"] #page .set-wrap > .card.sf { background: rgba(255,255,255,.5) !important; }
 .set-desc { background: rgba(255,255,255,.015) !important; border-color: rgba(255,255,255,.05) !important; }
+/* the switch exactly like the reference (iOS): a 46 x 28 track, a white knob of 24 px with a 2 px gap, green when on */
+input[type=checkbox].sw { width: 46px !important; height: 28px !important; min-width: 46px !important; }
+input[type=checkbox].sw::before { top: 0 !important; bottom: 0 !important; background: rgba(255,255,255,.22); }
+input[type=checkbox].sw::after { top: 2px !important; left: 2px !important; width: 24px !important; height: 24px !important; box-shadow: 0 2px 4px rgba(0,0,0,.35); }
+input[type=checkbox].sw:checked::after { transform: translateX(18px) !important; }
