@@ -976,3 +976,6 @@ html[data-mode="light"] .tiles { background: linear-gradient(rgba(255,255,255,.5
 .bk-sched { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 2px; border-top: 1px solid var(--line); } .bk-sched label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; } .bk-sched input[type=number] { width: 62px; height: 28px; }
 .bk-files { margin-top: 4px; } .bk-more { margin-top: 10px; } .bk-more summary { cursor: pointer; color: var(--mut); font-size: 12px; } .bk-pass { margin-bottom: 10px; }
 @media (max-width: 860px) { .bk-part { grid-template-columns: 46px 1fr; } .bk-tg, .bk-act { grid-column: 2; } }
+/* ---- lighter: a blur behind every button, row and card made the browser repaint hundreds of layers; only the big surfaces (header, menu, windows, toasts) keep it, and the up-arrows do not move all the time */
+button, .card, .tile, .gw-row, .gw-out, .fix, .tabs, .ob-raw, .gl-out, .detail td { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.tun-arr.up { animation: none; }

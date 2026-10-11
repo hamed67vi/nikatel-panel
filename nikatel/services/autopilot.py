@@ -935,6 +935,22 @@ def observe_all() -> None:
             continue
 
 
+_SLOW_AT = [0.0]
+
+
+def repair_cycle() -> None:
+    """The one repair job (every minute): the plain restarts of the tunnels that are down, and - every five minutes - the smart repair of those a restart could not heal
+    and the look at the tunnels that lose packets. (It replaces three jobs that woke up separately and looked at the same tunnels.)"""
+    actions.auto_repair()
+
+    if time.time() - _SLOW_AT[0] < 290:
+        return
+
+    _SLOW_AT[0] = time.time()
+    auto_escalate()
+    observe_all()
+
+
 # ------------------------------------------------------------------ automatic escalation (Settings -> Repairs, level)
 def auto_escalate() -> None:
     """Job hook: a tunnel that plain restarts could not heal gets a smart repair, once per 6 hours, never `move`."""

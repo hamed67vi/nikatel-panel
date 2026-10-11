@@ -18,7 +18,6 @@ from .api import router as api_router
 from .config import get_settings
 from .db import init_db
 from .services import (
-    actions,
     alerts,
     autopilot,
     backup,
@@ -79,12 +78,12 @@ def _register_jobs() -> None:
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
     jobs.register("backup", 600, backup.scheduled)
-    jobs.register("auto-repair", 60, actions.auto_repair)
-    jobs.register("smart-repair", 300, autopilot.auto_escalate)
-    jobs.register("observe", 300, autopilot.observe_all)
+    jobs.register("repair", 60, autopilot.repair_cycle)         # the plain restarts every minute; the smart repair and the look at lossy tunnels every five minutes (one job, not three)
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
-    jobs.register("failover", 60, failover.check)
+    if failover.ENABLED:                                          # while the DNS failover is switched off there is nothing to check every minute
+        jobs.register("failover", 60, failover.check)
+
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 120, panels.check_all)
     jobs.register("geo", 3600, nodes.geo_missing_job)

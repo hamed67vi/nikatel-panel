@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.1 - 2026-10-11 - A lighter panel
+
+* **One shared SSH connection per server** (kept two minutes after its last use) instead of a new handshake for every short command: the handshakes were most of the CPU the panel used and made the tunnel check run for ~40 s of every minute. If the shared connection can not be started the commands connect on their own as before (switch it off with NIKATEL_SSH_MULTIPLEX=false).
+* **Three repair jobs became one** (*repair*: the plain restarts every minute, the smart repair and the look at lossy tunnels every five minutes). The DNS *failover* job is not started while the failover is switched off. Jobs that no longer exist leave the Jobs list.
+* The browser has less to paint: no blur behind every button, row and card (only the header, menu, windows and toasts keep it), no endless movement of the up-arrows. The Shop bot and Settings pages no longer refresh themselves every 15 seconds (each refresh of the bot page ran SSH and database queries).
+
 ## 1.15.0 - 2026-10-11 - Backups: one file and one Telegram topic per part
 
 * **Parts.** The panel and the shop bot are backed up separately: *Panel* (database, settings, SSH keys) and *Shop bot* (the bot database dump, taken on the bot server and fetched over SSH; the server keeps its last 7 automatic dumps). Each is its own encrypted file, has its own switch and its own **Back up now**; one part failing does not stop the other.

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -363,9 +364,10 @@ done
 }
 
 
-def _ssh_base(node: Node) -> list[str]:
+def _ssh_base(node: Node, mux: str = "use") -> list[str]:
+    """The ssh command line. mux: "use" = share the background connection of this server when there is one (never starts one), "master" = start it, "" = a plain connection."""
     s = get_settings()
-    return [
+    cmd = [
         "ssh", "-i", str(s.ssh_key), "-p", str(node.port),
         "-o", "BatchMode=yes",
         "-o", "StrictHostKeyChecking=accept-new",
@@ -373,11 +375,51 @@ def _ssh_base(node: Node) -> list[str]:
         "-o", f"ConnectTimeout={s.ssh_connect_timeout}",
         "-o", "ServerAliveInterval=10",
         "-o", "LogLevel=ERROR",
-        f"{node.user}@{node.host}",
     ]
+
+    if mux and s.ssh_multiplex:
+        cmd += ["-o", f"ControlMaster={'yes' if mux == 'master' else 'no'}", "-o", f"ControlPath={s.data_dir / 'cm' / '%C'}"]
+
+        if mux == "master":
+            cmd += ["-o", "ControlPersist=120", "-fN"]
+
+    return cmd + [f"{node.user}@{node.host}"]
+
+
+_MASTER_LOCKS: dict[str, threading.Lock] = {}
+_MASTER_GUARD = threading.Lock()
+
+
+def _ensure_master(node: Node) -> None:
+    """One background ssh connection per server, kept for two minutes after its last use: the many short commands of the jobs share it instead of each doing its own handshake
+    (the handshake was most of the CPU the panel used). It is started apart, with its output thrown away - a master that inherited the pipe of a command would keep that command waiting.
+    When it can not be started, commands simply connect on their own, as before."""
+    s = get_settings()
+
+    if not s.ssh_multiplex:
+        return
+
+    key = f"{node.user}@{node.host}:{node.port}"
+
+    with _MASTER_GUARD:
+        lock = _MASTER_LOCKS.setdefault(key, threading.Lock())
+
+    with lock:
+        try:
+            (s.data_dir / "cm").mkdir(parents=True, exist_ok=True)
+            (s.data_dir / "cm").chmod(0o700)
+            use = _ssh_base(node)
+            alive = subprocess.run(use[:-1] + ["-O", "check", use[-1]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False)
+
+            if alive.returncode != 0:
+                subprocess.run(_ssh_base(node, "master"), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=s.ssh_connect_timeout + 15, check=False)
+        except (OSError, subprocess.SubprocessError) as e:
+            log.debug("no shared connection to %s: %s", node.host, e)
 
 
 def _exec(node: Node, script: str, timeout: int) -> str:
+    _ensure_master(node)
+
     try:
         r = subprocess.run(_ssh_base(node) + ["bash -s"], input=script.encode(), stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, timeout=timeout, check=False)

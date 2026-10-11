@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # ssh to the managed servers
     ssh_key: Path = Path("/root/.ssh/nikatel_v2_node")
     ssh_connect_timeout: int = 10
+    # one background connection per server, shared by the many short commands of the jobs (a new SSH handshake for each of them was most of the CPU the panel used)
+    ssh_multiplex: bool = True
     # while true, the panel may only run the reviewed read-only scripts (nikatel.ssh.SCRIPTS)
     read_only: bool = True
 

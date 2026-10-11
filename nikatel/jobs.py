@@ -7,6 +7,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from sqlalchemy import select
+
 from .db import session
 from .log import get_logger, request_id
 from .models import Job
@@ -86,6 +88,9 @@ def _loop(spec: _Spec) -> None:
 
 def start_all() -> None:
     with session() as db:
+        for gone in [j for j in db.scalars(select(Job)) if j.name not in _SPECS]:       # a job that was merged or switched off must not stay in the list as stale
+            db.delete(gone)
+
         for spec in _SPECS.values():
             job = db.get(Job, spec.name)
 

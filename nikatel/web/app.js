@@ -212,7 +212,7 @@ async function refresh() {
     if (transient) { clearTimeout(retryT); retryT = setTimeout(() => { if (seq === navSeq) refresh(); }, Math.min(8000, 1500 * 2 ** Math.min(retries++, 3))); }
   }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "", acts = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }

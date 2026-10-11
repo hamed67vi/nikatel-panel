@@ -266,3 +266,36 @@ def test_probe_verdict_tells_route_from_foreign_server():
     poor = probe_verdict("fi1", "ir1", "ir2", {"score": 20, "latency_ms": 300, "loss_pct": 30})
     assert "fi1 or its provider" in poor
     assert "no result" in probe_verdict("fi1", "ir1", "ir2", None)
+
+def test_one_repair_job_runs_the_slow_steps_every_five_minutes(monkeypatch):
+    import time as _t
+
+    from nikatel.services import actions, autopilot
+
+    seen = []
+    monkeypatch.setattr(actions, "auto_repair", lambda: seen.append("restart"))
+    monkeypatch.setattr(autopilot, "auto_escalate", lambda: seen.append("escalate"))
+    monkeypatch.setattr(autopilot, "observe_all", lambda: seen.append("observe"))
+    monkeypatch.setattr(autopilot, "_SLOW_AT", [0.0])
+    autopilot.repair_cycle()
+    autopilot.repair_cycle()
+    assert seen == ["restart", "escalate", "observe", "restart"]                 # the restarts every time, the slow steps once
+    autopilot._SLOW_AT[0] = _t.time() - 301
+    autopilot.repair_cycle()
+    assert seen[-3:] == ["restart", "escalate", "observe"]
+
+
+def test_a_job_that_is_gone_leaves_the_jobs_list(monkeypatch):
+    from nikatel import jobs
+    from nikatel.db import session
+    from nikatel.models import Job
+
+    with session() as db:
+        db.add(Job(name="old-job", interval=60))
+
+    monkeypatch.setattr(jobs, "_SPECS", {})
+    monkeypatch.setattr(jobs.threading, "Thread", lambda *a, **k: type("T", (), {"start": lambda self: None})())
+    jobs.start_all()
+
+    with session() as db:
+        assert db.get(Job, "old-job") is None
