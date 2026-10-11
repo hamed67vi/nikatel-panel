@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.8 - 2026-10-11 - The ping arrow, twice as big and in the middle
+
+* The ping arrow in the tunnel list is twice as big and sits in the middle of the gap between the Iran node and the foreign node (the Iran column is narrower, the ping column wider).
+
 ## 1.16.7 - 2026-10-11 - Tunnels: buttons joined to the list; smaller monitoring
 
 * On Tunnels the row of buttons is one piece with the list box; the groups and their tables sit inside it.

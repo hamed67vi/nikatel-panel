@@ -1109,3 +1109,11 @@ html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #37415
 .modal .mon { gap: 6px; } .modal .mon .mhead small { display: none; } .modal .mrange button { height: 24px; padding: 0 10px; font-size: 11.5px; }
 .modal .mtile { padding: 5px 10px; } .modal .mtile b { font-size: 16px; } .modal .mtile span { font-size: 10.5px; }
 .modal .mcard { padding: 6px 10px 5px; } .modal .mcard h6 { margin-bottom: 3px; } .modal .mcard svg, .modal .mcard canvas { max-height: 110px; }
+/* the ping link, twice as big, in the middle of the gap between the Iran node and the foreign node (the Iran column is narrow, its text is short; the ping column is wide) */
+.tlink { min-width: 124px; gap: 3px; }
+.tlink .ms { font-size: 13px; }
+.tlink .wire { height: 20px; }
+.tlink .wire::before, .tlink .wire::after { left: 11px; right: 11px; height: 3px; border-radius: 3px; } .tlink .wire::before { top: 3px; } .tlink .wire::after { bottom: 3px; }
+.tlink .h { border-width: 6px; } .tlink .h.r { top: -1.5px; border-left-width: 10px; } .tlink .h.l { bottom: -1.5px; border-right-width: 10px; }
+.tlink .pk { width: 7px; height: 7px; } .tlink .pk.a { top: 1px; left: 11px; } .tlink .pk.b { bottom: 1px; left: calc(100% - 18px); }
+@keyframes pkRight { from { left: 11px; } to { left: calc(100% - 18px); } } @keyframes pkLeft { from { left: calc(100% - 18px); } to { left: 11px; } }
