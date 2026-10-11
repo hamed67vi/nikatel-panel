@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.2 - 2026-10-11 - One view in every detail window
+
+* The windows of a server, a tunnel and a config have no tabs any more: the boxes, the charts and the tools are one scrolling view under thin headings. The things you do most are in the window header: server *Console / Edit / Delete*, tunnel *Ports / Remove*, config *Edit / Delete*. The server console is the only other view, with a *Back* link. Made for people who are new to the panel: nothing is hidden behind a tab.
+
 ## 1.16.1 - 2026-10-11 - Boxed tab strips; the user list changes page from the bottom
 
 * The tab strips that stood alone (Settings and its inner tabs, Shop bot, Users / Hosts of a panel) are in the same soft framed box as the others.

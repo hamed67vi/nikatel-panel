@@ -459,22 +459,29 @@ function srvModal(s) {   // while the edit form is open the header keeps only th
   const f = s.facts || {}, editing = state.edit === s.id;
   showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`,
     `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide" + (editing ? " editing" : ""),
-    editing ? "" : `<button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port">✎ Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button>`);
+    editing ? "" : `<button class="sm" onclick="srvConsole(${s.id})" title="Run a command on the server, with presets">⌨ Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port">✎ Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button>`);
 }
-function tunModal(t) { showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide"); }
+function tunModal(t) {
+  showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
+    `${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports">⇅ Ports</button>` : ""}<button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')" title="Remove it from both servers; users lose their connection">Remove</button>`);
+}
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="https://flagcdn.com/20x15/${cc.toLowerCase()}.png" srcset="https://flagcdn.com/40x30/${cc.toLowerCase()}.png 2x" width="20" height="15" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
 const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? flagImg(cc) + " " + cc : "";
 const irow = (label, val) => `<div class="irow"><span>${label}</span><div>${val}</div></div>`;
 const ibox = (icon, title, rows) => `<div class="ibox"><h5><i>${icon}</i>${title}</h5>${rows.filter(Boolean).join("")}</div>`;
+/* a server window is ONE view (no tabs): the boxes, the 24 h charts, the tools; Edit, Delete and Console are in its header. The console is the only other view, with a Back link. */
 function serverDetailHtml(s) {
+  if (state.wtab === "console") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + serverPartHtml(s, "console");
+  return serverPartHtml(s, "overview") + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>` + serverPartHtml(s, "tools");
+}
+function serverPartHtml(s, tab) {
   const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};
   const abuseOn = ab.installed || (f.abuse_rules || 0) > 0;
-  const tab = state.wtab || "overview";
-  const tabs = `<div class="tabs wtabs">${[["overview", "Overview"], ["charts", "Charts 24 h"], ["tools", "Tools"], ["console", "⌨ Console"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
+  const tabs = "";
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
   // every tile = icon + title + one short line; what a test found is shown only in "Last results", so the tiles stay the same size
-  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools uni">${tool("⇄", "GRE test", "do its GRE links answer?", `greCheck(${s.id})`)}${tool("⌨", "Console", "run a command with presets", `srvConsole(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("🔐", "Change SSH password", "set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
+  if (tab === "tools") return tabs + `<div class="wgroup"><h4>Manage</h4><div class="wtools uni">${tool("⇄", "GRE test", "do its GRE links answer?", `greCheck(${s.id})`)}${tool("🔑", "Connect SSH", "install the panel's key with the password", `srvConnect(${s.id}, '${esc(s.name)}')`)}${tool("🔐", "Change SSH password", "set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${esc(s.name)}')`)}${tool("↺", "Forget host key", "after a reinstall of this server", `forgetKey(${s.id}, '${esc(s.name)}')`)}</div></div>
     ${s.role === "foreign" ? `<div class="wgroup"><h4>Security</h4><div class="wtools uni">${tool("🛰", "Check filtering in Iran", "ping from your Iran servers + check-host.net", `srvFilter(${s.id})`)}${tool("🛡", abuseOn ? "Remove Abuse-Defender" : "Install Abuse-Defender", abuseOn ? "stop dropping traffic to abused ranges" : "drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)}</div></div>` : ""}
     ${resBox(s)}
     <div class="wgroup"><h4>Open on my computer</h4><div class="wtools uni">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
@@ -508,9 +515,9 @@ window.copyText = t => { const done = () => toast("✓ Copied " + t, "ok"); if (
 window.wtab = k => {
   state.wtab = k;
   const body = $("#modal .modal-body");
-  if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { body.innerHTML = `<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k === "charts") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
-  if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); if (k === "charts") loadTunnelCharts(t.id); return; } }
-  if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; if (k === "charts") cfLoadChart(c.id); return; } }
+  if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { body.innerHTML = `<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
+  if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); loadTunnelCharts(t.id); return; } }
+  if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; cfLoadChart(c.id); return; } }
   refresh();
 };
 let CON_PRESETS = {};
@@ -860,16 +867,18 @@ PAGES.tunnelsList = async () => {
   else hideModal();
   if (state.open) loadTunnelCharts(state.open);
 };
+/* a tunnel window is ONE view too: the boxes, the charts, the repair tools; Ports and Remove are in its header */
 function detailRow(t) {
+  return tunPartHtml(t, "info") + `<div class="wsec"><h4>Last 24 hours</h4>${tunPartHtml(t, "charts")}</div>` + tunPartHtml(t, "actions");
+}
+function tunPartHtml(t, tab) {
   const d = t.detail || {}, u = t.units || {};
   const unit = (side, name) => `<div><span>${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b></div>`;
-  const tab = state.wtab || "info";
-  const tabs = `<div class="tabs wtabs">${[["info", "Info"], ["charts", "Charts 24 h"], ["actions", "Actions"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
+  const tabs = "";
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
   if (tab === "charts") return tabs + `<div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>`;
   if (tab === "actions") return tabs + `<div class="wgroup"><h4>Repair</h4><div class="wtools">${t.state === "up" ? tool("🛠", "Fix", "nothing to fix: the tunnel is healthy", "", "disabled") + tool("👁", "Dry run", "nothing to fix: the tunnel is healthy", "", "disabled") : tool("🛠", "Fix", "diagnose and repair step by step: restarts only what is not working", `fixTunnel(${t.id}, false)`) + tool("👁", "Dry run", "show what Fix would do, change nothing", `fixTunnel(${t.id}, true)`)}${tool("📊", "Quality", "latency, jitter, loss, speed, score", `qualityOne(${t.id})`)}${tool("🔔", "Mute alerts", "no Telegram alerts until unmuted in Settings", `muteRef('${esc(t.name)}', true)`)}</div></div>
-    <div class="wgroup"><h4>Change</h4><div class="wtools">${t.type === "backhaul" ? tool("⇅", "Ports", "change the forwarded ports", `editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')`) : ""}${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
-    <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("🗑", "Remove", "from both servers; users lose their connection", `deleteTunnel(${t.id}, '${esc(t.name)}')`, "danger")}</div></div>
+    <div class="wgroup"><h4>Change</h4><div class="wtools">${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
     <div id="fix-${t.id}" class="fix hidden"></div>`;
   const rec = t.record || {}, q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre";
   const unitRow = (side, label, name) => irow(label, `<span class="mono">${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "gw-ok" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b>`);
@@ -880,7 +889,7 @@ function detailRow(t) {
     ibox("🕒", "Status", [irow("State", `<span class="st ${t.state}">${esc(t.state)}</span>`), irow("Since", t.state_since ? ago(t.state_since) + " ago" : "—"), irow("Checked", when(t.last_check_at)), irow("Created", when(t.created_at)), irow("RTT", t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"), irow("Traffic", t.rx_mbps != null ? `↓ ${mbps(t.rx_mbps)} ↑ ${mbps(t.tx_mbps)}` : "—"), d.iran_error ? irow("Iran error", `<span class="err">${esc(d.iran_error)}</span>`) : "", d.foreign_error ? irow("Foreign error", `<span class="err">${esc(d.foreign_error)}</span>`) : "", t.last_error ? irow("Last error", `<span class="err">${esc(t.last_error)}</span>`) : ""]),
     ibox("⚙", "Services", [...(u.iran || []).map(n => unitRow("iran", "Iran", n)), ...(u.foreign || []).map(n => unitRow("foreign", "Foreign", n))]),
   ].join("");
-  return tabs + `<div class="iboxes">${boxes}</div>    <div id="fix-${t.id}" class="fix hidden"></div>`;
+  return tabs + `<div class="iboxes">${boxes}</div>`;
 }
 async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
@@ -1399,18 +1408,21 @@ PAGES.configsList = async () => {
   cf.names = names; cf.cache = d.configs;
   const openC = d.configs.find(c => c.id === cf.open);
   if (cf.add) cfAddModal();
-  else if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(shown(openC))}</b> <span class="pill">${esc(openC.group || "manual")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide"); else hideModal();
+  else if (openC) showModal(`<span class="st ${openC.status}"></span><b>${esc(shown(openC))}</b> <span class="pill">${esc(openC.group || "manual")}</span>${cf.edit === openC.id ? '<span class="pill">editor</span>' : ""}`, `<div id="cf-detail-${openC.id}">${cf.edit === openC.id ? '<div class="mut">loading the link…</div>' : cfDetailHtml(openC)}</div>`, "wide",
+    cf.edit === openC.id ? "" : `<button class="sm" onclick="cfEdit(${openC.id})" title="Change the link field by field, rename, group">✎ Edit</button><button class="sm danger" onclick="cfDel(${openC.id}, '${esc(openC.name)}')" title="Delete it from the probe; its history goes too">Delete</button>`); else hideModal();
   if (cf.open && cf.edit === cf.open) cfLoadEditor(cf.open);
   else if (cf.open) cfLoadChart(cf.open);
 };
+/* a config window is ONE view: the boxes, the monitoring charts, the tests; Edit and Delete are in its header */
 function cfDetailHtml(c) {
-  const m = c.meta || {}, tab = state.wtab || "info";
-  const tabs = `<div class="tabs wtabs">${[["info", "Info"], ["charts", "Monitoring"], ["actions", "Actions"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" onclick="wtab('${k}')">${l}</button>`).join("")}</div>`;
+  return cfPartHtml(c, "info") + `<div class="wsec"><h4>Monitoring</h4>${cfPartHtml(c, "charts")}</div>` + cfPartHtml(c, "actions");
+}
+function cfPartHtml(c, tab) {
+  const m = c.meta || {};
+  const tabs = "";
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}"><i>${icon}</i><b>${title}</b><small>${sub}</small></a>`;
   if (tab === "charts") return tabs + `<div id="cf-charts-${c.id}"><div class="mut">loading…</div></div>`;
-  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Test</h4><div class="wtools">${tool("⚡", "Speed test now", "download and upload through this config from inside Iran (1-3 min)", `cfSpeed(${c.id})`)}${tool("↻", "Ping now", "ask the probe for the live state of every config", "cfSync()")}${tool("🔗", "Copy link", "the vless:// vmess:// trojan:// ss:// link", `cfCopy(${c.id})`)}</div></div>
-    <div class="wgroup"><h4>Change</h4><div class="wtools">${tool("✎", "Edit", "change the link field by field, rename, group", `cfEdit(${c.id})`)}</div></div>
-    <div class="wgroup"><h4>Danger</h4><div class="wtools">${tool("🗑", "Delete from the probe", "its history goes too", `cfDel(${c.id}, '${esc(c.name)}')`, "danger")}</div></div>`;
+  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Test</h4><div class="wtools">${tool("⚡", "Speed test now", "download and upload through this config from inside Iran (1-3 min)", `cfSpeed(${c.id})`)}${tool("↻", "Ping now", "ask the probe for the live state of every config", "cfSync()")}${tool("🔗", "Copy link", "the vless:// vmess:// trojan:// ss:// link", `cfCopy(${c.id})`)}</div></div>`;
   const sp = c.down_mbps != null ? `↓ ${mb(c.down_mbps / 8)} ↑ ${mb(c.up_mbps / 8)} MB/s <small class="mut">(${mb(c.down_mbps)} / ${mb(c.up_mbps)} Mb/s)</small>` : "not measured";
   return tabs + `<div class="iboxes">${[
     ibox("🧩", "Config", [irow("Type", esc((m.proto || "—").toUpperCase())), irow("Address", `<span class="mono">${esc(m.address || "—")}</span>`), irow("Port", m.port || "—"), irow("Transport", esc(m.network || "—")), irow("TLS", m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : "none")]),
