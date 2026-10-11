@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.7 - 2026-10-11 - Hosts by port
+
+* **Hosts** are shown by port: one row per port (how many hosts, how many on / off); click a port to see its hosts with their inbound, remark, address and state. A tick on the port row ticks all its hosts; *Enable all* / *Disable all* on the row switch the whole port at once; the toolbar's *Do with selected…* works on any ticked hosts. Search and the inbound / state filters stay.
+* *Users | Hosts* are back in the top row, as a box of their own beside the search box and the controls.
 ## 1.17.6 - 2026-10-11 - User window touches
 
 * Clicking the subscription link shows a green *✓ Copied* in the corner of its box for a moment.

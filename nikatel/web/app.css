@@ -1329,3 +1329,14 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 .ue-account .kv2 { min-height: 34px; padding: 3px 0; } .ue-account .kf input, .ue-account .kf select { height: 28px; } .ue-link { cursor: pointer; color: var(--acc-2); } .ue-link:hover { text-decoration: underline; }
 
 .sbox { position: relative; } .copied { position: absolute; top: 6px; right: 10px; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #10131f; background: var(--ok); animation: copiedIn .18s ease-out; box-shadow: 0 2px 8px rgba(0,0,0,.3); } @keyframes copiedIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* hosts: a row per port, click it to see its hosts and inbounds */
+.hp-list { display: grid; gap: 6px; align-content: start; overflow-y: auto; padding-right: 2px; }
+.hp { border-radius: 14px; border: 1px solid var(--line); background: var(--panel); } .hp > summary { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; cursor: pointer; list-style: none; font-size: 12.5px; } .hp > summary::-webkit-details-marker { display: none; }
+.hp > summary::before { content: "▸"; color: var(--mut); font-size: 11px; width: 10px; } .hp[open] > summary::before { content: "▾"; } .hp[open] > summary { border-bottom: 1px solid var(--line); }
+.hp-port { font-family: var(--mono); font-size: 15px; min-width: 84px; } .hp-st { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12px; } .hp-st .st { width: 8px; height: 8px; padding: 0; border-radius: 50%; display: inline-block; background: var(--unk); } .hp-st .st.up { background: var(--ok); }
+.hp > summary a { font-size: 11.5px; font-weight: 700; color: var(--acc-2); cursor: pointer; } .hp > summary a:hover { text-decoration: underline; } .hp.alloff .hp-port { color: var(--mut); }
+.hp-rows { display: grid; padding: 2px 10px 6px; } .hp-row { display: grid; grid-template-columns: 24px minmax(130px, 200px) minmax(0, 1.3fr) minmax(0, 1fr) 78px auto; align-items: center; gap: 10px; min-height: 36px; font-size: 12px; } .hp-row + .hp-row { border-top: 1px solid rgba(255,255,255,.05); } .hp-row.off .name { color: var(--mut); }
+.hp-row .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hp-act { display: inline-flex; gap: 4px; justify-content: flex-end; } .hp-edit { padding: 6px 0 10px; }
+/* Users | Hosts tabs: a box of their own at the start of the row */
+.pn-bars .toolbar.pn-tabs { flex: none; padding-left: 6px; padding-right: 6px; } .pn-tabs .tabs { margin: 0; } .pn-foot:empty { display: none; }

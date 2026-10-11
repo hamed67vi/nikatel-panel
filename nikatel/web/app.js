@@ -184,7 +184,7 @@ let pendScroll = null;   // the scroll positions a refresh wants back: the list 
 })();
 /* A refresh rebuilds the page from fresh data. Every scrolling box keeps its position through it (the page, a window, the lists inside the dashboard, the logs),
    so nothing jumps back to the top when new data arrives. Opening another page starts at the top. */
-const SCROLLERS = [".main", ".lbox", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".tt-res", ".sub-nodes", ".ob-inbounds", ".fix"];
+const SCROLLERS = [".main", ".lbox", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".tt-res", ".hp-list", ".sub-nodes", ".ob-inbounds", ".fix"];
 const scrollSnapshot = () => SCROLLERS.map(sel => { const el = $(sel); return el ? [sel, el.scrollTop, el.scrollTop + el.clientHeight >= el.scrollHeight - 12 && sel === ".tt-log"] : null; }).filter(Boolean);
 const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $(sel); if (el) el.scrollTop = atEnd ? el.scrollHeight : top; });
 /* The page is painted only when its HTML really changed: a refresh that brings the same data touches nothing (no flicker, no lost hover or selection).
@@ -1727,7 +1727,7 @@ PAGES.panels = async () => {
       <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnTestConfig(${p.id}, '${esc(p.name)}')" title="Looks in Configs for this panel's subscription (it may be there under another name). When it is not there, makes a small test user on the panel and adds its subscription, so its configs are measured from inside Iran (the probe).">🧪 Check configs from Iran${s.test_user ? " ✓" : ""}</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
     ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
-    <div id="pn-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot">${pnFoot("")}</div>`;
+    <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
@@ -1765,11 +1765,11 @@ async function pnUsersLoad(id) {
   const ps = pnPS(); pn.uoff = Math.floor(pn.uoff / ps) * ps;       // a page holds exactly what fits the window: the list never scrolls
   const key = `${id}|${pn.uq}|${pn.ustatus}|${pn.uoff}|${ps}`;
   if (!pn.users || pn.usersKey !== key) {   // read from the panel only when the question changed, not on every refresh
-    try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=${ps}&sort=-created_at`); pn.usersKey = key; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+    try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=${ps}&sort=-created_at`); pn.usersKey = key; } catch (e) { box.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="err">${esc(e.message)}</div>`; return; }
   }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
-  box.innerHTML = `<div class="pn-bars"><div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut pn-cnt">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
+  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut pn-cnt">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
       <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked users" onchange="pnBulkAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option><option value="renew">Add days…</option></select></div></div>
     <table class="tbl lift"><colgroup><col style="width:46px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:215px"></colgroup>
       <thead><tr><th><input type="checkbox" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th><th>Note</th><th></th></tr></thead>
@@ -1785,7 +1785,8 @@ async function pnUsersLoad(id) {
 }
 const pnRow = {h: 46, done: false};
 const pnPS = () => { const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((innerHeight - top - 54 - 34 - 50 - 40) / pnRow.h))); };
-const pnFoot = mid => `<div class="tabs">${[["users", "Users"], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>${mid}`;
+const pnTabs = () => `<div class="toolbar pn-tabs"><div class="tabs">${[["users", "Users"], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>`;
+const pnFoot = mid => mid;
 function pnPager(total, ps, off = pn.uoff, fn = "pnGo") {
   const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), show = [];
   for (let i = 0; i < pages; i++) if (i === 0 || i === pages - 1 || Math.abs(i - cur) <= 2) show.push(i);
@@ -1856,25 +1857,35 @@ window.pnBulkRenew = async id => { const d = await gprompt("Add how many days to
 async function pnHostsLoad(id) {
   const box = $("#pn-body"); if (!box) return;
   if (!pn.hosts || pn.hostsKey !== String(id)) {
-    try { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; pn.hostsKey = String(id); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+    try { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; pn.hostsKey = String(id); } catch (e) { box.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="err">${esc(e.message)}</div>`; return; }
   }
   const tags = {}; pn.hosts.forEach(h => { tags[h.tag] = (tags[h.tag] || 0) + 1; });
   const q = (pn.hq || "").toLowerCase();
-  const rows = pn.hosts.filter(h => (!pn.hinb || h.tag === pn.hinb) && (!pn.hstate || (pn.hstate === "off") === !!h.disabled) && (!q || [h.remark, h.tag, h.address, h.port].join(" ").toLowerCase().includes(q)))
-    .sort((x, y) => String(x.tag).localeCompare(String(y.tag)) || String(x.remark).localeCompare(String(y.remark)));      // grouped by inbound
-  const ps = pnPS(); pn.hoff = Math.min(Math.floor((pn.hoff || 0) / ps) * ps, Math.max(0, Math.floor((rows.length - 1) / ps) * ps));
-  const page = rows.slice(pn.hoff, pn.hoff + ps);
-  box.innerHTML = `<div class="pn-bars"><div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;pn.hoff=0;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;pn.hoff=0;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
-      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked hosts" onchange="pnHostAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option></select></div></div>
-    <table class="tbl lift"><colgroup><col style="width:46px"><col style="width:26%"><col style="width:16%"><col><col style="width:8%"><col style="width:10%"><col style="width:215px"></colgroup>
-      <thead><tr><th><input type="checkbox" id="pn-all" title="Select every host of this page" onchange="pnSelAll(this.checked)"></th><th>Remark</th><th>Inbound</th><th>Address</th><th>Port</th><th>State</th><th></th></tr></thead>
-      <tbody>${page.map(h => `<tr class="${h.disabled ? "" : "up"}"><td><input type="checkbox" class="pn-hchk" value="${esc(h.key)}" onchange="pnSelCount()"></td><td class="name" title="${esc(h.remark)}">${esc(h.remark)}</td><td><span class="td-type">${esc(h.tag)}</span></td><td class="mut">${esc(h.address)}</td><td class="num">${h.port ?? "—"}</td><td><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span></td>
-        <td><button class="sm" onclick="pnHostOpen(${id}, '${esc(h.key)}')">Edit</button> <button class="sm" onclick="pnHostClone(${id}, '${esc(h.key)}')">Clone</button> <button class="sm danger" onclick="pnHostDel(${id}, '${esc(h.key)}', '${esc(h.remark)}')">✕</button></td></tr>
-        ${pn.hostEdit && pn.hostEdit.key === h.key ? `<tr class="detail"><td colspan="7">${pnHostHtml(id, pn.hostEdit)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="mut">no host matches</td></tr>'}</tbody></table>`;
-  const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot(pnPager(rows.length, ps, pn.hoff, "pnHGo"));
+  const rows = pn.hosts.filter(h => (!pn.hinb || h.tag === pn.hinb) && (!pn.hstate || (pn.hstate === "off") === !!h.disabled) && (!q || [h.remark, h.tag, h.address, h.port].join(" ").toLowerCase().includes(q)));
+  const byPort = {}; rows.forEach(h => { const k = h.port == null ? "" : String(h.port); (byPort[k] = byPort[k] || []).push(h); });      // one group per port: click a port to see its hosts and inbounds
+  const ports = Object.keys(byPort).sort((x, y) => (x === "") - (y === "") || (+x || 0) - (+y || 0));
+  pn.hopen = pn.hopen || {};
+  const hostRow = h => `<div class="hp-row ${h.disabled ? "off" : ""}"><input type="checkbox" class="pn-hchk" value="${esc(h.key)}" onchange="pnSelCount();hpCount(this.closest('details'))"><span class="td-type" title="Inbound">${esc(h.tag)}</span><span class="name ell" title="${esc(h.remark)}">${esc(h.remark)}</span><span class="mut ell">${esc(h.address)}</span><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span>
+      <span class="hp-act"><button class="sm" onclick="pnHostOpen(${id}, ''${esc(h.key)}'')">Edit</button><button class="sm" onclick="pnHostClone(${id}, ''${esc(h.key)}'')">Clone</button><button class="sm danger" onclick="pnHostDel(${id}, ''${esc(h.key)}'', ''${esc(h.remark)}'')">✕</button></span></div>${pn.hostEdit && pn.hostEdit.key === h.key ? `<div class="hp-edit">${pnHostHtml(id, pn.hostEdit)}</div>` : ""}`;
+  const group = k => { const g = byPort[k], on = g.filter(h => !h.disabled).length, open = pn.hopen[k] || (pn.hostEdit && g.some(h => h.key === pn.hostEdit.key)), pk = esc(k);
+    return `<details class="hp ${on ? "" : "alloff"}" data-port="${pk}" ${open ? "open" : ""} ontoggle="pn.hopen['${pk}'] = this.open"><summary><input type="checkbox" class="hp-master" title="Tick every host of this port" onchange="hpMaster(this)"><b class="hp-port">${k === "" ? "inbound port" : ":" + pk}</b><small class="mut hp-n"></small><span class="hp-st"><i class="st ${on ? "up" : ""}"></i>${on} on${g.length - on ? ` · ${g.length - on} off` : ""}</span><span class="sp"></span>
+      <a onclick="pnHostsPort(event, ${id}, '${pk}', false)" title="Enable every host of this port">Enable all</a><a onclick="pnHostsPort(event, ${id}, '${pk}', true)" title="Disable every host of this port">Disable all</a></summary><div class="hp-rows">${g.map(hostRow).join("")}</div></details>`; };
+  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts · ${ports.length} ports</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
+      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host shown">select all</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked hosts" onchange="pnHostAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option></select></div></div>
+    <div class="hp-list">${ports.map(group).join("") || '<div class="mut" style="padding:16px">no host matches</div>'}</div>`;
+  box.querySelectorAll(".hp").forEach(hpCount);
+  const hl = box.querySelector(".hp-list"); if (hl) hl.style.maxHeight = Math.max(160, innerHeight - hl.getBoundingClientRect().top - 74) + "px";   // the list ends above the bottom strip: only it scrolls
+  const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot("");
   const sq = $("#pn-hq"); if (sq && pn.hq) { sq.focus(); sq.setSelectionRange(sq.value.length, sq.value.length); }
 }
-window.pnHQ = v => { pn.hq = v.trim(); pn.hoff = 0; clearTimeout(qT); qT = setTimeout(refresh, 250); };
+window.hpCount = d => { if (!d) return; const xs = [...d.querySelectorAll(".pn-hchk")], n = xs.filter(x => x.checked).length, m = d.querySelector(".hp-master"), c = d.querySelector(".hp-n"); if (c) c.textContent = n ? `${n} of ${xs.length} ticked` : `${xs.length} host${xs.length === 1 ? "" : "s"}`; if (m) { m.checked = n > 0 && n === xs.length; m.indeterminate = n > 0 && n < xs.length; } };
+window.hpMaster = m => { const d = m.closest("details"); d.querySelectorAll(".pn-hchk").forEach(x => { x.checked = m.checked; }); hpCount(d); pnSelCount(); };
+window.pnHostsPort = async (e, id, port, disable) => {
+  e.preventDefault(); e.stopPropagation();
+  const keys = (pn.hosts || []).filter(h => (h.port == null ? "" : String(h.port)) === port).map(h => h.key);
+  if (!keys.length || !await gconfirm(`${disable ? "Disable" : "Enable"} all ${keys.length} hosts of ${port ? "port " + port : "the inbound port"}?`, {danger: disable})) return;
+  try { const r = await api(`/api/panels/${id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys, disable})}); toast(`✓ ${r.changed} hosts ${disable ? "disabled" : "enabled"}`, "ok"); pn.hosts = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
+};window.pnHQ = v => { pn.hq = v.trim(); clearTimeout(qT); qT = setTimeout(refresh, 250); };
 window.pnHGo = i => { pn.hoff = Math.max(0, i) * pnPS(); refresh(); };
 window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v) pnHostsToggle(id, v === "disable"); };function pnHostHtml(id, h) {
   const txt = ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint"], bools = ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"];
