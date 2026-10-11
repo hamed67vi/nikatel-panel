@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.2 - 2026-10-11 - A lost SSH connection no longer crashes a job
+
+* An SSH connection that dropped with no message (exit 255, empty output) raised `AttributeError` inside the error text builder and killed the whole job run (seen in the configs job); it is now an ordinary *ssh connection lost* error that the jobs already handle and retry.
+
 ## 1.15.1 - 2026-10-11 - A lighter panel
 
 * **One shared SSH connection per server** (kept two minutes after its last use) instead of a new handshake for every short command: the handshakes were most of the CPU the panel used and made the tunnel check run for ~40 s of every minute. If the shared connection can not be started the commands connect on their own as before (switch it off with NIKATEL_SSH_MULTIPLEX=false).

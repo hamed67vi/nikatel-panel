@@ -439,7 +439,8 @@ def _exec(node: Node, script: str, timeout: int) -> str:
         elif "Host key verification failed" in out or "IDENTIFICATION HAS CHANGED" in out:
             tail = "the host key of this server changed (reinstalled?) - forget it in Settings"
         elif r.returncode == 255:
-            tail = "ssh connection lost (" + (re.search(r"(Timeout, server[^|]*|Connection (reset|closed|timed out)[^|]*|kex_exchange_identification[^|]*|Broken pipe)", out) or [None, "network"])[0].strip() + ")"
+            why = re.search(r"(Timeout, server[^|]*|Connection (reset|closed|timed out)[^|]*|kex_exchange_identification[^|]*|Broken pipe)", out)
+            tail = "ssh connection lost (" + (why.group(0).strip() if why else "network") + ")"
 
         raise SSHError(tail[:200], r.returncode)
 

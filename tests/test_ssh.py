@@ -30,3 +30,18 @@ def test_ssh_shares_one_background_connection_per_server(monkeypatch, tmp_path):
     calls.clear()
     ssh._ensure_master(node)
     assert calls == [] and not any("Control" in a for a in ssh._ssh_base(node))
+
+def test_a_lost_connection_without_a_message_is_an_ssh_error_not_a_crash(monkeypatch):
+    import subprocess
+
+    import pytest
+
+    from nikatel import ssh
+
+    monkeypatch.setattr(ssh, "_ensure_master", lambda node: None)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 255, stdout=b""))
+
+    with pytest.raises(ssh.SSHError) as e:
+        ssh._exec(ssh.Node("203.0.113.9"), "true", 5)
+
+    assert "ssh connection lost (network)" in str(e.value) and e.value.code == 255
