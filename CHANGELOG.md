@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.18 - 2026-10-11 - The inner tabs are in a box too
+
+* The tab row inside a page (Tunnel test / Network advisor, and the other pages that have one) sits in the same soft framed box, and the folder tabs above stick to it.
+
 ## 1.14.17 - 2026-10-11 - The tiles are in a box too
 
 * The tile rows (Online / Problems / Average load / Traffic and the like) sit in one soft framed box on every page, like the toolbar and the lists.
