@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.20 - 2026-10-11 - A rebuild never makes the tunnel vanish
+
+* While a tunnel is being rebuilt (removed, then built again - about a minute) its row stays in the list as *rebuilding…*; before, the row disappeared and looked deleted.
+* A rebuild keeps a copy of the tunnel in *Recently removed* too, so a rebuild whose build fails can be restored with one click.
+
 ## 1.16.19 - 2026-10-11 - Tighter detail windows
 
 * The server / tunnel / config windows are tighter: smaller info rows, the monitoring tiles in one compact row, thinner timeline, shorter charts, smaller tool tiles. The GRE row no longer shows the meaningless *UNKNOWN* link state of a GRE interface.

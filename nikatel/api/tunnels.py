@@ -306,10 +306,42 @@ def _out(t: Tunnel) -> TunnelOut:
                      units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface})
 
 
+def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], known: set[str], now: int) -> list[TunnelOut]:
+    """Pure: a placeholder row for every rebuild in flight (the old tunnel is already removed, the new one not yet recorded), so the list never loses the tunnel
+    for the minute of a rebuild. A negative id marks it: the UI shows "rebuilding…" and no buttons."""
+    rows = []
+
+    for n, it in enumerate(items):
+        a = it.get("args") or {}
+        name = str(it.get("name") or "")
+
+        if not name or name in known or is_temp(name):
+            continue
+
+        iran, foreign = servers.get(int(a.get("iran_id") or 0), ("?", "")), servers.get(int(a.get("foreign_id") or 0), ("?", ""))
+        ports = [int(x.split("=")[0].split(":")[0]) for x in str(a.get("ports_text") or "").replace(",", " ").split() if x.split("=")[0].split(":")[0].isdigit()]
+        rows.append(TunnelOut(id=-(n + 1), name=name, type=str(a.get("kind") or "backhaul"), transport=str(a.get("transport") or ""), engine=str(a.get("kind") or "backhaul"),
+                              iran_name=iran[0], iran_host=iran[1], foreign_name=foreign[0], foreign_host=foreign[1], port=0, iran_tunnel_ip="", foreign_tunnel_ip="",
+                              forwarded_ports=ports, enabled=True, created_at=now, state="starting", state_since=now, last_check_at=0, last_error="rebuilding… (about a minute)",
+                              rtt_ms=None, rx_mbps=None, tx_mbps=None, detail={}, units={}))
+
+    return rows
+
+
 @router.get("/tunnels", response_model=list[TunnelOut])
 def list_tunnels():
+    from ..models import Server
+    from ..services import settings as st
+
     with session() as db:
-        return [_out(t) for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name)]      # a temporary test tunnel is not part of the list
+        rows = [_out(t) for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name)]      # a temporary test tunnel is not part of the list
+        pending = st.get("pending_builds").get("items", [])
+
+        if pending:
+            servers = {s.id: (s.name, s.host) for s in db.scalars(select(Server))}
+            rows += rebuilding_rows(pending, servers, {r.name for r in rows}, int(time.time()))
+
+        return sorted(rows, key=lambda r: r.name)
 
 
 @router.get("/tunnels/{tunnel_id}", response_model=TunnelOut)

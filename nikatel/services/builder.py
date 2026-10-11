@@ -895,7 +895,7 @@ def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
     pending_put({"name": name, "kind": "other" if other else "backhaul",
                  "args": {"iran_id": iran_id, "foreign_id": foreign_id, "ports_text": ports_text, "transport": transport.replace("l3:", "") if other else transport, "kind": kind, "mtu": mtu,
                           "keepalive": keepalive, "nodelay": bool(rec.get("nodelay", True)), "opts": opts}})
-    delete_tunnel(tunnel_id)
+    delete_tunnel(tunnel_id, trash=True)          # a copy is kept: a rebuild whose build fails can be restored from 'Recently removed'
 
     if other:
         from . import build_other

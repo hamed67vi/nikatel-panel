@@ -261,3 +261,21 @@ def test_a_job_loop_survives_an_error_and_a_dead_thread_is_revived(monkeypatch):
     assert jobs.dead() == ["t"]
     monkeypatch.setattr(jobs, "_loop", lambda s: None)
     assert jobs.ensure_alive() == ["t"] and jobs.dead() == [] or True
+
+def test_a_rebuild_in_flight_keeps_its_row_in_the_list(client):
+    from nikatel.db import session
+    from nikatel.models import Server
+    from nikatel.services import builder
+
+    with session() as db:
+        ir, fo = Server(name="ir1", host="203.0.113.5", role="iran"), Server(name="fi1", host="203.0.113.50", role="foreign")
+        db.add_all([ir, fo])
+        db.flush()
+        ids = (ir.id, fo.id)
+
+    builder.pending_put({"name": "fi1-ir1", "kind": "backhaul", "args": {"iran_id": ids[0], "foreign_id": ids[1], "ports_text": "80,2087=2096", "transport": "tcpmux", "kind": "backhaul"}})
+    rows = client.get("/api/tunnels").json()
+    assert [r["name"] for r in rows] == ["fi1-ir1"] and rows[0]["id"] < 0 and rows[0]["state"] == "starting" and "rebuilding" in rows[0]["last_error"]
+    assert rows[0]["iran_name"] == "ir1" and rows[0]["foreign_name"] == "fi1" and rows[0]["forwarded_ports"] == [80, 2087]
+    builder.pending_drop("fi1-ir1")
+    assert client.get("/api/tunnels").json() == []
