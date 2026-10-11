@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.30 - 2026-10-11 - The user cards, finer
+
+* A user card: the name with its note under it (the empty *Note* column is gone), the status as a pill, the traffic as *used* and *left* with a bar and its share (*3.2 % of 20 GB*), the expiry as a coloured pill (green, yellow within 7 days, red when expired).
+
 ## 1.17.29 - 2026-10-11 - Fewer buttons, a tidier panel bar and Add server
 
 * The *Find countries* button is gone (a server's location is found when it is added).
