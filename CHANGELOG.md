@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.5 - 2026-10-11 - Small tool tiles, the explanation on hover
+
+* In the server, tunnel and config windows the tool tiles are one line each (icon and name); the explanation shows when the mouse rests on a tile.
+
 ## 1.16.4 - 2026-10-11 - The ping arrow is as wide as its number and centred
 
 * In the tunnel list the double arrow is exactly as wide as the ping written over it and sits in the middle between the Iran node and the foreign node (it used to stretch to the foreign column).

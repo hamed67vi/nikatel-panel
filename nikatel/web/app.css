@@ -1087,3 +1087,10 @@ html[data-mode="light"][data-theme="ocean"] body::before, html[data-mode="light"
 .td-arrow { text-align: center !important; padding: 0 !important; }
 .tlink { display: inline-flex; width: max-content; min-width: 58px; align-items: stretch; gap: 2px; margin: 0 auto; }
 .tlink .ms { text-align: center; } .tlink .wire { width: 100%; max-width: none; } .tlink .loss { text-align: center; }
+/* ---- the tool tiles of a window are small: an icon and a name; the explanation is the tooltip on hover */
+.modal .wtools, .modal .wtools.uni { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 6px; }
+.modal .wtool, .modal .wtools.uni .wtool { grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: auto; column-gap: 9px; min-height: 36px; padding: 5px 10px; border-radius: 11px; }
+.modal .wtool i { grid-row: auto; width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+.modal .wtool b, .modal .wtools.uni .wtool > b { font-size: 12.5px; align-self: center; } .modal .wtool small { display: none; }
+.modal .wgroup { margin-bottom: 4px; } .modal .wgroup h4 { margin: 8px 2px 5px; }
+.modal .res-row { padding: 4px 0; font-size: 12.5px; }
