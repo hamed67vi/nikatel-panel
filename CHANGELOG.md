@@ -7,6 +7,7 @@
 - Tunnel Doctor: "degraded" is shown as "unstable" everywhere; its settings moved from Settings to its own page (Settings keeps only the AI assistant).
 - Iran gateway and Probe boxes redesigned (compact, one line per job); the Probe box says "connected" when the probe answers.
 - The configs box keeps one height for every group, so switching groups does not make it jump.
+- Configs list: the country flag lies faded under the name and gets richer under the mouse; the Alerts button is gone from its toolbar.
 ## 1.17.34
 
 - Name and logo: NIKATEL in the Unbounded font (static), subtitle "Network operations"; the logo has its own slow animation (turning ring, breathing glow, a light running along the N, signals along the tunnel). The side-menu net is now a live SVG: nodes drift softly, small signals run along the lines.

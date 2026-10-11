@@ -1805,3 +1805,9 @@ html[data-anim="off"] .bg-scene { display: none; } html[data-anim="off"] body::b
 .ap-set-row select, .ap-set-row input:not([type=checkbox]) { height: 30px; font-size: 12.5px; } .ap-sec { display: flex; align-items: center; gap: 6px; } .ap-sec input { width: 100%; } .ap-sec em { font-style: normal; font-size: 11px; }
 .ap-set-row button { height: 30px; min-width: 76px; } @media (max-width: 980px) { .ap-set-row { grid-template-columns: 1fr 1fr; } }
 .pgs .pgn-gap { width: 40px; }
+
+/* configs list: the country flag lies faded under the name, richer under the mouse */
+.cf-list td.name { position: relative; isolation: isolate; overflow: hidden; }
+.cf-list td.name.has-flag::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 190px; z-index: -1; background: var(--flag) center / 100% 100% no-repeat; opacity: .22; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 22%, rgba(0,0,0,.55) 60%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 22%, rgba(0,0,0,.55) 60%, transparent 100%); transition: opacity .25s, filter .25s; }
+.cf-list tr:hover td.name.has-flag::before { opacity: .7; filter: saturate(1.35); }
+html[data-mode="light"] .cf-list td.name.has-flag::before { opacity: .38; } html[data-mode="light"] .cf-list tr:hover td.name.has-flag::before { opacity: .8; }
