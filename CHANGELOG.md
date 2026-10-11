@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.6 - 2026-10-11 - Nodes: tiles on top, buttons joined to the list
+
+* On Nodes the four tiles come first (in their frame, with the Iran / Foreign tabs standing on it); the row of buttons sits under them and is one piece with the list box.
+
 ## 1.16.5 - 2026-10-11 - Small tool tiles, the explanation on hover
 
 * In the server, tunnel and config windows the tool tiles are one line each (icon and name); the explanation shows when the mouse rests on a tile.

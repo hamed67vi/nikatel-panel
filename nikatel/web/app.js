@@ -201,7 +201,7 @@ async function refresh() {
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
     scrollRestore(snap);
-    document.body.classList.toggle("tabbed", !!SUB[state.page] && !!document.querySelector("#page > .toolbar:first-child, #page > .fstrip:first-child"));   // the sub tabs stick to the box under them
+    document.body.classList.toggle("tabbed", !!SUB[state.page] && !!document.querySelector("#page > .toolbar:first-child, #page > .fstrip:first-child, #page > .tiles:first-child"));   // the sub tabs stick to the box under them
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) {
     if (e.message === "not logged in" || seq !== navSeq) return;
@@ -440,15 +440,15 @@ PAGES.servers = async () => {
       <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}<button class="sm" onclick="toggleDetail(${s.id})" title="Resources, charts, console and tools of this server">More</button><button class="sm" onclick="event.stopPropagation();editServer(${s.id})" title="Change name, address, SSH user or port">Edit</button><button class="sm danger" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button></div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
-  $("#page").innerHTML = `<div class="toolbar">
-      <button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a>
-      <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>${searchSeg()}</div>
-    <div class="tiles">
+  $("#page").innerHTML = `<div class="tiles">
       <div class="tile ${online < mine.length ? "bad" : "ok"}"><small>Online</small><b>${online} / ${mine.length}</b><span>${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}</span></div>
       <div class="tile ${nProb ? "warn" : ""}"><small>Problems</small><b>${nProb}</b><span>offline, or CPU > 85 %, RAM > 90 %, disk > 85 %</span></div>
       <div class="tile"><small>Average load</small><b>${avg("cpu") ?? "—"}% <small style="display:inline;font-size:12px;letter-spacing:0;text-transform:none">cpu</small></b><span>ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%</span></div>
       <div class="tile"><small>Traffic now</small><b>${sumNet.toFixed(0)} Mb/s</b><span>sum of ↓ and ↑ over all ${state.tab} servers</span></div></div>
-    <table class="tbl lift srv-tbl"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:17%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:16%">'}</colgroup>
+    <div class="toolbar joined">
+      <button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a>
+      <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>${searchSeg()}</div>
+    <table class="tbl lift srv-tbl joined"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:17%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:16%">'}</colgroup>
       <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
       <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;;
   applyQ();
