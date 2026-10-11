@@ -1140,3 +1140,5 @@ html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #37415
 .card:hover, .ibox:hover { box-shadow: 0 14px 36px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06); }
 :root[data-anim="off"] #page.enter .tbl tbody tr, :root[data-anim="off"] #page.enter .tile, :root[data-anim="off"] #page.enter .cf-card, :root[data-anim="off"] #page.enter .dash-cols > .card, :root[data-anim="off"] #page.enter .kpi { animation: none; }
 @media (prefers-reduced-motion: reduce) { #page.enter * { animation: none !important; } }
+/* the packets on the ping arrow: slow and faint */
+.tlink.up .pk { animation-duration: calc(var(--ping) * 45ms + 4s); opacity: .45; background: rgba(255,255,255,.75); box-shadow: 0 0 4px var(--c); }
