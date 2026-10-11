@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.34 - 2026-10-11 - All the numbers of Resources in one column
+
+* In the Resources box every row has the same three parts: the label, the bar (empty for Traffic and Sample), and one right-hand column that holds every number - the percent with its used / total beside it, the traffic, the age of the last sample.
+
 ## 1.16.33 - 2026-10-11 - Everything about a server in three boxes
 
 * The server window shows System, Resources and *Access & status* only - three boxes of six rows each; the separate lines for tunnels and for the last results are gone, their facts are rows of the third box (GRE, Filtering or Site, Tunnels). Nothing is said twice: whether the Abuse-Defender is installed is the label of its button (*Abuse-Defender* / *Remove Abuse-Defender*). Short labels on one line.

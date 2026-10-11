@@ -511,7 +511,8 @@ function serverGridHtml(s) {
   const f = s.facts || {}, x = s.extra || {}, fl = x.iran_filter, g = x.gre, geo = x.geo || {}, pg = (s.extra || {}).geo || {};
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
   const kv = (l, v, id) => `<div class="kv2"><span>${l}</span><div ${id ? `id="res-${id}"` : ""}>${v}</div></div>`;
-  const rr = (l, v, warn, bad, detail) => `<div class="rrow"><span>${l}</span><i class="rbar"><u class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${v == null ? 0 : Math.min(100, v)}%"></u></i><b>${v == null ? "—" : v + "%"}</b><small>${detail || ""}</small></div>`;
+  const rr = (l, v, warn, bad, detail) => `<div class="rrow"><span>${l}</span><i class="rbar"><u class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${v == null ? 0 : Math.min(100, v)}%"></u></i><em><b>${v == null ? "—" : v + "%"}</b>${detail ? `<small>${detail}</small>` : ""}</em></div>`;
+  const rt = (l, v, id) => `<div class="rrow"><span>${l}</span><i></i><em ${id ? `id="res-${id}"` : ""}><b>${v}</b></em></div>`;
   const box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
   const dom = pg.domain || "", pname = pg.provider || s.provider || "";
   if (dom || pname) setTimeout(() => provSite(s.name), 0);
@@ -523,7 +524,7 @@ function serverGridHtml(s) {
   const sys = box("🖥", "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
     kv("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), kv("Top process", esc(f.top || "—")), kv("Connections", f.conn != null ? f.conn : "—")]);
   const res = box("📊", "Resources", [rr("CPU", f.cpu, 80, 92, ""), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""), rr("Swap", f.swap, 50, 80, ""),
-    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""), kv("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—"), kv("Last sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
+    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""), rt("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—"), rt("Sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
   const acc = box("🔑", "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), kv("Provider", provider),
     s.role === "foreign" ? kv("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")}`) : kv("Site", site),
     s.role === "foreign" ? kv("Filtering", fl ? `<b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.online ? '<b class="gw-ok">online</b>' : '<b class="err">offline</b>'),
