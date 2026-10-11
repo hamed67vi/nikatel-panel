@@ -1563,7 +1563,7 @@ PAGES.configsList = async () => {
   const MBs = v => v == null ? "—" : mb(v / 8);   // the table speaks MB/s like a v2ray client; the stat boxes elsewhere stay in Mb/s
   const row = c => { const m = c.meta || {}; return `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})">
       <td><span class="td-type">${esc((m.proto || "—").toUpperCase())}</span></td>
-      <td class="name ${cfCode(c.name) ? "has-flag" : ""}" ${cfCode(c.name) ? `style="--flag:url(/flags/${cfCode(c.name)}.png)" title="${cfCode(c.name).toUpperCase()}"` : ""}><div class="cf-nm"><i class="sdot ${c.status}" title="${esc(c.status)}"></i>${esc(shown(c))}${c.enabled ? "" : '<span class="pill">disabled</span>'}</div></td>
+      <td class="name"><div class="cf-nm"><i class="sdot ${c.status}" title="${esc(c.status)}"></i>${title(c)}</div></td>
       ${gcell(c)}
       <td class="mono" title="${esc(m.address || "")}">${esc(m.address || "—")}</td>
       <td class="num">${m.port || "—"}</td>
