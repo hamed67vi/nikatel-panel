@@ -1351,3 +1351,6 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 .badv .sbox, .adv-h { border-bottom: 0 !important; margin-bottom: 0 !important; } .adv-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; padding-top: 8px; border-top: 1px solid var(--line); margin-top: 6px; } .adv-grid label { font-size: 11px; } .adv-grid label input, .adv-grid label select { height: 28px; font-size: 12px; } .adv-grid label.chk { height: 28px; align-self: end; }
 .bld-foot { margin: 0; } .bld-foot button { height: 30px; }
 @media (max-width: 900px) { .adv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Recently removed: a slim box, one line per tunnel */
+.trashbox { margin: 0 0 8px; padding: 4px 12px 2px; border-radius: 12px; } .trashbox h5 { margin: 0 0 1px; font-size: 10.5px; letter-spacing: .8px; } .trashbox h5 small { font-size: 10.5px; }
+.trashbox .trow { padding: 3px 0; gap: 10px; } .trashbox .tn { flex-direction: row; align-items: baseline; gap: 10px; } .trashbox .tn b { font-size: 12px; } .trashbox .tn small { font-size: 11px; } .trashbox .tw { font-size: 11px; } .trashbox .ta button { height: 22px; padding: 0 10px; font-size: 11px; }

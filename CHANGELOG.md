@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.10 - 2026-10-11 - Slimmer *Recently removed*
+
+* The *Recently removed* box of the tunnel list is slim: one line per removed tunnel, smaller buttons.
+
 ## 1.17.9 - 2026-10-11 - Rename a tunnel; tunnel names follow their servers
 
 * **✎ Rename** in the tunnel window (next to *Ports* and *Remove*): lowercase letters, digits and - (up to 15). Only the name in the panel changes; on the servers the tunnel keeps the name it was built with (new ``sname``: the GRE interface, units and files), so nothing there is touched and repairs, checks and removal keep working. Configs that name the tunnel and its alert mute follow the new name.
