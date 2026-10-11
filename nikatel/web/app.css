@@ -2121,3 +2121,91 @@ input[type=checkbox].sw { width: 46px !important; height: 28px !important; min-w
 input[type=checkbox].sw::before { top: 0 !important; bottom: 0 !important; background: rgba(255,255,255,.22); }
 input[type=checkbox].sw::after { top: 2px !important; left: 2px !important; width: 24px !important; height: 24px !important; box-shadow: 0 2px 4px rgba(0,0,0,.35); }
 input[type=checkbox].sw:checked::after { transform: translateX(18px) !important; }
+/* the eye (iOS style): a thin line eye; crossed out while the password is shown; no box, no jump */
+.pwi .eye { position: absolute; right: 8px; top: 0; bottom: 0; margin: auto 0; transform: none !important; width: 26px; height: 26px; border: 0; background: none !important; box-shadow: none !important; filter: none !important; color: rgba(255,255,255,.5); display: grid; place-items: center; transition: color .15s; }
+.pwi .eye:hover, .pwi .eye:active, .pwi .eye:focus { transform: none !important; background: none !important; box-shadow: none !important; color: #fff; outline: 0; }
+.pwi .eye svg { width: 20px; height: 20px; stroke-width: 1.5; } .pwi .eye .shut { display: none; } .pwi .eye.on .shut { display: block; } .pwi .eye.on { color: var(--ok); }
+/* the frame of the settings is almost invisible */
+#page .set-wrap > .card.sf { background: transparent !important; border-color: rgba(255,255,255,.035) !important; } .set-desc { background: transparent !important; border-color: transparent !important; }
+.ss-hero { background: rgba(255,255,255,.02) !important; border-color: color-mix(in srgb, var(--sc) 22%, transparent) !important; } .si, .sl > .si { border-top-color: rgba(255,255,255,.05) !important; }
+.si-f, .sr > .v input:not([type=checkbox]), .sr > .v select, .pwf-f .si-f { background: rgba(255,255,255,.035) !important; }
+input[type=checkbox].sw { min-height: 28px !important; max-height: none !important; max-width: none !important; }
+/* the switch of the reference: a long pill track (56 x 24), a slightly oval white knob (23 x 20) with a soft shadow, a green track with a glow when on, a pale grey one when off */
+input[type=checkbox].sw { width: 56px !important; min-width: 56px !important; height: 24px !important; min-height: 24px !important; }
+input[type=checkbox].sw::before { top: 0 !important; bottom: 0 !important; border-radius: 999px; background: rgba(255,255,255,.2); box-shadow: inset 0 1px 3px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.08); }
+input[type=checkbox].sw::after { top: 2px !important; left: 2px !important; width: 23px !important; height: 20px !important; border-radius: 999px !important; background: linear-gradient(180deg, #ffffff, #f1f2f4); box-shadow: 0 2px 5px rgba(0,0,0,.35), inset 0 -1px 1px rgba(0,0,0,.06); }
+input[type=checkbox].sw:checked::before { background: linear-gradient(180deg, #19d870, #09a955); box-shadow: inset 0 1px 2px rgba(0,0,0,.18), 0 0 12px rgba(25,216,112,.45); }
+input[type=checkbox].sw:checked::after { transform: translateX(29px) !important; }
+html[data-mode="light"] input[type=checkbox].sw::before { background: #d6d7da; box-shadow: inset 0 1px 3px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.05); }
+/* the spacing around the password switch and its button */
+.pwf-f { gap: 10px; padding: 8px 0 4px; } .pwf-f .swl { margin-top: 6px; gap: 12px; } .pwf-a { padding: 12px 0 0; }
+
+/* ---- buttons: soft raised kit (primary / secondary / ghost / destructive) ---- */
+html body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)) {
+  border-radius: 999px; border: 1px solid rgba(255,255,255,.10); color: var(--tx, #e8eaf2); font-weight: 700; letter-spacing: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,.05));
+  box-shadow: 0 4px 10px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.20), inset 0 -1px 2px rgba(0,0,0,.18);
+  transition: background .2s ease, box-shadow .2s ease, filter .2s ease, transform .12s ease, opacity .2s;
+}
+html body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)):not(:disabled):hover {
+  background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.09)); transform: none; filter: none;
+  box-shadow: 0 6px 14px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.26), inset 0 -1px 2px rgba(0,0,0,.18);
+}
+html body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)):not(:disabled):active {
+  transform: scale(.97); background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.12));
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.2);
+}
+html body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)):disabled {
+  opacity: 1; color: rgba(255,255,255,.34); background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.05); box-shadow: none; filter: none;
+}
+/* primary: the theme colour, glossy, with its own soft glow */
+html body button.pri:not(.ai-btn):not(.cta) {
+  color: var(--pri-ink); border: 1px solid rgba(255,255,255,.28); text-shadow: 0 1px 0 rgba(255,255,255,.22); font-weight: 800;
+  background: linear-gradient(180deg, var(--pri-top) 0%, var(--pri-mid) 52%, var(--pri-bot) 100%);
+  box-shadow: 0 6px 16px rgba(var(--glow), .38), 0 0 0 1px rgba(var(--glow), .35), inset 0 1px 0 rgba(255,255,255,.6), inset 0 -3px 6px rgba(0,0,0,.14);
+}
+html body button.pri:not(.ai-btn):not(.cta)::before {
+  display: block; content: ""; position: absolute; left: 9%; right: 9%; top: 2px; bottom: auto; width: auto; height: 44%; border-radius: 999px; transform: none; opacity: 1; animation: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0)); pointer-events: none;
+}
+html body button.pri:not(.ai-btn):not(.cta):not(:disabled):hover {
+  background: linear-gradient(180deg, var(--pri-top) 0%, var(--pri-mid) 52%, var(--pri-bot) 100%); filter: brightness(1.08) saturate(1.05);
+  box-shadow: 0 8px 20px rgba(var(--glow), .5), 0 0 0 1px rgba(var(--glow), .45), inset 0 1px 0 rgba(255,255,255,.65), inset 0 -3px 6px rgba(0,0,0,.14);
+}
+html body button.pri:not(.ai-btn):not(.cta):not(:disabled):active {
+  filter: brightness(.9); transform: scale(.97);
+  box-shadow: 0 2px 6px rgba(var(--glow), .3), inset 0 2px 5px rgba(0,0,0,.3);
+}
+html body button.pri:not(.ai-btn):not(.cta):disabled { background: rgba(255,255,255,.08); color: rgba(255,255,255,.34); text-shadow: none; box-shadow: none; }
+html body button.pri:not(.ai-btn):not(.cta):disabled::before { display: none; }
+/* destructive */
+html body button.danger:not(.ai-btn) {
+  color: #ff8b97; border-color: rgba(255,90,110,.32);
+  background: linear-gradient(180deg, rgba(255,90,110,.30), rgba(255,90,110,.12));
+  box-shadow: 0 4px 10px rgba(255,60,90,.20), inset 0 1px 0 rgba(255,200,205,.28), inset 0 -1px 2px rgba(0,0,0,.14);
+}
+html body button.danger:not(.ai-btn):not(:disabled):hover { background: linear-gradient(180deg, rgba(255,90,110,.42), rgba(255,90,110,.2)); box-shadow: 0 6px 14px rgba(255,60,90,.3), inset 0 1px 0 rgba(255,200,205,.34); }
+html body button.danger-fill { color: #fff; border: 1px solid rgba(255,255,255,.25); background: linear-gradient(180deg, #ff6b78 0%, #f23c4f 55%, #d82339 100%); box-shadow: 0 6px 16px rgba(240,60,80,.4), inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 6px rgba(0,0,0,.14); }
+/* button with an icon */
+button .bi { display: inline-grid; place-items: center; margin-right: 6px; } button .bi svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+button:has(> .bi) { display: inline-flex; align-items: center; justify-content: center; }
+/* light mode: white raised pills */
+html[data-mode="light"] body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(.pri):not(.danger):not(.danger-fill):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)) {
+  color: #1c1f2a; border-color: rgba(20,24,40,.07); background: linear-gradient(180deg, #ffffff, #eceef3);
+  box-shadow: 0 3px 8px rgba(30,40,70,.14), inset 0 1px 0 #fff, inset 0 -1px 1px rgba(30,40,70,.06);
+}
+html[data-mode="light"] body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(.pri):not(.danger):not(.danger-fill):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)):not(:disabled):hover { background: linear-gradient(180deg, #ffffff, #e2e5ec); box-shadow: 0 5px 12px rgba(30,40,70,.18), inset 0 1px 0 #fff; }
+html[data-mode="light"] body button:disabled:not(.pri) { color: rgba(20,24,40,.35); background: rgba(20,24,40,.05); }
+html[data-mode="light"] body button.danger:not(.ai-btn) { color: #c81e36; background: linear-gradient(180deg, rgba(255,90,110,.22), rgba(255,90,110,.08)); }
+
+/* ---- theme: Soft (white raised surfaces, blue glossy buttons) ---- */
+html[data-theme="soft"] { --bg: #0e1424; --bg-2: #141c32; --acc: #4da3ff; --acc-2: #9cc7ff; --grad: linear-gradient(135deg, #5aa9ff 0%, #0a7cff 100%); --line-hi: rgba(77,163,255,.55); --pri-top: #5eb0ff; --pri-mid: #0a7cff; --pri-bot: #0062e6; --pri-edge: #0050c0; --pri-ink: #ffffff; --pri-rim: rgba(180,215,255,.6); --glow: 10,124,255; }
+html[data-theme="soft"] body::before { background: radial-gradient(50% 40% at 12% 6%, rgba(77,163,255,.14), transparent 70%), radial-gradient(40% 36% at 92% 94%, rgba(120,150,255,.08), transparent 70%); }
+html[data-mode="light"][data-theme="soft"] { --bg: #e8edf7; --bg-2: #f3f6fc; --text: #14182a; --mut: #5d6785; --glass: linear-gradient(180deg, #ffffff, #f1f4fa); --glass-hi: #fff; --panel: rgba(255,255,255,.82); --panel-2: rgba(60,80,130,.05); --line: rgba(60,80,130,.12); --line-hi: rgba(10,124,255,.45); --edge: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(60,80,130,.05); --shadow: 0 8px 22px rgba(60,80,130,.13); --shadow-hi: 0 14px 34px rgba(60,80,130,.18); }
+html[data-mode="light"][data-theme="soft"] body::before { background: radial-gradient(60% 50% at 8% 0%, rgba(255,255,255,.95), transparent 70%), radial-gradient(50% 45% at 96% 100%, rgba(120,170,255,.24), transparent 70%); }
+html[data-mode="light"][data-theme="soft"] body::after { background: none; }
+html[data-mode="light"][data-theme="soft"] .card, html[data-mode="light"][data-theme="soft"] .tiles, html[data-mode="light"][data-theme="soft"] .fstrip, html[data-mode="light"][data-theme="soft"] .toolbar, html[data-mode="light"][data-theme="soft"] .lbox, html[data-mode="light"][data-theme="soft"] .modal { background: linear-gradient(180deg, #ffffff, #f4f6fb); border-color: rgba(255,255,255,.9); box-shadow: 0 8px 22px rgba(60,80,130,.12), inset 0 1px 0 #fff; }
+html[data-mode="light"][data-theme="soft"] input:not([type=checkbox]):not([type=radio]), html[data-mode="light"][data-theme="soft"] select, html[data-mode="light"][data-theme="soft"] textarea { background: linear-gradient(180deg, #f1f4fa, #ffffff); border: 1px solid rgba(60,80,130,.10); box-shadow: inset 0 1px 3px rgba(60,80,130,.14); color: #14182a; }
+html[data-mode="light"][data-theme="soft"] input:focus, html[data-mode="light"][data-theme="soft"] select:focus, html[data-mode="light"][data-theme="soft"] textarea:focus { border-color: #0a7cff; box-shadow: 0 0 0 3px rgba(10,124,255,.18), inset 0 1px 3px rgba(60,80,130,.10); outline: none; }
+html[data-theme="soft"] button.pri:not(.ai-btn):not(.cta) { text-shadow: 0 1px 1px rgba(0,40,120,.35); }
+html[data-mode="light"][data-theme="soft"] .brand b { background: linear-gradient(180deg, #2b8cff, #0a5fd6); -webkit-background-clip: text; background-clip: text; }
