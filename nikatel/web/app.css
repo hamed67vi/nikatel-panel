@@ -1178,3 +1178,9 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 .modal .mcard.mwide { padding: 4px 10px 6px; } .modal .mcard.mwide h6 { margin-bottom: 2px; } .modal .strip { height: 7px; }
 .modal .mgrid { gap: 6px; } .modal .mcard { padding: 4px 9px 4px; } .modal .mcard h6 { font-size: 10px; } .modal .mcard svg, .modal .mcard canvas { max-height: 84px; } .modal .mstat { font-size: 9.5px; margin-top: 1px; } .modal .chart-empty { padding: 12px 0; font-size: 11px; }
 .modal .wtools, .modal .wtools.uni { gap: 5px; } .modal .wtool, .modal .wtools.uni .wtool { min-height: 32px; padding: 4px 9px; } .modal .wgroup h4 { margin: 6px 2px 4px; }
+/* the diagnosis window: a steady box; the list of what was checked in two columns, the tick first, the text on one line (two at most) */
+.modal .ibox.checked { max-height: none; }
+.chk-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; padding-top: 4px; }
+.chk-row { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 12px; line-height: 1.35; border-top: 1px solid rgba(255,255,255,.04); }
+.chk-row b { flex: none; width: 16px; text-align: center; } .chk-row.ok b { color: var(--ok); } .chk-row.bad b { color: var(--bad); } .chk-row span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 760px) { .chk-list { grid-template-columns: 1fr; } }

@@ -360,7 +360,7 @@ window.cfDiagnose = async id => {
     showModal(`<span class="st ${d.status === "up" ? "up" : "down"}"></span><b>${esc(d.name)}</b> <span class="mut">${esc(d.address)}${d.port ? ":" + d.port : ""}</span>`, `
       <div class="ibox"><h5><i>🩺</i>Cause</h5><div style="padding:6px 0;font-size:13.5px"><b class="${d.status === "up" ? "gw-ok" : "err"}">${esc(d.summary)}</b></div></div>
       ${d.ai ? `<div class="ibox" style="margin-top:10px"><h5><i>✨</i>AI</h5><div style="padding:6px 0;font-size:13px">${esc(d.ai)}</div></div>` : ""}
-      <div class="ibox" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5>${d.findings.map(f => irow(esc(f.text), f.ok ? '<b class="gw-ok">✓</b>' : '<b class="err">✕</b>')).join("")}</div>
+      <div class="ibox checked" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5><div class="chk-list">${d.findings.map(f => `<div class="chk-row ${f.ok ? "ok" : "bad"}"><b>${f.ok ? "✓" : "✕"}</b><span>${esc(f.text)}</span></div>`).join("")}</div></div>
       <div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">
         ${tn && tn.state !== "up" ? `<a class="wtool" onclick="apDiagnose(${tn.id}, {auto: true})"><i>🛠</i><b>Fix the tunnel ${esc(tn.name)}</b><small>diagnose it and repair it by itself</small></a>` : ""}</div>
         ${tn && tn.state !== "up" ? "" : '<div class="mut" style="padding:6px 0;font-size:12.5px">Nothing on your servers can change this: when an address is cut from inside Iran, the config needs another address (another foreign server or a CDN).</div>'}</div>`, "wide");
@@ -1305,7 +1305,7 @@ window.apDiagnose = async (id, opts = {}) => {
     showModal(`<span class="st ${d.state}"></span><b>${esc(d.name)}</b> <span class="mut">${esc(d.iran_name)} ⇄ ${esc(d.foreign_name)}</span>`, `
       <div class="ibox"><h5><i>🩺</i>Cause</h5><div style="padding:6px 0;font-size:13.5px"><b class="${d.cause === "healthy" ? "gw-ok" : "err"}">${esc(d.summary)}</b></div></div>
       ${d.ai ? `<div class="ibox" style="margin-top:10px"><h5><i>✨</i>AI</h5><div style="padding:6px 0;font-size:13px">${esc(d.ai)}</div></div>` : ""}
-      <div class="ibox" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5>${d.findings.map(f => irow(esc(f.text), f.ok ? '<b class="gw-ok">✓</b>' : '<b class="err">✕</b>')).join("")}</div>
+      <div class="ibox checked" style="margin-top:10px"><h5><i>🔎</i>What was checked</h5><div class="chk-list">${d.findings.map(f => `<div class="chk-row ${f.ok ? "ok" : "bad"}"><b>${f.ok ? "✓" : "✕"}</b><span>${esc(f.text)}</span></div>`).join("")}</div></div>
       ${d.cause === "healthy" ? "" : `<div class="wgroup" style="margin-top:12px"><h4>What can be done</h4><div class="wtools">
         ${d.ladder.includes("restart") || d.ladder.includes("relink") ? `<a class="wtool" onclick="apRun(${id}, '${d.ladder.includes("switch") ? "switch" : "rebuild"}')"><i>🛠</i><b>Smart fix</b><small>${d.ladder.includes("restart") ? "restart what is not running, then rebuild if needed" : "build the link again with a new inner network and key, then try the other types"}</small></a>` : ""}
         ${sw ? `<a class="wtool" onclick="apRun(${id}, 'switch')"><i>🔀</i><b>Switch the tunnel type</b><small>test the other types on this route today and keep the best that works</small></a>` : ""}
