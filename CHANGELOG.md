@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.3 - 2026-10-11 - Compact, equal boxes
+
+* On the desktop the boxes of every page are tighter and the same size: the page header, the status line and the toolbars are slimmer, the tiles are all one height with a single line of text, and table rows are 31 px instead of 40 px, so a whole list of servers (Nodes) fits on the screen.
+
 ## 1.15.2 - 2026-10-11 - A lost SSH connection no longer crashes a job
 
 * An SSH connection that dropped with no message (exit 255, empty output) raised `AttributeError` inside the error text builder and killed the whole job run (seen in the configs job); it is now an ordinary *ssh connection lost* error that the jobs already handle and retry.
