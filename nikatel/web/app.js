@@ -545,9 +545,9 @@ PAGES.servers = async () => {
 };
 function srvModal(s) {   // while the edit form is open the header keeps only the name: the form has Save and Back
   const f = s.facts || {}, editing = state.edit === s.id;
-  showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`,
+  showModal(`${flagImg(s.role === "iran" ? "IR" : s.country)}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`,
     `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide" + (editing ? " editing" : ""),
-    editing ? "" : `<button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}>⌨ Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port">✎ Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button>`);
+    editing ? "" : `<button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}><i class="bi">${SI.term}</i>Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port"><i class="bi">${SI.edit}</i>Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)"><i class="bi">${SI.trash}</i>Delete</button>`);
 }
 function tunModal(t) {
   showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
@@ -567,7 +567,7 @@ function serverDetailHtml(s) {
 function serverBar(s) {
   const f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, nm = esc(s.name);
   const off = s.online === false && s.enabled !== false;      // a server that is off: what needs it is shown off
-  const b = (icon, title, tip, click, cls = "", always = false) => `<button class="sm abtn ${cls}" ${off && !always ? `disabled title="${esc("The server is off or does not answer: " + title + " works when it is back")}"` : `onclick="${click}" title="${esc(tip)}"`}><i>${icon}</i>${title}</button>`;
+  const b = (icon, title, tip, click, cls = "", always = false) => `<button class="sm abtn ${cls}" ${off && !always ? `disabled title="${esc("The server is off or does not answer: " + title + " works when it is back")}"` : `onclick="${click}" title="${esc(tip)}"`}><i class="bi">${{"⇄": SI.swap, "🛰": SI.probe, "🛡": SI.shield(false), "🔐": SI.lock(false), "↺": SI.restore, "⏻": SI.power}[icon] || icon}</i>${title}</button>`;
   const hostKeyChanged = /host key/i.test(s.last_error || "");        // only when the panel refuses the server because it was reinstalled: then its old identity must be forgotten
   const groups = [
     [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
@@ -587,7 +587,7 @@ function serverGridHtml(s) {
   const kv = (l, v, id) => `<div class="kv2"><span>${l}</span><div ${id ? `id="res-${id}"` : ""}>${v}</div></div>`;
   const rr = (l, v, warn, bad, detail) => `<div class="rrow"><span>${l}</span><i class="rbar"><u class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${v == null ? 0 : Math.min(100, v)}%"></u></i><em><b>${v == null ? "—" : v + "%"}</b>${detail ? `<small>${detail}</small>` : ""}</em></div>`;
   const rt = (l, v, id) => `<div class="rrow"><span>${l}</span><i></i><em ${id ? `id="res-${id}"` : ""}><b>${v}</b></em></div>`;
-  const box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
+  const box = (icon, title, rows) => `<div class="sbox" data-b="${title.split(" ")[0].toLowerCase()}"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
   const dom = pg.domain || "", pname = pg.provider || s.provider || "";
   if (dom || pname) setTimeout(() => provSite(s.name), 0);
   const provider = dom || pname ? `${dom ? `<a href="https://${esc(dom)}" target="_blank" rel="noopener">${esc(dom)} ↗</a>` : ""} <small class="mut">${esc(pname)}</small>` : '<span class="mut">not found yet</span>';
@@ -595,11 +595,11 @@ function serverGridHtml(s) {
   const lv = fl ? (FLT_LEVEL[fl.level] || ["warn", "⚠ " + esc(fl.level || "unknown")]) : null;
   const gre = g ? `<b class="${g.ok || !g.links ? "gw-ok" : "err"}">${g.ok ? "✓ OK" : g.links ? "✕ failing" : "no GRE links"}</b> <small class="mut">${ago(g.at)} ago</small>` : '<span class="mut">not tested</span>';
   const tunnels = mine.length ? mine.map(t => `<span class="tchip"><i class="st ${t.state}"></i>${esc(t.name)}</span>`).join("") : '<span class="mut">none</span>';
-  const sys = box("🖥", "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
+  const sys = box(SI.server, "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
     kv("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), kv("Top process", esc(f.top || "—")), kv("Connections", f.conn != null ? f.conn : "—")]);
-  const res = box("📊", "Resources", [rr("CPU", f.cpu, 80, 92, ""), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""), rr("Swap", f.swap, 50, 80, ""),
+  const res = box(SI.bars, "Resources", [rr("CPU", f.cpu, 80, 92, ""), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""), rr("Swap", f.swap, 50, 80, ""),
     rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""), rt("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—"), rt("Sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
-  const acc = box("🔑", "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), kv("Provider", provider),
+  const acc = box(SI.key, "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), kv("Provider", provider),
     s.role === "foreign" ? kv("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")}`) : kv("Site", site),
     s.role === "foreign" ? kv("Filtering", fl ? `<b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.online ? '<b class="gw-ok">online</b>' : '<b class="err">offline</b>'),
     kv("GRE", gre, "gre"), kv("Tunnels", tunnels)]);
@@ -622,8 +622,8 @@ function serverPartHtml(s, tab) {
   if (tab === "charts") return tabs + `<div class="charts" id="srv-charts-${s.id}"><div class="mut">loading 24 h…</div></div><div class="kv" id="srv-peaks-${s.id}"></div>`;
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
   const boxes = [
-    ibox("🖥", "System", [irow("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), irow("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), irow("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"), irow("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), irow("Connections", f.conn != null ? f.conn : "—"), irow("Busiest process", esc(f.top || "—"))]),
-    ibox("📊", "Resources", [irow("CPU", pct(f.cpu, 80, 92)), irow("RAM", `${pct(f.ram, 80, 90)} <small class="mut">${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""}</small>`), irow("Swap", f.swap != null ? f.swap + "%" : "—"), irow("Disk", `${pct(f.disk, 85, 95)} <small class="mut">${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""}</small>`), irow("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—")]),
+    ibox(SI.server, "System", [irow("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), irow("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), irow("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"), irow("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), irow("Connections", f.conn != null ? f.conn : "—"), irow("Busiest process", esc(f.top || "—"))]),
+    ibox(SI.bars, "Resources", [irow("CPU", pct(f.cpu, 80, 92)), irow("RAM", `${pct(f.ram, 80, 90)} <small class="mut">${f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""}</small>`), irow("Swap", f.swap != null ? f.swap + "%" : "—"), irow("Disk", `${pct(f.disk, 85, 95)} <small class="mut">${f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""}</small>`), irow("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—")]),
     ibox("🔑", "Access", [irow("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), irow("Last seen", when(s.last_seen_at)), irow("Role", esc(s.role)), irow("Provider", provCell(s))]),
     s.role === "foreign" ? ibox("🛡", "Location & security", [irow("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")} ${geo.agree ? `<small class="mut">(${esc(geo.agree)} agree)</small>` : ""}`), irow("Abuse-Defender", abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off"), irow("Filtered in Iran?", fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : "not checked yet")]) : "",
   ].join("");
@@ -710,7 +710,7 @@ function chartCard(title, pts, o = {}) {
   const grid = [0, .5, 1].map(f => { const y = (pt + (1 - f) * (H - pt - pb)).toFixed(1); return `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" class="lg"/><text x="${pl - 5}" y="${(+y + 3).toFixed(1)}" class="lt" text-anchor="end">${fmt(bot + f * (top - bot))}</text>`; }).join("");
   const xl = [0, .5, 1].map(f => `<text x="${(pl + f * (W - pl - pr)).toFixed(1)}" y="${H - 4}" class="lt" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}">${fmtT(t0 + f * span, span)}</text>`).join("");
   const id = "c" + (++chSeq); CH[id] = {v, t0, span, W, pl, pr, X, Y, fmt, unit};
-  return `<div class="mcard"><h6>${title}<span class="mval ${tone}">${fmt(cur)}${unit}</span></h6>
+  return `<div class="mcard" data-c="${o.col || ""}"><h6>${o.ic ? `<i class="mc-ic">${o.ic}</i>` : ""}${title}<span class="mval ${tone}">${fmt(cur)}${unit}</span></h6>
     <div class="lc-wrap"><svg class="lc ${tone}" data-ch="${id}" viewBox="0 0 ${W} ${H}">${grid}${xl}<path class="la" d="${area}"/><path class="ll" d="${line}"/><line class="lc-cur" y1="${pt}" y2="${H - pb}" x1="-9" x2="-9"/><circle class="lc-dot" r="3.5" cx="-9" cy="-9"/></svg><div class="lc-tip"></div></div>
     <div class="mstat"><span>min <b>${fmt(mn)}${unit}</b></span><span>avg <b>${fmt(av)}${unit}</b></span><span>max <b>${fmt(mx)}${unit}</b></span></div></div>`;
 }
@@ -741,7 +741,7 @@ async function loadServerCharts(id) {
   box.className = "mon";
   box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${d.samples.length} samples · one every 2 minutes · hover a chart for exact values</small></div>
     <div class="mtiles">${mtile("CPU", pc(avgOf(cpu)), "peak " + pc(cpu.length ? Math.max(...cpu) : null), avgOf(cpu) > 85 ? "bad" : "")}${mtile("RAM", pc(avgOf(ram)), "peak " + pc(ram.length ? Math.max(...ram) : null), avgOf(ram) > 90 ? "bad" : "")}${mtile("Disk", pc(disk.length ? disk[disk.length - 1] : null), "now", disk.length && disk[disk.length - 1] > 85 ? "bad" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg · peak ↓" + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}${mtile("Connections", conn.length ? Math.round(avgOf(conn)) : "—", "peak " + (conn.length ? Math.max(...conn) : "—"))}</div>
-    <div class="mgrid">${chartCard("CPU", series("cpu"), {max: 100, unit: "%", warn: 70, bad: 85, fmt: v => Math.round(v)})}${chartCard("RAM", series("ram"), {max: 100, unit: "%", warn: 80, bad: 90, fmt: v => Math.round(v)})}${chartCard("Load (1 min)", series("load1"), {fmt: v => (Math.round(v * 100) / 100)})}${chartCard("Download ↓", series("rx_mbps"), {unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {unit: " Mb/s"})}${chartCard("Connections", series("conn"), {fmt: v => Math.round(v)})}</div>`;
+    <div class="mgrid">${chartCard("CPU", series("cpu"), {col: "blue", ic: SI.cpu, max: 100, unit: "%", warn: 70, bad: 85, fmt: v => Math.round(v)})}${chartCard("RAM", series("ram"), {col: "purple", ic: SI.ram, max: 100, unit: "%", warn: 80, bad: 90, fmt: v => Math.round(v)})}${chartCard("Load (1 min)", series("load1"), {col: "blue", ic: SI.pulse, fmt: v => (Math.round(v * 100) / 100)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}${chartCard("Connections", series("conn"), {col: "cyan", ic: SI.users, fmt: v => Math.round(v)})}</div>`;
 }
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT;
@@ -1038,7 +1038,7 @@ function tunBar(t) {
 function tunGrid(t) {
   const d = t.detail || {}, u = t.units || {}, rec = t.record || {}, q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre";
   const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`;
-  const box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
+  const box = (icon, title, rows) => `<div class="sbox" data-b="${title.split(" ")[0].toLowerCase()}"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
   const chips = (side, names) => (names || []).map(n => { const ok = (d[side + "_units"] || {})[n] === "active", short = /^backhaul/.test(n) ? "backhaul" : /gre/.test(n) ? "GRE" : n.replace(/\.service$/, "");
     return `<span class="tchip" title="${esc(n)}: ${esc((d[side + "_units"] || {})[n] || "?")}"><i class="st ${ok ? "up" : "down"}"></i>${esc(short)}</span>`; }).join("") || "—";
   const err = t.last_error && t.state !== "up" ? ` <small class="err" title="${esc(t.last_error)}">${esc(t.last_error.slice(0, 60))}</small>` : "";
@@ -1089,7 +1089,7 @@ async function loadTunnelCharts(id) {
   box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
     <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length} checks up`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) + " in total" : "none in this range", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) + " · worst " + Math.round(Math.max(...rtt)) + " ms" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg · peak ↓" + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}</div>
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
-    <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {unit: " Mb/s"})}
+    <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}
       <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
 }/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
@@ -2534,7 +2534,13 @@ const SI = {   // line icons
   hash: '<svg viewBox="0 0 24 24"><path d="M9 4L7.5 20M16.5 4L15 20M4.5 9h15.5M4 15h15.5"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M14 3.5V8h4.5"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.8 12.5h9.4L17.5 7M10 11v5M14 11v5"/></svg>',
-  cube: '<svg viewBox="0 0 24 24"><path d="M12 3l8 4.2v9.6L12 21l-8-4.2V7.2z"/><path d="M4 7.2l8 4.3 8-4.3M12 11.5V21"/></svg>',  buoy: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>',
+  cube: '<svg viewBox="0 0 24 24"><path d="M12 3l8 4.2v9.6L12 21l-8-4.2V7.2z"/><path d="M4 7.2l8 4.3 8-4.3M12 11.5V21"/></svg>',  swap: '<svg viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3M20 16H7m0 0 3-3m-3 3 3 3"/></svg>',
+  power: '<svg viewBox="0 0 24 24"><path d="M12 3.5v8M7.2 6.8a7.5 7.5 0 1 0 9.6 0"/></svg>',
+  term: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10l3 2-3 2M12.5 15h4"/></svg>',
+  edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 8l3 3"/></svg>',
+  bars: '<svg viewBox="0 0 24 24"><path d="M6 20v-8M12 20V5M18 20v-5" stroke-width="2.6"/></svg>',
+  ram: '<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="9" rx="2"/><path d="M7 16v2.5M11 16v2.5M15 16v2.5M7.5 10.5h.01M12 10.5h.01M16.5 10.5h.01"/></svg>',
+  users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6M16 6.4a3 3 0 0 1 0 5.2M17.5 14.6c1.8.5 3 1.9 3.4 4.4"/></svg>',  buoy: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>',
   lock: on => `<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="${on ? "M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" : "M8.2 10.5V8a3.8 3.8 0 0 1 7.2-1.7"}"/><path d="M12 14.6v2.2"/></svg>`,
 };
 /* the building blocks */

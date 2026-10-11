@@ -2,6 +2,7 @@
 
 ## 1.17.38
 
+- Server window like the reference: flag and copyable address in the header, line icons on every button, blue box titles with icon tiles, compact action bar with Reboot at the right, coloured charts (CPU blue, RAM purple, load blue, download green, upload orange, connections cyan) with icons, a blue-edged window.
 - Tunnel Doctor page: the six steps are cards with a coloured icon tile and a blue title, the settings row is tidy; check boxes are blue rounded squares with a tick; the Settings menu item has its old icon back and no text shadow.
 - Side menu like the reference (coloured line icons, a chevron on each item, a blue active item with a bar); every tab bar is outlined with a blue active tab; the Add buttons are the blue glossy one; the Servers toolbar fits one row on wide screens and its search has a magnifier; the theme tiles are twelve in a row with a blue ring on the chosen one; Save sits at the right in every settings tab.
 - Settings are built like the reference pictures: every group is a rounded row-card (icon tile, title with its sentence, fields with their label on top and a small icon inside, buttons at the right); the Security items have a switch or a button and a chevron; the password card shows its three boxes with a lock and an eye; Backups cards carry Back up now / Restore / Download with icons and the state line under them; the AI and Shop bot tabs follow the same cards; selects have an icon and a thin chevron; the tab bar has line icons and a blue active tab. The main button of the default theme is the blue glossy one.
