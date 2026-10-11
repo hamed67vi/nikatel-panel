@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.5 - 2026-10-11 - The user window rebuilt, the panel test button, matching boxes
+
+* **The user window of a panel** is rebuilt: one bar of actions on top (Add days, Reset usage, Revoke subscription, Disable/Enable; Delete user on the right), three boxes of equal height - *Usage* (used, left, lifetime, expires, created, online), *Account* (status, data limit, reset, expiry, note, the subscription link with Copy) and *Inbounds* (a row per protocol with its own tick) - and Save / Cancel at the bottom.
+* **Users and Hosts** search box and controls box are the same kind of box, the same height.
+* **Check configs from Iran** (panel top bar, was *Test config on probe*): first looks in Configs for this panel's subscription - it may be there under another name - and only when it is not there makes the small test user and adds its subscription.
 ## 1.17.4 - 2026-10-11 - Panels: users and hosts tidy, tick boxes, search
 
 * **Users and Hosts** are built the same way: the search is a box of its own beside the controls (they no longer move while typing), a page holds what fits the window (no scrolling), numbered pages and the *Users | Hosts* tabs are in the bottom strip, the range text is gone.

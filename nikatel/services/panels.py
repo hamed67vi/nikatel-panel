@@ -18,7 +18,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Panel
+from ..models import Config, Panel, Subscription
 from .events import emit
 
 log = get_logger("panels")
@@ -678,8 +678,19 @@ def test_user(c: dict, panel_name: str, gb: int = 5, days: int = 30) -> dict:
     return {"username": uname, "sub": sub}
 
 
+def group_of_panel(base_url: str, name: str, subs: list[tuple[str, str]], groups: set[str]) -> str:
+    """The Configs group that already holds this panel's subscription, whatever it is called: a subscription whose link starts with the panel's address, else a group named like the panel."""
+    base = base_url.rstrip("/").lower()
+
+    for gname, url in subs:
+        if base and str(url).strip().lower().startswith(base):
+            return gname
+
+    return name if name in groups else ""
+
+
 def test_config(panel_id: int) -> dict:
-    """Make sure the panel's test user exists and its subscription is imported on the probe as group <panel name>."""
+    """Look in Configs for this panel's subscription (it may be there under another name); when it is not, make the panel's test user and import its subscription on the probe as group <panel name>."""
     from . import configs
 
     with session() as db:
@@ -688,7 +699,18 @@ def test_config(panel_id: int) -> dict:
         if p is None:
             raise ValueError("panel not found")
 
-        c, name = _cred(p), p.name
+        c, name, had_test = _cred(p), p.name, bool((p.stats or {}).get("test_user"))
+        subs = [(s.name, s.url) for s in db.scalars(select(Subscription))]
+        groups = {g for g in db.scalars(select(Config.group)) if g}
+
+    found = "" if had_test else group_of_panel(c["url"], name, subs, groups)
+
+    if found:
+        with session() as db:
+            n = len(list(db.scalars(select(Config).where(Config.group == found))))
+            emit(db, "info", "panels", f"Panel {name}: its subscription is already in Configs as group {found} ({n} configs); nothing added.", name)
+
+        return {"username": "", "added": [], "skipped": [], "existing": found, "existing_count": n}
 
     tu = test_user(c, name)
     res = configs.import_subscription(name, tu["sub"], prefix=name)

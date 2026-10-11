@@ -1314,3 +1314,15 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 
 /* a tick box is always a square (a table or form rule used to stretch it) */
 :not(.bk-sw) > input[type=checkbox] { width: 18px; height: 18px; min-width: 18px; max-width: 18px; min-height: 18px; max-height: 18px; padding: 0; aspect-ratio: 1 / 1; }
+
+/* users and hosts: the search box and the controls box are the same kind of box, the same height */
+.pn-bars .toolbar { margin: 0; align-self: stretch; } .pn-bars .toolbar.pn-sb { flex: none; width: 280px; } .pn-bars .toolbar.pn-sb input { width: 100%; flex: 1 1 auto; height: 30px; }
+
+/* the user window: actions bar, three boxes, the save row */
+.ue-form { display: block !important; } .ue-grid { margin-bottom: 8px; align-items: stretch; } .ue-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ue-big { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-top: 2px; } .ue-big b { font-size: 22px; } .ue-big span { color: var(--mut); font-size: 12px; }
+.ue-usage .ue-bar { margin: 4px 0 4px; height: 6px; }
+.kf { flex-wrap: nowrap !important; align-items: center !important; } .kf > span { flex: none; width: 84px; } .kf input, .kf select { flex: 1; min-width: 0; height: 26px; font-size: 12px; padding: 0 8px; border-radius: 8px; } .kf em { font-style: normal; color: var(--mut); font-size: 11px; }
+.ue-inb .ue-ibs { max-height: 214px; overflow-y: auto; margin-top: 4px; grid-template-columns: 1fr; } .ue-inb .ue-ibp[open] { grid-column: auto; }
+.ue-acts { margin-bottom: 8px; } .ue-save { margin-top: 2px; }
+@media (max-width: 900px) { .ue-grid, .ue-grid.two { grid-template-columns: 1fr; } }

@@ -206,3 +206,11 @@ def test_proxies_follow_the_inbounds_without_changing_the_users_ids():
     assert "vmess" not in out                                # no inbound left: removed
     assert out["trojan"] == {}                               # new protocol: Marzban makes the settings
     assert proxies_for(None, {"vless": ["a"]}) == {"vless": {}}
+
+def test_a_panels_subscription_is_found_in_configs_under_any_name():
+    from nikatel.services.panels import group_of_panel
+
+    subs = [("Turkey pack", "https://pnl.example.com:8443/sub/abc123"), ("other", "https://other.example.org/sub/zzz")]
+    assert group_of_panel("https://pnl.example.com:8443/", "marzban-main", subs, {"Turkey pack"}) == "Turkey pack"     # another name, same panel
+    assert group_of_panel("https://nothing.example.net", "marzban-main", subs, {"Turkey pack", "marzban-main"}) == "marzban-main"   # a group named like the panel
+    assert group_of_panel("https://nothing.example.net", "marzban-main", subs, {"Turkey pack"}) == ""                    # not there: the test user is made
