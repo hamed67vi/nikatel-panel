@@ -202,3 +202,27 @@ def test_telegram_topic_creation_reports_why(monkeypatch):
     monkeypatch.setattr(telegram.httpx, "post", lambda *a, **k: R())
     tid, why = telegram.create_topic("Panel backups")
     assert tid == 0 and "not a forum" in why and "Topics" in why
+
+def test_backup_runs_every_n_minutes_and_sends_to_telegram_once_a_day(client, monkeypatch):
+    import time as _t
+
+    from nikatel.services import backup as bk
+
+    st.put("backup", {"enabled": True, "every_minutes": 15, "hour": 3, "send_telegram": True, "tg_every": "daily"})
+    calls = []
+    monkeypatch.setattr(bk, "run", lambda send=None, part="": calls.append(send) or {"ok": True})
+    monkeypatch.setattr(bk, "local_day", lambda now, tz: ("2026-10-11", 9), raising=False)
+    monkeypatch.setattr("nikatel.services.report.local_day", lambda now, tz: ("2026-10-11", 9))
+    bk.scheduled()
+    assert calls == [True]                                   # the first run of the day after 03:00 goes to Telegram
+    bk.scheduled()
+    assert calls == [True]                                   # 15 minutes have not passed: nothing
+    bk._mark("backup_last_run", {"at": int(_t.time()) - 16 * 60})
+    bk.scheduled()
+    assert calls == [True, False]                            # the next ones in the day are kept locally only
+    st.put("backup", {"tg_every": "all"})
+    bk._mark("backup_last_run", {"at": int(_t.time()) - 16 * 60})
+    bk.scheduled()
+    assert calls[-1] is True
+    assert client.put("/api/settings/backup", json={"every_minutes": 15, "tg_every": "daily"}).json()["every_minutes"] == 15
+    assert client.put("/api/settings/backup", json={"tg_every": "sometimes"}).status_code == 422

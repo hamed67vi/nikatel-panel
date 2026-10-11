@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.3 - 2026-10-11 - Backups every 15 minutes if you like
+
+* The backup can run every 15 / 30 minutes, every hour, 3, 6 or 12 hours, or once a day at an hour. With a short interval the files can go to Telegram every time, once a day only, or never (the rest stay on the panel server for the kept days).
+* The backup password: said in plain words (the files are encrypted with it; typed only on restore) and a **Generate** button makes a strong one.
+
 ## 1.16.2 - 2026-10-11 - One view in every detail window
 
 * The windows of a server, a tunnel and a config have no tabs any more: the boxes, the charts and the tools are one scrolling view under thin headings. The things you do most are in the window header: server *Console / Edit / Delete*, tunnel *Ports / Remove*, config *Edit / Delete*. The server console is the only other view, with a *Back* link. Made for people who are new to the panel: nothing is hidden behind a tab.

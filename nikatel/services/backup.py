@@ -217,36 +217,60 @@ def list_backups() -> list[dict]:
                   key=lambda x: x["at"], reverse=True)
 
 
+def _marker(key: str) -> dict:
+    from ..models import Setting
+
+    with session() as db:
+        m = db.get(Setting, key)
+        return dict(m.value) if m is not None and isinstance(m.value, dict) else {}
+
+
+def _mark(key: str, value: dict) -> None:
+    from ..models import Setting
+
+    with session() as db:
+        m = db.get(Setting, key)
+
+        if m is None:
+            db.add(Setting(key=key, value=value))
+        else:
+            m.value = value
+
+
 def scheduled() -> None:
-    """Job: once per local day at the configured hour."""
+    """Job (every 5 minutes): once per local day at the configured hour - or, when `every_minutes` is set, every that many minutes (15, 30, 60 ...).
+    With a short interval the files can still go to Telegram every time, or once a day only (`tg_every`), so the group is not flooded."""
     conf = st.get("backup")
 
     if not conf.get("enabled"):
         return
 
-    from ..models import Setting
     from .report import local_day
 
     now = int(time.time())
     day, hour = local_day(now, int(st.get("report").get("tz_offset_minutes", 0)))
+    every = int(conf.get("every_minutes") or 0)
+    last_day = _marker("backup_last_day").get("day", "")
 
-    with session() as db:
-        marker = db.get(Setting, "backup_last_day")
-        last = marker.value.get("day") if marker is not None and isinstance(marker.value, dict) else ""
+    if every > 0:
+        if now - int(_marker("backup_last_run").get("at", 0)) < every * 60 - 30:        # 30 s of slack: the job ticks every 5 minutes, not to the second
+            return
 
-    if hour < int(conf.get("hour", 3)) or last == day:
+        daily_due = hour >= int(conf.get("hour", 3)) and last_day != day
+        send = bool(conf.get("send_telegram")) and (conf.get("tg_every", "all") != "daily" or daily_due)
+        r = run(send=send)
+        _mark("backup_last_run", {"at": now})
+
+        if r.get("ok") and daily_due:
+            _mark("backup_last_day", {"day": day})
+
+        return
+
+    if hour < int(conf.get("hour", 3)) or last_day == day:
         return
 
     run()
-
-    with session() as db:
-        marker = db.get(Setting, "backup_last_day")
-
-        if marker is None:
-            db.add(Setting(key="backup_last_day", value={"day": day}))
-        else:
-            marker.value = {"day": day}
-
+    _mark("backup_last_day", {"day": day})
 
 def restore(path: Path, passphrase: str, data_dir: Path | None = None) -> list[str]:
     """Unpack a backup into the data dir (service must be stopped). Returns the restored file names."""

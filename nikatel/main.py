@@ -77,7 +77,7 @@ def _register_jobs() -> None:
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
-    jobs.register("backup", 600, backup.scheduled)
+    jobs.register("backup", 300, backup.scheduled)
     jobs.register("repair", 60, autopilot.repair_cycle)         # the plain restarts every minute; the smart repair and the look at lossy tunnels every five minutes (one job, not three)
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)

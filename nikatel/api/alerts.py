@@ -158,6 +158,8 @@ class BackupIn(BaseModel):
     hour: int = Field(3, ge=0, le=23)
     keep_days: int = Field(14, ge=1, le=365)
     send_telegram: bool = True
+    every_minutes: int = Field(0, ge=0, le=1440)          # 0 = once a day at `hour`; else every N minutes
+    tg_every: str = Field("all", pattern=r"^(all|daily)$")   # with a short interval: every backup to Telegram, or once a day only
 
 
 class PassIn(BaseModel):
