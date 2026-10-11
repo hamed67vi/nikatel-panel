@@ -112,7 +112,7 @@ const PAGES = {};
 const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
 const INFO = {
   dashboard: ["Dashboard", "What needs attention right now, and what happened."],
-  nodes: ["Nodes", "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs."],
+  nodes: ["Servers", "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs."],
   servers: ["Servers", "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH."],
   tunnels: ["Tunnels", "Every tunnel between an Iran server and a foreign server: service units, GRE link, peer ping, forwarded ports. Checked every minute."],
   events: ["Events", "One plain sentence per thing that happened. Newest first."],
@@ -141,7 +141,14 @@ function renderSub() {
 }
 window.setSub = (page, k) => { if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
 const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
-function go(page) {
+/* a small animated drawing beside the title of the main pages: lights of a server, packets in a tunnel, bars of a panel, the blink of the shop bot */
+const TITLE_ANIM = {
+  nodes: `<svg class="t-anim srv-anim" viewBox="0 0 32 30" width="30" height="28" aria-hidden="true"><rect x="3" y="2" width="26" height="7.5" rx="2.2"/><rect x="3" y="11.2" width="26" height="7.5" rx="2.2"/><rect x="3" y="20.4" width="26" height="7.5" rx="2.2"/><circle class="l1" cx="8" cy="5.75" r="1.5"/><circle class="l2" cx="13" cy="5.75" r="1.5"/><circle class="l3" cx="8" cy="14.95" r="1.5"/><circle class="l1" cx="13" cy="14.95" r="1.5"/><circle class="l2" cx="8" cy="24.15" r="1.5"/><circle class="l3" cx="13" cy="24.15" r="1.5"/><path d="M20 5.75h6M20 14.95h6M20 24.15h6"/></svg>`,
+  tunnels: `<svg class="t-anim tun-anim" viewBox="0 0 48 26" width="46" height="26" aria-hidden="true"><circle class="nd" cx="5" cy="13" r="4"/><circle class="nd" cx="43" cy="13" r="4"/><path class="tube" d="M10 8.5h28M10 17.5h28"/><circle class="pk r" cx="12" cy="8.5" r="1.9"/><circle class="pk r d" cx="12" cy="8.5" r="1.9"/><circle class="pk l" cx="36" cy="17.5" r="1.9"/><circle class="pk l d" cx="36" cy="17.5" r="1.9"/></svg>`,
+  configs: `<svg class="t-anim pan-anim" viewBox="0 0 32 28" width="32" height="28" aria-hidden="true"><rect class="win" x="2" y="2" width="28" height="24" rx="3.5"/><path class="bar0" d="M2 8h28"/><rect class="b b1" x="7" y="12" width="4" height="10" rx="1"/><rect class="b b2" x="14" y="12" width="4" height="10" rx="1"/><rect class="b b3" x="21" y="12" width="4" height="10" rx="1"/><circle class="dt" cx="6" cy="5" r="1"/><circle class="dt" cx="10" cy="5" r="1"/></svg>`,
+  settings: `<svg class="t-anim gear-anim" viewBox="0 0 30 30" width="28" height="28" aria-hidden="true"><g class="gear"><path d="M15 3.5l2 .4.7 3 2.2 1 2.6-1.6 2.7 2.7-1.6 2.6 1 2.2 3 .7.4 2-.4 2-3 .7-1 2.2 1.6 2.6-2.7 2.7-2.6-1.6-2.2 1-.7 3-2 .4-2-.4-.7-3-2.2-1-2.6 1.6-2.7-2.7 1.6-2.6-1-2.2-3-.7-.4-2 .4-2 3-.7 1-2.2-1.6-2.6 2.7-2.7 2.6 1.6 2.2-1 .7-3z" transform="translate(0 0) scale(.9) translate(1.7 1.7)"/><circle cx="15" cy="15" r="4"/></g></svg>`,
+  bot: `<svg class="t-anim bot-anim" viewBox="0 0 30 30" width="30" height="30" aria-hidden="true"><path class="ant" d="M15 3v4"/><circle class="ap" cx="15" cy="3" r="1.8"/><rect class="hd" x="4" y="8" width="22" height="17" rx="5"/><ellipse class="eye" cx="11" cy="16" rx="2.3" ry="2.6"/><ellipse class="eye" cx="19" cy="16" rx="2.3" ry="2.6"/><path class="mo" d="M11 21.2h8"/></svg>`,
+};function go(page) {
   let aliased = false;
   if (NAV_ALIAS[page]) {   aliased = true;               // an old page name: open the page that holds it, on the right sub-tab
     const target = NAV_ALIAS[page];
@@ -159,7 +166,7 @@ function go(page) {
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
-  if (page === "nodes") $("#title").insertAdjacentHTML("beforeend", `<svg class="srv-anim" viewBox="0 0 32 30" width="30" height="28" aria-hidden="true"><rect x="3" y="2" width="26" height="7.5" rx="2.2"/><rect x="3" y="11.2" width="26" height="7.5" rx="2.2"/><rect x="3" y="20.4" width="26" height="7.5" rx="2.2"/><circle class="l1" cx="8" cy="5.75" r="1.5"/><circle class="l2" cx="13" cy="5.75" r="1.5"/><circle class="l3" cx="8" cy="14.95" r="1.5"/><circle class="l1" cx="13" cy="14.95" r="1.5"/><circle class="l2" cx="8" cy="24.15" r="1.5"/><circle class="l3" cx="13" cy="24.15" r="1.5"/><path d="M20 5.75h6M20 14.95h6M20 24.15h6"/></svg>`);
+  if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
   $("#subnav").classList.toggle("hidden", !SUB[page]);
   refresh();
 }
@@ -202,18 +209,22 @@ const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "Th
 async function refresh() {
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
-  const seq = navSeq;
+  const seq = navSeq, pg0 = $("#page");
+  if (pg0 && pg0.childElementCount && !pg0.querySelector(".loading")) pg0.style.minHeight = pg0.offsetHeight + "px";      // the page keeps its height while it is redrawn: switching a tab does not make it jump
+  const release = () => requestAnimationFrame(() => requestAnimationFrame(() => { if (pg0) pg0.style.minHeight = ""; }));
   const ae = document.activeElement, focus = ae && ae.id && ae.matches("input, textarea") ? {id: ae.id, a: ae.selectionStart, b: ae.selectionEnd} : null;   // the box being typed in
   try {
     await PAGES[state.page]();
-    if (seq !== navSeq) return;                 // another page was opened meanwhile: this one is history
+    if (seq !== navSeq) { release(); return; }                 // another page was opened meanwhile: this one is history
     if (focus) { const el = document.getElementById(focus.id); if (el && el !== document.activeElement) { el.focus(); try { el.setSelectionRange(focus.a, focus.b); } catch (e) { /* not a text box */ } } }   // a re-drawn page must not take the cursor out of the search box
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
     scrollRestore(snap); pendScroll = snap.length ? snap : null; setTimeout(() => { pendScroll = null; }, 500);
     document.body.classList.toggle("tabbed", !!SUB[state.page] && !!document.querySelector("#page > .toolbar:first-child, #page > .fstrip:first-child, #page > .tiles:first-child"));   // the sub tabs stick to the box under them
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
+    release();
   } catch (e) {
+    release();
     if (e.message === "not logged in" || seq !== navSeq) return;
     const transient = /HTTP 50\d|Failed to fetch|NetworkError|Load failed|network/i.test(e.message);
     const pg = $("#page");
@@ -224,7 +235,17 @@ async function refresh() {
 }
 setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
-function showModal(title, body, cls = "", acts = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
+function showModal(title, body, cls = "", acts = "") {
+  let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); }
+  const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button>`;
+  const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
+  if (cur && mb && cur.className.trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
+    const keep = mb.scrollTop; cur.style.minHeight = cur.offsetHeight + "px";
+    cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;
+    return;
+  }
+  m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${head}</div><div class="modal-body">${body}</div></div></div>`;
+}
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
@@ -263,10 +284,8 @@ function glassChoice(text, choices) {
 window.gconfirm = (text, o) => glassAsk(text, o);
 window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({input: true, value}, o));
 window.closeModal = () => {
-  const quiet = (state.page === "nodes" || state.page === "tunnels") && !state.edit && !state.build;   // just close: the list behind is still current
   state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
-  hideModal();
-  if (!quiet) refresh();
+  hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
 };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
@@ -307,7 +326,7 @@ window.dqPick = i => {
 const dashKpis = (o, cfg, cUp) => {
   const nProb = (o.tunnels.down || 0) + (o.tunnels.degraded || 0) + (o.servers.offline || 0) + (cfg.configs.length - cUp);
   const k = (label, val, cls, to) => `<a class="kpi" ${to ? `onclick="go('${to}')"` : ""}><i class="dash-dot ${cls}"></i><span><b>${val}</b><small>${label}</small></span></a>`;
-  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Nodes online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs")}${k("Problems", nProb, nProb ? "red" : "green", "")}</div>`;
+  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Servers online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs")}${k("Problems", nProb, nProb ? "red" : "green", "")}</div>`;
 };
 const dashFree = () => `<div class="dash-free"><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div></div>`;
 PAGES.dashboard = async () => {
@@ -386,24 +405,32 @@ function eventsHtml(list, open) {
 
 /* ---- servers */
 window.NODE_CERT = "";   // the default Marzban certificate (Settings of the panel, loaded after sign-in)
-const SERVER_FORM = (s, role) => `<form class="frm" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
-    <label>Name<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value="${esc(s ? s.name : "")}" placeholder="ir7"></label>
-    <label>Host / IP<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10"></label>
-    <label>Role<select name="role">${["iran", "foreign"].map(r => `<option ${(s ? s.role : role) === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
-    <label>SSH user<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}"></label>
-    <label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}"></label>
+const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how the panel reaches it, what to install after; the foot has the button and the one-line help
+  const fl = (l, inner) => `<label class="kv2 kf bf"><span>${l}</span>${inner}</label>`;
+  return `<form class="frm srv-form2" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
+    <div class="sgrid two srv-two">
+      <div class="sbox"><h5><i>🖥</i>Server</h5>
+        ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value="${esc(s ? s.name : "")}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)">`)}
+        ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10">`)}
+        ${fl("Role", `<select name="role">${["iran", "foreign"].map(r => `<option ${(s ? s.role : role) === r ? "selected" : ""}>${r}</option>`).join("")}</select>`)}
+        <label class="kv2 kf bf"><span>Checked</span><span class="chkline"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> by the panel</span></label></div>
+      <div class="sbox"><h5><i>🔑</i>SSH access</h5>
+        ${fl("User", `<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}">`)}
+        ${fl("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}">`)}
+        ${fl("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to install the panel's key now" : "empty = the panel's key is already there"}" title="With a password the panel logs in once, installs its own key and forgets the password">`)}
+        <div class="bf-note mut">${s ? "A password here installs the panel's key now." : "With a password the panel logs in once, installs its key and forgets it."}</div></div>
+    </div>
     ${s ? `<input type="hidden" name="provider" value="${esc(s.provider)}">` : ""}
-    <label>SSH password <small>(optional)</small><input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to (re)install the panel's key now" : "empty = the panel's key is already on the server"}"></label>
-    <label class="chk"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> enabled (checked by the panel)</label>
-    ${`<div class="srv-extra"><b>${s ? "Install after saving" : "Install after adding"}</b> <small class="mut">(optional, needs root; the server is ${s ? "saved" : "added"} first, then these run and tell what they did)</small>
-      <label class="chk"><input name="x_bt" type="checkbox"> Block public torrents <small class="mut">(iptables DROP rules for tracker addresses, refreshed daily - Heclalava/blockpublictorrent-iptables)</small></label>
-      <label class="chk"><input name="x_node" type="checkbox" onchange="this.closest('.srv-extra').querySelectorAll('.x-cert').forEach(e => e.classList.toggle('hidden', !this.checked))"> Marzban node <small class="mut">(Docker + the official Gozargah installer; ports 62050 / 62051)</small></label>
-      <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
-      <label class="chk x-cert hidden"><input name="x_cert_save" type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>`}
-    <div class="frm-act"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>
-      ${s ? `<span class="sp"></span><button type="button" onclick="state.edit = null; refresh()" title="Back to the server's details without saving">← Back</button>` : ""}</div>
-    <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install below acts on the server itself." : "With a password the panel logs in once, installs its own key and forgets the password. Without a password the panel's key must already be in the server's <code>authorized_keys</code> (Settings shows the key)."}</small>
+    <div class="sbox srv-after"><h5><i>⚙</i>${s ? "Install after saving" : "Install after adding"}<small>optional · needs root · the server is ${s ? "saved" : "added"} first</small></h5>
+      <div class="srv-opts">
+        <label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>
+        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="this.closest('.srv-after').querySelectorAll('.x-cert').forEach(e => e.classList.toggle('hidden', !this.checked))"> Marzban node</label></div>
+      <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
+      <label class="chk x-cert hidden"><input name="x_cert_save" type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>
+    <div class="sbar bld-foot"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<span class="sp"></span>
+      <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install acts on the server itself." : "Without a password the panel's key must already be in the server's authorized_keys (Settings shows the key)."}</small></div>
   </form>`;
+};
 
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
 /* severity colours of the rows: red = fully down (or a server that cannot be reached / is critical), yellow = everything else that is wrong - packet loss of any size, degraded, slow, loaded */
@@ -462,7 +489,8 @@ PAGES.servers = async () => {
   };  const openSrv = list.find(s => s.id === state.open);
   if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
   $("#page").innerHTML = `<div class="toolbar joined">
-      <button onclick="newServer()" title="One server, or several at once with one password">+ Add server</button><button onclick="greCheckAll()" title="Look for GRE links on every server of this tab and ping their other end">GRE check all</button>${state.tab === "foreign" ? '<button class="sm" onclick="srvGeo()" title="Country of every foreign server, by majority vote of four services">🌍 Countries</button>' : ""}<a class="sm mut" href="/api/nodes/user-key" download="nikatel_user" title="Your own private key for PuTTY / ssh / MobaXterm — keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 My SSH key</a>
+      <button class="cta cta-server" onclick="newServer()" title="Add one server, or several at once with one password"><i class="cta-ic">＋</i>Add server</button><i class="sep"></i><button onclick="greCheckAll()" title="Look for the GRE links on every server of this tab and ping their other end">⇄ Check GRE links</button>${state.tab === "foreign" ? '<button onclick="srvGeo()" title="Find the country of every foreign server (the vote of four services) and show its flag">🌍 Find countries</button>' : ""}<i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 Download my SSH key</a>
+      
       <span class="tcount pstat nd-stats"><span class="tc ${online < mine.length ? "bad" : "ok"}" title="${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}">Online <b>${online} / ${mine.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span>
       <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>${searchSeg()}</div>
     <table class="tbl lift srv-tbl joined"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">'}</colgroup>
@@ -476,7 +504,7 @@ function srvModal(s) {   // while the edit form is open the header keeps only th
   const f = s.facts || {}, editing = state.edit === s.id;
   showModal(`<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`,
     `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide" + (editing ? " editing" : ""),
-    editing ? "" : `<button class="sm" onclick="srvConsole(${s.id})" title="Run a command on the server, with presets">⌨ Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port">✎ Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button>`);
+    editing ? "" : `<button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}>⌨ Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port">✎ Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)">Delete</button>`);
 }
 function tunModal(t) {
   showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
@@ -495,7 +523,8 @@ function serverDetailHtml(s) {
 }
 function serverBar(s) {
   const f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, nm = esc(s.name);
-  const b = (icon, title, tip, click, cls = "") => `<button class="sm abtn ${cls}" onclick="${click}" title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  const off = s.online === false && s.enabled !== false;      // a server that is off: what needs it is shown off
+  const b = (icon, title, tip, click, cls = "", always = false) => `<button class="sm abtn ${cls}" ${off && !always ? `disabled title="${esc("The server is off or does not answer: " + title + " works when it is back")}"` : `onclick="${click}" title="${esc(tip)}"`}><i>${icon}</i>${title}</button>`;
   const hostKeyChanged = /host key/i.test(s.last_error || "");        // only when the panel refuses the server because it was reinstalled: then its old identity must be forgotten
   const groups = [
     [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
@@ -503,7 +532,7 @@ function serverBar(s) {
       b("🛡", abuseOn ? "Remove Abuse-Defender" : "Abuse-Defender", abuseOn ? "Stop dropping traffic to abused ranges" : "Drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)] : [],
     [b("🔐", "SSH password", "Set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`),
      `<select class="sm abtn abtn-open" title="Open this server in a program on your computer" onchange="if(this.value){srvOpen(${s.id}, this.value);this.selectedIndex=0}"><option value="">🖥 Open in…</option><option value="ssh">Windows ssh</option><option value="putty">PuTTY</option><option value="mobaxterm">MobaXterm</option></select>`,
-     ...(hostKeyChanged ? [b("↺", "Trust the new server", "The server was reinstalled and its SSH identity changed: forget the old one so the panel can connect again", `forgetKey(${s.id}, '${nm}')`)] : [])],
+     ...(hostKeyChanged ? [b("↺", "Trust the new server", "The server was reinstalled and its SSH identity changed: forget the old one so the panel can connect again", `forgetKey(${s.id}, '${nm}')`, "", true)] : [])],
     [b("⏻", "Reboot", "Its tunnels are down until it is back", `srvReboot(${s.id}, '${nm}')`, "danger")],
   ].filter(g => g.length);
   return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
@@ -586,7 +615,7 @@ state.conOut = {};
 window.srvConsole = id => { state.con = id; if (state.open === id && $("#modal .modal-body")) { wtab("console"); return; } state.open = id; state.wtab = "console"; refresh(); };
 window.srvRun = async id => { const cmd = $(`#con-cmd-${id}`).value.trim(); if (!cmd) return; const out = $(`#con-out-${id}`); out.textContent = "running…"; try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: cmd})}); state.conOut[id] = `$ ${cmd}\n${r.output}${r.code ? "\n[exit " + r.code + "]" : ""}\n(${r.ms} ms)`; } catch (e) { state.conOut[id] = "✕ " + e.message; } out.textContent = state.conOut[id]; };
 window.srvConnect = async (id, name) => { const pw = await gprompt(`SSH password of ${name} (used once to install the panel's key, not stored):`); if (!pw) return; toast("Connecting…"); try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Nodes → 'My SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
+window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Servers → 'Download my SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
 window.srvAbuse = async (id, action) => { if (!await gconfirm(action === "install" ? "Install Abuse-Defender on this foreign server? Outgoing traffic to a public list of abused ranges is dropped; your own servers, tunnel links, DNS and gateway stay allowed. Takes a minute." : "Remove Abuse-Defender from this server?")) return; toast("Working… (up to a minute)"); try { const r = await api(`/api/servers/${id}/abuse`, {method: "POST", body: JSON.stringify({action})}); toast(r.installed ? `✓ Abuse-Defender on: ${r.rules} ranges blocked` : "✓ Abuse-Defender removed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* the result of the GRE test and of the filtering check is written into the Tools window itself */
 const setRes = (key, html) => { for (const id of ["res-" + key, "tile-" + key]) { const el = $("#" + id); if (el) el.innerHTML = html; } };   // the tool tile and the results box
@@ -901,7 +930,8 @@ async function enginesLoad() {
 window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
-  const [list, trashRes, outageRes] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []})), api("/api/autopilot/outage").catch(() => null)]);
+  const [list, trashRes, outageRes, srvAll] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []})), api("/api/autopilot/outage").catch(() => null), api("/api/servers").catch(() => null)]);
+  if (srvAll) state.serversCache = srvAll;
   state.tunnelsCache = list; state.trashCache = trashRes.items || [];
   const tmode = localStorage.getItem("nk.tf") === "problems" ? "problems" : "all", nProblems = list.filter(tunSev).length;
   const workList = (outageRes || {}).working || [], fixing = new Set(workList.filter(w => w.mode !== "look").map(w => w.name)), workMap = new Map(workList.map(w => [w.name, w]));
@@ -925,7 +955,7 @@ PAGES.tunnelsList = async () => {
       <td class="num hide-sm" title="${esc(q.latency_ms != null ? "quality test: " + q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "% · score " + q.score : "")}">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td><div class="td-act">${t.id < 0 ? `<span class="busy-chip"><i class="spin"></i>rebuilding…</span>` : ""}</div></td></tr>`; };
   const creating = false;
-  $("#page").innerHTML = `<div class="toolbar joined"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="checkAll()" title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">🔍 Check all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><span class="tcount"><span class="tc up"><i></i><b>${list.filter(t => t.state === "up").length}</b> up</span><span class="tc down"><i></i><b>${list.filter(t => t.state === "down").length}</b> down</span><span class="tc unstable"><i></i><b>${list.filter(t => t.state === "degraded").length}</b> unstable</span></span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
+  $("#page").innerHTML = `<div class="toolbar joined"><button class="cta cta-tunnel" onclick="openBuild()" title="Build a tunnel between an Iran and a foreign server"><i class="cta-ic">＋</i>Create tunnel</button><button onclick="checkAll()" title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">🔍 Check all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><span class="tcount"><span class="tc up"><i></i><b>${list.filter(t => t.state === "up").length}</b> up</span><span class="tc down"><i></i><b>${list.filter(t => t.state === "down").length}</b> down</span><span class="tc unstable"><i></i><b>${list.filter(t => t.state === "degraded").length}</b> unstable</span></span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
     <div class="lbox">${trashBox()}
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
@@ -946,7 +976,9 @@ function detailRow(t) {
 }
 function tunBar(t) {
   const up = t.state === "up", nm = esc(t.name);
-  const b = (icon, title, tip, click, cls = "") => `<button class="sm abtn ${cls}" ${click ? `onclick="${click}"` : "disabled"} title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  const offs = ["iran", "foreign"].map(r => (state.serversCache || []).find(x => x.name === t[r + "_name"])).filter(x => x && x.enabled !== false && x.online === false).map(x => x.name).join(", ");   // the servers of this tunnel that are off
+  const needsSrv = ["Fix", "Dry run", "Health", "Restart", "Quality", "Rebuild"];
+  const b = (icon, title, tip, click, cls = "") => offs && needsSrv.includes(title) ? `<button class="sm abtn" disabled title="${esc("A server of this tunnel is off (" + offs + "): " + title + " works when it is back")}"><i>${icon}</i>${title}</button>` : `<button class="sm abtn ${cls}" ${click ? `onclick="${click}"` : "disabled"} title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
   const groups = [
     [b("🛠", "Fix", up ? "Nothing to fix: the tunnel is healthy" : "Diagnose and repair step by step: restarts only what is not working", up ? "" : `fixTunnel(${t.id}, false)`),
      b("👁", "Dry run", up ? "Nothing to fix: the tunnel is healthy" : "Show what Fix would do, change nothing", up ? "" : `fixTunnel(${t.id}, true)`)],
@@ -1040,7 +1072,7 @@ async function buildFormHtml() {
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
   void srvOpt;
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
-  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
+  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Servers → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
   const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(name in bk.chk ? bk.chk[name] : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
   const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
@@ -1265,7 +1297,7 @@ const ARVAN_UI = false;   // the ArvanCloud failover is switched off for now (al
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
-  // Smart repair is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Nodes)
+  // Smart repair is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
   const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
@@ -1285,7 +1317,7 @@ PAGES.actions = async () => {
   const storm = outage && outage.storm ? `<div class="storm-banner">⚠ <b>Mass disruption:</b> ${outage.servers_offline.length} server(s) offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down. While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.</div>` : "";
   $("#page").innerHTML = `<div data-tab="att" class="ap-top">${storm}${disturb}</div><div class="grid2 ap-two ap-pair" data-tab="att"><div class="card"><h3>🔧 Working now <span class="sp"></span><label class="chk ap-auto" title="On: the smart repair restarts, rebuilds, builds the link again and tries other tunnel types by itself. Off: you diagnose and fix by hand."><input type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""} onchange="apAuto(this)"> Automatic repair</label>${bad.length && !rp.auto ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
       <div class="ap-att">${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
-      ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
+      ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Servers.</div>'}
       </div>
       <small class="mut ap-note">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto} (<a class="mut" onclick="go('settings');setTab('ai')">Settings → Repairs</a>). Restart, rebuild, a new GRE link and another tunnel type happen by themselves, without asking.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
     <div class="card ap-histcard"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>

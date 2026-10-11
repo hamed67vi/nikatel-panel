@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.17.23 - 2026-10-11 - Animated titles, buttons off for a server that is off, a compact Add server
+
+* A small animated drawing beside the title of **Nodes** (a server with blinking lights), **Tunnels** (packets running through a tunnel), **Panels** (bars of a panel moving), **Shop bot** (a bot that blinks) and **Settings** (a slowly turning gear); off with *prefers-reduced-motion*.
+* **A server that is off has its buttons off**: in its window *GRE test*, *Filtering*, *Abuse-Defender*, *SSH password*, *Reboot* and *Console* are grey and say why; in the window of a tunnel one of whose servers is off, *Fix*, *Dry run*, *Health*, *Restart*, *Quality* and *Rebuild* are grey and name the server.
+* **Nodes is now called Servers** (the side menu, the title, the dashboard counter and the hints that named it); *Nodes* stays the name of the nodes of a Marzban panel.
+* **The buttons of Servers say what they do**: *＋ Add server*, *⇄ Check GRE links*, *🌍 Find countries*, *🔑 Download my SSH key* - in groups, the key as a button of the same height.
+* **The names of the servers** are set in Poppins (semibold, a little air between the letters) - a face of their own.
+* **The two big buttons have a style of their own**: *＋ Add server* is emerald (a light sweeps across it, the plus turns a quarter), *＋ Create tunnel* is violet (a ring of light pulses out, the plus turns half a turn).
+* **The Add server window is built again**: two boxes (*Server*: name, host, role, checked; *SSH access*: user, port, password) in the same rows as the other windows, a strip *Install after adding* with the two options, and one foot bar (the button and a one-line help).
+* **Switching a tab never makes the page jump**: a page keeps its height while it is redrawn, and a window that is redrawn (the tabs *One server / Several at once*, the tabs inside a window) only changes its content - it does not fly in again and it does not shrink.
+* **Closing a window no longer redraws the page behind it** (the page jumped when a window was closed): only the window goes.
+* **The duplicate configs of the group *Nikatel-bot* are cleaned**: the 23 copies the import had made (50 configs became 27, the 25 nodes and 2 that exist only once); the import now skips a node whose own name and endpoint the probe already tests.
+
 ## 1.17.22 - 2026-10-11 - The tabs of Nodes in one style, a server beside its title
 
 * The two tabs *Iran* and *Foreign* carry the same kind of icon: a round badge - the flag of Iran and a globe (the Windows emoji of the flag showed as `IR`, the other was a different drawing).

@@ -541,7 +541,7 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
         db.add(sub)
 
     todo, regroup, final = [], [], {}       # final: node name -> the name of its config
-    seen_sig = {endpoint_sig(c.meta): c.name for c in rows_now if endpoint_sig(c.meta)}      # the nodes the probe already tests, whatever they are called
+    by_name = {c.name: c for c in rows_now}
 
     for n in nodes:
         if picks is not None and n["name"] not in picks:
@@ -551,15 +551,14 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
             continue
 
         full = clean_name(f"{prefix} {n['name']}" if prefix else n["name"])
+        orig = clean_name(n["name"])
+        twin = by_name.get(orig) if prefix and orig != full else None      # the probe already tests this node under its own name (the prefix only keeps a panel's test nodes apart from hand-added ones)
         sig = endpoint_sig(meta_from_uri(n["uri"]))
 
-        if sig and full not in existing and sig in seen_sig:      # the same node (address, port, transport, security) is already tested under another name: a second copy would only double the list
-            skipped.append(seen_sig[sig])
-            final[n["name"]] = seen_sig[sig]
+        if twin is not None and sig and endpoint_sig(twin.meta) == sig and full not in existing:      # the same name and the same endpoint: a second copy would only double the list
+            skipped.append(twin.name)
+            final[n["name"]] = twin.name
             continue
-
-        if sig:
-            seen_sig.setdefault(sig, full)
 
         if full in existing:
             skipped.append(full)
