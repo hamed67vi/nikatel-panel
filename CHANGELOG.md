@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.17 - 2026-10-11 - No second copy of a node already tested
+
+* **Why *Nikatel-bot* showed 50 configs**: *Check configs from Iran* imports the subscription of the panel's test user; the probe already tested the same nodes (from the older import, under their own names), and the import only compared **names**, so every node came a second time as *Nikatel-bot <node>*. The import now compares the **node** (protocol, address, port, transport, security - the user id and the name do not count) and skips a node that is already tested under another name, also inside one subscription.
+
+## 1.17.16 - 2026-10-11 - Gateway & outbounds moved to Panels
+
+* **Gateway & outbounds** is now the third tab of **Panels** (Configs | Panels | Gateway & outbounds), not a tab of Nodes; its tab has a colour of its own (cyan) and its page sits under the tab like the others.
+
 ## 1.17.15 - 2026-10-11 - Nodes: no duplicate names, the numbers in the bar
 
 * **A server name is never added twice** (capitals do not count: `TR1` is `tr1`): adding or editing a server, and adding several at once, say plainly what is taken - *a server named X already exists (Iran / foreign)* or *the address A belongs to the server X*. In *Nodes* a name carried by more than one server is marked `⚠ ×N`.

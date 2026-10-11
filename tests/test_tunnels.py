@@ -370,3 +370,13 @@ def test_a_server_name_is_never_added_twice(client):
     assert r.status_code == 409 and "dupA" in r.json()["detail"] and "name" in r.json()["detail"].lower()
     r = client.post("/api/servers", json={"name": "other", "host": "203.0.113.61", "role": "foreign"})        # same address
     assert r.status_code == 409 and "203.0.113.61" in r.json()["detail"]
+
+def test_the_same_node_under_another_user_is_not_imported_twice():
+    from nikatel.services.configs import endpoint_sig, meta_from_uri
+
+    a = meta_from_uri("vless://11111111-1111-1111-1111-111111111111@dr.example.ir:80?type=ws&security=none&path=%2F#Turkey-1")
+    b = meta_from_uri("vless://22222222-2222-2222-2222-222222222222@dr.example.ir:80?type=ws&security=none&path=%2F#Nikatel-bot%20Turkey-1")
+    other = meta_from_uri("vless://22222222-2222-2222-2222-222222222222@dr.example.ir:443?type=ws&security=tls#Turkey-1")
+    assert endpoint_sig(a) is not None and endpoint_sig(a) == endpoint_sig(b)          # another user id, another name: the same node
+    assert endpoint_sig(a) != endpoint_sig(other)                                       # another port / security: another node
+    assert endpoint_sig({}) is None and endpoint_sig({"address": ""}) is None

@@ -504,6 +504,16 @@ def fetch_subscription(url: str) -> list[dict]:
     return [{"name": clean_name(link_name(u)) or f"node{i + 1}", "uri": u, "proto": u.split("://", 1)[0]} for i, u in enumerate(links)]
 
 
+def endpoint_sig(meta: dict | None) -> tuple | None:
+    """What makes two configs the same node for the probe: protocol, address, port, transport and security (the user id and the name do not count)."""
+    m = meta or {}
+
+    if not m.get("address"):
+        return None
+
+    return tuple(str(m.get(k) or "") for k in ("proto", "address", "port", "network", "security"))
+
+
 def _alt_name(group: str, node: str) -> str:
     return clean_name(f"{group} {node}")
 
@@ -531,6 +541,7 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
         db.add(sub)
 
     todo, regroup, final = [], [], {}       # final: node name -> the name of its config
+    seen_sig = {endpoint_sig(c.meta): c.name for c in rows_now if endpoint_sig(c.meta)}      # the nodes the probe already tests, whatever they are called
 
     for n in nodes:
         if picks is not None and n["name"] not in picks:
@@ -540,6 +551,15 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
             continue
 
         full = clean_name(f"{prefix} {n['name']}" if prefix else n["name"])
+        sig = endpoint_sig(meta_from_uri(n["uri"]))
+
+        if sig and full not in existing and sig in seen_sig:      # the same node (address, port, transport, security) is already tested under another name: a second copy would only double the list
+            skipped.append(seen_sig[sig])
+            final[n["name"]] = seen_sig[sig]
+            continue
+
+        if sig:
+            seen_sig.setdefault(sig, full)
 
         if full in existing:
             skipped.append(full)
