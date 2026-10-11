@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.21 - 2026-10-11 - Tidy info boxes and Tools buttons
+
+* The info boxes of a server / tunnel window (System, Resources, Access ...) have one label column and one value style (sizes, weights, units), and long values wrap instead of running out of the box.
+* The Tools buttons of servers and tunnels are the same size, with an icon tile, a title and one short line; group headings have a fading line; Danger buttons are tinted red.
+
 ## 1.14.20 - 2026-10-11 - Tune all applied and removed
 
 * The **Tune all** button is removed from Tunnels (no extra features for now). It was run once on the tunnels this panel built; new tunnels still get the newer defaults.
