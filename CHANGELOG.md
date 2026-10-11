@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.1 - 2026-10-11 - Boxed tab strips; the user list changes page from the bottom
+
+* The tab strips that stood alone (Settings and its inner tabs, Shop bot, Users / Hosts of a panel) are in the same soft framed box as the others.
+* The user list of a panel sits in the framed list box; its pages change from a strip under the list (‹ Previous · 1–40 of N · Next ›) and the list is shown from its top again.
+
 ## 1.16.0 - 2026-10-11 - More themes and a redesigned dashboard
 
 * **Themes.** Ten themes in Settings → Appearance, picked from small previews: Aurora glass (default), **Ocean**, **Emerald**, **Sunset**, **Royal**, Gold luxury, Cyber neon, **Graphite** and the plain **Classic** admin look (solid surfaces, thin borders, square-ish corners, a flat blue button, no glow or blur), Minimal. Every theme sets its own colours, corner radius and the art behind the page (waves, a dotted grid, stars, a fine grid), and has a day version.

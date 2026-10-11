@@ -1639,7 +1639,7 @@ PAGES.panels = async () => {
       <div class="tile click" onclick="pnNodesWin()" title="Open the nodes of this panel"><small>Nodes</small><b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b><span>connected</span></div>
       <div class="tile"><small>Load</small><b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b><span>cpu · ram ${s.mem_pct ?? "—"}%</span></div>
       <div class="tile"><small>Traffic</small><b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b><span>↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}</span></div></div>
-    <div class="tabs" style="margin-bottom:10px">${[["users", `Users${s.users_total != null ? ` <small>${s.users_total}</small>` : ""}`], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>
+    <div class="fstrip"><div class="tabs">${[["users", `Users${s.users_total != null ? ` <small>${s.users_total}</small>` : ""}`], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>
     <div id="pn-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
@@ -1682,16 +1682,17 @@ async function pnUsersLoad(id) {
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
   box.innerHTML = `<div class="toolbar"><input id="pn-uq" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
-      <button class="sm" onclick="pnBulk(${id}, 'disable')">Disable ticked</button><button class="sm" onclick="pnBulk(${id}, 'enable')">Enable ticked</button><button class="sm" onclick="pnBulkRenew(${id})">Renew ticked…</button>
-      <button class="sm" ${pn.uoff ? "" : "disabled"} onclick="pn.uoff=Math.max(0,pn.uoff-40);refresh()">‹</button><button class="sm" ${pn.uoff + 40 < u.total ? "" : "disabled"} onclick="pn.uoff+=40;refresh()">›</button></div>
-    <table class="tbl"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:170px"></colgroup>
+      <button class="sm" onclick="pnBulk(${id}, 'disable')">Disable ticked</button><button class="sm" onclick="pnBulk(${id}, 'enable')">Enable ticked</button><button class="sm" onclick="pnBulkRenew(${id})">Renew ticked…</button></div>
+    <table class="tbl lift"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:170px"></colgroup>
       <thead><tr><th></th><th>User</th><th>Status</th><th>Traffic</th><th>Expires</th><th>Note</th><th></th></tr></thead>
       <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}"><td><input type="checkbox" class="pn-uchk" value="${esc(x.username)}"></td><td class="name">${esc(x.username)}</td><td><span class="st ${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}">${esc(x.status)}</span></td>
         <td class="num">${fmtB(x.used || 0)} / ${gb(x.limit)}</td><td class="num">${exp(x)}</td><td class="mut">${esc(x.note)}</td>
         <td><button class="sm" onclick="pnUserOpen(${id}, '${esc(x.username)}')">Edit</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', '${x.status === "active" ? "disable" : "enable"}')">${x.status === "active" ? "Disable" : "Enable"}</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', 'reset')">Reset</button></td></tr>
-`).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>`;
+`).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>
+    <div class="fstrip pager"><button class="sm" ${pn.uoff ? "" : "disabled"} onclick="pnPage(-1)">‹ Previous</button><span class="mut">${u.total ? pn.uoff + 1 : 0}–${Math.min(pn.uoff + 40, u.total)} of ${u.total}</span><button class="sm" ${pn.uoff + 40 < u.total ? "" : "disabled"} onclick="pnPage(1)">Next ›</button></div>`;
   const q = $("#pn-uq"); if (q && pn.uq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
+window.pnPage = d => { pn.uoff = Math.max(0, pn.uoff + d * 40); state.resetScroll = true; refresh(); };      // the page changes from the bottom of the list and the list is shown from its top again
 function pnUserHtml(id, u) {   // the user window, laid out like the Marzban dashboard's: usage on top, the fields, the subscription, the actions
   if (u.sub && u.sub.startsWith("/")) { const pp = (state.panelsCache || []).find(x => String(x.id) === String(id)); if (pp) u = {...u, sub: String(pp.url || "").replace(/\/+$/, "") + u.sub}; }
   const nm = esc(u.username), pct = u.limit ? Math.min(100, Math.round((u.used || 0) * 100 / u.limit)) : 0, left = u.expire ? Math.ceil((u.expire - Date.now() / 1000) / 86400) : null;
@@ -1790,7 +1791,7 @@ PAGES.bot = async () => {
       <div class="tile"><small>7 days</small><b>${money((s.week || {}).income)}</b><span>${(s.week || {}).orders ?? "—"} orders</span></div>
       <div class="tile"><small>30 days</small><b>${money((s.month || {}).income)}</b><span>${(s.month || {}).orders ?? "—"} orders · ${fmt(c.orders)} in all</span></div></div>
     ${d.stage_users != null && d.stage_users > (c.users || 0) ? `<div class="gw-out"><b>Real database waiting:</b> the staging copy on the bot server holds ${fmt(d.stage_users)} users, the live bot has ${fmt(c.users)}. <button class="pri sm" onclick="sbImport()">Import the real database now</button> <small class="mut">(the live database is dumped first; broadcast queues are not copied)</small></div>` : ""}
-    <div class="tabs sb-tabs">${SB_TABS.map(([k, label]) => `<button class="${sb.tab === k ? "on" : ""}" onclick="sbTab('${k}')">${label}${k === "payments" && n.pending ? ` <small>${n.pending}</small>` : k === "tickets" && n.tickets ? ` <small>${n.tickets}</small>` : ""}</button>`).join("")}</div>
+    <div class="fstrip"><div class="tabs sb-tabs">${SB_TABS.map(([k, label]) => `<button class="${sb.tab === k ? "on" : ""}" onclick="sbTab('${k}')">${label}${k === "payments" && n.pending ? ` <small>${n.pending}</small>` : k === "tickets" && n.tickets ? ` <small>${n.tickets}</small>` : ""}</button>`).join("")}</div></div>
     <div id="sb-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;
   const load = {overview: sbOverview, payments: sbPays, orders: sbOrders, users: sbUsersLoad, plans: sbPlans, categories: sbCategories, servers: sbServers, discounts: sbDiscounts, gifts: sbGifts, broadcast: sbBroadcast, tickets: sbTickets, texts: sbTexts, settings: sbSettings, tools: sbTools}[sb.tab] || sbOverview;
   try { await load(); } catch (e) { const b = $("#sb-body"); if (b) b.innerHTML = `<div class="page-err"><b>This tab could not be loaded</b><span>${esc(e.message)}</span><button class="sm" onclick="refresh()">Try again</button></div>`; }
@@ -2388,7 +2389,7 @@ const SET_TABS = {
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "account";
   state.stab = cur;
-  const bar = `<div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
+  const bar = `<div class="fstrip"><div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
   $("#page").insertAdjacentHTML("afterbegin", bar);
   const grid = $("#page .grid2"), byName = {};
   grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); const nm = c.dataset.name || (h ? h.childNodes[0].textContent.trim() : ""); c.dataset.name = nm; byName[nm] = c; c.classList.add("hidden"); });
@@ -2397,7 +2398,7 @@ function settingsTabs() {
   if (names.length > 1) {   // several cards in a tab: a second row of tabs, one card at a time
     const pick = names.includes(state.sstab) ? state.sstab : names[0];
     state.sstab = pick; show = [pick];
-    $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div>`);
+    $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="fstrip"><div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div></div>`);
   }
   show.forEach(n => { const c = byName[n]; c.classList.remove("hidden"); grid.appendChild(c); });
   grid.classList.add("one");
@@ -2408,7 +2409,7 @@ settingsTabs.only = () => {   // switch the card without touching the server or 
   const byName = {};
   grid.querySelectorAll(":scope > .card").forEach(c => { const nm = c.dataset.name || ""; byName[nm] = c; c.classList.add("hidden"); });
   const names = SET_TABS[state.stab][2].filter(n => byName[n]), pick = names.includes(state.sstab) ? state.sstab : names[0];
-  $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div>`);
+  $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="fstrip"><div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div></div>`);
   byName[pick].classList.remove("hidden");
   if (pick === "About") aboutLoad(); if (pick === "Core update") enginesLoad();
 };
