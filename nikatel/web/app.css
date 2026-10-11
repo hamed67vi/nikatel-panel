@@ -1357,3 +1357,10 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 
 /* Smart repair: Working now and History side by side, the same height */
 .ap-pair { margin-bottom: 8px; } .ap-pair .ap-att, .ap-pair .ap-hist { height: clamp(240px, calc(100vh - 330px), 520px); max-height: none; box-sizing: border-box; overflow: auto; }
+
+/* ping arrows: every row has the same height and the same drawing (the packet loss sits on the ms line), the lines fade out at their tails like a trail */
+.tlink .tl-top { display: flex; align-items: center; justify-content: center; gap: 6px; height: 16px; }
+.tlink .tl-top .loss { font-size: 10px; font-weight: 800; line-height: 1; padding: 2px 6px; border-radius: 999px; background: rgba(255,200,70,.16); color: var(--warn); }
+.tlink .wire::before { background: linear-gradient(90deg, transparent 0, var(--c) 40%); } .tlink .wire::after { background: linear-gradient(270deg, transparent 0, var(--c) 40%); }
+.tlink.degraded .wire::before, .tlink.degraded .wire::after, .tlink.down .wire::before, .tlink.down .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 8px, transparent 8px 13px); }
+.tlink .h { border-radius: 1px; } .tlink .pk { box-shadow: 0 0 5px var(--c); }

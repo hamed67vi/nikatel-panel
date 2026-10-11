@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.12 - 2026-10-11 - Ping arrows aligned in every row
+
+* The ping arrow of a tunnel with packet loss is no longer taller than the others: the loss is a small pill on the ms line, so every row has the same height and the arrows sit at the same place. The lines fade out at their tails like a trail; unstable and down tunnels keep their dashes.
+
 ## 1.17.11 - 2026-10-11 - Smart repair in two columns
 
 * *Working now* and *History* of the Smart repair page sit side by side, the same height, each scrolling inside its own box.
