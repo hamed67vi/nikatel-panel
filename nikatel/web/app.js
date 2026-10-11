@@ -290,6 +290,13 @@ window.dqPick = i => {
   if (x.kind !== "config") state.q = x.name.toLowerCase();
   refresh();
 };
+/* the numbers at a glance, beside the search; and a row of free slots under the cards, kept empty for whatever is added to the dashboard later */
+const dashKpis = (o, cfg, cUp) => {
+  const nProb = (o.tunnels.down || 0) + (o.tunnels.degraded || 0) + (o.servers.offline || 0) + (cfg.configs.length - cUp);
+  const k = (label, val, cls, to) => `<a class="kpi" ${to ? `onclick="go('${to}')"` : ""}><i class="dash-dot ${cls}"></i><span><b>${val}</b><small>${label}</small></span></a>`;
+  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Nodes online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs")}${k("Problems", nProb, nProb ? "red" : "green", "")}</div>`;
+};
+const dashFree = () => `<div class="dash-free"><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div></div>`;
 PAGES.dashboard = async () => {
   const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.serversCache = srv;
@@ -300,7 +307,7 @@ PAGES.dashboard = async () => {
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   $("#page").innerHTML = `
-    ${dashSearch()}
+    <div class="dash-top">${dashSearch()}${dashKpis(o, cfg, cUp)}</div>
     <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " degraded" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
@@ -309,7 +316,8 @@ PAGES.dashboard = async () => {
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>
+    ${dashFree()}`;
 };
 /* ---- the Problems box: only what is wrong right now (read from the live state, so a solved problem leaves it by itself), each with its way to fix it */
 function problemsCard(o, tl, srv, configs, filtered) {
@@ -2268,7 +2276,7 @@ PAGES.settings = async () => {
 
     <div class="card"><h3>Appearance</h3>
       <div class="frm">
-        <label>Theme<select onchange="lookSet('theme', this.value)">${[["aurora", "🌌 Aurora glass"], ["gold", "✨ Gold luxury"], ["neon", "⚡ Cyber neon"], ["minimal", "▫ Minimal"]].map(([k, l]) => `<option value="${k}" ${LOOK.theme === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <div style="grid-column:1/-1"><small class="mut">Theme</small><div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b><small>${desc}</small></button>`).join("")}</div></div>
         <label>Day / night<select onchange="lookSet('mode', this.value)">${[["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]].map(([k, l]) => `<option value="${k}" ${LOOK.mode === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label>Text size<select onchange="lookSet('size', this.value)">${[["small", "Small"], ["normal", "Normal"], ["large", "Large"]].map(([k, l]) => `<option value="${k}" ${LOOK.size === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label>Animations<select onchange="lookSet('anim', this.value)">${[["on", "On"], ["off", "Off (calmer)"]].map(([k, l]) => `<option value="${k}" ${LOOK.anim === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -2348,6 +2356,18 @@ window.saveArvan = e => { const j = formJson(e, ["confirm_minutes"], []); j.doma
 window.testArvan = async () => { toast("Asking ArvanCloud (read only)…"); try { const r = await api("/api/settings/arvan/test", {method: "POST"}); toast("✓ Connected: " + r.domains.length + " domain(s), " + r.records + " record(s)", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = `<div><span>Installed</span> <b>${esc(u.installed || "?")}</b> · <span>newest on GitHub</span> <b>${esc(u.newest || "?")}</b> · ${u.up_to_date ? '<b class="gw-ok">up to date</b>' : '<b class="err">update available</b>'}</div>`; const lg = $("#about-log"); if (u.last_log) { lg.textContent = u.last_log; lg.classList.remove("hidden"); } } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } toast("Updating… the page reloads in 40 s"); setTimeout(() => location.reload(), 40000); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* the look: theme, day/night, text size, animations - kept in this browser */
+const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview
+  ["aurora", "Aurora glass", "frosted glass over a soft aurora - the default", "#070a17", "rgba(124,131,255,.7)", "rgba(56,217,245,.5)"],
+  ["ocean", "Ocean", "deep water, teal and sky, faint waves", "#04101c", "rgba(45,212,191,.7)", "rgba(56,189,248,.5)"],
+  ["emerald", "Emerald", "forest greens on a dotted grid", "#05120d", "rgba(16,185,129,.7)", "rgba(163,230,53,.45)"],
+  ["sunset", "Sunset", "warm rose, amber and violet", "#140a12", "rgba(244,63,94,.65)", "rgba(251,146,60,.55)"],
+  ["royal", "Royal", "indigo and violet under small stars", "#0a0716", "rgba(124,58,237,.7)", "rgba(240,171,252,.45)"],
+  ["gold", "Gold luxury", "dark with warm gold light", "#0b0a08", "rgba(230,184,92,.7)", "rgba(246,217,138,.45)"],
+  ["neon", "Cyber neon", "magenta and cyan on black", "#040409", "rgba(255,43,214,.6)", "rgba(25,245,255,.5)"],
+  ["graphite", "Graphite", "quiet professional dark, thin grid, blue accent", "#0d0f12", "rgba(96,165,250,.55)", "rgba(148,163,184,.35)"],
+  ["classic", "Classic", "plain admin look: solid surfaces, thin borders, flat blue", "#111827", "#2563eb", "#1f2937", true],
+  ["minimal", "Minimal", "almost no decoration", "#0c0d10", "rgba(156,163,175,.4)", "rgba(203,213,225,.25)"],
+];
 const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "on"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
 function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; }
 window.lookSet = (k, v) => { LOOK[k] = v; localStorage.setItem("nk.look", JSON.stringify(LOOK)); lookApply(); };

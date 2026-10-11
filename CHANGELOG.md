@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.0 - 2026-10-11 - More themes and a redesigned dashboard
+
+* **Themes.** Ten themes in Settings → Appearance, picked from small previews: Aurora glass (default), **Ocean**, **Emerald**, **Sunset**, **Royal**, Gold luxury, Cyber neon, **Graphite** and the plain **Classic** admin look (solid surfaces, thin borders, square-ish corners, a flat blue button, no glow or blur), Minimal. Every theme sets its own colours, corner radius and the art behind the page (waves, a dotted grid, stars, a fine grid), and has a day version.
+* **Dashboard.** The search (its list is now solid, no longer printed over the cards) sits on one line with four numbers (tunnels up, nodes online, configs up, problems); the three cards follow, and a row of free slots under them is kept empty for what is added later.
+
 ## 1.15.5 - 2026-10-11 - The ping lives on the tunnel arrow; Tools tiles in equal columns
 
 * The Latency column is gone: the ping is written over a longer double arrow between the Iran node and the foreign node, in the colour of the tunnel (green / yellow / red, dashed when down), with a small packet running along it - faster when the ping is lower - and the packet loss under it when there is some.
