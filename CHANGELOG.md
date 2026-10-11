@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.5 - 2026-10-11 - The ping lives on the tunnel arrow; Tools tiles in equal columns
+
+* The Latency column is gone: the ping is written over a longer double arrow between the Iran node and the foreign node, in the colour of the tunnel (green / yellow / red, dashed when down), with a small packet running along it - faster when the ping is lower - and the packet loss under it when there is some.
+* The Tools tiles of a server / tunnel window are three equal columns, every tile the same height with the title on one line and the note on two.
+
 ## 1.15.4 - 2026-10-11 - Info boxes of the windows: same size, tight
 
 * The compact page density of 1.15.3 (slimmer header, tiles and table rows) is taken back out.

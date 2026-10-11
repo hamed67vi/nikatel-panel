@@ -989,3 +989,29 @@ button, .card, .tile, .gw-row, .gw-out, .fix, .tabs, .ob-raw, .gl-out, .detail t
 .modal .iboxes > .ibox:last-child:nth-child(odd) { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-content: start; } .modal .iboxes > .ibox:last-child:nth-child(odd) > h5 { grid-column: 1 / -1; }
 .modal .iboxes > .ibox:last-child:nth-child(odd) .irow + .irow { border-top: 0; }
 @media (max-width: 760px) { .modal .iboxes { grid-auto-rows: auto; } .modal .iboxes > .ibox:last-child:nth-child(odd) { display: block; } }
+/* ---- the link between the Iran node and the foreign node: the ping over a stretched double arrow, a packet running along it (faster for a lower ping) */
+.td-arrow { text-align: center !important; padding: 0 8px !important; } .tbl th.c { text-align: center; }
+.tlink { --c: var(--unk, #8b93a7); display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--c); }
+.tlink.up { --c: var(--ok); } .tlink.degraded { --c: var(--warn); } .tlink.down { --c: var(--bad); }
+.tlink .ms { font-family: var(--mono); font-size: 12px; font-weight: 700; line-height: 1; color: var(--text); } .tlink .ms.warn { color: var(--warn); } .tlink .ms.mut { color: var(--mut); }
+.tlink .wire { position: relative; display: block; width: 100%; max-width: 170px; height: 14px; }
+.tlink .wire::before, .tlink .wire::after { content: ""; position: absolute; left: 9px; right: 9px; height: 2px; border-radius: 2px; background: var(--c); opacity: .85; }
+.tlink .wire::before { top: 2px; } .tlink .wire::after { bottom: 2px; }
+.tlink.down .wire::before, .tlink.down .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 5px, transparent 5px 9px); }
+.tlink .h { position: absolute; width: 0; height: 0; border: 4px solid transparent; }
+.tlink .h.r { right: 0; top: -1px; border-left: 7px solid var(--c); border-right: 0; } .tlink .h.l { left: 0; bottom: -1px; border-right: 7px solid var(--c); border-left: 0; }
+.tlink .pk { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 7px var(--c); opacity: 0; }
+.tlink .pk.a { top: 0; left: 9px; } .tlink .pk.b { bottom: 0; left: calc(100% - 14px); }
+.tlink.up .pk { opacity: 1; animation: pkRight calc(var(--ping) * 14ms + 900ms) linear infinite; }
+.tlink.up .pk.b { animation-name: pkLeft; animation-delay: calc(var(--ping) * -7ms); }
+.tlink .loss { font-size: 10px; line-height: 1; }
+@keyframes pkRight { from { left: 9px; } to { left: calc(100% - 14px); } } @keyframes pkLeft { from { left: calc(100% - 14px); } to { left: 9px; } }
+@media (prefers-reduced-motion: reduce) { .tlink.up .pk { animation: none; opacity: 0; } }
+
+/* ---- the Tools tiles of a server / tunnel window: three equal columns, every tile the same height, the title on one line, the note on two */
+.modal .wtools, .modal .wtools.uni { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; }
+.modal .wtool, .modal .wtools.uni .wtool { min-height: 68px; padding: 8px 12px; column-gap: 10px; }
+.modal .wtool b, .modal .wtools.uni .wtool > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.modal .wtool small, .modal .wtools.uni .wtool > small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; font-size: 11px; line-height: 1.3; }
+.modal .wgroup h4 { margin: 10px 2px 6px; }
+@media (max-width: 760px) { .modal .wtools, .modal .wtools.uni { grid-template-columns: 1fr 1fr; } }
