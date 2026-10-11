@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.38
+
+- A server that is switched off is called off within about 20 seconds: a new pulse job knocks on the SSH port of every server every 10 seconds (one TCP connection, 3 s); two misses in a row mark it off and one hit puts it back. The full SSH sample (every 2 minutes) still reads cpu, ram and disk, and a server whose login is broken keeps that verdict. The Servers page refreshes every 8 s.
+- A node that drops off a Marzban / PasarGuard panel shows within half a minute (the panels check runs every 30 s instead of every 2 minutes).
+- Settings: a group is only as wide as its content and the control sits right after its label (small boxes for numbers); groups of many short rows (rules, password, bot server, schedule, AI, daily report) show them two per line. The theme row, the tunnel cores and the service settings take the frame. The About strip says Up to date / Update available in one word with the commits underneath.
+- Tunnels list: a cut tunnel says what is wrong in two or three words in place of the state (foreign server off, Iran server off, GRE link cut, service stopped, no data passes), and a tunnel whose server is off is drawn cut (red dashed wire with a cross) like a down one.
 ## 1.17.37
 
 - Settings rebuilt from scratch: one frame per tab, from the first tab to a little past the last one (the description strip and the tab bar end at the same edge), only as tall as its content; inside it grouped lists like a phone's settings (a header with icon and state, rows with the label left and the control right, switches, one action row), stacked one under the other; inside a group the rows sit two per line, so a wide screen leaves nothing empty. The page header scrolls away and the rows of tabs stay locked at the top. The same system on every tab: Security, Alerts, Backups, Probe, AI, Shop bot, Appearance, About & update.

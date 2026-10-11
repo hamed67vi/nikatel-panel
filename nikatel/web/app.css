@@ -1971,3 +1971,30 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
   .ss-rows > .sr:not(.x):not(.li):nth-child(odd):is(:last-child, :has(+ .x), :has(+ .li), :has(+ pre), :has(+ .hidden:last-child)) { grid-column: 1 / -1; border-left: 0; }
   .sf .theme-grid { gap: 5px; } .sf .tsw { padding: 4px 4px 5px; } .sf .tsw b { font-size: 10px; letter-spacing: -.1px; } .sf .tsw i { height: 30px; }
 }
+/* the groups do not fill the frame: each is 640 px wide (the wide ones - theme, cores, service settings - take the frame), rows one per line */
+@media (min-width: 761px) {
+  .sf .ss, .sf .ss-hero { width: min(100%, 640px); } .sf .ss.x { width: 100%; }
+  .ss-rows { display: block; } .ss-rows > .sr { border-left: 0 !important; grid-column: auto; } .sr > .v { flex: 0 1 250px; }
+}
+/* a tunnel whose server is off (state unknown with a reason) is drawn cut, like a down one: red dashed wire, a cross, no packets */
+.tlink.cut { --c: var(--bad); } .tlink.cut .wire::before, .tlink.cut .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 8px, transparent 8px 13px); opacity: .9; } .tlink.cut .pk { display: none; }
+
+/* settings rows: the control sits right after its label, nothing is stretched; a group is only as wide as its content */
+@media (min-width: 761px) {
+  .sf .ss, .sf .ss-hero { width: fit-content; min-width: 360px; max-width: 100%; } .sf .ss.x { width: 100%; }
+  .ss-h { min-height: 30px; padding: 5px 10px; } .ss-h > small { flex: 0 1 auto; }
+  .sr { justify-content: flex-start; gap: 12px; min-height: 34px; padding: 3px 10px; }
+  .sr > span { flex: 0 0 auto; max-width: 340px; } .sr > .v { flex: 0 0 auto; width: auto; justify-content: flex-start; }
+  .sr > .v.t { flex: 0 1 auto; max-width: 560px; text-align: left; white-space: normal; }
+  .sr > .v input:not([type=checkbox]), .sr > .v select { width: 230px; text-align: left; } .sr > .v input[type=number] { width: 90px; } .sr > .v input[type=datetime-local] { width: 190px; }
+  .sr.x textarea { width: 560px; max-width: 100%; }
+  .ss-a { justify-content: flex-start; padding: 6px 10px; gap: 6px; }
+  .ss-hero { gap: 10px; padding: 6px 10px; } .ss-hero .ss-ht b, .ss-hero .ss-ht small { white-space: normal; }
+}
+/* a group of many short rows (numbers, passwords) shows them two per line, each column only as wide as its content */
+@media (min-width: 761px) {
+  .ss.two .ss-rows { display: grid; grid-template-columns: max-content max-content; } .ss.two .ss-rows > .sr:nth-child(even) { border-left: 1px solid var(--line) !important; }
+  .ss.two .ss-rows > .sr:nth-child(odd):last-child, .ss.two .ss-rows > pre { grid-column: 1 / -1; }
+  .ss.two .sr > span { max-width: 260px; }
+}
+.st.why { text-transform: none; letter-spacing: 0; font-size: 12px; white-space: nowrap; }

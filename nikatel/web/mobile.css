@@ -122,3 +122,4 @@ html body .tbl td:first-child, html body .srv-tbl td:first-child, html body .tun
 .sr.x { display: block !important; } .ss-a { display: flex !important; flex-wrap: wrap; justify-content: flex-end !important; } .ss-a button { flex: 0 1 auto; height: 36px; }
 .ss-hero { flex-wrap: wrap; } .ss-hr { width: 100%; justify-content: flex-end; } .ss-hero .sec-seg { width: auto; }
 .sf .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } .sf .eff-grid { grid-template-columns: 1fr 1fr !important; }
+.sf .ss, .sf .ss-hero, .sf .ss.x { width: 100% !important; }

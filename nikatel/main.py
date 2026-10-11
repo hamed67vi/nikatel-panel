@@ -30,6 +30,7 @@ from .services import (
     nodes,
     panels,
     probe,
+    pulse,
     report,
     tunnel_test,
     tunnels,
@@ -74,6 +75,7 @@ def _harden(resp) -> None:
 def _register_jobs() -> None:
     s = get_settings()
     jobs.register("servers", s.server_sample_interval, facts.sample_all)
+    jobs.register("pulse", 10, pulse.run)                       # a server that is switched off is called off within ~20 s, not at the next full sample
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
@@ -85,7 +87,7 @@ def _register_jobs() -> None:
         jobs.register("failover", 60, failover.check)
 
     jobs.register("configs", 120, configs.sync)
-    jobs.register("panels", 120, panels.check_all)
+    jobs.register("panels", 30, panels.check_all)          # a node that drops off a Marzban / PasarGuard panel shows within half a minute
     jobs.register("geo", 3600, nodes.geo_missing_job)
     jobs.register("filter", 3600, nodes.filter_daily_job)
 

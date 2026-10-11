@@ -159,3 +159,6 @@ I18N.add({
 "service on the Iran server ended activating: {}": "سرویس روی سرور ایران هنگام راه‌اندازی تمام شد: {}", "{} has no python3 (needed for the test door)": "{} پایتون ۳ ندارد (برای درگاه تست لازم است)", "Everything created was removed again.": "هر چه ساخته شده بود دوباره پاک شد.",
 "started but no data passes through it ({}). Is {} port {} open between the servers? Log: {}": "بالا آمد ولی هیچ داده‌ای از آن رد نمی‌شود ({}). آیا پورت {} {} بین دو سرور باز است؟ لاگ: {}",
 });
+I18N.add({"no answer on the SSH port {}: {} quick checks in a row got no connection": "پورت SSH {} پاسخ نمی‌دهد: {} بررسی سریع پشت‌سرهم وصل نشد", "Server {} does not answer: no answer on the SSH port {}: {} quick checks in a row got no connection": "سرور {} پاسخ نمی‌دهد: پورت SSH {} جواب نمی‌دهد ({} بررسی سریع پشت‌سرهم وصل نشد)"});
+
+I18N.add({"foreign server off": "سرور خارج خاموش", "Iran server off": "سرور ایران خاموش", "both servers off": "هر دو سرور خاموش", "GRE link cut": "لینک GRE قطع", "GRE interface missing": "اینترفیس GRE نیست", "service stopped": "سرویس متوقف", "no data passes": "داده عبور نمی‌کند", "no answer": "بی‌پاسخ"});
