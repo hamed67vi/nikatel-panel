@@ -204,6 +204,8 @@ def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
         db.flush()
         aid = entry.id
 
+    BUILD_OF[aid] = build_aid
+
     threading.Thread(target=_worker, args=(aid, build_aid, name, iran_id, foreign_id), name=f"tunnel-test-{name}", daemon=True).start()
     return aid
 
@@ -283,6 +285,9 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
     if not ok:
         return False, "Build failed: " + (story[-1] if story else "unknown reason")
 
+    if build_aid in builder.CANCEL:
+        return False, "Stopped by you."
+
     _say(aid, "Built; measuring…")
 
     with session() as db:
@@ -295,6 +300,9 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
     _say(aid, f"GRE: latency {avg} ms, jitter {jitter} ms, loss {loss}% (30 pings)")
 
     mbps = None
+
+    if build_aid in builder.CANCEL:
+        return False, "Stopped by you."
 
     try:
         run_action(foreign, "speed_sink", {"PORT": str(TEST_PORT)})
@@ -317,6 +325,7 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
 
 # ------------------------------------------------------------------ compare several transports, one after the other
 RESULTS: dict[int, dict] = {}
+BUILD_OF: dict[int, int] = {}   # test action id -> its build id (what Stop cancels)
 # key, label, note, group, ticked by default
 KINDS = [
     ("tcpmux", "Backhaul · TCP Mux", "over GRE, many users over few connections (recommended)", "Backhaul over GRE", True),
@@ -386,6 +395,8 @@ def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full")
         db.add(entry)
         db.flush()
         aid = entry.id
+
+    BUILD_OF[aid] = build_aid
 
     threading.Thread(target=_other_worker, args=(aid, build_aid, name, iran_id, foreign_id), name=f"tunnel-test-{name}", daemon=True).start()
     return aid
@@ -488,6 +499,9 @@ def _compare_worker(job: dict) -> None:
             for _ in range(400):
                 time.sleep(3)
 
+                if job["stop"]:
+                    builder.CANCEL.add(BUILD_OF.get(aid, -1))
+
                 with session() as db:
                     e = db.get(ActionLog, aid)
 
@@ -496,6 +510,11 @@ def _compare_worker(job: dict) -> None:
                         break
             else:
                 ok, story = False, ["the test took too long"]
+
+            builder.CANCEL.discard(BUILD_OF.pop(aid, -1))
+
+            if job["stop"] and aid not in RESULTS:           # cancelled half way: no row for it
+                continue
 
             r = dict(RESULTS.get(aid) or {})
             r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else explain_failure(kind, (story[-1] if story else "no result")[:160]))   # a failed build says why
@@ -527,3 +546,7 @@ def compare_stop(jid: str) -> None:
         raise ValueError("unknown test")
 
     job["stop"] = True
+    aid = job.get("current_aid")
+
+    if aid in BUILD_OF:
+        builder.CANCEL.add(BUILD_OF[aid])      # the running build stops at its next step and removes what it made

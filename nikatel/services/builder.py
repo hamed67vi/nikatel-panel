@@ -385,7 +385,17 @@ class Build:
     created: list[tuple[str, Node]] = field(default_factory=list)   # (what, where) for rollback
 
 
+CANCEL: set[int] = set()   # build ids the operator stopped: the next step of the build raises and the build rolls everything back
+
+
+class BuildCancelled(RuntimeError):
+    pass
+
+
 def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) -> None:
+    if aid in CANCEL and not done:
+        raise BuildCancelled("stopped by you")
+
     with session() as db:
         e = db.get(ActionLog, aid)
 

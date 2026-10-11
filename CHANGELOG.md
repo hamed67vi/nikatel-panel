@@ -7,6 +7,9 @@
 * The diagnosis window's *Network advisor* tile opens this view with that tunnel's servers picked.
 * A cut tunnel shows a red cross in the middle of its two arrows in the tunnel list.
 * Backups: the list of file names under the schedule is gone (each part already shows its latest backup and a Download button).
+* **Stop in Tunnel test really stops**: the running build is cancelled at its next step and everything it made is removed (before, Stop waited for the whole transport, build and measurement); the button is small and shows *Stopping…*.
+* Tunnel list: the name, type, status, ping and traffic columns are shown whole (the empty space was moved to them; tighter cell padding).
+* The user window in Panels: one row per protocol; click it to see its inbounds with their ports (*all* / *none* per protocol, a count of ticked ones).
 ## 1.16.35 - 2026-10-11 - The tunnel window like the server window
 
 * One button bar (Fix, Dry run, Quality, Mute alerts, Rebuild, History; Ports and Remove stay in the header) and three boxes of six rows - *Servers*, *Status*, *Link* - with the services shown as small dots (backhaul / GRE, green when active) instead of two long lines each. Nothing is said twice (the latency and the packet loss were in two boxes). The outages card is one wide row of four.
