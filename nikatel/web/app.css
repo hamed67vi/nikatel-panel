@@ -2583,3 +2583,25 @@ html body #page .ap-set-row { padding: 12px 14px; border: 1px solid rgba(255,255
 html body .usr-tbl thead th:last-child, html body .usr-tbl tbody td:last-child { text-align: left !important; padding-left: 36px !important; padding-right: 12px !important; }
 .exp-c { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
 .exp-d { color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* ---- Tunnel Doctor without a page scroll ---- */
+@media (min-width: 1000px) {
+  html body #page:has(.ap-pair) { display: flex; flex-direction: column; height: var(--ap-h, auto); overflow: hidden; gap: 12px; }
+  html body #page:has(.ap-pair) > * { flex: none; margin-top: 0; margin-bottom: 0; }
+  html body #page:has(.ap-pair) > .ap-pair { flex: 1 1 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
+  html body #page .ap-intro { padding: 10px 12px 12px; } html body #page .ap-steps { gap: 8px; } html body #page .ap-steps > div { padding: 10px 14px; row-gap: 2px; } html body #page .ap-steps > div > span { font-size: 13px; line-height: 1.4; }
+  html body #page .ap-pair > .card:first-child { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  html body #page .ap-pair > .card:first-child .ap-att { flex: 1 1 0; min-height: 0; overflow: auto; }
+  html body #page .ap-pair > .ap-histcard { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  html body #page .ap-pair > .ap-histcard .ap-hist { flex: 1 1 0; min-height: 0; max-height: none !important; overflow: auto; }
+}
+
+/* ---- every window and question opens the same soft way: a short fade and a small rise, no blur, no tilt, no spring, nothing that changes the rendering at the end (that was the little jump) ---- */
+html body .overlay { animation: ov-soft .2s ease-out both; }
+@keyframes ov-soft { from { opacity: 0; } to { opacity: 1; } }
+html body .modal, html body #ask .modal.ask-box { animation: win-soft .26s cubic-bezier(.2, .8, .2, 1) both; transform-origin: 50% 30%; will-change: opacity, transform; filter: none; }
+@keyframes win-soft { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+html body .modal::after { display: none; }
+html body .modal-head, html body .modal-body { animation: none; }
+html body .toast { animation-duration: .22s; }
+@media (prefers-reduced-motion: reduce) { html body .overlay, html body .modal { animation: none !important; } }

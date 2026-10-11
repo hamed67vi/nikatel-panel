@@ -1387,7 +1387,11 @@ PAGES.actions = async () => {
     ${foCard(fo, av, irn)}${ARVAN_UI ? dnsCard(fo, av, irn) : ""}`;
   const nPend = (fo && fo.pending.length) || 0;
   pageTabs("actions", [["att", "🔧 Working now"], ["fo", "🔁 Failover · CDN"]].filter(t => t[0] !== "fo" || fo), nPend ? "fo" : "att", {att: n, fo: nPend});
+  apFit(fo);
 };
+/* the Tunnel Doctor page fits the window: its height is what is left under the top, the log and the history scroll inside their own boxes */
+function apFit(fo) { const pg = $("#page"); if (!pg) return; if (fo || !pg.querySelector(".ap-pair")) { pg.style.removeProperty("--ap-h"); return; } pg.style.setProperty("--ap-h", Math.max(440, Math.floor(mainBottom() - pg.getBoundingClientRect().top - 44)) + "px"); }
+addEventListener("resize", () => { const pg = $("#page"); if (pg && pg.querySelector(".ap-pair") && pg.style.getPropertyValue("--ap-h")) apFit(false); });
 const foForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
     <label>ArvanCloud API key <small>(empty keeps the saved one; stays on this server)</small><input name="api_key" type="password" placeholder="${av.has_api_key ? "•••••••• saved" : "paste the key here"}" autocomplete="off"></label>
     <label>When an Iran server is down<select name="mode">${[["off", "Do nothing (failover off)"], ["approve", "Prepare a plan and ask me first"], ["auto", "Do it by itself (only clean plans)"]].map(([k, l]) => `<option value="${k}" ${(av.mode || "off") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
