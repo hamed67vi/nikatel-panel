@@ -301,6 +301,7 @@ def _run(aid: int, build_aid: int, name: str) -> tuple[bool, str]:
         time.sleep(1)
         pulled = run_script(iran, "speed_pull", {"PORT": str(TEST_PORT)}, timeout=40).strip()
         m = re.search(r"SPEED=([\d.]+)", pulled)
+        _say(aid, "Pull: " + " ".join(pulled.split())[:220])              # bytes, seconds, who was on the socket: a number that is too good to be true can be checked
 
         if m and float(m.group(1)) > 0:
             mbps = round(float(m.group(1)) * 8 / 1e6, 1)

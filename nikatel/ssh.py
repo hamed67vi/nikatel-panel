@@ -180,6 +180,7 @@ if SECS > 0 and "error" not in out:
         th = [threading.Thread(target=run, args=(mode, res, i)) for i in range(N)]
         [x.start() for x in th]; [x.join() for x in th]
         out[key] = round(sum(res), 1)
+        out[key.replace("mbps", "streams")] = [round(x, 1) for x in res]
 print("NKPROBE " + json.dumps(out))
 __NK_PY__
 """, {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$"}),
@@ -339,7 +340,8 @@ ping -c 30 -i $V -W 1 $I '@PEER@' 2>&1 | grep -E 'time=|packets transmitted'
 """, {"IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": _IPV4}),
 
     # pull from a sink through a forwarded port for 10 s; bytes per second
-    "speed_pull": (r"""echo "SPEED=$(curl -s -m 12 -o /dev/null -w '%{speed_download}' 'http://127.0.0.1:@PORT@/' 2>/dev/null || echo 0)"
+    "speed_pull": (r"""curl -s -m 12 -o /dev/null -w 'SPEED=%{speed_download} SIZE=%{size_download} TIME=%{time_total} CODE=%{http_code}\n' 'http://127.0.0.1:@PORT@/' 2>/dev/null || echo "SPEED=0 SIZE=0 TIME=0 CODE=000"
+echo "WHO $(ss -tnpH state established '( dport = :@PORT@ or sport = :@PORT@ )' 2>/dev/null | head -3 | tr '\n' ';')"
 """, {"PORT": r"^\d{1,5}$"}),
 
     # the last log lines of a unit

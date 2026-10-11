@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.16 - 2026-10-11 - The speed test shows its working
+
+* A tunnel test writes what its speed measurement really did (bytes, seconds, who was on the socket; per-stream rates for the other engines), after one real run reported 20 Gb/s through a Backhaul TCP tunnel - a number that can not be true and is being traced.
+
 ## 1.16.15 - 2026-10-11 - Lightness first
 
 * No blur anywhere (header, menu, windows, buttons, the dark overlay), small shadows, short transitions, a quick page-open animation, no brightness filters on hover, and the ping packets move by transform (the browser composites them, nothing is re-laid out every frame).

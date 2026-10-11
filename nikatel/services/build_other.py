@@ -669,6 +669,9 @@ def _measure(b: Build, iran: Node, key: str) -> None:
         b.quality["at"] = int(time.time())
         _say(b.aid, f"Quality: {b.quality.get('latency_ms')} ms, jitter {b.quality.get('jitter_ms')} ms, loss {b.quality.get('loss_pct')}%"
              + (f", ↓{b.quality.get('down_mbps')} ↑{b.quality.get('up_mbps')} Mb/s" if b.quality.get("down_mbps") is not None else "") + f" → score {b.quality['score']}")
+
+        if b.quality.get("down_streams"):
+            _say(b.aid, f"Per stream: ↓{b.quality['down_streams']} ↑{b.quality.get('up_streams')} Mb/s")
     except (SSHError, RuntimeError, ValueError) as e:
         _say(b.aid, f"Measurement skipped: {str(e)[:100]}")
 
