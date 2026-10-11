@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.37 - 2026-10-11 - The certificate tick of Add server
+
+* The *remember this certificate* tick of the Marzban-node option sits in its own row under the certificate box (it was laid out as a grid and floated over the box).
+
 ## 1.16.36 - 2026-10-11 - Tunnel test and Network advisor in one tidy view
 
 * The *Network advisor* tab is gone: **Tunnel test** is one view. A bar holds the two servers (and "pair of a tunnel…" to take a tunnel's servers), **Quick: best today** (the five types that matter) and **Start test**; below it the engine chips (*Advanced* opens every transport, *Which one?* opens the situation guide - both closed by default), then the results beside a fixed-height live log.
