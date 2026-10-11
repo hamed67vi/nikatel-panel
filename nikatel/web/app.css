@@ -2605,3 +2605,4 @@ html body .modal::after { display: none; }
 html body .modal-head, html body .modal-body { animation: none; }
 html body .toast { animation-duration: .22s; }
 @media (prefers-reduced-motion: reduce) { html body .overlay, html body .modal { animation: none !important; } }
+html body #page .sg:not(:is(.sf) *) { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
