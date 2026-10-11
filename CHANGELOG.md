@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.0 - 2026-10-11 - Backups: one file and one Telegram topic per part
+
+* **Parts.** The panel and the shop bot are backed up separately: *Panel* (database, settings, SSH keys) and *Shop bot* (the bot database dump, taken on the bot server and fetched over SSH; the server keeps its last 7 automatic dumps). Each is its own encrypted file, has its own switch and its own **Back up now**; one part failing does not stop the other.
+* **Telegram topics.** Every part can have its own topic (a separate page) in the Telegram group: *＋ Telegram topic* makes it (the group needs Topics on and the bot must be an admin that may manage topics) and the backups of that part go there; *unlink* sends them to the main page again.
+* **Settings → Backups** is tidier: one tile per part (switch, latest file, topic, Back up now, Download), one line for the schedule, the passphrase and restore hint folded away.
+
 ## 1.14.22 - 2026-10-11 - Restore a removed tunnel; Detect on servers is gone
 
 * **Restore.** Before a tunnel is removed on request (Delete, or *replace* in Create tunnel) the panel keeps a copy; *Recently removed* above the tunnel list shows it with **Restore** (builds it again: same name, same servers, same ports, a new GRE key) and **Forget**. Copies are kept for 30 days.

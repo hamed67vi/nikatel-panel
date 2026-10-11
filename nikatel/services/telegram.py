@@ -58,7 +58,7 @@ def send_text(text: str, require_enabled: bool = True) -> tuple[bool, str]:
     return True, "sent"
 
 
-def send_file(name: str, data: bytes, caption: str = "") -> tuple[bool, str]:
+def send_file(name: str, data: bytes, caption: str = "", thread_id: int = 0) -> tuple[bool, str]:
     conf = _conf(True)
 
     if conf is None:
@@ -68,7 +68,7 @@ def send_file(name: str, data: bytes, caption: str = "") -> tuple[bool, str]:
 
     try:
         r = httpx.post(f"https://api.telegram.org/bot{token}/sendDocument", timeout=120,
-                       data={"chat_id": chat, "caption": caption[:900]}, files={"document": (name, data)})
+                       data={"chat_id": chat, "caption": caption[:900], **({"message_thread_id": int(thread_id)} if thread_id else {})}, files={"document": (name, data)})
         d = r.json()
     except (httpx.HTTPError, ValueError) as e:
         log.warning("file send failed: %s", e)
@@ -78,3 +78,25 @@ def send_file(name: str, data: bytes, caption: str = "") -> tuple[bool, str]:
         return False, f"Telegram rejected the file: {d.get('description') or r.status_code}"
 
     return True, "sent"
+
+def create_topic(name: str) -> tuple[int, str]:
+    """A new topic (a separate page) in the group: (thread id, "") or (0, why). The group must have Topics switched on and the bot must be an admin that may manage topics."""
+    conf = _conf(False)
+
+    if conf is None:
+        return 0, "Telegram is not configured (token and chat id)"
+
+    token, chat = conf
+
+    try:
+        r = httpx.post(f"https://api.telegram.org/bot{token}/createForumTopic", timeout=20, json={"chat_id": chat, "name": name[:100]})
+        d = r.json()
+    except (httpx.HTTPError, ValueError) as e:
+        return 0, f"Telegram did not answer: {str(e)[:80]}"
+
+    if not d.get("ok"):
+        why = str(d.get("description") or r.status_code)
+        hint = " - switch Topics on in the group settings and make the bot an admin with the right to manage topics" if "not a forum" in why.lower() or "rights" in why.lower() or "admin" in why.lower() else ""
+        return 0, f"Telegram refused: {why}{hint}"
+
+    return int((d.get("result") or {}).get("message_thread_id") or 0), ""

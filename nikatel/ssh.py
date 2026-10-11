@@ -295,6 +295,10 @@ echo "HOOKED $(grep -c text_overrides.json config.php 2>/dev/null || echo 0)"
 """, {"DIR": r"^/var/www/[A-Za-z0-9._-]{1,40}$"}),
 
     # the database dumps of the bot
+    # shop bot: one dump file as base64 (for the Telegram backup); refuses a file over 30 MB
+    "bot_fetch_dump": (r"""f='@FILE@'; if [ -f "$f" ] && [ "$(stat -c %s "$f")" -lt 30000000 ]; then base64 -w0 "$f"; else echo TOO_BIG_OR_MISSING; fi
+""", {"FILE": r"^/opt/nikabot/backups/[A-Za-z0-9._-]{1,80}\.sql\.gz$"}),
+
     "bot_backups": (r"""for f in /opt/nikabot/backups/*.sql.gz; do [ -f "$f" ] && echo "BACKUP $(basename "$f") $(stat -c %s "$f")"; done; true
 """, {}),
 
@@ -745,6 +749,10 @@ mysql --batch --raw --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "
 F=/opt/nikabot/backups/@NAME@-$(date +%Y%m%d-%H%M%S).sql
 mysqldump -u "$DB_USER" -p"$DB_PASS" --single-transaction "$DB_NAME" > "$F"; gzip -f "$F"; echo "BACKUP $F.gz $(stat -c %s "$F.gz")"
 """, {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "NAME": r"^[a-z-]{1,24}$"}),
+
+    # shop bot: keep only the last 7 dumps of the automatic backup (auto-*.sql.gz)
+    "bot_prune_dumps": (r"""ls -1t /opt/nikabot/backups/auto-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f; echo PRUNED
+""", {}),
 
     # shop bot: copy every table of the staging database (the real data) over the live one,
     # except the broadcast queues; tables that exist only in one of them are left alone

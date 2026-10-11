@@ -158,3 +158,47 @@ def test_alerts_run_with_new_config_state(client):
 
     alerts.run()
     alerts.run()
+
+
+def test_backup_parts_each_go_to_their_own_topic(client, monkeypatch):
+    from nikatel.services import telegram
+
+    assert client.post("/api/settings/backup/passphrase", json={"passphrase": "a-long-test-passphrase"}).status_code == 200
+    sent = []
+    monkeypatch.setattr(backup, "send_file", lambda name, data, caption="", thread_id=0: sent.append((name.split("-")[1], thread_id)) or (True, "sent"))
+    r = client.post("/api/backup/now").json()                                   # the bot is not set up: only the panel is made, the bot says why
+    assert r["ok"] and r["parts"]["panel"]["ok"] is True and r["parts"]["bot"]["ok"] is False and sent == [("panel", 0)]
+    monkeypatch.setattr(backup, "make_bot_archive", lambda: b"\x1f\x8bbot-dump")
+    monkeypatch.setattr(telegram, "create_topic", lambda name: (11 if name.startswith("Panel") else 22, ""))
+    v = client.post("/api/backup/topic/panel").json()
+    assert v["parts"]["panel"]["topic"] == 11 and v["parts"]["panel"]["topic_name"] == "Panel backups"
+    assert client.post("/api/backup/topic/bot").json()["parts"]["bot"]["topic"] == 22
+    sent.clear()
+    r = client.post("/api/backup/now").json()
+    assert sorted(sent) == [("bot", 22), ("panel", 11)] and r["parts"]["bot"]["ok"] is True
+    files = client.get("/api/settings/backup").json()
+    assert {b["part"] for b in files["backups"]} == {"panel", "bot"} and files["parts"]["bot"]["last"]["file"].startswith("nikatel-bot-")
+    sent.clear()
+    assert client.post("/api/backup/now?part=bot").json()["parts"].keys() == {"bot"} and sent == [("bot", 22)]
+    assert client.delete("/api/backup/topic/panel").json()["parts"]["panel"]["topic"] == 0
+    assert client.post("/api/settings/backup/part/bot", json={"enabled": False}).json()["parts"]["bot"]["enabled"] is False
+    sent.clear()
+    client.post("/api/backup/now")
+    assert sent == [("panel", 0)]                                              # the switched-off part is left out
+    assert client.post("/api/backup/topic/nope").status_code == 404 and client.post("/api/backup/now?part=nope").status_code == 400
+
+
+def test_telegram_topic_creation_reports_why(monkeypatch):
+    from nikatel.services import telegram
+
+    st.put("telegram", {"token": "123456789:" + "D" * 35, "chat_id": "-1001234567890", "enabled": True})
+
+    class R:
+        status_code = 400
+
+        def json(self):
+            return {"ok": False, "description": "Bad Request: the chat is not a forum"}
+
+    monkeypatch.setattr(telegram.httpx, "post", lambda *a, **k: R())
+    tid, why = telegram.create_topic("Panel backups")
+    assert tid == 0 and "not a forum" in why and "Topics" in why

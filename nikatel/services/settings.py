@@ -13,7 +13,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "telegram": {"enabled": False, "token": "", "chat_id": ""},
     "alerts": {"tunnel_fails": 3, "server_fails": 2, "config_fails": 3, "min_down_minutes": 4, "up_stable_seconds": 600, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
-    "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True},
+    "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True, "parts": {"panel": {"enabled": True, "topic": 0, "topic_name": ""}, "bot": {"enabled": True, "topic": 0, "topic_name": ""}}},
     # the smart repair is on by default (restart, rebuild, a new GRE link, another tunnel type - by itself); it can be switched off on Smart repair to work by hand
     "repair": {"auto": True, "after_seconds": 180, "level": "switch"},   # level: restart | rebuild | switch (how far the automatic repair may go)
     # the probe(s): primary + standby list [{name, api_url, api_token}]

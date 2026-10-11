@@ -164,14 +164,81 @@ class PassIn(BaseModel):
     passphrase: str = Field(min_length=12, max_length=200)
 
 
+def _backup_view() -> dict:
+    """The backup settings with, for every part, its switch, its Telegram topic, its latest file and whether it can be made at all."""
+    from ..services import shopbot, telegram
+
+    conf, files, pc = st.get("backup"), backup.list_backups(), backup.parts_conf()
+    tg = st.get("telegram")
+    parts = {}
+
+    for k, (label, what) in backup.PARTS.items():
+        last = next((f for f in files if f["part"] == k), None)
+        ready = bool(shopbot.conf().get("host")) if k == "bot" else True
+        parts[k] = {**pc[k], "label": label, "what": what, "last": last, "ready": ready}
+
+    return {**{k: v for k, v in conf.items() if k != "parts"}, "parts": parts, "has_passphrase": backup.has_passphrase(), "backups": files[:12],
+            "telegram_ready": bool(tg.get("enabled") and telegram.valid_token(tg.get("token", "")) and telegram.valid_chat(tg.get("chat_id", "")))}
+
+
 @router.get("/settings/backup")
 def backup_get():
-    return {"ok": True, **st.get("backup"), "has_passphrase": backup.has_passphrase(), "backups": backup.list_backups()}
+    return {"ok": True, **_backup_view()}
 
 
 @router.put("/settings/backup")
 def backup_put(body: BackupIn):
-    return {"ok": True, **st.put("backup", body.model_dump())}
+    st.put("backup", body.model_dump())
+    return {"ok": True, **_backup_view()}
+
+
+class PartIn(BaseModel):
+    enabled: bool
+
+
+def _part(part: str) -> str:
+    if part not in backup.PARTS:
+        raise HTTPException(404, "no such backup part")
+
+    return part
+
+
+@router.post("/settings/backup/part/{part}")
+def backup_part(part: str, body: PartIn):
+    """Switch one part on or off."""
+    _part(part)
+    parts = st.get("backup").get("parts") or {}
+    parts[part] = {**backup.parts_conf()[part], "enabled": body.enabled}
+    st.put("backup", {"parts": parts})
+    return {"ok": True, **_backup_view()}
+
+
+@router.post("/backup/topic/{part}")
+def backup_topic(part: str):
+    """Make a topic (a separate page) for this part in the Telegram group; its backups go there."""
+    from ..services import telegram
+
+    _part(part)
+    label = backup.PARTS[part][0]
+    tid, why = telegram.create_topic(f"{label} backups")
+
+    if not tid:
+        raise HTTPException(400, why or "Telegram did not create the topic")
+
+    parts = st.get("backup").get("parts") or {}
+    parts[part] = {**backup.parts_conf()[part], "topic": tid, "topic_name": f"{label} backups"}
+    st.put("backup", {"parts": parts})
+    return {"ok": True, **_backup_view()}
+
+
+@router.delete("/backup/topic/{part}")
+def backup_topic_unlink(part: str):
+    """Forget the topic of this part (the topic itself stays in Telegram); its backups go to the main page of the group again."""
+    _part(part)
+    parts = st.get("backup").get("parts") or {}
+    parts[part] = {**backup.parts_conf()[part], "topic": 0, "topic_name": ""}
+    st.put("backup", {"parts": parts})
+    return {"ok": True, **_backup_view()}
 
 
 @router.post("/settings/backup/passphrase")
@@ -185,8 +252,8 @@ def backup_pass(body: PassIn):
 
 
 @router.post("/backup/now")
-def backup_now(send: bool = True):
-    r = backup.run(send=send)
+def backup_now(send: bool = True, part: str = ""):
+    r = backup.run(send=send, part=part)
 
     if not r.get("ok"):
         raise HTTPException(400, r.get("error", "backup failed"))

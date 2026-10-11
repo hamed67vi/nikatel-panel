@@ -2247,18 +2247,7 @@ PAGES.settings = async () => {
         <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="previewReport()">Preview</button><button type="button" onclick="sendReport()">Send now</button></div></form>
       <pre id="report-prev" class="gl-out hidden"></pre></div>
 
-    <div class="card"><h3>Backups <span class="sp"></span>${bk.has_passphrase ? '<span class="pill">passphrase set</span>' : '<span class="pill">no passphrase</span>'}</h3>
-      <form class="frm one" onsubmit="return savePass(event)">
-        <label>Backup passphrase <small>(min 12 characters; needed to restore — keep it somewhere safe)</small><input name="passphrase" type="password" minlength="12" required autocomplete="new-password" placeholder="${bk.has_passphrase ? "•••••••••••• set — type to replace" : ""}"></label>
-        <div class="frm-act"><button class="pri" type="submit">${bk.has_passphrase ? "Replace passphrase" : "Set passphrase"}</button></div></form>
-      <form class="frm one" onsubmit="return saveBackup(event)">
-        <label class="chk"><input name="enabled" type="checkbox" ${bk.enabled ? "checked" : ""}> daily backup</label>
-        <label>At hour (local)<input name="hour" type="number" min="0" max="23" value="${bk.hour}"></label>
-        <label>Keep (days)<input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}"></label>
-        <label class="chk"><input name="send_telegram" type="checkbox" ${bk.send_telegram ? "checked" : ""}> also send to Telegram</label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="backupNow()">Back up now</button></div></form>
-      ${bk.backups.slice(0, 8).map(b => `<div class="ev"><time>${ago(b.at)} ago</time><i></i><small>${Math.round(b.bytes / 1024)} KB</small><span><a href="/api/backup/download/${esc(b.file)}">${esc(b.file)}</a></span></div>`).join("") || '<div class="empty">No backup yet.</div>'}
-      <small class="mut">Restore: stop the service, then <code>nikatel restore &lt;file&gt;</code> on the server.</small></div>
+    ${backupCard(bk)}
 
     <div class="card"><h3>Shop bot <span class="sp"></span><span class="pill">${sb.host ? "server set" : "not set"}</span></h3>
       <form class="frm one" onsubmit="return saveShopbot(event)">
@@ -2422,9 +2411,36 @@ window.saveRepair = e => put(e, "/api/settings/repair", formJson(e, ["after_seco
 window.saveReport = e => put(e, "/api/settings/report", formJson(e, ["hour", "tz_offset_minutes"], ["enabled"]), "✓ Report settings saved");
 window.previewReport = async () => { const r = await api("/api/report/preview"); const p = $("#report-prev"); p.textContent = r.text; p.classList.remove("hidden"); };
 window.sendReport = async () => { toast("Sending…"); try { await api("/api/report/send", {method: "POST"}); toast("✓ Report sent (if Telegram is configured)", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.savePass = async e => { e.preventDefault(); try { await api("/api/settings/backup/passphrase", {method: "POST", body: JSON.stringify({passphrase: new FormData(e.target).get("passphrase")})}); toast("✓ Passphrase set", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+/* ---- Settings → Backups: one tile per part (panel, shop bot): its switch, its Telegram topic, its latest file, its own "Back up now" */
+const backupCard = bk => {
+  const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+  const topic = (k, p) => !bk.telegram_ready ? '<small class="mut">Telegram is not set up (card on the left)</small>'
+    : p.topic ? `<span class="pill ok" title="Its backups go to this topic of the group">▣ ${esc(p.topic_name || "topic")} · #${p.topic}</span><a class="mut bk-un" onclick="bkTopicOff('${k}')">unlink</a>`
+    : `<button class="sm" onclick="bkTopic('${k}')" title="Make a separate page (topic) for it in the Telegram group">＋ Telegram topic</button><small class="mut">goes to the main page now</small>`;
+  const part = ([k, p]) => `<div class="bk-part ${p.enabled ? "" : "off"}">
+      <label class="bk-sw" title="${p.enabled ? "On: included in the daily backup" : "Off: not in the daily backup"}"><input type="checkbox" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"><span></span></label>
+      <div class="bk-main"><b>${esc(p.label)}</b><small class="mut">${esc(p.what)}</small><small class="bk-last">${p.last ? "latest: " + ago(p.last.at) + " ago · " + kb(p.last.bytes) : "no backup yet"}${p.ready ? "" : " · set the bot server first (Shop bot card)"}</small></div>
+      <div class="bk-tg">${topic(k, p)}</div>
+      <div class="bk-act"><button class="sm pri" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}</div></div>`;
+  return `<div class="card bk-card"><h3>Backups <span class="sp"></span>${bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>'}</h3>
+    ${bk.has_passphrase ? "" : `<form class="frm one bk-pass" onsubmit="return savePass(event)"><label>Passphrase for the backups <small>(min 12 characters; needed to restore — keep it somewhere safe)</small><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label><div class="frm-act"><button class="pri" type="submit">Set passphrase</button></div></form>`}
+    <div class="bk-parts">${Object.entries(bk.parts).map(part).join("")}</div>
+    <form class="bk-sched" onsubmit="return saveBackup(event)">
+      <label class="chk"><input name="enabled" type="checkbox" ${bk.enabled ? "checked" : ""}> daily</label>
+      <label>at <input name="hour" type="number" min="0" max="23" value="${bk.hour}"> h</label>
+      <label>keep <input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}"> days</label>
+      <label class="chk"><input name="send_telegram" type="checkbox" ${bk.send_telegram ? "checked" : ""}> send to Telegram</label>
+      <button class="sm pri" type="submit">Save</button></form>
+    ${(bk.backups || []).length ? `<div class="bk-files">${bk.backups.slice(0, 6).map(b => `<div class="ev"><time>${ago(b.at)} ago</time><i></i><small>${kb(b.bytes)}</small><span class="pill">${esc(b.part)}</span><span><a href="/api/backup/download/${esc(b.file)}">${esc(b.file)}</a></span></div>`).join("")}</div>` : ""}
+    <details class="bk-more"><summary>Restore and passphrase</summary>
+      <small class="mut">Restore: stop the service, then <code>nikatel restore &lt;file&gt;</code> on the server (a bot file puts its dump in <code>bot-restore/</code>).</small>
+      ${bk.has_passphrase ? `<form class="frm one" onsubmit="return savePass(event)"><label>New passphrase <small>(files made before keep the old one)</small><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label><div class="frm-act"><button type="submit">Replace passphrase</button></div></form>` : ""}</details></div>`;
+};
+window.bkPart = async (k, on) => { try { await api(`/api/settings/backup/part/${k}`, {method: "POST", body: JSON.stringify({enabled: on})}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };
+window.bkTopic = async k => { toast("Making the topic…"); try { await api(`/api/backup/topic/${k}`, {method: "POST"}); toast("✓ Topic made: its backups go there now", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.bkTopicOff = async k => { if (!await gconfirm("Unlink the topic? Its backups go to the main page of the group again (the topic itself stays in Telegram).")) return; try { await api(`/api/backup/topic/${k}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };window.savePass = async e => { e.preventDefault(); try { await api("/api/settings/backup/passphrase", {method: "POST", body: JSON.stringify({passphrase: new FormData(e.target).get("passphrase")})}); toast("✓ Passphrase set", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveBackup = e => put(e, "/api/settings/backup", formJson(e, ["hour", "keep_days"], ["enabled", "send_telegram"]), "✓ Backup settings saved");
-window.backupNow = async () => { toast("Backing up…"); try { const r = await api("/api/backup/now", {method: "POST"}); toast("✓ " + r.file + (r.sent ? " · sent" : ""), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.backupNow = async part => { toast("Backing up…"); try { const r = await api("/api/backup/now" + (part ? "?part=" + part : ""), {method: "POST"}); toast("✓ " + r.file + (r.sent ? " · sent to Telegram" : ""), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.changePassword = async e => {
   e.preventDefault();
   const f = new FormData(e.target);
