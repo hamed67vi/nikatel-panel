@@ -292,3 +292,21 @@ def test_which_configs_are_direct():
     assert configs._direct_tcp({"network": "xhttp", "security": "reality", "address": "a.example", "port": 2082})
     assert not configs._direct_tcp({"network": "ws", "security": "none", "address": "a.example", "port": 80})       # through a CDN: the probe's own test is the judge
     assert not configs._direct_tcp({"network": "tcp", "security": "none", "address": "", "port": 80})
+
+
+def test_picking_two_new_nodes_keeps_the_order_of_the_whole_subscription(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import Config, Subscription
+
+    nodes = [{"name": n, "uri": f"vless://u@h.example:{80 + i}?type=ws#{n}", "proto": "vless"} for i, n in enumerate(["Zed", "Alpha", "Mid", "Beta"])]
+    monkeypatch.setattr(configs, "fetch_subscription", lambda url: nodes)
+    monkeypatch.setattr(probe, "add_many", lambda items: {i["name"]: None for i in items})
+
+    with session() as db:       # three of the four are on the list already (in the order they were first added); only one stored name is known in the subscription row
+        db.add(Subscription(name="grp", url="https://sub.example.net/x", nodes=["Mid"]))
+
+        for n in ("Zed", "Alpha", "Mid"):
+            db.add(Config(name=n, group="grp", status="up", meta={}))
+
+    configs.import_subscription("grp", "https://sub.example.net/x", picks=["Beta"])
+    assert [c["name"] for c in client.get("/api/configs").json()["configs"]] == ["Zed", "Alpha", "Mid", "Beta"]      # as the subscription lists them, not alphabetical

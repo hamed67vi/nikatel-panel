@@ -626,7 +626,16 @@ def import_subscription(name: str, url: str, picks: list[str] | None = None, pre
 
     with session() as db:
         sub = db.scalar(select(Subscription).where(Subscription.name == name))
-        order = [final[n["name"]] for n in nodes if n["name"] in final]      # the order of the subscription
+        mine = {c.name for c in rows_now if c.group == name} | set(added) | set(regroup)      # the configs of this group, old and new
+
+        def cfg_of(n: dict) -> str | None:
+            for c in (final.get(n["name"]), clean_name(f"{prefix} {n['name']}" if prefix else n["name"]), _alt_name(name, n["name"])):
+                if c and c in mine:
+                    return c
+
+            return None
+
+        order = [x for x in dict.fromkeys(cfg_of(n) for n in nodes) if x]      # the order of the WHOLE subscription, not only of the nodes picked this time
         sub.nodes = order + [x for x in (sub.nodes or []) if x not in order] if picks is not None else order
         sub.last_import = int(time.time())
         emit(db, "info", "configs", f"Subscription {name}: {len(added)} configs added, {len(skipped)} already there, {len(failed)} failed.", name)

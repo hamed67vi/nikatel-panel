@@ -1553,7 +1553,7 @@ PAGES.configsList = async () => {
       <td class="mono" title="${esc(m.address || "")}">${esc(m.address || "—")}</td>
       <td class="num">${m.port || "—"}</td>
       <td>${esc(m.network || "—")}</td>
-      <td>${m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : '<span class="mut">none</span>'}</td>
+      <td>${m.security && m.security !== "none" ? `<b class="sec-${esc(m.security)}">${esc(m.security)}</b>` : '<span class="mut">none</span>'}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
       <td class="num">${c.down_mbps != null ? "↓" + MBs(c.down_mbps) + " ↑" + MBs(c.up_mbps) : "—"}</td>
       <td class="cf-acts">${acts(c)}</td></tr>`; };  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})">
@@ -1606,7 +1606,7 @@ function cfPartHtml(c, tab) {
   const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`, box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
   const ok = c.status === "up";
   return `<div class="sgrid">${[
-    box("🧩", "Config", [kv("Type", esc((m.proto || "—").toUpperCase())), kv("Address", `<span class="mono">${esc(m.address || "—")}</span>`), kv("Port", m.port || "—"), kv("Transport", esc(m.network || "—")), kv("TLS", m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : "none"), kv("Group", c.group ? esc(c.group) : "—")]),
+    box("🧩", "Config", [kv("Type", esc((m.proto || "—").toUpperCase())), kv("Address", `<span class="mono">${esc(m.address || "—")}</span>`), kv("Port", m.port || "—"), kv("Transport", esc(m.network || "—")), kv("TLS", m.security && m.security !== "none" ? `<b class="sec-${esc(m.security)}">${esc(m.security)}</b>` : "none"), kv("Group", c.group ? esc(c.group) : "—")]),
     box("🕒", "Status", [kv("State", `<span class="st ${c.status}">${esc(c.status)}</span>`), kv("Since", c.status_since ? ago(c.status_since) + " ago" : "—"), kv("Delay", c.ping_ms != null && ok ? `<b class="${pingCls(c.ping_ms)}">${Math.round(c.ping_ms)} ms</b>` : "—"), kv("Last check", c.checked_at ? ago(c.checked_at) + " ago" : "—"),
       kv("Error", c.last_error ? `<span class="err" title="${esc(c.last_error)}">${esc(c.last_error.slice(0, 44))}</span>` : "—"), kv("Tunnel", c.tunnel ? esc(c.tunnel) : "—")]),
     box("⚡", "Speed & routing", [kv("Download", c.down_mbps != null ? `${mb(c.down_mbps / 8)} MB/s <small class="mut">${mb(c.down_mbps)} Mb/s</small>` : "not measured"), kv("Upload", c.up_mbps != null ? `${mb(c.up_mbps / 8)} MB/s <small class="mut">${mb(c.up_mbps)} Mb/s</small>` : "—"), kv("Measured", esc((c.speed_at || "").slice(0, 16).replace("T", " ") || "—")),
@@ -1879,18 +1879,37 @@ async function pnUsersLoad(id) {
 `).join("") || '<tr><td colspan="5" class="mut">nobody matches</td></tr>'}</tbody></table>
 `;
   const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot(pnPager(u.total, ps));
+  pn.curPS = ps; pnFitSoon(ps);       // after the list was put into its box
   const q = $("#pn-uq"); if (q && pn.uq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   const rows = box.querySelectorAll("tbody tr");                 // the first time, the real height of a row is measured and the page size follows it
   if (!pnRow.done && rows.length > 2) { pnRow.done = true; const pitch = (rows[rows.length - 1].getBoundingClientRect().bottom - rows[0].getBoundingClientRect().top) / rows.length; if (pitch > 20 && Math.abs(pitch - pnRow.h) > 0.5) { pnRow.h = pitch; if (pnPS() !== ps) pnUsersLoad(id); } }
 }
-const pnRow = {h: 46, done: false};
-const pnPS = () => { const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((innerHeight - top - 54 - 34 - 50 - 40) / pnRow.h))); };
+const pnRow = {h: 46, done: true};
+const pnPS = () => { const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((innerHeight - top - 56 - 52 - 14 - 14 - 36 - 6) / pnRow.h))); };
+/* the list box is one fixed box from its top down to the pager, which sits on the bottom edge: the rows are stretched to fill it exactly, so nothing scrolls and no empty strip is left */
+function pnFitSoon(ps, n = 0) { clearTimeout(pnFitSoon.t); pnFitSoon.t = setTimeout(() => { if (document.querySelector("#pn-body .usr-tbl") && !document.querySelector("#pn-body .lbox") && n < 20) return pnFitSoon(ps, n + 1); pnFit(ps); }, n ? 60 : 30); }      // waits until the list sits in its box
+function pnFit(ps) {
+  const box = document.querySelector("#pn-body .lbox"), foot = $("#pn-foot"); if (!box) return;
+  const tb = box.querySelector("table"), th = box.querySelector("thead"); if (!tb || !th) return;
+  box.style.height = ""; box.style.maxHeight = "none"; box.style.overflow = "hidden"; box.style.minHeight = "0";
+  const H = Math.floor(innerHeight - box.getBoundingClientRect().top - (foot ? foot.offsetHeight + 6 : 0) - 14);
+  box.style.height = H + "px";
+  const inner = () => box.clientHeight - 14, set = h => box.style.setProperty("--rh", h + "px");
+  let h = Math.floor((inner() - th.offsetHeight - 6 - ps * 6) / ps);
+  for (let k = 0; k < 3; k++) { set(h); const over = tb.offsetHeight - inner(); if (Math.abs(over) < 1) break; h -= over / ps; }
+  set(Math.floor(h * 10) / 10);
+}
+let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = setTimeout(() => { if (!$("#pn-body .usr-tbl")) return; if (pnPS() !== pn.curPS) refresh(); else pnFitSoon(pn.curPS); }, 150); });
 const pnTabs = () => `<div class="toolbar pn-tabs"><div class="tabs">${[["users", "Users"], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>`;
 const pnFoot = mid => mid;
 function pnPager(total, ps, off = pn.uoff, fn = "pnGo") {
-  const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), show = [];
-  for (let i = 0; i < pages; i++) if (i === 0 || i === pages - 1 || Math.abs(i - cur) <= 2) show.push(i);
-  const btns = show.map((i, k) => (k && i - show[k - 1] > 1 ? `<span class="pgn-gap">…</span>` : "") + `<button class="sm pgn ${i === cur ? "on" : ""}" onclick="${fn}(${i})">${i + 1}</button>`).join("");
+  const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), last = pages - 1;
+  let slots;      // always seven slots (numbers or "…") of one width, so the buttons never move when the page changes
+  if (pages <= 7) slots = Array.from({length: pages}, (_, i) => i);
+  else if (cur <= 3) slots = [0, 1, 2, 3, 4, -1, last];
+  else if (cur >= last - 3) slots = [0, -1, last - 4, last - 3, last - 2, last - 1, last];
+  else slots = [0, -1, cur - 1, cur, cur + 1, -1, last];
+  const btns = slots.map(i => i < 0 ? `<span class="pgn-gap">…</span>` : `<button class="sm pgn ${i === cur ? "on" : ""}" onclick="${fn}(${i})">${i + 1}</button>`).join("");
   return `<span class="sp"></span><span class="pgs"><button class="sm pgn" ${cur ? "" : "disabled"} onclick="${fn}(${cur - 1})">‹</button>${btns}<button class="sm pgn" ${cur + 1 < pages ? "" : "disabled"} onclick="${fn}(${cur + 1})">›</button></span><span class="sp"></span>`;
 }
 window.pnGo = i => { pn.uoff = Math.max(0, i) * pnPS(); refresh(); };      // the page changes from the bottom of the list and the list is shown from its top again

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.33
+
+- Panels > Users: the list is one fixed box down to the pager, which stays on the bottom edge; the rows are stretched to fill it, so nothing scrolls and no empty strip is left. The pager keeps seven slots of one width, so the buttons no longer jump when the page changes.
+- Configs: a group lists its configs in the order of its subscription again (picking a few new nodes had cut the stored order down to those nodes, so the list fell back to the alphabet). The TLS column is no longer green: tls is blue, reality violet.
+
 ## 1.17.32 - 2026-10-11 - Sign out above the credits
 
 * In the side menu, *Sign out* is above and the *Powered by* card with the version is under it.

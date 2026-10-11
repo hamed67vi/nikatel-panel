@@ -1596,3 +1596,8 @@ nav a.on .ic .a1 { animation: icR .55s ease-in-out infinite alternate; } nav a.o
 nav a.on .ic .led { animation: icLed .7s ease-in-out infinite; } nav a.on .ic .led.l2 { animation-delay: -.35s; }
 nav a.on .ic .s1 { animation: icS .7s ease-in-out infinite alternate; } nav a.on .ic .s2 { animation: icS .7s ease-in-out infinite alternate-reverse; } nav a.on .ic .s3 { animation: icS .55s ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) { nav a.on .ic svg, nav a.on .ic * { animation: none !important; } }
+/* users list: one fixed box down to the pager; the rows fill it (the row height is set from the script) */
+.usr-tbl td { height: var(--rh, 54px); } .usr-tbl tbody td { padding-top: 0; padding-bottom: 0; }
+.pgs .pgn { min-width: 40px; width: 40px; padding: 0; text-align: center; } .pgs .pgn-gap { display: inline-block; width: 24px; text-align: center; padding: 0; }
+.pn-foot { min-height: 36px; box-sizing: border-box; }.cf-list .sec-tls, .sec-tls { color: #7cc4ff; font-weight: 700; } .cf-list .sec-reality, .sec-reality { color: #c9a0ff; font-weight: 700; } .sec-xtls { color: #ffb86b; font-weight: 700; }
+@media (min-width: 761px) { .main:has(.usr-tbl) { padding-bottom: 0; } }
