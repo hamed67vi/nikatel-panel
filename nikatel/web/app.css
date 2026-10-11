@@ -1128,3 +1128,15 @@ html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #37415
 .pb-row.click { cursor: pointer; border-radius: 10px; transition: background .2s; } .pb-row.click:hover { background: rgba(255,255,255,.05); } .pb-row small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .ue-ib { grid-column: 1 / -1; } .ue-ib > small span { font-weight: 500; } .ue-ibs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 6px; } .ue-ibp { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ue-ibp > b { display: block; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); margin-bottom: 4px; } .ue-ibp .chk { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12.5px; }
+
+/* ---- a little life when a page opens: the rows and tiles come in one after the other (only on opening a page, never on the refreshes), and a card lifts softly under the mouse */
+#page.enter .tbl tbody tr, #page.enter .tile, #page.enter .cf-card, #page.enter .dash-cols > .card, #page.enter .kpi { animation: rowIn .45s cubic-bezier(.2,.8,.2,1) both; }
+#page.enter .tbl tbody tr:nth-child(1), #page.enter .tile:nth-child(1), #page.enter .kpi:nth-child(1) { animation-delay: .02s; } #page.enter .tbl tbody tr:nth-child(2), #page.enter .tile:nth-child(2), #page.enter .kpi:nth-child(2) { animation-delay: .06s; }
+#page.enter .tbl tbody tr:nth-child(3), #page.enter .tile:nth-child(3), #page.enter .kpi:nth-child(3) { animation-delay: .10s; } #page.enter .tbl tbody tr:nth-child(4), #page.enter .tile:nth-child(4), #page.enter .kpi:nth-child(4) { animation-delay: .14s; }
+#page.enter .tbl tbody tr:nth-child(5) { animation-delay: .18s; } #page.enter .tbl tbody tr:nth-child(6) { animation-delay: .22s; } #page.enter .tbl tbody tr:nth-child(7) { animation-delay: .26s; } #page.enter .tbl tbody tr:nth-child(8) { animation-delay: .30s; }
+#page.enter .tbl tbody tr:nth-child(n+9) { animation-delay: .34s; } #page.enter .dash-cols > .card:nth-child(2) { animation-delay: .08s; } #page.enter .dash-cols > .card:nth-child(3) { animation-delay: .16s; }
+@keyframes rowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.card, .tile, .kpi, .bk-part, .wtool, .ibox { transition: transform .25s var(--ease), box-shadow .25s, border-color .25s; }
+.card:hover, .ibox:hover { box-shadow: 0 14px 36px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06); }
+:root[data-anim="off"] #page.enter .tbl tbody tr, :root[data-anim="off"] #page.enter .tile, :root[data-anim="off"] #page.enter .cf-card, :root[data-anim="off"] #page.enter .dash-cols > .card, :root[data-anim="off"] #page.enter .kpi { animation: none; }
+@media (prefers-reduced-motion: reduce) { #page.enter * { animation: none !important; } }

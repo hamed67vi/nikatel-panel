@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.12 - 2026-10-11 - A little life when a page opens
+
+* When a page opens its rows, tiles and cards come in one after the other (never on the refreshes), and cards lift softly under the mouse. Off with Settings → Appearance → Animations off, and for people who asked their system for less motion.
+
 ## 1.16.11 - 2026-10-11 - Shared SSH connections the simple way
 
 * The shared SSH connection per server is now started by the first command itself (ControlMaster=auto) instead of a separate starter; the starter could leave a stray background connection for every start that raced another (93 of them were found after a few hours).
