@@ -1961,3 +1961,5 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
   .subnav, .set-top { position: sticky; top: 0; z-index: 7; background: var(--bg); padding-top: 4px; margin-top: -4px; }
   .subnav::before, .set-top::before { content: ""; position: absolute; left: -6px; right: -6px; top: 0; bottom: 0; z-index: -1; background: var(--bg); }
 }
+/* every tab's frame has the same height (the Appearance tab's); a tab with more content grows */
+@media (min-width: 761px) { #page .set-wrap > .card.sf { min-height: 640px !important; } }
