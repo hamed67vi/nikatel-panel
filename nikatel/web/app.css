@@ -1450,3 +1450,12 @@ tr.clk:hover td:last-child::after { opacity: .9; transform: translate(0, -52%); 
 .cf-list .flg { width: 20px !important; height: 20px !important; vertical-align: -5px; margin-right: 6px !important; }
 .flgt { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; font-size: 9px; font-weight: 800; letter-spacing: 0; color: var(--mut); box-shadow: 0 0 0 2px rgba(255,255,255,.14); vertical-align: -7px; background: rgba(255,255,255,.05); }
 @media (min-width: 861px) { .statusbar { position: relative; top: auto; } }
+/* the two tabs of Nodes: the same round badge for both (the flag of Iran, a globe for the rest of the world) */
+.tic { display: inline-block; width: 22px; height: 22px; margin-right: 9px; border-radius: 50%; vertical-align: -6px; background: center / cover no-repeat; box-shadow: 0 0 0 2px rgba(255,255,255,.22), 0 2px 6px rgba(0,0,0,.35); }
+.tic-ir { background-image: url('/flags/ir.png'); } .tic-globe { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='g' cx='35%25' cy='30%25' r='80%25'%3E%3Cstop offset='0' stop-color='%2377d4ff'/%3E%3Cstop offset='1' stop-color='%231b5fb8'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.55' stroke-width='1'%3E%3Cellipse cx='12' cy='12' rx='5' ry='11.2'/%3E%3Cpath d='M1 12h22M3.2 6.5h17.6M3.2 17.5h17.6'/%3E%3C/g%3E%3C/svg%3E"); }
+/* a small server beside the title of Nodes: its lights blink */
+.srv-anim { margin-left: 12px; vertical-align: -3px; overflow: visible; } .srv-anim rect { fill: rgba(255,255,255,.07); stroke: rgba(255,255,255,.35); stroke-width: 1.2; } .srv-anim path { stroke: rgba(255,255,255,.3); stroke-width: 1.2; stroke-linecap: round; fill: none; }
+.srv-anim circle { fill: var(--ok); animation: srvLed 1.6s ease-in-out infinite; } .srv-anim .l2 { fill: #ffd166; animation-duration: 2.1s; animation-delay: .3s; } .srv-anim .l3 { animation-duration: 2.7s; animation-delay: .8s; }
+@keyframes srvLed { 0%, 100% { opacity: .22; } 45%, 60% { opacity: 1; filter: drop-shadow(0 0 3px currentColor); } }
+@media (prefers-reduced-motion: reduce) { .srv-anim circle { animation: none; opacity: .9; } }
+.pstat .tc.info b { color: #6fb2ff; }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.22 - 2026-10-11 - The tabs of Nodes in one style, a server beside its title
+
+* The two tabs *Iran* and *Foreign* carry the same kind of icon: a round badge - the flag of Iran and a globe (the Windows emoji of the flag showed as `IR`, the other was a different drawing).
+* A small server whose lights blink sits beside the title of *Nodes*.
+
 ## 1.17.21 - 2026-10-11 - The red counters are always red
 
 * In the bars, *Problems* (Nodes) and *Offline* (Configs) always have a red light and a red number, also at 0: they count what is wrong, so the colour says which counter it is.

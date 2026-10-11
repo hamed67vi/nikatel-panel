@@ -125,7 +125,7 @@ const INFO = {
 const NAV_ALIAS = {servers: "nodes", gateway: "configs", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
-  nodes: [["iran", "🇮🇷 Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "🌍 Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."]],
+  nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."]],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Smart repair", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
@@ -159,6 +159,7 @@ function go(page) {
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
+  if (page === "nodes") $("#title").insertAdjacentHTML("beforeend", `<svg class="srv-anim" viewBox="0 0 32 30" width="30" height="28" aria-hidden="true"><rect x="3" y="2" width="26" height="7.5" rx="2.2"/><rect x="3" y="11.2" width="26" height="7.5" rx="2.2"/><rect x="3" y="20.4" width="26" height="7.5" rx="2.2"/><circle class="l1" cx="8" cy="5.75" r="1.5"/><circle class="l2" cx="13" cy="5.75" r="1.5"/><circle class="l3" cx="8" cy="14.95" r="1.5"/><circle class="l1" cx="13" cy="14.95" r="1.5"/><circle class="l2" cx="8" cy="24.15" r="1.5"/><circle class="l3" cx="13" cy="24.15" r="1.5"/><path d="M20 5.75h6M20 14.95h6M20 24.15h6"/></svg>`);
   $("#subnav").classList.toggle("hidden", !SUB[page]);
   refresh();
 }
@@ -273,7 +274,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 /* the small search of the dashboard: a few letters, and the servers / tunnels / configs whose name (or a part of it) starts with them are listed; a click opens it */
 state.dq = ""; let dqSel = 0;
 function dqSections() {   // every section of the panel by its name: the pages, their tabs, the tabs of Settings and of the shop bot
-  const strip = s => String(s).replace(/^[^A-Za-z0-9]+/, "").trim(), out = [], pages = {};
+  const strip = s => String(s).replace(/<[^>]*>/g, "").replace(/^[^A-Za-z0-9]+/, "").trim(), out = [], pages = {};
   document.querySelectorAll("#nav a").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });
   Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label]) => out.push({page, subKey: k, name: strip(label), sub: pages[page] || page})));
   Object.entries(SET_TABS).forEach(([k, v]) => out.push({page: "settings", setTab: k, name: strip(v[0]), sub: "Settings"}));
