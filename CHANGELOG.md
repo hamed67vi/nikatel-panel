@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.29 - 2026-10-11 - One box, one row
+
+* In a server window the tunnels line and the last-results line are two rows of one box; the monitoring tiles (CPU, RAM, Disk, Traffic, Connections) are one row.
+
 ## 1.16.28 - 2026-10-11 - The server button bar is always one row
 
 * The buttons of a server window share the width of the bar and shrink their padding and font when the window is narrow; they never wrap into a second row.

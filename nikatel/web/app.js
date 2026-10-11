@@ -525,7 +525,7 @@ function serverLinesHtml(s) {
   const res = `<div class="sline">${cell("GRE", "gre", g ? greTxt(g) : '<span class="mut">not tested</span>')}${s.role === "foreign" ? cell("Filtering", "flt", fl ? fltTxt(fl) : '<span class="mut">not checked</span>') + cell("Abuse-Defender", "abuse", abuseOn ? `<b class="gw-ok">✓ ${rules} ranges</b>` : '<span class="mut">not installed</span>') : ""}${cell("Last sample", "sample", s.last_seen_at ? `${ago(s.last_seen_at)} ago${f.uptime ? " · up " + esc(String(f.uptime)) : ""}` : '<span class="mut">never</span>')}</div>`;
   const tun = mine.length ? `<div class="sline"><small>⇄ Tunnels <b>${mine.length}</b></small>${mine.map(t => `<span class="tchip"><i class="st ${t.state}"></i><b>${esc(t.name)}</b><small>${esc(t.iran_name === s.name ? t.foreign_name : t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div>` : "";
   const pings = fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : "";
-  return tun + res + pings;
+  return `<div class="slines">${tun}${res}</div>` + pings;
 }
 function serverPartHtml(s, tab) {
   const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};

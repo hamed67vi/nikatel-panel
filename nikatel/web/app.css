@@ -1218,3 +1218,8 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 /* the button bar is ONE row: the buttons share the width, shrink their padding and font when the window is narrow, and never wrap */
 .sbar { flex-wrap: nowrap; gap: 3px; overflow: hidden; } .sbar .sg { flex: 1 1 auto; flex-wrap: nowrap; gap: 3px; min-width: 0; } .sbar .sg:last-child { flex: 0 0 auto; } .sbar .sep { flex: none; margin: 0 4px; }
 .sbar .abtn { flex: 1 1 auto; min-width: 0; justify-content: center; padding: 0 clamp(4px, .7vw, 10px); font-size: clamp(10px, .82vw, 12px); gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .sbar .abtn i { font-size: clamp(10px, .85vw, 13px); }
+/* the tunnels line and the last-results line are two rows of ONE box; the monitoring tiles are one row */
+.slines { margin-bottom: 8px; padding: 3px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+.slines .sline { margin: 0; padding: 4px 0; border: 0; border-radius: 0; background: none; } .slines .sline + .sline { border-top: 1px solid rgba(255,255,255,.05); }
+.modal .mtiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.modal .mtile { min-width: 0; overflow: hidden; } .modal .mtile b { white-space: nowrap; } .modal .mtile span { max-width: 62%; }
