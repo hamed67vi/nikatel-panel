@@ -1162,3 +1162,11 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 .tlink.down .wire::before, .tlink.down .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 5px, transparent 5px 9px); opacity: .9; } .tlink.down .pk { display: none; } .tlink.down .ms { color: var(--bad); }
 .tbl tr.lossy td, .tbl.lift tbody tr.lossy:not(.detail):hover td { background: rgba(255,255,255,.045); border-color: var(--line); }
 .tun-tbl tr.down td:first-child, .tun-tbl tr.degraded td:first-child, .tun-tbl tr.up td:first-child { border-left-color: var(--line); }
+.modal .iboxes { grid-auto-rows: auto; align-items: start; } .modal .iboxes > .ibox:last-child:nth-child(odd) { align-content: start; }
+
+/* the Resources box: every bar the same width in one column, the number in one column, the detail (used / total) in one column */
+.modal .ibox .irow > div { flex-wrap: nowrap; justify-content: flex-end; gap: 10px; }
+.modal .ibox .pbar { width: auto; flex: none; gap: 8px; } .modal .ibox .pbar .bar { flex: 0 0 96px; width: 96px; } .modal .ibox .pbar b { min-width: 52px; text-align: right; }
+.modal .ibox .irow > div > small.mut { flex: 0 0 122px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the wide Access box: its rows in two tight columns, no empty height */
+.modal .iboxes > .ibox:last-child:nth-child(odd) { padding-bottom: 6px; } .modal .iboxes > .ibox:last-child:nth-child(odd) .irow { padding: 3px 0; }

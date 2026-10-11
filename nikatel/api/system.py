@@ -5,7 +5,7 @@ from collections import deque
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
-from .. import __version__
+from .. import __version__, jobs
 from ..auth import current_user
 from ..config import get_settings
 from ..db import session
@@ -37,6 +37,10 @@ def overview():
 
     stale = [j.name for j in jobs_ if j.enabled and j.last_ok and now - j.last_ok > j.interval * 3]
     failing = [j.name for j in jobs_ if j.last_error]
+    revived = jobs.ensure_alive()                                   # a job whose thread died is started again right here (and said below)
+
+    if revived:
+        failing = sorted(set(failing) | set(revived))
 
     return {
         "ok": True,

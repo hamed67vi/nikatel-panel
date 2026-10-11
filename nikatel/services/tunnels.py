@@ -241,7 +241,7 @@ def flap(raw: str, recent_ok: list[bool]) -> tuple[str, str]:
     window = (list(recent_ok) + [raw == "up"])[-FLAP_WINDOW:]
     fails = sum(1 for ok in window if not ok)
 
-    if raw == "up" and fails >= FLAP_BAD:
+    if raw == "up" and fails >= FLAP_BAD and not all(window[-3:]):      # three clean checks in a row: whatever happened before is over, the users see no cuts
         switches = sum(1 for i in range(1, len(window)) if window[i] != window[i - 1])
 
         if switches >= 3:        # on and off again and again

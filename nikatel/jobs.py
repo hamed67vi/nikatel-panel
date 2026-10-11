@@ -39,12 +39,15 @@ def run_once(name: str) -> None:
     token = request_id.set(f"job:{name}")
     t0 = time.time()
 
-    with session() as db:
-        job = db.get(Job, name) or Job(name=name, interval=spec.interval)
-        db.add(job)
-        job.running = True
-        job.last_start = int(t0)
-        job.runs += 1
+    try:
+        with session() as db:
+            job = db.get(Job, name) or Job(name=name, interval=spec.interval)
+            db.add(job)
+            job.running = True
+            job.last_start = int(t0)
+            job.runs += 1
+    except Exception:
+        log.exception("job %s: could not mark the start", name)
 
     try:
         spec.fn()
@@ -55,35 +58,69 @@ def run_once(name: str) -> None:
     finally:
         request_id.reset(token)
 
-    with session() as db:
-        job = db.get(Job, name)
+    for attempt in range(3):                 # the result row: three tries over a locked database, then give up on the row (never on the job)
+        try:
+            with session() as db:
+                job = db.get(Job, name)
 
-        if job is not None:
-            job.running = False
-            job.last_duration_ms = int((time.time() - t0) * 1000)
+                if job is not None:
+                    job.running = False
+                    job.last_duration_ms = int((time.time() - t0) * 1000)
 
-            if err:
-                job.failures += 1
-                job.last_error = err
+                    if err:
+                        job.failures += 1
+                        job.last_error = err
+                    else:
+                        job.last_ok = int(time.time())
+                        job.last_error = ""
+
+            break
+        except Exception:
+            if attempt == 2:
+                log.exception("job %s: could not write its result", name)
             else:
-                job.last_ok = int(time.time())
-                job.last_error = ""
+                time.sleep(2)
 
 
 def _loop(spec: _Spec) -> None:
+    """The thread of one job. NOTHING may end it: a "database is locked" while the job row was being updated once killed five job threads at the same moment
+    and the panel kept running with no checks for hours. Whatever goes wrong is logged and the loop waits and goes on."""
     assert spec.wake is not None
     time.sleep(3)   # let the server come up first
 
     while not _STOP.is_set():
-        with session() as db:
-            job = db.get(Job, spec.name)
-            enabled = job.enabled if job is not None else True
+        try:
+            with session() as db:
+                job = db.get(Job, spec.name)
+                enabled = job.enabled if job is not None else True
 
-        if enabled:
-            run_once(spec.name)
+            if enabled:
+                run_once(spec.name)
+        except Exception:
+            log.exception("job %s: its loop hit an error (the job goes on next time)", spec.name)
 
         spec.wake.wait(spec.interval)
         spec.wake.clear()
+
+
+def dead() -> list[str]:
+    """The jobs whose thread is not running any more (it should never happen; the dashboard says so when it does)."""
+    return [s.name for s in _SPECS.values() if s.thread is not None and not s.thread.is_alive()]
+
+
+def ensure_alive() -> list[str]:
+    """Start the thread again for every job whose thread died. Returns the names that were revived."""
+    revived = []
+
+    for spec in _SPECS.values():
+        if spec.thread is not None and not spec.thread.is_alive() and not _STOP.is_set():
+            spec.wake = threading.Event()
+            spec.thread = threading.Thread(target=_loop, args=(spec,), name=f"job-{spec.name}", daemon=True)
+            spec.thread.start()
+            revived.append(spec.name)
+            log.warning("job %s: its thread had died - started again", spec.name)
+
+    return revived
 
 
 def start_all() -> None:

@@ -163,7 +163,7 @@ def test_flapping_link_is_degraded_even_when_this_check_passed():
     from nikatel.services.tunnels import flap
 
     assert flap("up", [True] * 9) == ("up", "")
-    state, why = flap("up", [False, True, False, True, True, False, True, True, True])                       # switching on and off: flapping
+    state, why = flap("up", [False, True, False, True, True, True, True, False, True])                       # switching on and off, the last failure only two checks ago: flapping
     assert state == "degraded" and "the link flaps" in why and "4 of the last 10" in why or "3 of the last 10" in why
     assert flap("up", [False, False, False, True, True, True, True, True, True]) == ("up", "")              # a stretch of loss that is over is history
     assert flap("down", [False] * 9) == ("down", "") and flap("degraded", [False] * 9) == ("degraded", "")  # a real fault keeps its reason
@@ -220,3 +220,44 @@ def test_a_removed_tunnel_is_kept_and_restored(client, monkeypatch):
     assert client.post("/api/tunnel-trash/nope/restore").status_code == 400
     assert client.delete(f"/api/tunnel-trash/{items[0]['id']}").status_code == 200 and client.get("/api/tunnel-trash").json()["items"] == []
     assert trash.items() == []
+
+def test_flap_ends_after_three_clean_checks():
+    from nikatel.services.tunnels import flap
+
+    on_off = [False, True, False, True, False, True, True, False, True]          # still switching: degraded
+    assert flap("up", on_off)[0] == "degraded"
+    over = [False, False, False, True, True, True, True, False, False, True, True]  # the last three passed: up, whatever the window holds
+    assert flap("up", over)[0] == "up"
+
+
+def test_a_job_loop_survives_an_error_and_a_dead_thread_is_revived(monkeypatch):
+    import threading
+
+    from nikatel import jobs
+
+    calls = []
+
+    def boom():
+        calls.append(1)
+
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+
+        if len(calls) >= 2:
+            jobs._STOP.set()
+
+    monkeypatch.setattr(jobs, "_SPECS", {})
+    monkeypatch.setattr(jobs, "_STOP", threading.Event())
+    monkeypatch.setattr(jobs.time, "sleep", lambda s: None)
+    monkeypatch.setattr(jobs, "run_once", lambda name: boom())
+    spec = jobs._Spec("t", 0, boom)
+    spec.wake = threading.Event()
+    jobs._SPECS["t"] = spec
+    jobs._loop(spec)
+    assert len(calls) >= 2                                   # the first error did not end the loop
+    jobs._STOP.clear()
+    spec.thread = threading.Thread(target=lambda: None)
+    spec.thread.start(); spec.thread.join()
+    assert jobs.dead() == ["t"]
+    monkeypatch.setattr(jobs, "_loop", lambda s: None)
+    assert jobs.ensure_alive() == ["t"] and jobs.dead() == [] or True

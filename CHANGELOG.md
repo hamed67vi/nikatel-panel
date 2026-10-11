@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.18 - 2026-10-11 - A job thread can no longer die
+
+* **Root cause of a server shown offline for two hours after it was back:** a *database is locked* error while a job wrote its own status row killed five job threads at the same moment (servers, tunnels, repair, alerts, netwatch); the panel kept serving with no checks. The loop of a job now survives any error, the status row is written with retries and never stops the job, and the dashboard starts a dead job thread again and names it.
+* A tunnel that passed its last three checks is *up* again at once; the flap rule no longer keeps it *unstable* for ten minutes after an outage that is over.
+* The info boxes of a window no longer stretch to the height of the tallest one (the Access box had a lot of empty space); in Resources the bars, numbers and details are three aligned columns.
+
 ## 1.16.17 - 2026-10-11 - A bigger mux stream window
 
 * Real measurement (one Iran ⇄ one foreign server, 100 ms round trip): a multiplexed Backhaul stream was capped at ~37 Mb/s and a BackPack one at ~18 Mb/s, while a plain TCP stream reached 2 Gb/s - the cap is the mux stream window divided by the round trip (512 KB / 0.1 s ≈ 40 Mb/s). New tunnels get a 2 MB stream window and a 16 MB receive buffer (Backhaul and BackPack); *Tune all* applies it to existing tunnels.
