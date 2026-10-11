@@ -2526,6 +2526,7 @@ const sGrp = (o) => `<${o.form ? `form class="ss ${o.cls || ""}" onsubmit="${o.f
 const sRow = (label, control, hint = "") => `<label class="sr"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="v">${control}</div></label>`;
 const sText = (label, text, hint = "") => `<div class="sr"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="v t">${text}</div></div>`;
 const sSw = (name, on, text, hint = "", extra = "") => `<label class="sr"><span>${text}${hint ? `<small>${hint}</small>` : ""}</span><div class="v"><input type="checkbox" class="sw" name="${name}" ${on ? "checked" : ""} ${extra}></div></label>`;
+const sItem = o => `<div class="si ${o.ok === true ? "ok" : o.ok === false ? "off" : ""}"><i class="ss-ic">${o.icon}</i><div class="si-t"><b>${o.title}</b>${o.pill || ""}${o.desc ? `<small>${o.desc}</small>` : ""}</div>${o.acts ? `<div class="si-a">${o.acts}</div>` : ""}</div>`;
 const sWide = inner => `<div class="sr x">${inner}</div>`;
 const sHero = (cls, icon, title, sub, right = "") => `<div class="ss-hero ${cls}"><i class="ss-ic">${icon}</i><div class="ss-ht"><b>${title}</b><small>${sub}</small></div><div class="ss-hr">${right}</div></div>`;
 const sFrame = (name, desc, pill, inner) => `<div class="card sf" data-name="${esc(name)}"><h3>${esc(name)}<small class="sf-d">${desc}</small><span class="sp"></span>${pill || ""}</h3>${inner}</div>`;
@@ -2545,7 +2546,7 @@ PAGES.settings = async () => {
     + sGrp({form: "return saveTelegram(event)", ok: tg.has_token, icon: SI.send, title: "Telegram", pill: tg.has_token ? '<span class="pill ok">token saved</span>' : '<span class="pill err">no token</span>',
         rows: sRow("Bot token", `<input name="token" type="password" placeholder="${tg.has_token ? "•••••••••• saved" : "123456789:AA…"}" autocomplete="off">`, "from @BotFather; empty keeps the saved one") + sRow("Chat id", `<input name="chat_id" value="${esc(tg.chat_id)}" placeholder="-1001234567890">`, "your id, a negative group id, or @channel") + sSw("enabled", tg.enabled, "Send alerts, reports and backups"),
         acts: '<button class="sm" type="button" onclick="testTelegram()">Send a test message</button><button class="pri sm" type="submit">Save</button>'})
-    + sGrp({form: "return saveReport(event)", cls: "two", ok: repOn, icon: SI.doc, title: "Daily report", pill: repOn ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
+    + sGrp({form: "return saveReport(event)", cls: "two flat", ok: repOn, icon: SI.doc, title: "Daily report", pill: repOn ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
         rows: sSw("enabled", rp.enabled, "Send a daily report") + sRow("At hour", `<input name="hour" type="number" min="0" max="23" value="${rp.hour}">`, "local time") + sRow("UTC offset", `<input name="tz_offset_minutes" type="number" min="-720" max="840" value="${rp.tz_offset_minutes}">`, "minutes; Tehran 210") + '<pre id="report-prev" class="gl-out hidden"></pre>',
         acts: '<button class="sm" type="button" onclick="previewReport()">Preview</button><button class="sm" type="button" onclick="sendReport()">Send now</button><button class="pri sm" type="submit">Save</button>'})
     + sGrp({form: "return saveRules(event)", cls: "two", icon: SI.rules, title: "Rules", desc: "failed checks before a message, and how often it repeats",
@@ -2554,7 +2555,7 @@ PAGES.settings = async () => {
           + sRow("Flap guard", `<input name="flap_max" type="number" min="0" max="50" value="${al.flap_max == null ? 3 : al.flap_max}">`, "outages within an hour; 0 = off") + sRow("Then quiet for", `<input name="flap_quiet_hours" type="number" min="1" max="168" value="${al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours}">`, "hours")
           + sText("Muted", (al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false)">unmute</a>`).join(" · ") || '<span class="mut">nothing — mute a tunnel from its window</span>'),
         acts: '<button class="pri sm" type="submit">Save rules</button>'})
-    + sGrp({form: "return addWindow(event)", ok: !activeW, icon: SI.clock, title: "Maintenance windows", pill: activeW ? '<span class="pill warn">active now</span>' : "", desc: "no alerts are sent inside a window",
+    + sGrp({form: "return addWindow(event)", cls: "flat", ok: !activeW, icon: SI.clock, title: "Maintenance windows", pill: activeW ? '<span class="pill warn">active now</span>' : "", desc: "no alerts are sent inside a window",
         rows: sRow("From (UTC)", `<input name="start" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000))}">`) + sRow("To (UTC)", `<input name="end" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000) + 3600)}">`) + sRow("Note", '<input name="note" placeholder="upgrade of …">')
           + mw.windows.map(w => `<div class="sr li ${w.active ? "act" : ""}"><span>${when(w.start).slice(0, 16)} → ${when(w.end).slice(5, 16)}<small>${esc(w.note)}${w.active ? " · active now" : ""}</small></span><div class="v"><a class="mut" onclick="delWindow(${w.id})">remove</a></div></div>`).join(""),
         acts: '<button class="pri sm" type="submit">Add window</button>'})
@@ -2563,22 +2564,21 @@ PAGES.settings = async () => {
   /* backups */
   const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
   const topic = (k, p) => !bk.telegram_ready ? '<span class="mut">Telegram is not set up (Alerts)</span>' : p.topic ? `<span class="pill ok" title="Its backups go to this topic of the group">▣ ${esc(p.topic_name || "topic")}</span> <a class="mut" onclick="bkTopicOff('${k}')">unlink</a>` : `<button class="sm" type="button" onclick="bkTopic('${k}')" title="Make a separate page (topic) for it in the Telegram group">＋ topic</button>`;
-  const part = ([k, p]) => sGrp({ok: p.enabled && p.ready, icon: k === "panel" ? SI.box : SI.cart, title: p.label, pill: p.enabled ? '<span class="pill ok">in the backup</span>' : '<span class="pill">off</span>', desc: p.what,
-      rows: `<label class="sr"><span>Included in the backup</span><div class="v"><input type="checkbox" class="sw" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"></div></label>` + sText("Latest", p.last ? `${ago(p.last.at)} ago · ${kb(p.last.bytes)}` : '<span class="mut">no backup yet</span>' + (p.ready ? "" : ' <span class="err">· set the bot server first</span>')) + sText("Telegram", topic(k, p)),
-      acts: `${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}<button class="sm" type="button" onclick="bkRestoreOpen('${k}')">↩ Restore</button><button class="sm pri" type="button" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button>`});
+  const part = ([k, p]) => sItem({ok: p.enabled && p.ready, icon: k === "panel" ? SI.box : SI.cart, title: p.label, pill: `<label class="swl" title="${p.enabled ? "In the daily backup" : "Not in the daily backup"}"><input type="checkbox" class="sw" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"></label>`,
+      desc: `${esc(p.what)} · ${p.last ? `latest ${ago(p.last.at)} ago, ${kb(p.last.bytes)}` : "no backup yet"}${p.ready ? "" : ' · <span class="err">set the bot server first</span>'} · ${topic(k, p)}`,
+      acts: `<button class="sm pri" type="button" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button><button class="sm" type="button" onclick="bkRestoreOpen('${k}')">↩ Restore</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}`});
   const everyOpts = [[0, "day"], [15, "15 min"], [30, "30 min"], [60, "hour"], [180, "3 h"], [360, "6 h"], [720, "12 h"]], tgOpts = [["all", "every backup"], ["daily", "once a day"], ["off", "never"]];
   const backups = sFrame("Backups", "Encrypted copies of the panel and the shop bot: kept here and sent to Telegram.", bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>',
     (bk.has_passphrase ? "" : sGrp({form: "return savePass(event)", ok: false, icon: SI.key, title: "Backup password", desc: "the files are encrypted with it; you type it only when you restore — keep it somewhere safe",
         rows: sRow("Passphrase", '<input name="passphrase" type="text" minlength="12" required autocomplete="off" spellcheck="false">', "at least 12 characters"),
         acts: '<button type="button" class="sm" onclick="bkGen(this.form)">🎲 Generate</button><button class="pri sm" type="submit">Set the password</button>', cls: "x"}))
-    + `<div class="sg">` + Object.entries(bk.parts).map(part).join("")
-    + sGrp({form: "return saveBackup(event)", cls: "two", ok: !!bk.enabled, icon: SI.clock, title: "Schedule", pill: bk.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
+    + `<div class="sl">` + Object.entries(bk.parts).map(part).join("") + `</div>`
+    + sGrp({form: "return saveBackup(event)", cls: "two flat", ok: !!bk.enabled, icon: SI.clock, title: "Schedule", pill: bk.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
         rows: sSw("enabled", bk.enabled, "Automatic backups") + sRow("Every", sSel("every_minutes", everyOpts, bk.every_minutes || 0, `onchange="this.form.querySelector('.bk-hour').classList.toggle('hidden', this.value !== '0')"`)) + `<label class="sr bk-hour ${(bk.every_minutes || 0) ? "hidden" : ""}"><span>At hour</span><div class="v"><input name="hour" type="number" min="0" max="23" value="${bk.hour}"></div></label>` + sRow("Keep for", `<input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}">`, "days") + sRow("Send to Telegram", sSel("tg", tgOpts, bk.send_telegram ? (bk.tg_every || "all") : "off")),
         acts: '<button class="pri sm" type="submit">Save</button>'})
-    + (bk.has_passphrase ? sGrp({form: "return savePass(event)", icon: SI.key, title: "Passphrase", desc: "files made before keep the old one",
+    + (bk.has_passphrase ? sGrp({form: "return savePass(event)", cls: "flat", icon: SI.key, title: "Passphrase", desc: "files made before keep the old one",
         rows: sRow("New passphrase", '<input name="passphrase" type="password" minlength="12" required autocomplete="new-password">', "at least 12 characters"),
-        acts: '<button class="sm" type="submit">Replace passphrase</button>'}) : "")
-    + `</div>`);
+        acts: '<button class="sm" type="submit">Replace passphrase</button>'}) : ""));
 
   /* probe */
   const prOn = !!pr.state.active && !pr.state.fails;
@@ -2588,10 +2588,8 @@ PAGES.settings = async () => {
         rows: sRow("Primary address", `<input name="api_url" value="${esc(pr.api_url)}" placeholder="http://ip:18080">`) + sRow("Token", `<input name="api_token" type="password" placeholder="${pr.has_api_token ? "•••••••• saved" : "from speed-api.token on the probe"}" autocomplete="off">`, "empty keeps the saved one") + sRow("Runs on server", sSel("server_id", srvOpts(pr.server_id, true), pr.server_id || 0), "for speed tests over SSH")
           + sWide(`<span>Standby probes<small>one per line: name,http://ip:18080,token — an empty token keeps the saved one</small></span><textarea name="standby" rows="2" spellcheck="false">${(pr.standby || []).map(x => `${x.name},${x.api_url},`).join("\n")}</textarea>`),
         acts: '<button class="sm" type="button" onclick="testProbe()">Test</button><button class="pri sm" type="submit">Save</button>'})
-    + sGrp({form: "return installProbe(event)", icon: SI.down, title: "Install a probe", desc: "on an Iran server: copies the code and Xray, registers it as standby (or primary when there is none)",
-        rows: sRow("Server", sSel("server_id", srvOpts(0, false), iranList[0] && iranList[0].id)),
-        acts: `<button class="sm" type="submit" ${ro ? "disabled" : ""}>Install probe</button>`})
-    + `</div>`);
+    + `</div><form class="sl" onsubmit="return installProbe(event)">` + sItem({icon: SI.down, title: "Install a probe", desc: "on an Iran server: copies the code and Xray, registers it as standby (or primary when there is none)",
+        acts: `${sSel("server_id", srvOpts(0, false), iranList[0] && iranList[0].id)}<button class="sm" type="submit" ${ro ? "disabled" : ""}>Install probe</button>`}) + `</form>`);
 
   /* AI */
   const st = ai_.status || {};
@@ -2613,18 +2611,16 @@ PAGES.settings = async () => {
 
   /* appearance */
   const look = sFrame("Appearance", "Theme, day / night, text size, animations — kept in this browser.", "",
-    sGrp({icon: SI.paint, title: "Theme", cls: "x", rows: sWide(`<div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" title="${esc(desc)}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b></button>`).join("")}</div>`)})
-    + `<div class="sg one">`
-    + sGrp({icon: SI.gear, title: "Options",
+    sGrp({icon: SI.paint, title: "Theme", cls: "x flat", rows: sWide(`<div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" title="${esc(desc)}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b></button>`).join("")}</div>`)})
+    + sGrp({icon: SI.gear, title: "Options", cls: "two flat",
         rows: sRow("Day / night", sSel("mode", [["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]], LOOK.mode, `onchange="lookSet('mode', this.value)"`)) + sRow("Text size", sSel("size", [["small", "Small"], ["normal", "Normal"], ["large", "Large"]], LOOK.size, `onchange="lookSet('size', this.value)"`)) + sRow("Animations", sSel("anim", [["calm", "Calm (default)"], ["rich", "Rich: moving backgrounds"], ["off", "Off (lightest)"]], LOOK.anim, `onchange="lookSet('anim', this.value)"`), "Calm: nothing moves by itself"),
-        acts: '<button type="button" class="sm" onclick="lookReset()">↺ Reset the look</button>'})
-    + `</div>`);
+        acts: '<button type="button" class="sm" onclick="lookReset()">↺ Reset the look</button>'}));
 
   /* about & update */
   const about = sFrame("About & update", "This panel, the tunnel cores on your servers, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
     `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small>Update pulls, tests, restarts and checks health — it rolls back by itself when the new version does not start.</small></div><div class="ss-hr"><button class="sm" onclick="aboutLoad()">↻ Check</button><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div><pre class="gl-out hidden" id="about-log"></pre>`
-    + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
-    + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x",
+    + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x flat", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
+    + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x flat",
         rows: sWide(`<div class="eff-grid"><span><em>Mode</em><b>${ro ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div>`)}));
 
   /* security: filled by secLoad */
@@ -2647,19 +2643,16 @@ async function secLoad() {
   const setup = sec.setup ? sGrp({icon: SI.shield(false), title: "Turn on two-step sign-in", cls: "x",
       rows: sWide(`<div class="sec-qr">${sec.setup.qr_svg || ""}<div style="flex:1;min-width:240px"><b>1.</b> Open Google Authenticator (or any TOTP app) → add an account → scan the picture, or type this key:<div class="sec-key">${esc(sec.setup.secret.replace(/(.{4})/g, "$1 ").trim())}</div><div style="margin-top:10px"><b>2.</b> Type the 6-digit code the app shows:</div><div class="frm-act"><input id="sec-code" inputmode="numeric" maxlength="7" placeholder="123456" style="width:140px" onkeydown="if(event.key==='Enter')secEnable()"><button class="pri sm" onclick="secEnable()">Turn on</button><button class="sm" onclick="sec.setup=null;secLoad()">Cancel</button></div></div></div>`)}) : "";
   const hero = sHero("s" + score, SI.shield(score === 3), score === 3 ? "Fully protected" : score === 0 ? "Only the password protects the panel" : `${score} of 3 protections are on`, score === 3 ? "Two-step sign-in, recovery codes and a secret path are all on." : "Turn on the rest so a stolen or guessed password is not enough.", sSeg([on2, onR, onP]));
-  const g2 = sGrp({ok: on2, icon: SI.shield(on2), title: "Two-step sign-in", pill: on2 ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>',
-      rows: sText("Authenticator app", on2 ? "every sign-in asks for its code" : '<span class="mut">a second code from your phone on every sign-in</span>'),
+  const g2 = sItem({ok: on2, icon: SI.shield(on2), title: "Two-step sign-in", pill: on2 ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', desc: on2 ? "every sign-in asks for the code of your authenticator app" : "a second code from your phone on every sign-in",
       acts: on2 ? '<button class="sm danger" onclick="secOff()">Turn off</button>' : '<button class="sm pri" onclick="secSetup()">Turn on</button>'});
-  const gR = sGrp({ok: onR, icon: SI.buoy, title: "Recovery codes", pill: `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`,
-      rows: sText("Use", 'sign in without the app, or reset a forgotten password') + sText("Last resort", "<code>nikatel set-password</code> on the server"),
+  const gR = sItem({ok: onR, icon: SI.buoy, title: "Recovery codes", pill: `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`, desc: "sign in without the app or reset a forgotten password · last resort on the server: <code>nikatel set-password</code>",
       acts: '<button class="sm" onclick="secNewCodes()">Make new codes</button>'});
-  const gP = sGrp({ok: onP, icon: SI.lock(onP), title: "Secret entry path", pill: onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>',
-      rows: sText("Effect", "the panel answers 404 to everyone until the browser opened the secret address once") + (onP ? sWide(`<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>`) : ""),
-      acts: `${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}<button class="sm" onclick="secPath(false)">Choose my own</button><button class="sm pri" onclick="secPath(true)">${onP ? "Change" : "Random path"}</button>`});
+  const gP = sItem({ok: onP, icon: SI.lock(onP), title: "Secret entry path", pill: onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', desc: onP ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>` : "the panel answers 404 to everyone until the browser opened the secret address once",
+      acts: `<button class="sm pri" onclick="secPath(true)">${onP ? "Change" : "Random path"}</button><button class="sm" onclick="secPath(false)">Choose my own</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`});
   const gW = sGrp({form: "return changePassword(event)", cls: "two", icon: SI.key, title: "Password", desc: "at least 10 characters",
       rows: sRow("Current", '<input name="current" type="password" required autocomplete="current-password">') + sRow("New", '<input name="new" type="password" required minlength="10" autocomplete="new-password">') + sRow("Repeat", '<input name="again" type="password" required minlength="10" autocomplete="new-password">') + sSw("logout_others", true, "Sign out the other devices"),
       acts: '<button class="pri sm" type="submit">Change password</button>'});
-  box.innerHTML = `${codes}${hero}${setup}<div class="sg">${sec.setup ? "" : g2}${gR}${gP}${gW}</div>`;
+  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}</div>${gW}`;
 }const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
 window.secSetup = async () => { const pw = await askPw(); if (!pw) return; try { sec.setup = await api("/api/auth/2fa/setup", {method: "POST", body: JSON.stringify({password: pw})}); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secEnable = async () => { try { const r = await api("/api/auth/2fa/enable", {method: "POST", body: JSON.stringify({password: "", code: $("#sec-code").value})}); sec.setup = null; sec.codes = r.recovery_codes; toast("✓ Two-step sign-in is on", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
