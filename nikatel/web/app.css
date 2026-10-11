@@ -1117,3 +1117,11 @@ html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #37415
 .tlink .h { border-width: 6px; } .tlink .h.r { top: -1.5px; border-left-width: 10px; } .tlink .h.l { bottom: -1.5px; border-right-width: 10px; }
 .tlink .pk { width: 7px; height: 7px; } .tlink .pk.a { top: 1px; left: 11px; } .tlink .pk.b { bottom: 1px; left: calc(100% - 18px); }
 @keyframes pkRight { from { left: 11px; } to { left: calc(100% - 18px); } } @keyframes pkLeft { from { left: calc(100% - 18px); } to { left: 11px; } }
+/* the Iran node is right-aligned and the foreign node left-aligned, so the ping arrow between them is in the exact middle of the gap whatever the widths are; the arrow is thin and faint, the ping number stays readable */
+.tun-tbl td.td-node.ir { text-align: right; } .tun-tbl th.r { text-align: right; }
+.tlink { min-width: 110px; }
+.tlink .wire { height: 16px; opacity: .55; }
+.tlink .wire::before, .tlink .wire::after { height: 2px; opacity: .6; } .tlink .wire::before { top: 2px; } .tlink .wire::after { bottom: 2px; }
+.tlink .h { border-width: 4px; opacity: .7; } .tlink .h.r { top: -1px; border-left-width: 7px; } .tlink .h.l { bottom: -1px; border-right-width: 7px; }
+.tlink .pk { width: 5px; height: 5px; box-shadow: 0 0 5px var(--c); opacity: .9; } .tlink .pk.a { top: 0.5px; } .tlink .pk.b { bottom: 0.5px; }
+.tlink.up { --c: color-mix(in srgb, var(--ok) 70%, transparent); } .tlink .ms { opacity: 1; }

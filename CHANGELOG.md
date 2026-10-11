@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.9 - 2026-10-11 - The ping arrow in the exact middle, thin and faint
+
+* In the tunnel list the Iran node is right-aligned and the foreign node left-aligned, so the ping arrow sits in the exact middle of the gap between them; the arrow is thinner and fainter, the ping number stays as it was.
+
 ## 1.16.8 - 2026-10-11 - The ping arrow, twice as big and in the middle
 
 * The ping arrow in the tunnel list is twice as big and sits in the middle of the gap between the Iran node and the foreign node (the Iran column is narrower, the ping column wider).

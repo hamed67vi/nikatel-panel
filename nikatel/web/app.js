@@ -844,7 +844,7 @@ PAGES.tunnelsList = async () => {
       <td class="name">${esc(t.name)}${wrench(t)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
       <td>${workMap.has(t.name) ? `<span class="busy-chip" title="The smart repair is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>` : `<span class="st ${t.state}">${stText(t)}</span>${t.last_error && t.state !== "up" ? `<small class="${t.state === "down" ? "err" : "mut"} td-err" title="${esc(t.last_error)}">${esc(t.state === "degraded" ? shortWhy(t) : t.last_error.slice(0, 40))}</small>` : ""}`}</td>
-      <td class="td-node"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
+      <td class="td-node ir"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
       <td class="td-arrow"><div class="tlink ${t.state}" style="--ping:${Math.round(t.rtt_ms || 80)}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><b class="ms ${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="wire"><u class="h r"></u><u class="h l"></u><s class="pk a"></s><s class="pk b"></s></i>${d.loss_pct >= SHOW_LOSS ? `<small class="loss hi" title="Packets lost on the GRE link of this tunnel">${d.loss_pct}% loss</small>` : ""}</div></td>
       <td class="td-node"><b>${esc(t.foreign_name)}${dupMark(t)}</b><span class="mono mut">${esc(t.foreign_host)}</span></td>
       <td><div class="td-ports">${ports(t).slice(0, 6).map(p => `<i class="${d.listen && d.listen[parseInt(p)] === false ? "bad" : ""}">${esc(p)}</i>`).join("")}${ports(t).length > 6 ? `<i>+${ports(t).length - 6}</i>` : ""}${ports(t).length ? "" : '<span class="mut">—</span>'}</div></td>
@@ -857,7 +857,7 @@ PAGES.tunnelsList = async () => {
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
     <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:10%"><col style="width:11%"><col style="width:9%"><col style="width:13%"><col style="width:11%"><col style="width:9%"><col style="width:11%"><col style="width:290px"></colgroup>
-      <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th class="c">Ping</th><th>Foreign node</th><th>Ports</th><th>Traffic</th><th style="text-align:right">Actions</th></tr></thead>
+      <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th class="r">Iran node</th><th class="c">Ping</th><th>Foreign node</th><th>Ports</th><th>Traffic</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}</div>`;
   applyQ();
   const openT = list.find(t => t.id === state.open);
