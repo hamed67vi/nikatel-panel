@@ -240,4 +240,5 @@ I18N.add({
 "Enter')secEnable()": "", "Prompt": "پرسش", "OK": "تأیید", "Yes, do it": "بله، انجام بده",
 "Quick: best today": "سریع: بهترین امروز", "Start test": "شروع تست", "Which one?": "کدام را؟", "↳ pair of a tunnel…": "↳ سرورهای یک تانل…", "Results": "نتایج", "Speed Mb/s": "سرعت Mb/s", "Live log": "گزارش زنده", "Stop": "توقف",
 "Press <b>Quick</b> for the five types that matter, or tick engines and press <b>Start test</b>.": "برای پنج نوع مهم «سریع» را بزنید، یا موتورها را انتخاب و «شروع تست» را بزنید.",
+"unstable": "ناپایدار", "{} unstable": "{} ناپایدار", "{} up · {} unstable · {} down": "{} بالا · {} ناپایدار · {} قطع",
 });

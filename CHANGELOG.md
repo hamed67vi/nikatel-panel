@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.1 - 2026-10-11 - *unstable* in one box
+
+* The tunnel count of the Tunnels page is one framed box with a dot and a number per state, and *degraded* is called **unstable** (like the state of each tunnel); the same word in the dashboard line and in the check / restart messages.
+
 ## 1.17.0 - 2026-10-11 - Restore from the panel
 
 * Each part of the Backups card has a **↩ Restore** button: pick one of the files kept on this server, or choose a backup file from your computer (a download or a file from Telegram). A file made with another passphrase asks for it.
