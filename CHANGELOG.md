@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.27 - 2026-10-11 - The users of a panel are cards
+
+* The users list of a panel has no *Edit / Disable / Reset* buttons: a click on the card opens the user (*Disable*, *Reset usage* and the rest are in its window); the cards look like those of the servers and the tunnels, and the traffic column is wide enough to show *left* whole.
+
 ## 1.17.26 - 2026-10-11 - Server Doctor like Tunnel Doctor
 
 * *Server Doctor* is two boxes in one frame joined to its tab, like *Tunnel Doctor*: *Needs a look* (a card per server with the cause in plain words and what to do) and *Healthy* (each with its CPU and memory); the extra bits are gone.
