@@ -1170,3 +1170,11 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 .modal .ibox .irow > div > small.mut { flex: 0 0 122px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* the wide Access box: its rows in two tight columns, no empty height */
 .modal .iboxes > .ibox:last-child:nth-child(odd) { padding-bottom: 6px; } .modal .iboxes > .ibox:last-child:nth-child(odd) .irow { padding: 3px 0; }
+/* ---- the detail windows, tighter still: small info rows, the monitoring part as one compact block */
+.modal .iboxes { gap: 6px; } .modal .ibox { padding: 6px 12px 4px; } .modal .ibox h5 { padding-bottom: 4px; margin-bottom: 0; font-size: 10.5px; } .modal .irow { padding: 2px 0; font-size: 12px; }
+.modal .wsec { margin-top: 8px; } .modal .wsec > h4 { margin: 0 2px 4px; font-size: 10.5px; }
+.modal .mon { gap: 5px; } .modal .mhead { gap: 8px; } .modal .mrange button { height: 22px; padding: 0 9px; font-size: 11px; }
+.modal .mtiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; } .modal .mtile { display: flex; align-items: baseline; gap: 6px; padding: 4px 9px; border-radius: 9px; } .modal .mtile small { font-size: 9.5px; letter-spacing: .6px; } .modal .mtile b { font-size: 13px; margin: 0; } .modal .mtile span { font-size: 10px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal .mcard.mwide { padding: 4px 10px 6px; } .modal .mcard.mwide h6 { margin-bottom: 2px; } .modal .strip { height: 7px; }
+.modal .mgrid { gap: 6px; } .modal .mcard { padding: 4px 9px 4px; } .modal .mcard h6 { font-size: 10px; } .modal .mcard svg, .modal .mcard canvas { max-height: 84px; } .modal .mstat { font-size: 9.5px; margin-top: 1px; } .modal .chart-empty { padding: 12px 0; font-size: 11px; }
+.modal .wtools, .modal .wtools.uni { gap: 5px; } .modal .wtool, .modal .wtools.uni .wtool { min-height: 32px; padding: 4px 9px; } .modal .wgroup h4 { margin: 6px 2px 4px; }

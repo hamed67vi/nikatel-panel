@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.19 - 2026-10-11 - Tighter detail windows
+
+* The server / tunnel / config windows are tighter: smaller info rows, the monitoring tiles in one compact row, thinner timeline, shorter charts, smaller tool tiles. The GRE row no longer shows the meaningless *UNKNOWN* link state of a GRE interface.
+
 ## 1.16.18 - 2026-10-11 - A job thread can no longer die
 
 * **Root cause of a server shown offline for two hours after it was back:** a *database is locked* error while a job wrote its own status row killed five job threads at the same moment (servers, tunnels, repair, alerts, netwatch); the panel kept serving with no checks. The loop of a job now survives any error, the status row is written with retries and never stops the job, and the dashboard starts a dead job thread again and names it.
