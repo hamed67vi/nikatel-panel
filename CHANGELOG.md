@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.37
+
+- Settings rebuilt from scratch: one frame per tab, as wide as the row of tabs; inside it grouped lists like a phone's settings (a header with icon and state, rows with the label left and the control right, switches, one action row), packed into two columns with no empty space. The same system on every tab: Security, Alerts, Backups, Probe, AI, Shop bot, Appearance, About & update.
+- Phones: a layout of its own (mobile.css, loaded only up to 760 px): one column, a bottom tab bar with the page icons, every table turned into cards with the column names on the cells, windows as full-height sheets, 16 px inputs (no zoom), 44 px touch targets, and no sideways scrolling anywhere (checked on every page).
+- Calm by default: nothing moves by itself any more - no drifting backgrounds, breathing icons, blinking LEDs, running logo lights, button shines or row-entrance animations. What you touch answers with a short soft transition. Appearance > Animations now has Calm (default), Rich (the moving backgrounds and the live logo) and Off. The font stack puts the system font (San Francisco / Segoe) first.
+- Lighter and safer: the panel no longer announces its server software (server header off); every setting of the lists is drawn once, not per refresh.
 ## 1.17.36
 
 - Persian: the Tunnel Doctor stories, repair events, network-watch events, installs, errors raised by the panel's own code, log lines of the Logs page and about 450 tooltips, hints, confirmations and toasts are translated (new files i18n.fa.doctor.js and i18n.fa.ui2.js). The translator now takes leading symbols (checkmark, cross) off a text before it looks it up - before, every text that began with one stayed English.

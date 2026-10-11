@@ -223,8 +223,9 @@ let pendScroll = null;   // the scroll positions a refresh wants back: the list 
 (() => {
   const pg = $("#page"); if (!pg) return;
   let q = 0;
-  const fit = () => { const fixed = !!pg.querySelector(".cf-top") && innerWidth > 760; pg.querySelectorAll(".lbox").forEach(b => { const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
-  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
+  const fit = () => { if (innerWidth <= 760) return; const fixed = !!pg.querySelector(".cf-top"); pg.querySelectorAll(".lbox").forEach(b => { const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
+  const labelCells = () => { if (innerWidth > 760) return; pg.querySelectorAll("table.tbl").forEach(tb => { const hs = [...tb.querySelectorAll("thead th")].map(h => h.textContent.trim()); if (!hs.length) return; tb.querySelectorAll("tbody tr").forEach(tr => { let i = 0; for (const td of tr.children) { if (td.tagName !== "TD") continue; if (!td.hasAttribute("data-l")) td.setAttribute("data-l", hs[i] || ""); i += +td.getAttribute("colspan") || 1; } }); }); };
+  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); labelCells(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
   window.addEventListener("resize", () => requestAnimationFrame(fit));
 })();
@@ -1901,10 +1902,11 @@ async function pnUsersLoad(id) {
 }
 const pnRow = {h: 46, done: true};
 const mainBottom = () => { const m = document.querySelector(".main"); return m ? Math.min(innerHeight, m.getBoundingClientRect().bottom) : innerHeight; };
-const pnPS = () => { const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - 56 - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
+const pnPS = () => { if (innerWidth <= 760) return 10; const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - 56 - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
 /* the list box is one fixed box from its top down to the pager, which sits on the bottom edge: the rows are stretched to fill it exactly, so nothing scrolls and no empty strip is left */
 function pnFitSoon(ps, n = 0) { clearTimeout(pnFitSoon.t); pnFitSoon.t = setTimeout(() => { if (document.querySelector("#pn-body .usr-tbl") && !document.querySelector("#pn-body .lbox") && n < 20) return pnFitSoon(ps, n + 1); pnFit(ps); }, n ? 60 : 30); }      // waits until the list sits in its box
 function pnFit(ps) {
+  if (innerWidth <= 760) return;
   const box = document.querySelector("#pn-body .lbox"), foot = $("#pn-foot"); if (!box) return;
   const tb = box.querySelector("table"), th = box.querySelector("thead"); if (!tb || !th) return;
   box.style.height = ""; box.style.maxHeight = "none"; box.style.overflow = "hidden"; box.style.minHeight = "0";
@@ -2492,124 +2494,169 @@ window.setLog = (k, v) => { state.logs[k] = v; refresh(); };
 let lqT; window.setLogQ = v => { state.logs.q = v.trim(); clearTimeout(lqT); lqT = setTimeout(refresh, 250); };
 
 /* ---- settings */
+/* ---- Settings: one frame per tab, as wide as the row of tabs; inside, grouped lists like a phone's settings:
+   a group = header (icon, name, state) + rows (label left, control right) + an action row. The groups fill two columns with no gaps. */
+const SI = {   // line icons
+  bell: '<svg viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  send: '<svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.5L11.5 20l3-4.5L19 18z"/><path d="M9 13.5L21 4"/></svg>',
+  doc: '<svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2.4"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg>',
+  rules: '<svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  probe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>',
+  down: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg>',
+  up: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 16.5v-9M8.5 11l3.5-3.5 3.5 3.5"/></svg>',
+  bot: '<svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 4v3M9 13h.5M14.5 13h.5"/></svg>',
+  cart: '<svg viewBox="0 0 24 24"><path d="M3 4h2.5l2 11h10l2-7H7"/><circle cx="9.5" cy="19" r="1.3"/><circle cx="16.5" cy="19" r="1.3"/></svg>',
+  key: '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="3.6"/><path d="M10.7 12.6L19 4.5M15.5 8l2.5 2.5M13.2 10.3l2 2"/></svg>',
+  box: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
+  save: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 4v5h8V4M8 20v-6h8v6"/></svg>',
+  paint: '<svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.6 0-.9-.6-1.2-.6-2 0-.9.7-1.4 1.6-1.4h1.7a4 4 0 0 0 4-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1"/><circle cx="10.5" cy="7.5" r="1.1"/><circle cx="15" cy="7.5" r="1.1"/></svg>',
+  cpu: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>',
+  shield: on => `<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6z"/>${on ? '<path d="M8.6 12.2l2.4 2.4 4.4-4.6"/>' : '<path d="M12 8.2v4.4M12 15.6v.4"/>'}</svg>`,
+  buoy: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>',
+  lock: on => `<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="${on ? "M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" : "M8.2 10.5V8a3.8 3.8 0 0 1 7.2-1.7"}"/><path d="M12 14.6v2.2"/></svg>`,
+};
+/* the building blocks */
+const sGrp = (o) => `<${o.form ? `form class="ss ${o.cls || ""}" onsubmit="${o.form}"` : `div class="ss ${o.cls || ""}"`}><div class="ss-h ${o.ok === true ? "ok" : o.ok === false ? "off" : ""}"><i class="ss-ic">${o.icon}</i><b>${o.title}</b>${o.pill || ""}${o.desc ? `<small>${o.desc}</small>` : ""}</div><div class="ss-rows">${o.rows}</div>${o.acts ? `<div class="ss-a">${o.acts}</div>` : ""}</${o.form ? "form" : "div"}>`;
+const sRow = (label, control, hint = "") => `<label class="sr"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="v">${control}</div></label>`;
+const sText = (label, text, hint = "") => `<div class="sr"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="v t">${text}</div></div>`;
+const sSw = (name, on, text, hint = "", extra = "") => `<label class="sr"><span>${text}${hint ? `<small>${hint}</small>` : ""}</span><div class="v"><input type="checkbox" class="sw" name="${name}" ${on ? "checked" : ""} ${extra}></div></label>`;
+const sWide = inner => `<div class="sr x">${inner}</div>`;
+const sHero = (cls, icon, title, sub, right = "") => `<div class="ss-hero ${cls}"><i class="ss-ic">${icon}</i><div class="ss-ht"><b>${title}</b><small>${sub}</small></div><div class="ss-hr">${right}</div></div>`;
+const sFrame = (name, desc, pill, inner) => `<div class="card sf" data-name="${esc(name)}"><h3>${esc(name)}<small class="sf-d">${desc}</small><span class="sp"></span>${pill || ""}</h3>${inner}</div>`;
+const sSeg = flags => `<span class="sec-seg">${flags.map(f => `<i class="${f ? "on" : ""}"></i>`).join("")}</span>`;
+const sSel = (name, opts, cur, attrs = "") => `<select name="${name}" ${attrs}>${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+
 PAGES.settings = async () => {
   const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
-  $("#page").innerHTML = `<div class="grid2">
-    <div class="card pr-card al-card"><h3>Alerts <small class="mut gw-sub">Where alerts go, when they are sent, the daily report and quiet windows.</small><span class="sp"></span>${tg.enabled && tg.has_token && tg.chat_id ? '<span class="pill ok">● sending to Telegram</span>' : '<span class="pill err">● not sending</span>'}</h3>
-      ${(() => {
-        const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id), repOn = !!rp.enabled, activeW = mw.windows.filter(w => w.active).length, score = [tgOn, repOn].filter(Boolean).length;
-        return `<div class="sec-hero al-hero ${tgOn ? (activeW ? "s2" : "s3") : "s0"}"><div class="sec-shield"><svg viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>${tgOn ? "" : '<path d="M4 4l16 16"/>'}</svg></div><div class="sec-ht"><b>${tgOn ? (activeW ? "Alerts are paused by a maintenance window" : "Alerts are on") : "Alerts are not reaching you"}</b><small class="mut">${tgOn ? "Down and up messages, the daily report and backups go to your Telegram chat." : "Set the bot token and chat id below, then send a test message."}</small></div><div class="sec-seg"><i class="${tgOn ? "on" : ""}" title="Telegram"></i><i class="${repOn ? "on" : ""}" title="Daily report"></i><i class="${activeW ? "" : "on"}" title="No maintenance window now"></i></div></div>`;
-      })()}
-      <div class="al-grid">
-        <form class="sec-card al-sec ${tg.enabled && tg.has_token ? "ok" : "off"}" onsubmit="return saveTelegram(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.5L11.5 20l3-4.5L19 18z"/><path d="M9 13.5L21 4"/></svg></div><div class="sec-body"><div class="sec-t"><b>Telegram</b>${tg.has_token ? '<span class="pill ok">token saved</span>' : '<span class="pill err">no token</span>'}</div>
-          <label>Bot token <small>from @BotFather; empty keeps the saved one</small><input name="token" type="password" placeholder="${tg.has_token ? "•••••••••• saved" : "123456789:AA…"}" autocomplete="off"></label>
-          <label>Chat id <small>your id, a negative group id, or @channel</small><input name="chat_id" value="${esc(tg.chat_id)}" placeholder="-1001234567890"></label>
-          <label class="chk"><input name="enabled" type="checkbox" ${tg.enabled ? "checked" : ""}> Send alerts, reports and backups</label>
-          <div class="sec-a"><button class="pri sm" type="submit">Save</button><button class="sm" type="button" onclick="testTelegram()">Send a test message</button></div></div></form>
-        <form class="sec-card al-sec ${rp.enabled ? "ok" : "off"}" onsubmit="return saveReport(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2.4"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg></div><div class="sec-body"><div class="sec-t"><b>Daily report</b>${rp.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>'}</div>
-          <label class="chk"><input name="enabled" type="checkbox" ${rp.enabled ? "checked" : ""}> Send a daily report</label>
-          <div class="al-two"><label>At hour <small>local</small><input name="hour" type="number" min="0" max="23" value="${rp.hour}"></label><label>UTC offset <small>minutes; Tehran 210</small><input name="tz_offset_minutes" type="number" min="-720" max="840" value="${rp.tz_offset_minutes}"></label></div>
-          <div class="sec-a"><button class="pri sm" type="submit">Save</button><button class="sm" type="button" onclick="previewReport()">Preview</button><button class="sm" type="button" onclick="sendReport()">Send now</button></div><pre id="report-prev" class="gl-out hidden"></pre></div></form>
-        <form class="sec-card al-sec al-wide ok" onsubmit="return saveRules(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg></div><div class="sec-body"><div class="sec-t"><b>Alert rules</b><small class="mut">how many failed checks before a message, and how often it may repeat</small></div>
-          <div class="al-rules">
-            <label title="Failed checks in a row before a tunnel is DOWN">Tunnel down after<input name="tunnel_fails" type="number" min="1" max="20" value="${al.tunnel_fails}"></label>
-            <label title="Failed samples in a row before a server is OFFLINE">Server offline after<input name="server_fails" type="number" min="1" max="20" value="${al.server_fails}"></label>
-            <label title="Failed checks in a row before a config is DOWN">Config down after<input name="config_fails" type="number" min="1" max="20" value="${al.config_fails == null ? 3 : al.config_fails}"></label>
-            <label title="A blip shorter than this says nothing">Down at least (min)<input name="min_down_minutes" type="number" min="0" max="1440" value="${al.min_down_minutes == null ? 4 : al.min_down_minutes}"></label>
-            <label title="The UP message comes only after it was stable this long">UP after stable (s)<input name="up_stable_seconds" type="number" min="0" max="86400" value="${al.up_stable_seconds}"></label>
-            <label title="Remind while still down every this many hours. 0 = never: one DOWN, one UP, nothing in between">Remind every (h)<input name="remind_hours" type="number" min="0" max="168" value="${al.remind_hours == null ? 0 : al.remind_hours}"></label>
-            <label title="Outages within an hour before the panel goes quiet about it. 0 = off">Flap guard (outages/h)<input name="flap_max" type="number" min="0" max="50" value="${al.flap_max == null ? 3 : al.flap_max}"></label>
-            <label title="…then it says nothing about it for this many hours">Then quiet for (h)<input name="flap_quiet_hours" type="number" min="1" max="168" value="${al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours}"></label></div>
-          <div class="sec-a al-save"><small class="mut">Muted: ${(al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false)">unmute</a>`).join(" · ") || "nothing"}. Mute a tunnel from its detail row.</small><span class="sp"></span><button class="pri sm" type="submit">Save rules</button></div></div></form>
-        <div class="sec-card al-sec al-wide ${mw.windows.some(w => w.active) ? "off" : "ok"}"><div class="sec-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></div><div class="sec-body"><div class="sec-t"><b>Maintenance windows</b><small class="mut">no alerts are sent inside a window</small></div>
-          <form class="al-win" onsubmit="return addWindow(event)"><label>From (UTC)<input name="start" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000))}"></label><label>To (UTC)<input name="end" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000) + 3600)}"></label><label>Note<input name="note" placeholder="upgrade of …"></label><button class="pri sm" type="submit">Add window</button></form>
-          ${mw.windows.map(w => `<div class="al-wrow ${w.active ? "act" : ""}"><span>${when(w.start).slice(0, 16)} → ${when(w.end).slice(0, 16)}</span><span class="mut">${esc(w.note)}</span>${w.active ? '<b class="warn">active now</b>' : ""}<a class="mut" onclick="delWindow(${w.id})">remove</a></div>`).join("") || '<small class="mut">No window.</small>'}</div></div>
-      </div></div>
+  const srvOpts = (cur, none) => (none ? [["0", "—"]] : []).concat(iranList.map(x => [x.id, x.name])), ro = s.read_only;
 
-    <div class="card pr-card"><h3>Probe <small class="mut gw-sub">Tests your configs from inside Iran and runs their speed tests.</small><span class="sp"></span>${!pr.state.active ? '<span class="pill">no probe set</span>' : pr.state.fails ? `<span class="pill err" title="the last ${pr.state.fails} questions got no answer">● not answering · ${esc(pr.state.active)}</span>` : `<span class="pill ok" title="the panel gets answers from this probe">● connected · ${esc(pr.state.active)}</span>`}</h3>
-      <form class="frm pr-form" onsubmit="return saveProbe(event)">
-        <label>Primary address<input name="api_url" value="${esc(pr.api_url)}" placeholder="http://ip:18080"></label>
-        <label>Token <small>(empty keeps it)</small><input name="api_token" type="password" placeholder="${pr.has_api_token ? "•••••••• saved" : "from speed-api.token on the probe"}" autocomplete="off"></label>
-        <label>Runs on server <small>(speed tests over SSH)</small><select name="server_id"><option value="0">—</option>${iranList.map(s => `<option value="${s.id}" ${s.id === pr.server_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label>
-        <label class="pr-b">Standby probes <small>one per line: name,http://ip:18080,token (empty token keeps the saved one)</small><textarea name="standby" class="ob-raw" rows="2" spellcheck="false">${(pr.standby || []).map(x => `${x.name},${x.api_url},`).join("\n")}</textarea></label>
-        <div class="frm-act pr-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testProbe()">Test</button></div></form>
-      <form class="pr-install" onsubmit="return installProbe(event)"><label>Install a probe on an Iran server <small>copies the code and Xray, registers it as standby (or primary when there is none)</small><span class="pr-ins-row"><select name="server_id">${iranList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button type="submit" ${s.read_only ? "disabled" : ""}>Install probe</button></span></label></form></div>
+  /* alerts */
+  const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id), repOn = !!rp.enabled, activeW = mw.windows.filter(w => w.active).length;
+  const alerts = sFrame("Alerts", "Where alerts go, when they are sent, the daily report and quiet windows.", tgOn ? '<span class="pill ok">● sending to Telegram</span>' : '<span class="pill err">● not sending</span>',
+    sHero(tgOn ? (activeW ? "s2" : "s3") : "s0", SI.bell, tgOn ? (activeW ? "Alerts are paused by a maintenance window" : "Alerts are on") : "Alerts are not reaching you", tgOn ? "Down and up messages, the daily report and backups go to your Telegram chat." : "Set the bot token and chat id, then send a test message.", sSeg([tgOn, repOn, !activeW]))
+    + `<div class="sg">`
+    + sGrp({form: "return saveTelegram(event)", ok: tg.has_token, icon: SI.send, title: "Telegram", pill: tg.has_token ? '<span class="pill ok">token saved</span>' : '<span class="pill err">no token</span>',
+        rows: sRow("Bot token", `<input name="token" type="password" placeholder="${tg.has_token ? "•••••••••• saved" : "123456789:AA…"}" autocomplete="off">`, "from @BotFather; empty keeps the saved one") + sRow("Chat id", `<input name="chat_id" value="${esc(tg.chat_id)}" placeholder="-1001234567890">`, "your id, a negative group id, or @channel") + sSw("enabled", tg.enabled, "Send alerts, reports and backups"),
+        acts: '<button class="sm" type="button" onclick="testTelegram()">Send a test message</button><button class="pri sm" type="submit">Save</button>'})
+    + sGrp({form: "return saveReport(event)", ok: repOn, icon: SI.doc, title: "Daily report", pill: repOn ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
+        rows: sSw("enabled", rp.enabled, "Send a daily report") + sRow("At hour", `<input name="hour" type="number" min="0" max="23" value="${rp.hour}">`, "local time") + sRow("UTC offset", `<input name="tz_offset_minutes" type="number" min="-720" max="840" value="${rp.tz_offset_minutes}">`, "minutes; Tehran 210") + '<pre id="report-prev" class="gl-out hidden"></pre>',
+        acts: '<button class="sm" type="button" onclick="previewReport()">Preview</button><button class="sm" type="button" onclick="sendReport()">Send now</button><button class="pri sm" type="submit">Save</button>'})
+    + sGrp({form: "return saveRules(event)", icon: SI.rules, title: "Rules", desc: "failed checks before a message, and how often it repeats",
+        rows: sRow("Tunnel down after", `<input name="tunnel_fails" type="number" min="1" max="20" value="${al.tunnel_fails}">`, "failed checks in a row") + sRow("Server offline after", `<input name="server_fails" type="number" min="1" max="20" value="${al.server_fails}">`, "failed samples in a row") + sRow("Config down after", `<input name="config_fails" type="number" min="1" max="20" value="${al.config_fails == null ? 3 : al.config_fails}">`, "failed checks in a row")
+          + sRow("Down at least", `<input name="min_down_minutes" type="number" min="0" max="1440" value="${al.min_down_minutes == null ? 4 : al.min_down_minutes}">`, "minutes; a shorter blip says nothing") + sRow("UP after stable", `<input name="up_stable_seconds" type="number" min="0" max="86400" value="${al.up_stable_seconds}">`, "seconds") + sRow("Remind every", `<input name="remind_hours" type="number" min="0" max="168" value="${al.remind_hours == null ? 0 : al.remind_hours}">`, "hours while still down; 0 = never")
+          + sRow("Flap guard", `<input name="flap_max" type="number" min="0" max="50" value="${al.flap_max == null ? 3 : al.flap_max}">`, "outages within an hour; 0 = off") + sRow("Then quiet for", `<input name="flap_quiet_hours" type="number" min="1" max="168" value="${al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours}">`, "hours")
+          + sText("Muted", (al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false)">unmute</a>`).join(" · ") || '<span class="mut">nothing — mute a tunnel from its window</span>'),
+        acts: '<button class="pri sm" type="submit">Save rules</button>'})
+    + sGrp({form: "return addWindow(event)", ok: !activeW, icon: SI.clock, title: "Maintenance windows", pill: activeW ? '<span class="pill warn">active now</span>' : "", desc: "no alerts are sent inside a window",
+        rows: sRow("From (UTC)", `<input name="start" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000))}">`) + sRow("To (UTC)", `<input name="end" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000) + 3600)}">`) + sRow("Note", '<input name="note" placeholder="upgrade of …">')
+          + mw.windows.map(w => `<div class="sr li ${w.active ? "act" : ""}"><span>${when(w.start).slice(0, 16)} → ${when(w.end).slice(5, 16)}<small>${esc(w.note)}${w.active ? " · active now" : ""}</small></span><div class="v"><a class="mut" onclick="delWindow(${w.id})">remove</a></div></div>`).join(""),
+        acts: '<button class="pri sm" type="submit">Add window</button>'})
+    + `</div>`);
 
+  /* backups */
+  const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+  const topic = (k, p) => !bk.telegram_ready ? '<span class="mut">Telegram is not set up (Alerts)</span>' : p.topic ? `<span class="pill ok" title="Its backups go to this topic of the group">▣ ${esc(p.topic_name || "topic")}</span> <a class="mut" onclick="bkTopicOff('${k}')">unlink</a>` : `<button class="sm" type="button" onclick="bkTopic('${k}')" title="Make a separate page (topic) for it in the Telegram group">＋ topic</button>`;
+  const part = ([k, p]) => sGrp({ok: p.enabled && p.ready, icon: k === "panel" ? SI.box : SI.cart, title: p.label, pill: p.enabled ? '<span class="pill ok">in the backup</span>' : '<span class="pill">off</span>', desc: p.what,
+      rows: `<label class="sr"><span>Included in the backup</span><div class="v"><input type="checkbox" class="sw" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"></div></label>` + sText("Latest", p.last ? `${ago(p.last.at)} ago · ${kb(p.last.bytes)}` : '<span class="mut">no backup yet</span>' + (p.ready ? "" : ' <span class="err">· set the bot server first</span>')) + sText("Telegram", topic(k, p)),
+      acts: `${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}<button class="sm" type="button" onclick="bkRestoreOpen('${k}')">↩ Restore</button><button class="sm pri" type="button" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button>`});
+  const everyOpts = [[0, "day"], [15, "15 min"], [30, "30 min"], [60, "hour"], [180, "3 h"], [360, "6 h"], [720, "12 h"]], tgOpts = [["all", "every backup"], ["daily", "once a day"], ["off", "never"]];
+  const backups = sFrame("Backups", "Encrypted copies of the panel and the shop bot: kept here and sent to Telegram.", bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>',
+    (bk.has_passphrase ? "" : sGrp({form: "return savePass(event)", ok: false, icon: SI.key, title: "Backup password", desc: "the files are encrypted with it; you type it only when you restore — keep it somewhere safe",
+        rows: sRow("Passphrase", '<input name="passphrase" type="text" minlength="12" required autocomplete="off" spellcheck="false">', "at least 12 characters"),
+        acts: '<button type="button" class="sm" onclick="bkGen(this.form)">🎲 Generate</button><button class="pri sm" type="submit">Set the password</button>', cls: "x"}))
+    + `<div class="sg">` + Object.entries(bk.parts).map(part).join("")
+    + sGrp({form: "return saveBackup(event)", ok: !!bk.enabled, icon: SI.clock, title: "Schedule", pill: bk.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
+        rows: sSw("enabled", bk.enabled, "Automatic backups") + sRow("Every", sSel("every_minutes", everyOpts, bk.every_minutes || 0, `onchange="this.form.querySelector('.bk-hour').classList.toggle('hidden', this.value !== '0')"`)) + `<label class="sr bk-hour ${(bk.every_minutes || 0) ? "hidden" : ""}"><span>At hour</span><div class="v"><input name="hour" type="number" min="0" max="23" value="${bk.hour}"></div></label>` + sRow("Keep for", `<input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}">`, "days") + sRow("Send to Telegram", sSel("tg", tgOpts, bk.send_telegram ? (bk.tg_every || "all") : "off")),
+        acts: '<button class="pri sm" type="submit">Save</button>'})
+    + (bk.has_passphrase ? sGrp({form: "return savePass(event)", icon: SI.key, title: "Passphrase", desc: "files made before keep the old one",
+        rows: sRow("New passphrase", '<input name="passphrase" type="password" minlength="12" required autocomplete="new-password">', "at least 12 characters"),
+        acts: '<button class="sm" type="submit">Replace passphrase</button>'}) : "")
+    + `</div>`);
 
+  /* probe */
+  const prOn = !!pr.state.active && !pr.state.fails;
+  const probe = sFrame("Probe", "Tests your configs from inside Iran and runs their speed tests.", !pr.state.active ? '<span class="pill">no probe set</span>' : pr.state.fails ? `<span class="pill err">● not answering · ${esc(pr.state.active)}</span>` : `<span class="pill ok">● connected · ${esc(pr.state.active)}</span>`,
+    `<div class="sg">`
+    + sGrp({form: "return saveProbe(event)", ok: pr.state.active ? prOn : undefined, icon: SI.probe, title: "Probe", pill: prOn ? '<span class="pill ok">connected</span>' : pr.state.active ? '<span class="pill err">not answering</span>' : "",
+        rows: sRow("Primary address", `<input name="api_url" value="${esc(pr.api_url)}" placeholder="http://ip:18080">`) + sRow("Token", `<input name="api_token" type="password" placeholder="${pr.has_api_token ? "•••••••• saved" : "from speed-api.token on the probe"}" autocomplete="off">`, "empty keeps the saved one") + sRow("Runs on server", sSel("server_id", srvOpts(pr.server_id, true), pr.server_id || 0), "for speed tests over SSH")
+          + sWide(`<span>Standby probes<small>one per line: name,http://ip:18080,token — an empty token keeps the saved one</small></span><textarea name="standby" rows="2" spellcheck="false">${(pr.standby || []).map(x => `${x.name},${x.api_url},`).join("\n")}</textarea>`),
+        acts: '<button class="sm" type="button" onclick="testProbe()">Test</button><button class="pri sm" type="submit">Save</button>'})
+    + sGrp({form: "return installProbe(event)", icon: SI.down, title: "Install a probe", desc: "on an Iran server: copies the code and Xray, registers it as standby (or primary when there is none)",
+        rows: sRow("Server", sSel("server_id", srvOpts(0, false), iranList[0] && iranList[0].id)),
+        acts: `<button class="sm" type="submit" ${ro ? "disabled" : ""}>Install probe</button>`})
+    + `</div>`);
 
-    ${backupCard(bk)}
+  /* AI */
+  const st = ai_.status || {};
+  const ai = sFrame("AI assistant", "Explains problems and helps the Tunnel Doctor. Needs an Anthropic API key.", aiPill(ai_),
+    sHero(!ai_.has_api_key ? "s0" : !st.at ? "s1" : st.ok ? "s3" : "s0", SI.bot, !ai_.has_api_key ? "No key saved" : !st.at ? "Key saved, not tested yet" : st.ok ? "Connected" : "Not working", !ai_.has_api_key ? "Paste an Anthropic API key below; the panel tests it at once." : !st.at ? "Press Test the key." : st.ok ? `${esc(st.provider || "Anthropic")} · ${esc(st.model || ai_.model)} · ${st.ms} ms · tested ${ago(st.at)} ago` : esc(st.error || "no answer"))
+    + `<div class="sg one">`
+    + sGrp({form: "return saveAi(event)", icon: SI.key, title: "Key and use",
+        rows: sRow("Anthropic API key", `<input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off">`, "empty keeps the saved one") + sRow("Model", `<input name="model" value="${esc(ai_.model)}">`) + sSw("enabled", ai_.enabled, "Diagnose broken tunnels with the AI") + sSw("actions", ai_.actions, "Let it add safe repair steps to the plan"),
+        acts: '<button type="button" class="sm danger" onclick="forgetAi()">Remove the key</button><button type="button" class="sm" onclick="testAi()">Test the key</button><button class="pri sm" type="submit">Save</button>'})
+    + `</div>`);
 
-    <div class="card pr-card sb-card"><h3>Shop bot <small class="mut gw-sub">The server that runs the bot and how the panel reaches it (with its SSH key).</small><span class="sp"></span><span class="pill ${sb.host ? "ok" : ""}">${sb.host ? "● server set" : "not set"}</span></h3>
-      <form class="frm sb-form" onsubmit="return saveShopbot(event)">
-        <label class="sb-h">Server <small>IP or host</small><input name="host" value="${esc(sb.host)}" placeholder="ip or host"></label>
-        <label class="sb-u">SSH user<input name="ssh_user" value="${esc(sb.ssh_user)}"></label>
-        <label class="sb-p">SSH port<input name="ssh_port" type="number" value="${sb.ssh_port}"></label>
-        <label class="sb-d">Bot directory<input name="dir" value="${esc(sb.dir)}"></label>
-        <label class="sb-e">DB env file<input name="env" value="${esc(sb.env)}"></label>
-        <label class="sb-w">Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
-        <div class="frm-act sb-act"><button class="pri" type="submit">Save</button></div></form></div>
+  /* shop bot */
+  const shop = sFrame("Shop bot", "The server that runs the bot and how the panel reaches it (with its SSH key).", sb.host ? '<span class="pill ok">● server set</span>' : '<span class="pill">not set</span>',
+    `<div class="sg one">`
+    + sGrp({form: "return saveShopbot(event)", ok: !!sb.host, icon: SI.cart, title: "Bot server",
+        rows: sRow("Server", `<input name="host" value="${esc(sb.host)}" placeholder="ip or host">`, "IP or host") + sRow("SSH user", `<input name="ssh_user" value="${esc(sb.ssh_user)}">`) + sRow("SSH port", `<input name="ssh_port" type="number" value="${sb.ssh_port}">`) + sRow("Bot directory", `<input name="dir" value="${esc(sb.dir)}">`) + sRow("DB env file", `<input name="env" value="${esc(sb.env)}">`) + sRow("Public webhook URL", `<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php">`),
+        acts: '<button class="pri sm" type="submit">Save</button>'})
+    + `</div>`);
 
-    <div class="card pr-card ai-card"><h3>AI assistant <small class="mut gw-sub">Explains problems and helps the Tunnel Doctor. Needs an Anthropic API key.</small><span class="sp"></span>${aiPill(ai_)}</h3>
-      ${aiStatus(ai_)}
-      <form class="frm ai-form" onsubmit="return saveAi(event)">
-        <label class="chk"><input name="enabled" type="checkbox" ${ai_.enabled ? "checked" : ""}> Diagnose broken tunnels with the AI</label>
-        <label class="chk"><input name="actions" type="checkbox" ${ai_.actions ? "checked" : ""}> Let it add safe repair steps</label>
-        <label class="ai-k">Anthropic API key <small>(empty keeps the saved one)</small><input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off"></label>
-        <label class="ai-m">Model<input name="model" value="${esc(ai_.model)}"></label>
-        <div class="frm-act ai-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testAi()">Test the key</button><button type="button" class="danger" onclick="forgetAi()">Remove the key</button></div></form></div>
+  /* appearance */
+  const look = sFrame("Appearance", "Theme, day / night, text size, animations — kept in this browser.", "",
+    sGrp({icon: SI.paint, title: "Theme", cls: "x", rows: sWide(`<div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" title="${esc(desc)}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b></button>`).join("")}</div>`)})
+    + `<div class="sg one">`
+    + sGrp({icon: SI.gear, title: "Options",
+        rows: sRow("Day / night", sSel("mode", [["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]], LOOK.mode, `onchange="lookSet('mode', this.value)"`)) + sRow("Text size", sSel("size", [["small", "Small"], ["normal", "Normal"], ["large", "Large"]], LOOK.size, `onchange="lookSet('size', this.value)"`)) + sRow("Animations", sSel("anim", [["calm", "Calm (default)"], ["rich", "Rich: moving backgrounds"], ["off", "Off (lightest)"]], LOOK.anim, `onchange="lookSet('anim', this.value)"`), "Calm: nothing moves by itself"),
+        acts: '<button type="button" class="sm" onclick="lookReset()">↺ Reset the look</button>'})
+    + `</div>`);
 
-    <div class="card"><h3>Appearance</h3>
-      <div class="frm look-frm">
-        <div style="grid-column:1/-1"><small class="mut">Theme</small><div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" title="${esc(desc)}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b><small>${desc}</small></button>`).join("")}</div></div>
-        <label>Day / night<select onchange="lookSet('mode', this.value)">${[["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]].map(([k, l]) => `<option value="${k}" ${LOOK.mode === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-        <label>Text size<select onchange="lookSet('size', this.value)">${[["small", "Small"], ["normal", "Normal"], ["large", "Large"]].map(([k, l]) => `<option value="${k}" ${LOOK.size === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-        <label>Animations<select onchange="lookSet('anim', this.value)">${[["on", "On"], ["off", "Off (lightest)"]].map(([k, l]) => `<option value="${k}" ${LOOK.anim === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-        <div class="frm-act"><button type="button" onclick="lookReset()">↺ Reset the look</button><small class="mut">kept in this browser</small></div></div></div>
+  /* about & update */
+  const about = sFrame("About & update", "This panel, the tunnel cores on your servers, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
+    `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small>Update pulls, tests, restarts and checks health — it rolls back by itself when the new version does not start.</small></div><div class="ss-hr"><button class="sm" onclick="aboutLoad()">↻ Check</button><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div><pre class="gl-out hidden" id="about-log"></pre>`
+    + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
+    + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x",
+        rows: sWide(`<div class="eff-grid"><span><em>Mode</em><b>${ro ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div>`)}));
 
+  /* security: filled by secLoad */
+  const security = sFrame("Security", "How the panel is protected, and your password.", '<span class="pill" id="sec-pill">…</span>', '<div id="sec-box"><div class="mut">loading…</div></div>');
 
-    <div class="card pr-card up-card"><h3>About & update <small class="mut gw-sub">This panel, the tunnel cores on your servers, and what the service runs with.</small><span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
-      <div class="sec-hero s3 up-hero"><div class="sec-shield"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 16.5v-9M8.5 11l3.5-3.5 3.5 3.5"/></svg></div><div class="sec-ht"><div id="about-box" class="kv one"><div class="mut">checking GitHub…</div></div><small class="mut">Update pulls, tests, restarts and checks health — it rolls back by itself when the new version does not start.</small></div><div class="up-btns"><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button><button class="sm" onclick="aboutLoad()">↻ Check</button></div></div>
-      <pre class="gl-out hidden" id="about-log"></pre>
-      <div class="up-sec"><div class="up-t"><b>Tunnel cores</b><small class="mut">Backhaul, BackPack, Paqet, Chisel and Xray on every server</small></div><div id="eng-box"><div class="mut">loading…</div></div></div>
-      <div class="up-sec"><div class="up-t"><b>Service settings</b><small class="mut">set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>${s.read_only ? ". Read-only cannot be switched off from here, on purpose" : ""}</small></div>
-        <div class="eff-grid"><span><em>Mode</em><b>${s.read_only ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div></div></div>
-
-    <div class="card pr-card"><h3>Security <small class="mut gw-sub">How the panel is protected, and your password.</small><span class="sp"></span><span class="pill" id="sec-pill">…</span></h3><div id="sec-box"><div class="mut">loading…</div></div>
-</div>
-
-
-
-  </div>`;
+  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${about}</div>`;
   settingsTabs();
   if (state.stab === "update") { aboutLoad(); enginesLoad(); }
   if ($("#sec-box")) secLoad();
-};
-/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
+};/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
 const sec = {setup: null, codes: null};
 async function secLoad() {
   const box = $("#sec-box"); if (!box) return;
   const s = await api("/api/auth/security");
   const pill = $("#sec-pill"); if (pill) { pill.textContent = s.totp_enabled ? "2-step on" : "2-step OFF"; pill.className = "pill " + (s.totp_enabled ? "ok" : "err"); }
   const url = s.entry_path ? location.origin + "/" + s.entry_path : "";
-  const codes = sec.codes ? `<div class="sec-sec" style="border-color:var(--warn)"><h4>⚠ Your recovery codes - shown once</h4><small class="mut">Each code works one time: to sign in without the app, or to reset a forgotten password. Keep them somewhere safe and offline.</small><div class="sec-codes">${sec.codes.map(c => `<code>${esc(c)}</code>`).join("")}</div><div class="frm-act"><button class="sm" onclick="secDownloadCodes()">⬇ Download .txt</button><button class="sm pri" onclick="sec.codes=null;secLoad()">I saved them</button></div></div>` : "";
-  const ICON = {   // line icons: a shield (with a tick when protected, a mark when not), a lifebuoy, a lock
-    shield: on => `<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6z"/>${on ? '<path d="M8.6 12.2l2.4 2.4 4.4-4.6"/>' : '<path d="M12 8.2v4.4M12 15.6v.4"/>'}</svg>`,
-    buoy: () => `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>`,
-    lock: on => `<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="${on ? "M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" : "M8.2 10.5V8a3.8 3.8 0 0 1 7.2-1.7"}"/><path d="M12 14.6v2.2"/></svg>`,
-  };
-  const card = (ok, icon, title, chip, desc, acts, extra = "") => `<div class="sec-card ${ok ? "ok" : "off"}"><div class="sec-ic">${icon}</div><div class="sec-body"><div class="sec-t"><b>${title}</b>${chip}</div><small class="sec-d">${desc}</small>${extra}<div class="sec-a">${acts}</div></div></div>`;
   const on2 = !!s.totp_enabled, onR = (s.recovery_left || 0) > 0, onP = !!url, score = [on2, onR, onP].filter(Boolean).length;
-  const hero = `<div class="sec-hero s${score}"><div class="sec-shield">${ICON.shield(score === 3)}</div><div class="sec-ht"><b>${score === 3 ? "Fully protected" : score === 0 ? "Only the password protects the panel" : `${score} of 3 protections are on`}</b><small class="mut">${score === 3 ? "Two-step sign-in, recovery codes and a secret path are all on." : "Turn on the rest so a stolen or guessed password is not enough."}</small></div><div class="sec-seg"><i class="${on2 ? "on" : ""}"></i><i class="${onR ? "on" : ""}"></i><i class="${onP ? "on" : ""}"></i></div></div>`;
-  const twofa = sec.setup ? `<div class="sec-sec"><h4>Two-step sign-in</h4><div class="sec-qr">${sec.setup.qr_svg || ""}<div style="flex:1;min-width:240px"><b>1.</b> Open Google Authenticator (or any TOTP app) → add an account → scan the picture, or type this key:<div class="sec-key">${esc(sec.setup.secret.replace(/(.{4})/g, "$1 ").trim())}</div><div style="margin-top:10px"><b>2.</b> Type the 6-digit code the app shows:</div><div class="frm-act"><input id="sec-code" inputmode="numeric" maxlength="7" placeholder="123456" style="width:140px" onkeydown="if(event.key==='Enter')secEnable()"><button class="pri" onclick="secEnable()">Turn on</button><button onclick="sec.setup=null;secLoad()">Cancel</button></div></div></div></div>` : "";
-  const c2 = card(on2, ICON.shield(on2), "Two-step sign-in", on2 ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', on2 ? "Every sign-in asks for the code of your authenticator app." : "A second code from your phone on every sign-in.", on2 ? '<button class="sm danger" onclick="secOff()">Turn off</button>' : '<button class="sm pri" onclick="secSetup()">Turn on</button>');
-  const cR = card(onR, ICON.buoy(), "Recovery codes", `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`, 'Sign in or reset a forgotten password. Last resort on the server: <code>nikatel set-password</code>.', '<button class="sm" onclick="secNewCodes()">Make new codes</button>');
-  const cP = card(onP, ICON.lock(onP), "Secret entry path", onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', "The panel answers 404 to everyone until the browser opened the secret address once.", `<button class="sm pri" onclick="secPath(true)">${onP ? "Change" : "Random path"}</button><button class="sm" onclick="secPath(false)">Choose my own</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`, onP ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>` : "");
-  const cW = `<form class="sec-card pw-card ok" onsubmit="return changePassword(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="3.6"/><path d="M10.7 12.6L19 4.5M15.5 8l2.5 2.5M13.2 10.3l2 2"/></svg></div><div class="sec-body"><div class="sec-t"><b>Password</b><span class="pill">10+ characters</span></div><label>Current<input name="current" type="password" required autocomplete="current-password"></label><label>New<input name="new" type="password" required minlength="10" autocomplete="new-password"></label><label>Repeat<input name="again" type="password" required minlength="10" autocomplete="new-password"></label><label class="chk"><input name="logout_others" type="checkbox" checked> Sign out the other devices</label><div class="sec-a"><button class="pri sm" type="submit">Change password</button></div></div></form>`;
-  box.innerHTML = `${codes}${hero}${twofa}<div class="sec-cards">${sec.setup ? "" : c2}${cR}${cP}${cW}</div>
-`;
-}
-const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
+  const codes = sec.codes ? sGrp({icon: SI.buoy, title: "Your recovery codes", pill: '<span class="pill warn">shown once</span>', desc: "each works one time: to sign in without the app, or to reset a forgotten password; keep them offline", cls: "x warn",
+      rows: sWide(`<div class="sec-codes">${sec.codes.map(c => `<code>${esc(c)}</code>`).join("")}</div>`), acts: '<button class="sm" onclick="secDownloadCodes()">⬇ Download .txt</button><button class="sm pri" onclick="sec.codes=null;secLoad()">I saved them</button>'}) : "";
+  const setup = sec.setup ? sGrp({icon: SI.shield(false), title: "Turn on two-step sign-in", cls: "x",
+      rows: sWide(`<div class="sec-qr">${sec.setup.qr_svg || ""}<div style="flex:1;min-width:240px"><b>1.</b> Open Google Authenticator (or any TOTP app) → add an account → scan the picture, or type this key:<div class="sec-key">${esc(sec.setup.secret.replace(/(.{4})/g, "$1 ").trim())}</div><div style="margin-top:10px"><b>2.</b> Type the 6-digit code the app shows:</div><div class="frm-act"><input id="sec-code" inputmode="numeric" maxlength="7" placeholder="123456" style="width:140px" onkeydown="if(event.key==='Enter')secEnable()"><button class="pri sm" onclick="secEnable()">Turn on</button><button class="sm" onclick="sec.setup=null;secLoad()">Cancel</button></div></div></div>`)}) : "";
+  const hero = sHero("s" + score, SI.shield(score === 3), score === 3 ? "Fully protected" : score === 0 ? "Only the password protects the panel" : `${score} of 3 protections are on`, score === 3 ? "Two-step sign-in, recovery codes and a secret path are all on." : "Turn on the rest so a stolen or guessed password is not enough.", sSeg([on2, onR, onP]));
+  const g2 = sGrp({ok: on2, icon: SI.shield(on2), title: "Two-step sign-in", pill: on2 ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>',
+      rows: sText("Authenticator app", on2 ? "every sign-in asks for its code" : '<span class="mut">a second code from your phone on every sign-in</span>'),
+      acts: on2 ? '<button class="sm danger" onclick="secOff()">Turn off</button>' : '<button class="sm pri" onclick="secSetup()">Turn on</button>'});
+  const gR = sGrp({ok: onR, icon: SI.buoy, title: "Recovery codes", pill: `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`,
+      rows: sText("Use", 'sign in without the app, or reset a forgotten password') + sText("Last resort", "<code>nikatel set-password</code> on the server"),
+      acts: '<button class="sm" onclick="secNewCodes()">Make new codes</button>'});
+  const gP = sGrp({ok: onP, icon: SI.lock(onP), title: "Secret entry path", pill: onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>',
+      rows: sText("Effect", "the panel answers 404 to everyone until the browser opened the secret address once") + (onP ? sWide(`<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>`) : ""),
+      acts: `${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}<button class="sm" onclick="secPath(false)">Choose my own</button><button class="sm pri" onclick="secPath(true)">${onP ? "Change" : "Random path"}</button>`});
+  const gW = sGrp({form: "return changePassword(event)", icon: SI.key, title: "Password", desc: "at least 10 characters",
+      rows: sRow("Current", '<input name="current" type="password" required autocomplete="current-password">') + sRow("New", '<input name="new" type="password" required minlength="10" autocomplete="new-password">') + sRow("Repeat", '<input name="again" type="password" required minlength="10" autocomplete="new-password">') + sSw("logout_others", true, "Sign out the other devices"),
+      acts: '<button class="pri sm" type="submit">Change password</button>'});
+  box.innerHTML = `${codes}${hero}${setup}<div class="sg">${sec.setup ? "" : g2}${gR}${gP}${gW}</div>`;
+}const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
 window.secSetup = async () => { const pw = await askPw(); if (!pw) return; try { sec.setup = await api("/api/auth/2fa/setup", {method: "POST", body: JSON.stringify({password: pw})}); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secEnable = async () => { try { const r = await api("/api/auth/2fa/enable", {method: "POST", body: JSON.stringify({password: "", code: $("#sec-code").value})}); sec.setup = null; sec.codes = r.recovery_codes; toast("✓ Two-step sign-in is on", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secOff = async () => { const pw = await askPw(); if (!pw) return; const code = await gprompt("A code from the app, or a recovery code:"); if (!code) return; try { await api("/api/auth/2fa/disable", {method: "POST", body: JSON.stringify({password: pw, code})}); toast("Two-step sign-in is off", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -2633,7 +2680,7 @@ window.testAi = async () => {      // a key typed in the box is saved first (the
 };
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
 window.saveArvan = e => { const j = formJson(e, ["confirm_minutes"], []); j.domains = String(j.domains || "").split(/[,\s]+/).filter(Boolean); return put(e, "/api/settings/arvan", j, "✓ ArvanCloud settings saved (the key is tested right away)"); };
-window.testArvan = async () => { toast("Asking ArvanCloud (read only)…"); try { const r = await api("/api/settings/arvan/test", {method: "POST"}); toast("✓ Connected: " + r.domains.length + " domain(s), " + r.records + " record(s)", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = `<div><span>Installed</span> <b>${esc(u.installed || "?")}</b> · <span>newest on GitHub</span> <b>${esc(u.newest || "?")}</b> · ${u.up_to_date ? '<b class="gw-ok">up to date</b>' : '<b class="err">update available</b>'}</div>`; const lg = $("#about-log"); if (u.last_log) { lg.textContent = u.last_log; lg.classList.remove("hidden"); } } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
+window.testArvan = async () => { toast("Asking ArvanCloud (read only)…"); try { const r = await api("/api/settings/arvan/test", {method: "POST"}); toast("✓ Connected: " + r.domains.length + " domain(s), " + r.records + " record(s)", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = `Installed <b>${esc(u.installed || "?")}</b> · newest on GitHub <b>${esc(u.newest || "?")}</b> · ${u.up_to_date ? '<b class="gw-ok">up to date</b>' : '<b class="err">update available</b>'}`; const h = $("#about-hero"); if (h) h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const lg = $("#about-log"); if (u.last_log) { lg.textContent = u.last_log; lg.classList.remove("hidden"); } } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } toast("Updating… the page reloads in 40 s"); setTimeout(() => location.reload(), 40000); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview
@@ -2649,10 +2696,11 @@ const THEMES = [   // key, name, note, page colour, accent, second accent, flat 
   ["classic", "Classic", "plain admin, flat blue", "#1c2638", "#2563eb", "#33415a", true],
   ["minimal", "Minimal", "almost no decoration", "#1a1c21", "rgba(156,163,175,.6)", "rgba(203,213,225,.4)"],
 ];
-const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "on"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
-function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; const lg = document.querySelector(".logo-orb svg"); if (lg && lg.pauseAnimations) { if (LOOK.anim === "off") lg.pauseAnimations(); else lg.unpauseAnimations(); } }
+const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "calm"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
+if (!["calm", "rich", "off"].includes(LOOK.anim)) LOOK.anim = "calm";      // the old "on" is the calm default now: nothing moves by itself, only what you touch
+function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; const lg = document.querySelector(".logo-orb svg"); if (lg && lg.pauseAnimations) { if (LOOK.anim !== "rich") lg.pauseAnimations(); else lg.unpauseAnimations(); } }
 window.lookSet = (k, v) => { LOOK[k] = v; localStorage.setItem("nk.look", JSON.stringify(LOOK)); lookApply(); };
-window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOOK, {theme: "aurora", mode: "dark", size: "normal", anim: "on"}); lookApply(); refresh(); };
+window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOOK, {theme: "aurora", mode: "dark", size: "normal", anim: "calm"}); lookApply(); refresh(); };
 window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
@@ -2682,7 +2730,11 @@ function settingsTabs() {
   }
   show.forEach(n => { const c = byName[n]; c.classList.remove("hidden"); grid.appendChild(c); });
   grid.classList.add("one");
+  setW();
 }
+/* the frame of every settings tab ends exactly where the row of tabs ends */
+const setW = () => { const t = $("#page .set-tabs"); if (t) $("#page").style.setProperty("--set-w", Math.round(t.getBoundingClientRect().width + 96) + "px"); };
+addEventListener("resize", () => { clearTimeout(setW.t); setW.t = setTimeout(setW, 120); });
 settingsTabs.only = () => {   // switch the card without touching the server or the forms: hide / show and redraw the small tab row
   const grid = $("#page .grid2"); if (!grid) return refresh();
   const old = $("#page .set-sub"); if (old) old.remove();
@@ -2891,7 +2943,7 @@ window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dock
     let last = 0;
     const frame = now => {
       requestAnimationFrame(frame);
-      if (document.hidden || document.documentElement.dataset.anim === "off" || innerWidth <= 900) { if (!last) draw(0); return; }
+      if (document.hidden || document.documentElement.dataset.anim !== "rich" || innerWidth <= 900) { if (!last) draw(0); return; }      // the net only drifts in the Rich look
       if (last && now - last < 33) return; const dt = Math.min(.08, (now - (last || now)) / 1000); last = now; draw(now / 1000, dt);      // 30 pictures a second are plenty for a slow drift
     };
     const pos = (n, t) => [n.bx + Math.sin(t * n.sx + n.px) * n.ax, n.by + Math.cos(t * n.sy + n.py) * n.ay];

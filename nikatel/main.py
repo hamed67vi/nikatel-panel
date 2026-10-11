@@ -43,7 +43,7 @@ def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for name in ("app.js", "app.css", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
+    for name in ("app.js", "app.css", "mobile.css", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
         try:
             stamp = int((WEB / name).stat().st_mtime)
         except OSError:
@@ -299,7 +299,7 @@ def cli(argv: list[str] | None = None) -> int:
     if s.tls_cert and s.tls_key and s.tls_cert.exists() and s.tls_key.exists():
         kw = {"ssl_certfile": str(s.tls_cert), "ssl_keyfile": str(s.tls_key)}
 
-    uvicorn.run(create_app(), host=s.listen_host, port=s.listen_port, log_config=None, access_log=False, timeout_graceful_shutdown=4, **kw)      # a restart waits 4 s for open connections, not 16 s of 502s
+    uvicorn.run(create_app(), host=s.listen_host, port=s.listen_port, log_config=None, access_log=False, timeout_graceful_shutdown=4, server_header=False, **kw)      # a restart waits 4 s for open connections, not 16 s of 502s
     return 0
 
 
