@@ -1946,3 +1946,18 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
 .sr > .v.t { white-space: normal; line-height: 1.3; } .sg.one .sr > .v { flex-basis: 340px; }
 .sf .sr.x .eff-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) !important; } @media (max-width: 1300px) { .sf .sr.x .eff-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
 .sf .eff-grid span { padding: 4px 8px; } .sf .eff-grid em { font-size: 9px; } .sf .eff-grid b { font-size: 11.5px; }
+/* inside a group the rows sit two per line, so nothing is left empty on a wide screen; a wide row (.x) takes the whole line */
+@media (min-width: 761px) {
+  .ss-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: dense; }
+  .ss-rows > .sr.x, .ss-rows > pre, .ss-rows > .sr.li, .sg.one .ss-rows > .sr:has(input[name=public_url]), .ss-rows > #eng-box { grid-column: 1 / -1; }
+  .ss-rows > .sr:nth-child(even):not(.x):not(.li) { border-left: 1px solid var(--line); }
+  .sr { min-height: 36px; padding: 4px 12px; } .sr > .v { flex: 0 1 230px; } .sr > .v.t { flex: 1 1 auto; }
+  .ss-h { min-height: 32px; padding: 6px 12px; } .ss-a { padding: 6px 12px; } .ss-hero { padding: 6px 12px; margin-bottom: 8px; } .sg > .ss, .ss { margin-bottom: 8px; }
+  #page .set-wrap > .card.sf { padding: 10px 12px 12px; } .sf > h3 { margin-bottom: 8px; }
+}
+/* the page header scrolls away; the rows of tabs stay locked at the top, so nothing falls behind the header */
+@media (min-width: 761px) {
+  .head { position: static; }
+  .subnav, .set-top { position: sticky; top: 0; z-index: 7; background: var(--bg); padding-top: 4px; margin-top: -4px; }
+  .subnav::before, .set-top::before { content: ""; position: absolute; left: -6px; right: -6px; top: 0; bottom: 0; z-index: -1; background: var(--bg); }
+}
