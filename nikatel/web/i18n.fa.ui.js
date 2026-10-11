@@ -238,4 +238,6 @@ I18N.add({
 "Day": "روز", "Copy": "کپی", "✓ Copied": "✓ کپی شد", "✓ Saved": "✓ ذخیره شد", "✓ Added": "✓ اضافه شد", "✓ Changed": "✓ تغییر کرد", "✓ Checked": "✓ بررسی شد", "✓ Deleted": "✓ حذف شد", "✓ Removed": "✓ حذف شد", "✓ Synced": "✓ همگام شد", "✓ Server added": "✓ سرور اضافه شد", "✓ Server saved": "✓ سرور ذخیره شد", "✓ Host key forgotten": "✓ کلید میزبان فراموش شد", "✓ Link copied": "✓ لینک کپی شد", "✓ Reconnect requested": "✓ درخواست اتصال مجدد ارسال شد", "✓ Saved — the probe restarts this config": "✓ ذخیره شد — پروب این کانفیگ را ری‌استارت می‌کند", "✓ Commands set:": "✓ دستورها تنظیم شد:", "✓ Saved:": "✓ ذخیره شد:", "✓ Added": "✓ اضافه شد",
 "Delete this config?": "این کانفیگ حذف شود؟", "Added": "اضافه شد", "Result": "نتیجه", "Result ": "نتیجه",
 "Enter')secEnable()": "", "Prompt": "پرسش", "OK": "تأیید", "Yes, do it": "بله، انجام بده",
+"Quick: best today": "سریع: بهترین امروز", "Start test": "شروع تست", "Which one?": "کدام را؟", "↳ pair of a tunnel…": "↳ سرورهای یک تانل…", "Results": "نتایج", "Speed Mb/s": "سرعت Mb/s", "Live log": "گزارش زنده", "Stop": "توقف",
+"Press <b>Quick</b> for the five types that matter, or tick engines and press <b>Start test</b>.": "برای پنج نوع مهم «سریع» را بزنید، یا موتورها را انتخاب و «شروع تست» را بزنید.",
 });

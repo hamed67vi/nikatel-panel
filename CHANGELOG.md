@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.36 - 2026-10-11 - Tunnel test and Network advisor in one tidy view
+
+* The *Network advisor* tab is gone: **Tunnel test** is one view. A bar holds the two servers (and "pair of a tunnel…" to take a tunnel's servers), **Quick: best today** (the five types that matter) and **Start test**; below it the engine chips (*Advanced* opens every transport, *Which one?* opens the situation guide - both closed by default), then the results beside a fixed-height live log.
+* The results are best-first with a *best* badge; when a tunnel of the chosen pair exists, every working row has **Use for <tunnel>** (replace it, same name and ports, the old type comes back if the new one fails).
+* The diagnosis window's *Network advisor* tile opens this view with that tunnel's servers picked.
+* A cut tunnel shows a red cross in the middle of its two arrows in the tunnel list.
+* Backups: the list of file names under the schedule is gone (each part already shows its latest backup and a Download button).
 ## 1.16.35 - 2026-10-11 - The tunnel window like the server window
 
 * One button bar (Fix, Dry run, Quality, Mute alerts, Rebuild, History; Ports and Remove stay in the header) and three boxes of six rows - *Servers*, *Status*, *Link* - with the services shown as small dots (backhaul / GRE, green when active) instead of two long lines each. Nothing is said twice (the latency and the packet loss were in two boxes). The outages card is one wide row of four.

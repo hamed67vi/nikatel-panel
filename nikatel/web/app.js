@@ -177,13 +177,13 @@ document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.
   const pg = $("#page"); if (!pg) return;
   let q = 0;
   const fit = () => pg.querySelectorAll(".lbox").forEach(b => { b.style.maxHeight = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24) + "px"; });   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
-  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); };
+  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
   window.addEventListener("resize", () => requestAnimationFrame(fit));
 })();
 /* A refresh rebuilds the page from fresh data. Every scrolling box keeps its position through it (the page, a window, the lists inside the dashboard, the logs),
    so nothing jumps back to the top when new data arrives. Opening another page starts at the top. */
-const SCROLLERS = [".main", ".lbox", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".sub-nodes", ".ob-inbounds", ".fix"];
+const SCROLLERS = [".main", ".lbox", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".tt-res", ".sub-nodes", ".ob-inbounds", ".fix"];
 const scrollSnapshot = () => SCROLLERS.map(sel => { const el = $(sel); return el ? [sel, el.scrollTop, el.scrollTop + el.clientHeight >= el.scrollHeight - 12 && sel === ".tt-log"] : null; }).filter(Boolean);
 const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $(sel); if (el) el.scrollTop = atEnd ? el.scrollHeight : top; });
 /* The page is painted only when its HTML really changed: a refresh that brings the same data touches nothing (no flicker, no lost hover or selection).
@@ -765,62 +765,71 @@ PAGES.tunnels = async () => {
 };
 PAGES.configs = async () => { renderSub(); return sub("configs") === "panels" ? PAGES.panels() : PAGES.configsList(); };
 const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || "", foreign: localStorage.getItem("nk.tt.foreign") || ""};
+/* Tunnel test + Network advisor in ONE view: a bar (pair, quick test, start), the engines, then the results (with "Use for this tunnel") beside the live log */
+const TT_QUICK = ["tcpmux", "bp:tcpmux", "bp:wssmux", "chisel:tls", "bpd:udp"];
+const ttSrv = id => (tt.servers || []).find(s => String(s.id) === String(id));
+const ttTunnel = () => { const i = ttSrv(tt.iran), f = ttSrv(tt.foreign); return i && f ? (tt.tl || []).find(t => t.iran_name === i.name && t.foreign_name === f.name) : null; };
 PAGES.tunnelTest = async () => {
   const [servers, kd, tl] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds"), api("/api/tunnels").catch(() => [])]);
-  tt.kinds = kd.kinds;
-  const opt = (role, cur) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === cur ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
-  const j = tt.job, running = j && !j.done;
-  $("#page").innerHTML = `<div class="card" data-tab="test"><h3>🧪 Tunnel test <span class="sp"></span><span id="tt-run">${ttRunPill()}</span></h3>
-    <div class="frm">
-      <label>Iran server<select id="tt-iran" ${running ? "disabled" : ""} onchange="tt.iran=this.value;localStorage.setItem('nk.tt.iran',this.value)">${opt("iran", tt.iran)}</select></label>
-      <label>Foreign server<select id="tt-foreign" ${running ? "disabled" : ""} onchange="tt.foreign=this.value;localStorage.setItem('nk.tt.foreign',this.value)">${opt("foreign", tt.foreign)}</select></label>
-      <div class="frm-act">${running ? `<button class="danger" onclick="ttStop()">Stop</button>` : `<button class="pri" onclick="ttStart()">Start test</button>`}<small class="mut">${running ? "the current transport finishes, then the test stops; everything temporary is removed" : "each ticked transport is built as a temporary tunnel, measured, and removed again — one after the other"}</small></div>
-    </div>
-    <div class="ob-sec" id="tt-kinds"><h4>What to try <small class="mut">— tick the engines; Advanced opens every transport so single ones can be unticked</small><span class="sp"></span><a class="adv-btn" onclick="ttAdv()">Advanced ${tt.adv ? "▴" : "▾"}</a></h4>
-      <div class="tteng">${[...new Set(tt.kinds.map(k => k.group))].map((g, i) => `<label class="tte"><input type="checkbox" data-eng="${esc(g)}" ${running ? "disabled" : ""} onchange="ttGroup('${esc(g)}', this.checked)"><b>${esc(g)}</b><small class="mut" id="tte-n-${i}"></small></label>`).join("")}</div>
-      <div class="tta ${tt.adv ? "" : "hidden"}" id="tt-adv">${[...new Set(tt.kinds.map(k => k.group))].map(g => `<div class="tta-row"><span class="tta-g">${esc(g)}</span><div class="tta-chips">${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk" title="${esc(k.note)}"><input type="checkbox" value="${k.key}" ${running ? "disabled" : ""} onchange="ttSyncEng()" ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> ${esc(k.label.replace(/^[^·]+· /, ""))}</label>`).join("")}</div></div>`).join("")}</div></div>
-    <div class="ob-sec"><h4>Which tunnel for which situation <small class="mut">— click one to open Create tunnel with it</small></h4>
-      <div class="bguide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" title="${esc(why)}" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span><small>${esc(why)}</small></a>`).join("")}</div>
-      <small class="mut">Every engine ships with its many-users settings (multiplexing, 8 mux channels, 16-24 connection pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels). Backhaul is measured with 30 pings over GRE and a download; the other engines through their test door, both ways. Nothing is added to your list; the story of each run stays in Repairs.</small></div></div>
-    ${apAdvisorCard(tl, tl.find(x => String(x.id) === ap.tid) || tl.find(x => x.state !== "up") || tl[0])}
-    <div class="card tt-logcard" data-tab="test"><h3>Live log <span class="sp"></span><small class="mut">fixed box: new lines come in here, the page stays where it is</small></h3><div class="tt-log" id="tt-log">${ttLogHtml()}</div></div>
-    <div id="tt-results" data-tab="test">${ttResultsHtml()}</div>`;
+  tt.kinds = kd.kinds; tt.servers = servers; tt.tl = tl;
+  const usable = role => servers.filter(s => s.role === role && s.enabled);
+  for (const [k, role] of [["iran", "iran"], ["foreign", "foreign"]]) if (!usable(role).some(s => String(s.id) === String(tt[k]))) tt[k] = usable(role)[0] ? String(usable(role)[0].id) : "";
+  const opt = (role, cur) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" title="${esc(s.host)}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(cur) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""}${!s.enabled ? " (disabled)" : s.online === false ? " (offline)" : ""}</option>`).join("");
+  const j = tt.job, running = j && !j.done, dis = running ? "disabled" : "";
+  const groups = [...new Set(tt.kinds.map(k => k.group))];
+  const pairs = tl.filter(t => servers.some(s => s.name === t.iran_name) && servers.some(s => s.name === t.foreign_name));
+  $("#page").innerHTML = `<div class="sbar tt-bar">
+      <span class="sg"><select class="sm" id="tt-iran" ${dis} title="Iran server" onchange="ttPair('iran', this.value)">${opt("iran", tt.iran)}</select><b class="mut">⇄</b><select class="sm" id="tt-foreign" ${dis} title="Foreign server" onchange="ttPair('foreign', this.value)">${opt("foreign", tt.foreign)}</select>
+        <select class="sm" ${dis} title="Take the two servers of one of your tunnels" onchange="if(this.value){ttTake(this.value);this.selectedIndex=0}"><option value="">↳ pair of a tunnel…</option>${pairs.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></span>
+      <i class="sep"></i>
+      <span class="sg">${running ? `<button class="sm abtn danger" onclick="ttStop()" title="The current transport finishes, then the test stops; everything temporary is removed"><i>■</i>Stop</button>` : `<button class="sm abtn" onclick="ttStart(TT_QUICK)" title="Five types that matter (TCP Mux over GRE, BackPack TCP Mux, BackPack WS TLS Mux, Chisel TLS, BackPack Direct UDP): which one is best today"><i>⚡</i>Quick: best today</button><button class="sm abtn pri" onclick="ttStart()" title="Each ticked transport is built as a temporary tunnel, measured and removed again, one after the other (about 2 minutes each). Nothing is added to your list; the story of each run stays in Repairs."><i>▶</i>Start test <span id="tt-count"></span></button>`}</span>
+      <span class="sp"></span><span id="tt-run">${ttRunPill()}</span></div>
+    <div class="sbox tt-sel" id="tt-kinds"><h5><i>🧪</i>What to try<span class="sp"></span><a class="adv-btn" onclick="ttAdv()" title="Open every transport, so single ones can be unticked">Advanced ${tt.adv ? "▴" : "▾"}</a><a class="adv-btn" onclick="ttGuide()" title="Which tunnel for which situation">Which one? ${tt.guide ? "▴" : "▾"}</a></h5>
+      <div class="tteng row">${groups.map((g, i) => `<label class="tte"><input type="checkbox" data-eng="${esc(g)}" ${dis} onchange="ttGroup('${esc(g)}', this.checked)"><b>${esc(g)}</b><small class="mut" id="tte-n-${i}"></small></label>`).join("")}</div>
+      <div class="tta ${tt.adv ? "" : "hidden"}" id="tt-adv">${groups.map(g => `<div class="tta-row"><span class="tta-g">${esc(g)}</span><div class="tta-chips">${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk" title="${esc(k.note)}"><input type="checkbox" value="${k.key}" ${dis} onchange="ttSyncEng()" ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> ${esc(k.label.replace(/^[^·]+· /, ""))}</label>`).join("")}</div></div>`).join("")}</div>
+      <div class="bguide ${tt.guide ? "" : "hidden"}" id="tt-guide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" title="${esc(why)}" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span></a>`).join("")}</div></div>
+    <div class="tt-two"><div class="sbox"><h5><i>📊</i>Results<span class="sp"></span><span id="tt-best">${ttBestHtml()}</span></h5><div class="tt-res" id="tt-results">${ttResultsHtml()}</div></div>
+      <div class="sbox"><h5><i>📜</i>Live log</h5><div class="tt-log" id="tt-log">${ttLogHtml()}</div></div></div>`;
   const lg = $("#tt-log"); if (lg) lg.scrollTop = lg.scrollHeight;
   ttSyncEng();
-  apAdvisor();
-  pageTabs("tunneltest", [["test", "🧪 Tunnel test"], ["adv", "🧭 Network advisor"]], "test", {adv: ap.job && !ap.job.done ? 1 : 0});
   if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
 };
 const ttRunPill = () => { const j = tt.job; return j && !j.done ? `<span class="pill ok">running: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""; };
 const ttLogHtml = () => { const j = tt.job; return j && j.story && j.story.length ? j.story.map(l => `<div class="fx-line"><b>·</b><span>${esc(l)}</span></div>`).join("") : `<div class="mut" style="padding:8px 2px">${j && !j.done ? "starting…" : "Start a test and its story shows up here."}</div>`; };
+const ttLabel = k => (tt.kinds.find(x => x.key === k) || {}).label || apName(k);
+const ttBest = () => { const j = tt.job; return j ? j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0] : null; };
+const ttBestHtml = () => { const b = ttBest(); return b ? `<span class="pill ok">best: ${esc(ttLabel(b.kind))} · ${b.score} / 100</span>` : ""; };
 function ttResultsHtml() {
-  const j = tt.job; if (!j) return "";
-  const running = !j.done, best = j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0];
-  const row = r => { const sc = r.score == null ? null : r.score; return `<tr class="${r.ok ? "up" : "down"}"><td class="name">${esc((tt.kinds.find(k => k.key === r.kind) || {}).label || r.kind)}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor / failed"}</span></td>
-      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? "↓" + r.down_mbps + (r.up_mbps != null ? " ↑" + r.up_mbps : "") + " Mb/s" : "—"}</td>
-      <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc + " / 100"}</b></td><td class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 60))}</td></tr>`; };
-  return `<div class="card"><h3>Results <span class="sp"></span>${best ? `<span class="pill ok">best: ${esc((tt.kinds.find(k => k.key === best.kind) || {}).label || best.kind)} · ${best.score} / 100</span>` : ""}</h3>
-    <table class="tbl"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8%"><col style="width:12%"><col style="width:11%"><col></colgroup>
-      <thead><tr><th>Transport</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Download</th><th>Score</th><th>Verdict</th></tr></thead>
-      <tbody>${[...j.results].sort((a, b) => (b.score || 0) - (a.score || 0)).map(row).join("")}${running ? `<tr><td class="name">${esc(j.current)}</td><td colspan="7" class="mut">measuring…</td></tr>` : ""}</tbody></table></div>`;
-}
-/* a poll repaints only the pill, the results and the log box: the page itself is not rebuilt, so nothing jumps */
+  const j = tt.job;
+  if (!j) return '<div class="mut tt-empty">Press <b>Quick</b> for the five types that matter, or tick engines and press <b>Start test</b>.</div>';
+  const run = !j.done, best = ttBest(), tun = ttTunnel();
+  const row = r => { const sc = r.score; return `<tr class="${r === best ? "up" : r.ok ? "" : "down"}"><td class="name" title="${esc(r.error || r.verdict || "")}"><i class="st ${r.ok ? "up" : "down"}"></i>${esc(ttLabel(r.kind))}</td>
+      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? "↓" + r.down_mbps + (r.up_mbps != null ? " ↑" + r.up_mbps : "") : "—"}</td>
+      <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc}</b></td>
+      <td class="tt-use">${r.ok && tun && !run ? `<button class="sm ${r === best ? "pri" : ""}" title="Replace ${esc(tun.name)} with this type: same name, same ports; if the new one fails the old type is built again" onclick="apUse('${esc(r.kind)}', ${tun.id})">Use for ${esc(tun.name)}</button>` : `<span class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 34))}</span>`}</td></tr>`; };
+  return `<table class="tbl"><thead><tr><th>Transport</th><th>Latency</th><th>Loss</th><th>Speed Mb/s</th><th>Score</th><th></th></tr></thead>
+      <tbody>${[...j.results].sort((a, b) => (b.score || 0) - (a.score || 0)).map(row).join("")}${run ? `<tr><td class="name">${esc(ttLabel(j.current))}</td><td colspan="5" class="mut">measuring…</td></tr>` : ""}</tbody></table>`;
+}/* a poll repaints only the pill, the results and the log box: the page itself is not rebuilt, so nothing jumps */
 function ttPaint() {
   const r = $("#tt-run"), res = $("#tt-results"), lg = $("#tt-log"); if (!r || !res || !lg) return false;
   const atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 12, keep = lg.scrollTop;
-  r.innerHTML = ttRunPill(); res.innerHTML = ttResultsHtml(); lg.innerHTML = ttLogHtml();
+  r.innerHTML = ttRunPill(); res.innerHTML = ttResultsHtml(); lg.innerHTML = ttLogHtml(); const bb = $("#tt-best"); if (bb) bb.innerHTML = ttBestHtml();
   lg.scrollTop = atEnd ? lg.scrollHeight : keep;
   return true;
 }
 window.ttGroup = (g, on) => { document.querySelectorAll(`#tt-kinds label[data-g="${g}"] input`).forEach(x => { if (!x.disabled) x.checked = on; }); ttSyncEng(); };
-window.ttAdv = () => { tt.adv = !tt.adv; const el = $("#tt-adv"); if (el) el.classList.toggle("hidden", !tt.adv); const b = $("#tt-kinds .adv-btn"); if (b) b.textContent = "Advanced " + (tt.adv ? "▴" : "▾"); };
+window.ttAdv = () => { tt.adv = !tt.adv; const el = $("#tt-adv"); if (el) el.classList.toggle("hidden", !tt.adv); const b = document.querySelector("#tt-kinds .adv-btn"); if (b) b.textContent = "Advanced " + (tt.adv ? "▴" : "▾"); };
+window.ttGuide = () => { tt.guide = !tt.guide; const el = $("#tt-guide"); if (el) el.classList.toggle("hidden", !tt.guide); const b = document.querySelectorAll("#tt-kinds .adv-btn")[1]; if (b) b.textContent = "Which one? " + (tt.guide ? "▴" : "▾"); };
+window.ttPair = (role, v) => { tt[role] = v; localStorage.setItem("nk.tt." + role, v); const r = $("#tt-results"); if (r) r.innerHTML = ttResultsHtml(); };
+window.ttTake = id => { const t = (tt.tl || []).find(x => String(x.id) === String(id)), i = t && (tt.servers || []).find(s => s.name === t.iran_name), f = t && (tt.servers || []).find(s => s.name === t.foreign_name); if (!i || !f) return; tt.iran = String(i.id); tt.foreign = String(f.id); localStorage.setItem("nk.tt.iran", tt.iran); localStorage.setItem("nk.tt.foreign", tt.foreign); refresh(); };
 window.ttSyncEng = () => document.querySelectorAll("#tt-kinds .tte input").forEach((e, i) => {   // an engine is ticked when all its transports are, half-ticked when some are
   const all = [...document.querySelectorAll(`#tt-kinds label[data-g="${e.dataset.eng}"] input`)], on = all.filter(x => x.checked).length;
   e.checked = on === all.length; e.indeterminate = on > 0 && on < all.length;
   const n = $("#tte-n-" + i); if (n) n.textContent = `${on} / ${all.length}`;
+  const c = $("#tt-count"); if (c) c.textContent = "(" + document.querySelectorAll("#tt-kinds .ttk input:checked").length + ")";
 });
-window.ttStart = async () => {
-  const kinds = [...document.querySelectorAll("#tt-kinds .ttk input:checked")].map(x => x.value);
+window.ttStart = async quick => {
+  const kinds = Array.isArray(quick) ? quick.filter(k => tt.kinds.some(x => x.key === k)) : [...document.querySelectorAll("#tt-kinds .ttk input:checked")].map(x => x.value);
   if (!kinds.length) { toast("Tick at least one transport", "bad"); return; }
   try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +$("#tt-iran").value, foreign_id: +$("#tt-foreign").value, kinds})}); tt.job = {id: r.id, kinds, results: [], current: kinds[0], done: false}; toast("Test started — about 2 minutes per transport"); refresh(); }
   catch (e) { toast("✕ " + e.message, "bad"); }
@@ -903,7 +912,7 @@ PAGES.tunnelsList = async () => {
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
       <td>${workMap.has(t.name) ? `<span class="busy-chip" title="The smart repair is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>` : `<span class="st ${t.state}">${stText(t)}</span>${t.last_error && t.state !== "up" ? `<small class="${t.state === "down" ? "err" : "mut"} td-err" title="${esc(t.last_error)}">${esc(t.state === "degraded" ? shortWhy(t) : t.last_error.slice(0, 40))}</small>` : ""}`}</td>
       <td class="td-node ir"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
-      <td class="td-arrow"><div class="tlink ${t.state}" style="--ping:${Math.round(t.rtt_ms || 80)}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><b class="ms ${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="wire"><u class="h r"></u><u class="h l"></u><s class="pk a"></s><s class="pk b"></s></i>${d.loss_pct >= SHOW_LOSS ? `<small class="loss hi" title="Packets lost on the GRE link of this tunnel">${d.loss_pct}% loss</small>` : ""}</div></td>
+      <td class="td-arrow"><div class="tlink ${t.state}" style="--ping:${Math.round(t.rtt_ms || 80)}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><b class="ms ${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="wire"><u class="h r"></u><u class="h l"></u><s class="pk a"></s><s class="pk b"></s>${t.state === "down" ? '<em class="xx">✕</em>' : ""}</i>${d.loss_pct >= SHOW_LOSS ? `<small class="loss hi" title="Packets lost on the GRE link of this tunnel">${d.loss_pct}% loss</small>` : ""}</div></td>
       <td class="td-node"><b>${esc(t.foreign_name)}${dupMark(t)}</b><span class="mono mut">${esc(t.foreign_host)}</span></td>
       <td><div class="td-ports">${ports(t).slice(0, 6).map(p => `<i class="${d.listen && d.listen[parseInt(p)] === false ? "bad" : ""}">${esc(p)}</i>`).join("")}${ports(t).length > 6 ? `<i>+${ports(t).length - 6}</i>` : ""}${ports(t).length ? "" : '<span class="mut">—</span>'}</div></td>
 
@@ -1231,7 +1240,7 @@ function storyHtml(s) {
 }
 /* ---- Smart repair: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
 const ARVAN_UI = false;   // the ArvanCloud failover is switched off for now (also server side: failover.ENABLED); flip both to bring it back
-const ap = {job: null, tid: localStorage.getItem("nk.ap.tid") || "", timer: null};
+
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
@@ -1239,7 +1248,7 @@ PAGES.actions = async () => {
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
   const [d, tl, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
-  const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS), pick = tl.find(t => String(t.id) === ap.tid) || bad[0] || tl[0];
+  const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : '<span class="mut work-chip watch" title="The smart repair watches it and starts by itself when needed">watching</span>'; })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the smart repair is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
@@ -1350,31 +1359,8 @@ window.apExplain = async tid => {
 };
 window.cfDiagnoseByName = name => { const c = (state.cfgCache || []).find(x => x.name === name); if (c) cfDiagnose(c.id); else api("/api/configs").then(d => { const x = d.configs.find(y => y.name === name); if (x) cfDiagnose(x.id); }); };
 INFO.actions = ["Smart repair", "Finds why a tunnel is down and fixes it: restart, rebuild, another tunnel type or another Iran server - and says which tunnel is best on today's network."];
-const apAdvisorCard = (tl, pick) => `<div class="card" data-tab="adv"><h3>🧭 Network advisor — which tunnel is best today <span class="sp"></span></h3>
-      <div class="frm"><label>Tunnel <small>(its two servers are tested)</small><select id="ap-tun" onchange="ap.tid=this.value;localStorage.setItem('nk.ap.tid',this.value)">${tl.map(t => `<option value="${t.id}" ${pick && t.id === pick.id ? "selected" : ""}>${esc(t.name)} — ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(t.type)})</option>`).join("")}</select></label>
-        <div class="frm-act" style="align-self:end"><button class="pri" onclick="apRecommend()" ${tl.length ? "" : "disabled"}>Find the best tunnel today</button></div></div>
-      <small class="mut">Builds a temporary tunnel of each type between the two servers (TCP Mux over GRE, BackPack TCP Mux, BackPack WS TLS Mux, Chisel TLS, BackPack Direct UDP), measures latency and loss, removes it again. About a minute per type. Nothing of your real tunnel changes until you press “Use”.</small>
-      <div id="ap-adv"></div></div>`;
-function apAdvisor() {
-  const box = $("#ap-adv"), j = ap.job; if (!box || !j) return;
-  const rs = [...(j.results || [])].sort((a, b) => (b.score || 0) - (a.score || 0)), best = rs.find(r => r.ok);
-  const run = !j.done;
-  box.innerHTML = `<table class="tbl" style="margin-top:10px"><thead><tr><th>Tunnel type</th><th>State</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Score</th><th></th></tr></thead><tbody>
-    ${rs.map(r => `<tr class="${r === best ? "up" : r.ok ? "" : "down"}"><td class="name">${esc(apName(r.kind))}${r === best ? ' <span class="pill ok">best today</span>' : ""}</td><td><span class="st ${r.ok ? "up" : "down"}">${r.error ? "failed" : r.ok ? "works" : "poor"}</span></td><td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.jitter_ms != null ? r.jitter_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td><b class="${r.score >= 70 ? "gw-ok" : r.score >= 50 ? "" : "err"}">${r.score != null ? r.score + " / 100" : "—"}</b></td><td>${r.ok ? `<button class="sm ${r === best ? "pri" : ""}" onclick="apUse('${esc(r.kind)}')">Use for this tunnel</button>` : `<span class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 36))}</span>`}</td></tr>`).join("")}
-    ${run ? `<tr><td class="name">${esc(apName(j.current))}</td><td colspan="6" class="mut">testing… ${j.results.length} of ${j.kinds.length} done</td></tr>` : ""}</tbody></table>
-    ${!run && !best ? '<div class="err" style="margin-top:8px">No tunnel type works well between these two servers right now.</div>' : ""}${!run && best ? `<div class="mut" style="margin-top:8px">Best today: <b>${esc(apName(best.kind))}</b>, score ${best.score}. “Use” replaces this tunnel with that type (same name, same ports); if the new one fails, the old type is built again.</div>` : ""}`;
-  clearTimeout(ap.timer);
-  if (run) ap.timer = setTimeout(apPoll, 3000);
-}
-async function apPoll() { if (!ap.job || ap.job.done || state.page !== "tunnels") return; try { ap.job = await api(`/api/tunnel-test/compare/${ap.job.id}`); } catch (e) { ap.job.done = true; } apAdvisor(); }
-window.apRecommend = async () => {
-  const t = (state.tunnelsCache || []).find(x => String(x.id) === ($("#ap-tun") || {}).value) || (await api("/api/tunnels")).find(x => String(x.id) === ($("#ap-tun") || {}).value);
-  if (!t) return;
-  const sv = (await api("/api/servers")), iran = sv.find(s => s.name === t.iran_name), foreign = sv.find(s => s.name === t.foreign_name);
-  try { const r = await api("/api/autopilot/recommend", {method: "POST", body: JSON.stringify({iran_id: iran.id, foreign_id: foreign.id})}); ap.job = {id: r.id, kinds: ["…", "…", "…", "…", "…"], results: [], current: "starting", done: false}; apAdvisor(); apPoll(); } catch (e) { toast("✕ " + e.message, "bad"); }
-};
-window.apUse = async kind => {
-  const tid = +($("#ap-tun") || {}).value; if (!tid) return;
+window.apUse = async (kind, tid) => {
+  if (!tid) return;
   if (!await gconfirm(`Replace this tunnel with ${apName(kind)}? It is removed and built again (same name, same ports); users on it reconnect after about a minute. If the new one fails, the old type is built again.`, {danger: true})) return;
   try { const r = await api("/api/autopilot/replace", {method: "POST", body: JSON.stringify({tunnel_id: tid, kind})}); apStoryWindow(r.id, "Replacing the tunnel"); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
@@ -1409,7 +1395,11 @@ window.apDiagnose = async (id, opts = {}) => {
 async function apStart(id, level) {
   try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
 }
-window.apTune = id => { ap.tid = String(id); localStorage.setItem("nk.ap.tid", ap.tid); refresh(); };
+window.apTune = async id => {   // "Network advisor" of the diagnosis window: the Tunnel test page with this tunnel's two servers picked
+  const t = (state.tunnelsCache || []).find(x => x.id === id), sv = await api("/api/servers"), i = t && sv.find(s => s.name === t.iran_name), f = t && sv.find(s => s.name === t.foreign_name);
+  if (i) { tt.iran = String(i.id); localStorage.setItem("nk.tt.iran", tt.iran); } if (f) { tt.foreign = String(f.id); localStorage.setItem("nk.tt.foreign", tt.foreign); }
+  go("tunnels"); state.sub.tunnels = "test"; refresh();
+};
 window.apRun = async (id, level) => {
   try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
@@ -2563,7 +2553,6 @@ const backupCard = bk => {
       <label>keep <input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}"> days</label>
       <label>Telegram <select name="tg">${[["all", "every backup"], ["daily", "once a day"], ["off", "never"]].map(([v, l]) => `<option value="${v}" ${(bk.send_telegram ? (bk.tg_every || "all") : "off") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <button class="sm pri" type="submit">Save</button></form>
-    ${(bk.backups || []).length ? `<div class="bk-files">${bk.backups.slice(0, 6).map(b => `<div class="ev"><time>${ago(b.at)} ago</time><i></i><small>${kb(b.bytes)}</small><span class="pill">${esc(b.part)}</span><span><a href="/api/backup/download/${esc(b.file)}">${esc(b.file)}</a></span></div>`).join("")}</div>` : ""}
     <details class="bk-more"><summary>Restore and passphrase</summary>
       <small class="mut">Restore: stop the service, then <code>nikatel restore &lt;file&gt;</code> on the server (a bot file puts its dump in <code>bot-restore/</code>).</small>
       ${bk.has_passphrase ? `<form class="frm one" onsubmit="return savePass(event)"><label>New passphrase <small>(files made before keep the old one)</small><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label><div class="frm-act"><button type="submit">Replace passphrase</button></div></form>` : ""}</details></div>`;

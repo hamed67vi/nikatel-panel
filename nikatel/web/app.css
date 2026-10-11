@@ -1241,3 +1241,17 @@ select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; 
 /* the outages card under the three charts: full width, its rows in two columns, one line each */
 .modal .mgrid > .mcard:last-child:nth-child(4) { grid-column: 1 / -1; }
 .modal .mcard:has(> .irow) { display: block; } .modal .mcard .irow { padding: 2px 0; font-size: 11.5px; } .modal .mcard .irow > div { text-align: right; max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a cut tunnel: a red cross in the middle of its two arrows */
+.tlink .xx { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -52%); font-style: normal; font-weight: 900; font-size: 15px; line-height: 1; color: var(--bad); text-shadow: 0 0 3px var(--panel, #14161f), 0 0 3px var(--panel, #14161f); pointer-events: none; }
+
+/* Tunnel test + Network advisor in one view */
+.tt-bar { margin-bottom: 8px; } .tt-bar select.sm { height: 26px; font-size: 12px; max-width: 190px; } .tt-bar .sg { align-items: center; gap: 6px; }
+.tt-sel { margin-bottom: 8px; } .tt-sel h5 .adv-btn { margin-left: 12px; text-transform: none; letter-spacing: 0; }
+.tteng.row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } .tteng.row .tte { height: 28px; padding: 0 10px; width: auto; }
+.tt-sel .bguide { margin-top: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; } .tt-sel .bg-row { padding: 6px 10px; gap: 1px; } .tt-sel .bg-row b { font-size: 12px; } .tt-sel .bg-row span { font-size: 11px; }
+.tt-two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; }
+.tt-res, .tt-two .tt-log { height: 320px; box-sizing: border-box; overflow-y: auto; overflow-anchor: none; }
+.tt-two .tt-log { margin-top: 4px; } .tt-res { margin-top: 2px; } .tt-res .tbl { width: 100%; } .tt-res .tbl th { position: sticky; top: 0; background: var(--panel); z-index: 1; } .tt-res .tbl td, .tt-res .tbl th { padding: 5px 8px; font-size: 12px; }
+.tt-res .tbl td.name { white-space: nowrap; } .tt-res .tbl td.name .st { display: inline-block; width: 8px; height: 8px; padding: 0; border-radius: 50%; margin-right: 7px; background: var(--bad); vertical-align: middle; } .tt-res .tbl td.name .st.up { background: var(--ok); }
+.tt-use { text-align: right; white-space: nowrap; } .tt-use .sm { height: 24px; } .tt-empty { padding: 28px 12px; text-align: center; font-size: 12.5px; }
+@media (max-width: 900px) { .tt-two { grid-template-columns: 1fr; } }
