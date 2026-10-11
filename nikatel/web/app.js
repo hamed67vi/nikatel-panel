@@ -856,7 +856,7 @@ PAGES.tunnelsList = async () => {
     ${trashBox()}
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
-    <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:10%"><col style="width:11%"><col style="width:10%"><col style="width:13%"><col style="width:10%"><col style="width:9%"><col style="width:10%"><col style="width:290px"></colgroup>
+    <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col style="width:11%"><col style="width:290px"></colgroup>
       <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th>Iran node</th><th class="c">Ping</th><th>Foreign node</th><th>Ports</th><th>Traffic</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${rows.filter(t => tunType(t) === ty).map(row).join("")}</tbody></table>`).join("") || '<div class="empty">No tunnel.</div>'}`;
   applyQ();

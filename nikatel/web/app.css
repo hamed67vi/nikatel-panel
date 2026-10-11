@@ -1083,3 +1083,7 @@ html[data-mode="light"][data-theme="ocean"] body::before, html[data-mode="light"
 .wback { margin-bottom: 8px; }
 .modal .modal-body { padding-top: 12px; } .modal .wgroup { margin-bottom: 8px; } .modal .mon .mhead { margin-bottom: 6px; }
 .modal-head .sm { height: 28px; }
+/* the ping link is as wide as its own ping text and sits in the middle of its column (the column is centred between the Iran and the foreign node) */
+.td-arrow { text-align: center !important; padding: 0 !important; }
+.tlink { display: inline-flex; width: max-content; min-width: 58px; align-items: stretch; gap: 2px; margin: 0 auto; }
+.tlink .ms { text-align: center; } .tlink .wire { width: 100%; max-width: none; } .tlink .loss { text-align: center; }

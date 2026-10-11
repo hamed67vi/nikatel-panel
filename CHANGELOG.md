@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.4 - 2026-10-11 - The ping arrow is as wide as its number and centred
+
+* In the tunnel list the double arrow is exactly as wide as the ping written over it and sits in the middle between the Iran node and the foreign node (it used to stretch to the foreign column).
+
 ## 1.16.3 - 2026-10-11 - Backups every 15 minutes if you like
 
 * The backup can run every 15 / 30 minutes, every hour, 3, 6 or 12 hours, or once a day at an hour. With a short interval the files can go to Telegram every time, once a day only, or never (the rest stay on the panel server for the kept days).
