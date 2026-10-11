@@ -2545,14 +2545,14 @@ PAGES.settings = async () => {
         <label class="sb-w">Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
         <div class="frm-act sb-act"><button class="pri" type="submit">Save</button></div></form></div>
 
-    <div class="card"><h3>AI assistant <span class="sp"></span>${aiPill(ai_)}</h3>
+    <div class="card pr-card ai-card"><h3>AI assistant <small class="mut gw-sub">Explains problems and helps the Tunnel Doctor. Needs an Anthropic API key.</small><span class="sp"></span>${aiPill(ai_)}</h3>
       ${aiStatus(ai_)}
-      <form class="frm one" onsubmit="return saveAi(event)">
-        <label class="chk"><input name="enabled" type="checkbox" ${ai_.enabled ? "checked" : ""}> use the AI to diagnose broken tunnels (inside Fix)</label>
-        <label class="chk"><input name="actions" type="checkbox" ${ai_.actions ? "checked" : ""}> let the AI add safe repair steps to the plan</label>
-        <label>Anthropic API key <small>(empty keeps the saved one)</small><input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off"></label>
-        <label>Model<input name="model" value="${esc(ai_.model)}"></label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testAi()">Test the key</button><button type="button" class="danger" onclick="forgetAi()">Remove the key</button></div></form></div>
+      <form class="frm ai-form" onsubmit="return saveAi(event)">
+        <label class="chk"><input name="enabled" type="checkbox" ${ai_.enabled ? "checked" : ""}> Diagnose broken tunnels with the AI</label>
+        <label class="chk"><input name="actions" type="checkbox" ${ai_.actions ? "checked" : ""}> Let it add safe repair steps</label>
+        <label class="ai-k">Anthropic API key <small>(empty keeps the saved one)</small><input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off"></label>
+        <label class="ai-m">Model<input name="model" value="${esc(ai_.model)}"></label>
+        <div class="frm-act ai-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testAi()">Test the key</button><button type="button" class="danger" onclick="forgetAi()">Remove the key</button></div></form></div>
 
     <div class="card"><h3>Appearance</h3>
       <div class="frm look-frm">
@@ -2630,7 +2630,11 @@ const aiStatus = a => {   // which AI is behind the key, whether it answers, how
   return `<div class="ai-stat ${s.ok ? "ok" : "bad"}"><div class="ai-head">${s.ok ? "● Connected" : "● Not working"}</div>${s.ok ? "" : `<div class="err">${esc(s.error || "no answer")}</div>`}<div class="ai-grid">${rows.map(r => `<span class="mut">${r[0]}</span><span>${r[1]}</span>`).join("")}</div></div>`;
 };
 window.saveAi = e => put(e, "/api/settings/ai", formJson(e, [], ["enabled", "actions"]), "✓ AI settings saved");
-window.testAi = async () => { toast("Asking Anthropic…"); try { const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.testAi = async () => {      // a key typed in the box is saved first (the test asks the SAVED key), and the card is drawn again so the state shows
+  const f = document.querySelector('form[onsubmit^="return saveAi"]'), typed = f && f.api_key.value.trim(); toast("Asking Anthropic…");
+  try { if (typed) await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: f.enabled.checked, actions: f.actions.checked, api_key: typed, model: f.model.value.trim()})}); const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  refresh();
+};
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
 window.saveArvan = e => { const j = formJson(e, ["confirm_minutes"], []); j.domains = String(j.domains || "").split(/[,\s]+/).filter(Boolean); return put(e, "/api/settings/arvan", j, "✓ ArvanCloud settings saved (the key is tested right away)"); };
 window.testArvan = async () => { toast("Asking ArvanCloud (read only)…"); try { const r = await api("/api/settings/arvan/test", {method: "POST"}); toast("✓ Connected: " + r.domains.length + " domain(s), " + r.records + " record(s)", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = `<div><span>Installed</span> <b>${esc(u.installed || "?")}</b> · <span>newest on GitHub</span> <b>${esc(u.newest || "?")}</b> · ${u.up_to_date ? '<b class="gw-ok">up to date</b>' : '<b class="err">update available</b>'}</div>`; const lg = $("#about-log"); if (u.last_log) { lg.textContent = u.last_log; lg.classList.remove("hidden"); } } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
