@@ -1811,7 +1811,7 @@ function pnUserHtml(id, u) {   // the user window: the actions on top, three box
   const box = (icon, title, rows, cls = "") => `<div class="sbox ${cls}"><h5><i>${icon}</i>${title}</h5>${rows}</div>`;
   const b = (icon, title, tip, click, cls = "") => `<button type="button" class="sm abtn ${cls}" onclick="${click}" title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
   const off = u.status === "disabled";
-  const bar = `<div class="sbar ue-acts"><span class="sg">${b("＋", "Add days", "Extend the expiry date", `(async()=>pnUAct(${id}, '${nm}', 'renew', await gprompt('Add how many days?', '30')))()`)}${b("↺", "Reset usage", "Set the used traffic back to zero", `pnUAct(${id}, '${nm}', 'reset')`)}${b("🔑", "Revoke subscription", "A new subscription link: the old one stops working", `pnUAct(${id}, '${nm}', 'revoke')`)}</span><i class="sep"></i>
+  const bar = `<div class="sbar ue-acts"><span class="sg">${b("↺", "Reset usage", "Set the used traffic back to zero", `pnUAct(${id}, '${nm}', 'reset')`)}${b("🔑", "Revoke subscription", "A new subscription link: the old one stops working", `pnUAct(${id}, '${nm}', 'revoke')`)}</span><i class="sep"></i>
     <span class="sg">${b(off ? "▶" : "⏸", off ? "Enable" : "Disable", off ? "Let the user connect again" : "Stop the user from connecting", `pnUAct(${id}, '${nm}', '${off ? "enable" : "disable"}')`)}</span><span class="sp"></span>
     ${b("🗑", "Delete user", "Remove the user from the panel", `(async()=>{if(await gconfirm('Delete ${nm} from the panel?'))pnUAct(${id}, '${nm}', 'delete')})()`, "danger")}</div>`;
   const usage = box("📊", "Usage", `<div class="ue-big"><b>${fmtB(used)}</b><span>${lim ? "of " + gb(lim) + " · " + pct + " %" : "unlimited"}</span></div>${lim ? `<div class="ue-bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>` : ""}`
@@ -1821,7 +1821,7 @@ function pnUserHtml(id, u) {   // the user window: the actions on top, three box
     + fld("Reset usage", `<select name="reset">${["no_reset", "day", "week", "month", "year"].map(s => `<option ${u.reset === s ? "selected" : ""}>${s}</option>`).join("")}</select>`)
     + fld("Expires", `<input name="expire_date" type="date" value="${esc(u.expire_date)}" title="empty = never">`)
     + fld("Note", `<input name="note" value="${esc(u.note)}" placeholder="optional">`)
-    + (u.sub ? kv("Link", `<span class="mono ell" title="${esc(u.sub)}">${esc(u.sub)}</span> <button type="button" class="sm" onclick="navigator.clipboard.writeText('${esc(u.sub)}');toast('✓ copied','ok')">Copy</button>`) : ""), "ue-account");
+    + (u.sub ? kv("Link", `<span class="mono ell ue-link" title="Click to copy the subscription link" onclick="navigator.clipboard.writeText('${esc(u.sub)}');toast('✓ Link copied','ok')">${esc(u.sub)}</span>`) : ""), "ue-account");
   const ib = ibHtml(u), inbounds = ib ? box("🔌", "Inbounds", ib, "ue-inb") : "";
   return `${bar}<form class="frm ue-form" onsubmit="return pnUserSave(event, ${id}, '${nm}')"><div class="sgrid ue-grid ${ib ? "" : "two"}">${usage}${account}${inbounds}</div>
     <div class="frm-act ue-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`;

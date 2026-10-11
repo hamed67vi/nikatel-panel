@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.6 - 2026-10-11 - User window touches
+
+* The user window: *Add days* is gone, the rows of the *Account* box have room between them, and the subscription link copies itself when you click it.
+
 ## 1.17.5 - 2026-10-11 - The user window rebuilt, the panel test button, matching boxes
 
 * **The user window of a panel** is rebuilt: one bar of actions on top (Add days, Reset usage, Revoke subscription, Disable/Enable; Delete user on the right), three boxes of equal height - *Usage* (used, left, lifetime, expires, created, online), *Account* (status, data limit, reset, expiry, note, the subscription link with Copy) and *Inbounds* (a row per protocol with its own tick) - and Save / Cancel at the bottom.

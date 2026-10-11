@@ -1326,3 +1326,4 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 .ue-inb .ue-ibs { max-height: 214px; overflow-y: auto; margin-top: 4px; grid-template-columns: 1fr; } .ue-inb .ue-ibp[open] { grid-column: auto; }
 .ue-acts { margin-bottom: 8px; } .ue-save { margin-top: 2px; }
 @media (max-width: 900px) { .ue-grid, .ue-grid.two { grid-template-columns: 1fr; } }
+.ue-account .kv2 { min-height: 34px; padding: 3px 0; } .ue-account .kf input, .ue-account .kf select { height: 28px; } .ue-link { cursor: pointer; color: var(--acc-2); } .ue-link:hover { text-decoration: underline; }
