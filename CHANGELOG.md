@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.32 - 2026-10-11 - Sign out above the credits
+
+* In the side menu, *Sign out* is above and the *Powered by* card with the version is under it.
+
 ## 1.17.31 - 2026-10-11 - What the Tunnel Doctor does, Settings tabs joined to their frames
 
 * **Tunnel Doctor** has a box above its two boxes that says exactly what it does: it watches every tunnel, restarts one that stays down, repairs up to the level you chose, only looks at loss from 5 % and acts from 15 %, waits while a server is off, and tells every step in *History*. Every place that said *Smart repair* now says *Tunnel Doctor*.
