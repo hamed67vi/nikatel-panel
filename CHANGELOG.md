@@ -2,6 +2,7 @@
 
 ## 1.17.38
 
+- Configs page like its design: a toolbar card with pill buttons and line icons (Add, Ping all, Test all, Delete all), status chips, a Grid / Compact / List segmented switch, the group chips with counts, and the list as rows of cards (a down config has a red-tinted row) with Test and Delete pills.
 - Tunnel test: the Quick and Start test buttons have a gap between them (the button groups of the toolbars are flex rows again).
 - Every window and question opens the same soft way: a short fade and a small rise, no blur, tilt or spring (the little jump at the end of the old animation is gone). The Tunnel Doctor page fits the window without a page scroll: the log and the history scroll inside their own boxes.
 - Panels, users: a short list (a status filter with few users) keeps the row height of a full page instead of stretching to fill the box; the coloured line at the left of a row is gone, a small tile with a person icon in the colour of the status stands in its place; the Expires column starts at the same place as its header and shows the date beside the days.

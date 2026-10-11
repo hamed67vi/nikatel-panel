@@ -144,4 +144,5 @@ I18N.add({
 "Sign out of other devices": "خروج از دستگاه‌های دیگر", "Terminate all active sessions except this device.": "همه‌ی نشست‌های فعال به‌جز این دستگاه بسته می‌شود.",
 "Keep your configs alive and monitor them from inside Iran.": "کانفیگ‌هایتان را زنده نگه می‌دارد و از داخل ایران پایش می‌کند.", "Restore": "بازگردانی", "Reset the look": "بازنشانی ظاهر", "unlink": "جدا کردن", "no backup yet": "هنوز پشتیبانی گرفته نشده", "About & update": "درباره و به‌روزرسانی",
 "Configure the server that runs the shop bot.": "سروری که ربات فروش روی آن اجرا می‌شود را تنظیم کنید.", "Let the AI analyze errors and suggest fixes.": "هوش مصنوعی خطاها را تحلیل کند و راه‌حل پیشنهاد دهد.", "Include recommended repair steps in action plans.": "مراحل پیشنهادی تعمیر در برنامه‌ی اقدام بیاید.",
+"Test all": "تست همه", "Sync": "همگام‌سازی", "Grid": "شبکه‌ای", "Compact": "فشرده", "List": "لیست", "Total": "کل",
 });
