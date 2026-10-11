@@ -128,8 +128,8 @@ def backpack_texts(iran_host: str, port: int, token: str, transport: str, ports:
     pool = int(o.get("connection_pool", 16 if mux else 24))
     accept_udp = "true" if (o.get("accept_udp") or transport == "udp") else "false"
     port_lines = "\n".join(f'    "{p}",' for p in _entries(ports, test_port))
-    mux_s = (f"mux_con = {int(o.get('mux_con', 8))}\nmux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 8388608\nmux_streambuffer = 262144\n") if mux else ""
-    mux_c = ("mux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 8388608\nmux_streambuffer = 262144\n") if mux else ""
+    mux_s = (f"mux_con = {int(o.get('mux_con', 8))}\nmux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 16777216\nmux_streambuffer = 2097152\n") if mux else ""
+    mux_c = ("mux_version = 2\nmux_framesize = 32768\nmux_recievebuffer = 16777216\nmux_streambuffer = 2097152\n") if mux else ""
     server = f"""# Nikatel panel - BackPack server (Iran)
 [server]
 bind_addr = "0.0.0.0:{port}"

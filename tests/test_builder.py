@@ -54,7 +54,7 @@ def test_gre_scripts_match_server_layout():
 def test_backhaul_texts():
     iran, foreign = backhaul_texts("10.9.9.1", 9901, "tok", "tcpmux", [PortMap(8072), PortMap(443, 2096)])
     assert 'bind_addr = "10.9.9.1:9901"' in iran and '"8072",' in iran and '"443=127.0.0.1:2096",' in iran and "mux_con = 8" in iran
-    assert 'remote_addr = "10.9.9.1:9901"' in foreign and "connection_pool = 24" in foreign and "mux_streambuffer = 524288" in iran
+    assert 'remote_addr = "10.9.9.1:9901"' in foreign and "connection_pool = 24" in foreign and "mux_streambuffer = 2097152" in iran
     iran_tcp, _ = backhaul_texts("10.9.9.1", 9901, "tok", "tcp", [PortMap(80)])
     assert "mux_con" not in iran_tcp
 
@@ -176,7 +176,7 @@ def test_retune_changes_two_lines_only_and_only_for_multiplexed_tunnels():
     assert changed and f"connection_pool = {POOL}" in f2 and f"mux_streambuffer = {STREAMBUF}" in f2 and f"mux_streambuffer = {STREAMBUF}" in i2
     assert [ln for ln in f2.splitlines() if ln not in foreign.splitlines()] == [f"connection_pool = {POOL}", f"mux_streambuffer = {STREAMBUF}"]       # nothing else moved
     assert retune_texts(i2, f2)[2] is False                                                                                                  # already tuned: left alone
-    big_i, big_f = backhaul_texts("10.9.9.1", 9901, "tok", "tcpmux", [PortMap(80)], 75, True, {"connection_pool": 48, "mux_streambuffer": 1048576})
+    big_i, big_f = backhaul_texts("10.9.9.1", 9901, "tok", "tcpmux", [PortMap(80)], 75, True, {"connection_pool": 48, "mux_streambuffer": 4194304})
     assert retune_texts(big_i, big_f)[2] is False                                                                                            # an operator's bigger value is never lowered
     plain_i, plain_f = backhaul_texts("10.9.9.1", 9901, "tok", "tcp", [PortMap(80)])
     assert retune_texts(plain_i, plain_f) == (plain_i, plain_f, False)                                                                       # a plain tcp tunnel is not touched

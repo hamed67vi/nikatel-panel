@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.17 - 2026-10-11 - A bigger mux stream window
+
+* Real measurement (one Iran ⇄ one foreign server, 100 ms round trip): a multiplexed Backhaul stream was capped at ~37 Mb/s and a BackPack one at ~18 Mb/s, while a plain TCP stream reached 2 Gb/s - the cap is the mux stream window divided by the round trip (512 KB / 0.1 s ≈ 40 Mb/s). New tunnels get a 2 MB stream window and a 16 MB receive buffer (Backhaul and BackPack); *Tune all* applies it to existing tunnels.
+
 ## 1.16.16 - 2026-10-11 - The speed test shows its working
 
 * A tunnel test writes what its speed measurement really did (bytes, seconds, who was on the socket; per-stream rates for the other engines), after one real run reported 20 Gb/s through a Backhaul TCP tunnel - a number that can not be true and is being traced.

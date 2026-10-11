@@ -300,7 +300,7 @@ def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: l
     tls = f'tls_cert = "/etc/backhaul/{tls_name}.crt"\ntls_key = "/etc/backhaul/{tls_name}.key"\n' if transport in ("wss", "wssmux") and tls_name else ""
     mux = transport != "tcp"
     nd = "true" if nodelay else "false"
-    mv, fs, rb, sb = o.get("mux_version", 2), o.get("mux_framesize", 32768), o.get("mux_recievebuffer", 8388608), o.get("mux_streambuffer", 524288)
+    mv, fs, rb, sb = o.get("mux_version", 2), o.get("mux_framesize", 32768), o.get("mux_recievebuffer", 16777216), o.get("mux_streambuffer", 2097152)   # the stream window caps every user's stream at window / RTT: 2 MB ≈ 160 Mb/s at 100 ms (512 KB gave 40 Mb/s in the real test)
     mux_server = (f"mux_con = {o.get('mux_con', 8)}\nmux_version = {mv}\nmux_framesize = {fs}\nmux_recievebuffer = {rb}\nmux_streambuffer = {sb}\n") if mux else ""
     mux_client = (f"mux_version = {mv}\nmux_framesize = {fs}\nmux_recievebuffer = {rb}\nmux_streambuffer = {sb}\n") if mux else ""
     port_lines = "\n".join(f'    "{p.entry()}",' for p in ports)

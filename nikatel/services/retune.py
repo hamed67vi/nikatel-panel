@@ -24,7 +24,7 @@ from .tunnels import check_tunnel
 
 log = get_logger("retune")
 POOL = 24                   # connection_pool of a multiplexed tunnel (was 16)
-STREAMBUF = 524288          # mux_streambuffer (was 262144)
+STREAMBUF = 2097152         # mux_streambuffer (was 524288; the real test showed the window caps a stream at window / RTT)
 WORSE_LOSS = 5.0            # % more loss than before = worse
 WORSE_MS = 25.0             # ms more latency than before = worse
 GAP = 90                    # seconds between two tunnels
