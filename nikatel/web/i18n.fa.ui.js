@@ -244,4 +244,5 @@ I18N.add({
 "🧪 Check configs from Iran": "🧪 تست کانفیگ‌ها از ایران", 
 "ping/loss%": "پینگ/لاس٪", 
 "Servers online": "سرورهای آنلاین", "⇄ Check GRE links": "⇄ بررسی لینک‌های GRE", "🌍 Find countries": "🌍 پیدا کردن کشورها", "🔑 Download my SSH key": "🔑 دانلود کلید SSH من", "＋ Add server": "＋ افزودن سرور", "Servers": "سرورها", 
+"Tunnel Doctor": "دکتر تانل", "🩺 Tunnel Doctor": "🩺 دکتر تانل", "Server Doctor": "دکتر سرور", "🩺 Server Doctor": "🩺 دکتر سرور", 
 });

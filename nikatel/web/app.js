@@ -125,8 +125,8 @@ const INFO = {
 const NAV_ALIAS = {servers: "nodes", gateway: "configs", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SUB = {
-  nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."]],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Smart repair", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."]],
+  nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -170,9 +170,46 @@ const TITLE_ANIM = {
   $("#subnav").classList.toggle("hidden", !SUB[page]);
   refresh();
 }
-PAGES.nodes = async () => {
+/* ---- Server Doctor: what is wrong with a server, in plain words, and what to do about it */
+function srvDiagnose(s, tl) {
+  const f = s.facts || {}, x = s.extra || {}, err = String(s.last_error || ""), finds = [], steps = [];
+  const mineT = tl.filter(t => t.iran_name === s.name || t.foreign_name === s.name).map(t => t.name);
+  const add = (lvl, text) => finds.push({lvl, text});
+  const step = (label, click, pri = false) => steps.push({label, click, pri});
+  if (s.online === false) {
+    if (/host key|identification/i.test(err)) { add("bad", "Its SSH identity changed: the server was probably reinstalled, so the panel no longer trusts it."); step("↺ Trust the new server", `forgetKey(${s.id}, '${esc(s.name)}')`, true); }
+    else if (noLogin(s)) { add("bad", "The panel cannot log in: its key is not accepted (or the password changed)."); step("🔑 Enter the SSH password", `srvPassword(${s.id}, '${esc(s.name)}')`, true); }
+    else if (/timeout|timed out|refused|no route|unreachable|lost|network/i.test(err)) { add("bad", "It does not answer at all: it is off, or its address / SSH port is blocked or changed."); step("↻ Check again", `checkServer(${s.id})`, true); }
+    else { add("bad", "It does not answer" + (err ? ": " + err.slice(0, 90) : "") + "."); step("↻ Check again", `checkServer(${s.id})`, true); }
+    if (mineT.length) add("warn", `${mineT.length} tunnel${mineT.length === 1 ? "" : "s"} depend on it: nothing is done to them until it is back.`);
+  } else {
+    if ((f.cpu || 0) >= 92) add("bad", `The CPU is at ${Math.round(f.cpu)} %${f.top ? " - the busiest process is " + f.top : ""}.`); else if ((f.cpu || 0) >= 80) add("warn", `The CPU is high: ${Math.round(f.cpu)} %${f.top ? " (" + f.top + ")" : ""}.`);
+    if ((f.ram || 0) >= 92) add("bad", `The memory is almost full: ${Math.round(f.ram)} %.`); else if ((f.ram || 0) >= 85) add("warn", `The memory is high: ${Math.round(f.ram)} %.`);
+    if ((f.disk || 0) >= 95) add("bad", `The disk is almost full: ${Math.round(f.disk)} %.`); else if ((f.disk || 0) >= 85) add("warn", `The disk is filling up: ${Math.round(f.disk)} %.`);
+    const tDown = tl.filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && t.state !== "up");      // a GRE ping can be dropped on a route while the data passes: it is a fault only when a tunnel of this server is not up
+    if (x.gre && x.gre.links && !x.gre.ok && tDown.length) { add("bad", `A GRE link of this server does not answer and ${tDown.length === 1 ? "its tunnel " + tDown[0].name + " is" : tDown.length + " of its tunnels are"} not up.`); step("⇄ Test GRE links", `docOpen(${s.id})`); }
+    const flt = x.iran_filter; if (flt && ["filtered", "blocked"].includes(flt.level)) { add("bad", "This address is filtered from Iran: users cannot reach it."); step("🛰 See the details", `docOpen(${s.id})`); }
+    const rch = (x.reach_ir || {}).level || ""; if (rch === "bad") add("warn", "Its route from Iran is bad: most Iran servers lose packets to it.");
+  }
+  if (finds.length) step("🖥 Open the server", `docOpen(${s.id})`);
+  return {s, finds, steps, bad: finds.some(i => i.lvl === "bad")};
+}
+window.docOpen = id => { const s = (state.serversCache || []).find(x => x.id === id); go("nodes"); if (s) { state.sub.nodes = s.role; state.tab = s.role; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); } state.open = id; state.edit = null; refresh(); };
+PAGES.serverDoctor = async () => {
+  renderSub();
+  const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
+  state.serversCache = list; state.tunnelsCache = tl;
+  const live = list.filter(s => s.enabled !== false), dx = live.map(s => srvDiagnose(s, tl)), sick = dx.filter(d => d.finds.length).sort((a, b) => b.bad - a.bad), fine = dx.filter(d => !d.finds.length);
+  const card = d => `<div class="ap-iss ${d.bad ? "off" : ""}"><div class="ap-ih"><span class="ap-flag">${d.s.role === "iran" ? "🇮🇷" : "🌍"}</span><b>${d.s.role === "iran" ? "Iran server" : "Foreign server"} ${esc(d.s.name)}</b><span class="pill ${d.bad ? "err" : "warn"}">${d.s.online === false ? "OFF" : d.bad ? "PROBLEM" : "WATCH"}</span></div>
+      <div class="ap-fl">${d.finds.map(i => `<div class="ap-it"><b class="${i.lvl === "bad" ? "err" : "warn"}">${i.lvl === "bad" ? "✕" : "!"}</b> ${esc(i.text)}</div>`).join("")}</div>
+      <div class="ap-do dr-steps">${d.steps.map(t => `<button class="sm ${t.pri ? "pri" : ""}" onclick="${t.click}">${t.label}</button>`).join("")}</div></div>`;
+  $("#page").innerHTML = `<div class="card dr-head"><h3>🩺 Server Doctor <span class="sp"></span><span class="pill ${sick.length ? "err" : "ok"}">${sick.length ? sick.length + " to look at" : "all healthy"}</span><button class="sm" onclick="refresh()" title="Read the servers again">↻ Refresh</button></h3>
+    ${sick.length ? `<div class="ap-issues">${sick.map(card).join("")}</div>` : `<div class="mut" style="padding:8px 2px 4px">Every server answers and none is under pressure. When one is off, cannot be logged in to, or runs short of CPU, memory or disk, it shows here with the cause in plain words and what to do.</div>`}
+    <div class="dr-fine"><small class="mut">${fine.length} healthy:</small>${fine.map(d => `<span class="tchip" title="${esc(d.s.host)}"><i class="st up"></i>${esc(d.s.name)}</span>`).join("")}</div></div>`;
+};PAGES.nodes = async () => {
   renderSub();
   const s = sub("nodes");
+  if (s === "doctor") return PAGES.serverDoctor();
   state.tab = s;
   return PAGES.servers(false);
 };
@@ -220,7 +257,7 @@ async function refresh() {
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
     scrollRestore(snap); pendScroll = snap.length ? snap : null; setTimeout(() => { pendScroll = null; }, 500);
-    document.body.classList.toggle("tabbed", !!SUB[state.page] && !!document.querySelector("#page > .toolbar:first-child, #page > .fstrip:first-child, #page > .tiles:first-child"));   // the sub tabs stick to the box under them
+    document.body.classList.toggle("tabbed", !!SUB[state.page] && ((c) => !!c && c.matches(".toolbar, .fstrip, .tiles, .ap-pair, .ap-alert, .tt-frame, .dr-head"))([...$("#page").children].find(c => getComputedStyle(c).display !== "none")));   // the sub tabs stick to the box under them
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
     release();
   } catch (e) {
@@ -809,7 +846,7 @@ PAGES.tunnelTest = async () => {
   const j = tt.job, running = j && !j.done, dis = running ? "disabled" : "";
   const groups = [...new Set(tt.kinds.map(k => k.group))];
   const pairs = tl.filter(t => servers.some(s => s.name === t.iran_name) && servers.some(s => s.name === t.foreign_name));
-  $("#page").innerHTML = `<div class="sbar tt-bar">
+  $("#page").innerHTML = `<div class="toolbar tt-bar tt-frame">
       <span class="sg"><select class="sm" id="tt-iran" ${dis} title="Iran server" onchange="ttPair('iran', this.value)">${opt("iran", tt.iran)}</select><b class="mut">⇄</b><select class="sm" id="tt-foreign" ${dis} title="Foreign server" onchange="ttPair('foreign', this.value)">${opt("foreign", tt.foreign)}</select>
         <select class="sm" ${dis} title="Take the two servers of one of your tunnels" onchange="if(this.value){ttTake(this.value);this.selectedIndex=0}"><option value="">↳ pair of a tunnel…</option>${pairs.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></span>
       <i class="sep"></i>
@@ -1137,7 +1174,7 @@ function bkCheckRender(form) {
     ? `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${b.id}" ${bk.chk["replace_" + b.id] ? "checked" : ""} onchange="bkBtn(this.closest('form'))"> ⚠ Port ${b.ports.join(", ")} is used on ${esc(c.iran)} by ${esc(b.tunnel)} (${esc(b.state)}) — replace it: it is removed first${(b.all_ports || []).length > b.ports.length ? ` (its other ports ${b.all_ports.filter(x => !b.ports.includes(x)).join(", ")} stop too)` : ""}, restorable for 30 days from <i>Recently removed</i></label></div>`
     : `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
   const conf = c.conflicts.map(t => `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${t.id}" ${t.replaceable ? "checked" : ""}> ⚠ Port ${t.ports.join(", ")} already goes to this foreign server through ${esc(t.name)} (${esc(t.iran)}, ${esc(t.state)}${t.state !== "up" && t.since ? " for " + ago(t.since) : ""}) — remove it first and replace it</label></div>`).join("");
-  const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Smart repair → Failover)"}</small></label>` : "";
+  const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Tunnel Doctor → Failover)"}</small></label>` : "";
   const stale = (c.stale || []).map(s => `<div class="bconf"><label class="chk"><input type="checkbox" name="stale_${esc(s.unit)}" checked> ⚠ Port ${s.port} on ${esc(c.iran)} is held by an old tunnel (${esc(s.unit)}): ${esc(s.why)} — remove it and use the port</label></div>`).join("");
   box.innerHTML = busy + stale + conf + dns + (c.error ? `<div class="mut">${esc(c.error)}</div>` : "");
   bkBtn(form);
@@ -1416,7 +1453,7 @@ window.apExplain = async tid => {
   catch (e) { showModal("<b>💬 Explain with AI</b>", `<div class="err">${esc(e.message)}</div>${/no AI key/.test(e.message) ? '<div style="margin-top:10px"><button class="sm" onclick="closeModal();go(\'settings\');setTab(\'ai\')">Open Settings → Repairs & AI</button></div>' : ""}`); }
 };
 window.cfDiagnoseByName = name => { const c = (state.cfgCache || []).find(x => x.name === name); if (c) cfDiagnose(c.id); else api("/api/configs").then(d => { const x = d.configs.find(y => y.name === name); if (x) cfDiagnose(x.id); }); };
-INFO.actions = ["Smart repair", "Finds why a tunnel is down and fixes it: restart, rebuild, another tunnel type or another Iran server - and says which tunnel is best on today's network."];
+INFO.actions = ["Tunnel Doctor", "Finds why a tunnel is down and fixes it: restart, rebuild, another tunnel type or another Iran server - and says which tunnel is best on today's network."];
 window.apUse = async (kind, tid) => {
   if (!tid) return;
   if (!await gconfirm(`Replace this tunnel with ${apName(kind)}? It is removed and built again (same name, same ports); users on it reconnect after about a minute. If the new one fails, the old type is built again.`, {danger: true})) return;
@@ -1507,19 +1544,18 @@ PAGES.configsList = async () => {
       <td>${m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : '<span class="mut">none</span>'}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
       <td class="num">${c.down_mbps != null ? "↓" + MBs(c.down_mbps) + " ↑" + MBs(c.up_mbps) : "—"}</td>
-      <td>${cdnIn(c)}</td>
       <td class="cf-acts">${acts(c)}</td></tr>`; };  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})">
       <td class="name">${title(c)}</td>${gcell(c)}<td>${live(c)}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</b></td>
       <td class="num hide-sm">${c.down_mbps != null ? "↓" + mb(c.down_mbps) + " ↑" + mb(c.up_mbps) : "—"}</td>
-      <td class="mut hide-sm">${c.cdn_port ? ":" + esc(c.cdn_port) : "—"}</td>
+      
       <td class="mut" title="${esc(c.last_error)}">${c.last_error && c.status === "down" ? esc(c.last_error).slice(0, 40) : (c.checked_at ? ago(c.checked_at) + " ago" : "—")}</td>
       <td class="cf-acts">${acts(c)}</td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
   const card = c => `<div class="cf-card ${c.status}" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div>${inAll && c.group ? `<small class="cf-sub">${esc(c.group)}</small>` : ""}
       <div class="cf-stats"><div class="cf-stat"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}<small>ms</small></b><span>PING</span></div><div class="cf-stat"><b>${mb(c.down_mbps)}</b><span>DOWN Mbps</span></div><div class="cf-stat"><b>${mb(c.up_mbps)}</b><span>UP Mbps</span></div></div>
-      <div class="cf-meta">${cdnIn(c)}</div><div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
+      <div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
   const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
   const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
@@ -1531,10 +1567,10 @@ PAGES.configsList = async () => {
     ${gbar}
     ${cf.sub && cf.edit !== "new" ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
-      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup>${inAll ? '<col style="width:22%"><col style="width:14%">' : '<col style="width:30%">'}<col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col><col style="width:150px"></colgroup>
-      <thead><tr><th>Config</th>${inAll ? "<th>Subs group</th>" : ""}<th>Status</th><th>Ping</th><th>Speed</th><th>CDN port</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
-      : `<table class="tbl lift cf-list srv-tbl">${inAll ? '<colgroup><col style="width:5%"><col style="width:17%"><col style="width:13%"><col style="width:18%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:6%"><col style="width:150px"></colgroup>' : '<colgroup><col style="width:6%"><col style="width:22%"><col style="width:22%"><col style="width:6%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:12%"><col style="width:7%"><col style="width:150px"></colgroup>'}
-      <thead><tr><th>Type</th><th>Remarks</th>${inAll ? "<th>Subs group</th>" : ""}<th>Address</th><th>Port</th><th>Transport</th><th>TLS</th><th>Delay (ms)</th><th>Speed (MB/s)</th><th>CDN port</th><th style="text-align:right">Actions</th></tr></thead>
+      : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup>${inAll ? '<col style="width:22%"><col style="width:14%">' : '<col style="width:30%">'}<col style="width:9%"><col style="width:8%"><col style="width:12%"><col><col style="width:150px"></colgroup>
+      <thead><tr><th>Config</th>${inAll ? "<th>Subs group</th>" : ""}<th>Status</th><th>Ping</th><th>Speed</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
+      : `<table class="tbl lift cf-list srv-tbl">${inAll ? '<colgroup><col style="width:5%"><col style="width:17%"><col style="width:13%"><col style="width:18%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:150px"></colgroup>' : '<colgroup><col style="width:6%"><col style="width:22%"><col style="width:22%"><col style="width:6%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:12%"><col style="width:150px"></colgroup>'}
+      <thead><tr><th>Type</th><th>Remarks</th>${inAll ? "<th>Subs group</th>" : ""}<th>Address</th><th>Port</th><th>Transport</th><th>TLS</th><th>Delay (ms)</th><th>Speed (MB/s)</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${list.map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
     ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
   applyQ();

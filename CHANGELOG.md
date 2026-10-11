@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.24 - 2026-10-11 - Tunnel Doctor and Server Doctor
+
+* **Smart repair is now *Tunnel Doctor*.**
+* **Server Doctor** (a new tab of *Servers*): a card per server that needs a look, in plain words - off or not answering, its SSH identity changed (*Trust the new server*), the login refused (*Enter the SSH password*), CPU / memory / disk high or full, a failing GRE link, an address filtered from Iran, a bad route from Iran - the tunnels that depend on it, and buttons for what to do; the healthy servers are listed below.
+* **Tunnel test and Tunnel Doctor are one frame joined to their tab**: the bar, the engines, the results and the log; *Working now* and *History*.
+* The **CDN port column** is gone from the configs lists.
+
 ## 1.17.23 - 2026-10-11 - Animated titles, buttons off for a server that is off, a compact Add server
 
 * A small animated drawing beside the title of **Nodes** (a server with blinking lights), **Tunnels** (packets running through a tunnel), **Panels** (bars of a panel moving), **Shop bot** (a bot that blinks) and **Settings** (a slowly turning gear); off with *prefers-reduced-motion*.

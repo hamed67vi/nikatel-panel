@@ -1515,3 +1515,12 @@ button.cta-tunnel:hover { transform: scale(1.04); animation: ctaRing 1.1s ease-o
 @media (prefers-reduced-motion: reduce) { button.cta, button.cta .cta-ic, button.cta-server::after { transition: none; animation: none !important; } }
 /* the names of the servers: a geometric face of their own (Poppins), a little air between the letters */
 .srv-tbl td.name { font-family: 'Poppins', 'Inter', system-ui, sans-serif; font-weight: 600; font-size: 14.5px; letter-spacing: .45px; } .srv-tbl td.name .pill, .srv-tbl td.name .dup { font-family: 'Inter', system-ui, sans-serif; letter-spacing: 0; }
+
+/* Tunnel test: one frame - the bar, the engines, the results and the log joined together and to the tab above */
+.tt-frame.toolbar { margin-bottom: 0 !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; box-shadow: none !important; border-bottom-color: var(--line) !important; }
+.tt-sel { margin: 0 !important; border-radius: 0 !important; border-top: 0 !important; border-bottom-color: var(--line) !important; box-shadow: none !important; }
+.tt-two { gap: 0 !important; } .tt-two > .sbox { margin: 0; border-radius: 0; border-top: 0; box-shadow: none; } .tt-two > .sbox:first-child { border-bottom-left-radius: 14px; border-right: 0; } .tt-two > .sbox:last-child { border-bottom-right-radius: 14px; }
+/* Tunnel Doctor: the two cards are one frame, joined to the tab */
+.ap-pair { gap: 0 !important; margin-bottom: 8px; } .ap-pair > .card { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; } .ap-pair > .card:first-child { border-top-left-radius: 0 !important; border-bottom-left-radius: 14px !important; border-right: 0 !important; } .ap-pair > .card:last-child { border-top-right-radius: 14px !important; border-bottom-right-radius: 14px !important; }
+/* Server Doctor */
+.dr-head { margin-bottom: 8px; border-top-left-radius: 0 !important; } .dr-head .ap-issues { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); } .ap-fl { display: grid; gap: 4px; } .ap-it b.err { color: var(--bad); } .ap-it b.warn { color: var(--warn); } .dr-steps { display: flex; flex-wrap: wrap; gap: 6px; } .dr-fine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; }
