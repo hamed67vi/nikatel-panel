@@ -2522,14 +2522,15 @@ const SI = {   // line icons
   lock: on => `<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="${on ? "M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" : "M8.2 10.5V8a3.8 3.8 0 0 1 7.2-1.7"}"/><path d="M12 14.6v2.2"/></svg>`,
 };
 /* the building blocks */
-const sGrp = (o) => `<${o.form ? `form class="ss ${o.cls || ""}" onsubmit="${o.form}"` : `div class="ss ${o.cls || ""}"`}><div class="ss-h ${o.ok === true ? "ok" : o.ok === false ? "off" : ""}"><i class="ss-ic">${o.icon}</i><b>${o.title}</b>${o.pill || ""}${o.desc ? `<small>${o.desc}</small>` : ""}</div><div class="ss-rows">${o.rows}</div>${o.acts ? `<div class="ss-a">${o.acts}</div>` : ""}</${o.form ? "form" : "div"}>`;
-const sRow = (label, control, hint = "") => `<label class="sr"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="v">${control}</div></label>`;
-const sText = (label, text, hint = "") => `<div class="sr"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="v t">${text}</div></div>`;
-const sSw = (name, on, text, hint = "", extra = "") => `<label class="sr"><span>${text}${hint ? `<small>${hint}</small>` : ""}</span><div class="v"><input type="checkbox" class="sw" name="${name}" ${on ? "checked" : ""} ${extra}></div></label>`;
-const sItem = o => `<div class="si ${o.ok === true ? "ok" : o.ok === false ? "off" : ""}"><i class="ss-ic">${o.icon}</i><div class="si-t"><b>${o.title}</b>${o.pill || ""}${o.desc ? `<small>${o.desc}</small>` : ""}</div>${o.acts ? `<div class="si-a">${o.acts}</div>` : ""}</div>`;
+const tip = t => t ? ` title="${String(t).replace(/<[^>]*>/g, "").replace(/"/g, "&quot;")}"` : "";      // the explanation of a row is shown only when the mouse rests on it
+const sGrp = (o) => `<${o.form ? `form class="ss ${o.box ? "" : "flat"} ${o.cls || ""}" onsubmit="${o.form}"` : `div class="ss ${o.box ? "" : "flat"} ${o.cls || ""}"`}><div class="ss-h ${o.ok === true ? "ok" : o.ok === false ? "off" : ""}"${tip(o.desc)}><i class="ss-ic">${o.icon}</i><b>${o.title}</b>${o.pill || ""}</div><div class="ss-rows">${o.rows}</div>${o.acts ? `<div class="ss-a">${o.acts}</div>` : ""}</${o.form ? "form" : "div"}>`;
+const sRow = (label, control, hint = "") => `<label class="sr"${tip(hint)}><span>${label}</span><div class="v">${control}</div></label>`;
+const sText = (label, text, hint = "") => `<div class="sr"${tip(hint)}><span>${label}</span><div class="v t">${text}</div></div>`;
+const sSw = (name, on, text, hint = "", extra = "") => `<label class="sr"${tip(hint)}><span>${text}</span><div class="v"><input type="checkbox" class="sw" name="${name}" ${on ? "checked" : ""} ${extra}></div></label>`;
+const sItem = o => `<div class="si ${o.ok === true ? "ok" : o.ok === false ? "off" : ""}"><i class="ss-ic">${o.icon}</i><div class="si-t"><span class="si-n"><b>${o.title}</b>${o.pill || ""}</span>${o.desc ? `<small>${o.desc}</small>` : ""}</div><div class="si-a">${o.acts || ""}</div></div>`;
 const sWide = inner => `<div class="sr x">${inner}</div>`;
-const sHero = (cls, icon, title, sub, right = "") => `<div class="ss-hero ${cls}"><i class="ss-ic">${icon}</i><div class="ss-ht"><b>${title}</b><small>${sub}</small></div><div class="ss-hr">${right}</div></div>`;
-const sFrame = (name, desc, pill, inner) => `<div class="card sf" data-name="${esc(name)}"><h3>${esc(name)}<small class="sf-d">${desc}</small><span class="sp"></span>${pill || ""}</h3>${inner}</div>`;
+const sHero = (cls, icon, title, sub, right = "") => `<div class="ss-hero ${cls}"${tip(sub)}><i class="ss-ic">${icon}</i><div class="ss-ht"><b>${title}</b></div><div class="ss-hr">${right}</div></div>`;
+const sFrame = (name, desc, pill, inner) => `<div class="card sf" data-name="${esc(name)}"><h3${tip(desc)}>${esc(name)}<span class="sp"></span>${pill || ""}</h3>${inner}</div>`;
 const sSeg = flags => `<span class="sec-seg">${flags.map(f => `<i class="${f ? "on" : ""}"></i>`).join("")}</span>`;
 const sSel = (name, opts, cur, attrs = "") => `<select name="${name}" ${attrs}>${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 
@@ -2576,7 +2577,7 @@ PAGES.settings = async () => {
     + sGrp({form: "return saveBackup(event)", cls: "two flat", ok: !!bk.enabled, icon: SI.clock, title: "Schedule", pill: bk.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
         rows: sSw("enabled", bk.enabled, "Automatic backups") + sRow("Every", sSel("every_minutes", everyOpts, bk.every_minutes || 0, `onchange="this.form.querySelector('.bk-hour').classList.toggle('hidden', this.value !== '0')"`)) + `<label class="sr bk-hour ${(bk.every_minutes || 0) ? "hidden" : ""}"><span>At hour</span><div class="v"><input name="hour" type="number" min="0" max="23" value="${bk.hour}"></div></label>` + sRow("Keep for", `<input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}">`, "days") + sRow("Send to Telegram", sSel("tg", tgOpts, bk.send_telegram ? (bk.tg_every || "all") : "off")),
         acts: '<button class="pri sm" type="submit">Save</button>'})
-    + (bk.has_passphrase ? sGrp({form: "return savePass(event)", cls: "flat", icon: SI.key, title: "Passphrase", desc: "files made before keep the old one",
+    + (bk.has_passphrase ? sGrp({form: "return savePass(event)", icon: SI.key, title: "Passphrase", desc: "files made before keep the old one",
         rows: sRow("New passphrase", '<input name="passphrase" type="password" minlength="12" required autocomplete="new-password">', "at least 12 characters"),
         acts: '<button class="sm" type="submit">Replace passphrase</button>'}) : ""));
 
@@ -2586,7 +2587,7 @@ PAGES.settings = async () => {
     `<div class="sg">`
     + sGrp({form: "return saveProbe(event)", ok: pr.state.active ? prOn : undefined, icon: SI.probe, title: "Probe", pill: prOn ? '<span class="pill ok">connected</span>' : pr.state.active ? '<span class="pill err">not answering</span>' : "",
         rows: sRow("Primary address", `<input name="api_url" value="${esc(pr.api_url)}" placeholder="http://ip:18080">`) + sRow("Token", `<input name="api_token" type="password" placeholder="${pr.has_api_token ? "•••••••• saved" : "from speed-api.token on the probe"}" autocomplete="off">`, "empty keeps the saved one") + sRow("Runs on server", sSel("server_id", srvOpts(pr.server_id, true), pr.server_id || 0), "for speed tests over SSH")
-          + sWide(`<span>Standby probes<small>one per line: name,http://ip:18080,token — an empty token keeps the saved one</small></span><textarea name="standby" rows="2" spellcheck="false">${(pr.standby || []).map(x => `${x.name},${x.api_url},`).join("\n")}</textarea>`),
+          + sWide(`<span title="one per line: name,http://ip:18080,token — an empty token keeps the saved one">Standby probes</span><textarea name="standby" rows="2" spellcheck="false">${(pr.standby || []).map(x => `${x.name},${x.api_url},`).join("\n")}</textarea>`),
         acts: '<button class="sm" type="button" onclick="testProbe()">Test</button><button class="pri sm" type="submit">Save</button>'})
     + `</div><form class="sl" onsubmit="return installProbe(event)">` + sItem({icon: SI.down, title: "Install a probe", desc: "on an Iran server: copies the code and Xray, registers it as standby (or primary when there is none)",
         acts: `${sSel("server_id", srvOpts(0, false), iranList[0] && iranList[0].id)}<button class="sm" type="submit" ${ro ? "disabled" : ""}>Install probe</button>`}) + `</form>`);
@@ -2645,9 +2646,9 @@ async function secLoad() {
   const hero = sHero("s" + score, SI.shield(score === 3), score === 3 ? "Fully protected" : score === 0 ? "Only the password protects the panel" : `${score} of 3 protections are on`, score === 3 ? "Two-step sign-in, recovery codes and a secret path are all on." : "Turn on the rest so a stolen or guessed password is not enough.", sSeg([on2, onR, onP]));
   const g2 = sItem({ok: on2, icon: SI.shield(on2), title: "Two-step sign-in", pill: on2 ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', desc: on2 ? "every sign-in asks for the code of your authenticator app" : "a second code from your phone on every sign-in",
       acts: on2 ? '<button class="sm danger" onclick="secOff()">Turn off</button>' : '<button class="sm pri" onclick="secSetup()">Turn on</button>'});
-  const gR = sItem({ok: onR, icon: SI.buoy, title: "Recovery codes", pill: `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`, desc: "sign in without the app or reset a forgotten password · last resort on the server: <code>nikatel set-password</code>",
+  const gR = sItem({ok: onR, icon: SI.buoy, title: "Recovery codes", pill: `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`, desc: "sign in without the app, or reset a forgotten password",
       acts: '<button class="sm" onclick="secNewCodes()">Make new codes</button>'});
-  const gP = sItem({ok: onP, icon: SI.lock(onP), title: "Secret entry path", pill: onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', desc: onP ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>` : "the panel answers 404 to everyone until the browser opened the secret address once",
+  const gP = sItem({ok: onP, icon: SI.lock(onP), title: "Secret entry path", pill: onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', desc: onP ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>` : "the panel answers 404 until the secret address is opened once",
       acts: `<button class="sm pri" onclick="secPath(true)">${onP ? "Change" : "Random path"}</button><button class="sm" onclick="secPath(false)">Choose my own</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`});
   const gW = sGrp({form: "return changePassword(event)", cls: "two", icon: SI.key, title: "Password", desc: "at least 10 characters",
       rows: sRow("Current", '<input name="current" type="password" required autocomplete="current-password">') + sRow("New", '<input name="new" type="password" required minlength="10" autocomplete="new-password">') + sRow("Repeat", '<input name="again" type="password" required minlength="10" autocomplete="new-password">') + sSw("logout_others", true, "Sign out the other devices"),
