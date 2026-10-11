@@ -1542,3 +1542,12 @@ button.cta-tunnel:hover { transform: scale(1.04); animation: ctaRing 1.1s ease-o
 .usr-tbl tbody tr.clk td { background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.028)); border-top-color: rgba(255,255,255,.09); border-bottom-color: rgba(255,255,255,.05); }
 .usr-tbl tbody tr.clk:hover td { background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05)); border-top-color: rgba(255,255,255,.2); } .usr-tbl tbody tr.clk:hover { box-shadow: 0 6px 18px rgba(0,0,0,.28); }
 .usr-tbl td.name { font-family: 'Poppins', 'Inter', sans-serif; font-weight: 600; font-size: 13.5px; letter-spacing: .35px; } .usr-tbl td.trf { white-space: nowrap; overflow: visible; }
+/* the Add server window: a mid-sized window, two equal boxes, a foot bar with the button and the help on one line, the same gap everywhere */
+.modal.mid { width: min(820px, 100%); }
+.srv-two { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; margin-bottom: 8px; } .srv-form2 .sbox { margin: 0; } .srv-after { margin: 0 0 8px; }
+.srv-form2 .bld-foot { flex-wrap: nowrap; gap: 12px; } .srv-form2 .bld-foot small { max-width: none !important; text-align: right; flex: 1; font-size: 11px; line-height: 1.35; }
+.srv-form2 .bf-note { min-height: 0; padding-top: 5px; } .srv-form2 .kv2 { min-height: 34px; }
+#modal .modal.mid .modal-body > .tabs:first-child { margin: 0 0 8px !important; }
+/* the head of a panel: one even row of controls (the same height, the same gaps) */
+.pn-top, #pn-body > .pn-bars > .toolbar { min-height: 46px; } .pn-top { gap: 10px; }
+.pn-top select, .pn-top .pill, .pn-top .pstat, .pn-top button { height: 30px; } .pn-top .pill { display: inline-flex; align-items: center; padding: 0 12px; }

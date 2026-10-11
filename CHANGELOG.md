@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.29 - 2026-10-11 - Fewer buttons, a tidier panel bar and Add server
+
+* The *Find countries* button is gone (a server's location is found when it is added).
+* The bar of a panel shows only what is needed: the panel, its status (version and age of the check in its tooltip), *Users*, *Nodes*, *Traffic* and the buttons; the Load counter and the version text are gone.
+* The *Add server* window is mid-sized with two equal boxes and one foot bar (the button and the help on one line); the empty space is gone.
+
 ## 1.17.28 - 2026-10-11 - Server Doctor switched off
 
 * The *Server Doctor* tab is switched off for now (the page stays in the code behind one switch, `SERVER_DOCTOR` in `app.js`).
