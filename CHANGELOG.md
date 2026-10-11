@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.15 - 2026-10-11 - Nodes: no duplicate names, the numbers in the bar
+
+* **A server name is never added twice** (capitals do not count: `TR1` is `tr1`): adding or editing a server, and adding several at once, say plainly what is taken - *a server named X already exists (Iran / foreign)* or *the address A belongs to the server X*. In *Nodes* a name carried by more than one server is marked `⚠ ×N`.
+* The `×N` mark of the Iran servers in the tunnel list is gone (it was a mistaken reading); the `⚠ ×N` of a foreign server that ends several tunnels stays.
+* **Nodes**: the four tiles (Online, Problems, Load, Traffic) are numbers in the toolbar row.
+
 ## 1.17.14 - 2026-10-11 - A server that is off: said plainly, and nothing is done until it is back
 
 * **Smart repair says which server is off**: a full-width box *Servers and network* above the two columns has a card per server - *Iran server X* / *Foreign server Y* - marked **OFF** (it does not answer) or **NETWORK DISTURBED** (its tunnels lose packets together), the tunnels that depend on it, and what the repair does about it. In the list, a tunnel whose server is off says *Iran server X is off or does not answer - nothing is done until it is back* and *waiting for the server*.

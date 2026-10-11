@@ -362,3 +362,11 @@ def test_nothing_is_done_to_a_tunnel_while_its_server_is_off(client):
         assert servers_off(t) == ["Foreign server fi7 is off or does not answer"]
         f.online = True
         assert servers_off(t) == []
+
+def test_a_server_name_is_never_added_twice(client):
+    r = client.post("/api/servers", json={"name": "dupA", "host": "203.0.113.61", "role": "iran"})
+    assert r.status_code == 201
+    r = client.post("/api/servers", json={"name": "DUPA", "host": "203.0.113.62", "role": "foreign"})        # same name, other capitals
+    assert r.status_code == 409 and "dupA" in r.json()["detail"] and "name" in r.json()["detail"].lower()
+    r = client.post("/api/servers", json={"name": "other", "host": "203.0.113.61", "role": "foreign"})        # same address
+    assert r.status_code == 409 and "203.0.113.61" in r.json()["detail"]

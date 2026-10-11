@@ -179,6 +179,22 @@ def set_password(server_id: int, password: str) -> dict:
     return {"user": user}
 
 
+def server_conflict(db, name: str, host: str, exclude_id: int = 0) -> str:
+    """"" when the name and the address are free, else the sentence that says what is taken. Names are compared without capitals: TR1 and tr1 are the same name."""
+    from sqlalchemy import func
+
+    by_name = db.scalar(select(Server).where(func.lower(Server.name) == str(name).lower(), Server.id != exclude_id))
+
+    if by_name is not None:
+        return f"a server named {by_name.name} already exists ({'Iran' if by_name.role == 'iran' else 'foreign'}): choose another name"
+
+    by_host = db.scalar(select(Server).where(Server.host == host, Server.id != exclude_id))
+
+    if by_host is not None:
+        return f"the address {host} already belongs to the server {by_host.name}"
+
+    return ""
+
 def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", ssh_port: int = 22) -> list[dict]:
     """Lines of `name host [user] [port]`; every server is added to the panel and, with a password, connected in parallel."""
     if role not in ("iran", "foreign"):
@@ -213,8 +229,10 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
             continue
 
         with session() as db:
-            if db.scalar(select(Server).where((Server.name == it["name"]) | (Server.host == it["host"]))):
-                it.update(ok=False, error="already in the panel")
+            why = server_conflict(db, it["name"], it["host"])
+
+            if why:
+                it.update(ok=False, error=why)
                 continue
 
             srv = Server(name=it["name"], host=it["host"], role=role, ssh_user=it["user"], ssh_port=it["port"])

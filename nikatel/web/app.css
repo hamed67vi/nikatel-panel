@@ -1420,3 +1420,4 @@ html[data-mode="light"] .gchip button small { background: rgba(20,24,40,.1); }
 .hp-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; align-items: start; } .hp[open] { grid-column: 1 / -1; }
 .hp > summary { grid-template-columns: 14px 24px 72px 70px 84px 98px minmax(0, 1fr); gap: 8px; } .hp-port { font-size: 14px; min-width: 0; } .hp-tags .td-type { max-width: 130px; }
 @media (max-width: 1200px) { .hp-list { grid-template-columns: 1fr; } }
+.pstat .tc.on b { color: var(--ok); } .pstat .tc.bad b { color: var(--bad); } .pstat .tc.warn b { color: var(--warn); }

@@ -12,6 +12,7 @@ from ..log import get_logger
 from ..models import Server, ServerSample, Tunnel
 from ..services.events import emit
 from ..services.facts import sample_server
+from ..services.nodes import server_conflict
 
 log = get_logger("servers")
 router = APIRouter(tags=["servers"], dependencies=[Depends(current_user)])
@@ -82,8 +83,10 @@ def samples(server_id: int, hours: int = 24):
 @router.post("/servers", response_model=ServerOut, status_code=201)
 def add_server(body: ServerIn):
     with session() as db:
-        if db.scalar(select(Server).where((Server.name == body.name) | (Server.host == body.host))):
-            raise HTTPException(409, "a server with this name or host exists")
+        why = server_conflict(db, body.name, body.host)
+
+        if why:
+            raise HTTPException(409, why[0].upper() + why[1:])
 
         s = Server(**body.model_dump())
         db.add(s)
@@ -100,8 +103,10 @@ def update_server(server_id: int, body: ServerIn):
         if s is None:
             raise HTTPException(404, "server not found")
 
-        if db.scalar(select(Server).where(((Server.name == body.name) | (Server.host == body.host)) & (Server.id != server_id))):
-            raise HTTPException(409, "another server has this name or host")
+        why = server_conflict(db, body.name, body.host, exclude_id=server_id)
+
+        if why:
+            raise HTTPException(409, why[0].upper() + why[1:])
 
         was_enabled, old_name = s.enabled, s.name
 
