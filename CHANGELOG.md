@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.20 - 2026-10-11 - Tune all applied and removed
+
+* The **Tune all** button is removed from Tunnels (no extra features for now). It was run once on the tunnels this panel built; new tunnels still get the newer defaults.
+
 ## 1.14.19 - 2026-10-11 - No lonely tab
 
 * A page with only one inner tab (Smart repair now that the failover is off: only *Working now*) shows no tab bar at all.
