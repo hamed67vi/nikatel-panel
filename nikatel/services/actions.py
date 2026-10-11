@@ -26,7 +26,7 @@ from ..ssh import Node, SSHError, render_action, run_action
 from . import ai
 from . import settings as st
 from .events import emit
-from .tunnels import Plan, _query, check_tunnel, judge, plan_for
+from .tunnels import Plan, _query, check_tunnel, judge, plan_for, servers_off
 
 log = get_logger("actions")
 MAX_PER_HOUR = 2
@@ -286,7 +286,7 @@ def auto_repair() -> None:
     muted = set(st.get("alerts").get("muted") or [])
 
     with session() as db:
-        down = [(t.id, t.name, t.state_since) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down"))]
+        down = [(t.id, t.name, t.state_since) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down")) if not servers_off(t)]      # a server that is off: nothing to restart until it is back
 
     now = int(time.time())
 

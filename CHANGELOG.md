@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.17.14 - 2026-10-11 - A server that is off: said plainly, and nothing is done until it is back
+
+* **Smart repair says which server is off**: a full-width box *Servers and network* above the two columns has a card per server - *Iran server X* / *Foreign server Y* - marked **OFF** (it does not answer) or **NETWORK DISTURBED** (its tunnels lose packets together), the tunnels that depend on it, and what the repair does about it. In the list, a tunnel whose server is off says *Iran server X is off or does not answer - nothing is done until it is back* and *waiting for the server*.
+* **Nothing extra is done while a server is off**: the automatic restarts, the smart repair and the look at packet loss skip every tunnel one of whose servers is off; they start again by themselves when it answers.
+* In the tunnel list an **Iran server that carries more than one tunnel** is marked `×N` (blue, calm) like a foreign server that ends more than one (`⚠ ×N`, yellow); the tooltip lists the tunnels.
+* **The panel opens faster** (and the reload no longer waits for anything): the fonts (Inter, Poppins, Vazirmatn) are served by the panel itself - before, the page waited for Google Fonts, slow or blocked from Iran; the versioned files (`?v=`) and the fonts are cached for good, so a reload asks for nothing; the page asks for its data at the same moment as the sign-in check (one round trip less) and the tunnel list reads its three answers together; the page no longer re-animates itself on every refresh (the entrance runs only when another page is opened, 0.14 s).
+* **Smooth scrolling** in every scroll box (the wheel glides to its target; a box at its end passes the wheel on to the one around it; off with the animations setting).
+* **Dashboard search finds sections** (Tunnels, Tunnel test, Smart repair, Backups, Shop bot tabs…), not servers, tunnels or configs.
+* **Hosts by port, tidy**: a row per port - tick, port, count, a bar of how many are on, the inbounds it serves; no switches on the rows (the toolbar menu works on ticked hosts). **Users**: a status switch, the count as a chip. The head of a panel (its bar and the Users / Hosts bar) is one frame.
+* **Configs**: the four tiles are numbers in the top bar, the bar of the groups is joined to it; the config window is one bar of tests and three boxes of six rows; the counts of the group chips are readable.
+* **Fix**: a server renamed in *Nodes* now really renames its tunnels (the rule of 1.17.9 was written and tested, but not wired into the server edit).
 ## 1.17.13 - 2026-10-11 - ping/loss% column
 
 * The *Ping* column of the tunnel list is called *ping/loss%* and every row shows both, with a slash: `88 ms / 0%`; the percentage is yellow when the link loses packets.

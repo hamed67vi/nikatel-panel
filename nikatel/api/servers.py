@@ -103,10 +103,18 @@ def update_server(server_id: int, body: ServerIn):
         if db.scalar(select(Server).where(((Server.name == body.name) | (Server.host == body.host)) & (Server.id != server_id))):
             raise HTTPException(409, "another server has this name or host")
 
-        was_enabled = s.enabled
+        was_enabled, old_name = s.enabled, s.name
 
         for k, v in body.model_dump().items():
             setattr(s, k, v)
+
+        if s.name != old_name:                       # the tunnels that carry the name the panel made for them follow the new server name
+            from ..services import builder
+
+            db.flush()
+
+            for line in builder.follow_server_rename(db, s, old_name):
+                emit(db, "info", "servers", f"Tunnel name follows the server: {line}.", s.name)
 
         if was_enabled and not s.enabled:
             emit(db, "info", "servers", f"Server {s.name} disabled: it is no longer checked.", s.name)

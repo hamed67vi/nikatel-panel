@@ -273,17 +273,20 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 /* ---- dashboard */
 /* the small search of the dashboard: a few letters, and the servers / tunnels / configs whose name (or a part of it) starts with them are listed; a click opens it */
 state.dq = ""; let dqSel = 0;
-function dqItems(q) {
-  q = q.trim().toLowerCase(); if (!q) return [];
-  const starts = n => { n = String(n || "").toLowerCase(); return n.startsWith(q) || n.split(/[-_ .]+/).some(w => w.startsWith(q)); };
-  const out = [];
-  (state.serversCache || []).filter(s => starts(s.name)).forEach(s => out.push({kind: "server", name: s.name, sub: s.role === "iran" ? "Iran server" : "foreign server", st: s.enabled === false ? "" : s.online === false ? "down" : s.online ? "up" : "", role: s.role}));
-  (state.tunnelsCache || []).filter(t => starts(t.name)).forEach(t => out.push({kind: "tunnel", name: t.name, sub: `tunnel · ${t.iran_name} ⇄ ${t.foreign_name}`, st: t.state}));
-  (state.cfgCache || []).filter(c => starts(c.name)).forEach(c => out.push({kind: "config", name: c.name, sub: "config", st: c.status === "up" ? "up" : c.status === "down" ? "down" : ""}));
-  return out.slice(0, 8);
+function dqSections() {   // every section of the panel by its name: the pages, their tabs, the tabs of Settings and of the shop bot
+  const strip = s => String(s).replace(/^[^A-Za-z0-9]+/, "").trim(), out = [], pages = {};
+  document.querySelectorAll("#nav a").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });
+  Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label]) => out.push({page, subKey: k, name: strip(label), sub: pages[page] || page})));
+  Object.entries(SET_TABS).forEach(([k, v]) => out.push({page: "settings", setTab: k, name: strip(v[0]), sub: "Settings"}));
+  SB_TABS.forEach(([k, l]) => out.push({page: "bot", sbTab: k, name: l, sub: "Shop bot"}));
+  return out;
 }
-const dqHtml = q => { const it = dqItems(q); if (!q.trim()) return ""; return it.length ? it.map((x, i) => `<a class="${i === dqSel ? "on" : ""}" onmousedown="dqPick(${i})"><span class="st ${x.st}"></span>${esc(x.name)}<small>${esc(x.sub)}</small></a>`).join("") : '<div class="none">Nothing starts with that.</div>'; };
-const dashSearch = () => `<div class="dsearch"><input id="dq" type="search" placeholder="Search a server, tunnel or config…" value="${esc(state.dq)}" oninput="dqType(this.value)" onkeydown="dqKey(event)" onblur="setTimeout(()=>{const l=$('#dq-list');if(l)l.innerHTML=''},150)" autocomplete="off" spellcheck="false"><div class="dq-list" id="dq-list">${dqHtml(state.dq)}</div></div>`;
+function dqItems(q) {   // the sections whose name (or a word of it) starts with what was typed - names of servers, tunnels or configs are not searched here
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const starts = n => { n = String(n || "").toLowerCase(); return n.startsWith(q) || n.split(/[-_ .&]+/).some(w => w.startsWith(q)); };
+  return dqSections().filter(s => starts(s.name)).slice(0, 8);
+}const dqHtml = q => { const it = dqItems(q); if (!q.trim()) return ""; return it.length ? it.map((x, i) => `<a class="${i === dqSel ? "on" : ""}" onmousedown="dqPick(${i})"><span class="dq-go">›</span>${esc(x.name)}<small>${esc(x.sub)}</small></a>`).join("") : '<div class="none">No section starts with that.</div>'; };
+const dashSearch = () => `<div class="dsearch"><input id="dq" type="search" placeholder="Search a section…" value="${esc(state.dq)}" oninput="dqType(this.value)" onkeydown="dqKey(event)" onblur="setTimeout(()=>{const l=$('#dq-list');if(l)l.innerHTML=''},150)" autocomplete="off" spellcheck="false"><div class="dq-list" id="dq-list">${dqHtml(state.dq)}</div></div>`;
 window.dqType = v => { state.dq = v; dqSel = 0; $("#dq-list").innerHTML = dqHtml(v); };
 window.dqKey = e => {
   const n = dqItems(state.dq).length;
@@ -294,10 +297,10 @@ window.dqKey = e => {
 window.dqPick = i => {
   const x = dqItems(state.dq)[i]; if (!x) return;
   state.dq = "";
-  if (x.kind === "server") { go("nodes"); state.tab = x.role; localStorage.setItem("nk.tab", x.role); }
-  else if (x.kind === "tunnel") go("tunnels");
-  else { go("configs"); cf.q = x.name.toLowerCase(); }
-  if (x.kind !== "config") state.q = x.name.toLowerCase();
+  go(x.page);                                         // a page opens on its first tab: the one that was asked for is set right after
+  if (x.subKey) { state.sub[x.page] = x.subKey; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); }
+  if (x.setTab) { state.stab = x.setTab; state.sstab = null; localStorage.setItem("nk.stab", x.setTab); }
+  if (x.sbTab) { sb.tab = x.sbTab; localStorage.setItem("nk.sb.tab", x.sbTab); }
   refresh();
 };
 /* the numbers at a glance, beside the search; and a row of free slots under the cards, kept empty for whatever is added to the dashboard later */
@@ -900,13 +903,15 @@ async function enginesLoad() {
 window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
-  const [list, trashRes] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []}))]);
+  const [list, trashRes, outageRes] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []})), api("/api/autopilot/outage").catch(() => null)]);
   state.tunnelsCache = list; state.trashCache = trashRes.items || [];
   const tmode = localStorage.getItem("nk.tf") === "problems" ? "problems" : "all", nProblems = list.filter(tunSev).length;
-  const workList = ((await api("/api/autopilot/outage").catch(() => null)) || {}).working || [], fixing = new Set(workList.filter(w => w.mode !== "look").map(w => w.name)), workMap = new Map(workList.map(w => [w.name, w]));
+  const workList = (outageRes || {}).working || [], fixing = new Set(workList.filter(w => w.mode !== "look").map(w => w.name)), workMap = new Map(workList.map(w => [w.name, w]));
   if (workList.length) { clearTimeout(window.__workT); window.__workT = setTimeout(() => { if (state.page === "tunnels" && !state.open && !state.build) refresh(); }, 4000); }
   const shortWhy = t => { const e = t.last_error || "", l = (t.detail || {}).loss_pct; return /flaps|lost packets/.test(e) ? "keeps dropping" : /loss/.test(e) ? `${l || ""}% packets lost` : /not listening/.test(e) ? "port closed" : /no data/.test(e) ? "no data" : e.slice(0, 24); };
   const fcount = {}; list.forEach(t => { fcount[t.foreign_name] = (fcount[t.foreign_name] || 0) + 1; });   // how many tunnels end on the same foreign server
+  const icount = {}; list.forEach(x => { icount[x.iran_name] = (icount[x.iran_name] || 0) + 1; });
+  const iranMark = t => icount[t.iran_name] > 1 ? `<span class="dup many" title="This Iran server carries ${icount[t.iran_name]} tunnels (${esc(list.filter(x => x.iran_name === t.iran_name).map(x => x.name).join(", "))})">×${icount[t.iran_name]}</span>` : "";
   const dupMark = t => fcount[t.foreign_name] > 1 ? `<span class="dup" title="This foreign server ends ${fcount[t.foreign_name]} tunnels (${esc(list.filter(x => x.foreign_name === t.foreign_name).map(x => x.name).join(", "))}). Is that on purpose?">⚠ ×${fcount[t.foreign_name]}</span>` : "";
   const wrench = t => fixing.has(t.name) ? '<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span>' : "";
   const rows = list.filter(t => tmode === "all" || tunSev(t));
@@ -916,7 +921,7 @@ PAGES.tunnelsList = async () => {
       <td class="name">${esc(t.name)}${wrench(t)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
       <td>${workMap.has(t.name) ? `<span class="busy-chip" title="The smart repair is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>` : `<span class="st ${t.state}">${stText(t)}</span>${t.last_error && t.state !== "up" ? `<small class="${t.state === "down" ? "err" : "mut"} td-err" title="${esc(t.last_error)}">${esc(t.state === "degraded" ? shortWhy(t) : t.last_error.slice(0, 40))}</small>` : ""}`}</td>
-      <td class="td-node ir"><b>${esc(t.iran_name)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
+      <td class="td-node ir"><b>${esc(t.iran_name)}${iranMark(t)}</b><span class="mono mut">${esc(t.iran_host)}</span></td>
       <td class="td-arrow"><div class="tlink ${t.state}" style="--ping:${Math.round(t.rtt_ms || 80)}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><span class="tl-top"><b class="ms ${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="sl">/</i><small class="loss ${d.loss_pct >= SHOW_LOSS ? "hi" : "ok"}" title="Packets lost on the GRE link of this tunnel">${d.loss_pct != null ? d.loss_pct + "%" : "—"}</small></span><i class="wire"><u class="h r"></u><u class="h l"></u><s class="pk a"></s><s class="pk b"></s>${t.state === "down" ? '<em class="xx">✕</em>' : ""}</i></div></td>
       <td class="td-node"><b>${esc(t.foreign_name)}${dupMark(t)}</b><span class="mono mut">${esc(t.foreign_host)}</span></td>
       <td><div class="td-ports">${ports(t).slice(0, 6).map(p => `<i class="${d.listen && d.listen[parseInt(p)] === false ? "bad" : ""}">${esc(p)}</i>`).join("")}${ports(t).length > 6 ? `<i>+${ports(t).length - 6}</i>` : ""}${ports(t).length ? "" : '<span class="mut">—</span>'}</div></td>
@@ -1265,16 +1270,23 @@ const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
   // Smart repair is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Nodes)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
-  const [d, tl, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
+  const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
-  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : '<span class="mut work-chip watch" title="The smart repair watches it and starts by itself when needed">watching</span>'; })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the smart repair is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
+  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : '${(outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="The smart repair watches it and starts by itself when needed">watching</span>`}'; })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(outage && outage.by_tunnel && outage.by_tunnel[t.name] ? outage.by_tunnel[t.name].join(" · ") + " — nothing is done until it is back" : kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the smart repair is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
   const work = outage && (outage.working || []).length ? `<div class="nw-box work-box"><b class="nw-title">🔧 Working now</b>${outage.working.map(w => `<div class="nw-row"><span class="wrench">🔧</span><b>${esc(w.name)}</b><span class="mut">${w.mode === "look" ? "looking at it" : "repairing"}</span><span class="work-line">${esc(w.line)}</span><button class="sm" onclick="apLive(${(state.tunnelsCache || []).find(t => t.name === w.name)?.id || 0}, '${esc(w.name)}')">📡 Live</button></div>`).join("")}</div>` : "";
-  const disturb = nw && nw.items.length ? `<div class="nw-box"><b class="nw-title">🌐 Network disturbances</b>${nw.items.map(i => `<div class="nw-row"><span class="st degraded">network</span><span>${esc(i.text)}${(i.tunnels || []).length ? ` <small class="mut">(${i.tunnels.map(esc).join(", ")})</small>` : ""}</span></div>`).join("")}<small class="mut">A server's own network is disturbed: rebuilding its tunnels would not help, so the repair only watches. It clears by itself when the server answers well again.</small></div>` : "";
+  const mineOf = nm => tl.filter(t => t.iran_name === nm || t.foreign_name === nm).map(t => t.name);
+  const issues = [...(srvs || []).filter(s => s.enabled && s.online === false).map(s => ({kind: "off", role: s.role, name: s.name, why: s.last_error || "", tunnels: mineOf(s.name)})),
+    ...((nw && nw.items) || []).filter(i => !(srvs || []).some(s => s.name === i.server && s.enabled && s.online === false)).map(i => ({kind: "net", role: i.kind === "iran_server" ? "iran" : "foreign", name: i.server, text: i.text, tunnels: i.tunnels || []}))];
+  const issueCard = i => `<div class="ap-iss ${i.kind}"><div class="ap-ih"><span class="ap-flag">${i.role === "iran" ? "🇮🇷" : "🌍"}</span><b>${i.role === "iran" ? "Iran server" : "Foreign server"} ${esc(i.name)}</b><span class="pill ${i.kind === "off" ? "err" : "warn"}">${i.kind === "off" ? "OFF" : "NETWORK DISTURBED"}</span></div>
+      <div class="ap-it">${i.kind === "off" ? `It is off or does not answer${i.why ? ` <small class="mut">(${esc(String(i.why).slice(0, 80))})</small>` : ""}.` : `${esc(i.text.replace(/^.*?: /, ""))}.`}</div>
+      ${i.tunnels.length ? `<div class="ap-tl"><small class="mut">${i.tunnels.length} tunnel${i.tunnels.length === 1 ? "" : "s"}:</small>${i.tunnels.map(n => `<span class="tchip">${esc(n)}</span>`).join("")}</div>` : ""}
+      <div class="ap-do">${i.kind === "off" ? "Nothing is done to its tunnels until it is back on: nothing to restart or rebuild." : "The repair only watches: rebuilding would not help. It carries on by itself when the server answers well again."}</div></div>`;
+  const disturb = issues.length ? `<div class="card ap-alert"><h3>⚠ Servers and network <span class="sp"></span><span class="pill err">${issues.length}</span></h3><div class="ap-issues">${issues.map(issueCard).join("")}</div></div>` : "";
   const storm = outage && outage.storm ? `<div class="storm-banner">⚠ <b>Mass disruption:</b> ${outage.servers_offline.length} server(s) offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down. While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.</div>` : "";
-  $("#page").innerHTML = `<div class="grid2 ap-two ap-pair" data-tab="att"><div class="card">${storm}${disturb}<h3>🔧 Working now <span class="sp"></span><label class="chk ap-auto" title="On: the smart repair restarts, rebuilds, builds the link again and tries other tunnel types by itself. Off: you diagnose and fix by hand."><input type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""} onchange="apAuto(this)"> Automatic repair</label>${bad.length && !rp.auto ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
+  $("#page").innerHTML = `<div data-tab="att" class="ap-top">${storm}${disturb}</div><div class="grid2 ap-two ap-pair" data-tab="att"><div class="card"><h3>🔧 Working now <span class="sp"></span><label class="chk ap-auto" title="On: the smart repair restarts, rebuilds, builds the link again and tries other tunnel types by itself. Off: you diagnose and fix by hand."><input type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""} onchange="apAuto(this)"> Automatic repair</label>${bad.length && !rp.auto ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
       <div class="ap-att">${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Nodes.</div>'}
       </div>
@@ -1483,14 +1495,10 @@ PAGES.configsList = async () => {
   const chip = (label, n, key, removable) => `<span class="gchip ${cf.group === key ? "on" : ""}"><button onclick="cfGroup('${esc(key)}')">${esc(label)}<small>${n}</small></button>${removable ? `<a title="Remove group" onclick="cfGroupDel('${esc(key)}')">×</a>` : ""}</span>`;
   const gbar = names.length ? `<div class="gbar">${chip("All", searched.length, "__all", false)}<i class="gsep"></i>${names.map(n => chip(n, searched.filter(c => c.group === n).length, n, true)).join("")}
       ${names.includes(cf.group) ? `<span class="sp"></span><button class="sm" onclick="cfSubRefresh(${sub ? sub.id : 0}, '${esc(cf.group)}')" title="Add the new nodes of this subscription at once">⟳ Sync</button><button class="sm" onclick="cfSubManage('${esc(cf.group)}')" title="Tick which nodes of this group are kept on the probe">✎ Edit</button>` : ""}</div>` : "";
-  $("#page").innerHTML = `<div class="toolbar">
+  $("#page").innerHTML = `<div class="toolbar cf-top">
       <button class="${cf.edit === "new" ? "on" : ""}" onclick="cfNew()">＋ Add</button><button onclick="cfSync()" title="Ask the probe for the live state of every config">↻ Ping all</button><button onclick="cfSpeedAll()" title="Speed test of every config in this view, one after the other" ${list.length ? "" : "disabled"}>⚡ Test all</button><button class="danger" onclick="cfDeleteAll()" ${list.length ? "" : "disabled"}>🗑 Delete all</button><button onclick="go('settings');setTab('alerts')">🔔 Alerts</button>
+      <span class="tcount pstat cf-stats"><span class="tc" title="${names.length} groups · probe: ${esc(d.probe.active || "none")}">Total <b>${d.configs.length}</b></span><span class="tc on" title="Answer from inside Iran">Online <b>${up.length}</b></span><span class="tc ${down.length ? "bad" : ""}" title="${down.length ? esc(down.slice(0, 6).map(c => c.name).join(", ") + (down.length > 6 ? "…" : "")) : "none"}">Offline <b>${down.length}</b></span><span class="tc" title="Average over ${pings.length} online configs">Avg ping <b>${pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) + " ms" : "—"}</b></span></span>
       <span class="sp"></span><div class="tabs" title="Display">${[["grid", "▦ Grid"], ["compact", "▤ Compact"], ["list", "☰ List"]].map(([k, l]) => `<button class="${cf.view === k ? "on" : ""}" onclick="cfView('${k}')">${l}</button>`).join("")}</div><span class="tb-search"><input id="cq" type="search" placeholder="Search…" value="${esc(cf.q)}" oninput="cfQ(this.value)" autocomplete="off" spellcheck="false"></span></div>
-    <div class="tiles">
-      <div class="tile"><small>Total configs</small><b>${d.configs.length}</b><span>${names.length} groups · probe: ${esc(d.probe.active || "none")}</span></div>
-      <div class="tile ok"><small>Online</small><b>${up.length}</b><span>answer from inside Iran</span></div>
-      <div class="tile ${down.length ? "bad" : ""}"><small>Offline</small><b>${down.length}</b><span>${down.length ? down.slice(0, 3).map(c => esc(c.name)).join(", ") + (down.length > 3 ? "…" : "") : "none"}</span></div>
-      <div class="tile"><small>Average live ping</small><b>${pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) + " ms" : "—"}</b><span>over ${pings.length} online configs</span></div></div>
     ${gbar}
     ${cf.sub && cf.edit !== "new" ? cfSubHtml() : ""}
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
@@ -1509,25 +1517,25 @@ PAGES.configsList = async () => {
   if (cf.open && cf.edit === cf.open) cfLoadEditor(cf.open);
   else if (cf.open) cfLoadChart(cf.open);
 };
-/* a config window is ONE view: the boxes, the monitoring charts, the tests; Edit and Delete are in its header */
+/* a config window is ONE view, like the server and tunnel windows: one bar of tests, three boxes of six rows, the monitoring; Edit and Delete are in its header */
 function cfDetailHtml(c) {
-  return cfPartHtml(c, "info") + `<div class="wsec"><h4>Monitoring</h4>${cfPartHtml(c, "charts")}</div>` + cfPartHtml(c, "actions");
+  return cfPartHtml(c, "actions") + cfPartHtml(c, "info") + `<div class="wsec"><h4>Monitoring</h4>${cfPartHtml(c, "charts")}</div>`;
 }
 function cfPartHtml(c, tab) {
   const m = c.meta || {};
-  const tabs = "";
-  const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}" title="${esc(sub)}"><i>${icon}</i><b>${title}</b></a>`;   // the note is a tooltip: the tiles stay small
-  if (tab === "charts") return tabs + `<div id="cf-charts-${c.id}"><div class="mut">loading…</div></div>`;
-  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Test</h4><div class="wtools">${tool("⚡", "Speed test now", "download and upload through this config from inside Iran (1-3 min)", `cfSpeed(${c.id})`)}${tool("↻", "Ping now", "ask the probe for the live state of every config", "cfSync()")}${tool("🔗", "Copy link", "the vless:// vmess:// trojan:// ss:// link", `cfCopy(${c.id})`)}</div></div>`;
-  const sp = c.down_mbps != null ? `↓ ${mb(c.down_mbps / 8)} ↑ ${mb(c.up_mbps / 8)} MB/s <small class="mut">(${mb(c.down_mbps)} / ${mb(c.up_mbps)} Mb/s)</small>` : "not measured";
-  return tabs + `<div class="iboxes">${[
-    ibox("🧩", "Config", [irow("Type", esc((m.proto || "—").toUpperCase())), irow("Address", `<span class="mono">${esc(m.address || "—")}</span>`), irow("Port", m.port || "—"), irow("Transport", esc(m.network || "—")), irow("TLS", m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : "none")]),
-    ibox("🕒", "Status", [irow("State", `<span class="st ${c.status}">${esc(c.status)}</span>`), irow("Since", c.status_since ? ago(c.status_since) + " ago" : "—"), irow("Delay", c.ping_ms != null && c.status === "up" ? `<b class="${pingCls(c.ping_ms)}">${Math.round(c.ping_ms)} ms</b>` : "—"), irow("Last check", c.checked_at ? ago(c.checked_at) + " ago" : "—"), c.last_error ? irow("Error", `<span class="err">${esc(c.last_error.slice(0, 60))}</span>`) : ""]),
-    ibox("📡", "Subscription & routing", [irow("Subs group", c.group ? esc(c.group) : "—"), irow("CDN port", esc(c.cdn_port || "—")), irow("Probe port", `${c.port || "—"} <small class="mut">slug ${esc(c.slug)}</small>`)]),
-    ibox("⚡", "Speed", [irow("Last test", sp), irow("Measured", esc((c.speed_at || "").slice(0, 16).replace("T", " ") || "—"))]),
+  const b = (icon, title, tip, click) => `<button class="sm abtn" onclick="${click}" title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  if (tab === "charts") return `<div id="cf-charts-${c.id}"><div class="mut">loading…</div></div>`;
+  if (tab === "actions") return `<div class="sbar">${b("⚡", "Speed test", "Download and upload through this config from inside Iran (1-3 min)", `cfSpeed(${c.id})`)}${b("↻", "Ping now", "Ask the probe for the live state of every config", "cfSync()")}${b("🔗", "Copy link", "The vless:// vmess:// trojan:// ss:// link", `cfCopy(${c.id})`)}</div>`;
+  const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`, box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
+  const ok = c.status === "up";
+  return `<div class="sgrid">${[
+    box("🧩", "Config", [kv("Type", esc((m.proto || "—").toUpperCase())), kv("Address", `<span class="mono">${esc(m.address || "—")}</span>`), kv("Port", m.port || "—"), kv("Transport", esc(m.network || "—")), kv("TLS", m.security && m.security !== "none" ? `<b class="gw-ok">${esc(m.security)}</b>` : "none"), kv("Group", c.group ? esc(c.group) : "—")]),
+    box("🕒", "Status", [kv("State", `<span class="st ${c.status}">${esc(c.status)}</span>`), kv("Since", c.status_since ? ago(c.status_since) + " ago" : "—"), kv("Delay", c.ping_ms != null && ok ? `<b class="${pingCls(c.ping_ms)}">${Math.round(c.ping_ms)} ms</b>` : "—"), kv("Last check", c.checked_at ? ago(c.checked_at) + " ago" : "—"),
+      kv("Error", c.last_error ? `<span class="err" title="${esc(c.last_error)}">${esc(c.last_error.slice(0, 44))}</span>` : "—"), kv("Tunnel", c.tunnel ? esc(c.tunnel) : "—")]),
+    box("⚡", "Speed & routing", [kv("Download", c.down_mbps != null ? `${mb(c.down_mbps / 8)} MB/s <small class="mut">${mb(c.down_mbps)} Mb/s</small>` : "not measured"), kv("Upload", c.up_mbps != null ? `${mb(c.up_mbps / 8)} MB/s <small class="mut">${mb(c.up_mbps)} Mb/s</small>` : "—"), kv("Measured", esc((c.speed_at || "").slice(0, 16).replace("T", " ") || "—")),
+      kv("CDN port", esc(c.cdn_port || "—")), kv("Probe port", c.port || "—"), kv("Slug", `<span class="mono">${esc(c.slug || "—")}</span>`)]),
   ].join("")}</div>`;
-}
-async function cfLoadChart(id) {
+}async function cfLoadChart(id) {
   const box = document.getElementById("cf-charts-" + id); if (!box) return;
   const d = await api(`/api/configs/${id}/samples?hours=${state.mrange}`);
   const rows = d.samples, ups = rows.map(r => r[1]), pings = nums(rows.map(r => r[2]).filter((v, i) => ups[i])), upn = ups.filter(Boolean).length;
@@ -1737,7 +1745,7 @@ PAGES.panels = async () => {
       <label>Name<input name="name" value="${esc(p.name)}"></label><label>Address<input name="url" value="${esc(p.url)}"></label><label>Admin user<input name="username" value="${esc(p.username)}" autocomplete="off"></label>
       <label>New password <small>(empty keeps the saved one)</small><input name="password" type="password" autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" ${p.verify_tls ? "checked" : ""}> verify the TLS certificate</label><label class="chk"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> enabled (checked every 2 min)</label>
       <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="pn.edit=false;refresh()">Cancel</button><span class="sp"></span><button type="button" class="danger" onclick="pnDel(${p.id}, '${esc(p.name)}')">Remove from the list</button></div></form></div>`;
-  $("#page").innerHTML = `<div class="toolbar"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
+  $("#page").innerHTML = `<div class="toolbar pn-top"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
       <span class="mut">${esc(p.version || "")}${p.checked_at ? " · checked " + ago(p.checked_at) + " ago" : ""}</span>
       <span class="tcount pstat"><span class="tc" title="${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online">Users <b>${s.users_total ?? "—"}</b> <small>${s.users_online ?? "—"} online</small></span><span class="tc click" onclick="pnNodesWin()" title="Open the nodes of this panel">Nodes <b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b></span><span class="tc" title="cpu · ram ${s.mem_pct ?? "—"}%">Load <b>${s.cpu != null ? Math.round(s.cpu) + "%" : "—"}</b></span><span class="tc" title="↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}">Traffic <b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b></span></span><span class="sp"></span>
       <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnTestConfig(${p.id}, '${esc(p.name)}')" title="Looks in Configs for this panel's subscription (it may be there under another name). When it is not there, makes a small test user on the panel and adds its subscription, so its configs are measured from inside Iran (the probe).">🧪 Check configs from Iran${s.test_user ? " ✓" : ""}</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
@@ -1785,7 +1793,7 @@ async function pnUsersLoad(id) {
   }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
-  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut pn-cnt">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
+  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><div class="tabs pn-st" title="Show the users of one status">${[["", "All"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<button class="${pn.ustatus === v ? "on" : ""}" onclick="pn.ustatus='${v}';pn.uoff=0;refresh()">${l}</button>`).join("")}</div><span class="pn-cnt-chip"><b>${(+u.total || 0).toLocaleString()}</b> users</span><button class="sm pn-reload" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
       <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked users" onchange="pnBulkAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option><option value="renew">Add days…</option></select></div></div>
     <table class="tbl lift"><colgroup><col style="width:46px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:215px"></colgroup>
       <thead><tr><th><input type="checkbox" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th><th>Note</th><th></th></tr></thead>
@@ -1884,9 +1892,10 @@ async function pnHostsLoad(id) {
   const hostRow = h => `<div class="hp-row ${h.disabled ? "off" : ""}"><input type="checkbox" class="pn-hchk" value="${esc(h.key)}" onchange="pnSelCount();hpCount(this.closest('details'))"><span class="td-type" title="Inbound">${esc(h.tag)}</span><span class="name ell" title="${esc(h.remark)}">${esc(h.remark)}</span><span class="mut ell">${esc(h.address)}</span><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span>
       <span class="hp-act"><button class="sm" onclick="pnHostOpen(${id}, ''${esc(h.key)}'')">Edit</button><button class="sm" onclick="pnHostClone(${id}, ''${esc(h.key)}'')">Clone</button><button class="sm danger" onclick="pnHostDel(${id}, ''${esc(h.key)}'', ''${esc(h.remark)}'')">✕</button></span></div>${pn.hostEdit && pn.hostEdit.key === h.key ? `<div class="hp-edit">${pnHostHtml(id, pn.hostEdit)}</div>` : ""}`;
   const group = k => { const g = byPort[k], on = g.filter(h => !h.disabled).length, open = pn.hopen[k] || (pn.hostEdit && g.some(h => h.key === pn.hostEdit.key)), pk = esc(k);
-    return `<details class="hp ${on ? "" : "alloff"}" data-port="${pk}" ${open ? "open" : ""} ontoggle="pn.hopen['${pk}'] = this.open"><summary><input type="checkbox" class="hp-master" title="Tick every host of this port" onchange="hpMaster(this)"><b class="hp-port">${k === "" ? "inbound port" : ":" + pk}</b><small class="mut hp-n"></small><span class="hp-st"><i class="st ${on ? "up" : ""}"></i>${on} on${g.length - on ? ` · ${g.length - on} off` : ""}</span><span class="sp"></span>
-      <a onclick="pnHostsPort(event, ${id}, '${pk}', false)" title="Enable every host of this port">Enable all</a><a onclick="pnHostsPort(event, ${id}, '${pk}', true)" title="Disable every host of this port">Disable all</a></summary><div class="hp-rows">${g.map(hostRow).join("")}</div></details>`; };
-  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts · ${ports.length} ports</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
+    const tg = [...new Set(g.map(h => h.tag))], pct = Math.round(on * 100 / g.length);
+    return `<details class="hp ${on ? "" : "alloff"}" data-port="${pk}" ${open ? "open" : ""} ontoggle="pn.hopen['${pk}'] = this.open"><summary><input type="checkbox" class="hp-master" title="Tick every host of this port" onchange="hpMaster(this)"><b class="hp-port">${k === "" ? "inbound port" : ":" + pk}</b><small class="mut hp-n"></small>
+      <span class="hp-bar" title="${on} of ${g.length} hosts are on"><i class="${pct === 100 ? "full" : ""}" style="width:${pct}%"></i></span><span class="hp-st"><b>${on}</b> on${g.length - on ? ` · <b>${g.length - on}</b> off` : ""}</span>
+      <span class="hp-tags">${tg.slice(0, 3).map(t => `<span class="td-type" title="Inbound">${esc(t)}</span>`).join("")}${tg.length > 3 ? `<small class="mut" title="${esc(tg.slice(3).join(", "))}">+${tg.length - 3}</small>` : ""}</span></summary><div class="hp-rows">${g.map(hostRow).join("")}</div></details>`; };  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts · ${ports.length} ports</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
       <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host shown">select all</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked hosts" onchange="pnHostAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option></select></div></div>
     <div class="hp-list">${ports.map(group).join("") || '<div class="mut" style="padding:16px">no host matches</div>'}</div>`;
   box.querySelectorAll(".hp").forEach(hpCount);
@@ -1896,12 +1905,7 @@ async function pnHostsLoad(id) {
 }
 window.hpCount = d => { if (!d) return; const xs = [...d.querySelectorAll(".pn-hchk")], n = xs.filter(x => x.checked).length, m = d.querySelector(".hp-master"), c = d.querySelector(".hp-n"); if (c) c.textContent = n ? `${n} of ${xs.length} ticked` : `${xs.length} host${xs.length === 1 ? "" : "s"}`; if (m) { m.checked = n > 0 && n === xs.length; m.indeterminate = n > 0 && n < xs.length; } };
 window.hpMaster = m => { const d = m.closest("details"); d.querySelectorAll(".pn-hchk").forEach(x => { x.checked = m.checked; }); hpCount(d); pnSelCount(); };
-window.pnHostsPort = async (e, id, port, disable) => {
-  e.preventDefault(); e.stopPropagation();
-  const keys = (pn.hosts || []).filter(h => (h.port == null ? "" : String(h.port)) === port).map(h => h.key);
-  if (!keys.length || !await gconfirm(`${disable ? "Disable" : "Enable"} all ${keys.length} hosts of ${port ? "port " + port : "the inbound port"}?`, {danger: disable})) return;
-  try { const r = await api(`/api/panels/${id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys, disable})}); toast(`✓ ${r.changed} hosts ${disable ? "disabled" : "enabled"}`, "ok"); pn.hosts = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
-};window.pnHQ = v => { pn.hq = v.trim(); clearTimeout(qT); qT = setTimeout(refresh, 250); };
+window.pnHQ = v => { pn.hq = v.trim(); clearTimeout(qT); qT = setTimeout(refresh, 250); };
 window.pnHGo = i => { pn.hoff = Math.max(0, i) * pnPS(); refresh(); };
 window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v) pnHostsToggle(id, v === "disable"); };function pnHostHtml(id, h) {
   const txt = ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint"], bools = ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"];
@@ -2683,8 +2687,10 @@ window.changePassword = async e => {
 };
 
 /* ---- boot */
-(async () => {
-  try { await api("/api/auth/me"); showApp(); go(state.page); } catch (e) { showLogin(); }
+(() => {
+  const me = api("/api/auth/me").then(() => showApp(), () => showLogin());
+  Promise.resolve().then(() => go(state.page));      // the page asks for its data at once, beside the sign-in check (a 401 answer shows the sign-in page): one round trip less before the first paint; it starts when the whole file has been read
+  return me;
 })();
 
 /* the AI buttons (anything with ✨ in it) get the glass-gold look and the magic wand on hover (see .ai-btn in app.css) */
@@ -2736,3 +2742,30 @@ window.dockOpen = id => {
   m.innerHTML = ""; it.ov.classList.remove("docked"); m.appendChild(it.ov); dockRender();
 };
 window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dockRender(); };
+
+/* ---- smooth scrolling in every scroll box: the wheel moves a target and the box glides to it (ease-out), the nearest box that can still move takes the wheel, and a box at its end passes it on to the one around it.
+   Lightweight: one wheel listener, one animation frame loop that runs only while something glides; off with the animations setting or reduced motion. */
+(() => {
+  const glide = new WeakMap();      // box -> {to, raf}
+  const can = (el, dy) => { const s = getComputedStyle(el); return /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 1 && (dy < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1); };
+  const step = el => {
+    const g = glide.get(el); if (!g) return;
+    const d = g.to - el.scrollTop;
+    if (Math.abs(d) < 0.6) { el.scrollTop = g.to; glide.delete(el); return; }
+    el.scrollTop += d * 0.2;
+    g.raf = requestAnimationFrame(() => step(el));
+  };
+  addEventListener("wheel", e => {
+    if (e.ctrlKey || e.shiftKey || e.defaultPrevented || document.documentElement.dataset.anim === "off" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const t = e.target; if (!(t instanceof Element) || t.closest("input[type=number], select, [data-nosmooth]")) return;
+    const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+    let el = t; while (el && el !== document.body && !can(el, dy)) el = el.parentElement;
+    if (!el || el === document.body) return;
+    e.preventDefault();
+    const g = glide.get(el) || {to: el.scrollTop, raf: 0};
+    g.to = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, g.to + dy));
+    const was = glide.has(el); glide.set(el, g);
+    if (!was) g.raf = requestAnimationFrame(() => step(el));
+  }, {passive: false});
+})();

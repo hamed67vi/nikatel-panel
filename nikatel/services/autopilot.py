@@ -36,7 +36,7 @@ from ..ssh import Node, SSHError, run_script
 from . import actions, ai, build_other, builder, detect, tunnel_test
 from . import settings as st
 from .events import emit
-from .tunnels import check_tunnel
+from .tunnels import check_tunnel, servers_off
 
 log = get_logger("autopilot")
 LEVELS = ("restart", "rebuild", "switch")
@@ -810,11 +810,12 @@ def outage_state() -> dict:
     with session() as db:
         servers = list(db.scalars(select(Server).where(Server.enabled.is_(True))))
         tunnels = list(db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))))
+        by_tunnel = {t.name: off for t in tunnels if (off := servers_off(t))}
 
     offline = [s.name for s in servers if s.online is False]
     down = [t.name for t in tunnels if t.state == "down"]
     storm = len(offline) >= STORM_SERVERS or (len(tunnels) >= 4 and len(down) >= max(4, STORM_FRACTION * len(tunnels)))
-    return {"servers_offline": offline, "tunnels_down": down, "tunnels": len(tunnels), "storm": storm}
+    return {"servers_offline": offline, "tunnels_down": down, "tunnels": len(tunnels), "storm": storm, "by_tunnel": by_tunnel}
 
 
 def repairing_names() -> list[str]:
@@ -917,7 +918,7 @@ def observe_all() -> None:
 
     with session() as db:
         cands = [(t.id, t.name) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))
-                 if t.state in ("degraded", "down") or ((t.detail or {}).get("loss_pct") or 0) >= OBSERVE_FROM][:6]
+                 if (t.state in ("degraded", "down") or ((t.detail or {}).get("loss_pct") or 0) >= OBSERVE_FROM) and not servers_off(t)][:6]
 
     for tid, name in cands:
         if name in _BUSY or len(_BUSY) >= MAX_AUTO_REPAIRS:
@@ -971,7 +972,7 @@ def auto_escalate() -> None:
     with session() as db:
         # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link): restarts do not cure those, so they climb without them
         down = [(t.id, t.name, t.state_since, t.state) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
-                if t.state == "down" or any(w in (t.last_error or "") for w in ("flaps", "loss", "lost packets"))]
+                if (t.state == "down" or any(w in (t.last_error or "") for w in ("flaps", "loss", "lost packets"))) and not servers_off(t)]       # a server that is off: no smart repair until it is back
 
     down.sort(key=lambda r: (r[3] != "down", r[2]))      # the tunnels that are down first, the longest-down first
 

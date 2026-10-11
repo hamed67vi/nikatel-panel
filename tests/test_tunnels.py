@@ -322,3 +322,43 @@ def test_renaming_a_tunnel_and_a_server_keeps_the_servers_names(client):
         f.name = "de9"                                       # a hand-named tunnel does not
         builder._rename_row(db, t, "mine", custom=True)
         assert builder.follow_server_rename(db, f, "nl9") == [] and t.name == "mine"
+
+def test_renaming_a_server_in_nodes_renames_its_tunnels(client):
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+
+    with session() as db:
+        i = Server(name="ir8", host="203.0.113.81", role="iran")
+        f = Server(name="fi8", host="203.0.113.82", role="foreign")
+        db.add_all([i, f])
+        db.flush()
+        db.add(Tunnel(name="fi8-ir8", type="backhaul", transport="tcpmux", engine="backhaul", iran_server_id=i.id, foreign_server_id=f.id, port=9916, forwarded_ports=[8071], record={"built_by": "nikatel-panel"}))
+        fid = f.id
+
+    r = client.put(f"/api/servers/{fid}", json={"name": "nl8", "host": "203.0.113.82", "role": "foreign"})
+    assert r.status_code == 200
+
+    with session() as db:
+        t = db.query(Tunnel).filter(Tunnel.iran_server_id != 0, Tunnel.port == 9916).one()
+        assert t.name == "nl8-ir8" and t.record["slug"] == "fi8-ir8"               # the servers still know it as fi8-ir8
+
+
+def test_nothing_is_done_to_a_tunnel_while_its_server_is_off(client):
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services.tunnels import servers_off
+
+    with session() as db:
+        i = Server(name="ir7", host="203.0.113.71", role="iran", online=False)
+        f = Server(name="fi7", host="203.0.113.72", role="foreign", online=True)
+        db.add_all([i, f])
+        db.flush()
+        t = Tunnel(name="fi7-ir7", type="backhaul", transport="tcpmux", engine="backhaul", iran_server_id=i.id, foreign_server_id=f.id, port=9917, forwarded_ports=[8070], state="down")
+        db.add(t)
+        db.flush()
+        assert servers_off(t) == ["Iran server ir7 is off or does not answer"]
+        i.online = True
+        f.online = False
+        assert servers_off(t) == ["Foreign server fi7 is off or does not answer"]
+        f.online = True
+        assert servers_off(t) == []

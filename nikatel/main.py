@@ -65,9 +65,9 @@ def _harden(resp) -> None:
     h["Cross-Origin-Resource-Policy"] = "same-origin"
     h["Strict-Transport-Security"] = "max-age=31536000"
     h["X-Robots-Tag"] = "noindex, nofollow"
-    # what the browser may load and where it may send: only this origin (plus the two fonts and the flag pictures), never inside a frame
-    h["Content-Security-Policy"] = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                                    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://flagcdn.com; connect-src 'self'; "
+    # what the browser may load and where it may send: only this origin (plus the flag pictures), never inside a frame
+    h["Content-Security-Policy"] = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                                    "font-src 'self'; img-src 'self' data: https://flagcdn.com; connect-src 'self'; "
                                     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 
 
@@ -163,7 +163,11 @@ def create_app(run_jobs: bool = True) -> FastAPI:
         response.headers["X-Request-Id"] = rid
         _harden(response)
 
-        if request.url.path == "/" or request.url.path.startswith("/static/"):
+        if request.url.path.startswith("/static/") and "v" in request.query_params:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"   # the page links its files with their change time (?v=): a deploy changes the link, so a reload asks for nothing
+        elif request.url.path.startswith("/static/fonts/"):
+            response.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+        elif request.url.path == "/" or request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-cache"   # the browser revalidates (ETag), so a deploy shows at once
         elif request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"

@@ -66,6 +66,11 @@ def sname(t: Tunnel) -> str:
     return str((t.record or {}).get("slug") or t.name)
 
 
+def servers_off(t: Tunnel) -> list[str]:
+    """Plain sentences for the servers of this tunnel that are off (or do not answer). While one is, nothing is done to the tunnel by itself: there is nothing to repair until the server is back."""
+    return [f"{role} server {s.name} is off or does not answer" for role, s in (("Iran", t.iran), ("Foreign", t.foreign)) if s is not None and s.enabled and s.online is False]
+
+
 def plan_for(t: Tunnel) -> Plan:
     name, typ, tr, port = sname(t), t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
     ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
