@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.21 - 2026-10-11 - The red counters are always red
+
+* In the bars, *Problems* (Nodes) and *Offline* (Configs) always have a red light and a red number, also at 0: they count what is wrong, so the colour says which counter it is.
+
 ## 1.17.20 - 2026-10-11 - Round flags, nothing slides under the status bar
 
 * **Flags are round badges** (24 px, a thin ring) in Nodes and Configs. They are served by the panel (`/flags/xx.png`: the panel server fetches each flag once from flagcdn and keeps it), so the browser no longer waits for a foreign server for them and the page stays whole when that server is slow or blocked.
