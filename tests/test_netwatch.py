@@ -40,3 +40,15 @@ def test_temporary_test_tunnels_are_hidden(client):
 
     assert [t["name"] for t in client.get("/api/tunnels").json()] == ["real"]
     assert client.get("/api/netwatch").json()["items"] == []
+
+
+def test_a_foreign_server_is_called_bad_only_when_most_iran_servers_lose_packets_toward_it():
+    from nikatel.services.netwatch import reach_level
+
+    now = 1_000_000
+    s = [{"iran": "ir1", "loss": 85.0, "at": now - 60}, {"iran": "ir2", "loss": 90.0, "at": now - 300}, {"iran": "ir3", "loss": 0.0, "at": now - 200}]
+    v = reach_level(s, now)
+    assert v["level"] == "bad" and v["bad"] == 2 and v["total"] == 3 and v["from"] == ["ir1", "ir2"] and v["worst"] == 90.0
+    assert reach_level([{"iran": "ir1", "loss": 85.0, "at": now}], now)["level"] != "bad"                # one Iran server alone: its own trouble, never "bad"
+    assert reach_level([{"iran": "ir1", "loss": 85.0, "at": now - 2000}, {"iran": "ir2", "loss": 85.0, "at": now - 2000}], now)["level"] == "unknown"   # stale
+    assert reach_level([{"iran": "ir1", "loss": 10.0, "at": now}, {"iran": "ir2", "loss": 0.0, "at": now}], now)["level"] == "weak"

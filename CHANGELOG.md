@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.21 - 2026-10-11 - A foreign server with a bad route from Iran is named
+
+* Every five minutes each Iran server already pings a few foreign servers; those pings are now also read the other way round: a foreign server that most Iran servers lose packets toward (two or more looked, in the last 15 minutes) is marked **bad route from Iran** in Nodes, listed in the dashboard Problems (with a click to open it and a Test button), and told in the events with the numbers. One lossy Iran server alone never blames the foreign server.
+
 ## 1.16.20 - 2026-10-11 - A rebuild never makes the tunnel vanish
 
 * While a tunnel is being rebuilt (removed, then built again - about a minute) its row stays in the list as *rebuilding…*; before, the row disappeared and looked deleted.
