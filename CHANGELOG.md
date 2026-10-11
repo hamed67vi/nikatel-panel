@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.28 - 2026-10-11 - Server Doctor switched off
+
+* The *Server Doctor* tab is switched off for now (the page stays in the code behind one switch, `SERVER_DOCTOR` in `app.js`).
+
 ## 1.17.27 - 2026-10-11 - The users of a panel are cards
 
 * The users list of a panel has no *Edit / Disable / Reset* buttons: a click on the card opens the user (*Disable*, *Reset usage* and the rest are in its window); the cards look like those of the servers and the tunnels, and the traffic column is wide enough to show *left* whole.
