@@ -2,6 +2,7 @@
 
 ## 1.17.35
 
+- Fix: copying an address or a link did nothing visible (and the click raised an error): the copy function had been lost in 1.17.30. It is back, with the solid green "Copied" mark on the address.
 - Panels > Users: changing the page (or the search / status) redraws only the list and the pager, never the whole page; the list box is made at once at its fixed size and ends inside the window; the pager has seven slots of one width, so no button moves.
 - New theme "Mono glass" (black and white frosted glass; only the special buttons keep their colour). The highlight colour of the active menu entry and tabs follows the theme (it was gold everywhere).
 - Tunnel Doctor: "degraded" is shown as "unstable" everywhere; its settings moved from Settings to its own page (Settings keeps only the AI assistant).

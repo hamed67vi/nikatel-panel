@@ -1972,6 +1972,14 @@ const pnTraffic = x => {
   return lim ? `<div class="trf2"><div class="trf2-t"><span><b>${fmtB(used)}</b> <small>used</small></span><span class="${pct >= 95 ? "err" : ""}"><b>${fmtB(left)}</b> <small>left</small></span></div><div class="trf2-b" title="Account volume ${gb(lim)}"><i class="rbar"><u class="${cls}" style="width:${pct}%"></u></i><small>${pct}% of ${gb(lim)}</small></div></div>`
     : `<div class="trf2"><div class="trf2-t"><span><b>${fmtB(used)}</b> <small>used</small></span><span class="mut">unlimited</span></div></div>`; };
 const expPill = x => { if (!x.expire_date) return '<span class="epill none">∞ never</span>'; const d = typeof x.expire === "number" ? Math.ceil((x.expire - Date.now() / 1000) / 86400) : null; const cls = d == null ? "" : d < 0 ? "bad" : d <= 7 ? "warn" : "ok"; return `<span class="epill ${cls}" title="${esc(x.expire_date)}">${d == null ? esc(x.expire_date) : d < 0 ? "expired" : d + " d"}</span>`; };
+/* copy a text and say so where it was clicked: a corner badge in a box, a solid mark on the address in a table cell */
+window.copyFrom = async (el, text) => {
+  try { await navigator.clipboard.writeText(text); } catch (e) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) { /* no clipboard at all */ } t.remove(); }
+  const box = el.closest(".sbox");
+  if (!box) { el.classList.remove("ip-copied"); void el.offsetWidth; el.classList.add("ip-copied"); clearTimeout(el.__ct); el.__ct = setTimeout(() => el.classList.remove("ip-copied"), 1500); return; }
+  box.querySelectorAll(".copied").forEach(x => x.remove());
+  const b = document.createElement("span"); b.className = "copied"; b.textContent = "✓ Copied"; box.appendChild(b); setTimeout(() => b.remove(), 1600);
+};
 window.pnSelCount = () => {
   const all = [...document.querySelectorAll(".pn-uchk, .pn-hchk")], n = all.filter(x => x.checked).length;
   const c = $("#pn-seln"); if (c) c.textContent = n;
@@ -2564,10 +2572,12 @@ PAGES.settings = async () => {
 
     <div class="card" style="grid-column:1/-1"><h3>Core update <span class="sp"></span><small class="mut">backhaul and Xray on every server</small></h3><div id="eng-box"><div class="mut">loading…</div></div></div>
 
-    <div class="card"><h3>About <span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
+    <div class="card pr-card"><h3>About & update <small class="mut gw-sub">Update this panel from GitHub; below, what the service was started with.</small><span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
       <div class="kv one" id="about-box"><div class="mut">checking GitHub…</div></div>
       <div class="frm-act"><button class="pri" onclick="panelUpdate()">Update from GitHub</button><button onclick="aboutLoad()">↻ Check</button><small class="mut">pull, tests, restart, health check — rolls back by itself when the new version does not start</small></div>
-      <pre class="gl-out hidden" id="about-log"></pre></div>
+      <pre class="gl-out hidden" id="about-log"></pre>
+      <div class="eff-grid"><span><em>Mode</em><b>${s.read_only ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div>
+      <small class="mut">Set in <code>${esc(s.env_file)}</code> on the panel server (then <code>systemctl restart nikatel</code>). ${s.read_only ? "Read-only cannot be switched off from here, on purpose." : ""}</small></div>
 
     <div class="card"><h3>Security <span class="sp"></span><span class="pill" id="sec-pill">…</span></h3><div id="sec-box"><div class="mut">loading…</div></div></div>
 
@@ -2579,16 +2589,6 @@ PAGES.settings = async () => {
         <label class="chk"><input name="logout_others" type="checkbox" checked> sign out every other session (other browsers and devices)</label>
         <div class="frm-act"><button class="pri" type="submit">Change password</button></div></form></div>
 
-    <div class="card"><h3>Effective settings</h3><div class="kv one">
-      <div><span>Version</span> <b>${esc(s.version)}</b></div>
-      <div><span>Mode</span> <b>${s.read_only ? "read-only — the panel never changes a server" : "read-write"}</b></div>
-      <div><span>Server sampling</span> every ${s.server_sample_interval} s</div>
-      <div><span>Tunnel checks</span> every ${s.tunnel_check_interval} s</div>
-      <div><span>Parallel SSH</span> ${s.ssh_workers}</div>
-      <div><span>Session</span> ${s.session_hours} h</div>
-      <div><span>Log level</span> ${esc(s.log_level)}</div>
-      <div><span>Port</span> ${s.listen_port}</div></div>
-      <small class="mut">These come from <code>${esc(s.env_file)}</code> on the panel server (then <code>systemctl restart nikatel</code>). Read-only cannot be switched off from here on purpose.</small></div>
   </div>`;
   settingsTabs();
   if (state.stab === "update") { aboutLoad(); enginesLoad(); }
@@ -2602,15 +2602,13 @@ async function secLoad() {
   const pill = $("#sec-pill"); if (pill) { pill.textContent = s.totp_enabled ? "2-step on" : "2-step OFF"; pill.className = "pill " + (s.totp_enabled ? "ok" : "err"); }
   const url = s.entry_path ? location.origin + "/" + s.entry_path : "";
   const codes = sec.codes ? `<div class="sec-sec" style="border-color:var(--warn)"><h4>⚠ Your recovery codes - shown once</h4><small class="mut">Each code works one time: to sign in without the app, or to reset a forgotten password. Keep them somewhere safe and offline.</small><div class="sec-codes">${sec.codes.map(c => `<code>${esc(c)}</code>`).join("")}</div><div class="frm-act"><button class="sm" onclick="secDownloadCodes()">⬇ Download .txt</button><button class="sm pri" onclick="sec.codes=null;secLoad()">I saved them</button></div></div>` : "";
-  const twofa = sec.setup ? `<div class="sec-qr">${sec.setup.qr_svg || ""}<div style="flex:1;min-width:240px"><b>1.</b> Open Google Authenticator (or any TOTP app) → add an account → scan the picture, or type this key:<div class="sec-key">${esc(sec.setup.secret.replace(/(.{4})/g, "$1 ").trim())}</div><div style="margin-top:10px"><b>2.</b> Type the 6-digit code the app shows:</div><div class="frm-act"><input id="sec-code" inputmode="numeric" maxlength="7" placeholder="123456" style="width:140px" onkeydown="if(event.key==='Enter')secEnable()"><button class="pri" onclick="secEnable()">Turn on</button><button onclick="sec.setup=null;secLoad()">Cancel</button></div></div></div>`
-    : s.totp_enabled ? `<div class="irow"><span>Status</span><div><b class="gw-ok">On</b> - every sign-in asks for the app's code</div></div><div class="frm-act"><button class="sm danger" onclick="secOff()">Turn off</button></div>`
-    : `<div class="irow"><span>Status</span><div><b class="err">Off</b> - only the password protects the panel</div></div><small class="mut">Strongly recommended: a stolen or guessed password is then not enough.</small><div class="frm-act"><button class="pri" onclick="secSetup()">Turn on with Google Authenticator</button></div>`;
-  box.innerHTML = `${codes}
-    <div class="sec-sec"><h4>Two-step sign-in</h4>${twofa}</div>
-    <div class="sec-sec"><h4>Recovery <span class="sp"></span><span class="pill">${s.recovery_left} codes left</span></h4><small class="mut">If you forget the password: on the sign-in page choose “Forgot the password?” and use a recovery code or a code sent to your Telegram. Last resort on the server: <code>nikatel set-password</code>.</small><div class="frm-act"><button class="sm" onclick="secNewCodes()">Make new recovery codes</button></div></div>
-    <div class="sec-sec"><h4>Secret entry path</h4><small class="mut">With a path set, the panel answers “404 Not Found” to everyone, on every address, until the browser has opened the secret address once. Scanners and bots find nothing.</small>
-      ${url ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a><small class="err">Write this address down. If you lose it: <code>nikatel entry-path --clear</code> on the server.</small>` : '<div class="irow"><span>Status</span><div><b class="err">Off</b> - the panel answers on its normal address</div></div>'}
-      <div class="frm-act"><button class="sm pri" onclick="secPath(true)">${url ? "Change the path" : "Turn on with a random path"}</button>${url ? '<button class="sm" onclick="secPath(false)">Choose my own</button><button class="sm danger" onclick="secPathOff()">Turn off</button>' : '<button class="sm" onclick="secPath(false)">Choose my own</button>'}</div></div>
+  const row = (ic, title, chip, desc, acts, extra = "") => `<div class="sec-row"><div class="sec-t"><i>${ic}</i><b>${title}</b>${chip}</div><small class="mut sec-d">${desc}</small><div class="sec-a">${acts}</div>${extra}</div>`;
+  const twofa = sec.setup ? `<div class="sec-sec"><h4>Two-step sign-in</h4><div class="sec-qr">${sec.setup.qr_svg || ""}<div style="flex:1;min-width:240px"><b>1.</b> Open Google Authenticator (or any TOTP app) → add an account → scan the picture, or type this key:<div class="sec-key">${esc(sec.setup.secret.replace(/(.{4})/g, "$1 ").trim())}</div><div style="margin-top:10px"><b>2.</b> Type the 6-digit code the app shows:</div><div class="frm-act"><input id="sec-code" inputmode="numeric" maxlength="7" placeholder="123456" style="width:140px" onkeydown="if(event.key==='Enter')secEnable()"><button class="pri" onclick="secEnable()">Turn on</button><button onclick="sec.setup=null;secLoad()">Cancel</button></div></div></div></div>`
+    : s.totp_enabled ? row("🔐", "Two-step sign-in", '<span class="pill ok">on</span>', "Every sign-in asks for the code of your authenticator app.", '<button class="sm danger" onclick="secOff()">Turn off</button>')
+    : row("🔐", "Two-step sign-in", '<span class="pill err">off</span>', "Only the password protects the panel. Strongly recommended: a stolen password is then not enough.", '<button class="sm pri" onclick="secSetup()">Turn on with Google Authenticator</button>');
+  box.innerHTML = `${codes}${twofa}
+    ${row("🛟", "Recovery codes", `<span class="pill ${s.recovery_left ? "" : "err"}">${s.recovery_left} left</span>`, 'Sign in or reset a forgotten password with one. Last resort on the server: <code>nikatel set-password</code>.', '<button class="sm" onclick="secNewCodes()">Make new codes</button>')}
+    ${row("🕵", "Secret entry path", url ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>', "With a path set the panel answers 404 to everyone until the browser has opened the secret address once.", `<button class="sm pri" onclick="secPath(true)">${url ? "Change" : "Random path"}</button><button class="sm" onclick="secPath(false)">Choose my own</button>${url ? '<button class="sm danger" onclick="secPathOff()">Turn off</button>' : ""}`, url ? `<div class="sec-x"><a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a><small class="err">Write it down. If you lose it: <code>nikatel entry-path --clear</code> on the server.</small></div>` : "")}
 `;
 }
 const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
@@ -2661,14 +2659,14 @@ window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode 
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  account: ["👤 Account", "Your password, two-step sign-in, recovery codes, the secret entry path, and the settings the service was started with.", ["Security", "Password", "Effective settings"]],
+  account: ["👤 Account", "Your password, two-step sign-in, recovery codes and the secret entry path.", ["Security", "Password"]],
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows and the daily report.", ["Telegram", "Alert rules", "Daily report", "Maintenance windows"]],
   backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
   ai: ["🤖 AI", "The AI assistant that explains problems and helps the Tunnel Doctor.", ["AI assistant"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
-  update: ["⬆ Update", "Update this panel from GitHub with one click, and the tunnel cores on your servers.", ["About", "Core update"]],
+  update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, and the settings the service runs with.", ["About & update", "Core update"]],
 };
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "account";
@@ -2695,7 +2693,7 @@ settingsTabs.only = () => {   // switch the card without touching the server or 
   const names = SET_TABS[state.stab][2].filter(n => byName[n]), pick = names.includes(state.sstab) ? state.sstab : names[0];
   $("#page .set-desc").insertAdjacentHTML("afterend", `<div class="fstrip"><div class="tabs set-sub">${names.map(n => `<button class="${n === pick ? "on" : ""}" onclick="state.sstab='${esc(n)}';settingsTabs.only()">${esc(n)}</button>`).join("")}</div></div>`);
   byName[pick].classList.remove("hidden");
-  if (pick === "About") aboutLoad(); if (pick === "Core update") enginesLoad();
+  if (pick === "About & update") aboutLoad(); if (pick === "Core update") enginesLoad();
 };
 window.setTab = k => { state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); refresh(); };
 state.stab = localStorage.getItem("nk.stab") || "account";
