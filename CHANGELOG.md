@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.25 - 2026-10-11 - A lighter copy of an address
+
+* Over an address the cursor is a modern arrow with a small copy badge and a copy mark fades in beside it; the *Copied* confirmation is faint and light (a pale green outline, below the address, so it no longer covers it).
+
 ## 1.17.24 - 2026-10-11 - Tunnel Doctor and Server Doctor
 
 * **Smart repair is now *Tunnel Doctor*.**
