@@ -1204,7 +1204,7 @@ window.foUndo = async id => { if (!await gconfirm("Point the DNS records back at
 function pageTabs(key, tabs, dflt, counts = {}) {
   const saved = localStorage.getItem("nk.tab." + key), cur = tabs.some(t => t[0] === saved) ? saved : dflt;
   document.querySelectorAll("#page > [data-tab]").forEach(el => el.classList.toggle("hidden", el.dataset.tab !== cur));
-  $("#page").insertAdjacentHTML("afterbegin", `<div class="fstrip"><div class="tabs set-tabs">${tabs.map(([k, l]) => `<button class="${k === cur ? "on" : ""}" onclick="localStorage.setItem('nk.tab.${key}','${k}');refresh()">${l}${counts[k] ? ` <i class="cnt">${counts[k]}</i>` : ""}</button>`).join("")}</div></div>`);
+  if (tabs.length > 1) $("#page").insertAdjacentHTML("afterbegin", `<div class="fstrip"><div class="tabs set-tabs">${tabs.map(([k, l]) => `<button class="${k === cur ? "on" : ""}" onclick="localStorage.setItem('nk.tab.${key}','${k}');refresh()">${l}${counts[k] ? ` <i class="cnt">${counts[k]}</i>` : ""}</button>`).join("")}</div></div>`);
   return cur;
 }
 /* DNS changes (next to the history): every record the failover re-pointed in the CDN, each with its own Restore */

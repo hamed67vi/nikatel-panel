@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.19 - 2026-10-11 - No lonely tab
+
+* A page with only one inner tab (Smart repair now that the failover is off: only *Working now*) shows no tab bar at all.
+
 ## 1.14.18 - 2026-10-11 - The inner tabs are in a box too
 
 * The tab row inside a page (Tunnel test / Network advisor, and the other pages that have one) sits in the same soft framed box, and the folder tabs above stick to it.
