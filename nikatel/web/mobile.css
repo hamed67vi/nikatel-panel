@@ -128,3 +128,6 @@ input[type=checkbox].sw { width: 44px !important; height: 26px !important; min-w
 .si-a button, .si-a a.btn { min-width: 0; flex: 1 1 auto; } .si-f { width: 100% !important; max-width: none !important; } .ss-hero { width: 100% !important; }
 .si-c { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; } .si-c .si-f { flex: 1 1 100%; } form.sl { display: block !important; }
 .pwf-f .si-f { width: 100% !important; font-size: 16px !important; height: 44px !important; }
+input[type=checkbox].sw { width: 46px !important; height: 28px !important; min-width: 46px !important; background-size: 24px 24px !important; } .si-r .si-f { width: 100% !important; } .si-r { flex-wrap: wrap; }
+input[type=checkbox].sw { background-size: 20px 20px !important; background-position: 4px 50% !important; } input[type=checkbox].sw:checked { background-position: calc(100% - 4px) 50% !important; }
+.pwf-f .pwi, .pwf-f .pwi .si-f { width: 100% !important; } .pwi .eye { height: 32px; width: 36px; }

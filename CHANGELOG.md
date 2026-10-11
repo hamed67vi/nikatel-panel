@@ -9,6 +9,8 @@
 
 - Settings, final form: the rows are grouped under small captions (Connection / Bot files, When it is called down / How often it repeats, Primary probe / Standby probes, Key / Use) and every box in a row has the same size; the password has its name on top, its three boxes in one row and the button under them; each main item (two-step, recovery codes, secret path) is one row: name with its explanation, a text box, its buttons in one column; the status strip is the only boxed piece; the switch is drawn correctly.
 
+- Settings, every tab built like Security: a name on top, each text box under its label, the buttons beside the boxes; the password boxes sit one above the other, each with a show / hide eye, and the button under them; the switch is drawn with its own floating knob. The alert rules are two numbers now (call it down after N failed checks - the same for tunnels, servers and configs - and remind every N hours); the daily report shows only the hour.
+
 ## 1.17.37
 
 - Settings rebuilt from scratch: one frame per tab, from the first tab to a little past the last one (the description strip and the tab bar end at the same edge), only as tall as its content; inside it grouped lists like a phone's settings (a header with icon and state, rows with the label left and the control right, switches, one action row), stacked one under the other; inside a group the rows sit two per line, so a wide screen leaves nothing empty. The page header scrolls away and the rows of tabs stay locked at the top. The same system on every tab: Security, Alerts, Backups, Probe, AI, Shop bot, Appearance, About & update.
