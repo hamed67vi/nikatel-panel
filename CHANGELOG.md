@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.36
+
+- Persian: the Tunnel Doctor stories, repair events, network-watch events, installs, errors raised by the panel's own code, log lines of the Logs page and about 450 tooltips, hints, confirmations and toasts are translated (new files i18n.fa.doctor.js and i18n.fa.ui2.js). The translator now takes leading symbols (checkmark, cross) off a text before it looks it up - before, every text that began with one stayed English.
+- Settings redesigned: every tab is one full-width card of the same minimum height; Security (shield strip and four cards, password included), Alerts (Telegram, daily report, rules and maintenance windows in one card), Probe, AI, Shop bot, Backups (panel and bot side by side), About & update (status strip, cores, service settings in one card), Appearance (all themes in one row).
+- Fix: the lost copy function is back (the Copied mark of addresses and links).
+- The BOM that a version bump had put at the start of nikatel/__init__.py is gone.
 ## 1.17.35
 
 - Fix: copying an address or a link did nothing visible (and the click raised an error): the copy function had been lost in 1.17.30. It is back, with the solid green "Copied" mark on the address.

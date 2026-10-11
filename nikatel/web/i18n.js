@@ -16,7 +16,7 @@
     explain(fn) { explainers.push(fn); cache.clear(); },
   };
 
-  const SYM = /^([^\p{L}\p{N}{(\[“"']*?)(.*?)([\s:….!?]*)$/su;
+  const SYM = /^([^\p{L}\p{N}{(\[“"']*)(.*?)([\s:….!?]*)$/su;      // the leading symbols (✓ ✕ ⚠ …) are taken greedily: the text after them is what gets looked up
   function fill(to, caps, depth) {
     let i = 0;
     return to.replace(/\{(\d*)\}/g, (_, n) => { const c = caps[n ? +n - 1 : i++]; return c == null ? "" : (core(c, depth + 1) ?? c); });

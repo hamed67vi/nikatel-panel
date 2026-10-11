@@ -960,10 +960,10 @@ async function enginesLoad() {
     have.forEach(n => vers[n.version] = (vers[n.version] || 0) + 1);
     const installed = Object.entries(vers).sort((a, b) => b[1] - a[1]).map(([v, c]) => `${esc(v)}${Object.keys(vers).length > 1 ? ` <small class="mut">×${c}</small>` : ""}`).join(", ");
     const outdated = e.outdated || 0, unreach = nodes.filter(n => n.state === "unreachable").length;
-    const status = e.error ? `<span class="err">${esc(e.error)}</span>` : !nodes.length ? '<span class="mut">press Check</span>' : outdated ? `<b class="warn">New version ${esc(e.latest)} is out</b> <small class="mut">· ${outdated} server${outdated > 1 ? "s" : ""} to update</small>` : `<b class="gw-ok">Up to date</b>${unreach ? ` <small class="mut">· ${unreach} unreachable</small>` : ""}`;
-    return `<div class="eng-row"><span class="eng-name"><b>${esc(e.title)}</b><small class="mut">${have.length} of ${nodes.length} servers have it</small></span><span class="eng-ver" title="${esc(nodes.map(n => n.name + ": " + (n.version || "—")).join(", "))}">${installed || '<span class="mut">not installed</span>'}</span><span class="eng-latest">${e.latest ? `latest ${esc(e.latest)}` : "—"}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener">notes</a>` : ""}</span><span class="eng-st">${status}</span><span class="eng-act">${outdated ? `<button class="pri sm" onclick="engineUpdate('${k}')" title="Update ${outdated} server${outdated > 1 ? "s" : ""} to ${esc(e.latest)}">⬆ Update</button>` : ""}</span></div>`;
+    const status = e.error ? `<span class="err">${esc(e.error)}</span>` : !nodes.length ? '<span class="mut">press Check</span>' : outdated ? `<b class="warn">New version ${esc(e.latest)} is out</b> <small class="mut">· ${outdated} server${outdated > 1 ? "s" : ""} to update</small>` : `<b class="gw-ok">✓ Up to date</b>${unreach ? ` <small class="mut">· ${unreach} unreachable</small>` : ""}`;
+    return `<div class="eng-row"><span class="eng-name"><b>${esc(e.title)}</b><small class="mut" title="${have.length} of ${nodes.length} servers have it">${have.length}/${nodes.length}</small></span><span class="eng-ver" title="${esc(nodes.map(n => n.name + ": " + (n.version || "—")).join(", "))}">${installed || '<span class="mut">not installed</span>'}</span><span class="eng-latest">${e.latest ? esc(e.latest) : "—"}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener" title="Release notes">↗</a>` : ""}</span><span class="eng-st">${status}</span><span class="eng-act">${outdated ? `<button class="pri sm" onclick="engineUpdate('${k}')" title="Update ${outdated} server${outdated > 1 ? "s" : ""} to ${esc(e.latest)}">⬆ Update</button>` : ""}</span></div>`;
   };
-  box.innerHTML = `<div class="toolbar"><span class="mut">${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : "checking…"} · nothing updates by itself: when a new version is out, Update asks you first</span><span class="sp"></span><button class="sm" onclick="engineCheck()">↻ Check now</button></div>
+  box.innerHTML = `<div class="eng-bar"><small class="mut">${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : "checking…"} · nothing updates by itself, Update asks you first</small><button class="sm" onclick="engineCheck()">↻ Check now</button></div>
     <div class="eng-head"><span>Core</span><span>Installed</span><span>Newest</span><span>Status</span><span></span></div>
     ${Object.entries(eng).map(([k, e]) => row(k, e)).join("") || '<div class="empty">Press “Check for updates” to compare the cores on your servers with the newest releases.</div>'}
     ${d.job ? `<div class="mut" style="margin-top:6px">Last update: <b>${esc(d.job.engine)} ${esc(d.job.version || "")}</b> ${d.job.done ? `— ${(d.job.items || []).filter(i => i.state === "ok").length} of ${(d.job.items || []).length} servers updated${(d.job.items || []).some(i => i.state !== "ok") ? ` <span class="err">(${(d.job.items || []).filter(i => i.state !== "ok").map(i => esc(i.name)).join(", ")} failed)</span>` : ""}` : "(running…)"}${d.job.error ? ` <span class="err">${esc(d.job.error)}</span>` : ""}</div>` : ""}`;
@@ -2496,33 +2496,36 @@ PAGES.settings = async () => {
   const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")]);
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   $("#page").innerHTML = `<div class="grid2">
-    <div class="card"><h3>Telegram <span class="sp"></span>${tg.has_token ? '<span class="pill">token saved</span>' : '<span class="pill">no token</span>'}</h3>
-      <form class="frm one" onsubmit="return saveTelegram(event)">
-        <label>Bot token <small>(from @BotFather; leave empty to keep the saved one)</small><input name="token" type="password" placeholder="${tg.has_token ? "•••••••••• saved" : "123456789:AA…"}" autocomplete="off"></label>
-        <label>Chat id <small>(your id, or a negative group/channel id, or @channel)</small><input name="chat_id" value="${esc(tg.chat_id)}" placeholder="-1001234567890"></label>
-        <label class="chk"><input name="enabled" type="checkbox" ${tg.enabled ? "checked" : ""}> send alerts, reports and backups</label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testTelegram()">Send a test message</button></div></form></div>
-
-    <div class="card"><h3>Alert rules</h3>
-      <form class="frm one" onsubmit="return saveRules(event)">
-        <label>Tunnel: failed checks in a row before DOWN <input name="tunnel_fails" type="number" min="1" max="20" value="${al.tunnel_fails}"></label>
-        <label>Server: failed samples in a row before OFFLINE <input name="server_fails" type="number" min="1" max="20" value="${al.server_fails}"></label>
-        <label>Config: failed checks in a row before DOWN <input name="config_fails" type="number" min="1" max="20" value="${al.config_fails == null ? 3 : al.config_fails}"></label>
-        <label>…and down for at least (minutes) <small>(a blip shorter than this says nothing)</small><input name="min_down_minutes" type="number" min="0" max="1440" value="${al.min_down_minutes == null ? 4 : al.min_down_minutes}"></label>
-        <label>UP message only after stable for (seconds) <input name="up_stable_seconds" type="number" min="0" max="86400" value="${al.up_stable_seconds}"></label>
-        <label>Remind while still down every (hours) <small>(0 = never: one DOWN, one UP, nothing in between)</small><input name="remind_hours" type="number" min="0" max="168" value="${al.remind_hours == null ? 0 : al.remind_hours}"></label>
-        <label>Flapping guard: outages within an hour before going quiet <small>(0 = off)</small><input name="flap_max" type="number" min="0" max="50" value="${al.flap_max == null ? 3 : al.flap_max}"></label>
-        <label>…then say nothing about it for (hours) <input name="flap_quiet_hours" type="number" min="1" max="168" value="${al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours}"></label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
-      <small class="mut">Muted: ${(al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false)">unmute</a>`).join(" · ") || "nothing"}. Mute a tunnel from its detail row.</small></div>
-
-    <div class="card"><h3>Maintenance windows <span class="sp"></span><small class="mut">no alerts are sent inside a window</small></h3>
-      <form class="frm" onsubmit="return addWindow(event)">
-        <label>From (UTC)<input name="start" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000))}"></label>
-        <label>To (UTC)<input name="end" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000) + 3600)}"></label>
-        <label>Note<input name="note" placeholder="upgrade of …"></label>
-        <div class="frm-act"><button class="pri" type="submit">Add window</button></div></form>
-      ${mw.windows.map(w => `<div class="ev ${w.active ? "warn" : ""}"><time>${when(w.start).slice(0, 16)}</time><i></i><small>→ ${when(w.end).slice(0, 16)}</small><span>${esc(w.note)} ${w.active ? "<b>(active now)</b>" : ""} <a class="mut" onclick="delWindow(${w.id})">remove</a></span></div>`).join("") || '<div class="empty">No window.</div>'}</div>
+    <div class="card pr-card al-card"><h3>Alerts <small class="mut gw-sub">Where alerts go, when they are sent, the daily report and quiet windows.</small><span class="sp"></span>${tg.enabled && tg.has_token && tg.chat_id ? '<span class="pill ok">● sending to Telegram</span>' : '<span class="pill err">● not sending</span>'}</h3>
+      ${(() => {
+        const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id), repOn = !!rp.enabled, activeW = mw.windows.filter(w => w.active).length, score = [tgOn, repOn].filter(Boolean).length;
+        return `<div class="sec-hero al-hero ${tgOn ? (activeW ? "s2" : "s3") : "s0"}"><div class="sec-shield"><svg viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>${tgOn ? "" : '<path d="M4 4l16 16"/>'}</svg></div><div class="sec-ht"><b>${tgOn ? (activeW ? "Alerts are paused by a maintenance window" : "Alerts are on") : "Alerts are not reaching you"}</b><small class="mut">${tgOn ? "Down and up messages, the daily report and backups go to your Telegram chat." : "Set the bot token and chat id below, then send a test message."}</small></div><div class="sec-seg"><i class="${tgOn ? "on" : ""}" title="Telegram"></i><i class="${repOn ? "on" : ""}" title="Daily report"></i><i class="${activeW ? "" : "on"}" title="No maintenance window now"></i></div></div>`;
+      })()}
+      <div class="al-grid">
+        <form class="sec-card al-sec ${tg.enabled && tg.has_token ? "ok" : "off"}" onsubmit="return saveTelegram(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.5L11.5 20l3-4.5L19 18z"/><path d="M9 13.5L21 4"/></svg></div><div class="sec-body"><div class="sec-t"><b>Telegram</b>${tg.has_token ? '<span class="pill ok">token saved</span>' : '<span class="pill err">no token</span>'}</div>
+          <label>Bot token <small>from @BotFather; empty keeps the saved one</small><input name="token" type="password" placeholder="${tg.has_token ? "•••••••••• saved" : "123456789:AA…"}" autocomplete="off"></label>
+          <label>Chat id <small>your id, a negative group id, or @channel</small><input name="chat_id" value="${esc(tg.chat_id)}" placeholder="-1001234567890"></label>
+          <label class="chk"><input name="enabled" type="checkbox" ${tg.enabled ? "checked" : ""}> Send alerts, reports and backups</label>
+          <div class="sec-a"><button class="pri sm" type="submit">Save</button><button class="sm" type="button" onclick="testTelegram()">Send a test message</button></div></div></form>
+        <form class="sec-card al-sec ${rp.enabled ? "ok" : "off"}" onsubmit="return saveReport(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2.4"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg></div><div class="sec-body"><div class="sec-t"><b>Daily report</b>${rp.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>'}</div>
+          <label class="chk"><input name="enabled" type="checkbox" ${rp.enabled ? "checked" : ""}> Send a daily report</label>
+          <div class="al-two"><label>At hour <small>local</small><input name="hour" type="number" min="0" max="23" value="${rp.hour}"></label><label>UTC offset <small>minutes; Tehran 210</small><input name="tz_offset_minutes" type="number" min="-720" max="840" value="${rp.tz_offset_minutes}"></label></div>
+          <div class="sec-a"><button class="pri sm" type="submit">Save</button><button class="sm" type="button" onclick="previewReport()">Preview</button><button class="sm" type="button" onclick="sendReport()">Send now</button></div><pre id="report-prev" class="gl-out hidden"></pre></div></form>
+        <form class="sec-card al-sec al-wide ok" onsubmit="return saveRules(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg></div><div class="sec-body"><div class="sec-t"><b>Alert rules</b><small class="mut">how many failed checks before a message, and how often it may repeat</small></div>
+          <div class="al-rules">
+            <label title="Failed checks in a row before a tunnel is DOWN">Tunnel down after<input name="tunnel_fails" type="number" min="1" max="20" value="${al.tunnel_fails}"></label>
+            <label title="Failed samples in a row before a server is OFFLINE">Server offline after<input name="server_fails" type="number" min="1" max="20" value="${al.server_fails}"></label>
+            <label title="Failed checks in a row before a config is DOWN">Config down after<input name="config_fails" type="number" min="1" max="20" value="${al.config_fails == null ? 3 : al.config_fails}"></label>
+            <label title="A blip shorter than this says nothing">Down at least (min)<input name="min_down_minutes" type="number" min="0" max="1440" value="${al.min_down_minutes == null ? 4 : al.min_down_minutes}"></label>
+            <label title="The UP message comes only after it was stable this long">UP after stable (s)<input name="up_stable_seconds" type="number" min="0" max="86400" value="${al.up_stable_seconds}"></label>
+            <label title="Remind while still down every this many hours. 0 = never: one DOWN, one UP, nothing in between">Remind every (h)<input name="remind_hours" type="number" min="0" max="168" value="${al.remind_hours == null ? 0 : al.remind_hours}"></label>
+            <label title="Outages within an hour before the panel goes quiet about it. 0 = off">Flap guard (outages/h)<input name="flap_max" type="number" min="0" max="50" value="${al.flap_max == null ? 3 : al.flap_max}"></label>
+            <label title="…then it says nothing about it for this many hours">Then quiet for (h)<input name="flap_quiet_hours" type="number" min="1" max="168" value="${al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours}"></label></div>
+          <div class="sec-a al-save"><small class="mut">Muted: ${(al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false)">unmute</a>`).join(" · ") || "nothing"}. Mute a tunnel from its detail row.</small><span class="sp"></span><button class="pri sm" type="submit">Save rules</button></div></div></form>
+        <div class="sec-card al-sec al-wide ${mw.windows.some(w => w.active) ? "off" : "ok"}"><div class="sec-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></div><div class="sec-body"><div class="sec-t"><b>Maintenance windows</b><small class="mut">no alerts are sent inside a window</small></div>
+          <form class="al-win" onsubmit="return addWindow(event)"><label>From (UTC)<input name="start" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000))}"></label><label>To (UTC)<input name="end" type="datetime-local" required value="${dt(Math.floor(Date.now() / 1000) + 3600)}"></label><label>Note<input name="note" placeholder="upgrade of …"></label><button class="pri sm" type="submit">Add window</button></form>
+          ${mw.windows.map(w => `<div class="al-wrow ${w.active ? "act" : ""}"><span>${when(w.start).slice(0, 16)} → ${when(w.end).slice(0, 16)}</span><span class="mut">${esc(w.note)}</span>${w.active ? '<b class="warn">active now</b>' : ""}<a class="mut" onclick="delWindow(${w.id})">remove</a></div>`).join("") || '<small class="mut">No window.</small>'}</div></div>
+      </div></div>
 
     <div class="card pr-card"><h3>Probe <small class="mut gw-sub">Tests your configs from inside Iran and runs their speed tests.</small><span class="sp"></span>${!pr.state.active ? '<span class="pill">no probe set</span>' : pr.state.fails ? `<span class="pill err" title="the last ${pr.state.fails} questions got no answer">● not answering · ${esc(pr.state.active)}</span>` : `<span class="pill ok" title="the panel gets answers from this probe">● connected · ${esc(pr.state.active)}</span>`}</h3>
       <form class="frm pr-form" onsubmit="return saveProbe(event)">
@@ -2533,13 +2536,7 @@ PAGES.settings = async () => {
         <div class="frm-act pr-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testProbe()">Test</button></div></form>
       <form class="pr-install" onsubmit="return installProbe(event)"><label>Install a probe on an Iran server <small>copies the code and Xray, registers it as standby (or primary when there is none)</small><span class="pr-ins-row"><select name="server_id">${iranList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button type="submit" ${s.read_only ? "disabled" : ""}>Install probe</button></span></label></form></div>
 
-    <div class="card"><h3>Daily report</h3>
-      <form class="frm one" onsubmit="return saveReport(event)">
-        <label class="chk"><input name="enabled" type="checkbox" ${rp.enabled ? "checked" : ""}> send a daily report</label>
-        <label>At hour (local)<input name="hour" type="number" min="0" max="23" value="${rp.hour}"></label>
-        <label>Local time offset from UTC (minutes; Tehran = 210)<input name="tz_offset_minutes" type="number" min="-720" max="840" value="${rp.tz_offset_minutes}"></label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="previewReport()">Preview</button><button type="button" onclick="sendReport()">Send now</button></div></form>
-      <pre id="report-prev" class="gl-out hidden"></pre></div>
+
 
     ${backupCard(bk)}
 
@@ -2570,24 +2567,18 @@ PAGES.settings = async () => {
         <label>Animations<select onchange="lookSet('anim', this.value)">${[["on", "On"], ["off", "Off (lightest)"]].map(([k, l]) => `<option value="${k}" ${LOOK.anim === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <div class="frm-act"><button type="button" onclick="lookReset()">↺ Reset the look</button><small class="mut">kept in this browser</small></div></div></div>
 
-    <div class="card" style="grid-column:1/-1"><h3>Core update <span class="sp"></span><small class="mut">backhaul and Xray on every server</small></h3><div id="eng-box"><div class="mut">loading…</div></div></div>
 
-    <div class="card pr-card"><h3>About & update <small class="mut gw-sub">Update this panel from GitHub; below, what the service was started with.</small><span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
-      <div class="kv one" id="about-box"><div class="mut">checking GitHub…</div></div>
-      <div class="frm-act"><button class="pri" onclick="panelUpdate()">Update from GitHub</button><button onclick="aboutLoad()">↻ Check</button><small class="mut">pull, tests, restart, health check — rolls back by itself when the new version does not start</small></div>
+    <div class="card pr-card up-card"><h3>About & update <small class="mut gw-sub">This panel, the tunnel cores on your servers, and what the service runs with.</small><span class="sp"></span><span class="pill">v${esc(s.version)}</span></h3>
+      <div class="sec-hero s3 up-hero"><div class="sec-shield"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 16.5v-9M8.5 11l3.5-3.5 3.5 3.5"/></svg></div><div class="sec-ht"><div id="about-box" class="kv one"><div class="mut">checking GitHub…</div></div><small class="mut">Update pulls, tests, restarts and checks health — it rolls back by itself when the new version does not start.</small></div><div class="up-btns"><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button><button class="sm" onclick="aboutLoad()">↻ Check</button></div></div>
       <pre class="gl-out hidden" id="about-log"></pre>
-      <div class="eff-grid"><span><em>Mode</em><b>${s.read_only ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div>
-      <small class="mut">Set in <code>${esc(s.env_file)}</code> on the panel server (then <code>systemctl restart nikatel</code>). ${s.read_only ? "Read-only cannot be switched off from here, on purpose." : ""}</small></div>
+      <div class="up-sec"><div class="up-t"><b>Tunnel cores</b><small class="mut">Backhaul, BackPack, Paqet, Chisel and Xray on every server</small></div><div id="eng-box"><div class="mut">loading…</div></div></div>
+      <div class="up-sec"><div class="up-t"><b>Service settings</b><small class="mut">set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>${s.read_only ? ". Read-only cannot be switched off from here, on purpose" : ""}</small></div>
+        <div class="eff-grid"><span><em>Mode</em><b>${s.read_only ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div></div></div>
 
-    <div class="card"><h3>Security <span class="sp"></span><span class="pill" id="sec-pill">…</span></h3><div id="sec-box"><div class="mut">loading…</div></div></div>
+    <div class="card pr-card"><h3>Security <small class="mut gw-sub">How the panel is protected, and your password.</small><span class="sp"></span><span class="pill" id="sec-pill">…</span></h3><div id="sec-box"><div class="mut">loading…</div></div>
+</div>
 
-    <div class="card"><h3>Password</h3>
-      <form class="frm one" onsubmit="return changePassword(event)">
-        <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
-        <label>New password <small>(at least 10 characters)</small><input name="new" type="password" required minlength="10" autocomplete="new-password"></label>
-        <label>Repeat<input name="again" type="password" required minlength="10" autocomplete="new-password"></label>
-        <label class="chk"><input name="logout_others" type="checkbox" checked> sign out every other session (other browsers and devices)</label>
-        <div class="frm-act"><button class="pri" type="submit">Change password</button></div></form></div>
+
 
   </div>`;
   settingsTabs();
@@ -2614,7 +2605,8 @@ async function secLoad() {
   const c2 = card(on2, ICON.shield(on2), "Two-step sign-in", on2 ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', on2 ? "Every sign-in asks for the code of your authenticator app." : "A second code from your phone on every sign-in.", on2 ? '<button class="sm danger" onclick="secOff()">Turn off</button>' : '<button class="sm pri" onclick="secSetup()">Turn on</button>');
   const cR = card(onR, ICON.buoy(), "Recovery codes", `<span class="pill ${onR ? "ok" : "err"}">${s.recovery_left} left</span>`, 'Sign in or reset a forgotten password. Last resort on the server: <code>nikatel set-password</code>.', '<button class="sm" onclick="secNewCodes()">Make new codes</button>');
   const cP = card(onP, ICON.lock(onP), "Secret entry path", onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', "The panel answers 404 to everyone until the browser opened the secret address once.", `<button class="sm pri" onclick="secPath(true)">${onP ? "Change" : "Random path"}</button><button class="sm" onclick="secPath(false)">Choose my own</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`, onP ? `<a class="sec-url" href="${esc(url)}" title="Open">${esc(url)}</a>` : "");
-  box.innerHTML = `${codes}${hero}${twofa}<div class="sec-cards">${sec.setup ? "" : c2}${cR}${cP}</div>
+  const cW = `<form class="sec-card pw-card ok" onsubmit="return changePassword(event)"><div class="sec-ic"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="3.6"/><path d="M10.7 12.6L19 4.5M15.5 8l2.5 2.5M13.2 10.3l2 2"/></svg></div><div class="sec-body"><div class="sec-t"><b>Password</b><span class="pill">10+ characters</span></div><label>Current<input name="current" type="password" required autocomplete="current-password"></label><label>New<input name="new" type="password" required minlength="10" autocomplete="new-password"></label><label>Repeat<input name="again" type="password" required minlength="10" autocomplete="new-password"></label><label class="chk"><input name="logout_others" type="checkbox" checked> Sign out the other devices</label><div class="sec-a"><button class="pri sm" type="submit">Change password</button></div></div></form>`;
+  box.innerHTML = `${codes}${hero}${twofa}<div class="sec-cards">${sec.setup ? "" : c2}${cR}${cP}${cW}</div>
 `;
 }
 const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
@@ -2665,14 +2657,14 @@ window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode 
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
 const SET_TABS = {
-  account: ["👤 Account", "Your password, two-step sign-in, recovery codes and the secret entry path.", ["Security", "Password"]],
-  alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the flapping rules, maintenance windows and the daily report.", ["Telegram", "Alert rules", "Daily report", "Maintenance windows"]],
+  account: ["🛡 Security", "Two-step sign-in, recovery codes, the secret entry path and your password.", ["Security"]],
+  alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the rules, the daily report and maintenance windows.", ["Alerts"]],
   backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
   ai: ["🤖 AI", "The AI assistant that explains problems and helps the Tunnel Doctor.", ["AI assistant"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
-  update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, and the settings the service runs with.", ["About & update", "Core update"]],
+  update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, and the settings the service runs with.", ["About & update"]],
 };
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "account";
@@ -2724,7 +2716,7 @@ window.sendReport = async () => { toast("Sending…"); try { await api("/api/rep
 /* ---- Settings → Backups: one tile per part (panel, shop bot): its switch, its Telegram topic, its latest file, its own "Back up now" */
 const backupCard = bk => {
   const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
-  const topic = (k, p) => !bk.telegram_ready ? '<small class="mut">Telegram is not set up (card on the left)</small>'
+  const topic = (k, p) => !bk.telegram_ready ? '<small class="mut">Telegram is not set up (Settings → Alerts)</small>'
     : p.topic ? `<span class="pill ok" title="Its backups go to this topic of the group">▣ ${esc(p.topic_name || "topic")} · #${p.topic}</span><a class="mut bk-un" onclick="bkTopicOff('${k}')">unlink</a>`
     : `<button class="sm" onclick="bkTopic('${k}')" title="Make a separate page (topic) for it in the Telegram group">＋ Telegram topic</button><small class="mut">goes to the main page now</small>`;
   const part = ([k, p]) => `<div class="bk-part ${p.enabled ? "" : "off"}">
@@ -2732,7 +2724,7 @@ const backupCard = bk => {
       <div class="bk-main"><b>${esc(p.label)}</b><small class="mut">${esc(p.what)}</small><small class="bk-last">${p.last ? "latest: " + ago(p.last.at) + " ago · " + kb(p.last.bytes) : "no backup yet"}${p.ready ? "" : " · set the bot server first (Shop bot card)"}</small></div>
       <div class="bk-tg">${topic(k, p)}</div>
       <div class="bk-act"><button class="sm pri" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button><button class="sm" onclick="bkRestoreOpen('${k}')" title="Put a backup of this part back: one kept on this server or a file from your computer">↩ Restore</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}</div></div>`;
-  return `<div class="card bk-card"><h3>Backups <span class="sp"></span>${bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>'}</h3>
+  return `<div class="card pr-card bk-card"><h3>Backups <small class="mut gw-sub">Encrypted copies of the panel and the shop bot: kept here and sent to Telegram.</small><span class="sp"></span>${bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>'}</h3>
     ${bk.has_passphrase ? "" : `<form class="frm one bk-pass" onsubmit="return savePass(event)"><label>Backup password <small>(the backup files are encrypted with it, so a copied file is unreadable without it; you type it only when you restore — keep it somewhere safe; min 12 characters)</small><input name="passphrase" type="text" minlength="12" required autocomplete="off" spellcheck="false"></label><div class="frm-act"><button class="pri" type="submit">Set the password</button><button type="button" onclick="bkGen(this.form)" title="A strong random password is put in the box: copy it somewhere safe, then press Set">🎲 Generate</button></div></form>`}
     <div class="bk-parts">${Object.entries(bk.parts).map(part).join("")}</div>
     <form class="bk-sched" onsubmit="return saveBackup(event)">

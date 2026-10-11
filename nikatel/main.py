@@ -43,7 +43,7 @@ def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for name in ("app.js", "app.css", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js"):
+    for name in ("app.js", "app.css", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
         try:
             stamp = int((WEB / name).stat().st_mtime)
         except OSError:

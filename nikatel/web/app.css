@@ -1836,3 +1836,51 @@ html[data-anim="off"] .bg-scene { display: none; } html[data-anim="off"] body::b
 .sec-ic { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 11px; color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); } .sec-card.ok .sec-ic { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); } .sec-ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .sec-shield svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .sec-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; } .sec-card .sec-t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .sec-card .sec-t b { font-size: 13px; } .sec-card .sec-d { font-size: 12px; line-height: 1.4; color: var(--mut); min-height: 34px; } .sec-card .sec-a { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; } .sec-card .sec-url { margin: 0; padding: 4px 8px; font-size: 11px; }
+
+/* Core update: one slim line per core */
+.eng-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; } .eng-bar small { font-size: 11.5px; }
+.eng-head, .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr) 96px; gap: 8px; padding: 4px 10px; } .eng-head { padding-bottom: 2px; font-size: 10px; }
+.eng-row { margin-bottom: 4px; font-size: 12px; min-height: 34px; border-radius: 10px; } .eng-name { display: flex; align-items: baseline; gap: 8px; } .eng-name b { display: inline; font-size: 12.5px; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .eng-act button { height: 24px; }
+@media (max-width: 900px) { .eng-head { display: none; } .eng-row { grid-template-columns: 1fr 1fr; } }
+
+/* password inside the Security card */
+.pw-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 6px 10px; align-items: end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); } .pw-h { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; } .pw-h b { font-size: 13px; } .pw-h small { font-size: 11.5px; }
+.pw-form button { height: 30px; white-space: nowrap; } .pw-form .pw-o { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mut); } @media (max-width: 980px) { .pw-form { grid-template-columns: 1fr; } }
+
+/* About & update: the status and the buttons on one line, the seven settings in one row */
+.pr-card #about-box { margin: 0 0 8px; font-size: 12.5px; } .pr-card #about-box + .frm-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; padding: 0; } .pr-card #about-box + .frm-act button { height: 30px; } .pr-card #about-box + .frm-act small { flex: 1 1 260px; text-align: right; font-size: 11.5px; }
+.eff-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin: 10px 0 6px; padding-top: 10px; } @media (min-width: 1100px) { .eff-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+.eff-grid span { padding: 4px 9px; border-radius: 9px; } .eff-grid em { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .eff-grid b { font-size: 12px; white-space: nowrap; }
+
+/* every theme preview in ONE row; the notes are in the tooltip */
+.theme-grid { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; } @media (max-width: 1100px) { .theme-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } } @media (max-width: 600px) { .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tsw { padding: 5px 5px 6px; gap: 3px; border-radius: 10px; } .tsw i { height: 34px; border-radius: 7px; } .tsw i::after { bottom: 4px; height: 7px; left: 5px; right: 5px; } .tsw b { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tsw small { display: none; }
+.look-frm .frm-act { grid-column: auto !important; }
+
+/* Alerts: one card, a status strip and four sections (like Security) */
+.al-hero { margin-bottom: 10px; } .al-hero .sec-shield svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.al-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .al-grid .al-wide { grid-column: 1 / -1; } @media (max-width: 980px) { .al-grid { grid-template-columns: 1fr; } }
+.al-sec { align-items: flex-start; } .al-sec .sec-body { gap: 7px; } .al-sec .sec-t small { font-size: 11.5px; } .al-sec label { display: grid; gap: 3px; font-size: 11px; color: var(--mut); } .al-sec label.chk { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); } .al-sec label small { font-size: 10.5px; font-weight: 500; opacity: .85; }
+.al-sec input:not([type=checkbox]) { height: 30px; font-size: 12.5px; } .al-sec .sec-a { margin-top: 2px; } .al-sec .sec-a button { height: 28px; }
+.al-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .al-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; } @media (max-width: 980px) { .al-rules { grid-template-columns: 1fr 1fr; } }
+.al-rules label { white-space: nowrap; } .al-rules label input { width: 100%; } .al-save { align-items: center; } .al-save small { font-size: 11.5px; }
+.al-win { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; align-items: end; } .al-win button { height: 30px; white-space: nowrap; } @media (max-width: 980px) { .al-win { grid-template-columns: 1fr 1fr; } }
+.al-wrow { display: flex; align-items: center; gap: 12px; padding: 5px 9px; border-radius: 9px; border: 1px solid var(--line); font-size: 12px; } .al-wrow.act { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); } .al-wrow .mut { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* About & update: one card - a status strip, the cores, the settings */
+.up-hero { margin-bottom: 8px; } .up-hero #about-box { margin: 0; font-size: 13px; } .up-hero .sec-ht small { font-size: 11.5px; } .up-btns { display: flex; gap: 6px; flex: none; } .up-btns button { height: 30px; white-space: nowrap; }
+.up-hero .sec-shield svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.up-sec { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); } .up-t { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; } .up-t b { font-size: 12.5px; letter-spacing: .5px; text-transform: uppercase; } .up-t small { font-size: 11.5px; } .up-sec .eff-grid { margin: 0; padding: 0; border: 0; }
+
+/* Settings: every card is as wide as the tab bar and has the same minimum height; forms flow into columns */
+#page .grid2.one > .card { width: 100%; justify-self: stretch; min-height: 330px; box-sizing: border-box; }
+#page .grid2.one .frm.one { max-width: none; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; } #page .grid2.one .frm.one > .frm-act, #page .grid2.one .frm.one > label.chk, #page .grid2.one .frm.one > .ob-raw, #page .grid2.one .frm.one > small { grid-column: 1 / -1; }
+.sec-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } @media (max-width: 1500px) { .sec-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 760px) { .sec-cards { grid-template-columns: 1fr; } }
+.pw-card .sec-body { gap: 6px; } .pw-card label { display: grid; gap: 2px; font-size: 11px; color: var(--mut); } .pw-card label.chk { display: flex; align-items: center; gap: 8px; font-size: 12px; } .pw-card input:not([type=checkbox]) { height: 30px; font-size: 12.5px; } .pw-card .sec-a { margin-top: 2px; }
+.sec-card .sec-d { min-height: 0; }
+
+/* Backups: the panel and the shop bot side by side, each a compact card; the schedule in one row */
+.bk-card > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; font-size: 12.5px; letter-spacing: .8px; text-transform: uppercase; } .bk-card > h3 .gw-sub { text-transform: none; letter-spacing: 0; font-size: 11.5px; font-weight: 500; } .bk-card > h3 .sp { flex: 1; }
+.bk-parts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0 0 8px; } @media (max-width: 980px) { .bk-parts { grid-template-columns: 1fr; } }
+.bk-part { grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; padding: 10px 12px; align-items: start; } .bk-part .bk-main { grid-column: 2; } .bk-part .bk-tg { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; } .bk-part .bk-act { grid-column: 1 / -1; flex-wrap: wrap; } .bk-act button, .bk-act a.btn { height: 28px; }
+.bk-sched { padding: 8px 2px 4px; gap: 6px 14px; } .bk-more { margin-top: 4px; font-size: 12px; }
