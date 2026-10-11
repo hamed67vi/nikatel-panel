@@ -979,21 +979,13 @@ html[data-mode="light"] .tiles { background: linear-gradient(rgba(255,255,255,.5
 /* ---- lighter: a blur behind every button, row and card made the browser repaint hundreds of layers; only the big surfaces (header, menu, windows, toasts) keep it, and the up-arrows do not move all the time */
 button, .card, .tile, .gw-row, .gw-out, .fix, .tabs, .ob-raw, .gl-out, .detail td { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .tun-arr.up { animation: none; }
-/* ---- compact density (desktop): the boxes of every page are the same size and tight, so a whole monitoring list fits on the screen */
-@media (min-width: 761px) {
-  :root { --row-h: 31px; }
-  .head { height: 54px; margin-bottom: 8px; border-radius: 16px; } .head h1 { font-size: 18px; } .head p { font-size: 11.5px; }
-  .statusbar { height: 24px; margin: -2px 0 8px; font-size: 11.5px; }
-  .subnav { margin-bottom: 0; }
-  .toolbar:not(.card .toolbar):not(.modal .toolbar):not(.sub-nodes .toolbar) { padding: 5px 10px; margin-bottom: 8px; }
-  .fstrip { padding: 4px 8px; margin-bottom: 8px; }
-  .tiles { padding: 6px; gap: 8px; margin-bottom: 8px; grid-auto-rows: 1fr; }
-  .tile, .page .tiles .tile { padding: 6px 12px; min-height: 62px; display: flex; flex-direction: column; justify-content: center; }
-  .page .tiles .tile b, .tile b { font-size: 18px; margin-top: 0; line-height: 1.15; }
-  .tile small { font-size: 10px; } .tile span { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tbl.lift, .cf-grid { padding: 4px 8px 6px; }
-  .tbl { border-spacing: 0 3px; } .tbl th { font-size: 10px; padding-bottom: 0; } .tbl td { font-size: 12.5px; }
-  .tbl .td-node b, .tbl .name { font-size: 12.5px; } .td-node span.mono { font-size: 10px; }
-  .tbl .sm { height: 22px; font-size: 11px; padding: 0 9px; }
-  .pbar .bar { height: 5px; }
-}
+
+/* ---- the info boxes of a server / tunnel window: the same size, tight, so all of them are in view; the last (wide) box keeps its rows in two columns */
+.modal .iboxes { gap: 8px; grid-auto-rows: 1fr; }
+.modal .ibox { padding: 8px 12px 5px; }
+.modal .ibox h5 { margin-bottom: 1px; padding-bottom: 5px; font-size: 11px; }
+.modal .irow { padding: 3px 0; font-size: 12.5px; line-height: 1.3; gap: 12px; }
+.modal .irow > span { width: 96px; }
+.modal .iboxes > .ibox:last-child:nth-child(odd) { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-content: start; } .modal .iboxes > .ibox:last-child:nth-child(odd) > h5 { grid-column: 1 / -1; }
+.modal .iboxes > .ibox:last-child:nth-child(odd) .irow + .irow { border-top: 0; }
+@media (max-width: 760px) { .modal .iboxes { grid-auto-rows: auto; } .modal .iboxes > .ibox:last-child:nth-child(odd) { display: block; } }

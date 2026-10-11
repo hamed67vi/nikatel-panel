@@ -1,8 +1,9 @@
 # Changelog
 
-## 1.15.3 - 2026-10-11 - Compact, equal boxes
+## 1.15.4 - 2026-10-11 - Info boxes of the windows: same size, tight
 
-* On the desktop the boxes of every page are tighter and the same size: the page header, the status line and the toolbars are slimmer, the tiles are all one height with a single line of text, and table rows are 31 px instead of 40 px, so a whole list of servers (Nodes) fits on the screen.
+* The compact page density of 1.15.3 (slimmer header, tiles and table rows) is taken back out.
+* The info boxes of a server / tunnel window (Servers, Quality, Link, Status, Services ...) are all the same size and tighter, so the whole window is in view; the wide last box keeps its rows in two columns.
 
 ## 1.15.2 - 2026-10-11 - A lost SSH connection no longer crashes a job
 
