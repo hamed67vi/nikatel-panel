@@ -1223,3 +1223,7 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 .slines .sline { margin: 0; padding: 4px 0; border: 0; border-radius: 0; background: none; } .slines .sline + .sline { border-top: 1px solid rgba(255,255,255,.05); }
 .modal .mtiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 .modal .mtile { min-width: 0; overflow: hidden; } .modal .mtile b { white-space: nowrap; } .modal .mtile span { max-width: 62%; }
+/* the charts of a window are small: three in a row, short, so the window needs no scrolling for them */
+.modal .mgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.modal .mcard svg.lc { max-height: 64px; width: 100%; } .modal .mcard h6 { margin-bottom: 0; } .modal .mcard h6 .mval { font-size: 14px; } .modal .mstat { font-size: 9.5px; margin-top: 0; }
+@media (max-width: 900px) { .modal .mgrid { grid-template-columns: 1fr 1fr; } }

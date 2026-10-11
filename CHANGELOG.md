@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.30 - 2026-10-11 - Small charts, no disk chart
+
+* The charts of a window are three in a row and short; the Disk chart is gone (the disk is a flat line; its number is in the tiles and in Resources), so the whole monitoring part fits without scrolling. The Traffic tile shows both numbers on one line.
+
 ## 1.16.29 - 2026-10-11 - One box, one row
 
 * In a server window the tunnels line and the last-results line are two rows of one box; the monitoring tiles (CPU, RAM, Disk, Traffic, Connections) are one row.
