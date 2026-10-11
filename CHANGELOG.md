@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.11 - 2026-10-11 - Shared SSH connections the simple way
+
+* The shared SSH connection per server is now started by the first command itself (ControlMaster=auto) instead of a separate starter; the starter could leave a stray background connection for every start that raced another (93 of them were found after a few hours).
+
 ## 1.16.10 - 2026-10-11 - Inbounds per user; plain-words problems; a lighter bot page
 
 * **Panels → user:** the user window lists the inbounds of the panel (grouped by protocol) with a tick per inbound; tick or untick and Save. The ids of the protocols the user keeps are not touched (the links of the users stay valid); a protocol with no inbound left is removed, a new one gets its settings from the panel.
