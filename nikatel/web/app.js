@@ -2733,7 +2733,11 @@ function settingsTabs() {
   setW();
 }
 /* the frame of every settings tab ends exactly where the row of tabs ends */
-const setW = () => { const t = $("#page .set-tabs"); if (t) $("#page").style.setProperty("--set-w", Math.round(t.getBoundingClientRect().width + 96) + "px"); };
+const setW = () => {   // the frame ends a little past the right edge of the LAST tab (the bar itself stretches across the page)
+  const t = $("#page .set-tabs"); if (!t) return;
+  const left = t.getBoundingClientRect().left, right = Math.max(...[...t.querySelectorAll("button")].map(b => b.getBoundingClientRect().right));
+  $("#page").style.setProperty("--set-w", Math.round(right - left + 40) + "px");
+};
 addEventListener("resize", () => { clearTimeout(setW.t); setW.t = setTimeout(setW, 120); });
 settingsTabs.only = () => {   // switch the card without touching the server or the forms: hide / show and redraw the small tab row
   const grid = $("#page .grid2"); if (!grid) return refresh();

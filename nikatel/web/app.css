@@ -1963,3 +1963,11 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
 }
 /* every tab's frame has the same height (the Appearance tab's); a tab with more content grows */
 @media (min-width: 761px) { #page .set-wrap > .card.sf { min-height: 640px !important; } }
+/* the settings frame: as wide as the row of tabs (first tab to a little past the last one), the height only what the content needs;
+   the description strip and the tab bar end at the same edge; a lone row at the end of a group takes the whole line */
+@media (min-width: 761px) {
+  #page .set-wrap > .card.sf { min-height: 0 !important; }
+  #page .set-top, #page .set-desc { width: min(var(--set-w, 100%), 100%); box-sizing: border-box; }
+  .ss-rows > .sr:not(.x):not(.li):nth-child(odd):is(:last-child, :has(+ .x), :has(+ .li), :has(+ pre), :has(+ .hidden:last-child)) { grid-column: 1 / -1; border-left: 0; }
+  .sf .theme-grid { gap: 5px; } .sf .tsw { padding: 4px 4px 5px; } .sf .tsw b { font-size: 10px; letter-spacing: -.1px; } .sf .tsw i { height: 30px; }
+}
