@@ -2105,3 +2105,14 @@ input[type=checkbox].sw:checked { background-position: calc(100% - 4px) 50% !imp
 .pwi .eye svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .pwi .eye .slash { display: none; } .pwi .eye.on .slash { display: block; }
 @media (min-width: 761px) { .ss.flat .sr > .v, .sg.one .ss.flat .sr > .v { flex: 0 0 auto !important; height: auto; width: auto; } .ss.flat .sr:has(.v.t) > .v { flex: 1 1 auto !important; } }
 .si-n .si-a { display: inline-flex; gap: 6px; margin-left: 10px; } .si-n .si-a button, .si-n .si-a a.btn { height: 28px; padding: 0 14px; }
+/* ALL text boxes of the Security items share one column and one width */
+@media (min-width: 761px) { .si-r .si-f, .pwf-f .pwi, .pwf-f .pwi .si-f { width: 340px; max-width: 100%; } .pwf-f { padding: 6px 0 2px; } .pwf-a { padding: 6px 0 0; } .si .pwf-f .si-f { height: 30px; } }
+/* the switch: a track 18 px high with a knob a little bigger than the track (26 px), like a real toggle */
+input[type=checkbox].sw { position: relative; width: 46px !important; height: 28px !important; min-width: 46px !important; background: none !important; background-image: none !important; border-radius: 999px !important; transition: none !important; }
+input[type=checkbox].sw::before { content: "" !important; display: block !important; position: absolute; left: 0; right: 0; top: 5px; bottom: 5px; border-radius: 999px; background: rgba(255,255,255,.2); transition: background .18s; }
+input[type=checkbox].sw::after { content: "" !important; display: block !important; position: absolute; top: 1px !important; left: 0 !important; width: 26px !important; height: 26px !important; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); transition: transform .18s var(--ease); }
+input[type=checkbox].sw:checked { background: none !important; } input[type=checkbox].sw:checked::before { background: var(--ok); } input[type=checkbox].sw:checked::after { transform: translateX(20px) !important; }
+html[data-mode="light"] input[type=checkbox].sw::before { background: rgba(0,0,0,.2); } html[data-mode="light"] input[type=checkbox].sw:checked::before { background: var(--ok); }
+/* the settings frame is paler */
+#page .set-wrap > .card.sf { background: rgba(255,255,255,.015) !important; border-color: rgba(255,255,255,.06) !important; box-shadow: none !important; } html[data-mode="light"] #page .set-wrap > .card.sf { background: rgba(255,255,255,.5) !important; }
+.set-desc { background: rgba(255,255,255,.015) !important; border-color: rgba(255,255,255,.05) !important; }

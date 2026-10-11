@@ -131,3 +131,4 @@ input[type=checkbox].sw { width: 44px !important; height: 26px !important; min-w
 input[type=checkbox].sw { width: 46px !important; height: 28px !important; min-width: 46px !important; background-size: 24px 24px !important; } .si-r .si-f { width: 100% !important; } .si-r { flex-wrap: wrap; }
 input[type=checkbox].sw { background-size: 20px 20px !important; background-position: 4px 50% !important; } input[type=checkbox].sw:checked { background-position: calc(100% - 4px) 50% !important; }
 .pwf-f .pwi, .pwf-f .pwi .si-f { width: 100% !important; } .pwi .eye { height: 32px; width: 36px; }
+input[type=checkbox].sw { width: 52px !important; height: 32px !important; min-width: 52px !important; } input[type=checkbox].sw::before { top: 6px; bottom: 6px; } input[type=checkbox].sw::after { width: 30px !important; height: 30px !important; } input[type=checkbox].sw:checked::after { transform: translateX(22px) !important; }
