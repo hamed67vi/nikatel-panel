@@ -1534,3 +1534,7 @@ button.cta-tunnel:hover { transform: scale(1.04); animation: ctaRing 1.1s ease-o
 @keyframes ipPop { 0% { opacity: 0; transform: translateY(-20%) scale(.9); } 18% { opacity: .85; transform: translateY(0) scale(1); } 70% { opacity: .85; } 100% { opacity: 0; transform: translateY(40%) scale(.98); } }
 .ip-copied::after { animation: ipPop 1.3s ease-out both !important; } @keyframes ipFlash { 0% { background: rgba(61,220,151,.1); } 100% { background: transparent; } }
 .copied { background: rgba(61,220,151,.1) !important; color: #8fe9c4 !important; box-shadow: 0 0 0 1px rgba(61,220,151,.28) inset !important; font-weight: 600 !important; opacity: .9; }
+/* Server Doctor: two boxes like Tunnel Doctor - what needs a look, and the healthy ones */
+.dr-list { display: grid !important; gap: 8px; align-content: start; } .dr-list .ap-iss { margin: 0; }
+.dr-ok { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 10px; align-content: start; padding: 4px 2px; }
+.dr-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; } .dr-row b { font-family: 'Poppins', 'Inter', sans-serif; font-weight: 600; letter-spacing: .3px; font-size: 12.5px; } .dr-row small { font-size: 10.5px; } .dr-row span { margin-left: auto; font-size: 11px; white-space: nowrap; } .dr-row .st { width: 8px; height: 8px; border-radius: 50%; padding: 0; background: var(--ok); display: inline-block; }

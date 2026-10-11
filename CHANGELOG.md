@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.26 - 2026-10-11 - Server Doctor like Tunnel Doctor
+
+* *Server Doctor* is two boxes in one frame joined to its tab, like *Tunnel Doctor*: *Needs a look* (a card per server with the cause in plain words and what to do) and *Healthy* (each with its CPU and memory); the extra bits are gone.
+
 ## 1.17.25 - 2026-10-11 - A lighter copy of an address
 
 * Over an address the cursor is a modern arrow with a small copy badge and a copy mark fades in beside it; the *Copied* confirmation is faint and light (a pale green outline, below the address, so it no longer covers it).
