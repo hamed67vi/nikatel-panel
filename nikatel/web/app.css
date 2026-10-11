@@ -1558,3 +1558,41 @@ button.cta-tunnel:hover { transform: scale(1.04); animation: ctaRing 1.1s ease-o
 .spill.active, .epill.ok { color: var(--ok); background: rgba(61,220,151,.1); border-color: rgba(61,220,151,.3); } .spill.disabled { color: var(--mut); } .spill.limited, .spill.expired, .epill.bad { color: var(--bad); background: rgba(255,107,139,.1); border-color: rgba(255,107,139,.32); } .spill.on_hold, .epill.warn { color: var(--warn); background: rgba(255,200,70,.1); border-color: rgba(255,200,70,.32); }
 .trf2 { display: grid; gap: 5px; min-width: 0; } .trf2-t { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; } .trf2-t b { font-family: var(--mono); font-weight: 700; color: var(--text); } .trf2-t small { color: var(--mut); font-size: 11px; }
 .trf2-b { display: flex; align-items: center; gap: 10px; } .trf2-b .rbar { flex: 1; height: 5px; } .trf2-b small { font-size: 10.5px; color: var(--mut); white-space: nowrap; min-width: 92px; text-align: right; }
+/* Tunnel Doctor: what it does, above the two boxes */
+.ap-intro { margin-bottom: 8px; border-top-left-radius: 0 !important; padding-bottom: 12px; } .ap-intro h3 { margin-bottom: 8px; } .ap-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .ap-steps > div { display: grid; gap: 3px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ap-steps b { font-size: 12px; color: var(--acc-2); letter-spacing: .3px; } .ap-steps span { font-size: 12px; line-height: 1.45; color: var(--text); opacity: .85; } .ap-steps i { font-style: normal; font-weight: 700; color: var(--acc-2); }
+@media (max-width: 1100px) { .ap-steps { grid-template-columns: 1fr 1fr; } } @media (max-width: 760px) { .ap-steps { grid-template-columns: 1fr; } }
+/* Settings: every tab is a folder tab joined to the frame under it */
+.set-top { margin: 0 0 -1px 2px; position: relative; z-index: 3; } .set-top .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; backdrop-filter: none; }
+.set-top .tabs button { height: 38px; padding: 0 18px; border-radius: 15px 15px 0 0; border: 1px solid var(--line); border-bottom: 0; background: rgba(255,255,255,.035); color: var(--mut); box-shadow: none; font-size: 13px; transform: none; }
+.set-top .tabs button:hover { background: rgba(255,255,255,.07); color: var(--text); transform: none; box-shadow: none; }
+.set-top .tabs button.on { height: 40px; margin-bottom: -1px; background: #1b1e2b; color: #f6dc8a; border-color: var(--line-hi, rgba(255,255,255,.22)); box-shadow: inset 0 2px 0 #e9bf55, 0 -6px 18px rgba(233,191,85,.10); }
+.set-desc { margin: 0 !important; padding: 10px 16px; border: 1px solid var(--line); border-bottom: 0; border-radius: 0 14px 0 0; background: var(--panel); font-size: 12.5px; color: var(--mut); }
+.set-desc + .fstrip { margin: 0 !important; border-radius: 0 !important; border-top: 1px solid var(--line) !important; box-shadow: none !important; } .set-desc ~ .grid2 > .card:not(.hidden) { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; border-top: 0; }
+html[data-theme="classic"] .set-top .tabs button.on { background: #1f2937; }
+/* leaving a page: the old one stays, dimmed and still, until the new one arrives */
+#page.busy { opacity: .5; pointer-events: none; transition: opacity .14s ease; } #page { transition: opacity .14s ease; }
+
+/* the side menu: line icons of one family, each with its own colour, a faint breath, brighter and livelier under the mouse */
+nav a .ic { width: 26px; height: 26px; display: inline-grid; place-items: center; font-size: 0; filter: none !important; color: var(--ic, #8f98c8); } nav a .ic svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .62; animation: icBreath 4.4s ease-in-out infinite; transition: opacity .25s, transform .3s cubic-bezier(.2,.9,.3,1.3), filter .25s; }
+nav a[data-page="dashboard"] { --ic: #93a4ff; } nav a[data-page="nodes"] { --ic: #5ee0b5; } nav a[data-page="tunnels"] { --ic: #6fb2ff; } nav a[data-page="configs"] { --ic: #ffb86b; } nav a[data-page="bot"] { --ic: #ff8fb1; } nav a[data-page="settings"] { --ic: #c3a5ff; }
+nav a:nth-child(2) .ic svg { animation-delay: -.7s; } nav a:nth-child(3) .ic svg { animation-delay: -1.4s; } nav a:nth-child(4) .ic svg { animation-delay: -2.1s; } nav a:nth-child(5) .ic svg { animation-delay: -2.8s; } nav a:nth-child(6) .ic svg { animation-delay: -3.5s; }
+@keyframes icBreath { 0%, 100% { opacity: .5; } 50% { opacity: .78; } }
+nav a:hover .ic svg { opacity: 1; animation: none; transform: scale(1.14); filter: drop-shadow(0 0 7px var(--ic)); } nav a:hover .ic { animation: none !important; transform: none !important; }
+nav a.on { --ic: #f6c453; } nav a.on .ic svg { opacity: 1; animation: none; filter: drop-shadow(0 0 6px rgba(246,196,83,.55)); }
+nav a .ic .led { animation: icLed 1.8s ease-in-out infinite; } nav a .ic .led.l2 { animation-delay: -.9s; } @keyframes icLed { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+nav a:hover .ic .a1 { animation: icR .7s ease-in-out infinite alternate; } nav a:hover .ic .a2 { animation: icL .7s ease-in-out infinite alternate; } @keyframes icR { to { transform: translateX(2.5px); } } @keyframes icL { to { transform: translateX(-2.5px); } }
+nav a:hover .ic .s1 { animation: icS 1s ease-in-out infinite alternate; } nav a:hover .ic .s2 { animation: icS 1s ease-in-out infinite alternate-reverse; } nav a:hover .ic .s3 { animation: icS .8s ease-in-out infinite alternate; } @keyframes icS { to { transform: translateX(3px); } }
+@media (prefers-reduced-motion: reduce) { nav a .ic svg, nav a .ic .led, nav a:hover .ic * { animation: none !important; } }
+
+/* the configs list: bigger type in cards of the same size, each card clearly apart from the next, easy to find by its name */
+.cf-list { border-collapse: separate !important; border-spacing: 0 5px !important; }
+.cf-list td { font-size: 13.5px; background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.05)) !important; border-top: 1px solid rgba(255,255,255,.14) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+.cf-list td.name { font-size: 15.5px; font-weight: 800; letter-spacing: .15px; } .cf-list td.mono { font-size: 12.5px; } .cf-list td.num { font-size: 13px; } .cf-list .td-type { font-size: 11px; padding: 2px 9px; }
+.cf-list tbody tr.click:hover td { background: linear-gradient(180deg, rgba(124,131,255,.2), rgba(124,131,255,.1)) !important; border-top-color: rgba(124,131,255,.5) !important; } .cf-list tbody tr.click:hover { box-shadow: 0 5px 16px rgba(0,0,0,.3); }
+.cf-list tr td:first-child { border-left-width: 4px !important; } .cf-list th { font-size: 11px; }
+/* the icon of the page you are on moves faster than the others */
+nav a.on .ic svg { animation: icOn 1.5s ease-in-out infinite !important; } @keyframes icOn { 0%, 100% { transform: scale(1); filter: drop-shadow(0 0 3px rgba(246,196,83,.4)); } 50% { transform: scale(1.13); filter: drop-shadow(0 0 9px rgba(246,196,83,.8)); } }
+nav a.on .ic .a1 { animation: icR .55s ease-in-out infinite alternate; } nav a.on .ic .a2 { animation: icL .55s ease-in-out infinite alternate; }
+nav a.on .ic .led { animation: icLed .7s ease-in-out infinite; } nav a.on .ic .led.l2 { animation-delay: -.35s; }
+nav a.on .ic .s1 { animation: icS .7s ease-in-out infinite alternate; } nav a.on .ic .s2 { animation: icS .7s ease-in-out infinite alternate-reverse; } nav a.on .ic .s3 { animation: icS .55s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { nav a.on .ic svg, nav a.on .ic * { animation: none !important; } }

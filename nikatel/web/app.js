@@ -161,7 +161,7 @@ const TITLE_ANIM = {
   if (state.page !== page) {   // leaving a page: drop what it still waits for, start the new one at the top and show at once that it is loading (the old page never stays on screen)
     navCtl.abort(); navCtl = new AbortController(); navSeq++; retries = 0; clearTimeout(retryT); state.resetScroll = true;
     const m = $(".main"); if (m) m.scrollTop = 0;
-    const pg = $("#page"); if (pg) { pg.innerHTML = loadingBox(page); pg.classList.remove("enter"); void pg.offsetWidth; pg.classList.add("enter"); }
+    const pg = $("#page"); if (pg) { if (pg.childElementCount && !pg.querySelector(".loading")) { pg.style.minHeight = pg.offsetHeight + "px"; pg.classList.add("busy"); } else pg.innerHTML = loadingBox(page); pg.classList.remove("enter"); }      // the old page stays (dimmed, still) until the new one has its data: nothing collapses, nothing jumps
     hideModal();
   }   // what the page we leave still waits for is dropped; the new page starts at the top
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
@@ -248,9 +248,9 @@ const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "Th
 async function refresh() {
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
-  const seq = navSeq, pg0 = $("#page");
-  if (pg0 && pg0.childElementCount && !pg0.querySelector(".loading")) pg0.style.minHeight = pg0.offsetHeight + "px";      // the page keeps its height while it is redrawn: switching a tab does not make it jump
-  const release = () => requestAnimationFrame(() => requestAnimationFrame(() => { if (pg0) pg0.style.minHeight = ""; }));
+  const seq = navSeq, pg0 = $("#page"), wasBusy = !!(pg0 && pg0.classList.contains("busy"));
+  if (pg0 && pg0.childElementCount && !pg0.querySelector(".loading") && !wasBusy) pg0.style.minHeight = pg0.offsetHeight + "px";      // the page keeps its height while it is redrawn: switching a tab does not make it jump
+  const release = () => { setTimeout(() => { if (pg0) pg0.style.minHeight = ""; }, 90); };      // a timer, not an animation frame: it also runs when the tab is in the background
   const ae = document.activeElement, focus = ae && ae.id && ae.matches("input, textarea") ? {id: ae.id, a: ae.selectionStart, b: ae.selectionEnd} : null;   // the box being typed in
   try {
     await PAGES[state.page]();
@@ -258,16 +258,18 @@ async function refresh() {
     if (focus) { const el = document.getElementById(focus.id); if (el && el !== document.activeElement) { el.focus(); try { el.setSelectionRange(focus.a, focus.b); } catch (e) { /* not a text box */ } } }   // a re-drawn page must not take the cursor out of the search box
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
+    if (pg0 && pg0.classList.contains("busy")) { pg0.classList.remove("busy"); void pg0.offsetWidth; pg0.classList.add("enter"); }      // a new page: it fades in over the old one's place
     scrollRestore(snap); pendScroll = snap.length ? snap : null; setTimeout(() => { pendScroll = null; }, 500);
-    document.body.classList.toggle("tabbed", !!SUB[state.page] && ((c) => !!c && c.matches(".toolbar, .fstrip, .tiles, .ap-pair, .ap-alert, .tt-frame, .dr-head"))([...$("#page").children].find(c => getComputedStyle(c).display !== "none")));   // the sub tabs stick to the box under them
+    document.body.classList.toggle("tabbed", !!SUB[state.page] && ((c) => !!c && c.matches(".toolbar, .fstrip, .tiles, .ap-pair, .ap-alert, .ap-intro, .tt-frame, .dr-head, .set-top"))([...$("#page").children].find(c => getComputedStyle(c).display !== "none")));   // the sub tabs stick to the box under them
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
     release();
   } catch (e) {
     release();
     if (e.message === "not logged in" || seq !== navSeq) return;
+    if (pg0) pg0.classList.remove("busy");
     const transient = /HTTP 50\d|Failed to fetch|NetworkError|Load failed|network/i.test(e.message);
     const pg = $("#page");
-    if (pg && (!pg.childElementCount || pg.querySelector(".loading, .page-err"))) pg.innerHTML = errorBox(e.message, transient);   // nothing of this page is on screen yet: say so instead of leaving the old page
+    if (pg && (!pg.childElementCount || pg.querySelector(".loading, .page-err") || wasBusy)) pg.innerHTML = errorBox(e.message, transient);   // nothing of this page is on screen yet: say so instead of leaving the old page
     toast("✕ " + e.message, "bad");
     if (transient) { clearTimeout(retryT); retryT = setTimeout(() => { if (seq === navSeq) refresh(); }, Math.min(8000, 1500 * 2 ** Math.min(retries++, 3))); }
   }
@@ -751,7 +753,8 @@ function applyQ() {
   document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
   const sb = $(".searchbar"); if (sb) sb.dataset.n = q ? shown + " / " + total : "";
 }
-window.setQ = v => { state.q = v.trim().toLowerCase(); applyQ(); };
+const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
+window.setQ = v => { holdBoxes(); state.q = v.trim().toLowerCase(); applyQ(); };
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
@@ -938,7 +941,7 @@ window.checkAll = async () => {
     const loss = x => x.loss_pct == null ? '<span class="mut">—</span>' : `<b class="${x.loss ? "warn" : "gw-ok"}">${x.loss_pct}%</b>${x.loss === "high" ? ' <small class="warn">users feel it</small>' : x.loss === "some" ? ' <small class="warn">some</small>' : ""}`;
     showModal(`<b>🔍 All tunnels</b> <span class="pill ${r.down || r.high_loss ? "err" : "ok"}">${r.up} up · ${r.degraded} unstable · ${r.down} down${r.unknown ? " · " + r.unknown + " unknown" : ""}</span>${r.high_loss ? ` <span class="pill err">${r.high_loss} with high packet loss</span>` : ""}`,
       `<table class="tbl"><thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Latency</th><th>Packet loss</th></tr></thead><tbody>${r.rows.map(x => `<tr class="${x.state}"><td class="name">${esc(x.name)}</td><td><span class="st ${x.state}">${esc(x.state)}</span>${x.why ? `<small class="err td-err" title="${esc(x.why)}">${esc(x.why).slice(0, 44)}</small>` : ""}</td><td class="mut">${esc(x.iran)} ⇄ ${esc(x.foreign)}</td><td class="num">${x.latency_ms != null ? Math.round(x.latency_ms) + " ms" : '<span class="mut">—</span>'}</td><td class="num">${loss(x)}</td></tr>`).join("")}</tbody></table>
-      <small class="mut">Packet loss of ${LOSS_HIGH_PCT} % or more is felt by users (stalls, slow pages); it is only shown here - the smart repair acts on it by itself when it is the route.</small>`, "wide");
+      <small class="mut">Packet loss of ${LOSS_HIGH_PCT} % or more is felt by users (stalls, slow pages); it is only shown here - the Tunnel Doctor acts on it by itself when it is the route.</small>`, "wide");
   } catch (e) { showModal("<b>🔍 All tunnels</b>", `<div class="err">${esc(e.message)}</div>`); }
   refresh();
 };
@@ -978,14 +981,14 @@ PAGES.tunnelsList = async () => {
   const shortWhy = t => { const e = t.last_error || "", l = (t.detail || {}).loss_pct; return /flaps|lost packets/.test(e) ? "keeps dropping" : /loss/.test(e) ? `${l || ""}% packets lost` : /not listening/.test(e) ? "port closed" : /no data/.test(e) ? "no data" : e.slice(0, 24); };
   const fcount = {}; list.forEach(t => { fcount[t.foreign_name] = (fcount[t.foreign_name] || 0) + 1; });   // how many tunnels end on the same foreign server
   const dupMark = t => fcount[t.foreign_name] > 1 ? `<span class="dup" title="This foreign server ends ${fcount[t.foreign_name]} tunnels (${esc(list.filter(x => x.foreign_name === t.foreign_name).map(x => x.name).join(", "))}). Is that on purpose?">⚠ ×${fcount[t.foreign_name]}</span>` : "";
-  const wrench = t => fixing.has(t.name) ? '<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span>' : "";
+  const wrench = t => fixing.has(t.name) ? '<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span>' : "";
   const rows = list.filter(t => tmode === "all" || tunSev(t));
   const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "UNSTABLE" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
   const row = t => { const q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}${t.id < 0 ? "" : " clk"}" ${t.id < 0 ? "" : `onclick="toggleDetail(${t.id})" title="Click for the details"`} data-q="${esc((t.name + " " + t.iran_name + " " + t.foreign_name + " " + t.type + " " + (t.iran_host || "") + " " + (t.foreign_host || "")).toLowerCase())}">
       <td class="name">${esc(t.name)}${wrench(t)}</td>
       <td><span class="td-type">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? "GRE" : (t.record || {}).direction === "direct" ? "direct" : "public"}</small></td>
-      <td>${workMap.has(t.name) ? `<span class="busy-chip" title="The smart repair is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>` : `<span class="st ${t.state}">${stText(t)}</span>${t.last_error && t.state !== "up" ? `<small class="${t.state === "down" ? "err" : "mut"} td-err" title="${esc(t.last_error)}">${esc(t.state === "degraded" ? shortWhy(t) : t.last_error.slice(0, 40))}</small>` : ""}`}</td>
+      <td>${workMap.has(t.name) ? `<span class="busy-chip" title="the Tunnel Doctor is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>` : `<span class="st ${t.state}">${stText(t)}</span>${t.last_error && t.state !== "up" ? `<small class="${t.state === "down" ? "err" : "mut"} td-err" title="${esc(t.last_error)}">${esc(t.state === "degraded" ? shortWhy(t) : t.last_error.slice(0, 40))}</small>` : ""}`}</td>
       <td class="td-node ir"><b>${esc(t.iran_name)}</b><span class="mono mut ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(t.iran_host)}')" title="Click to copy the address">${esc(t.iran_host)}</span></td>
       <td class="td-arrow"><div class="tlink ${t.state}" style="--ping:${Math.round(t.rtt_ms || 80)}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><span class="tl-top"><b class="ms ${t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="sl">/</i><small class="loss ${d.loss_pct >= SHOW_LOSS ? "hi" : "ok"}" title="Packets lost on the GRE link of this tunnel">${d.loss_pct != null ? d.loss_pct + "%" : "—"}</small></span><i class="wire"><u class="h r"></u><u class="h l"></u><s class="pk a"></s><s class="pk b"></s>${t.state === "down" ? '<em class="xx">✕</em>' : ""}</i></div></td>
       <td class="td-node"><b>${esc(t.foreign_name)}${dupMark(t)}</b><span class="mono mut ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(t.foreign_host)}')" title="Click to copy the address">${esc(t.foreign_host)}</span></td>
@@ -1330,18 +1333,18 @@ function storyHtml(s) {
   return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
     (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${["autopilot", "fix"].includes(s.action) && !s.dry_run ? (s.ok ? "All done - the problem is fixed." : "Repair did not succeed.") : `${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : s.action === "observe" ? "Look" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.`}</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
-/* ---- Smart repair: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
+/* ---- Tunnel Doctor: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
 const ARVAN_UI = false;   // the ArvanCloud failover is switched off for now (also server side: failover.ENABLED); flip both to bring it back
 
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
-  // Smart repair is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
+  // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
   const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
-  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="The smart repair is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : '${(outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="The smart repair watches it and starts by itself when needed">watching</span>`}'; })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(outage && outage.by_tunnel && outage.by_tunnel[t.name] ? outage.by_tunnel[t.name].join(" · ") + " — nothing is done until it is back" : kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the smart repair is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
+  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : '${(outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`}'; })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(outage && outage.by_tunnel && outage.by_tunnel[t.name] ? outage.by_tunnel[t.name].join(" · ") + " — nothing is done until it is back" : kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
   const work = outage && (outage.working || []).length ? `<div class="nw-box work-box"><b class="nw-title">🔧 Working now</b>${outage.working.map(w => `<div class="nw-row"><span class="wrench">🔧</span><b>${esc(w.name)}</b><span class="mut">${w.mode === "look" ? "looking at it" : "repairing"}</span><span class="work-line">${esc(w.line)}</span><button class="sm" onclick="apLive(${(state.tunnelsCache || []).find(t => t.name === w.name)?.id || 0}, '${esc(w.name)}')">📡 Live</button></div>`).join("")}</div>` : "";
@@ -1354,7 +1357,14 @@ PAGES.actions = async () => {
       <div class="ap-do">${i.kind === "off" ? "Nothing is done to its tunnels until it is back on: nothing to restart or rebuild." : "The repair only watches: rebuilding would not help. It carries on by itself when the server answers well again."}</div></div>`;
   const disturb = issues.length ? `<div class="card ap-alert"><h3>⚠ Servers and network <span class="sp"></span><span class="pill err">${issues.length}</span></h3><div class="ap-issues">${issues.map(issueCard).join("")}</div></div>` : "";
   const storm = outage && outage.storm ? `<div class="storm-banner">⚠ <b>Mass disruption:</b> ${outage.servers_offline.length} server(s) offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down. While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.</div>` : "";
-  $("#page").innerHTML = `<div data-tab="att" class="ap-top">${storm}${disturb}</div><div class="grid2 ap-two ap-pair" data-tab="att"><div class="card"><h3>🔧 Working now <span class="sp"></span><label class="chk ap-auto" title="On: the smart repair restarts, rebuilds, builds the link again and tries other tunnel types by itself. Off: you diagnose and fix by hand."><input type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""} onchange="apAuto(this)"> Automatic repair</label>${bad.length && !rp.auto ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
+  const intro = `<div class="card ap-intro" data-tab="att"><h3>🩺 What the Tunnel Doctor does</h3><div class="ap-steps">
+      <div><b>1 · Watches</b><span>Every tunnel is checked each minute: its services, the GRE link, the control port and whether data really passes - and the packet loss.</span></div>
+      <div><b>2 · Restarts</b><span>A tunnel that stays down for ${esc(rp.after_seconds || 180)} s gets its service restarted, one tunnel at a time.</span></div>
+      <div><b>3 · Repairs</b><span>If a restart is not enough it climbs, once per half hour per tunnel, up to the level you chose: rebuild, a new GRE link, another tunnel type. It never moves a tunnel to another Iran server by itself.</span></div>
+      <div><b>4 · Looks at loss</b><span>From 5 % packet loss it only reads and writes what it sees (the live log); from 15 % - what users feel - it acts, after testing first.</span></div>
+      <div><b>5 · Waits</b><span>While a server of a tunnel is off, or during a mass disruption, it does nothing to the tunnel: there is nothing to repair until the server is back.</span></div>
+      <div><b>6 · Tells you</b><span>Every step, test and build is written in <i>History</i> with its full story. <i>Explain with AI</i> reads the situation and says what to do first.</span></div></div></div>`;
+  $("#page").innerHTML = `${intro}<div data-tab="att" class="ap-top">${storm}${disturb}</div><div class="grid2 ap-two ap-pair" data-tab="att"><div class="card"><h3>🔧 Working now <span class="sp"></span><label class="chk ap-auto" title="On: the Tunnel Doctor restarts, rebuilds, builds the link again and tries other tunnel types by itself. Off: you diagnose and fix by hand."><input type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""} onchange="apAuto(this)"> Automatic repair</label>${bad.length && !rp.auto ? `<button class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></h3>
       <div class="ap-att">${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Servers.</div>'}
       </div>
@@ -1428,12 +1438,12 @@ window.foRestore = async id => {
   try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + r.fqdn + " points at " + r.old + " again", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.apLive = async (id, name) => {
-  /* the live log of what the smart repair does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
+  /* the live log of what the Tunnel Doctor does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
   showModal(`<b>📡 ${esc(name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Looking for the repair of this tunnel…</div></div><div class="frm-act" style="margin-top:8px"><button class="sm" onclick="apDiagnose('+id+')">🩺 Check the tunnel now</button></div>', "wide");
   try {
     const list = (await api("/api/actions?limit=60")).actions.filter(a => a.ref === name && ["autopilot", "observe", "fix", "build", "create"].includes(a.action));
     const box = $("#ap-story"), a = list.find(x => !x.done) || list[0];
-    if (!a) { box.innerHTML = '<div class="mut" style="padding:8px">Nothing to show yet. As soon as this tunnel shows packet loss (5 % or more) the smart repair looks at it and writes what it sees here; it acts by itself only when the loss is high enough for users to feel (15 %) or the tunnel is down.</div>'; return; }
+    if (!a) { box.innerHTML = '<div class="mut" style="padding:8px">Nothing to show yet. As soon as this tunnel shows packet loss (5 % or more) the Tunnel Doctor looks at it and writes what it sees here; it acts by itself only when the loss is high enough for users to feel (15 %) or the tunnel is down.</div>'; return; }
     box.innerHTML = storyHtml(a);
     if (!a.done) followStory(a.id, box, 900).then(() => refresh());
   } catch (e) { const box = $("#ap-story"); if (box) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
@@ -1617,7 +1627,7 @@ function cfPartHtml(c, tab) {
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(ups)}</div>
     <div class="mgrid">${chartCard("Delay", rows.map(r => [r[0], r[1] ? r[2] : null]), {unit: " ms", warn: 800, bad: 1000, fmt: v => Math.round(v)})}
       <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)}</span><div class="err">${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
-}window.cfQ = v => { cf.q = v.trim().toLowerCase(); applyQ(); };
+}window.cfQ = v => { holdBoxes(); cf.q = v.trim().toLowerCase(); applyQ(); };
 window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refresh(); };
 window.cfGroup = g => { cf.group = g; localStorage.setItem("nk.cfgroup", g); refresh(); };
 async function cfInView() { const d = await api("/api/configs"); return d.configs.filter(c => cf.group === "__all" ? true : cf.group === "__manual" ? !c.group : c.group === cf.group); }
@@ -1815,7 +1825,7 @@ PAGES.panels = async () => {
   $("#page").innerHTML = `<div class="toolbar pn-top"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
       
       <span class="tcount pstat"><span class="tc info" title="${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now">Users <b>${(+s.users_total || 0).toLocaleString()}</b></span><span class="tc click ${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length === (p.nodes || []).length ? "ok" : "bad"}" onclick="pnNodesWin()" title="Open the nodes of this panel (green: all connected)">Nodes <b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b></span><span class="tc info" title="↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}">Traffic <b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b></span></span><span class="sp"></span>
-      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnTestConfig(${p.id}, '${esc(p.name)}')" title="Looks in Configs for this panel's subscription (it may be there under another name). When it is not there, makes a small test user on the panel and adds its subscription, so its configs are measured from inside Iran (the probe).">🧪 Check configs from Iran${s.test_user ? " ✓" : ""}</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
+      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
     ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
@@ -2487,7 +2497,7 @@ PAGES.settings = async () => {
         <label>…after it has been down for (seconds)<input name="after_seconds" type="number" min="60" max="3600" value="${rp_.after_seconds}"></label>
         <label>How far it may go<select name="level">${[["restart", "Restart only (safe)"], ["rebuild", "+ rebuild the tunnel if restarting did not help"], ["switch", "+ switch the tunnel type when the route blocks it (GRE / port filtered)"]].map(([k, l]) => `<option value="${k}" ${(rp_.level || "restart") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <div class="frm-act"><button class="pri" type="submit">Save</button></div></form>
-      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps (rebuild, another tunnel type) run by themselves once the restarts failed, and again after 30 minutes if needed - nothing asks for approval. Details on the Smart repair page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
+      <small class="mut">At most ${rp_.max_per_hour} restarts per tunnel per hour; never when a server is unreachable. The deeper steps (rebuild, another tunnel type) run by themselves once the restarts failed, and again after 30 minutes if needed - nothing asks for approval. Details on the Tunnel Doctor page. ${rp_.read_only ? "Repairs need <code>NIKATEL_READ_ONLY=false</code> in the env file first." : ""}</small></div>
 
     <div class="card"><h3>Daily report</h3>
       <form class="frm one" onsubmit="return saveReport(event)">
@@ -2630,7 +2640,7 @@ const SET_TABS = {
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "account";
   state.stab = cur;
-  const bar = `<div class="fstrip"><div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
+  const bar = `<div class="set-top"><div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
   $("#page").insertAdjacentHTML("afterbegin", bar);
   const grid = $("#page .grid2"), byName = {};
   grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); const nm = c.dataset.name || (h ? h.childNodes[0].textContent.trim() : ""); c.dataset.name = nm; byName[nm] = c; c.classList.add("hidden"); });

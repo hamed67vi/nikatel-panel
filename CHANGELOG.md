@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.17.31 - 2026-10-11 - What the Tunnel Doctor does, Settings tabs joined to their frames
+
+* **Tunnel Doctor** has a box above its two boxes that says exactly what it does: it watches every tunnel, restarts one that stays down, repairs up to the level you chose, only looks at loss from 5 % and acts from 15 %, waits while a server is off, and tells every step in *History*. Every place that said *Smart repair* now says *Tunnel Doctor*.
+* **The side menu has line icons of one family** (dashboard, servers, tunnels, panels, bot, settings), each in a colour of its own with a faint breath; under the mouse an icon turns brighter and moves (the tunnel arrows slide, the sliders of Settings move, the server lights blink).
+* **The icon of the page you are on moves faster** than the others (a quicker beat and glow; the tunnel arrows, the server lights and the sliders run quicker).
+* **The configs list** has bigger type in cards of the same size, with a gap between the cards and a clearer edge, so a config is found at a glance.
+* **Moving between pages is smooth**: the old page stays (dimmed and still) until the new one has its data, then the new one fades in - nothing collapses into a *Loading* box and nothing jumps. **Typing in a search box no longer moves what is under it**: the list box keeps its height while its rows are filtered.
+* **Settings**: each tab is a folder tab joined to the frame under it (its description and its card).
+* The *Check configs from Iran* button is gone (a panel's subscription is added to Configs when the panel is added).
+
 ## 1.17.30 - 2026-10-11 - The user cards, finer
 
 * A user card: the name with its note under it (the empty *Note* column is gone), the status as a pill, the traffic as *used* and *left* with a bar and its share (*3.2 % of 20 GB*), the expiry as a coloured pill (green, yellow within 7 days, red when expired).
