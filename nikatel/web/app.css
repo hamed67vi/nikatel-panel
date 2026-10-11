@@ -2346,3 +2346,51 @@ html body #page .set-top { overflow-x: auto; scrollbar-width: none; } html body 
 @media (min-width: 761px) and (max-width: 1180px) { html body #page .set-tabs button { padding: 0 11px; gap: 6px; font-size: 13px; } }
 html body #page .set-tabs button { flex: 0 0 auto; }
 html body #page .set-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+
+html body #page .sf .theme-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 1200px) { html body #page .sf .theme-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 600px) { html body #page .sf .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+html body #page .sf .tsw { padding: 8px 8px 9px; gap: 7px; border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); }
+html body #page .sf .tsw i { height: 40px; border-radius: 10px; } html body #page .sf .tsw i::after { bottom: 6px; height: 8px; left: 8px; right: 8px; border-radius: 99px; }
+html body #page .sf .tsw b { font-size: 12.5px; font-weight: 600; letter-spacing: 0; }
+html body #page .sf .tsw.on { border: 2px solid #2f8bff; padding: 7px 7px 8px; box-shadow: 0 0 0 3px rgba(47,139,255,.18); background: rgba(47,139,255,.07); }
+
+/* ---- side menu like the reference: coloured line icons, a chevron at the right, a blue active item with a bar ---- */
+@media (min-width: 761px) {
+  nav#nav a { position: relative; display: flex; align-items: center; gap: 14px; height: 46px; padding: 0 16px 0 14px; border-radius: 14px; border: 1px solid transparent; font-weight: 600; font-size: 14.5px; }
+  nav#nav a[data-page="dashboard"] { --ic: #9aa4c0; } nav#nav a[data-page="nodes"] { --ic: #4da3ff; } nav#nav a[data-page="tunnels"] { --ic: #38bdf8; } nav#nav a[data-page="configs"] { --ic: #ffa94d; } nav#nav a[data-page="bot"] { --ic: #ff7a9c; } nav#nav a[data-page="settings"] { --ic: #b57cff; }
+  nav#nav a .ic { display: inline-grid; place-items: center; color: var(--ic); } nav#nav a .ic svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  nav#nav a:not([data-page="dashboard"])::after { content: "" !important; display: block !important; position: static !important; margin-left: auto; flex: none; width: 7px; height: 7px; border-right: 2px solid currentColor; border-top: 2px solid currentColor; transform: rotate(45deg) !important; opacity: .5 !important; background: none; inset: auto; animation: none !important; }
+  nav#nav a.on { color: #4da3ff; border-color: rgba(47,139,255,.55); background: linear-gradient(180deg, rgba(10,124,255,.18), rgba(10,124,255,.06)); box-shadow: 0 0 20px rgba(10,124,255,.2), inset 0 0 0 1px rgba(47,139,255,.1); }
+  nav#nav a.on .ic { color: #4da3ff; }
+  nav#nav a.on::before { content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px; width: 4px; border-radius: 4px; background: #2f8bff; box-shadow: 0 0 10px rgba(47,139,255,.8); }
+}
+
+/* ---- every tab bar and every "add" button in the reference style ---- */
+@media (min-width: 761px) {
+  html body #page .tabs:not(.set-tabs) { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; border: 0; background: none; }
+  html body #page .tabs:not(.set-tabs) button { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 20px; font-size: 14px; font-weight: 600; border-radius: 14px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); box-shadow: none; color: var(--text); }
+  html body #page .tabs:not(.set-tabs) button:hover { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); }
+  html body #page .tabs:not(.set-tabs) button.on { color: #4da3ff; border-color: rgba(47,139,255,.75); background: linear-gradient(180deg, rgba(10,124,255,.2), rgba(10,124,255,.06)); box-shadow: 0 0 0 1px rgba(47,139,255,.22), inset 0 -2px 0 #2f8bff; }
+}
+html body button.cta-server, html body button.cta-tunnel { color: #fff !important; text-shadow: 0 1px 1px rgba(0,40,120,.35); background: linear-gradient(180deg, #5eb0ff 0%, #0a7cff 52%, #0062e6 100%) !important; border: 1px solid rgba(255,255,255,.28) !important; box-shadow: 0 6px 16px rgba(10,124,255,.38), 0 0 0 1px rgba(10,124,255,.35), inset 0 1px 0 rgba(255,255,255,.6), inset 0 -3px 6px rgba(0,0,0,.14) !important; border-radius: 999px !important; }
+html body button.cta-server:hover, html body button.cta-tunnel:hover { filter: brightness(1.08); transform: none; animation: none; }
+html body button.cta .cta-ic { background: rgba(255,255,255,.2); }
+
+/* ---- one toolbar row like the reference (the chips and the search shrink; below 1300 px it wraps again) ---- */
+@media (min-width: 1650px) {
+  html body #page .toolbar.joined { flex-wrap: nowrap; gap: 8px; align-items: center; }
+  html body #page .toolbar.joined > button, html body #page .toolbar.joined > a.btn { height: 38px; padding: 0 14px; font-size: 13px; white-space: nowrap; flex: none; }
+  html body #page .toolbar.joined > .sep { display: none; }
+  html body #page .toolbar.joined .nd-stats, html body #page .toolbar.joined .tcount { gap: 6px; flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; }
+  html body #page .toolbar.joined .tc { padding: 0 9px; font-size: 12px; white-space: nowrap; }
+  html body #page .toolbar.joined .sp { flex: 1 1 0; min-width: 0; }
+  html body #page .toolbar.joined .tabs { flex: none; }
+  html body #page .toolbar.joined .tabs button { height: 36px; padding: 0 14px; font-size: 13px; }
+  html body #page .toolbar.joined .tb-search { flex: 0 1 170px; min-width: 110px; }
+}
+html body #page .tb-search { position: relative; display: block; }
+html body #page .tb-search::before { content: ""; position: absolute; left: 13px; top: 50%; width: 15px; height: 15px; transform: translateY(-50%); background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b4bad0' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E") center/contain no-repeat; pointer-events: none; }
+html body #page .tb-search input { width: 100%; height: 38px; border-radius: 14px; padding: 0 12px 0 38px; border: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.18); }
+html body #page .sf .sf-act { align-self: stretch !important; width: 100% !important; justify-content: flex-end !important; margin-left: 0; margin-right: 0; }
+html body #page .sf form.sl { align-items: stretch !important; }
