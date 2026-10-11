@@ -8,7 +8,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -67,7 +67,7 @@ def _harden(resp) -> None:
     h["X-Robots-Tag"] = "noindex, nofollow"
     # what the browser may load and where it may send: only this origin (plus the flag pictures), never inside a frame
     h["Content-Security-Policy"] = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-                                    "font-src 'self'; img-src 'self' data: https://flagcdn.com; connect-src 'self'; "
+                                    "font-src 'self'; img-src 'self' data:; connect-src 'self'; "
                                     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 
 
@@ -184,6 +184,31 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
     if WEB.exists():
         app.mount("/static", StaticFiles(directory=WEB), name="static")
+
+        @app.get("/flags/{cc}.png", include_in_schema=False, dependencies=[Depends(auth.current_user)])
+        def flag(cc: str):
+            """A country flag: the panel server fetches it once and keeps it, so the browser never has to reach a foreign server for it."""
+            import httpx
+            from fastapi.responses import FileResponse, Response
+
+            cc = cc.lower()
+
+            if len(cc) != 2 or not cc.isalpha():
+                return Response(status_code=404)
+
+            d = get_settings().data_dir / "flags"
+            d.mkdir(parents=True, exist_ok=True)
+            f = d / f"{cc}.png"
+
+            if not f.exists():
+                try:
+                    r = httpx.get(f"https://flagcdn.com/w80/{cc}.png", timeout=8)
+                    r.raise_for_status()
+                    f.write_bytes(r.content)
+                except Exception:  # noqa: BLE001  no flag is not an error: the page shows the country code
+                    return Response(status_code=404)
+
+            return FileResponse(f, media_type="image/png", headers={"Cache-Control": "private, max-age=2592000, immutable"})
 
         @app.get("/", include_in_schema=False)
         def index():

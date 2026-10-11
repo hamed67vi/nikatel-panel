@@ -380,3 +380,7 @@ def test_the_same_node_under_another_user_is_not_imported_twice():
     assert endpoint_sig(a) is not None and endpoint_sig(a) == endpoint_sig(b)          # another user id, another name: the same node
     assert endpoint_sig(a) != endpoint_sig(other)                                       # another port / security: another node
     assert endpoint_sig({}) is None and endpoint_sig({"address": ""}) is None
+
+def test_a_flag_is_asked_from_the_panel_not_from_the_browser(client):
+    assert client.get("/flags/abc.png").status_code == 404             # not a country code: nothing is fetched
+    assert client.get("/flags/12.png").status_code == 404

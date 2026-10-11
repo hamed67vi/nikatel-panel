@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.17.20 - 2026-10-11 - Round flags, nothing slides under the status bar
+
+* **Flags are round badges** (24 px, a thin ring) in Nodes and Configs. They are served by the panel (`/flags/xx.png`: the panel server fetches each flag once from flagcdn and keeps it), so the browser no longer waits for a foreign server for them and the page stays whole when that server is slow or blocked.
+* **The status bar no longer sticks** under the header on a wide screen: the tabs of a page could slide under it and look stuck.
+
+## 1.17.19 - 2026-10-11 - The rows of Nodes and Tunnels are cards
+
+* **No buttons on the rows** of *Nodes* and *Tunnels*: a click on the card opens its window (the actions are there: for a tunnel *Health* and *Restart* joined the button bar, *Rename* / *Ports* / *Remove* are in the header; for a server *Console* / *Edit* / *Delete* are in the header). A server the panel cannot log in to keeps its *Password* button.
+* The cards are quieter and finer: a soft gradient, a lift and a chevron on hover.
+* **An address copies itself on a click** (in both lists), with a *✓ Copied* pop and a green flash where it was clicked.
+
+## 1.17.18 - 2026-10-11 - Coloured marks with a meaning on the numbers of a bar
+
+* The numbers in the bar of *Nodes*, *Configs* and a *Panel* have a coloured dot and number colour that mean something: **green** fine (all online, no problem, load under 60 %, average delay under 800 ms), **yellow** take a look (load 60-80 %, delay 800-1000 ms), **red** wrong (a server offline, a problem, load over 80 %, delay over 1000 ms, configs offline, a node not connected), **blue** just information (totals, users, traffic). The tooltip of each says what the colours are.
+
 ## 1.17.17 - 2026-10-11 - No second copy of a node already tested
 
 * **Why *Nikatel-bot* showed 50 configs**: *Check configs from Iran* imports the subscription of the panel's test user; the probe already tested the same nodes (from the older import, under their own names), and the import only compared **names**, so every node came a second time as *Nikatel-bot <node>*. The import now compares the **node** (protocol, address, port, transport, security - the user id and the name do not count) and skips a node that is already tested under another name, also inside one subscription.

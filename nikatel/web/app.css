@@ -1426,3 +1426,27 @@ html[data-mode="light"] .gchip button small { background: rgba(20,24,40,.1); }
 body.tabbed .subnav .tabs button[data-k="gateway"] { color: #7fd8ee; border-color: rgba(80,200,230,.3); background: rgba(80,200,230,.07); }
 body.tabbed .subnav .tabs button[data-k="gateway"]:hover { background: rgba(80,200,230,.14); color: #a8e8f7; }
 body.tabbed .subnav .tabs button[data-k="gateway"].on { background: #14212b; color: #8fe3f5; border-color: rgba(80,200,230,.55); box-shadow: inset 0 2px 0 #4fc8e6, 0 -6px 18px rgba(80,200,230,.12); }.subnav .tabs button[data-k="gateway"] { color: #7fd8ee; } .subnav .tabs button[data-k="gateway"].on { color: #8fe3f5; box-shadow: inset 0 2px 0 #4fc8e6; }
+/* the numbers of a bar carry a coloured dot that means something: green fine, yellow take a look, red wrong, blue just information */
+.pstat .tc { --d: transparent; } .pstat .tc.ok { --d: var(--ok); } .pstat .tc.warn { --d: var(--warn); } .pstat .tc.bad { --d: var(--bad); } .pstat .tc.info { --d: #6fb2ff; }
+.pstat .tc::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--d); box-shadow: 0 0 6px var(--d); } .pstat .tc:not(.ok):not(.warn):not(.bad):not(.info)::before { display: none; }
+.pstat .tc.ok b { color: var(--ok); } .pstat .tc.warn b { color: var(--warn); } .pstat .tc.bad b { color: var(--bad); } .pstat .tc.info b { color: var(--text); }
+/* the rows of Nodes and Tunnels are cards: no buttons, a click opens the window of the row; a quiet lift and a chevron say so */
+tr.clk { cursor: pointer; } tr.clk td { transition: background-color .18s, border-color .18s, transform .18s; }
+.tun-tbl tbody tr.clk td, .srv-tbl tbody tr.clk td { background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.028)); border-top-color: rgba(255,255,255,.09); border-bottom-color: rgba(255,255,255,.05); }
+.tun-tbl tbody tr.clk:hover td, .srv-tbl tbody tr.clk:hover td { background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05)); border-top-color: rgba(255,255,255,.2); }
+.tun-tbl tbody tr.clk:hover, .srv-tbl tbody tr.clk:hover { box-shadow: 0 6px 18px rgba(0,0,0,.28); }
+tr.clk td:last-child { position: relative; } tr.clk td:last-child::after { content: "›"; position: absolute; right: 14px; top: 50%; transform: translate(-6px, -52%); font-size: 20px; line-height: 1; color: var(--mut); opacity: 0; transition: opacity .18s, transform .18s; }
+tr.clk:hover td:last-child::after { opacity: .9; transform: translate(0, -52%); color: var(--acc-2); }
+.tun-tbl td.name, .srv-tbl td.name { font-size: 13.5px; letter-spacing: .1px; }
+/* an address copies itself when it is clicked, with a pop where it was clicked */
+.ip-copy { cursor: copy; position: relative; border-radius: 8px; transition: background-color .15s, color .15s; } .ip-copy:hover { color: var(--acc-2) !important; background: rgba(255,255,255,.07); }
+.ip-copy::after { content: "✓ Copied"; position: absolute; right: 4px; top: 50%; padding: 2px 8px; border-radius: 999px; font-family: var(--font, inherit); font-size: 10.5px; font-weight: 800; letter-spacing: 0; color: #10131f; background: var(--ok); box-shadow: 0 4px 12px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transform: translateY(-50%) scale(.7); }
+.ip-copied { animation: ipFlash .6s ease-out; } .ip-copied::after { animation: ipPop 1.4s cubic-bezier(.2,.9,.3,1.2) both; }
+@keyframes ipPop { 0% { opacity: 0; transform: translateY(-30%) scale(.6); } 14% { opacity: 1; transform: translateY(-50%) scale(1.08); } 24% { transform: translateY(-50%) scale(1); } 78% { opacity: 1; transform: translateY(-50%) scale(1); } 100% { opacity: 0; transform: translateY(-90%) scale(.95); } }
+@keyframes ipFlash { 0% { background: rgba(61,220,151,.35); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .ip-copied, .ip-copied::after { animation-duration: .01s; } }
+/* flags are round badges (the same in every list); the statusbar no longer sticks, so nothing slides under it */
+.flg { width: 24px !important; height: 24px !important; border-radius: 50% !important; object-fit: cover; vertical-align: -7px; box-shadow: 0 0 0 2px rgba(255,255,255,.2), 0 3px 8px rgba(0,0,0,.4) !important; margin-right: 8px !important; }
+.cf-list .flg { width: 20px !important; height: 20px !important; vertical-align: -5px; margin-right: 6px !important; }
+.flgt { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; font-size: 9px; font-weight: 800; letter-spacing: 0; color: var(--mut); box-shadow: 0 0 0 2px rgba(255,255,255,.14); vertical-align: -7px; background: rgba(255,255,255,.05); }
+@media (min-width: 861px) { .statusbar { position: relative; top: auto; } }
