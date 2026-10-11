@@ -242,4 +242,5 @@ I18N.add({
 "Press <b>Quick</b> for the five types that matter, or tick engines and press <b>Start test</b>.": "برای پنج نوع مهم «سریع» را بزنید، یا موتورها را انتخاب و «شروع تست» را بزنید.",
 "unstable": "ناپایدار", "{} unstable": "{} ناپایدار", "{} up · {} unstable · {} down": "{} بالا · {} ناپایدار · {} قطع",
 "🧪 Check configs from Iran": "🧪 تست کانفیگ‌ها از ایران", 
+"ping/loss%": "پینگ/لاس٪", 
 });

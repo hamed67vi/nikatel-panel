@@ -1364,3 +1364,4 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 .tlink .wire::before { background: linear-gradient(90deg, transparent 0, var(--c) 40%); } .tlink .wire::after { background: linear-gradient(270deg, transparent 0, var(--c) 40%); }
 .tlink.degraded .wire::before, .tlink.degraded .wire::after, .tlink.down .wire::before, .tlink.down .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 8px, transparent 8px 13px); }
 .tlink .h { border-radius: 1px; } .tlink .pk { box-shadow: 0 0 5px var(--c); }
+.tlink .tl-top .sl { font-style: normal; color: var(--mut); font-weight: 600; } .tlink .tl-top .loss.ok { background: none; color: var(--mut); padding: 0; font-weight: 700; } .tlink .tl-top { gap: 5px; }
