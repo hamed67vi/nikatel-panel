@@ -176,8 +176,10 @@ document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.
 (() => {
   const pg = $("#page"); if (!pg) return;
   let q = 0;
-  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); };
+  const fit = () => pg.querySelectorAll(".lbox").forEach(b => { b.style.maxHeight = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24) + "px"; });   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
+  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
+  window.addEventListener("resize", () => requestAnimationFrame(fit));
 })();
 /* A refresh rebuilds the page from fresh data. Every scrolling box keeps its position through it (the page, a window, the lists inside the dashboard, the logs),
    so nothing jumps back to the top when new data arrives. Opening another page starts at the top. */

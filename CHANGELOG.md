@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.31 - 2026-10-11 - One scrollbar
+
+* A page with a list box had two vertical scrollbars (the page and the list). The list box is now sized to end exactly at the bottom of the window (also when the window is resized) and the page itself does not scroll: only the list does.
+
 ## 1.16.30 - 2026-10-11 - Small charts, no disk chart
 
 * The charts of a window are three in a row and short; the Disk chart is gone (the disk is a flat line; its number is in the tiles and in Resources), so the whole monitoring part fits without scrolling. The Traffic tile shows both numbers on one line.

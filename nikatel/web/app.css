@@ -1227,3 +1227,5 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 .modal .mgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .modal .mcard svg.lc { max-height: 64px; width: 100%; } .modal .mcard h6 { margin-bottom: 0; } .modal .mcard h6 .mval { font-size: 14px; } .modal .mstat { font-size: 9.5px; margin-top: 0; }
 @media (max-width: 900px) { .modal .mgrid { grid-template-columns: 1fr 1fr; } }
+/* a page with a list box has ONE scrollbar - the list's; the page itself does not scroll (the box is sized to end at the bottom of the window) */
+@media (min-width: 761px) { .main:has(.lbox) { overflow-y: hidden; } }
