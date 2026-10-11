@@ -1184,3 +1184,5 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 .chk-row { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 12px; line-height: 1.35; border-top: 1px solid rgba(255,255,255,.04); }
 .chk-row b { flex: none; width: 16px; text-align: center; } .chk-row.ok b { color: var(--ok); } .chk-row.bad b { color: var(--bad); } .chk-row span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @media (max-width: 760px) { .chk-list { grid-template-columns: 1fr; } }
+/* the server name cell shows its badges whole (network, bad route, disabled): the datacentre name is in the window, not here */
+.srv-tbl td.name { overflow: visible; text-overflow: clip; } .srv-tbl td.name .pill { margin-left: 6px; }

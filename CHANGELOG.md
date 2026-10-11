@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.23 - 2026-10-11 - No datacentre name in the server list
+
+* The server list no longer shows the datacentre / provider name beside the server name (it is in the server window); the *network* and *bad route* badges are shown whole instead of being cut off.
+
 ## 1.16.22 - 2026-10-11 - The diagnosis list reads on one line
 
 * In the diagnosis window *What was checked* is a two-column list with the tick first and the text beside it (it used to wrap every sentence into five lines in a narrow label column).
