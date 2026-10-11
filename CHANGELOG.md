@@ -5,6 +5,7 @@
 - Panels > Users: changing the page (or the search / status) redraws only the list and the pager, never the whole page; the list box is made at once at its fixed size and ends inside the window; the pager has seven slots of one width, so no button moves.
 - New theme "Mono glass" (black and white frosted glass; only the special buttons keep their colour). The highlight colour of the active menu entry and tabs follows the theme (it was gold everywhere).
 - Tunnel Doctor: "degraded" is shown as "unstable" everywhere; its settings moved from Settings to its own page (Settings keeps only the AI assistant).
+- Settings > Shop bot box redesigned in three short rows.
 - Iran gateway and Probe boxes redesigned (compact, one line per job); the Probe box says "connected" when the probe answers.
 - The configs box keeps one height for every group, so switching groups does not make it jump.
 - Configs list: the Alerts button is gone from its toolbar (the flag under the names was tried and taken out again).

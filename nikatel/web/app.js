@@ -2535,13 +2535,15 @@ PAGES.settings = async () => {
 
     ${backupCard(bk)}
 
-    <div class="card"><h3>Shop bot <span class="sp"></span><span class="pill">${sb.host ? "server set" : "not set"}</span></h3>
-      <form class="frm one" onsubmit="return saveShopbot(event)">
-        <label>Server that runs the bot <small>(IP or host, reached with the panel's SSH key)</small><input name="host" value="${esc(sb.host)}" placeholder="ip or host"></label>
-        <label>SSH user / port<input name="ssh_user" value="${esc(sb.ssh_user)}" style="width:48%;display:inline-block"> <input name="ssh_port" type="number" value="${sb.ssh_port}" style="width:48%;display:inline-block"></label>
-        <label>Bot directory<input name="dir" value="${esc(sb.dir)}"></label><label>DB env file<input name="env" value="${esc(sb.env)}"></label>
-        <label>Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
-        <div class="frm-act"><button class="pri" type="submit">Save</button></div></form></div>
+    <div class="card pr-card sb-card"><h3>Shop bot <small class="mut gw-sub">The server that runs the bot and how the panel reaches it (with its SSH key).</small><span class="sp"></span><span class="pill ${sb.host ? "ok" : ""}">${sb.host ? "● server set" : "not set"}</span></h3>
+      <form class="frm sb-form" onsubmit="return saveShopbot(event)">
+        <label class="sb-h">Server <small>IP or host</small><input name="host" value="${esc(sb.host)}" placeholder="ip or host"></label>
+        <label class="sb-u">SSH user<input name="ssh_user" value="${esc(sb.ssh_user)}"></label>
+        <label class="sb-p">SSH port<input name="ssh_port" type="number" value="${sb.ssh_port}"></label>
+        <label class="sb-d">Bot directory<input name="dir" value="${esc(sb.dir)}"></label>
+        <label class="sb-e">DB env file<input name="env" value="${esc(sb.env)}"></label>
+        <label class="sb-w">Public webhook URL<input name="public_url" value="${esc(sb.public_url)}" placeholder="https://host/path/bot.php"></label>
+        <div class="frm-act sb-act"><button class="pri" type="submit">Save</button></div></form></div>
 
     <div class="card"><h3>AI assistant <span class="sp"></span>${aiPill(ai_)}</h3>
       ${aiStatus(ai_)}
