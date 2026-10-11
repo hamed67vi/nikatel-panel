@@ -94,6 +94,7 @@ def _register_jobs() -> None:
 async def _lifespan(app: FastAPI):
     s = get_settings()
     s.data_dir.mkdir(parents=True, exist_ok=True)
+    backup.apply_pending_restore()          # a restore asked for in the Backups card: the files are put in place before the database is opened
     init_db()
     pw = auth.ensure_admin()
 

@@ -306,3 +306,174 @@ def restore(path: Path, passphrase: str, data_dir: Path | None = None) -> list[s
                 restored.append(m.name)
 
     return restored
+
+
+# ---------------------------------------------------------------- restore from the panel
+PENDING = "restore-pending"
+MAX_RESTORE = 120_000_000
+
+
+def read_archive(blob: bytes, passphrase: str = "") -> tuple[str, dict[str, bytes]]:
+    """Decrypt and unpack a backup file in memory. Returns (part, files); refuses anything that is not a Nikatel backup of a known part."""
+    if len(blob) > MAX_RESTORE:
+        raise ValueError("the file is too big for a backup")
+
+    pw = passphrase.strip() or (pass_file().read_text().strip() if has_passphrase() else "")
+
+    if not pw:
+        raise ValueError("no passphrase: type the passphrase this file was made with")
+
+    raw = decrypt(blob, pw)
+    files: dict[str, bytes] = {}
+
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+            for m in tar.getmembers():
+                if not m.isfile() or "/" in m.name or m.name.startswith(".") or m.size > MAX_RESTORE:
+                    continue
+
+                files[m.name] = tar.extractfile(m).read()
+    except (tarfile.TarError, OSError) as e:
+        raise ValueError("the file is damaged: " + str(e)[:80])
+
+    if "nikatel.sql" in files:
+        try:
+            probe = sqlite3.connect(":memory:")
+            probe.executescript(files["nikatel.sql"].decode())
+            tables = probe.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+            probe.close()
+        except (sqlite3.Error, UnicodeDecodeError) as e:
+            raise ValueError("the panel database inside is damaged: " + str(e)[:80])
+
+        if tables < 3:
+            raise ValueError("this is not a panel database")
+
+        return "panel", files
+
+    if "bot.sql.gz" in files:
+        import gzip
+
+        try:
+            head = gzip.decompress(files["bot.sql.gz"])[:2_000_000]
+        except (OSError, EOFError) as e:
+            raise ValueError("the bot dump inside is damaged: " + str(e)[:80])
+
+        if b"CREATE TABLE" not in head:
+            raise ValueError("this is not a bot database dump")
+
+        return "bot", files
+
+    raise ValueError("this is not a Nikatel backup")
+
+
+def stage_panel(files: dict[str, bytes]) -> str:
+    """Panel part: a safety copy of what runs now is kept first, then the new files wait in <data>/restore-pending and are put in place by the next start
+    (the running service keeps its database open, so the swap happens before it opens it)."""
+    import shutil
+
+    s = get_settings()
+    safety = ""
+
+    if has_passphrase():
+        out_dir = s.data_dir.parent / "backups"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"nikatel-panel-{time.strftime('%Y%m%d-%H%M%S')}-before-restore.tar.gz.enc"
+        path.write_bytes(encrypt(make_archive(), pass_file().read_text().strip()))
+        path.chmod(0o600)
+        safety = path.name
+
+    pend = s.data_dir / PENDING
+    shutil.rmtree(pend, ignore_errors=True)
+    pend.mkdir(parents=True)
+
+    for name, data in files.items():
+        if name == "nikatel.sql" or (name in FILES and name != "backup.pass"):
+            (pend / name).write_bytes(data)
+            (pend / name).chmod(0o600)
+
+    return safety
+
+
+def apply_pending_restore() -> str:
+    """At start, before the database is opened: put the staged files in place. The new database is built beside the old one and swapped only when it loaded completely."""
+    import shutil
+
+    s = get_settings()
+    pend = s.data_dir / PENDING
+
+    if not pend.is_dir():
+        return ""
+
+    try:
+        sql = pend / "nikatel.sql"
+
+        if sql.exists():
+            new = s.data_dir / "nikatel.db.restoring"
+            new.unlink(missing_ok=True)
+            conn = sqlite3.connect(str(new))
+            conn.executescript(sql.read_text())
+            conn.close()
+
+            for ext in ("", "-wal", "-shm"):
+                (s.data_dir / f"nikatel.db{ext}").unlink(missing_ok=True)
+
+            new.replace(s.data_dir / "nikatel.db")
+
+        for name in FILES:
+            if name != "backup.pass" and (pend / name).exists():
+                (s.data_dir / name).write_bytes((pend / name).read_bytes())
+                os.chmod(s.data_dir / name, 0o600)
+    except Exception:  # start-up boundary: a bad restore must not stop the panel from starting
+        log.exception("restore failed, the panel starts with what it had")
+        failed = s.data_dir / "restore-failed"
+        shutil.rmtree(failed, ignore_errors=True)
+        pend.rename(failed)
+        return "failed"
+
+    shutil.rmtree(pend, ignore_errors=True)
+    log.info("restore applied from %s", PENDING)
+    return "restored"
+
+
+def restore_bot(gz: bytes) -> str:
+    """Bot part: a fresh dump of the live bot database is kept on the bot server first, then the dump is loaded into it (tables are dropped and made again by the dump itself)."""
+    from . import shopbot
+
+    c = shopbot.conf()
+    node = shopbot._node()
+    safe = run_action(node, "bot_backup", {"ENV": c["env"], "NAME": "before-restore"}, timeout=600)
+    m = re.search(r"BACKUP (/opt/nikabot/backups/\S+\.sql\.gz)", safe)
+
+    if not m:
+        raise RuntimeError("the safety dump of the live bot database failed, nothing was restored: " + safe.strip()[-120:])
+
+    out = run_action(node, "bot_restore", {"ENV": c["env"], "B64": base64.b64encode(gz).decode()}, timeout=900)
+
+    if "RESTORED" not in out:
+        raise RuntimeError("the bot database was not restored: " + out.strip()[-160:] + f" (the safety dump is {m.group(1)} on the bot server)")
+
+    return f"{out.strip().splitlines()[-1]} - the dump of the data before is {m.group(1)} on the bot server"
+
+
+def restart_soon() -> None:
+    """Restart the service in two seconds (outside this process, so the answer to the page goes out first)."""
+    try:
+        subprocess.run(["systemd-run", "--quiet", "--on-active=2", "systemctl", "restart", "nikatel"], check=True, capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError("the files are staged but the restart failed: " + str(e)[:100] + " - restart the nikatel service by hand")
+
+
+def restore_blob(blob: bytes, passphrase: str = "") -> dict:
+    """The restore the Backups card asks for: any backup file (made here or uploaded). Panel part: staged, then the panel restarts. Bot part: loaded at once."""
+    if get_settings().read_only:
+        raise ValueError("the panel is in read-only mode: a restore is not allowed here")
+
+    part, files = read_archive(blob, passphrase)
+
+    if part == "bot":
+        note = restore_bot(files["bot.sql.gz"])
+        return {"ok": True, "part": "bot", "restarts": False, "message": "Shop bot database restored: " + note}
+
+    safety = stage_panel(files)
+    restart_soon()
+    return {"ok": True, "part": "panel", "restarts": True, "safety": safety, "message": "Panel data restored. The panel restarts now; sign in again in a few seconds." + (f" Before this, what ran was saved as {safety}." if safety else "")}

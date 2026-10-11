@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.0 - 2026-10-11 - Restore from the panel
+
+* Each part of the Backups card has a **↩ Restore** button: pick one of the files kept on this server, or choose a backup file from your computer (a download or a file from Telegram). A file made with another passphrase asks for it.
+* **Panel part**: the file is checked (decrypted, the database inside loaded in memory), what runs now is saved first (`…-before-restore.tar.gz.enc`), the new data is staged and the panel restarts; the swap happens at start, before the database is opened, and a bad file leaves the old database in place (`restore-failed/`). Only the known files are restored, never the passphrase.
+* **Shop bot part**: a safety dump of the live bot database is made on the bot server, then the backup is loaded (new reviewed action `bot_restore`; the dump is checked with `gunzip -t` before it touches the database).
+* A read-only panel never restores. Every restore asks for a confirmation that says what will be replaced.
+
 ## 1.16.37 - 2026-10-11 - The certificate tick of Add server
 
 * The *remember this certificate* tick of the Marzban-node option sits in its own row under the certificate box (it was laid out as a grid and floated over the box).

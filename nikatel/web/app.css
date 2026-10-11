@@ -1271,3 +1271,9 @@ select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; 
 
 /* the Marzban-node certificate: its remember-tick is an ordinary tick row (it was laid out as a grid and floated over the box above) */
 .srv-extra label.chk.x-cert { display: flex; align-items: center; gap: 8px; height: 28px; margin-top: 2px; } .srv-extra label.chk.x-cert.hidden { display: none; }
+
+/* Restore window */
+.bk-rnote { font-size: 12px; margin-bottom: 8px; } .bk-rlist { display: grid; gap: 4px; margin-bottom: 10px; }
+.bk-rrow { display: grid; grid-template-columns: 90px 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+.bk-rrow .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.bk-rfile { cursor: pointer; }

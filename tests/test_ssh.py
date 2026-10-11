@@ -24,3 +24,16 @@ def test_a_lost_connection_without_a_message_is_an_ssh_error_not_a_crash(monkeyp
         ssh._exec(ssh.Node("203.0.113.9"), "true", 5)
 
     assert "ssh connection lost (network)" in str(e.value) and e.value.code == 255
+
+def test_bot_restore_action_checks_the_dump_before_loading_it():
+    import pytest
+
+    from nikatel.ssh import render_action
+
+    script = render_action("bot_restore", {"ENV": "/opt/nikabot/db.env", "B64": "QUJD" * 8})
+    assert "gunzip -t" in script and script.index("gunzip -t") < script.index("| mysql")
+    assert "QUJD" * 8 in script
+
+    for bad in ({"ENV": "/etc/passwd", "B64": "QUJD" * 8}, {"ENV": "/opt/nikabot/db.env", "B64": "QUJD'; reboot; '" + "A" * 20}):
+        with pytest.raises(ValueError):
+            render_action("bot_restore", bad)

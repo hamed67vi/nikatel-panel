@@ -794,6 +794,18 @@ F=/opt/nikabot/backups/@NAME@-$(date +%Y%m%d-%H%M%S).sql
 mysqldump -u "$DB_USER" -p"$DB_PASS" --single-transaction "$DB_NAME" > "$F"; gzip -f "$F"; echo "BACKUP $F.gz $(stat -c %s "$F.gz")"
 """, {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "NAME": r"^[a-z-]{1,24}$"}),
 
+    # shop bot: load a dump (base64 of a .sql.gz taken by bot_backup) into the live database; the panel takes a safety dump first
+    "bot_restore": (r"""set -e; set -a; . '@ENV@'; set +a
+T=$(mktemp /tmp/botrestore.XXXXXX)
+trap 'rm -f "$T"' EXIT
+base64 -d > "$T" <<'NIKATEL_B64'
+@B64@
+NIKATEL_B64
+gunzip -t "$T"
+gunzip < "$T" | mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME"
+echo "RESTORED $(mysql -N -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()") tables"
+""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "B64": r"^[A-Za-z0-9+/=]{16,60000000}$"}),
+
     # shop bot: keep only the last 7 dumps of the automatic backup (auto-*.sql.gz)
     "bot_prune_dumps": (r"""ls -1t /opt/nikabot/backups/auto-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f; echo PRUNED
 """, {}),

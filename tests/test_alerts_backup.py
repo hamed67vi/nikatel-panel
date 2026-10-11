@@ -226,3 +226,58 @@ def test_backup_runs_every_n_minutes_and_sends_to_telegram_once_a_day(client, mo
     assert calls[-1] is True
     assert client.put("/api/settings/backup", json={"every_minutes": 15, "tg_every": "daily"}).json()["every_minutes"] == 15
     assert client.put("/api/settings/backup", json={"tg_every": "sometimes"}).status_code == 422
+
+def test_restore_from_the_panel_stages_then_swaps_at_start(client, tmp_path, monkeypatch):
+    import sqlite3
+    from types import SimpleNamespace
+
+    d = tmp_path / "data"
+    d.mkdir()
+    (d / "nikatel.db").write_bytes(b"old")
+    monkeypatch.setattr(backup, "get_settings", lambda: SimpleNamespace(data_dir=d, read_only=False))
+    sql = "BEGIN TRANSACTION; CREATE TABLE a(x); CREATE TABLE b(x); CREATE TABLE c(x); INSERT INTO a VALUES(1); COMMIT;"
+    backup.stage_panel({"nikatel.sql": sql.encode(), "secret.key": b"k", "backup.pass": b"nope", "evil": b"x"})
+    pend = d / "restore-pending"
+    assert (pend / "nikatel.sql").exists() and (pend / "secret.key").exists()
+    assert not (pend / "backup.pass").exists() and not (pend / "evil").exists()      # only the known files are staged, never the passphrase
+    assert backup.apply_pending_restore() == "restored"
+    assert sqlite3.connect(str(d / "nikatel.db")).execute("SELECT x FROM a").fetchone() == (1,)
+    assert (d / "secret.key").read_bytes() == b"k" and not pend.exists()
+    assert backup.apply_pending_restore() == ""                                      # nothing staged: nothing happens
+
+    backup.stage_panel({"nikatel.sql": b"THIS IS NOT SQL"})                          # a bad file: the panel keeps what it had and says so
+    assert backup.apply_pending_restore() == "failed"
+    assert sqlite3.connect(str(d / "nikatel.db")).execute("SELECT x FROM a").fetchone() == (1,)
+    assert (d / "restore-failed").is_dir()
+
+
+def test_restore_reads_only_real_backups(client, tmp_path, monkeypatch):
+    import io
+    import tarfile
+    from types import SimpleNamespace
+
+    pw = "a-long-test-passphrase"
+    s = get_settings()
+    backup.set_passphrase(pw)
+    blob = backup.encrypt(backup.make_archive(), pw)
+    part, files = backup.read_archive(blob)
+    assert part == "panel" and "nikatel.sql" in files
+    assert backup.read_archive(blob, pw)[0] == "panel"                                # the passphrase of the file may be given by hand
+
+    with pytest.raises(RuntimeError):
+        backup.read_archive(blob, "another-long-passphrase")
+
+    buf = io.BytesIO()
+
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        info = tarfile.TarInfo("notes.txt")
+        info.size = 3
+        tar.addfile(info, io.BytesIO(b"abc"))
+
+    with pytest.raises(ValueError):
+        backup.read_archive(backup.encrypt(buf.getvalue(), pw))
+
+    monkeypatch.setattr(backup, "get_settings", lambda: SimpleNamespace(data_dir=s.data_dir, read_only=True))
+
+    with pytest.raises(ValueError):
+        backup.restore_blob(blob)                                                    # the read-only panel never restores

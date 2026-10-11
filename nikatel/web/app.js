@@ -2545,7 +2545,7 @@ const backupCard = bk => {
       <label class="bk-sw" title="${p.enabled ? "On: included in the daily backup" : "Off: not in the daily backup"}"><input type="checkbox" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"><span></span></label>
       <div class="bk-main"><b>${esc(p.label)}</b><small class="mut">${esc(p.what)}</small><small class="bk-last">${p.last ? "latest: " + ago(p.last.at) + " ago · " + kb(p.last.bytes) : "no backup yet"}${p.ready ? "" : " · set the bot server first (Shop bot card)"}</small></div>
       <div class="bk-tg">${topic(k, p)}</div>
-      <div class="bk-act"><button class="sm pri" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}</div></div>`;
+      <div class="bk-act"><button class="sm pri" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button><button class="sm" onclick="bkRestoreOpen('${k}')" title="Put a backup of this part back: one kept on this server or a file from your computer">↩ Restore</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}</div></div>`;
   return `<div class="card bk-card"><h3>Backups <span class="sp"></span>${bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>'}</h3>
     ${bk.has_passphrase ? "" : `<form class="frm one bk-pass" onsubmit="return savePass(event)"><label>Backup password <small>(the backup files are encrypted with it, so a copied file is unreadable without it; you type it only when you restore — keep it somewhere safe; min 12 characters)</small><input name="passphrase" type="text" minlength="12" required autocomplete="off" spellcheck="false"></label><div class="frm-act"><button class="pri" type="submit">Set the password</button><button type="button" onclick="bkGen(this.form)" title="A strong random password is put in the box: copy it somewhere safe, then press Set">🎲 Generate</button></div></form>`}
     <div class="bk-parts">${Object.entries(bk.parts).map(part).join("")}</div>
@@ -2557,10 +2557,44 @@ const backupCard = bk => {
       <label>Telegram <select name="tg">${[["all", "every backup"], ["daily", "once a day"], ["off", "never"]].map(([v, l]) => `<option value="${v}" ${(bk.send_telegram ? (bk.tg_every || "all") : "off") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <button class="sm pri" type="submit">Save</button></form>
     <details class="bk-more"><summary>Restore and passphrase</summary>
-      <small class="mut">Restore: stop the service, then <code>nikatel restore &lt;file&gt;</code> on the server (a bot file puts its dump in <code>bot-restore/</code>).</small>
+      <small class="mut">Restore is the ↩ button of each part above. A file made with another passphrase asks for it.</small>
       ${bk.has_passphrase ? `<form class="frm one" onsubmit="return savePass(event)"><label>New passphrase <small>(files made before keep the old one)</small><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label><div class="frm-act"><button type="submit">Replace passphrase</button></div></form>` : ""}</details></div>`;
 };
-window.bkGen = f => { const a = new Uint8Array(15); crypto.getRandomValues(a); f.passphrase.value = [...a].map(b => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789".charAt(b % 55)).join("").replace(/(.{5})/g, "$1-").replace(/-$/, ""); f.passphrase.focus(); f.passphrase.select(); toast("Copy this password somewhere safe, then press Set", "ok"); };
+/* Restore: pick a backup kept on this server or a file from the computer. The panel part is put in place by the next start (the panel restarts, sign in again); the bot part is loaded into the bot database at once, after a safety dump of it. */
+const bkKb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+window.bkRestoreOpen = async part => {
+  let d; try { d = await api("/api/settings/backup"); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  const list = (d.backups || []).filter(b => b.part === part).slice(0, 8), label = (d.parts[part] || {}).label || part;
+  showModal(`<b>↩ Restore — ${esc(label)}</b>`, `<div class="mut bk-rnote">${part === "panel" ? "Replaces everything the panel knows (servers, tunnels, configs, settings) with the backup, then the panel restarts. What runs now is saved first." : "Replaces the shop bot database (users, orders, payments, plans) with the backup. The current data is dumped on the bot server first."}</div>
+    <div class="bk-rlist">${list.map(b => `<div class="bk-rrow"><span>${ago(b.at)} ago</span><small class="mut">${bkKb(b.bytes)}</small><span class="mono ell" title="${esc(b.file)}">${esc(b.file)}</span><button class="sm danger" onclick="bkRestore('${esc(b.file)}')">Restore</button></div>`).join("") || '<div class="mut" style="padding:8px 2px">No backup file of this part on this server yet.</div>'}</div>
+    <label class="sm btn bk-rfile" title="A backup you downloaded or got from Telegram (.tar.gz.enc)">📂 Choose a backup file from your computer…<input type="file" hidden accept=".enc" onchange="bkRestoreFile(this)"></label>`);
+};
+const bkRestoreWarn = file => /^nikatel-bot-/.test(file)
+  ? `Restore the shop bot database from ${file}? The bot's current users, orders and payments are replaced by the backup. A dump of the current data is kept on the bot server first.`
+  : `Restore the panel from ${file}? Servers, tunnels, configs and settings are replaced by the backup, then the panel restarts and you sign in again. What runs now is saved first (…-before-restore.tar.gz.enc).`;
+window.bkRestore = async (file, pw = "", blob = null) => {
+  if (!pw && !await gconfirm(bkRestoreWarn(file), {danger: true})) return;
+  try {
+    toast("Restoring…");
+    const r = blob ? await api("/api/backup/restore-upload", {method: "POST", headers: {"Content-Type": "application/octet-stream", "X-Backup-Passphrase": pw}, body: blob})
+      : await api("/api/backup/restore", {method: "POST", body: JSON.stringify({file, passphrase: pw})});
+    closeModal(); bkDone(r);
+  } catch (e) {
+    if (/passphrase/i.test(e.message)) { const p = await gprompt("The saved passphrase does not open this file. Type the passphrase it was made with:", ""); if (p) return bkRestore(file, p, blob); return; }
+    toast("✕ " + e.message, "bad");
+  }
+};
+window.bkRestoreFile = async inp => { const f = inp.files[0]; if (!f) return; if (f.size > 120e6) { toast("✕ The file is too big for a backup", "bad"); return; } bkRestore(f.name, "", await f.arrayBuffer()); };
+function bkDone(r) {
+  if (!r.restarts) { toast("✓ " + r.message, "ok"); refresh(); return; }
+  showModal("<b>↩ Restored</b>", `<div class="loading"><i class="spin"></i><span>${esc(r.message)}</span></div>`);
+  let n = 0, down = false;
+  const t = setInterval(async () => {
+    n++;
+    try { const h = await fetch("/api/health", {cache: "no-store"}); if (h.ok && (down || n > 25)) { clearInterval(t); location.reload(); } else if (!h.ok) down = true; } catch (e) { down = true; }
+    if (n > 90) clearInterval(t);
+  }, 2000);
+}window.bkGen = f => { const a = new Uint8Array(15); crypto.getRandomValues(a); f.passphrase.value = [...a].map(b => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789".charAt(b % 55)).join("").replace(/(.{5})/g, "$1-").replace(/-$/, ""); f.passphrase.focus(); f.passphrase.select(); toast("Copy this password somewhere safe, then press Set", "ok"); };
 window.bkPart = async (k, on) => { try { await api(`/api/settings/backup/part/${k}`, {method: "POST", body: JSON.stringify({enabled: on})}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };
 window.bkTopic = async k => { toast("Making the topic…"); try { await api(`/api/backup/topic/${k}`, {method: "POST"}); toast("✓ Topic made: its backups go there now", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.bkTopicOff = async k => { if (!await gconfirm("Unlink the topic? Its backups go to the main page of the group again (the topic itself stays in Telegram).")) return; try { await api(`/api/backup/topic/${k}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };window.savePass = async e => { e.preventDefault(); try { await api("/api/settings/backup/passphrase", {method: "POST", body: JSON.stringify({passphrase: new FormData(e.target).get("passphrase")})}); toast("✓ Passphrase set", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };

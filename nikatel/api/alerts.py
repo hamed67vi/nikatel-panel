@@ -2,7 +2,7 @@
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -12,6 +12,7 @@ from ..models import Maintenance
 from ..services import backup, report
 from ..services import settings as st
 from ..services.telegram import send_text, valid_chat, valid_token
+from ..ssh import SSHError
 
 router = APIRouter(tags=["alerts"], dependencies=[Depends(current_user)])
 
@@ -261,6 +262,42 @@ def backup_now(send: bool = True, part: str = ""):
         raise HTTPException(400, r.get("error", "backup failed"))
 
     return r
+
+
+class RestoreIn(BaseModel):
+    file: str = Field(min_length=1, max_length=120)
+    passphrase: str = Field(default="", max_length=200)
+
+
+def _restore(blob: bytes, passphrase: str) -> dict:
+    try:
+        return backup.restore_blob(blob, passphrase)
+    except (ValueError, RuntimeError, SSHError) as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/backup/restore")
+def backup_restore(body: RestoreIn):
+    """Restore from a backup file kept on this server (the passphrase is only needed when the file was made with another one)."""
+    p = backup.get_settings().data_dir.parent / "backups" / body.file
+
+    if "/" in body.file or not body.file.startswith("nikatel-") or not p.is_file():
+        raise HTTPException(404, "no such backup")
+
+    return _restore(p.read_bytes(), body.passphrase)
+
+
+@router.post("/backup/restore-upload")
+async def backup_restore_upload(request: Request):
+    """Restore from a backup file the operator chose on their computer (raw body; the passphrase, when it is another one, is the X-Backup-Passphrase header)."""
+    from starlette.concurrency import run_in_threadpool
+
+    blob = await request.body()
+
+    if not blob:
+        raise HTTPException(400, "no file received")
+
+    return await run_in_threadpool(_restore, blob, request.headers.get("x-backup-passphrase", ""))
 
 
 @router.get("/backup/download/{name}")
