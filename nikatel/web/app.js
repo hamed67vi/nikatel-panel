@@ -1112,8 +1112,8 @@ window.toggleDetail = id => {
   state.edit = null; state.wtab = null;
   if (state.open === id) { state.open = null; hideModal(); return; }
   state.open = id;
-  if (state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === id); if (s) { srvModal(s); return; } }
-  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); return; } }
+  if (state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === id); if (s) { srvModal(s); loadServerCharts(id); return; } }      // the window is one view: its charts load with it
+  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); loadTunnelCharts(id); return; } }
   refresh();
 };
 window.fixTunnel = async (id, dry) => {
