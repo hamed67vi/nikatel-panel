@@ -1922,17 +1922,12 @@ const ibBody = form => { const xs = [...form.querySelectorAll('input[name^="ib_"
 window.pnUserSave = async (e, id, name) => { e.preventDefault(); const f = new FormData(e.target); try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`, {method: "PUT", body: JSON.stringify(Object.assign({status: f.get("status"), expire_date: f.get("expire_date"), limit_gb: +f.get("limit_gb"), reset: f.get("reset"), note: f.get("note")}, ibBody(e.target)))}); toast("✓ Saved", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnUAct = async (id, name, action, value) => { if (action === "renew" && !value) return; try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}/action`, {method: "POST", body: JSON.stringify({action, value})}); toast("✓ " + action + " done", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnBulk = async (id, action, value) => { const names = [...document.querySelectorAll(".pn-uchk:checked")].map(x => x.value); if (!names.length) { toast("Tick some users first", "bad"); return; } try { const r = await api(`/api/panels/${id}/users-bulk`, {method: "POST", body: JSON.stringify({action, value, usernames: names})}); toast(`✓ ${r.done} done${r.failed_count ? ", " + r.failed_count + " failed" : ""}`, r.failed_count ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-const pnTraffic = x => { const used = x.used || 0, lim = x.limit || 0, left = Math.max(0, lim - used), pct = lim ? Math.min(100, Math.round(used * 100 / lim)) : 0;
-  return lim ? `<div class="trf-t"><span><b>${fmtB(used)}</b> used</span><span class="${pct >= 95 ? "err" : ""}"><b>${fmtB(left)}</b> left</span></div><div class="trf-b" title="Account volume ${gb(lim)}"><i class="rbar"><u class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></u></i><small>of ${gb(lim)}</small></div>`
-    : `<div class="trf-t"><span><b>${fmtB(used)}</b> used</span><span class="mut">unlimited</span></div>`; };
-/* copy a text and say so in the corner of the box it was clicked in */
-window.copyFrom = async (el, text) => {   // copy a text and say so where it was clicked: a corner badge in a box, a pop in a table cell
-  try { await navigator.clipboard.writeText(text); } catch (e) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) { /* no clipboard at all */ } t.remove(); }
-  const box = el.closest(".sbox");
-  if (!box) { el.classList.remove("ip-copied"); void el.offsetWidth; el.classList.add("ip-copied"); clearTimeout(el.__ct); el.__ct = setTimeout(() => el.classList.remove("ip-copied"), 1400); return; }
-  box.querySelectorAll(".copied").forEach(x => x.remove());
-  const b = document.createElement("span"); b.className = "copied"; b.textContent = "✓ Copied"; box.appendChild(b); setTimeout(() => b.remove(), 1600);
-};window.pnSelCount = () => {
+const pnTraffic = x => {
+  const used = x.used || 0, lim = x.limit || 0, left = Math.max(0, lim - used), pct = lim ? Math.min(100, Math.round(used * 1000 / lim) / 10) : 0, cls = pct >= 95 ? "bad" : pct >= 80 ? "warn" : "";
+  return lim ? `<div class="trf2"><div class="trf2-t"><span><b>${fmtB(used)}</b> <small>used</small></span><span class="${pct >= 95 ? "err" : ""}"><b>${fmtB(left)}</b> <small>left</small></span></div><div class="trf2-b" title="Account volume ${gb(lim)}"><i class="rbar"><u class="${cls}" style="width:${pct}%"></u></i><small>${pct}% of ${gb(lim)}</small></div></div>`
+    : `<div class="trf2"><div class="trf2-t"><span><b>${fmtB(used)}</b> <small>used</small></span><span class="mut">unlimited</span></div></div>`; };
+const expPill = x => { if (!x.expire_date) return '<span class="epill none">∞ never</span>'; const d = typeof x.expire === "number" ? Math.ceil((x.expire - Date.now() / 1000) / 86400) : null; const cls = d == null ? "" : d < 0 ? "bad" : d <= 7 ? "warn" : "ok"; return `<span class="epill ${cls}" title="${esc(x.expire_date)}">${d == null ? esc(x.expire_date) : d < 0 ? "expired" : d + " d"}</span>`; };
+window.pnSelCount = () => {
   const all = [...document.querySelectorAll(".pn-uchk, .pn-hchk")], n = all.filter(x => x.checked).length;
   const c = $("#pn-seln"); if (c) c.textContent = n;
   const a = $("#pn-act"); if (a) a.disabled = !n;
