@@ -1238,3 +1238,6 @@ select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; 
 .rrow { grid-template-columns: 52px minmax(30px, 1fr) 136px; gap: 10px; }
 .rrow > em { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; font-style: normal; white-space: nowrap; } .rrow > em b { font-weight: 700; } .rrow > em small { color: var(--mut); font-size: 10.5px; font-weight: 500; min-width: 66px; text-align: right; }
 .rrow > i:not(.rbar) { display: block; }
+/* the outages card under the three charts: full width, its rows in two columns, one line each */
+.modal .mgrid > .mcard:last-child:nth-child(4) { grid-column: 1 / -1; }
+.modal .mcard:has(> .irow) { display: block; } .modal .mcard .irow { padding: 2px 0; font-size: 11.5px; } .modal .mcard .irow > div { text-align: right; max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

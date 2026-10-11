@@ -925,9 +925,38 @@ PAGES.tunnelsList = async () => {
   else hideModal();
   if (state.open) loadTunnelCharts(state.open);
 };
-/* a tunnel window is ONE view too: the boxes, the charts, the repair tools; Ports and Remove are in its header */
+/* a tunnel window like the server window: ONE button bar (Ports and Remove are in the header), THREE boxes of six rows (Servers, Status, Link), the charts */
 function detailRow(t) {
-  return tunPartHtml(t, "info") + `<div class="wsec"><h4>Last 24 hours</h4>${tunPartHtml(t, "charts")}</div>` + tunPartHtml(t, "actions");
+  return tunBar(t) + tunGrid(t) + `<div id="fix-${t.id}" class="fix hidden"></div><div class="wsec"><h4>Last 24 hours</h4>${tunPartHtml(t, "charts")}</div>`;
+}
+function tunBar(t) {
+  const up = t.state === "up", nm = esc(t.name);
+  const b = (icon, title, tip, click, cls = "") => `<button class="sm abtn ${cls}" ${click ? `onclick="${click}"` : "disabled"} title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  const groups = [
+    [b("🛠", "Fix", up ? "Nothing to fix: the tunnel is healthy" : "Diagnose and repair step by step: restarts only what is not working", up ? "" : `fixTunnel(${t.id}, false)`),
+     b("👁", "Dry run", up ? "Nothing to fix: the tunnel is healthy" : "Show what Fix would do, change nothing", up ? "" : `fixTunnel(${t.id}, true)`)],
+    [b("📊", "Quality", "Latency, jitter, loss, speed and a score", `qualityOne(${t.id})`), b("🔔", "Mute alerts", "No Telegram alerts about this tunnel until unmuted in Settings", `muteRef('${nm}', true)`)],
+    [b("♻", "Rebuild", "Remove it and build it again: same name, same ports", `rebuildTunnel(${t.id}, '${nm}')`), b("📜", "History", "Every repair of this tunnel", "go('actions')")],
+  ];
+  return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
+}
+function tunGrid(t) {
+  const d = t.detail || {}, u = t.units || {}, rec = t.record || {}, q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre";
+  const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`;
+  const box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
+  const chips = (side, names) => (names || []).map(n => { const ok = (d[side + "_units"] || {})[n] === "active", short = /^backhaul/.test(n) ? "backhaul" : /gre/.test(n) ? "GRE" : n.replace(/\.service$/, "");
+    return `<span class="tchip" title="${esc(n)}: ${esc((d[side + "_units"] || {})[n] || "?")}"><i class="st ${ok ? "up" : "down"}"></i>${esc(short)}</span>`; }).join("") || "—";
+  const err = t.last_error && t.state !== "up" ? ` <small class="err" title="${esc(t.last_error)}">${esc(t.last_error.slice(0, 60))}</small>` : "";
+  const servers = box("⇄", "Servers", [kv("Iran", `<b>${esc(t.iran_name)}</b> <small class="mut mono">${esc(t.iran_host)}</small>`), kv("Foreign", `<b>${esc(t.foreign_name)}</b> <small class="mut mono">${esc(t.foreign_host)}</small>`),
+    kv("Type", `${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}`), kv("Direction", esc(rec.direction || "reverse")),
+    kv("Ports", `<div class="td-ports">${(t.forwarded_ports || []).map(p => `<i class="${d.listen && d.listen[p] === false ? "bad" : ""}">${p}</i>`).join("") || "—"}</div>`), kv("Control port", t.port || "—")]);
+  const status = box("🕒", "Status", [kv("State", `<span class="st ${t.state}">${esc(t.state)}</span>${err}`), kv("Since", t.state_since ? ago(t.state_since) + " ago" : "—"), kv("Checked", when(t.last_check_at)), kv("Created", when(t.created_at)),
+    kv("Traffic", t.rx_mbps != null ? `↓ ${mbps(t.rx_mbps)} ↑ ${mbps(t.tx_mbps)}` : "—"),
+    kv("Score", q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score} / 100</b> <small class="mut">${q.at ? ago(q.at) + " ago" : ""}</small>` : '<span class="mut">not measured</span>')]);
+  const link = box("🔗", "Link", [kv("Latency", t.rtt_ms != null ? `${t.rtt_ms.toFixed(0)} ms${q.jitter_ms != null ? ` <small class="mut">jitter ${q.jitter_ms} ms</small>` : ""}` : "—"), kv("Packet loss", d.loss_pct != null ? d.loss_pct + " %" : "—"),
+    kv("Speed", q.down_mbps != null ? `↓ ${q.down_mbps} ↑ ${q.up_mbps} Mb/s` : "—"),
+    kv(gre ? "GRE" : "Engine", gre ? (t.iran_tunnel_ip ? `<span class="mono">${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</span>` : "—") : esc(rec.transport_label || t.type)), kv("Iran side", chips("iran", u.iran)), kv("Foreign side", chips("foreign", u.foreign))]);
+  return `<div class="sgrid">${servers}${status}${link}</div>`;
 }
 function tunPartHtml(t, tab) {
   const d = t.detail || {}, u = t.units || {};
@@ -966,7 +995,7 @@ async function loadTunnelCharts(id) {
     <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length} checks up`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) + " in total" : "none in this range", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) + " · worst " + Math.round(Math.max(...rtt)) + " ms" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg · peak ↓" + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}</div>
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
     <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {unit: " Mb/s"})}
-      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-8).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
+      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
 }/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
 const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
@@ -1505,7 +1534,7 @@ async function cfLoadChart(id) {
     <div class="mtiles">${mtile("Uptime", pct == null ? "—" : f1(pct) + "%", `${upn} of ${rows.length} checks up`, pct != null && pct < 90 ? "bad" : pct != null && pct < 99 ? "warn" : "ok")}${mtile("Delay", pings.length ? Math.round(avgOf(pings)) + " ms" : "—", pings.length ? "best " + Math.round(Math.min(...pings)) + " · worst " + Math.round(Math.max(...pings)) + " ms" : "")}${mtile("Outages", out.length, out.length ? "down " + durText(out.reduce((a, o) => a + (o.to - o.from), 0)) + " in total" : "none in this range", out.length ? "warn" : "ok")}</div>
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(ups)}</div>
     <div class="mgrid">${chartCard("Delay", rows.map(r => [r[0], r[1] ? r[2] : null]), {unit: " ms", warn: 800, bad: 1000, fmt: v => Math.round(v)})}
-      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-8).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)}</span><div class="err">${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
+      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)}</span><div class="err">${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
 }window.cfQ = v => { cf.q = v.trim().toLowerCase(); applyQ(); };
 window.cfView = v => { cf.view = v; localStorage.setItem("nk.cfview", v); refresh(); };
 window.cfGroup = g => { cf.group = g; localStorage.setItem("nk.cfgroup", g); refresh(); };

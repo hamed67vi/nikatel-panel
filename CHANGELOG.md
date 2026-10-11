@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.35 - 2026-10-11 - The tunnel window like the server window
+
+* One button bar (Fix, Dry run, Quality, Mute alerts, Rebuild, History; Ports and Remove stay in the header) and three boxes of six rows - *Servers*, *Status*, *Link* - with the services shown as small dots (backhaul / GRE, green when active) instead of two long lines each. Nothing is said twice (the latency and the packet loss were in two boxes). The outages card is one wide row of four.
+
 ## 1.16.34 - 2026-10-11 - All the numbers of Resources in one column
 
 * In the Resources box every row has the same three parts: the label, the bar (empty for Traffic and Sample), and one right-hand column that holds every number - the percent with its used / total beside it, the traffic, the age of the last sample.
