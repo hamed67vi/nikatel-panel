@@ -58,11 +58,16 @@ def link_of(t: Tunnel) -> tuple[str, str]:
         peer = t.foreign_tunnel_ip if iface else (t.foreign.host if t.foreign else "")
         return iface, peer if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", peer or "") else ""
 
-    return t.name, t.foreign_tunnel_ip or ""
+    return sname(t), t.foreign_tunnel_ip or ""
+
+
+def sname(t: Tunnel) -> str:
+    """The name the tunnel carries ON THE SERVERS (GRE interface, unit and file names). It is the name it was built with: renaming a tunnel in the panel changes what the operator sees, never what is on the servers."""
+    return str((t.record or {}).get("slug") or t.name)
 
 
 def plan_for(t: Tunnel) -> Plan:
-    name, typ, tr, port = t.name, t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
+    name, typ, tr, port = sname(t), t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
     ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
 
     if typ == "backhaul" and (t.record or {}).get("legacy_gre"):   # found on the servers: its GRE link is not run by a nikatel-gre unit, so only backhaul, the data path and (when it has one) the link are judged

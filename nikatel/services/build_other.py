@@ -34,7 +34,7 @@ from .builder import (
     server_locks,
 )
 from .events import emit
-from .tunnels import check_tunnel
+from .tunnels import check_tunnel, sname
 
 log = get_logger("build-other")
 
@@ -818,7 +818,7 @@ def _build(b: Build) -> None:
 def remove(t: Tunnel) -> list[str]:
     """Remove a BackPack / Paqet / Chisel tunnel from both servers. Returns per-side results."""
     rec = t.record or {}
-    params = {"NAME": t.name, "KIND": t.type, "PORT": str(int(t.port or 0)), "PROTO": "udp" if rec.get("udp_carrier") else "tcp"}
+    params = {"NAME": sname(t), "KIND": t.type, "PORT": str(int(t.port or 0)), "PROTO": "udp" if rec.get("udp_carrier") else "tcp"}
     results = []
 
     for side, node in (("Iran", _node(t.iran)), ("foreign", _node(t.foreign))):
@@ -844,7 +844,7 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
         if not rec.get("test_port") or not sec.get("test_key"):
             raise ValueError("this tunnel has no test door")
 
-        iran, foreign, name, port, key = _node(t.iran), _node(t.foreign), t.name, int(rec["test_port"]), str(sec["test_key"])
+        iran, foreign, name, port, key = _node(t.iran), _node(t.foreign), sname(t), int(rec["test_port"]), str(sec["test_key"])
         bind = "0.0.0.0" if str(t.transport or "").startswith("l3:") else ""
 
     try:   # keep the sink at the current version

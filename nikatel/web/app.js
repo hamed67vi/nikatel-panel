@@ -479,7 +479,7 @@ function srvModal(s) {   // while the edit form is open the header keeps only th
 }
 function tunModal(t) {
   showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
-    `${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports">⇅ Ports</button>` : ""}<button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')" title="Remove it from both servers; users lose their connection">Remove</button>`);
+    `<button class="sm" onclick="renameTunnel(${t.id}, '${esc(t.name)}')" title="Change the name of this tunnel: only what you see changes, nothing on the servers">✎ Rename</button>${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports">⇅ Ports</button>` : ""}<button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')" title="Remove it from both servers; users lose their connection">Remove</button>`);
 }
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="https://flagcdn.com/20x15/${cc.toLowerCase()}.png" srcset="https://flagcdn.com/40x30/${cc.toLowerCase()}.png 2x" width="20" height="15" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
@@ -855,6 +855,10 @@ PAGES.tunnelQuality = async () => {
         <td class="num">${q(t).latency_ms != null ? q(t).latency_ms + " ms" : "—"}</td><td class="num">${q(t).jitter_ms != null ? q(t).jitter_ms + " ms" : "—"}</td><td class="num ${(q(t).loss_pct || 0) >= 15 ? "err" : ""}">${q(t).loss_pct != null ? q(t).loss_pct + "%" : "—"}</td>
         <td><b class="${cls(q(t).score)}">${q(t).score != null ? q(t).score + " / 100" : "not measured"}</b> <small class="mut">${q(t).at ? ago(q(t).at) + " ago" : ""}</small></td>
         <td><button class="sm" onclick="qualityOne(${t.id})">Measure</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
+};
+window.renameTunnel = async (id, cur) => {
+  const v = await gprompt("New name of this tunnel (lowercase letters, digits and -, up to 15). Only the name in the panel changes; on the servers nothing is touched:", cur); if (v == null || !v.trim() || v.trim() === cur) return;
+  try { const r = await api(`/api/tunnels/${id}/name`, {method: "PUT", body: JSON.stringify({name: v.trim()})}); toast("✓ Renamed to " + r.name, "ok"); closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.editPorts = async (id, cur) => { const v = await gprompt("Forwarded ports of this tunnel (Iran → foreign), e.g. 443, 443=2096, 10000-10009:", cur); if (v == null || !v.trim()) return; toast("Changing the ports… (the tunnel service restarts)"); try { const r = await api(`/api/tunnels/${id}/ports`, {method: "PUT", body: JSON.stringify({ports: v})}); toast("✓ Ports: " + r.mapping, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };

@@ -139,6 +139,19 @@ def set_ports(tunnel_id: int, body: PortsIn):
         raise HTTPException(502, str(e))
 
 
+class RenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+
+@router.put("/tunnels/{tunnel_id}/name")
+def rename(tunnel_id: int, body: RenameIn):
+    """Rename a tunnel (what the operator sees); on the servers it keeps the name it was built with."""
+    try:
+        return {"ok": True, "name": builder.rename_tunnel(tunnel_id, body.name)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class AutoIn(BaseModel):
     foreign_id: int
     ports: str = ""

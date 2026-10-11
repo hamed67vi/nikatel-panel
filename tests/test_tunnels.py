@@ -279,3 +279,46 @@ def test_a_rebuild_in_flight_keeps_its_row_in_the_list(client):
     assert rows[0]["iran_name"] == "ir1" and rows[0]["foreign_name"] == "fi1" and rows[0]["forwarded_ports"] == [80, 2087]
     builder.pending_drop("fi1-ir1")
     assert client.get("/api/tunnels").json() == []
+
+def test_renaming_a_tunnel_and_a_server_keeps_the_servers_names(client):
+    import pytest
+
+    from nikatel.db import session
+    from nikatel.models import Config, Server, Tunnel
+    from nikatel.services import builder
+    from nikatel.services.tunnels import plan_for, sname
+
+    with session() as db:
+        i = Server(name="ir9", host="203.0.113.91", role="iran")
+        f = Server(name="fi9", host="203.0.113.92", role="foreign")
+        db.add_all([i, f])
+        db.flush()
+        t = Tunnel(name="fi9-ir9", type="backhaul", transport="tcpmux", engine="backhaul", iran_server_id=i.id, foreign_server_id=f.id, port=9915, forwarded_ports=[8072], record={"built_by": "nikatel-panel"})
+        db.add(t)
+        db.add(Config(name="cfg-9", tunnel="fi9-ir9"))
+        db.flush()
+        tid, fid = t.id, f.id
+
+    assert builder.rename_tunnel(tid, "My-Tunnel") == "my-tunnel"
+    for bad in ("", "-x", "has space", "a" * 16):
+        with pytest.raises(ValueError):
+            builder.rename_tunnel(tid, bad)
+
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        assert t.name == "my-tunnel" and sname(t) == "fi9-ir9" and t.record["custom_name"] is True      # the servers still know it as fi9-ir9
+        assert "nikatel-gre-fi9-ir9.service" in plan_for(t).iran_units
+        assert db.scalar(__import__("sqlalchemy").select(Config).where(Config.name == "cfg-9")).tunnel == "my-tunnel"
+
+        t.name = "fi9-ir9"                                   # an auto-named tunnel follows a renamed server
+        t.record = {"built_by": "nikatel-panel", "slug": "fi9-ir9"}
+        f = db.get(Server, fid)
+        old = f.name
+        f.name = "nl9"
+        db.flush()
+        assert builder.follow_server_rename(db, f, old) == ["fi9-ir9 → nl9-ir9"]
+        assert t.name == "nl9-ir9" and sname(t) == "fi9-ir9"
+
+        f.name = "de9"                                       # a hand-named tunnel does not
+        builder._rename_row(db, t, "mine", custom=True)
+        assert builder.follow_server_rename(db, f, "nl9") == [] and t.name == "mine"

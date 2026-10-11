@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.9 - 2026-10-11 - Rename a tunnel; tunnel names follow their servers
+
+* **✎ Rename** in the tunnel window (next to *Ports* and *Remove*): lowercase letters, digits and - (up to 15). Only the name in the panel changes; on the servers the tunnel keeps the name it was built with (new ``sname``: the GRE interface, units and files), so nothing there is touched and repairs, checks and removal keep working. Configs that name the tunnel and its alert mute follow the new name.
+* **A server renamed in Nodes renames its tunnels**: a tunnel that still carries the name the panel made for it (``<foreign>-<iran>``, with or without a ``-2``) gets the new one; a tunnel you renamed by hand keeps its name.
 ## 1.17.8 - 2026-10-11 - Create tunnel in layers, replace the tunnel that holds the port
 
 * **Replace the tunnel that holds the port**: when a wanted port is used on the Iran server by another tunnel of the panel (even an *up* one) the check offers a tick *replace it* - the tunnel is removed first (its other ports are named, it stays restorable for 30 days under *Recently removed*) and the new one is built. Until the tick is on, *Build* waits; a port held by a process the panel does not know still stops the build.

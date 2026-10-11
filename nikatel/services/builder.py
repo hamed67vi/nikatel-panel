@@ -27,7 +27,7 @@ from ..ssh import Node, SSHError, run_action, run_script
 from . import settings as st
 from .events import emit
 from .trash import snapshot as trash_snapshot
-from .tunnels import check_tunnel, parse_side
+from .tunnels import check_tunnel, parse_side, sname
 
 log = get_logger("builder")
 GRE_HOLD_WAIT = 10
@@ -833,6 +833,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
             raise ValueError("tunnel not found")
 
         name, port, tr, label = t.name, int(t.port or 0), (t.transport or "tcpmux"), f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
+        on_server = sname(t)           # what the servers know it as
         nodes = [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
         other = (t.type or "").lower() in ("backpack", "paqet", "chisel")
         snap = trash_snapshot(t) if trash and not keep_record else None
@@ -850,7 +851,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
     if not other:
         for side, node in nodes:
             try:
-                run_action(node, "remove_tunnel_files", {"NAME": name, "PORT": str(port), "TRANSPORT": tr if tr in ("tcp", "tcpmux", "wsmux", "wssmux") else "tcpmux"}, timeout=90)
+                run_action(node, "remove_tunnel_files", {"NAME": on_server, "PORT": str(port), "TRANSPORT": tr if tr in ("tcp", "tcpmux", "wsmux", "wssmux") else "tcpmux"}, timeout=90)
                 results.append(f"{side}: removed")
             except (SSHError, ValueError) as e:
                 results.append(f"{side}: not removed ({e})")
@@ -913,3 +914,88 @@ def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
         return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), opts, forced_name=name)
 
     return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)), opts=opts)
+
+
+# ------------------------------------------------------------------ names
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,14}$")
+
+
+def _rename_row(db, t: Tunnel, new: str, custom: bool) -> None:
+    """The row, the configs that name it and the alert mutes follow the new name. What the servers know it as does not change (see tunnels.sname)."""
+    from ..models import Config
+
+    old = t.name
+    rec = dict(t.record or {})
+    rec.setdefault("slug", old)
+
+    if custom:
+        rec["custom_name"] = True
+
+    t.record = rec
+    t.name = new
+
+    for c in db.scalars(select(Config).where(Config.tunnel == old)):
+        c.tunnel = new
+
+    muted = list(st.get("alerts").get("muted") or [])
+
+    if old in muted:
+        st.put("alerts", {"muted": sorted({new if m == old else m for m in muted})})
+
+
+def rename_tunnel(tunnel_id: int, new_name: str) -> str:
+    """The operator renames a tunnel. Lowercase letters, digits and - (up to 15): the same shape a built tunnel always had, so a rebuild keeps working."""
+    new = str(new_name or "").strip().lower()
+
+    if not NAME_RE.match(new):
+        raise ValueError("a tunnel name is lowercase letters, digits and - (1-15 characters, starting with a letter or digit)")
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        if new == t.name:
+            return new
+
+        if db.scalar(select(Tunnel).where(Tunnel.name == new, Tunnel.id != tunnel_id)) is not None:
+            raise ValueError("another tunnel already has this name")
+
+        old = t.name
+        _rename_row(db, t, new, custom=True)
+        emit(db, "info", "tunnels", f"Tunnel {old} renamed to {new}.", new)
+
+    return new
+
+
+def follow_server_rename(db, server: Server, old_name: str) -> list[str]:
+    """A server was renamed: every tunnel that still carries the name the panel made for it (<foreign>-<iran>, with or without a -2) gets the new one.
+    A tunnel the operator named by hand keeps its name."""
+    renamed = []
+    names = {t.name for t in db.scalars(select(Tunnel))}
+
+    for t in list(db.scalars(select(Tunnel).where((Tunnel.iran_server_id == server.id) | (Tunnel.foreign_server_id == server.id)))):
+        if (t.record or {}).get("custom_name"):
+            continue
+
+        f_old = old_name if server.role == "foreign" else t.foreign.name
+        i_old = old_name if server.role == "iran" else t.iran.name
+        auto = pretty_name(f_old, i_old, set())
+
+        if t.name != auto and not re.fullmatch(re.escape(auto) + r"-\d+", t.name):
+            continue
+
+        new = pretty_name(t.foreign.name, t.iran.name, names - {t.name})
+
+        if new == t.name:
+            continue
+
+        names.discard(t.name)
+        names.add(new)
+        old = t.name
+        _rename_row(db, t, new, custom=False)
+        emit(db, "info", "tunnels", f"Tunnel {old} renamed to {new}: the server {old_name} is now {server.name}.", new)
+        renamed.append(f"{old} → {new}")
+
+    return renamed
