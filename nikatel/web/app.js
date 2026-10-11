@@ -483,10 +483,49 @@ const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="ht
 const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? flagImg(cc) + " " + cc : "";
 const irow = (label, val) => `<div class="irow"><span>${label}</span><div>${val}</div></div>`;
 const ibox = (icon, title, rows) => `<div class="ibox"><h5><i>${icon}</i>${title}</h5>${rows.filter(Boolean).join("")}</div>`;
-/* a server window is ONE view (no tabs): the boxes, the 24 h charts, the tools; Edit, Delete and Console are in its header. The console is the only other view, with a Back link. */
+/* a server window, built from scratch: ONE bar with every button, tight boxes with the same number of rows (nothing hollow), a line of tunnels, a line of the last results, the charts.
+   Console, Edit and Delete are in the window header. The console is the only other view, with a Back link. */
 function serverDetailHtml(s) {
   if (state.wtab === "console") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + serverPartHtml(s, "console");
-  return serverPartHtml(s, "overview") + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>` + serverPartHtml(s, "tools");
+  return serverBar(s) + serverGridHtml(s) + serverLinesHtml(s) + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>`;
+}
+function serverBar(s) {
+  const f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, nm = esc(s.name);
+  const b = (icon, title, tip, click, cls = "") => `<button class="sm abtn ${cls}" onclick="${click}" title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  const groups = [
+    [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`), b("🔑", "Connect SSH", "Install the panel's key on the server with its password", `srvConnect(${s.id}, '${nm}')`),
+     b("🔐", "SSH password", "Set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`), b("↺", "Forget host key", "After a reinstall of this server", `forgetKey(${s.id}, '${nm}')`)],
+    s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`),
+      b("🛡", abuseOn ? "Remove Abuse-Defender" : "Abuse-Defender", abuseOn ? "Stop dropping traffic to abused ranges" : "Drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)] : [],
+    [b("🖥", "Windows ssh", "A .bat with your own key", `srvOpen(${s.id}, 'ssh')`), b("🐱", "PuTTY", "A launcher for PuTTY", `srvOpen(${s.id}, 'putty')`), b("🧰", "MobaXterm", "A launcher for MobaXterm", `srvOpen(${s.id}, 'mobaxterm')`)],
+    [b("⏻", "Reboot", "Its tunnels are down until it is back", `srvReboot(${s.id}, '${nm}')`, "danger")],
+  ].filter(g => g.length);
+  return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
+}
+function serverGridHtml(s) {
+  const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0;
+  const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
+  const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`;
+  const rr = (l, v, warn, bad, detail) => `<div class="rrow"><span>${l}</span><i class="rbar"><u class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${v == null ? 0 : Math.min(100, v)}%"></u></i><b>${v == null ? "—" : v + "%"}</b><small>${detail || ""}</small></div>`;
+  const box = (icon, title, rows) => `<div class="sbox"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
+  const sys = box("🖥", "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
+    kv("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), kv("Busiest process", esc(f.top || "—")), kv("Last seen", when(s.last_seen_at))]);
+  const res = box("📊", "Resources", [rr("CPU", f.cpu, 80, 92, ""), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""), rr("Swap", f.swap, 50, 80, ""),
+    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""), kv("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—"), kv("Connections", f.conn != null ? f.conn : "—")]);
+  const acc = box("🔑", "Access", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), kv("Role", esc(s.role)), kv("Provider", provCell(s)),
+    s.role === "foreign" ? kv("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")}`) : kv("Tunnels", mine.length ? String(mine.length) : "none"),
+    s.role === "foreign" ? kv("Abuse-Defender", abuseOn ? `<b class="gw-ok">on · ${f.abuse_rules || ab.rules || "?"} ranges</b>` : "off") : kv("Status", s.online ? '<b class="gw-ok">online</b>' : '<b class="err">offline</b>'),
+    s.role === "foreign" ? kv("Filtered in Iran?", fl ? `<b class="${fl.level === "clean" ? "gw-ok" : fl.level === "unknown" ? "" : "err"}">${esc(fl.verdict)}</b>` : "not checked") : kv("Panel link", s.last_error ? `<span class="err">${esc(s.last_error.slice(0, 40))}</span>` : '<b class="gw-ok">ok</b>')]);
+  return `<div class="sgrid">${sys}${res}${acc}</div>`;
+}
+function serverLinesHtml(s) {
+  const f = s.facts || {}, x = s.extra || {}, g = x.gre, fl = x.iran_filter, ab = x.abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, rules = f.abuse_rules || ab.rules || 0;
+  const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
+  const cell = (label, key, body) => `<span class="rc"><small>${label}</small><span id="res-${key}">${body}</span></span>`;
+  const res = `<div class="sline">${cell("GRE", "gre", g ? greTxt(g) : '<span class="mut">not tested</span>')}${s.role === "foreign" ? cell("Filtering", "flt", fl ? fltTxt(fl) : '<span class="mut">not checked</span>') + cell("Abuse-Defender", "abuse", abuseOn ? `<b class="gw-ok">✓ ${rules} ranges</b>` : '<span class="mut">not installed</span>') : ""}${cell("Last sample", "sample", s.last_seen_at ? `${ago(s.last_seen_at)} ago${f.uptime ? " · up " + esc(String(f.uptime)) : ""}` : '<span class="mut">never</span>')}</div>`;
+  const tun = mine.length ? `<div class="sline"><small>⇄ Tunnels <b>${mine.length}</b></small>${mine.map(t => `<span class="tchip"><i class="st ${t.state}"></i><b>${esc(t.name)}</b><small>${esc(t.iran_name === s.name ? t.foreign_name : t.iran_name)}${t.rtt_ms != null ? " · " + t.rtt_ms.toFixed(0) + " ms" : ""}</small></span>`).join("")}</div>` : "";
+  const pings = fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : "";
+  return tun + res + pings;
 }
 function serverPartHtml(s, tab) {
   const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};

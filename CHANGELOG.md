@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.27 - 2026-10-11 - The server window, rebuilt from scratch
+
+* **One button bar:** every action of a server (GRE test, Connect SSH, SSH password, Forget host key, Filtering, Abuse-Defender, Windows ssh, PuTTY, MobaXterm, Reboot) is in a single bar at the top, grouped by thin dividers; Console, Edit and Delete stay in the window header.
+* **Three equal boxes with the same number of rows** (System, Resources, Access) so nothing is hollow; the CPU / RAM / Swap / Disk bars are four aligned columns (name, bar, percent, used / total). Under them one line of tunnels and one line of the last results (GRE, Filtering, Abuse-Defender, last sample), then the charts.
+
 ## 1.16.26 - 2026-10-11 - A dead tunnel that holds the port is replaced; the list boxes do not jump
 
 * **Create tunnel:** when a wanted port on the Iran server is held by an old backhaul tunnel that nobody is connected to (the foreign side was replaced or the tunnel is down / unknown to the panel), the check says so (*Port 80 on ir1 is held by an old tunnel ... nobody is connected to it*) and offers a ticked box *remove it and use the port*; on Build the panel looks again, removes only that unit and its config when still nobody is connected, then builds. A port held by a live tunnel or by another service (nginx ...) still blocks, now naming the process.
