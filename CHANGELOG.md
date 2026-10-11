@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.26 - 2026-10-11 - A dead tunnel that holds the port is replaced; the list boxes do not jump
+
+* **Create tunnel:** when a wanted port on the Iran server is held by an old backhaul tunnel that nobody is connected to (the foreign side was replaced or the tunnel is down / unknown to the panel), the check says so (*Port 80 on ir1 is held by an old tunnel ... nobody is connected to it*) and offers a ticked box *remove it and use the port*; on Build the panel looks again, removes only that unit and its config when still nobody is connected, then builds. A port held by a live tunnel or by another service (nginx ...) still blocks, now naming the process.
+* The list boxes show no horizontal scrollbar that comes and goes and a hovered row no longer shifts; the vertical scrollbar keeps its place.
+
 ## 1.16.25 - 2026-10-11 - New servers are marked
 
 * A server added in the last hour carries a gold **new** badge in the server list, and *· new* beside its name in the server choosers of Create tunnel and Tunnel test.

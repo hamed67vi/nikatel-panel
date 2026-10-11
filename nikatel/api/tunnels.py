@@ -24,6 +24,7 @@ class BuildIn(BaseModel):
     keepalive: int = Field(75, ge=10, le=600)
     nodelay: bool = True
     opts: dict = Field(default_factory=dict)
+    replace_units: list[str] = Field(default_factory=list, max_length=5)   # dead Iran-side backhaul units that hold a wanted port ("backhaul-iran-tcpmux-9921.service"): removed first
     replace_ids: list[int] = Field(default_factory=list, max_length=5)   # tunnels (same foreign server and port) removed before the build
     dns_follow: bool = False                                     # the CDN records that served only a replaced tunnel follow the new Iran server
     dns_names: list[str] = Field(default_factory=list, max_length=10)    # DNS names (A records in the ArvanCloud account) pointed at the new Iran server after the build
@@ -45,11 +46,11 @@ def build(body: BuildIn):
         if any(len(n) > 253 or not re.fullmatch(r"[a-z0-9.*-]+", n) for n in names):
             raise ValueError("a DNS name may only have letters, digits, dots and dashes")
 
-        if body.iran_id == 0 or body.replace_ids or body.dns_follow or names:
+        if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names:
             from ..services import create
 
             aid = create.start(body.iran_id, body.foreign_id, body.ports, body.kind, transport, body.opts if body.kind == "backhaul" else other_opts,
-                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names)
+                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units)
         elif body.kind == "backhaul":
             aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=body.opts)
         else:

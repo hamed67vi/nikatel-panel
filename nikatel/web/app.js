@@ -1006,7 +1006,8 @@ function bkCheckRender(form) {
   const busy = c.busy.map(b => `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
   const conf = c.conflicts.map(t => `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${t.id}" ${t.replaceable ? "checked" : ""}> ⚠ Port ${t.ports.join(", ")} already goes to this foreign server through ${esc(t.name)} (${esc(t.iran)}, ${esc(t.state)}${t.state !== "up" && t.since ? " for " + ago(t.since) : ""}) — remove it first and replace it</label></div>`).join("");
   const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Smart repair → Failover)"}</small></label>` : "";
-  box.innerHTML = busy + conf + dns + (c.error ? `<div class="mut">${esc(c.error)}</div>` : "");
+  const stale = (c.stale || []).map(s => `<div class="bconf"><label class="chk"><input type="checkbox" name="stale_${esc(s.unit)}" checked> ⚠ Port ${s.port} on ${esc(c.iran)} is held by an old tunnel (${esc(s.unit)}): ${esc(s.why)} — remove it and use the port</label></div>`).join("");
+  box.innerHTML = busy + stale + conf + dns + (c.error ? `<div class="mut">${esc(c.error)}</div>` : "");
   if (btn) btn.disabled = !!c.busy.length;
 }
 window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
@@ -1069,6 +1070,7 @@ window.startBuild = async e => {
     if (c.busy.length) { box.innerHTML = `<div class="fx-line bad"><b>!</b>Port ${c.busy[0].port} is already in use on ${esc(c.iran)} (${esc(c.busy[0].by)}): choose another Iran server or another port. Nothing was built.</div>`; return false; }
     if (c.conflicts.length && !seen) { box.innerHTML = '<div class="fx-line plan"><b>›</b>A tunnel already carries this port to the foreign server: decide above (replace it or keep it), then press Build again.</div>'; return false; }
     body.replace_ids = [...form.querySelectorAll("input[name^=replace_]:checked")].map(x => +x.name.slice(8));
+    body.replace_units = [...form.querySelectorAll("input[name^=stale_]:checked")].map(x => x.name.slice(6));
     const dup = (c.same_foreign || []).filter(x => !body.replace_ids.includes(x.id));        // the foreign server already ends a tunnel that is not being replaced: ask what to do with it
     if (dup.length) {
       const what = await glassChoice(`${c.foreign} already has ${dup.length === 1 ? "a tunnel" : dup.length + " tunnels"}: ${dup.map(x => `${x.name} (${x.iran}, ${x.state}, port ${x.ports.join(",") || "-"})`).join("; ")}.`,

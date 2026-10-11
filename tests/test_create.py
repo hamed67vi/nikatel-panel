@@ -220,3 +220,26 @@ def test_precheck_lists_every_tunnel_that_already_ends_on_the_foreign_server(cli
     r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "9000"}).json()
     assert r["conflicts"] == [] and r["foreign"] == "fi1"                       # no port in common, but a second tunnel to fi1 is still asked about
     assert sorted(x["name"] for x in r["same_foreign"]) == ["fi1-ir1", "fi1-ir1-b"]
+
+def test_a_dead_backhaul_tunnel_holding_a_port_is_recognised_and_a_live_one_is_not():
+    from nikatel.services.create import is_dead_tunnel, parse_backhaul_unit, parse_owner
+
+    assert parse_owner("OWNER 4242 backhaul backhaul-iran-tcpmux-9921.service\n") == {"pid": "4242", "process": "backhaul", "unit": "backhaul-iran-tcpmux-9921.service"}
+    assert parse_owner("OWNER - - -") == {"pid": "", "process": "", "unit": ""} and parse_owner("") == {}
+    assert parse_backhaul_unit("backhaul-iran-tcpmux-9921.service") == ("tcpmux", 9921) and parse_backhaul_unit("nginx.service") is None and parse_backhaul_unit("backhaul-kharej-tcp-9900.service") is None
+    assert is_dead_tunnel(False, "") and is_dead_tunnel(False, "down") and is_dead_tunnel(False, "unknown")      # nobody connected, not an up tunnel
+    assert not is_dead_tunnel(True, "down") and not is_dead_tunnel(False, "up") and not is_dead_tunnel(False, "degraded")
+
+
+def test_precheck_offers_to_replace_a_dead_tunnel_that_holds_the_port(client, monkeypatch):
+    from nikatel.services import build_other, create
+
+    w = _world()
+    monkeypatch.setattr(build_other, "parse_simple_facts", lambda out: {"tcp": {8076}})
+    monkeypatch.setattr(create, "run_script", lambda node, name, params=None, timeout=30: "OUT")
+    monkeypatch.setattr(create, "identify_owner", lambda node, sid, port: {"process": "backhaul", "unit": "backhaul-iran-tcpmux-9930.service", "transport": "tcpmux", "ctl": 9930, "connected": False, "tunnel": "", "state": "", "dead": True})
+    r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "8076", "live": True}).json()
+    assert r["busy"] == [] and r["can_build"] is True and r["stale"][0]["unit"] == "backhaul-iran-tcpmux-9930.service" and "nobody is connected" in r["stale"][0]["why"]
+    monkeypatch.setattr(create, "identify_owner", lambda node, sid, port: {"process": "nginx", "unit": "nginx.service"})
+    r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "8076", "live": True}).json()
+    assert r["stale"] == [] and r["busy"][0]["by"] == "nginx (nginx.service)" and r["can_build"] is False

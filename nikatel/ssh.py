@@ -464,6 +464,18 @@ ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
     "unit_enable_restart": (r"""systemctl daemon-reload; systemctl enable '@UNIT@' >/dev/null 2>&1 || true; systemctl restart '@UNIT@' 2>&1 | tail -2; sleep 2; echo "UNIT @UNIT@ $(systemctl is-active '@UNIT@' 2>/dev/null || echo unknown)"
 """, {"UNIT": _UNIT1}),
 
+    # who listens on a TCP port of this server: the pid, the process name and the systemd unit it runs in (read-only). Used by the Create tunnel check to tell a DEAD tunnel of ours from a real service.
+    "port_owner": (r"""p='@PORT@'; l=$(ss -ltnpH "( sport = :$p )" 2>/dev/null | head -1)
+pid=$(echo "$l" | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2); comm=$(echo "$l" | grep -o 'users:(("[^"]*"' | sed 's/users:(("//; s/"//')
+unit=""; [ -n "$pid" ] && unit=$(grep -o '[A-Za-z0-9@._-]*\.service' /proc/$pid/cgroup 2>/dev/null | tail -1)
+echo "OWNER ${pid:--} ${comm:--} ${unit:--}"
+""", {"PORT": r"^\d{1,5}$"}),
+
+    # remove ONE Iran-side backhaul server unit and its config (a dead tunnel that holds a port a new tunnel needs); the panel has checked that nobody is connected to it
+    "remove_backhaul_unit": (r"""u='@UNIT@'; c="${u#backhaul-iran-}"; c="${c%.service}"
+systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u" "/etc/backhaul/iran-$c.toml"; systemctl daemon-reload; echo "REMOVED $u"
+""", {"UNIT": r"^backhaul-iran-(tcp|tcpmux|wsmux|wssmux)-\d{1,5}\.service$"}),
+
     # Backhaul over TLS WebSocket (wssmux / wss): the server side needs a certificate; a self-signed one, made once per tunnel, is enough (the client does not verify it)
     "backhaul_tls": (r"""set -e; n='@NAME@'; mkdir -p /etc/backhaul
 [ -s "/etc/backhaul/$n.crt" ] && [ -s "/etc/backhaul/$n.key" ] || openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$n" -keyout "/etc/backhaul/$n.key" -out "/etc/backhaul/$n.crt" >/dev/null 2>&1

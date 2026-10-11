@@ -10,6 +10,7 @@
                                                 automatic). Everything is told in one story; returns its id."""
 from __future__ import annotations
 
+import re
 import time
 
 from sqlalchemy import select
@@ -29,6 +30,56 @@ def _ports(text: str) -> list[int]:
     return [p.listen for p in builder.parse_ports(text)]
 
 
+def parse_owner(out: str) -> dict:
+    """Pure: the answer of the port_owner script -> {pid, process, unit} (empty when nobody listens or it can not be told)."""
+    m = re.search(r"OWNER (\S+) (\S+) (\S+)", str(out))
+
+    if not m:
+        return {}
+
+    pid, comm, unit = m.groups()
+    return {"pid": pid if pid != "-" else "", "process": comm if comm != "-" else "", "unit": unit if unit != "-" else ""}
+
+
+def parse_backhaul_unit(unit: str) -> tuple[str, int] | None:
+    """Pure: the transport and the control port of an Iran-side backhaul unit (backhaul-iran-tcpmux-9921.service gives tcpmux and 9921); None for any other unit."""
+    m = re.fullmatch(r"backhaul-iran-(tcp|tcpmux|wsmux|wssmux)-(\d{1,5})\.service", unit or "")
+    return (m.group(1), int(m.group(2))) if m else None
+
+
+def is_dead_tunnel(connected: bool, tunnel_state: str) -> bool:
+    """Pure: an Iran-side backhaul server that holds a port is DEAD - safe to replace - when no client is connected to its control port and the panel does not
+    list it as a tunnel that is up. (A panel tunnel that is down or unknown, or a tunnel the panel does not know at all, with nobody connected.)"""
+    return not connected and tunnel_state not in ("up", "degraded", "starting")
+
+
+def identify_owner(node: Node, server_id: int, port: int) -> dict:
+    """Who holds this port on the Iran server, and - when it is a backhaul tunnel server - whether that tunnel is dead. Never raises."""
+    try:
+        info = parse_owner(run_script(node, "port_owner", {"PORT": str(port)}, timeout=30))
+    except (SSHError, ValueError):
+        return {}
+
+    bh = parse_backhaul_unit(info.get("unit", ""))
+
+    if not bh:
+        return info
+
+    tr, ctl = bh
+
+    try:
+        connected = bool(run_script(node, "estab_check", {"PORT": str(ctl)}, timeout=20).strip())
+    except (SSHError, ValueError):
+        return info                                   # can not tell: it is not called dead
+
+    with session() as db:
+        t = db.scalar(select(Tunnel).where(Tunnel.iran_server_id == server_id, Tunnel.port == ctl))
+        name, state = (t.name, t.state) if t is not None else ("", "")
+
+    info.update(transport=tr, ctl=ctl, connected=connected, tunnel=name, state=state, dead=is_dead_tunnel(connected, state))
+    return info
+
+
 def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> dict:
     wanted = set(_ports(ports))
 
@@ -42,7 +93,7 @@ def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> d
         if iran_id and (iran is None or iran.role != "iran"):
             raise ValueError("choose an Iran server")
 
-        busy, conflicts, same_foreign = [], [], []
+        busy, conflicts, same_foreign, stale = [], [], [], []
 
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
             if t.foreign_server_id == foreign.id:       # every tunnel that already ends on this foreign server, with or without a common port: the form asks what to do with it
@@ -72,11 +123,18 @@ def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> d
 
             for p in sorted(wanted):
                 if p in listening and p not in known:
-                    busy.append({"port": p, "ports": [p], "by": "a process on the server", "tunnel": "", "state": ""})
+                    own = identify_owner(node, iran_id, p)
+
+                    if own.get("dead"):             # an old tunnel of ours that nobody connects to any more: it can be replaced
+                        stale.append({"port": p, "unit": own["unit"], "transport": own["transport"], "ctl": own["ctl"], "tunnel": own.get("tunnel", ""),
+                                      "why": (f"the tunnel {own['tunnel']} is {own.get('state') or 'down'}" if own.get("tunnel") else "a tunnel the panel does not know") + " and nobody is connected to it"})
+                    else:
+                        who = (own.get("process") or "a process") + (f" ({own['unit']})" if own.get("unit") else "") + ("; its tunnel is connected" if own.get("connected") else "")
+                        busy.append({"port": p, "ports": [p], "by": who if own else "a process on the server", "tunnel": "", "state": ""})
         except (SSHError, ValueError) as e:
             error = f"{iran_name} could not be inspected: {str(e)[:120]}"
 
-    return {"iran": iran_name, "foreign": foreign_name, "busy": busy, "conflicts": conflicts, "same_foreign": same_foreign, "error": error, "can_build": not busy}
+    return {"iran": iran_name, "foreign": foreign_name, "busy": busy, "stale": stale, "conflicts": conflicts, "same_foreign": same_foreign, "error": error, "can_build": not busy}
 
 
 def _follow(aid: int, build_aid: int, limit: int = 1500) -> bool:
@@ -182,8 +240,9 @@ def smart_test(foreign_id: int, ports: str, kind: str) -> int:
 
 
 def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, opts: dict, replace_ids: list[int], dns_follow: bool,
-          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None) -> int:
+          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None, replace_units: list[str] | None = None) -> int:
     _ports(ports)                                   # a sentence for a bad list, before anything starts
+    replace_units = [u for u in (replace_units or []) if parse_backhaul_unit(u)]
     dns_names = [n.strip().lower() for n in (dns_names or []) if n.strip()] if failover.ENABLED else []
     dns_follow = dns_follow and failover.ENABLED
 
@@ -219,6 +278,24 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
 
             candidates = [r["id"] for r in usable[:MAX_TRIES]]
             autopilot._say(aid, "Order (quality first, then free resources): " + ", ".join(f"{r['name']} ({r.get('reason', '')})" for r in usable[:MAX_TRIES]))
+
+        for unit in replace_units if candidates and candidates[0] else []:          # an old Iran-side tunnel that holds a port and that nobody connects to: checked again now, then removed
+            _, ctl = parse_backhaul_unit(unit)
+
+            with session() as db:
+                srv = db.get(Server, candidates[0])
+                node = Node(srv.host, srv.ssh_user, srv.ssh_port)
+
+            try:
+                if run_script(node, "estab_check", {"PORT": str(ctl)}, timeout=20).strip():
+                    autopilot._say(aid, f"{unit} is connected to a foreign server right now: it is NOT removed (the port stays busy).")
+                    continue
+
+                from ..ssh import run_action
+
+                autopilot._say(aid, f"Removing the dead tunnel {unit}: " + run_action(node, "remove_backhaul_unit", {"UNIT": unit}, timeout=60).strip()[-60:])
+            except (SSHError, ValueError) as e:
+                autopilot._say(aid, f"Could not remove {unit}: {str(e)[:100]}")
 
         plans = []
 
