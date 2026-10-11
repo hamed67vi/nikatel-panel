@@ -566,9 +566,22 @@ def user_body(ch: dict, cur_expire, typ: str) -> dict:
     return body
 
 
+def proxies_for(cur_proxies: dict, inbounds: dict) -> dict:
+    """Pure: the `proxies` Marzban needs beside new `inbounds`. A protocol that keeps inbounds keeps its CURRENT settings (its UUID / password must not change: the
+    users' links would break); a protocol that gets inbounds for the first time gets empty settings (Marzban makes its id); a protocol with no inbound left is
+    dropped (Marzban removes it). Marzban deletes every protocol that is missing from `proxies`, so all the kept ones must be listed."""
+    cur_proxies = cur_proxies if isinstance(cur_proxies, dict) else {}
+    return {p: (cur_proxies.get(p) if isinstance(cur_proxies.get(p), dict) else {}) for p, tags in inbounds.items() if tags}
+
+
 def user_update(c: dict, username: str, ch: dict) -> dict:
     cur = call(c, "GET", _upath(username)) or {}
-    call(c, "PUT", _upath(username), body=user_body(ch, cur.get("expire"), c.get("type", "")))
+    body = user_body(ch, cur.get("expire"), c.get("type", ""))
+
+    if "inbounds" in body and c.get("type", "") != "pasarguard":
+        body["proxies"] = proxies_for(cur.get("proxies") or {}, body["inbounds"])
+
+    call(c, "PUT", _upath(username), body=body)
     return user_get(c, username)
 
 

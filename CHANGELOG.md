@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.10 - 2026-10-11 - Inbounds per user; plain-words problems; a lighter bot page
+
+* **Panels → user:** the user window lists the inbounds of the panel (grouped by protocol) with a tick per inbound; tick or untick and Save. The ids of the protocols the user keeps are not touched (the links of the users stay valid); a protocol with no inbound left is removed, a new one gets its settings from the panel.
+* **Dashboard → Problems:** every error in plain words (the raw text is the tooltip), a click on a row opens the tunnel / server / config, *show them* lists every config that is down.
+* **Shop bot:** the overview of the bot page is kept for a minute, so opening the page again costs no SSH call.
+
 ## 1.16.9 - 2026-10-11 - The ping arrow in the exact middle, thin and faint
 
 * In the tunnel list the Iran node is right-aligned and the foreign node left-aligned, so the ping arrow sits in the exact middle of the gap between them; the arrow is thinner and fainter, the ping number stays as it was.

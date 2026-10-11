@@ -19,9 +19,19 @@ def _wrap(fn, *a, **kw):
         raise HTTPException(502, str(e))
 
 
+_INFO: dict = {"at": 0.0, "data": None}
+
+
 @router.get("/shopbot")
-def info():
-    return {"ok": True, **_wrap(shopbot.info)}
+def info(fresh: bool = False):
+    """The overview of the bot (one SSH call and several database queries on the bot server): kept for a minute, so opening the page again and again costs nothing."""
+    import time as _t
+
+    if fresh or _INFO["data"] is None or _t.time() - _INFO["at"] > 60:
+        _INFO["data"] = _wrap(shopbot.info)
+        _INFO["at"] = _t.time()
+
+    return {"ok": True, **_INFO["data"]}
 
 
 @router.get("/shopbot/telegram")

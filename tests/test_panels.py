@@ -195,3 +195,14 @@ def test_core_save_backup_and_rollback(client, fake, monkeypatch):
     r = client.post(f"/api/panels/{pid}/core/restore/{name}")
     assert r.status_code == 200 and [o["tag"] for o in fake.core["outbounds"]] == ["direct", "block"]
     assert client.post(f"/api/panels/{pid}/core/restore/999-1.json").status_code == 400
+
+
+def test_proxies_follow_the_inbounds_without_changing_the_users_ids():
+    from nikatel.services.panels import proxies_for
+
+    cur = {"vless": {"id": "11111111-1111-1111-1111-111111111111", "flow": ""}, "vmess": {"id": "22222222-2222-2222-2222-222222222222"}}
+    out = proxies_for(cur, {"vless": ["VLESS TCP"], "vmess": [], "trojan": ["TROJAN WS"]})
+    assert out["vless"]["id"].startswith("1111")           # kept with its id
+    assert "vmess" not in out                                # no inbound left: removed
+    assert out["trojan"] == {}                               # new protocol: Marzban makes the settings
+    assert proxies_for(None, {"vless": ["a"]}) == {"vless": {}}

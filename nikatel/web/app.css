@@ -1125,3 +1125,6 @@ html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #37415
 .tlink .h { border-width: 4px; opacity: .7; } .tlink .h.r { top: -1px; border-left-width: 7px; } .tlink .h.l { bottom: -1px; border-right-width: 7px; }
 .tlink .pk { width: 5px; height: 5px; box-shadow: 0 0 5px var(--c); opacity: .9; } .tlink .pk.a { top: 0.5px; } .tlink .pk.b { bottom: 0.5px; }
 .tlink.up { --c: color-mix(in srgb, var(--ok) 70%, transparent); } .tlink .ms { opacity: 1; }
+.pb-row.click { cursor: pointer; border-radius: 10px; transition: background .2s; } .pb-row.click:hover { background: rgba(255,255,255,.05); } .pb-row small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ue-ib { grid-column: 1 / -1; } .ue-ib > small span { font-weight: 500; } .ue-ibs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 6px; } .ue-ibp { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ue-ibp > b { display: block; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); margin-bottom: 4px; } .ue-ibp .chk { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12.5px; }
