@@ -33,6 +33,7 @@ class ServerOut(BaseModel):
     last_error: str
     facts: dict
     extra: dict = {}
+    created_at: int = 0          # when the server was added: the list marks the ones added in the last hour as "new"
 
     model_config = {"from_attributes": True}
 

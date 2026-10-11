@@ -407,6 +407,8 @@ const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.st
 /* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
 const srvBusy = s => { const b = (s.extra || {}).busy; return b && b.what && Date.now() / 1000 - b.at < 900 ? b : null; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
+/* a server added in the last hour is marked "new" (Nodes, and the server lists of Create tunnel / Tunnel test) */
+const isNew = s => s && s.created_at && Date.now() / 1000 - s.created_at < 3600;
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
   const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
@@ -442,7 +444,7 @@ PAGES.servers = async () => {
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = (!s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls}" data-q="${esc((s.name + " " + s.host + " " + (s.provider || "")).toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top : "")}">
-      <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
+      <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
       <td>${srvBusy(s) ? `<span class="busy-chip" title="${esc(srvBusy(s).what + (srvBusy(s).detail ? ": " + srvBusy(s).detail : ""))}"><i class="spin"></i>${esc(srvBusy(s).what)}…${srvBusy(s).detail ? `<span class="busy-detail">${esc(srvBusy(s).detail)}</span>` : ""}</span>` : noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
@@ -721,7 +723,7 @@ const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || 
 PAGES.tunnelTest = async () => {
   const [servers, kd, tl] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds"), api("/api/tunnels").catch(() => [])]);
   tt.kinds = kd.kinds;
-  const opt = (role, cur) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === cur ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
+  const opt = (role, cur) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === cur ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const j = tt.job, running = j && !j.done;
   $("#page").innerHTML = `<div class="card" data-tab="test"><h3>🧪 Tunnel test <span class="sp"></span><span id="tt-run">${ttRunPill()}</span></h3>
     <div class="frm">
@@ -948,7 +950,7 @@ async function buildFormHtml() {
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
   void srvOpt;
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
-  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
+  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Nodes → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
   const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(name in bk.chk ? bk.chk[name] : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
   const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
