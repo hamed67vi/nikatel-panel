@@ -494,12 +494,14 @@ function serverDetailHtml(s) {
 function serverBar(s) {
   const f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, nm = esc(s.name);
   const b = (icon, title, tip, click, cls = "") => `<button class="sm abtn ${cls}" onclick="${click}" title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  const hostKeyChanged = /host key/i.test(s.last_error || "");        // only when the panel refuses the server because it was reinstalled: then its old identity must be forgotten
   const groups = [
-    [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`), b("🔑", "Connect SSH", "Install the panel's key on the server with its password", `srvConnect(${s.id}, '${nm}')`),
-     b("🔐", "SSH password", "Set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`), b("↺", "Forget host key", "After a reinstall of this server", `forgetKey(${s.id}, '${nm}')`)],
+    [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
     s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`),
       b("🛡", abuseOn ? "Remove Abuse-Defender" : "Abuse-Defender", abuseOn ? "Stop dropping traffic to abused ranges" : "Drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)] : [],
-    [b("🖥", "Windows ssh", "A .bat with your own key", `srvOpen(${s.id}, 'ssh')`), b("🐱", "PuTTY", "A launcher for PuTTY", `srvOpen(${s.id}, 'putty')`), b("🧰", "MobaXterm", "A launcher for MobaXterm", `srvOpen(${s.id}, 'mobaxterm')`)],
+    [b("🔐", "SSH password", "Set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`),
+     `<select class="sm abtn abtn-open" title="Open this server in a program on your computer" onchange="if(this.value){srvOpen(${s.id}, this.value);this.selectedIndex=0}"><option value="">🖥 Open in…</option><option value="ssh">Windows ssh</option><option value="putty">PuTTY</option><option value="mobaxterm">MobaXterm</option></select>`,
+     ...(hostKeyChanged ? [b("↺", "Trust the new server", "The server was reinstalled and its SSH identity changed: forget the old one so the panel can connect again", `forgetKey(${s.id}, '${nm}')`)] : [])],
     [b("⏻", "Reboot", "Its tunnels are down until it is back", `srvReboot(${s.id}, '${nm}')`, "danger")],
   ].filter(g => g.length);
   return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;

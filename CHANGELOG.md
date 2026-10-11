@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.32 - 2026-10-11 - A shorter button bar
+
+* The server button bar lost its duplicates: *Connect SSH* and *SSH password* were two buttons for the same area (the panel's login of a server without one is the key button on its row in Nodes); *Windows ssh / PuTTY / MobaXterm* are one **Open in…** choice; *Forget host key* only shows, as **Trust the new server**, when the panel refuses a server because it was reinstalled (its SSH identity changed). What is left: GRE test · Filtering · Abuse-Defender (foreign servers) · SSH password · Open in… · Reboot.
+
 ## 1.16.31 - 2026-10-11 - One scrollbar
 
 * A page with a list box had two vertical scrollbars (the page and the list). The list box is now sized to end exactly at the bottom of the window (also when the window is resized) and the page itself does not scroll: only the list does.

@@ -1229,3 +1229,5 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 @media (max-width: 900px) { .modal .mgrid { grid-template-columns: 1fr 1fr; } }
 /* a page with a list box has ONE scrollbar - the list's; the page itself does not scroll (the box is sized to end at the bottom of the window) */
 @media (min-width: 761px) { .main:has(.lbox) { overflow-y: hidden; } }
+/* "Open in..." is a select that looks like the other buttons */
+select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; text-align: center; text-align-last: center; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); color: inherit; font-weight: 700; } select.abtn-open option { background: #151a30; color: #eef1ff; }
