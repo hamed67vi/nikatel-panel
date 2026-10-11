@@ -2,6 +2,7 @@
 
 ## 1.17.38
 
+- The approved macOS-style design (design handoff) is the base look of the default theme at night: window #0f1626 with title bar #151d31, cards #172034, grey buttons with radius 8 (10 and 40 px tall in Settings), a flat #0a84ff main button, a 50 x 30 switch with a 24 px thumb (green when on), fields #0b1120, tab bars with a blue ringed active tab, line icons only. The link window and the config window follow their screens: coloured line icons in the action row, icon tiles on the boxes, coloured charts, three equal buttons in the config window.
 - Server window like the reference: flag and copyable address in the header, line icons on every button, blue box titles with icon tiles, compact action bar with Reboot at the right, coloured charts (CPU blue, RAM purple, load blue, download green, upload orange, connections cyan) with icons, a blue-edged window.
 - Tunnel Doctor page: the six steps are cards with a coloured icon tile and a blue title, the settings row is tidy; check boxes are blue rounded squares with a tick; the Settings menu item has its old icon back and no text shadow.
 - Side menu like the reference (coloured line icons, a chevron on each item, a blue active item with a bar); every tab bar is outlined with a blue active tab; the Add buttons are the blue glossy one; the Servers toolbar fits one row on wide screens and its search has a magnifier; the theme tiles are twelve in a row with a blue ring on the chosen one; Save sits at the right in every settings tab.

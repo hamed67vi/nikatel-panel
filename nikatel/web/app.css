@@ -2447,3 +2447,86 @@ html body .modal .sbar .sg { display: flex !important; gap: 10px; flex: 0 0 auto
 html body .modal .sbar .sg:last-of-type { margin-left: auto; }
 html body .modal .sbar .sep { display: none; }
 html body .modal .sbar .abtn { flex: 0 0 auto !important; width: auto !important; min-width: 0; }
+
+/* ================= HANDOFF LAYER: the approved macOS-style design (DESIGN-HANDOFF.md) =================
+   tokens: window #0f1626, title bar #151d31, card #172034, card border rgba(130,160,255,.10), input #0b1120, divider .07,
+   text #f2f5fb / #9aa4b8, label blue #5aa9ff, green #30d158, orange #ff9f0a, red #ff453a, accent #0a84ff.
+   Applied to the default theme at night; the other themes keep their colours and only take the shapes. */
+/* the switch: 50 x 30 track, 24 px thumb, on = #30d158 (every theme) */
+html body input[type=checkbox].sw { width: 50px !important; min-width: 50px !important; max-width: 50px !important; height: 30px !important; min-height: 30px !important; max-height: 30px !important; }
+html body input[type=checkbox].sw::before { border-radius: 15px !important; background: rgba(120,128,150,.45) !important; box-shadow: none !important; top: 0 !important; bottom: 0 !important; }
+html body input[type=checkbox].sw:checked::before { background: #30d158 !important; box-shadow: none !important; }
+html body input[type=checkbox].sw::after { top: 3px !important; left: 3px !important; width: 24px !important; height: 24px !important; border-radius: 50% !important; background: #fff !important; box-shadow: 0 2px 4px rgba(0,0,0,.35) !important; }
+html body input[type=checkbox].sw:checked::after { transform: translateX(20px) !important; }
+/* chart colours of the handoff */
+.mcard[data-c="blue"] .ll { stroke: #4da3ff; } .mcard[data-c="blue"] .la { fill: rgba(77,163,255,.16); }
+.mcard[data-c="purple"] .ll { stroke: #bf8cff; } .mcard[data-c="purple"] .la { fill: rgba(191,140,255,.16); }
+.mcard[data-c="green"] .ll { stroke: #32d74b; } .mcard[data-c="green"] .la { fill: rgba(50,215,75,.16); }
+.mcard[data-c="orange"] .ll { stroke: #ff9f0a; } .mcard[data-c="orange"] .la { fill: rgba(255,159,10,.16); }
+.mcard[data-c="cyan"] .ll { stroke: #64d2ff; } .mcard[data-c="cyan"] .la { fill: rgba(100,210,255,.16); }
+/* the menu colours of the handoff */
+nav#nav a[data-page="dashboard"] { --ic: #8b93a7; } nav#nav a[data-page="nodes"] { --ic: #4da3ff; } nav#nav a[data-page="tunnels"] { --ic: #3aa6b9; } nav#nav a[data-page="configs"] { --ic: #d99a52; } nav#nav a[data-page="bot"] { --ic: #d0607f; } nav#nav a[data-page="settings"] { --ic: #9b72e0; }
+
+/* ---- default theme, night ---- */
+html[data-theme="aurora"]:not([data-mode="light"]) { --pri-top: #0a84ff; --pri-mid: #0a84ff; --pri-bot: #0a84ff; --pri-ink: #fff; --glow: 10,132,255; --acc: #5aa9ff; --text: #f2f5fb; --mut: #9aa4b8; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; }
+html[data-theme="aurora"]:not([data-mode="light"]) body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; }
+/* buttons: grey, radius 8 (10 and taller in the settings); the main one a flat #0a84ff with a soft shadow */
+html[data-theme="aurora"]:not([data-mode="light"]) body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)) { border-radius: 8px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); box-shadow: none; color: #f2f5fb; font-weight: 500; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)):not(:disabled):hover { background: rgba(255,255,255,.16); box-shadow: none; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button:where(:not(.tsw):not(.eye):not(.lang-btn):not(.ai-btn):not(.cta):not(:is(.tabs,.set-tabs,.subnav,#nav,.gchip,.mtabs) *)):not(:disabled):active { background: rgba(255,255,255,.22); box-shadow: none; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button.pri:not(.ai-btn):not(.cta), html[data-theme="aurora"]:not([data-mode="light"]) body button.cta-server, html[data-theme="aurora"]:not([data-mode="light"]) body button.cta-tunnel { background: #0a84ff !important; background-image: none !important; border: 0 !important; border-radius: 8px !important; color: #fff !important; text-shadow: none !important; font-weight: 600 !important; box-shadow: 0 4px 14px rgba(10,132,255,.35) !important; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button.pri:not(.ai-btn):not(.cta)::before { display: none !important; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button.pri:not(.ai-btn):not(.cta):not(:disabled):hover, html[data-theme="aurora"]:not([data-mode="light"]) body button.cta-server:hover, html[data-theme="aurora"]:not([data-mode="light"]) body button.cta-tunnel:hover { filter: brightness(1.12); background: #0a84ff !important; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button.pri:disabled { background: rgba(255,255,255,.08) !important; box-shadow: none !important; color: rgba(255,255,255,.34) !important; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button.danger:not(.ai-btn) { color: #ff6961; background: rgba(255,69,58,.14); border: 1px solid rgba(255,69,58,.28); box-shadow: none; }
+html[data-theme="aurora"]:not([data-mode="light"]) body button.danger:not(.ai-btn):not(:disabled):hover { background: rgba(255,69,58,.26); }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf button:not(.eye):not(.tsw), html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf a.btn { height: 40px; padding: 0 20px; font-size: 14px; font-weight: 600; border-radius: 10px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf button.pri:not(.eye):not(.tsw) { border-radius: 10px !important; }
+/* settings: cards, tiles, fields, tabs */
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .si, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss-hero { background: #172034 !important; border: 1px solid rgba(130,160,255,.10) !important; border-radius: 14px !important; padding: 14px 20px !important; box-shadow: none !important; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss-ic { width: 40px; height: 40px; border-radius: 11px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .si-t b, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss > .ss-h b, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss-hero .ss-ht b { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .si-t small, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss-hero .ss-ht small, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss-hb small { font-size: 13px; color: #9aa4b8; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss .sr > .v input:not([type=checkbox]), html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss .sr > .v select, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .si-r .si-f, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .pwf-f .pwi .si-f, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .sic select { background-color: #0b1120 !important; border: 1px solid rgba(255,255,255,.07) !important; border-radius: 10px !important; box-shadow: none !important; height: 40px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .frame-h3, html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-desc { color: #9aa4b8; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf > h3 { color: #5aa9ff; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+@media (min-width: 761px) {
+  html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-top .set-tabs { padding: 0; border: 0; background: none; border-radius: 0; gap: 8px; }
+  html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-tabs button { height: 40px; padding: 0 18px; gap: 9px; font-size: 14px; font-weight: 500; border-radius: 12px; color: #e6eaf3; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); box-shadow: none; }
+  html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-tabs button:hover { background: rgba(255,255,255,.09); }
+  html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-tabs button.on { color: #5aa9ff; font-weight: 600; background: rgba(10,132,255,.14); border-color: #0a84ff; box-shadow: 0 0 0 3px rgba(10,132,255,.15); }
+  html[data-theme="aurora"]:not([data-mode="light"]) body #page .tabs:not(.set-tabs) button { height: 40px; border-radius: 12px; font-weight: 500; color: #e6eaf3; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); box-shadow: none; }
+  html[data-theme="aurora"]:not([data-mode="light"]) body #page .tabs:not(.set-tabs) button.on { color: #5aa9ff; font-weight: 600; background: rgba(10,132,255,.14); border-color: #0a84ff; box-shadow: 0 0 0 3px rgba(10,132,255,.15); }
+}
+/* the menu */
+@media (min-width: 761px) {
+  html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a { color: #a9b0c4; border-radius: 14px; }
+  html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a.on { color: #3b8cff; background: rgba(10,132,255,.16); border-color: rgba(10,132,255,.55); box-shadow: 0 6px 20px rgba(10,132,255,.18); }
+  html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a.on .ic { color: #3b8cff; }
+  html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a.on::before { background: #2f8bff; box-shadow: 0 0 10px rgba(47,139,255,.7); }
+}
+/* windows: window #0f1626, title bar #151d31, cards #172034 */
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal.wide { background: #0f1626; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 .5px rgba(0,0,0,.7); }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal.wide > .mh, html[data-theme="aurora"]:not([data-mode="light"]) body .modal.wide > header, html[data-theme="aurora"]:not([data-mode="light"]) body .modal.wide .modal-head { background: #151d31; border-bottom: 1px solid rgba(0,0,0,.55); }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox, html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mcard { background: #172034; border: 1px solid rgba(130,160,255,.10); border-radius: 12px; box-shadow: none; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mtile { background: #172034; border: 1px solid rgba(130,160,255,.10); border-radius: 10px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox > h5, html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mcard > h6, html[data-theme="aurora"]:not([data-mode="light"]) body .modal .wsec > h4, html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mtile > small { color: #5aa9ff; font-size: 12px; font-weight: 600; letter-spacing: .07em; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox .kv2, html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox .rrow { min-height: 32px; border-bottom: 0; border-top: 1px solid rgba(255,255,255,.07); padding: 0; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox > h5 + .kv2, html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox > h5 + .rrow { border-top: 1px solid rgba(255,255,255,.07); }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox > h5 { border-bottom: 0; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox > h5 > i { width: 22px; height: 22px; border-radius: 6px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbox > h5 > i svg { width: 14px; height: 14px; color: #fff; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mrange { background: rgba(118,128,160,.2); border: 0; border-radius: 8px; padding: 2px; gap: 2px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mrange button { border-radius: 6px !important; background: none !important; border: 0 !important; color: #c7cfdf; height: 28px !important; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .mrange button.on { background: #0a84ff !important; color: #fff !important; font-weight: 600; }
+html[data-theme="aurora"]:not([data-mode="light"]) body .modal .sbar .abtn { height: 32px; padding: 0 14px; font-size: 13px; border-radius: 8px; }
+/* the tunnel window: icon tiles per box and the coloured icons of the action row */
+.sbox[data-b="servers"] > h5 > i { background: #5b6b8c; } .sbox[data-b="status"] > h5 > i { background: #30d158; } .sbox[data-b="link"] > h5 > i { background: #0a84ff; }
+.sbar .abtn[data-t="Health"] .bi { color: #30d158; } .sbar .abtn[data-t="Restart"] .bi { color: #5aa9ff; } .sbar .abtn[data-t="Quality"] .bi { color: #bf8cff; } .sbar .abtn[data-t="Mute alerts"] .bi { color: #ff9f0a; }
+.sbar .abtn[data-t="Rebuild"] .bi { color: #32d74b; } .sbar .abtn[data-t="History"] .bi { color: #9aa4b8; }
+.sbar .abtn .bi { margin-right: 0; } .sbar .abtn { gap: 7px; }
+
+.sbox[data-b="config"] > h5 > i { background: #30b0c7; } .sbox[data-b="speed"] > h5 > i { background: #ff9f0a; }
+html body .modal .sbar.cfbar { flex-wrap: nowrap; } html body .modal .sbar.cfbar .abtn { flex: 1 1 0 !important; justify-content: center; }
+.sbar .abtn[data-t="Speed test"] .bi { color: #ff9f0a; } .sbar .abtn[data-t="Ping now"] .bi { color: #5aa9ff; } .sbar .abtn[data-t="Copy link"] .bi { color: #9aa4b8; }
+.sbar.cfbar .abtn .bi svg, .sbar .abtn .bi svg { stroke-width: 1.5; }
