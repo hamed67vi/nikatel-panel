@@ -1821,7 +1821,7 @@ function pnUserHtml(id, u) {   // the user window: the actions on top, three box
     + fld("Reset usage", `<select name="reset">${["no_reset", "day", "week", "month", "year"].map(s => `<option ${u.reset === s ? "selected" : ""}>${s}</option>`).join("")}</select>`)
     + fld("Expires", `<input name="expire_date" type="date" value="${esc(u.expire_date)}" title="empty = never">`)
     + fld("Note", `<input name="note" value="${esc(u.note)}" placeholder="optional">`)
-    + (u.sub ? kv("Link", `<span class="mono ell ue-link" title="Click to copy the subscription link" onclick="navigator.clipboard.writeText('${esc(u.sub)}');toast('✓ Link copied','ok')">${esc(u.sub)}</span>`) : ""), "ue-account");
+    + (u.sub ? kv("Link", `<span class="mono ell ue-link" title="Click to copy the subscription link" onclick="copyText(this, '${esc(u.sub)}')">${esc(u.sub)}</span>`) : ""), "ue-account");
   const ib = ibHtml(u), inbounds = ib ? box("🔌", "Inbounds", ib, "ue-inb") : "";
   return `${bar}<form class="frm ue-form" onsubmit="return pnUserSave(event, ${id}, '${nm}')"><div class="sgrid ue-grid ${ib ? "" : "two"}">${usage}${account}${inbounds}</div>
     <div class="frm-act ue-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`;
@@ -1834,6 +1834,13 @@ window.pnBulk = async (id, action, value) => { const names = [...document.queryS
 const pnTraffic = x => { const used = x.used || 0, lim = x.limit || 0, left = Math.max(0, lim - used), pct = lim ? Math.min(100, Math.round(used * 100 / lim)) : 0;
   return lim ? `<div class="trf-t"><span><b>${fmtB(used)}</b> used</span><span class="${pct >= 95 ? "err" : ""}"><b>${fmtB(left)}</b> left</span></div><div class="trf-b" title="Account volume ${gb(lim)}"><i class="rbar"><u class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></u></i><small>of ${gb(lim)}</small></div>`
     : `<div class="trf-t"><span><b>${fmtB(used)}</b> used</span><span class="mut">unlimited</span></div>`; };
+/* copy a text and say so in the corner of the box it was clicked in */
+window.copyText = async (el, text) => {
+  try { await navigator.clipboard.writeText(text); } catch (e) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) { /* no clipboard at all */ } t.remove(); }
+  const box = el.closest(".sbox") || el.parentElement; if (!box) return;
+  box.querySelectorAll(".copied").forEach(x => x.remove());
+  const b = document.createElement("span"); b.className = "copied"; b.textContent = "✓ Copied"; box.appendChild(b); setTimeout(() => b.remove(), 1600);
+};
 window.pnSelCount = () => {
   const all = [...document.querySelectorAll(".pn-uchk, .pn-hchk")], n = all.filter(x => x.checked).length;
   const c = $("#pn-seln"); if (c) c.textContent = n;

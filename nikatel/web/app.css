@@ -1327,3 +1327,5 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 .ue-acts { margin-bottom: 8px; } .ue-save { margin-top: 2px; }
 @media (max-width: 900px) { .ue-grid, .ue-grid.two { grid-template-columns: 1fr; } }
 .ue-account .kv2 { min-height: 34px; padding: 3px 0; } .ue-account .kf input, .ue-account .kf select { height: 28px; } .ue-link { cursor: pointer; color: var(--acc-2); } .ue-link:hover { text-decoration: underline; }
+
+.sbox { position: relative; } .copied { position: absolute; top: 6px; right: 10px; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #10131f; background: var(--ok); animation: copiedIn .18s ease-out; box-shadow: 0 2px 8px rgba(0,0,0,.3); } @keyframes copiedIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

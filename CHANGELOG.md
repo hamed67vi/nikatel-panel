@@ -2,6 +2,7 @@
 
 ## 1.17.6 - 2026-10-11 - User window touches
 
+* Clicking the subscription link shows a green *✓ Copied* in the corner of its box for a moment.
 * The user window: *Add days* is gone, the rows of the *Account* box have room between them, and the subscription link copies itself when you click it.
 
 ## 1.17.5 - 2026-10-11 - The user window rebuilt, the panel test button, matching boxes
