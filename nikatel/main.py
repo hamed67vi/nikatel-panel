@@ -112,6 +112,7 @@ async def _lifespan(app: FastAPI):
         try:
             builder.resume_pending()
             extras.resume_pending()
+            tunnel_test.purge_stale()          # a test that a restart cut short: its temporary tunnel goes now, not in ten minutes
         except Exception:
             log.exception("resuming interrupted rebuilds failed")
 

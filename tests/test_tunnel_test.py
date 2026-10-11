@@ -91,3 +91,16 @@ def test_loss_levels_and_the_full_check_report(client, monkeypatch):
     lossy = next(x for x in r["rows"] if x["name"] == "t-lossy")
     assert lossy["loss"] == "high" and lossy["loss_pct"] == 22.0
     assert next(x for x in r["rows"] if x["name"] == "t-down")["measured"] is False
+
+
+def test_purge_test_leftovers_action_is_scoped_to_test_units_and_the_test_port():
+    import pytest
+
+    from nikatel.ssh import render_action
+
+    s = render_action("purge_test_leftovers", {"TESTPORT": "39400"})
+    assert "nikatel-gre-test-*" in s and "backpack-test-*" in s and "39400" in s and "daemon-reload" in s
+    assert "/etc/backhaul/*.toml" in s          # a backhaul unit is removed only when its config forwards the test port
+
+    with pytest.raises(ValueError):
+        render_action("purge_test_leftovers", {"TESTPORT": "39400; reboot"})

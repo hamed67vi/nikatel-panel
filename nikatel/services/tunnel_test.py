@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Tunnel
+from ..models import ActionLog, Server, Tunnel
 from ..ssh import Node, SSHError, run_action, run_script
 from . import builder
 from .tunnels import link_of
@@ -168,8 +168,25 @@ def purge_stale() -> None:
             log.warning("stale temporary tunnel #%s not removed: %s", tid, str(e)[:100])
 
 
+def purge_leftovers(iran_id: int, foreign_id: int) -> None:
+    """Before a test: whatever an earlier test that was cut short (a restart of the panel) left on the two servers is removed, so the test port is free again."""
+    with session() as db:
+        nodes = [Node(s.host, s.ssh_user, s.ssh_port) for s in (db.get(Server, iran_id), db.get(Server, foreign_id)) if s is not None]
+
+    for node in nodes:
+        try:
+            out = run_action(node, "purge_test_leftovers", {"TESTPORT": str(TEST_PORT)}, timeout=60)
+
+            if "PURGED 0" not in out:
+                log.info("test leftovers removed on %s: %s", node.host, out.strip()[-40:])
+        except (SSHError, ValueError) as e:
+            log.warning("could not purge test leftovers on %s: %s", node.host, e)
+
+
 def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
     """Validate and start; returns the action id of the test (the build has its own id in the story)."""
+    purge_leftovers(iran_id, foreign_id)
+
     with session() as db:
         names = {t.name for t in db.scalars(select(Tunnel))}
 
@@ -347,6 +364,7 @@ def kind_parts(kind: str) -> tuple[str, str]:
 
 def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full") -> int:
     """A temporary BackPack / Paqet / Chisel tunnel: built (which measures it), then removed. Returns the test's action id."""
+    purge_leftovers(iran_id, foreign_id)
     from . import build_other
 
     k, tr = kind_parts(kind)
@@ -463,7 +481,7 @@ def _compare_worker(job: dict) -> None:
                 ok, story = False, ["the test took too long"]
 
             r = dict(RESULTS.get(aid) or {})
-            r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "")
+            r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else (story[-1] if story else "no result")[:160])   # a failed build says why
             job["results"].append(r)
     finally:
         job["current"], job["current_aid"], job["done"] = "", None, True

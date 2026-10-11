@@ -675,6 +675,17 @@ chmod 600 $B/@NAME@.*; echo PREPARED
 """, {"NAME": _TNAME, "TLS": r"^[01]$"}),
 
     # remove everything a BackPack / Paqet / Chisel tunnel (and its test sink) left on a server
+    # a tunnel TEST that was cut short (a restart of the panel in the middle of it) leaves its temporary units behind: the test-* units of every engine, the sink,
+    # the GRE link, and a backhaul unit whose config forwards the reserved test port. Removing them is safe: no real tunnel is named test-* or forwards that port.
+    "purge_test_leftovers": (r"""tp='@TESTPORT@'; n=0
+for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'nikatel-sink-test-*' 2>/dev/null | awk '{print $1}'); do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; n=$((n+1)); done
+for f in $(grep -lE "\"$tp(=|\")|\"$tp:" /etc/backhaul/*.toml 2>/dev/null); do b=$(basename "$f" .toml); systemctl disable --now "backhaul-$b.service" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/backhaul-$b.service" "$f"; n=$((n+1)); done
+for s in /usr/local/sbin/nikatel-gre-up-test-* /usr/local/sbin/nikatel-gre-down-test-* /usr/local/sbin/nikatel-gre-check-test-* /usr/local/sbin/nikatel-bpfw-test-* /usr/local/sbin/nikatel-paqet-fw-test-* /usr/local/sbin/nikatel-sink-test-*; do [ -e "$s" ] && rm -f "$s"; done
+rm -f /etc/backpack/test-*.toml /etc/backpack/test-*.metrics.json /etc/paqet/test-*.yaml /etc/nikatel-chisel/test-*.key /etc/nikatel-chisel/test-*.crt /etc/nikatel-chisel/test-*.env 2>/dev/null
+for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep '^test-'); do ip tunnel del "$i" 2>/dev/null || true; done
+systemctl daemon-reload; echo "PURGED $n"
+""", {"TESTPORT": r"^\d{4,5}$"}),
+
     "other_remove": (r"""n='@NAME@'; k='@KIND@'; p='@PORT@'; pr='@PROTO@'
 case "$k" in
   backpack) U="backpack-$n.service backpack-$n-kharej.service"; F="/etc/backpack/$n.toml /etc/backpack/$n-kharej.toml /etc/backpack/$n.metrics.json /etc/backpack/$n-kharej.metrics.json";;

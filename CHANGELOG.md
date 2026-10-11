@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.13 - 2026-10-11 - A cut-short tunnel test no longer blocks the next one
+
+* Real test of the engines (one Iran ⇄ one foreign server): Backhaul, BackPack, BackPack Direct, Paqet and Chisel all build, connect, measure and clean up. The one failure found: a test that a restart of the panel cut short left its temporary units on the servers, and the next Backhaul test was refused because the test port was in use. Now every test first removes such leftovers on both servers (only test-* units and a unit that forwards the reserved test port), the panel removes a cut-short test at startup, and a failed test says why in the comparison table.
+
 ## 1.16.12 - 2026-10-11 - A little life when a page opens
 
 * When a page opens its rows, tiles and cards come in one after the other (never on the refreshes), and cards lift softly under the mouse. Off with Settings → Appearance → Animations off, and for people who asked their system for less motion.
