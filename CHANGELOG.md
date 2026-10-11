@@ -2,6 +2,8 @@
 
 ## 1.17.38
 
+- Panels, users: a short list (a status filter with few users) keeps the row height of a full page instead of stretching to fill the box; the coloured line at the left of a row is gone, a small tile with a person icon in the colour of the status stands in its place; the Expires column starts at the same place as its header and shows the date beside the days.
+- Tunnel Doctor: the log (History) sits at the top right under the settings; the controls of Working now are one joined group and the log box and its note are one piece.
 - Settings group cards follow the Alerts screen of the design handoff: a header with a tinted icon tile and a pill, fields 44 px high with the label on top, 44 px pill buttons, tinted pills, maintenance rows with a red Remove.
 - The approved macOS-style design (design handoff) is the base look of the default theme at night: window #0f1626 with title bar #151d31, cards #172034, grey buttons with radius 8 (10 and 40 px tall in Settings), a flat #0a84ff main button, a 50 x 30 switch with a 24 px thumb (green when on), fields #0b1120, tab bars with a blue ringed active tab, line icons only. The link window and the config window follow their screens: coloured line icons in the action row, icon tiles on the boxes, coloured charts, three equal buttons in the config window.
 - Server window like the reference: flag and copyable address in the header, line icons on every button, blue box titles with icon tiles, compact action bar with Reboot at the right, coloured charts (CPU blue, RAM purple, load blue, download green, upload orange, connections cyan) with icons, a blue-edged window.

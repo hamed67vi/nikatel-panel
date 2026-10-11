@@ -2552,3 +2552,34 @@ html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .pill { font-s
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .pill.ok { color: #5ee07f; background: rgba(48,209,88,.08); border-color: rgba(48,209,88,.4); }
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .pill.err { color: #ff6b81; background: rgba(255,69,58,.08); border-color: rgba(255,69,58,.4); }
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .pill.warn { color: #ffb340; background: rgba(255,159,10,.08); border-color: rgba(255,159,10,.4); }
+
+/* Tunnel Doctor: the log (History) sits at the top right, under the settings; Working now takes the whole left column */
+@media (min-width: 1000px) {
+  html body #page .ap-pair { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-rows: auto; align-items: start; gap: 16px; }
+  html body #page .ap-pair > .card:first-child { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; }
+  html body #page .ap-pair > .ap-set { grid-column: 2; grid-row: 1; }
+  html body #page .ap-pair > .ap-histcard { grid-column: 2; grid-row: 2; margin: 0; }
+  html body #page .ap-pair > .ap-histcard .ap-hist { max-height: 340px; overflow: auto; }
+}
+
+/* ---- users: instead of the coloured line at the left of a row, a small tile with a person icon in the colour of the status ---- */
+html body .usr-tbl tbody tr td:first-child, html body .usr-tbl tbody tr.up td:first-child, html body .usr-tbl tbody tr.down td:first-child { border-left: 0 !important; box-shadow: none !important; }
+.usr-wrap { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.usr-av { width: 32px; height: 32px; flex: none; border-radius: 10px; display: grid; place-items: center; font-style: normal; background: rgba(154,164,192,.14); color: #9aa4b8; }
+.usr-av svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.usr-av.active { background: rgba(48,209,88,.14); color: #30d158; } .usr-av.limited { background: rgba(255,159,10,.14); color: #ff9f0a; }
+.usr-av.expired { background: rgba(255,69,58,.14); color: #ff6b81; } .usr-av.on_hold { background: rgba(90,169,255,.14); color: #5aa9ff; }
+/* Tunnel Doctor: the header controls of Working now are one joined group, and the log box and its note are one piece */
+html body #page .ap-pair > .card:first-child > h3 { display: flex; align-items: center; gap: 0; }
+html body #page .ap-pair > .card:first-child > h3 > .sp { flex: 1; }
+html body #page .ap-pair > .card:first-child > h3 > .ap-auto, html body #page .ap-pair > .card:first-child > h3 > button, html body #page .ap-pair > .card:first-child > h3 > .pill { height: 34px; display: inline-flex; align-items: center; gap: 8px; margin: 0 0 0 -1px; padding: 0 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 0; background: rgba(255,255,255,.05); box-shadow: none; text-transform: none; letter-spacing: 0; font-size: 13px; }
+html body #page .ap-pair > .card:first-child > h3 > .ap-auto { border-radius: 10px 0 0 10px; margin-left: 0; }
+html body #page .ap-pair > .card:first-child > h3 > .pill { border-radius: 0 10px 10px 0; }
+html body #page .ap-pair > .card:first-child .ap-att { border-radius: 12px 12px 0 0 !important; border: 1px solid rgba(255,255,255,.08) !important; border-bottom: 0 !important; background: rgba(255,255,255,.03) !important; margin-bottom: 0 !important; }
+html body #page .ap-pair > .card:first-child .ap-note { display: block; margin: 0 !important; padding: 10px 14px; border: 1px solid rgba(255,255,255,.08); border-top: 1px solid rgba(255,255,255,.06); border-radius: 0 0 12px 12px; background: rgba(255,255,255,.03); }
+html body #page .ap-set-row { padding: 12px 14px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.03); align-items: flex-end; }
+
+/* the Expires column: the header and the cells start at the same place, a little left of the edge; the pill with the date beside it */
+html body .usr-tbl thead th:last-child, html body .usr-tbl tbody td:last-child { text-align: left !important; padding-left: 36px !important; padding-right: 12px !important; }
+.exp-c { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
+.exp-d { color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; }

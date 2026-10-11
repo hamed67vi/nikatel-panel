@@ -1895,7 +1895,7 @@ async function pnUsersLoad(id) {
       <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked users" onchange="pnBulkAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option><option value="renew">Add days…</option></select></div></div>
     <div class="lbox full usr-box"><table class="tbl lift usr-tbl"><colgroup><col style="width:46px"><col style="width:30%"><col style="width:12%"><col style="width:38%"><col></colgroup>
       <thead><tr><th><input type="checkbox" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th></tr></thead>
-      <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"} clk" onclick="pnUserOpen(${id}, '${esc(x.username)}')" title="Click to open the user"><td onclick="event.stopPropagation()"><input type="checkbox" class="pn-uchk" value="${esc(x.username)}" onchange="pnSelCount()"></td><td class="name"><div class="usr-nm"><b>${esc(x.username)}</b>${x.note ? `<small class="mut" title="${esc(x.note)}">${esc(String(x.note).slice(0, 60))}</small>` : ""}</div></td><td><span class="spill ${x.status}">${esc(String(x.status).replace("_", " "))}</span></td>
+      <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"} clk" onclick="pnUserOpen(${id}, '${esc(x.username)}')" title="Click to open the user"><td onclick="event.stopPropagation()"><input type="checkbox" class="pn-uchk" value="${esc(x.username)}" onchange="pnSelCount()"></td><td class="name"><div class="usr-wrap"><i class="usr-av ${x.status}">${SI.user}</i><div class="usr-nm"><b>${esc(x.username)}</b>${x.note ? `<small class="mut" title="${esc(x.note)}">${esc(String(x.note).slice(0, 60))}</small>` : ""}</div></div></td><td><span class="spill ${x.status}">${esc(String(x.status).replace("_", " "))}</span></td>
         <td class="trf">${pnTraffic(x)}</td><td>${expPill(x)}</td></tr>
 `).join("") || '<tr><td colspan="5" class="mut">nobody matches</td></tr>'}</tbody></table></div>
 `;
@@ -1919,8 +1919,10 @@ function pnFit(ps) {
   box.style.height = H + "px";
   const inner = () => box.clientHeight - 14, set = h => box.style.setProperty("--rh", h + "px");
   let h = Math.floor((inner() - th.offsetHeight - 6 - ps * 6) / ps);
+  const key = ps + "|" + H, rows = tb.querySelectorAll("tbody tr").length;
+  if (rows < ps) { set(pnFit.k === key ? pnFit.h : Math.floor(h * 10) / 10); return; }      // a short list (a filter with few users) keeps the row height of a full page: the rows never grow to fill the box
   for (let k = 0; k < 3; k++) { set(h); const over = tb.offsetHeight - inner(); if (Math.abs(over) < 1) break; h -= over / ps; }
-  set(Math.floor(h * 10) / 10);
+  pnFit.k = key; pnFit.h = Math.floor(h * 10) / 10; set(pnFit.h);
 }
 let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = setTimeout(() => { if (!$("#pn-body .usr-tbl")) return; if (pnPS() !== pn.curPS) refresh(); else pnFitSoon(pn.curPS); }, 150); });
 const pnTabs = () => `<div class="toolbar pn-tabs"><div class="tabs">${[["users", "Users"], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>`;
@@ -1978,7 +1980,7 @@ const pnTraffic = x => {
   const used = x.used || 0, lim = x.limit || 0, left = Math.max(0, lim - used), pct = lim ? Math.min(100, Math.round(used * 1000 / lim) / 10) : 0, cls = pct >= 95 ? "bad" : pct >= 80 ? "warn" : "";
   return lim ? `<div class="trf2"><div class="trf2-t"><span><b>${fmtB(used)}</b> <small>used</small></span><span class="${pct >= 95 ? "err" : ""}"><b>${fmtB(left)}</b> <small>left</small></span></div><div class="trf2-b" title="Account volume ${gb(lim)}"><i class="rbar"><u class="${cls}" style="width:${pct}%"></u></i><small>${pct}% of ${gb(lim)}</small></div></div>`
     : `<div class="trf2"><div class="trf2-t"><span><b>${fmtB(used)}</b> <small>used</small></span><span class="mut">unlimited</span></div></div>`; };
-const expPill = x => { if (!x.expire_date) return '<span class="epill none">∞ never</span>'; const d = typeof x.expire === "number" ? Math.ceil((x.expire - Date.now() / 1000) / 86400) : null; const cls = d == null ? "" : d < 0 ? "bad" : d <= 7 ? "warn" : "ok"; return `<span class="epill ${cls}" title="${esc(x.expire_date)}">${d == null ? esc(x.expire_date) : d < 0 ? "expired" : d + " d"}</span>`; };
+const expPill = x => { if (!x.expire_date) return '<span class="epill none">∞ never</span>'; const d = typeof x.expire === "number" ? Math.ceil((x.expire - Date.now() / 1000) / 86400) : null; const cls = d == null ? "" : d < 0 ? "bad" : d <= 7 ? "warn" : "ok"; return `<span class="exp-c"><span class="epill ${cls}" title="${esc(x.expire_date)}">${d == null ? esc(x.expire_date) : d < 0 ? "expired" : d + " d"}</span>${d == null ? "" : `<small class="exp-d">${esc(String(x.expire_date).slice(0, 10))}</small>`}</span>`; };
 /* copy a text and say so where it was clicked: a corner badge in a box, a solid mark on the address in a table cell */
 window.copyFrom = async (el, text) => {
   try { await navigator.clipboard.writeText(text); } catch (e) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e2) { /* no clipboard at all */ } t.remove(); }
