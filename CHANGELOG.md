@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.2 - 2026-10-11 - Panel numbers in the top bar
+
+* The four boxes of a panel (Users, Nodes, Load, Traffic) are gone: their numbers sit in one framed strip of the top bar, details in tooltips; Nodes still opens the node list.
+
 ## 1.17.1 - 2026-10-11 - *unstable* in one box
 
 * The tunnel count of the Tunnels page is one framed box with a dot and a number per state, and *degraded* is called **unstable** (like the state of each tunnel); the same word in the dashboard line and in the check / restart messages.

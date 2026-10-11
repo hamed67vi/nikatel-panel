@@ -1279,3 +1279,7 @@ select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; 
 .bk-rfile { cursor: pointer; }
 /* tunnel count in the toolbar: one framed box, a dot and a number per state */
 .tcount { display: inline-flex; align-items: center; height: 26px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); font-size: 12px; color: var(--mut); overflow: hidden; } .tcount .tc { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; height: 100%; } .tcount .tc + .tc { border-left: 1px solid var(--line); } .tcount b { color: var(--text); font-weight: 800; } .tcount i { width: 8px; height: 8px; border-radius: 50%; background: var(--unk); } .tcount .up i { background: var(--ok); } .tcount .down i { background: var(--bad); } .tcount .unstable i { background: var(--warn); }
+
+/* the four numbers of a panel sit in its top bar */
+.pstat .tc { gap: 6px; } .pstat .tc i { display: none; } .pstat small { color: var(--mut); font-size: 11px; } .pstat .tc.click { cursor: pointer; } .pstat .tc.click:hover { background: rgba(255,255,255,.06); }
+.pstat .tc { padding: 0 10px; }
