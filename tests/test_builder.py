@@ -155,7 +155,7 @@ def test_rebuild_with_a_fresh_link_avoids_the_old_inner_network(client, monkeypa
         tid = t.id
 
     seen = {}
-    monkeypatch.setattr(builder, "delete_tunnel", lambda tunnel_id, keep_record=False: ["removed"])
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tunnel_id, keep_record=False, trash=False: ["removed"])
     monkeypatch.setattr(builder, "pending_put", lambda item: seen.setdefault("pending", item))
     monkeypatch.setattr(builder, "start_build", lambda iran_id, foreign_id, ports, transport, mtu, keepalive, forced_name="", nodelay=True, opts=None: seen.update(opts=dict(opts or {}), name=forced_name) or 5)
     assert builder.rebuild_tunnel(tid, fresh_link=True) == 5

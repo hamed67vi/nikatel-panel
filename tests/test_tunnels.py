@@ -192,3 +192,31 @@ def test_judge_trusts_the_users_path_over_the_ping():
     assert r[("203.0.113.5", 8075)] == ("404", 123.4) and r[("203.0.113.6", 80)] == ("000", None)
     s = parse_side("UNIT a.service active\nDATA 8075 404 0.2500\nNOW 5")
     assert s.data_code == "404" and s.data_ms == 250.0
+
+
+def test_a_removed_tunnel_is_kept_and_restored(client, monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services import builder, trash
+
+    with session() as db:
+        ir, fo = Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="fi1", host="203.0.113.50", role="foreign", online=True)
+        db.add_all([ir, fo])
+        db.flush()
+        db.add(Tunnel(name="fi1-ir1", type="backhaul", transport="tcpmux", iran_server_id=ir.id, foreign_server_id=fo.id, port=9900, forwarded_ports=[8075],
+                      record={"port_mapping": "8075", "mtu": 1400, "keepalive": 60, "opts": {"connection_pool": 24}}))
+        tid = db.scalar(__import__("sqlalchemy").select(Tunnel.id))
+        irid, foid = ir.id, fo.id
+
+    monkeypatch.setattr(builder, "run_action", lambda *a, **k: "REMOVED")
+    monkeypatch.setattr(builder.get_settings(), "read_only", False, raising=False)
+    builder.delete_tunnel(tid, trash=True)
+    items = client.get("/api/tunnel-trash").json()["items"]
+    assert [i["name"] for i in items] == ["fi1-ir1"] and items[0]["sub"] == "ir1 ⇄ fi1" and items[0]["ports"] == "8075" and "args" not in items[0]
+    seen = {}
+    monkeypatch.setattr(builder, "start_build", lambda iran_id, foreign_id, ports, transport, mtu, keepalive, forced_name="", nodelay=True, opts=None: seen.update(i=iran_id, f=foreign_id, p=ports, n=forced_name, m=mtu, o=opts) or 7)
+    r = client.post(f"/api/tunnel-trash/{items[0]['id']}/restore")
+    assert r.status_code == 202 and r.json()["id"] == 7 and seen == {"i": irid, "f": foid, "p": "8075", "n": "fi1-ir1", "m": 1400, "o": {"connection_pool": 24}}
+    assert client.post("/api/tunnel-trash/nope/restore").status_code == 400
+    assert client.delete(f"/api/tunnel-trash/{items[0]['id']}").status_code == 200 and client.get("/api/tunnel-trash").json()["items"] == []
+    assert trash.items() == []

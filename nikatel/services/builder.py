@@ -26,6 +26,7 @@ from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import settings as st
 from .events import emit
+from .trash import snapshot as trash_snapshot
 from .tunnels import check_tunnel, parse_side
 
 log = get_logger("builder")
@@ -805,8 +806,8 @@ def _build(b: Build) -> None:
 
 
 # ------------------------------------------------------------------ delete / rebuild
-def delete_tunnel(tunnel_id: int, keep_record: bool = False) -> list[str]:
-    """Remove the tunnel from both servers (and the row). Returns per-side results."""
+def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False) -> list[str]:
+    """Remove the tunnel from both servers (and the row). Returns per-side results. `trash`: keep a copy first, so that it can be restored."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to delete tunnels")
 
@@ -819,6 +820,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False) -> list[str]:
         name, port, tr, label = t.name, int(t.port or 0), (t.transport or "tcpmux"), f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
         nodes = [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
         other = (t.type or "").lower() in ("backpack", "paqet", "chisel")
+        snap = trash_snapshot(t) if trash and not keep_record else None
         entry = ActionLog(ref=name, action="delete", source="manual", story=[f"Removing {label} from both servers"])
         db.add(entry)
         db.flush()
@@ -853,6 +855,11 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False) -> list[str]:
             e.finished_at = int(time.time())
 
         emit(db, "warn" if all("not" not in r for r in results) else "bad", "tunnels", f"Tunnel {label} removed: " + "; ".join(results), name)
+
+    if snap is not None:
+        from . import trash as trash_store
+
+        trash_store.add(snap)
 
     return results
 

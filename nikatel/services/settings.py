@@ -27,6 +27,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
+    # tunnels removed on request: a copy of each so that it can be restored (30 days)
+    "trash": {"items": []},
     # installs on a server (torrent block, Marzban node) that the panel is following: picked up again when the panel starts
     "pending_installs": {"items": []},
     # the secret entry path: when set, the panel answers 404 to everything until the browser has opened /<entry_path>

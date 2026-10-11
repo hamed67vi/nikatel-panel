@@ -212,12 +212,12 @@ async function refresh() {
     if (transient) { clearTimeout(retryT); retryT = setTimeout(() => { if (seq === navSeq) refresh(); }, Math.min(8000, 1500 * 2 ** Math.min(retries++, 3))); }
   }
 }
-setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !state.detect && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) refresh(); }, 15000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 function showModal(title, body, cls = "", acts = "") { let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); } m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button></div><div class="modal-body">${body}</div></div></div>`; }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
-const ASK_VERB = /^(Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
+const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
 function glassAsk(text, {input = false, value = "", danger, password = false} = {}) {
   return new Promise(resolve => {
     const old = $("#ask"); if (old) old.remove();
@@ -253,8 +253,8 @@ function glassChoice(text, choices) {
 window.gconfirm = (text, o) => glassAsk(text, o);
 window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({input: true, value}, o));
 window.closeModal = () => {
-  const quiet = (state.page === "nodes" || state.page === "tunnels") && !state.edit && !state.build && !state.detect;   // just close: the list behind is still current
-  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
+  const quiet = (state.page === "nodes" || state.page === "tunnels") && !state.edit && !state.build;   // just close: the list behind is still current
+  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
   hideModal();
   if (!quiet) refresh();
 };
@@ -774,27 +774,6 @@ PAGES.tunnelQuality = async () => {
         <td><button class="sm" onclick="qualityOne(${t.id})">Measure</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
 };
 window.editPorts = async (id, cur) => { const v = await gprompt("Forwarded ports of this tunnel (Iran → foreign), e.g. 443, 443=2096, 10000-10009:", cur); if (v == null || !v.trim()) return; toast("Changing the ports… (the tunnel service restarts)"); try { const r = await api(`/api/tunnels/${id}/ports`, {method: "PUT", body: JSON.stringify({ports: v})}); toast("✓ Ports: " + r.mapping, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.detectTunnels = async () => { state.detect = {loading: true}; refresh(); try { state.detect = await api("/api/tunnels/detect"); } catch (e) { state.detect = {error: e.message}; } refresh(); };
-window.adoptPair = async i => { const p = state.detect.pairs[i]; try { const r = await api("/api/tunnels/adopt", {method: "POST", body: JSON.stringify(p)}); toast("✓ " + r.name + " added to the panel", "ok"); state.detect = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-/* Detect on servers: opens as a window. Complete pairs can be added to the panel; incomplete ones
-   (an Iran-side backhaul config whose foreign side no longer exists) can be removed from that server. */
-function detectHtml() {
-  const d = state.detect; if (!d) { return ""; }
-  let body;
-  if (d.loading) body = `<div class="fx-line run"><i></i>Scanning every server for tunnels…</div>`;
-  else if (d.error) body = `<div class="err">${esc(d.error)}</div>`;
-  else {
-    const rows = d.pairs.filter(p => !p.in_panel), orphans = rows.filter(p => !p.paired);
-    body = `<div class="toolbar"><span class="mut">${d.scanned} servers scanned · ${d.pairs.length} tunnels found · <b>${rows.length}</b> not in the panel · <b class="${orphans.length ? "err" : ""}">${orphans.length}</b> incomplete</span><span class="sp"></span>${orphans.length ? `<button class="sm danger" onclick="detectCleanAll()">🗑 Remove all incomplete (${orphans.length})</button>` : ""}<button class="sm" onclick="detectTunnels()">↻ Scan again</button></div>
-      <small class="mut">A complete pair = an Iran server config + the foreign client that dials it. Incomplete = only the Iran side is left (the foreign side was removed or reinstalled); it holds a control port and a GRE link for nothing and can be removed from that server.</small>
-      ${d.errors.length ? `<div class="err">${d.errors.map(e => esc(e.server) + ": " + esc(e.error)).join(" · ")}</div>` : ""}
-      ${rows.map(p => `<div class="gw-row"><span><b>${esc(p.name)}</b> <small class="mut">${esc(p.transport)} · control ${p.port} · ports ${esc(p.ports.join(", ") || "—")} · GRE ${esc(p.iran_tunnel_ip || "?")} ⇄ ${esc(p.foreign_tunnel_ip || "?")}</small></span><span>${esc(p.iran_name)} ⇄ ${p.paired ? esc(p.foreign_name) : '<span class="err">no matching foreign side</span>'}</span><span class="ob-act">${p.paired ? `<button class="sm pri" onclick="adoptPair(${d.pairs.indexOf(p)})">Add to panel</button>` : `<button class="sm danger" onclick="detectClean(${d.pairs.indexOf(p)})" title="Remove this incomplete tunnel from ${esc(p.iran_name)}">Remove</button>`}</span></div>`).join("") || '<div class="mut">Everything on the servers is already in the panel.</div>'}`;
-  }
-  showModal(`<b>🔍 Tunnels found on the servers</b>`, body, "wide");
-  return "";
-}
-window.detectClean = async i => { const p = state.detect.pairs[i]; if (!await gconfirm(`Remove the incomplete tunnel ${p.name} (${p.transport} ${p.port}) from ${p.iran_name}? Its units, config and GRE link go.`)) return; try { const r = await api("/api/tunnels/detect/clean", {method: "POST", body: JSON.stringify({iran_id: p.iran_id, transport: p.transport, port: p.port, name: p.name})}); toast("✓ " + r.results.join(" · "), "ok"); detectTunnels(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.detectCleanAll = async () => { const list = state.detect.pairs.filter(p => !p.in_panel && !p.paired); if (!list.length) return; if (!await gconfirm(`Remove ${list.length} incomplete tunnels from their Iran servers?`)) return; let ok = 0; for (const p of list) { try { await api("/api/tunnels/detect/clean", {method: "POST", body: JSON.stringify({iran_id: p.iran_id, transport: p.transport, port: p.port, name: p.name})}); ok++; } catch (e) { toast("✕ " + p.name + ": " + e.message, "bad"); } } toast(`✓ ${ok} of ${list.length} removed`, ok === list.length ? "ok" : "bad"); detectTunnels(); };
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.checkAll = async () => {
   showModal("<b>🔍 Checking every tunnel</b>", '<div class="loading"><i class="spin"></i><span>Is each tunnel up, and how many packets does it lose? (about a minute)</span></div>', "wide");
@@ -834,8 +813,8 @@ async function enginesLoad() {
 window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
-  const list = await api("/api/tunnels");
-  state.tunnelsCache = list;
+  const [list, trashRes] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []}))]);
+  state.tunnelsCache = list; state.trashCache = trashRes.items || [];
   const tmode = localStorage.getItem("nk.tf") === "problems" ? "problems" : "all", nProblems = list.filter(tunSev).length;
   const workList = ((await api("/api/autopilot/outage").catch(() => null)) || {}).working || [], fixing = new Set(workList.filter(w => w.mode !== "look").map(w => w.name)), workMap = new Map(workList.map(w => [w.name, w]));
   if (workList.length) { clearTimeout(window.__workT); window.__workT = setTimeout(() => { if (state.page === "tunnels" && !state.open && !state.build) refresh(); }, 4000); }
@@ -858,7 +837,8 @@ PAGES.tunnelsList = async () => {
       <td class="num hide-sm" title="${esc(q.latency_ms != null ? "quality test: " + q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "% · score " + q.score : "")}">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td><div class="td-act"><button class="sm" onclick="toggleDetail(${t.id})" title="Details, charts and actions of this tunnel">More</button><button class="sm" onclick="event.stopPropagation();checkTunnel(${t.id})" title="Health check now">Health</button><button class="sm" onclick="event.stopPropagation();restartTunnel(${t.id}, '${esc(t.name)}')" title="Restart the tunnel service on both servers (the GRE link stays)">Restart</button><button class="sm danger" onclick="event.stopPropagation();deleteTunnel(${t.id}, '${esc(t.name)}')">Delete</button></div></td></tr>`; };
   const creating = false;
-  $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="checkAll()" title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">🔍 Check all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><button onclick="detectTunnels()" title="Scan every server for tunnels that are not in this list - complete pairs can be added, incomplete leftovers removed">🔍 Detect on servers</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
+  $("#page").innerHTML = `<div class="toolbar"><button class="pri" onclick="openBuild()">＋ Create tunnel</button><button onclick="checkAll()" title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">🔍 Check all</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><span class="mut">${list.filter(t => t.state === "up").length} up · ${list.filter(t => t.state === "down").length} down · ${list.filter(t => t.state === "degraded").length} degraded</span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
+    ${trashBox()}
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${TUN_TYPES.filter(ty => rows.some(t => tunType(t) === ty)).map(ty => `<div class="nk-ghead"><b>${esc(TUN_LABEL[ty] || ty)}</b><span>${rows.filter(t => tunType(t) === ty).length}</span></div>
     <table class="tbl lift tun-tbl"><colgroup><col style="width:12%"><col style="width:11%"><col style="width:12%"><col style="width:10%"><col style="width:5%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:9%"><col style="width:290px"></colgroup>
@@ -867,7 +847,7 @@ PAGES.tunnelsList = async () => {
   applyQ();
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);
-  else if (state.detect) detectHtml();
+ 
   else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
   else hideModal();
   if (state.open) loadTunnelCharts(state.open);
@@ -1084,10 +1064,24 @@ async function followStory(aid, box, maxPolls) {
     if (s.done) return s;
   }
 }
+/* removed tunnels: a copy is kept for 30 days; Restore builds the tunnel again (same name, same servers, same ports) */
+const trashBox = () => { const it = state.trashCache || []; if (!it.length) return ""; return `<div class="trashbox"><h5><i>♻</i>Recently removed<small>a copy is kept for 30 days</small></h5>${it.map(x => `<div class="trow"><span class="tn"><b>${esc(x.title)}</b><small class="mut">${esc(x.sub)} · ports ${esc(x.ports || "—")}</small></span><span class="mut tw">removed ${esc(ago(x.at))} ago</span><span class="ta"><button class="sm pri" onclick="trashRestore('${esc(x.id)}')" title="Build it again: same name, same servers, same ports">Restore</button><button class="sm" onclick="trashForget('${esc(x.id)}')" title="Drop the copy; it can not be restored after that">Forget</button></span></div>`).join("")}</div>`; };
+window.trashRestore = async id => {
+  const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
+  if (!await gconfirm(`Restore the tunnel ${it.title}? It is built again between ${it.sub} with the ports ${it.ports} (a new GRE key; the services start by themselves; about a minute).`)) return;
+  showModal(`<b>♻ Restoring ${esc(it.title)}</b>`, '<div id="trash-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
+  try { const r = await api(`/api/tunnel-trash/${encodeURIComponent(id)}/restore`, {method: "POST"}); await followStory(r.id, $("#trash-story"), 600); } catch (e) { const b = $("#trash-story"); if (b) b.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
+  refresh();
+};
+window.trashForget = async id => {
+  const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
+  if (!await gconfirm(`Forget the copy of ${it.title}? It can not be restored after that.`)) return;
+  try { await api(`/api/tunnel-trash/${encodeURIComponent(id)}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
 window.deleteTunnel = async (id, name) => {
   if (!await gconfirm(`Remove the tunnel ${name} from BOTH servers? Users on it lose their connection. This cannot be undone.`)) return;
   toast("Removing…");
-  try { const r = await api(`/api/tunnels/${id}`, {method: "DELETE"}); toast("✓ " + r.results.join(" · "), "ok"); state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  try { const r = await api(`/api/tunnels/${id}`, {method: "DELETE"}); toast("✓ " + r.results.join(" · ") + " — you can restore it from “Recently removed” above the list", "ok"); state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.rebuildTunnel = async (id, name) => {
   if (!await gconfirm(`Rebuild ${name}: remove it from both servers and build it again with the same name and ports? It is down while this runs (about a minute).`)) return;
@@ -2484,7 +2478,7 @@ window.minModal = () => {
   const title = ((ov.querySelector(".modal-head b") || {}).textContent || "Task").replace(/^[^\w\u0600-\u06FF]+/, "").trim() || "Task";
   m.removeChild(ov); ov.classList.add("docked");
   dock.items.push({id: ++dock.n, title, ov});
-  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; state.detect = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; cf.sub = null;
+  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; cf.sub = null;
   dockRender(); refresh();
 };
 window.dockOpen = id => {

@@ -959,3 +959,8 @@ html[data-mode="light"] .tiles { background: linear-gradient(rgba(255,255,255,.5
 .wtool b, .wtools.uni .wtool > b { font-size: 13px; font-weight: 700; align-self: end; } .wtool small, .wtools.uni .wtool > small { font-size: 11px; color: var(--mut); line-height: 1.3; align-self: start; }
 .wtool:hover i { background: rgba(124,131,255,.18); border-color: rgba(124,131,255,.35); }
 .wtool.danger i { background: rgba(255,90,120,.12); border-color: rgba(255,90,120,.3); } .wtool.danger { background: linear-gradient(rgba(40,14,22,.55), rgba(40,14,22,.55)) padding-box, linear-gradient(120deg, rgba(255,90,120,.4), rgba(255,90,120,.08) 60%, rgba(255,90,120,0)) border-box; }
+/* removed tunnels: a soft box above the list with a Restore button per tunnel */
+.trashbox { margin: 0 0 12px; padding: 10px 14px 6px; border-radius: 16px; border: 1px solid transparent; box-shadow: 0 8px 24px rgba(0,0,0,.2);
+  background: linear-gradient(rgba(14,17,28,.6), rgba(14,17,28,.6)) padding-box, linear-gradient(100deg, rgba(233,191,85,.4), rgba(233,191,85,.08) 55%, rgba(233,191,85,0)) border-box; }
+.trashbox h5 { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--mut); } .trashbox h5 small { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.trashbox .trow { display: flex; align-items: center; gap: 14px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.05); } .trashbox .tn { flex: 1; min-width: 0; display: flex; flex-direction: column; } .trashbox .tn b { font-size: 13px; } .trashbox .tn small { font-size: 11.5px; } .trashbox .tw { font-size: 11.5px; white-space: nowrap; } .trashbox .ta { display: flex; gap: 6px; }

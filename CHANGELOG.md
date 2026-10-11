@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.22 - 2026-10-11 - Restore a removed tunnel; Detect on servers is gone
+
+* **Restore.** Before a tunnel is removed on request (Delete, or *replace* in Create tunnel) the panel keeps a copy; *Recently removed* above the tunnel list shows it with **Restore** (builds it again: same name, same servers, same ports, a new GRE key) and **Forget**. Copies are kept for 30 days.
+* The **Detect on servers** button and its code (scan, add to panel, remove incomplete) are removed: the checks before building make it unnecessary.
+
 ## 1.14.21 - 2026-10-11 - Tidy info boxes and Tools buttons
 
 * The info boxes of a server / tunnel window (System, Resources, Access ...) have one label column and one value style (sizes, weights, units), and long values wrap instead of running out of the box.

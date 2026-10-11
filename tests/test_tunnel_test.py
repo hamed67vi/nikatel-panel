@@ -53,7 +53,7 @@ def test_cleanup_also_removes_a_renamed_temporary_tunnel(monkeypatch):
         aid, ia, ib = e.id, a.id, b.id
 
     gone = []
-    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, keep_record=False: gone.append(tid) or ["Iran: removed", "foreign: removed"])
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, keep_record=False, trash=False: gone.append(tid) or ["Iran: removed", "foreign: removed"])
     tunnel_test._cleanup(aid, "nkt1", ia, ib)
 
     with session() as db:

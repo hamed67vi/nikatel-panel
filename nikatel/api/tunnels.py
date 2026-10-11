@@ -1,7 +1,7 @@
 import re
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -138,43 +138,6 @@ def set_ports(tunnel_id: int, body: PortsIn):
         raise HTTPException(502, str(e))
 
 
-@router.get("/tunnels/detect")
-def detect():
-    from ..services import detect as dt
-
-    return {"ok": True, **dt.scan()}
-
-
-@router.post("/tunnels/adopt")
-def adopt(body: dict):
-    from ..services import detect as dt
-
-    try:
-        return {"ok": True, "name": dt.adopt(body)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-class CleanIn(BaseModel):
-    iran_id: int
-    transport: str = Field(pattern=r"^(tcp|tcpmux|wsmux|wssmux)$")
-    port: int = Field(ge=1, le=65535)
-    name: str = Field("", max_length=64)
-
-
-@router.post("/tunnels/detect/clean")
-def detect_clean(body: CleanIn):
-    from ..services import detect as dt
-    from ..ssh import SSHError
-
-    try:
-        return {"ok": True, "results": dt.clean(body.iran_id, body.transport, body.port, body.name)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except SSHError as e:
-        raise HTTPException(502, str(e))
-
-
 class AutoIn(BaseModel):
     foreign_id: int
     ports: str = ""
@@ -289,7 +252,7 @@ def tunnel_test(body: TestIn):
 @router.delete("/tunnels/{tunnel_id}")
 def delete(tunnel_id: int):
     try:
-        return {"ok": True, "results": builder.delete_tunnel(tunnel_id)}
+        return {"ok": True, "results": builder.delete_tunnel(tunnel_id, trash=True)}
     except ValueError as e:
         raise HTTPException(400 if "read-only" in str(e) else 404, str(e))
 
@@ -403,3 +366,28 @@ def restart_one(tunnel_id: int):
 def check_now(tunnel_id: int):
     check_tunnel(tunnel_id)
     return get_tunnel(tunnel_id)
+
+# ------------------------------------------------------------------ removed tunnels (restore)
+@router.get("/tunnel-trash")
+def trash_items():
+    from ..services import trash
+
+    return {"ok": True, "items": [{k: v for k, v in i.items() if k != "args"} for i in trash.items()]}
+
+
+@router.post("/tunnel-trash/{item_id}/restore", status_code=202)
+def trash_restore(item_id: str = Path(pattern=r"^[A-Za-z0-9._-]{1,90}$")):
+    from ..services import trash
+
+    try:
+        return {"ok": True, "id": trash.restore(item_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/tunnel-trash/{item_id}")
+def trash_forget(item_id: str = Path(pattern=r"^[A-Za-z0-9._-]{1,90}$")):
+    from ..services import trash
+
+    trash.forget(item_id)
+    return {"ok": True}

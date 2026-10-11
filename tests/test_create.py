@@ -52,7 +52,7 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
     monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": w["ir1"], "name": "ir1", "score": 0, "reason": "port 8075 already used here"},
                                                                            {"id": w["ir2"], "name": "ir2", "score": 81, "reason": "60 ms, 0% loss, 1 tunnels, cpu 5%"}])
     gone, built = [], []
-    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, keep_record=False: gone.append(tid) or ["Iran: removed", "foreign: removed"])
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, keep_record=False, trash=False: gone.append(tid) or ["Iran: removed", "foreign: removed"])
 
     def fake_build(iran_id, foreign_id, ports, transport, mtu=0, keepalive=75, forced_name="", nodelay=True, opts=None):
         built.append((iran_id, foreign_id, ports, transport))

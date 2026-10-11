@@ -229,7 +229,7 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
                 except (ValueError, RuntimeError) as e:
                     autopilot._say(aid, f"DNS of {name}: no plan: {str(e)[:120]}")
 
-            res = builder.delete_tunnel(tid)
+            res = builder.delete_tunnel(tid, trash=True)
             autopilot._say(aid, f"Removed {name}: " + "; ".join(res))
 
         chosen = 0
