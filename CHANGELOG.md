@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.11 - 2026-10-11 - Smart repair in two columns
+
+* *Working now* and *History* of the Smart repair page sit side by side, the same height, each scrolling inside its own box.
+
 ## 1.17.10 - 2026-10-11 - Slimmer *Recently removed*
 
 * The *Recently removed* box of the tunnel list is slim: one line per removed tunnel, smaller buttons.
