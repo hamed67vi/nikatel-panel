@@ -173,11 +173,12 @@ document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.
 
 
 /* every list (a table or the config cards) sits in a box of a fixed height with its own scrollbar and a header that stays on top; done once for whatever a page draws, also what loads later */
+let pendScroll = null;   // the scroll positions a refresh wants back: the list boxes are made a moment after the page is drawn, so they are put back once those exist
 (() => {
   const pg = $("#page"); if (!pg) return;
   let q = 0;
   const fit = () => pg.querySelectorAll(".lbox").forEach(b => { b.style.maxHeight = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24) + "px"; });   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
-  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); };
+  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
   window.addEventListener("resize", () => requestAnimationFrame(fit));
 })();
@@ -209,7 +210,7 @@ async function refresh() {
     if (focus) { const el = document.getElementById(focus.id); if (el && el !== document.activeElement) { el.focus(); try { el.setSelectionRange(focus.a, focus.b); } catch (e) { /* not a text box */ } } }   // a re-drawn page must not take the cursor out of the search box
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
-    scrollRestore(snap);
+    scrollRestore(snap); pendScroll = snap.length ? snap : null; setTimeout(() => { pendScroll = null; }, 500);
     document.body.classList.toggle("tabbed", !!SUB[state.page] && !!document.querySelector("#page > .toolbar:first-child, #page > .fstrip:first-child, #page > .tiles:first-child"));   // the sub tabs stick to the box under them
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
   } catch (e) {
@@ -1768,12 +1769,12 @@ async function pnUsersLoad(id) {
   }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
-  box.innerHTML = `<div class="toolbar"><input id="pn-uq" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
-      <button class="sm" onclick="pnBulk(${id}, 'disable')">Disable ticked</button><button class="sm" onclick="pnBulk(${id}, 'enable')">Enable ticked</button><button class="sm" onclick="pnBulkRenew(${id})">Renew ticked…</button></div>
-    <table class="tbl lift"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:215px"></colgroup>
-      <thead><tr><th></th><th>User</th><th>Status</th><th>Traffic</th><th>Expires</th><th>Note</th><th></th></tr></thead>
-      <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}"><td><input type="checkbox" class="pn-uchk" value="${esc(x.username)}"></td><td class="name">${esc(x.username)}</td><td><span class="st ${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}">${esc(x.status)}</span></td>
-        <td class="num">${fmtB(x.used || 0)} / ${gb(x.limit)}</td><td class="num">${exp(x)}</td><td class="mut">${esc(x.note)}</td>
+  box.innerHTML = `<div class="pn-bars"><div class="searchbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut pn-cnt">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
+      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked users" onchange="pnBulkAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option><option value="renew">Add days…</option></select></div></div>
+    <table class="tbl lift"><colgroup><col style="width:46px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:215px"></colgroup>
+      <thead><tr><th><input type="checkbox" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th><th>Note</th><th></th></tr></thead>
+      <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}"><td><input type="checkbox" class="pn-uchk" value="${esc(x.username)}" onchange="pnSelCount()"></td><td class="name">${esc(x.username)}</td><td><span class="st ${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}">${esc(x.status)}</span></td>
+        <td class="trf">${pnTraffic(x)}</td><td class="num">${exp(x)}</td><td class="mut">${esc(x.note)}</td>
         <td><button class="sm" onclick="pnUserOpen(${id}, '${esc(x.username)}')">Edit</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', '${x.status === "active" ? "disable" : "enable"}')">${x.status === "active" ? "Disable" : "Enable"}</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', 'reset')">Reset</button></td></tr>
 `).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>
 `;
@@ -1785,11 +1786,11 @@ async function pnUsersLoad(id) {
 const pnRow = {h: 46, done: false};
 const pnPS = () => { const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((innerHeight - top - 54 - 34 - 50 - 40) / pnRow.h))); };
 const pnFoot = mid => `<div class="tabs">${[["users", "Users"], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>${mid}`;
-function pnPager(total, ps) {
-  const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(pn.uoff / ps), show = [];
+function pnPager(total, ps, off = pn.uoff, fn = "pnGo") {
+  const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), show = [];
   for (let i = 0; i < pages; i++) if (i === 0 || i === pages - 1 || Math.abs(i - cur) <= 2) show.push(i);
-  const btns = show.map((i, k) => (k && i - show[k - 1] > 1 ? `<span class="pgn-gap">…</span>` : "") + `<button class="sm pgn ${i === cur ? "on" : ""}" onclick="pnGo(${i})">${i + 1}</button>`).join("");
-  return `<span class="sp"></span><span class="pgs"><button class="sm pgn" ${cur ? "" : "disabled"} onclick="pnGo(${cur - 1})">‹</button>${btns}<button class="sm pgn" ${cur + 1 < pages ? "" : "disabled"} onclick="pnGo(${cur + 1})">›</button></span><span class="sp"></span><span class="mut">${total ? pn.uoff + 1 : 0}–${Math.min(pn.uoff + ps, total)} of ${total}</span>`;
+  const btns = show.map((i, k) => (k && i - show[k - 1] > 1 ? `<span class="pgn-gap">…</span>` : "") + `<button class="sm pgn ${i === cur ? "on" : ""}" onclick="${fn}(${i})">${i + 1}</button>`).join("");
+  return `<span class="sp"></span><span class="pgs"><button class="sm pgn" ${cur ? "" : "disabled"} onclick="${fn}(${cur - 1})">‹</button>${btns}<button class="sm pgn" ${cur + 1 < pages ? "" : "disabled"} onclick="${fn}(${cur + 1})">›</button></span><span class="sp"></span>`;
 }
 window.pnGo = i => { pn.uoff = Math.max(0, i) * pnPS(); refresh(); };      // the page changes from the bottom of the list and the list is shown from its top again
 /* the inbounds of a user (Marzban): one tick per inbound, grouped by protocol; a protocol with no tick is removed from the user */
@@ -1797,11 +1798,11 @@ const ibHtml = u => {
   const opts = (u.options || {}).inbounds || []; if (!opts.length || !u.inbounds) return "";
   const by = {}; opts.forEach(i => { (by[i.protocol] = by[i.protocol] || []).push(i); });
   const on = (p, tag) => ((u.inbounds || {})[p] || []).includes(tag);
-  return `<div class="ue-ib"><small class="mut">Inbounds <span>— click a protocol to see its ports; tick or untick and Save</span></small><div class="ue-ibs">${Object.entries(by).map(([p, lst]) => `<details class="ue-ibp" onchange="ibCount(this)"><summary><b>${esc(p)}</b><small class="mut ib-n"></small><span class="sp"></span><a onclick="ibAll(event, this, true)">all</a><a onclick="ibAll(event, this, false)">none</a></summary>
+  return `<div class="ue-ib"><small class="mut">Inbounds <span>— click a protocol to see its ports; tick or untick and Save</span></small><div class="ue-ibs">${Object.entries(by).map(([p, lst]) => `<details class="ue-ibp" onchange="ibCount(this)"><summary><input type="checkbox" class="ib-master" title="Tick or untick every ${esc(p)} inbound" onchange="ibMaster(this)"><b>${esc(p)}</b><small class="mut ib-n"></small></summary>
       <div class="ue-ibl">${lst.map(i => `<label class="chk" title="${esc(i.tag)}${i.port ? " · port " + i.port : ""}"><input type="checkbox" name="ib_${esc(p)}__${esc(i.tag)}" ${on(p, i.tag) ? "checked" : ""}><span>${esc(i.tag)}</span>${i.port ? `<em>:${i.port}</em>` : ""}</label>`).join("")}</div></details>`).join("")}</div></div>`;
 };
-window.ibCount = d => { const xs = d.querySelectorAll("input"), n = [...xs].filter(x => x.checked).length, c = d.querySelector(".ib-n"); if (c) c.textContent = `${n} of ${xs.length}`; d.classList.toggle("none", !n); };
-window.ibAll = (e, a, on) => { e.preventDefault(); e.stopPropagation(); const d = a.closest("details"); d.querySelectorAll("input").forEach(x => { x.checked = on; }); ibCount(d); };
+window.ibCount = d => { const xs = [...d.querySelectorAll(".ue-ibl input")], n = xs.filter(x => x.checked).length, c = d.querySelector(".ib-n"), m = d.querySelector(".ib-master"); if (c) c.textContent = `${n} of ${xs.length}`; if (m) { m.checked = n > 0 && n === xs.length; m.indeterminate = n > 0 && n < xs.length; } d.classList.toggle("none", !n); };
+window.ibMaster = m => { const d = m.closest("details"); d.querySelectorAll(".ue-ibl input").forEach(x => { x.checked = m.checked; }); ibCount(d); };
 setTimeout(() => {}, 0);function pnUserHtml(id, u) {   // the user window, laid out like the Marzban dashboard's: usage on top, the fields, the subscription, the actions
   if (u.sub && u.sub.startsWith("/")) { const pp = (state.panelsCache || []).find(x => String(x.id) === String(id)); if (pp) u = {...u, sub: String(pp.url || "").replace(/\/+$/, "") + u.sub}; }
   const nm = esc(u.username), pct = u.limit ? Math.min(100, Math.round((u.used || 0) * 100 / u.limit)) : 0, left = u.expire ? Math.ceil((u.expire - Date.now() / 1000) / 86400) : null;
@@ -1823,6 +1824,18 @@ const ibBody = form => { const xs = [...form.querySelectorAll('input[name^="ib_"
 window.pnUserSave = async (e, id, name) => { e.preventDefault(); const f = new FormData(e.target); try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`, {method: "PUT", body: JSON.stringify(Object.assign({status: f.get("status"), expire_date: f.get("expire_date"), limit_gb: +f.get("limit_gb"), reset: f.get("reset"), note: f.get("note")}, ibBody(e.target)))}); toast("✓ Saved", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnUAct = async (id, name, action, value) => { if (action === "renew" && !value) return; try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}/action`, {method: "POST", body: JSON.stringify({action, value})}); toast("✓ " + action + " done", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnBulk = async (id, action, value) => { const names = [...document.querySelectorAll(".pn-uchk:checked")].map(x => x.value); if (!names.length) { toast("Tick some users first", "bad"); return; } try { const r = await api(`/api/panels/${id}/users-bulk`, {method: "POST", body: JSON.stringify({action, value, usernames: names})}); toast(`✓ ${r.done} done${r.failed_count ? ", " + r.failed_count + " failed" : ""}`, r.failed_count ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+const pnTraffic = x => { const used = x.used || 0, lim = x.limit || 0, left = Math.max(0, lim - used), pct = lim ? Math.min(100, Math.round(used * 100 / lim)) : 0;
+  return lim ? `<div class="trf-t"><span><b>${fmtB(used)}</b> used</span><span class="${pct >= 95 ? "err" : ""}"><b>${fmtB(left)}</b> left</span></div><div class="trf-b" title="Account volume ${gb(lim)}"><i class="rbar"><u class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></u></i><small>of ${gb(lim)}</small></div>`
+    : `<div class="trf-t"><span><b>${fmtB(used)}</b> used</span><span class="mut">unlimited</span></div>`; };
+window.pnSelCount = () => {
+  const all = [...document.querySelectorAll(".pn-uchk, .pn-hchk")], n = all.filter(x => x.checked).length;
+  const c = $("#pn-seln"); if (c) c.textContent = n;
+  const a = $("#pn-act"); if (a) a.disabled = !n;
+  const h = $("#pn-all"); if (h) { h.checked = n > 0 && n === all.length; h.indeterminate = n > 0 && n < all.length; }
+  const s = document.querySelector(".pn-sel"); if (s) s.classList.toggle("on", n > 0);
+};
+window.pnSelAll = on => { document.querySelectorAll(".pn-uchk, .pn-hchk").forEach(x => { x.checked = on; }); pnSelCount(); };
+window.pnBulkAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v === "renew") pnBulkRenew(id); else if (v) pnBulk(id, v); };
 window.pnBulkRenew = async id => { const d = await gprompt("Add how many days to the ticked users?", "30"); if (d) pnBulk(id, "renew", +d); };
 
 /* hosts */
@@ -1831,14 +1844,25 @@ async function pnHostsLoad(id) {
   if (!pn.hosts || pn.hostsKey !== String(id)) {
     try { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; pn.hostsKey = String(id); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   }
-  box.innerHTML = `<div class="toolbar"><span class="mut">${pn.hosts.length} hosts — the address:port that goes into every subscription link</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span><button class="sm" onclick="pnHostsToggle(${id}, true)">Disable ticked</button><button class="sm" onclick="pnHostsToggle(${id}, false)">Enable ticked</button></div>
-    <table class="tbl"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:14%"><col><col style="width:8%"><col style="width:10%"><col style="width:150px"></colgroup>
-      <thead><tr><th></th><th>Remark</th><th>Inbound</th><th>Address</th><th>Port</th><th>State</th><th></th></tr></thead>
-      <tbody>${pn.hosts.map(h => `<tr class="${h.disabled ? "" : "up"}"><td><input type="checkbox" class="pn-hchk" value="${esc(h.key)}"></td><td class="name">${esc(h.remark)}</td><td class="mut">${esc(h.tag)}</td><td class="mut">${esc(h.address)}</td><td class="num">${h.port ?? "—"}</td><td><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span></td>
+  const tags = {}; pn.hosts.forEach(h => { tags[h.tag] = (tags[h.tag] || 0) + 1; });
+  const q = (pn.hq || "").toLowerCase();
+  const rows = pn.hosts.filter(h => (!pn.hinb || h.tag === pn.hinb) && (!pn.hstate || (pn.hstate === "off") === !!h.disabled) && (!q || [h.remark, h.tag, h.address, h.port].join(" ").toLowerCase().includes(q)))
+    .sort((x, y) => String(x.tag).localeCompare(String(y.tag)) || String(x.remark).localeCompare(String(y.remark)));      // grouped by inbound
+  const ps = pnPS(); pn.hoff = Math.min(Math.floor((pn.hoff || 0) / ps) * ps, Math.max(0, Math.floor((rows.length - 1) / ps) * ps));
+  const page = rows.slice(pn.hoff, pn.hoff + ps);
+  box.innerHTML = `<div class="pn-bars"><div class="searchbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;pn.hoff=0;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;pn.hoff=0;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
+      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked hosts" onchange="pnHostAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option></select></div></div>
+    <table class="tbl lift"><colgroup><col style="width:46px"><col style="width:26%"><col style="width:16%"><col><col style="width:8%"><col style="width:10%"><col style="width:215px"></colgroup>
+      <thead><tr><th><input type="checkbox" id="pn-all" title="Select every host of this page" onchange="pnSelAll(this.checked)"></th><th>Remark</th><th>Inbound</th><th>Address</th><th>Port</th><th>State</th><th></th></tr></thead>
+      <tbody>${page.map(h => `<tr class="${h.disabled ? "" : "up"}"><td><input type="checkbox" class="pn-hchk" value="${esc(h.key)}" onchange="pnSelCount()"></td><td class="name" title="${esc(h.remark)}">${esc(h.remark)}</td><td><span class="td-type">${esc(h.tag)}</span></td><td class="mut">${esc(h.address)}</td><td class="num">${h.port ?? "—"}</td><td><span class="st ${h.disabled ? "" : "up"}">${h.disabled ? "disabled" : "on"}</span></td>
         <td><button class="sm" onclick="pnHostOpen(${id}, '${esc(h.key)}')">Edit</button> <button class="sm" onclick="pnHostClone(${id}, '${esc(h.key)}')">Clone</button> <button class="sm danger" onclick="pnHostDel(${id}, '${esc(h.key)}', '${esc(h.remark)}')">✕</button></td></tr>
-        ${pn.hostEdit && pn.hostEdit.key === h.key ? `<tr class="detail"><td colspan="7">${pnHostHtml(id, pn.hostEdit)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="mut">no hosts</td></tr>'}</tbody></table>`;
+        ${pn.hostEdit && pn.hostEdit.key === h.key ? `<tr class="detail"><td colspan="7">${pnHostHtml(id, pn.hostEdit)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="mut">no host matches</td></tr>'}</tbody></table>`;
+  const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot(pnPager(rows.length, ps, pn.hoff, "pnHGo"));
+  const sq = $("#pn-hq"); if (sq && pn.hq) { sq.focus(); sq.setSelectionRange(sq.value.length, sq.value.length); }
 }
-function pnHostHtml(id, h) {
+window.pnHQ = v => { pn.hq = v.trim(); pn.hoff = 0; clearTimeout(qT); qT = setTimeout(refresh, 250); };
+window.pnHGo = i => { pn.hoff = Math.max(0, i) * pnPS(); refresh(); };
+window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v) pnHostsToggle(id, v === "disable"); };function pnHostHtml(id, h) {
   const txt = ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint"], bools = ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"];
   return `<form class="frm" onsubmit="return pnHostSave(event, ${id}, '${esc(h.key)}')">${txt.map(k => `<label>${k}${k === "port" ? " <small>(empty = inbound port)</small>" : ""}<input name="${k}" value="${esc(h[k] == null ? "" : h[k])}"></label>`).join("")}
     <label>security<select name="security">${["inbound_default", "none", "tls"].map(s => `<option ${h.security === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
@@ -1921,7 +1945,7 @@ async function sbOverview() {
 async function sbPays() {
   const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}`);
   const st = s => s === "have_sent" ? '<span class="pill warn">receipt sent</span>' : s === "pending" ? '<span class="pill">awaiting receipt</span>' : s === "approved" ? '<span class="pill ok">approved</span>' : s === "declined" ? '<span class="pill err">declined</span>' : `<span class="pill">${esc(s)}</span>`;
-  sbBody(`<div class="toolbar"><div class="tabs">${[["confirm", "To confirm"], ["pending", "Awaiting receipt"], ["approved", "Approved"], ["declined", "Declined"], ["all", "All"]].map(([k, l]) => `<button class="${sb.payState === k ? "on" : ""}" onclick="sb.payState='${k}';sb.payPage=0;refresh()">${l}</button>`).join("")}</div><input placeholder="user id, name, hash…" value="${esc(sb.payQ)}" oninput="sb.payQ=this.value.trim();sb.payPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)">${sbPager(r.page, r.total, "sbPayPage")}</div>
+  sbBody(`<div class="toolbar"><div class="tabs">${[["confirm", "To confirm"], ["pending", "Awaiting receipt"], ["approved", "Approved"], ["declined", "Declined"], ["all", "All"]].map(([k, l]) => `<button class="${sb.payState === k ? "on" : ""}" onclick="sb.payState='${k}';sb.payPage=0;refresh()">${l}</button>`).join("")}</div><input type="search" placeholder="user id, name, hash…" value="${esc(sb.payQ)}" oninput="sb.payQ=this.value.trim();sb.payPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)">${sbPager(r.page, r.total, "sbPayPage")}</div>
     <table class="tbl"><colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col></colgroup><thead><tr><th>#</th><th>User</th><th>Amount</th><th>Type</th><th>Asked</th><th>State</th><th></th></tr></thead>
     <tbody>${r.rows.map(p => `<tr class="${p.state === "have_sent" || p.state === "pending" ? "" : p.state === "approved" ? "up" : "down"}"><td class="num">${esc(p.id)}</td><td class="name"><a class="mut" onclick="sbUser('${esc(p.user_id)}')">${esc(p.name || p.user_id)}</a> <small class="mut">${p.username ? "@" + esc(p.username) : esc(p.user_id)}</small></td><td class="num"><b>${money(p.price)}</b></td><td>${esc(p.type || "")}</td><td class="mut">${tsFa(p.request_date)}</td><td>${st(p.state)}</td>
       <td><div class="td-act">${p.state === "have_sent" || p.state === "pending" ? `<button class="sm pri" onclick="sbPayDo(${p.id}, 'approve')">✓ Approve</button><button class="sm danger" onclick="sbPayDo(${p.id}, 'decline')">✕ Decline</button>` : p.approved_by && p.approved_by !== "NULL" ? `<small class="mut">by ${esc(p.approved_by)}</small>` : ""}</div></td></tr>`).join("") || '<tr><td colspan="7" class="empty">Nothing here.</td></tr>'}</tbody></table>`);
@@ -1936,7 +1960,7 @@ window.sbPayDo = async (id, act) => {
 /* ---- orders */
 async function sbOrders() {
   const r = await api(`/api/shopbot/orders?q=${encodeURIComponent(sb.ordQ)}&page=${sb.ordPage}&active=${sb.ordActive}`);
-  sbBody(`<div class="toolbar"><input placeholder="user id, name, remark…" value="${esc(sb.ordQ)}" oninput="sb.ordQ=this.value.trim();sb.ordPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)"><label class="chk"><input type="checkbox" ${sb.ordActive ? "checked" : ""} onchange="sb.ordActive=this.checked;sb.ordPage=0;refresh()"> active only</label>${sbPager(r.page, r.total, "sbOrdPage")}</div>
+  sbBody(`<div class="toolbar"><input type="search" placeholder="user id, name, remark…" value="${esc(sb.ordQ)}" oninput="sb.ordQ=this.value.trim();sb.ordPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)"><label class="chk"><input type="checkbox" ${sb.ordActive ? "checked" : ""} onchange="sb.ordActive=this.checked;sb.ordPage=0;refresh()"> active only</label>${sbPager(r.page, r.total, "sbOrdPage")}</div>
     <table class="tbl"><colgroup><col style="width:6%"><col style="width:20%"><col style="width:16%"><col style="width:12%"><col style="width:10%"><col style="width:14%"><col style="width:8%"><col></colgroup><thead><tr><th>#</th><th>User</th><th>Remark</th><th>Server</th><th>Paid</th><th>Expires</th><th>State</th><th></th></tr></thead>
     <tbody>${r.rows.map(o => `<tr class="${o.status === "1" ? "up" : "down"}"><td class="num">${esc(o.id)}</td><td class="name"><a class="mut" onclick="sbUser('${esc(o.userid)}')">${esc(o.name || o.userid)}</a> <small class="mut">${o.username ? "@" + esc(o.username) : ""}</small></td><td class="mono">${esc(o.remark || "")}</td><td>${esc(o.server || o.server_id || "")}</td><td class="num">${money(o.amount)}</td><td class="mut">${tsFa(o.expire_date)}</td><td>${o.status === "1" ? '<span class="pill ok">active</span>' : '<span class="pill">off</span>'}</td>
       <td><div class="td-act"><button class="sm ${o.status === "1" ? "danger" : ""}" onclick="sbOrderStatus(${o.id}, ${o.status === "1" ? "false" : "true"})">${o.status === "1" ? "Disable" : "Enable"}</button></div></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No order.</td></tr>'}</tbody></table>`);
@@ -1946,7 +1970,7 @@ window.sbOrderStatus = async (id, active) => { try { await api(`/api/shopbot/ord
 /* ---- users */
 async function sbUsersLoad() {
   const rows = sb.uq ? (await api("/api/shopbot/users?q=" + encodeURIComponent(sb.uq)).catch(e => { toast("✕ " + e.message, "bad"); return {users: []}; })).users : [];
-  sbBody(`<div class="toolbar"><input id="sb-uq" placeholder="Telegram id, username, name or phone…" value="${esc(sb.uq)}" oninput="sbUQ(this.value)"><span class="mut">${sb.uq ? rows.length + " found" : "type to search the bot's users"}</span></div>
+  sbBody(`<div class="toolbar"><input type="search" id="sb-uq" placeholder="Telegram id, username, name or phone…" value="${esc(sb.uq)}" oninput="sbUQ(this.value)"><span class="mut">${sb.uq ? rows.length + " found" : "type to search the bot's users"}</span></div>
     ${rows.length ? `<table class="tbl"><colgroup><col style="width:13%"><col style="width:22%"><col style="width:11%"><col style="width:7%"><col style="width:8%"><col style="width:9%"><col></colgroup><thead><tr><th>Telegram id</th><th>Name</th><th>Wallet</th><th>Orders</th><th>Agent</th><th>Discount</th><th></th></tr></thead>
       <tbody>${rows.map(r => `<tr class="${r.step === "banned" ? "down" : "up"}"><td class="num"><a class="mut" onclick="sbUser('${esc(r.userid)}')">${esc(r.userid)}</a></td><td class="name"><a onclick="sbUser('${esc(r.userid)}')">${esc(r.name || "")}</a> <small class="mut">${r.username ? "@" + esc(r.username) : ""}</small></td><td class="num">${fmt(r.wallet)}</td><td class="num">${esc(r.orders)}</td><td>${r.is_agent === "1" ? '<span class="pill ok">agent</span>' : ""}</td><td class="num">${disc(r.discount_percent)}%</td>
         <td><div class="td-act"><button class="sm" onclick="sbUser('${esc(r.userid)}')">More</button><button class="sm" onclick="(async()=>sbU('${esc(r.userid)}', 'wallet', await gprompt('Add to the wallet (Toman, negative to take)', '10000')))()">± wallet</button><button class="sm ${r.step === "banned" ? "" : "danger"}" onclick="sbU('${esc(r.userid)}', '${r.step === "banned" ? "unban" : "ban"}')">${r.step === "banned" ? "Unban" : "Ban"}</button></div></td></tr>`).join("")}</tbody></table>` : ""}`);
@@ -2123,7 +2147,7 @@ async function sbTexts() {
   if (!sb.txData) sb.txData = await api("/api/shopbot/texts");
   const d = sb.txData, base = sb.txKind === "text" ? d.texts : d.buttons, ov = sb.txKind === "text" ? d.text_overrides : d.button_overrides, q = sb.txQ.toLowerCase();
   const keys = Object.keys(base).filter(k => !q || k.toLowerCase().includes(q) || String(base[k]).toLowerCase().includes(q) || String(ov[k] || "").toLowerCase().includes(q));
-  sbBody(`<div class="toolbar"><div class="tabs"><button class="${sb.txKind === "text" ? "on" : ""}" onclick="sb.txKind='text';refresh()">Texts <small>${Object.keys(d.texts).length}</small></button><button class="${sb.txKind === "button" ? "on" : ""}" onclick="sb.txKind='button';refresh()">Buttons <small>${Object.keys(d.buttons).length}</small></button></div><input placeholder="search a key or a text…" value="${esc(sb.txQ)}" oninput="sb.txQ=this.value;clearTimeout(qT);qT=setTimeout(refresh,250)"><span class="mut">${Object.keys(ov).length} changed</span><span class="sp"></span><button class="sm" onclick="sb.txData=null;refresh()">↻</button><button class="pri sm" onclick="sbTextsSave()">Save changed</button></div>
+  sbBody(`<div class="toolbar"><div class="tabs"><button class="${sb.txKind === "text" ? "on" : ""}" onclick="sb.txKind='text';refresh()">Texts <small>${Object.keys(d.texts).length}</small></button><button class="${sb.txKind === "button" ? "on" : ""}" onclick="sb.txKind='button';refresh()">Buttons <small>${Object.keys(d.buttons).length}</small></button></div><input type="search" placeholder="search a key or a text…" value="${esc(sb.txQ)}" oninput="sb.txQ=this.value;clearTimeout(qT);qT=setTimeout(refresh,250)"><span class="mut">${Object.keys(ov).length} changed</span><span class="sp"></span><button class="sm" onclick="sb.txData=null;refresh()">↻</button><button class="pri sm" onclick="sbTextsSave()">Save changed</button></div>
     ${d.hooked || sb.txKind === "button" ? "" : '<div class="gw-out"><b>First save:</b> the bot is made to read the panel\'s text file (one line in its config, checked before it is kept).</div>'}
     <div class="tx-list">${keys.slice(0, 400).map(k => `<div class="tx-row ${k in ov ? "changed" : ""}"><div class="tx-key"><code>${esc(k)}</code>${k in ov ? `<a class="mut" onclick="sbTextReset('${esc(k)}')">reset</a>` : ""}</div><textarea data-key="${esc(k)}" spellcheck="false" rows="${Math.min(8, Math.max(1, (String(ov[k] ?? base[k]).match(/\n/g) || []).length + 1))}">${esc(ov[k] ?? base[k])}</textarea></div>`).join("")}${keys.length > 400 ? '<div class="mut">narrow the search to see the rest</div>' : ""}</div>`);
 }
@@ -2193,7 +2217,7 @@ async function sbTableLoad() {
   const box = $("#sb-tool"); if (!box) return;
   const tables = ["users", "orders_list", "pays", "server_plans", "server_config", "server_categories", "discounts", "setting", "send_list", "add_link", "increase_order", "gift_codes", "wheel_log", "cashback_log"];
   let t; try { t = await api(`/api/shopbot/table/${sb.table}?page=${sb.tpage}&q=${encodeURIComponent(sb.tq)}`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  box.innerHTML = `<div class="toolbar"><select onchange="sb.table=this.value;sb.tpage=0;sb.tq='';refresh()">${tables.map(x => `<option ${x === sb.table ? "selected" : ""}>${x}</option>`).join("")}</select><input id="sb-tq" placeholder="filter…" value="${esc(sb.tq)}" oninput="sbTQ(this.value)"><span class="mut">${t.total} rows</span><span class="sp"></span><button class="sm" ${sb.tpage ? "" : "disabled"} onclick="sb.tpage--;refresh()">‹</button><button class="sm" ${(sb.tpage + 1) * 40 < t.total ? "" : "disabled"} onclick="sb.tpage++;refresh()">›</button></div>
+  box.innerHTML = `<div class="toolbar"><select onchange="sb.table=this.value;sb.tpage=0;sb.tq='';refresh()">${tables.map(x => `<option ${x === sb.table ? "selected" : ""}>${x}</option>`).join("")}</select><input type="search" id="sb-tq" placeholder="filter…" value="${esc(sb.tq)}" oninput="sbTQ(this.value)"><span class="mut">${t.total} rows</span><span class="sp"></span><button class="sm" ${sb.tpage ? "" : "disabled"} onclick="sb.tpage--;refresh()">‹</button><button class="sm" ${(sb.tpage + 1) * 40 < t.total ? "" : "disabled"} onclick="sb.tpage++;refresh()">›</button></div>
     <div style="overflow:auto"><table class="tbl" style="table-layout:auto;min-width:100%"><thead><tr>${t.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${t.rows.map(r => `<tr>${t.columns.map(c => sbT(c, r[c])).join("")}</tr>`).join("") || `<tr><td class="mut">empty</td></tr>`}</tbody></table></div>`;
   const q = $("#sb-tq"); if (q && sb.tq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
@@ -2301,7 +2325,7 @@ PAGES.logs = async () => {
   $("#page").innerHTML = `<div class="toolbar">
       <select onchange="setLog('level', this.value)">${["", "INFO", "WARNING", "ERROR", "DEBUG"].map(l => `<option value="${l}" ${L.level === l ? "selected" : ""}>${l || "all levels"}</option>`).join("")}</select>
       <select onchange="setLog('domain', this.value)">${domains.map(x => `<option value="${x}" ${L.domain === x ? "selected" : ""}>${x || "all domains"}</option>`).join("")}</select>
-      <input id="lq" placeholder="text or rid…" value="${esc(L.q)}" oninput="setLogQ(this.value)"><span class="sp"></span><span class="mut">${d.lines.length} lines</span></div>
+      <input type="search" id="lq" placeholder="text or rid…" value="${esc(L.q)}" oninput="setLogQ(this.value)"><span class="sp"></span><span class="mut">${d.lines.length} lines</span></div>
     <div class="card log">${d.lines.map(l => `<div class="ll ${l.level}"><time>${esc(l.ts.slice(11, 19))}</time><b>${esc(l.level)}</b><i>${esc(l.domain)}</i><span>${esc(l.text)}</span><small>${esc(l.rid)}</small></div>`).join("") || '<div class="empty">No matching log line.</div>'}</div>`;
   const q = $("#lq"); if (q && L.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 };

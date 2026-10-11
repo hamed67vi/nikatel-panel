@@ -132,7 +132,10 @@ nav a.on::before { opacity: 1; top: 8px; bottom: 8px; } nav a.on .ic { opacity: 
 .frm input, .frm select { width: 100%; } .frm .frm-act, .frm > small { grid-column: 1 / -1; }
 .frm-act { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; } .frm-act .sp { flex: 1; }
 .frm label small { font-weight: 400; text-transform: none; letter-spacing: 0; }
-input[type=checkbox] { height: 16px; width: 16px; accent-color: var(--acc); box-shadow: none; }
+input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; width: 18px; height: 18px; margin: 0; vertical-align: middle; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.3); background: rgba(255,255,255,.05) center / 12px no-repeat; box-shadow: none; cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+input[type=checkbox]:hover { border-color: var(--acc); background-color: rgba(255,255,255,.09); } input[type=checkbox]:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.14); }
+input[type=checkbox]:checked { background-color: var(--acc); border-color: var(--acc); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5' fill='none' stroke='%2310131f' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } input[type=checkbox]:indeterminate { background-color: var(--acc); border-color: var(--acc); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' fill='none' stroke='%2310131f' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"); } input[type=checkbox]:disabled { opacity: .45; cursor: not-allowed; }
+html[data-mode="light"] input[type=checkbox] { border-color: rgba(20,24,40,.35); background-color: rgba(255,255,255,.8); }
 code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 6px; }
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; } @media (max-width: 980px) { .grid2 { grid-template-columns: 1fr; } }   /* every box in a row: same width, same height */
 .grid2 > .card { margin-bottom: 0; height: 100%; box-sizing: border-box; } .kv.one { grid-template-columns: 1fr; }
@@ -1289,3 +1292,25 @@ select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; 
 
 .pn-foot { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; padding: 4px 8px; } .pn-foot .tabs { flex: none; } .pgs { display: inline-flex; gap: 4px; align-items: center; } .pn-foot .sp { flex: 1; }
 #pn-body > .toolbar { margin-bottom: 6px; }
+
+/* users: a counter of the ticked ones and one action menu */
+.pn-sel .tc a { cursor: pointer; color: var(--acc-2); font-weight: 700; } .pn-sel.on b { color: var(--acc-2); } #pn-act { height: 26px; } #pn-act:disabled { opacity: .5; }
+
+/* users: traffic as used / left / account volume */
+.trf { line-height: 1.2; } .trf-t { display: flex; gap: 12px; font-size: 12px; color: var(--mut); } .trf-t b { color: var(--text); font-family: var(--mono); font-weight: 700; } .trf-b { display: flex; align-items: center; gap: 8px; margin-top: 3px; } .trf-b .rbar { flex: 1; min-width: 40px; } .trf-b small { font-size: 10.5px; color: var(--mut); white-space: nowrap; } th small { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--mut); }
+
+/* the tick column: the box is shown whole (the cell padding used to cut it) */
+.tbl td:first-child:has(> input[type=checkbox]), .tbl th:first-child:has(> input[type=checkbox]) { padding: 0 0 0 14px; overflow: visible; }
+
+/* users and hosts: the search sits in its own box, the controls beside it never move while typing */
+.pn-bars { display: flex; align-items: stretch; gap: 8px; margin: 0 0 6px; } .pn-bars .searchbar { flex: none; width: 280px; margin: 0; padding: 0 8px; justify-content: flex-start; } .pn-bars .searchbar input { width: 100%; height: 28px; } .pn-bars .toolbar { flex: 1; min-width: 0; margin: 0; } .pn-cnt { display: inline-block; min-width: 84px; white-space: nowrap; }
+#pn-body > .pn-bars { margin-bottom: 6px; }
+
+/* every search box: a small round cross at its end clears the text */
+input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin: 0 0 0 6px; border-radius: 50%; cursor: pointer; opacity: .8; background: rgba(255,255,255,.16) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2.5 2.5l5 5m0-5l-5 5' stroke='%23e8ecff' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") center / 9px no-repeat; } input[type=search]::-webkit-search-cancel-button:hover { opacity: 1; background-color: rgba(255,255,255,.28); }
+html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { background-color: rgba(20,24,40,.14); }
+
+.ue-ibp > summary .ib-master { margin-right: 2px; }
+
+/* a tick box is always a square (a table or form rule used to stretch it) */
+:not(.bk-sw) > input[type=checkbox] { width: 18px; height: 18px; min-width: 18px; max-width: 18px; min-height: 18px; max-height: 18px; padding: 0; aspect-ratio: 1 / 1; }

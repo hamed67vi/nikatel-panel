@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.17.4 - 2026-10-11 - Panels: users and hosts tidy, tick boxes, search
+
+* **Users and Hosts** are built the same way: the search is a box of its own beside the controls (they no longer move while typing), a page holds what fits the window (no scrolling), numbered pages and the *Users | Hosts* tabs are in the bottom strip, the range text is gone.
+* **Selection**: a tick in the table header selects the page, a counter shows how many are ticked (*select page* / *clear*), and one menu *Do with selected…* (users: Enable, Disable, Add days; hosts: Enable, Disable) replaces the three buttons.
+* **Hosts**: search, an inbound filter with the count of each inbound, a state filter, grouped by inbound, the inbound as a pill.
+* **Traffic of a user**: *used*, *left* and a bar with the account volume (*of 20 GB*); unlimited accounts say so.
+* **Tick boxes** everywhere are real square boxes (gold, a tick or a dash for part-ticked); in the table they are no longer cut by the cell.
+* **Every search box** shows a small round cross that clears the text (the shop bot's search boxes became real search boxes too).
+* **Inbounds of a user**: each protocol row has a tick that selects or clears all of its inbounds (part-ticked shows a dash).
+* A refresh keeps the scroll of a list box (the page jumped to the top while a server was being installed).
 ## 1.17.3 - 2026-10-11 - The users list without scrolling
 
 * A page of the users list holds exactly the rows that fit the window (measured from the real row height), so the list never scrolls; numbered pages (1 2 3 … last, ‹ ›) and the range are under it.
