@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.8 - 2026-10-11 - Create tunnel in layers, replace the tunnel that holds the port
+
+* **Replace the tunnel that holds the port**: when a wanted port is used on the Iran server by another tunnel of the panel (even an *up* one) the check offers a tick *replace it* - the tunnel is removed first (its other ports are named, it stays restorable for 30 days under *Recently removed*) and the new one is built. Until the tick is on, *Build* waits; a port held by a process the panel does not know still stops the build.
+* **The Create tunnel window is laid out in layers**: three equal boxes - *Servers* (Iran with *auto*, Foreign), *Tunnel* (type with a one-line hint, ports) and *Check* (what the port check says, where the replace tick appears) - a collapsible *Advanced settings* box (four fields to a row) and a foot bar with *Build* and *Test this pair first*.
 ## 1.17.7 - 2026-10-11 - Hosts by port
 
 * **Hosts** are shown by port: one row per port (how many hosts, how many on / off); click a port to see its hosts with their inbound, remark, address and state. A tick on the port row ticks all its hosts; *Enable all* / *Disable all* on the row switch the whole port at once; the toolbar's *Do with selected…* works on any ticked hosts. Search and the inbound / state filters stay.

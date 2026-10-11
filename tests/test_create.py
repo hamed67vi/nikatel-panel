@@ -32,6 +32,7 @@ def test_precheck_sees_busy_ports_and_replaceable_tunnels(client):
     w = _world()
     r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir1"], "foreign_id": w["fi1"], "ports": "8075"}).json()
     assert r["busy"][0]["by"] == "tunnel fi1-ir1" and r["busy"][0]["state"] == "down" and r["can_build"] is False and r["iran"] == "ir1"
+    assert r["busy"][0]["id"] == w["old"] and r["busy"][0]["all_ports"]         # a tunnel of the panel that holds the port: the form offers to replace it
     assert [c["name"] for c in r["conflicts"]] == ["fi1-ir1"] and r["conflicts"][0]["replaceable"] is True and r["conflicts"][0]["iran"] == "ir1" and r["conflicts"][0]["ports"] == [8075]
     r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "8075"}).json()
     assert r["busy"] == [] and r["can_build"] is True and r["conflicts"][0]["id"] == w["old"]          # free on ir2; the dead tunnel on fi1 can be replaced

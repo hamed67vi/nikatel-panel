@@ -1340,3 +1340,14 @@ html[data-mode="light"] input[type=search]::-webkit-search-cancel-button { backg
 .hp-row .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hp-act { display: inline-flex; gap: 4px; justify-content: flex-end; } .hp-edit { padding: 6px 0 10px; }
 /* Users | Hosts tabs: a box of their own at the start of the row */
 .pn-bars .toolbar.pn-tabs { flex: none; padding-left: 6px; padding-right: 6px; } .pn-tabs .tabs { margin: 0; } .pn-foot:empty { display: none; }
+
+/* Create tunnel: layered boxes (servers, tunnel, check), a collapsible advanced box, a foot bar */
+.frm.build { display: block !important; } .bld-grid { align-items: stretch; margin-bottom: 8px; }
+.bf { align-items: center !important; } .bf > span { width: 64px !important; } .bf select, .bf input { flex: 1; min-width: 0; height: 28px; font-size: 12px; padding: 0 8px; border-radius: 8px; }
+.bf-auto { cursor: pointer; font-size: 10.5px; font-weight: 700; color: var(--acc-2); margin-left: 4px; text-transform: none; } .bf-note { font-size: 11px; padding: 4px 0 0; line-height: 1.35; min-height: 14px; }
+.bld-check .bcheck { display: grid; gap: 6px; font-size: 12px; padding-top: 4px; } .bld-check .bcheck:empty::before { content: "Pick the servers and the ports: they are checked here (is the port free, is there a tunnel to replace)."; color: var(--mut); font-size: 11.5px; line-height: 1.4; }
+.bld-check .bcheck .err { font-size: 12px; line-height: 1.4; } .bld-check .bconf { padding: 6px 8px; border-radius: 10px; border: 1px solid rgba(255,190,70,.35); background: rgba(255,190,70,.07); } .bld-check .bconf .chk { align-items: flex-start; height: auto; font-size: 12px; line-height: 1.4; }
+.badv.sbox { padding-bottom: 7px; margin-bottom: 8px; } .adv-h { cursor: pointer; user-select: none; } .adv-h small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--mut); } .adv-h em { font-style: normal; color: var(--mut); }
+.badv .sbox, .adv-h { border-bottom: 0 !important; margin-bottom: 0 !important; } .adv-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; padding-top: 8px; border-top: 1px solid var(--line); margin-top: 6px; } .adv-grid label { font-size: 11px; } .adv-grid label input, .adv-grid label select { height: 28px; font-size: 12px; } .adv-grid label.chk { height: 28px; align-self: end; }
+.bld-foot { margin: 0; } .bld-foot button { height: 30px; }
+@media (max-width: 900px) { .adv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

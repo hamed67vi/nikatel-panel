@@ -1047,16 +1047,23 @@ async function buildFormHtml() {
   else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode">${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
   else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
   const typeSel = `<select name="ttype" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  const fl = (label, inner) => `<label class="kv2 kf bf"><span>${label}</span>${inner}</label>`;
+  const forHint = BK_FOR[K.key + ":" + tr.key] || "";
   return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
-    <div class="bgrid">
-      <label>Iran server <small><a onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">choose for me</a></small><select name="iran_id" required onchange="bkCheck(this.closest('form'))"><option value="0" ${String(v.iran_id) === "0" ? "selected" : ""}>✨ Smart — the best Iran server for this foreign server</option>${opt("iran", "iran_id")}</select></label>
-      <label>Foreign server<select name="foreign_id" required onchange="bkCheck(this.closest('form'))">${opt("foreign", "foreign_id")}</select></label>
-      <label>Ports to forward <small>(443, 443=2096, 10000-10009)</small><input name="ports" required placeholder="8072" value="${val("ports", "")}"></label>
-      <label>Tunnel type <small>(the defaults are the many-users settings)</small>${typeSel}</label></div>
-    <div id="auto-iran" class="mut"></div><div id="build-check" class="bcheck"></div>
+    <div class="sgrid bld-grid">
+      <div class="sbox"><h5><i>🖧</i>Servers</h5>
+        ${fl(`Iran <a class="bf-auto" onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">auto</a>`, `<select name="iran_id" required onchange="bkCheck(this.closest('form'))"><option value="0" ${String(v.iran_id) === "0" ? "selected" : ""}>✨ Smart — the best one</option>${opt("iran", "iran_id")}</select>`)}
+        ${fl("Foreign", `<select name="foreign_id" required onchange="bkCheck(this.closest('form'))">${opt("foreign", "foreign_id")}</select>`)}
+        <div id="auto-iran" class="mut bf-note"></div></div>
+      <div class="sbox"><h5><i>⇄</i>Tunnel</h5>
+        ${fl("Type", typeSel)}
+        ${fl("Ports", `<input name="ports" required placeholder="443, 443=2096, 10000-10009" title="Ports to forward: 443, 443=2096, 10000-10009" value="${val("ports", "")}">`)}
+        <div class="bf-note mut">${esc(forHint) || "the defaults are the many-users settings"}</div></div>
+      <div class="sbox bld-check"><h5><i>🛡</i>Check</h5><div id="build-check" class="bcheck"></div></div>
+    </div>
     ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server (ArvanCloud) <small class="mut">(comma separated; pick from the list)</small></label><input name="dns_names" list="dns-names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off"><datalist id="dns-names"></datalist></div>` : ""}
-    <div class="badv"><a onclick="bkAdv()">${bk.adv ? "▾ Advanced settings" : "▸ Advanced settings"} <small class="mut">${bk.adv ? "— change a value only when you measured a reason" : "— keepalive, heartbeat, MTU, preset, UDP…"}</small></a>${bk.adv ? `<div class="bgrid" style="margin-top:8px">${options}</div>` : ""}</div>
-    <div class="frm-act"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button></div>
+    <div class="sbox badv"><h5 class="adv-h" onclick="bkAdv()"><i>⚙</i>Advanced settings<small>${bk.adv ? "change a value only when you measured a reason" : "keepalive, heartbeat, MTU, preset, UDP…"}</small><span class="sp"></span><em>${bk.adv ? "▾" : "▸"}</em></h5>${bk.adv ? `<div class="adv-grid">${options}</div>` : ""}</div>
+    <div class="sbar bld-foot"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><span class="sp"></span><small class="mut">Every default is the many-users setting; a test builds a temporary tunnel, measures it and removes it.</small></div>
   </form><div id="build-story" class="fix hidden"></div>`;
 }
 /* the Create window redraws only its own body: no refresh of the page behind it, the typed values stay */
@@ -1087,13 +1094,19 @@ window.bkCheck = async (form, force) => {
 };
 function bkCheckRender(form) {
   const box = $("#build-check"), c = bk.ck, btn = form.querySelector("button.pri"); if (!box || !c) return;
-  const busy = c.busy.map(b => `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
+  const inConf = new Set(c.conflicts.map(t => t.id));      // a tunnel already offered below (same foreign server) is not offered twice
+  const busy = c.busy.filter(b => !(b.id && inConf.has(b.id))).map(b => b.id
+    ? `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${b.id}" ${bk.chk["replace_" + b.id] ? "checked" : ""} onchange="bkBtn(this.closest('form'))"> ⚠ Port ${b.ports.join(", ")} is used on ${esc(c.iran)} by ${esc(b.tunnel)} (${esc(b.state)}) — replace it: it is removed first${(b.all_ports || []).length > b.ports.length ? ` (its other ports ${b.all_ports.filter(x => !b.ports.includes(x)).join(", ")} stop too)` : ""}, restorable for 30 days from <i>Recently removed</i></label></div>`
+    : `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
   const conf = c.conflicts.map(t => `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${t.id}" ${t.replaceable ? "checked" : ""}> ⚠ Port ${t.ports.join(", ")} already goes to this foreign server through ${esc(t.name)} (${esc(t.iran)}, ${esc(t.state)}${t.state !== "up" && t.since ? " for " + ago(t.since) : ""}) — remove it first and replace it</label></div>`).join("");
   const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Smart repair → Failover)"}</small></label>` : "";
   const stale = (c.stale || []).map(s => `<div class="bconf"><label class="chk"><input type="checkbox" name="stale_${esc(s.unit)}" checked> ⚠ Port ${s.port} on ${esc(c.iran)} is held by an old tunnel (${esc(s.unit)}): ${esc(s.why)} — remove it and use the port</label></div>`).join("");
   box.innerHTML = busy + stale + conf + dns + (c.error ? `<div class="mut">${esc(c.error)}</div>` : "");
-  if (btn) btn.disabled = !!c.busy.length;
+  bkBtn(form);
 }
+/* the Build button waits while a busy port has no answer: a process we cannot replace, or a tunnel whose replace tick is off */
+const bkBlocked = form => (bk.ck ? bk.ck.busy : []).filter(b => !(b.id && form.querySelector(`input[name=replace_${b.id}]:checked`)));
+window.bkBtn = form => { const btn = form && form.querySelector("button.pri"); if (btn) btn.disabled = bk.ck ? !!bkBlocked(form).length : false; };
 window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 window.bkTransport = t => { bk.transport = t; bkRedraw(); };
 function bkBody(f) {
@@ -1151,7 +1164,8 @@ window.startBuild = async e => {
     box.innerHTML = '<div class="fx-line run"><i></i>Checking the ports…</div>';
     const c = await api("/api/tunnels/precheck", {method: "POST", body: JSON.stringify({iran_id: body.iran_id, foreign_id: body.foreign_id, ports: body.ports, live: !!body.iran_id})});
     bk.ck = c; bk.ckKey = bkKey(f); bkCheckRender(form);
-    if (c.busy.length) { box.innerHTML = `<div class="fx-line bad"><b>!</b>Port ${c.busy[0].port} is already in use on ${esc(c.iran)} (${esc(c.busy[0].by)}): choose another Iran server or another port. Nothing was built.</div>`; return false; }
+    const stuck = bkBlocked(form);
+    if (stuck.length) { box.innerHTML = `<div class="fx-line bad"><b>!</b>Port ${stuck[0].port} is already in use on ${esc(c.iran)} (${esc(stuck[0].by)}): ${stuck[0].id ? "tick “replace it” above, or " : ""}choose another Iran server or another port. Nothing was built.</div>`; return false; }
     if (c.conflicts.length && !seen) { box.innerHTML = '<div class="fx-line plan"><b>›</b>A tunnel already carries this port to the foreign server: decide above (replace it or keep it), then press Build again.</div>'; return false; }
     body.replace_ids = [...form.querySelectorAll("input[name^=replace_]:checked")].map(x => +x.name.slice(8));
     body.replace_units = [...form.querySelectorAll("input[name^=stale_]:checked")].map(x => x.name.slice(6));

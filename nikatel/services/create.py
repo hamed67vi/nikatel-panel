@@ -105,7 +105,7 @@ def precheck(iran_id: int, foreign_id: int, ports: str, live: bool = False) -> d
                 continue
 
             if iran is not None and t.iran_server_id == iran.id:
-                busy.append({"port": ps[0], "ports": ps, "by": f"tunnel {t.name}", "tunnel": t.name, "state": t.state})
+                busy.append({"port": ps[0], "ports": ps, "by": f"tunnel {t.name}", "tunnel": t.name, "id": t.id, "state": t.state, "all_ports": sorted(int(x) for x in (t.forwarded_ports or []) if str(x).isdigit())})      # a tunnel of the panel: the form may offer to replace it
 
             if t.foreign_server_id == foreign.id:
                 conflicts.append({"id": t.id, "name": t.name, "iran_id": t.iran_server_id, "iran": t.iran.name, "state": t.state, "since": t.state_since, "ports": ps, "replaceable": t.state != "up"})
