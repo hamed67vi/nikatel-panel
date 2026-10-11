@@ -293,9 +293,11 @@ def clean_bh_opts(o: dict | None) -> dict:
     return out
 
 
-def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: list[PortMap], keepalive: int = 75, nodelay: bool = True, opts: dict | None = None) -> tuple[str, str]:
-    """(iran server toml, foreign client toml) - tuned for many users. `opts` are the Advanced settings (see clean_bh_opts)."""
+def backhaul_texts(iran_ip: str, port: int, token: str, transport: str, ports: list[PortMap], keepalive: int = 75, nodelay: bool = True, opts: dict | None = None, tls_name: str = "") -> tuple[str, str]:
+    """(iran server toml, foreign client toml) - tuned for many users. `opts` are the Advanced settings (see clean_bh_opts). A TLS transport (wssmux) names the
+    certificate the server listens with (`tls_name`: made on the server by the backhaul_tls action)."""
     o = opts or {}
+    tls = f'tls_cert = "/etc/backhaul/{tls_name}.crt"\ntls_key = "/etc/backhaul/{tls_name}.key"\n' if transport in ("wss", "wssmux") and tls_name else ""
     mux = transport != "tcp"
     nd = "true" if nodelay else "false"
     mv, fs, rb, sb = o.get("mux_version", 2), o.get("mux_framesize", 32768), o.get("mux_recievebuffer", 8388608), o.get("mux_streambuffer", 524288)
@@ -313,7 +315,7 @@ channel_size = {o.get('channel_size', 8192)}
 log_level = "{o.get('log_level', 'warn')}"
 web_port = 0
 sniffer = false
-{mux_server}
+{tls}{mux_server}
 ports = [
 {port_lines}
 ]
@@ -730,7 +732,10 @@ def _build(b: Build) -> None:
     _say(aid, f"GRE holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
 
     # 5. backhaul both sides
-    iran_toml, foreign_toml = backhaul_texts(iran_ip, port, token, b.transport, b.ports, b.keepalive, b.nodelay, b.opts)
+    if b.transport in ("wss", "wssmux"):          # the TLS WebSocket transport listens with a certificate: a self-signed one, made once on the Iran server
+        run_action(iran, "backhaul_tls", {"NAME": b.name}, timeout=60)
+
+    iran_toml, foreign_toml = backhaul_texts(iran_ip, port, token, b.transport, b.ports, b.keepalive, b.nodelay, b.opts, tls_name=b.name)
     iran_cfg, foreign_cfg = f"/etc/backhaul/iran-{b.transport}-{port}.toml", f"/etc/backhaul/kharej-{b.transport}-{port}.toml"
     iran_unit, foreign_unit = f"backhaul-iran-{b.transport}-{port}.service", f"backhaul-kharej-{b.transport}-{port}.service"
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.15 - 2026-10-11 - Lightness first
+
+* No blur anywhere (header, menu, windows, buttons, the dark overlay), small shadows, short transitions, a quick page-open animation, no brightness filters on hover, and the ping packets move by transform (the browser composites them, nothing is re-laid out every frame).
+* **Backhaul · wssmux built for real:** the server side listened with no certificate and never started (*failed to listen … no such file*); a self-signed certificate is now made on the Iran server and named in the config (removed with the tunnel).
+* A tunnel comparison explains the failures the real tests showed on Iranian routes: clear-text WebSocket (use wss) and QUIC (use UDP / KCP) are filtered.
+* A tunnel that is unstable or down changes only its arrow (yellow stepped packets, or a red dashed line without packets and a red number), never the colour of its row.
+
 ## 1.16.14 - 2026-10-11 - Slower, fainter packets on the ping arrow
 
 * The packets that run along the ping arrow move about three times slower and are fainter.

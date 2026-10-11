@@ -1142,3 +1142,23 @@ html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #37415
 @media (prefers-reduced-motion: reduce) { #page.enter * { animation: none !important; } }
 /* the packets on the ping arrow: slow and faint */
 .tlink.up .pk { animation-duration: calc(var(--ping) * 45ms + 4s); opacity: .45; background: rgba(255,255,255,.75); box-shadow: 0 0 4px var(--c); }
+/* ================= lightness first: no blur anywhere, small shadows, short animations, nothing that re-layouts every frame ================= */
+:root { --blur: none; --shadow: 0 4px 14px rgba(2,6,23,.35); --shadow-hi: 0 8px 22px rgba(2,6,23,.45), 0 0 0 1px rgba(255,255,255,.06); --glass: linear-gradient(160deg, rgba(22,26,44,.92), rgba(16,19,34,.9)); --glass-hi: linear-gradient(160deg, rgba(28,32,52,.96), rgba(20,24,42,.95)); }
+.overlay, #ask .overlay, .statusbar, .ai-btn, .ai-btn.pri, .head, .side, .modal, .toast, .card, button, .dk { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.overlay { background: rgba(4,6,18,.72); } .tbl.lift, .cf-grid, .lbox, .tiles, .fstrip, .searchbar, .toolbar:not(.card .toolbar), .trashbox, .bk-part, .wtool, .card:hover, .ibox:hover { box-shadow: 0 4px 14px rgba(0,0,0,.22); }
+.tbl.lift tbody tr:not(.detail):hover, .tbl.lift tbody tr:not(.detail) { filter: none !important; transition: none; } .tbl td { transition: background-color .15s; }
+.tile:hover, .gw-row:hover, .ap-row:hover, .hl-row:hover, .wtool:hover, .dns-row:hover, .kpi:hover { transform: none !important; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
+button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transition-duration: .12s; } button:hover { filter: none; }
+@keyframes ov-in { from { opacity: 0; } to { opacity: 1; } } .modal, .overlay { animation-duration: .14s !important; }
+/* the page-open animation: quick */
+#page.enter .tbl tbody tr, #page.enter .tile, #page.enter .cf-card, #page.enter .dash-cols > .card, #page.enter .kpi { animation-duration: .16s; }
+#page.enter .tbl tbody tr:nth-child(n+2), #page.enter .tile:nth-child(n+2), #page.enter .kpi:nth-child(n+2), #page.enter .dash-cols > .card:nth-child(n+2) { animation-delay: .04s; } #page.enter .tbl tbody tr:nth-child(n+5) { animation-delay: .08s; }
+/* the ping arrow: a fixed width, packets moved by transform (compositor only), no change of the row colour when a tunnel is down or unstable - only the arrow says it */
+.tlink { width: 112px; min-width: 112px; } .tlink .wire { width: 112px; }
+.tlink .pk.a, .tlink .pk.b { left: 11px; animation-name: none; } .tlink.up .pk.a { animation: pkA calc(var(--ping) * 45ms + 4s) linear infinite; } .tlink.up .pk.b { animation: pkB calc(var(--ping) * 45ms + 4s) linear infinite; animation-delay: calc(var(--ping) * -22ms - 2s); }
+@keyframes pkA { from { transform: translateX(0); } to { transform: translateX(84px); } } @keyframes pkB { from { transform: translateX(84px); } to { transform: translateX(0); } }
+.tlink.degraded .wire::before, .tlink.degraded .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 12px, transparent 12px 16px); opacity: .8; }
+.tlink.degraded .pk { opacity: .7; background: var(--warn); box-shadow: 0 0 6px var(--warn); } .tlink.degraded .pk.a { animation: pkA 2.2s steps(6) infinite; } .tlink.degraded .pk.b { animation: pkB 2.2s steps(6) infinite; animation-delay: -1.1s; }
+.tlink.down .wire::before, .tlink.down .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 5px, transparent 5px 9px); opacity: .9; } .tlink.down .pk { display: none; } .tlink.down .ms { color: var(--bad); }
+.tbl tr.lossy td, .tbl.lift tbody tr.lossy:not(.detail):hover td { background: rgba(255,255,255,.045); border-color: var(--line); }
+.tun-tbl tr.down td:first-child, .tun-tbl tr.degraded td:first-child, .tun-tbl tr.up td:first-child { border-left-color: var(--line); }

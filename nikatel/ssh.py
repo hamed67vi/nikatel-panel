@@ -462,13 +462,19 @@ ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
     "unit_enable_restart": (r"""systemctl daemon-reload; systemctl enable '@UNIT@' >/dev/null 2>&1 || true; systemctl restart '@UNIT@' 2>&1 | tail -2; sleep 2; echo "UNIT @UNIT@ $(systemctl is-active '@UNIT@' 2>/dev/null || echo unknown)"
 """, {"UNIT": _UNIT1}),
 
+    # Backhaul over TLS WebSocket (wssmux / wss): the server side needs a certificate; a self-signed one, made once per tunnel, is enough (the client does not verify it)
+    "backhaul_tls": (r"""set -e; n='@NAME@'; mkdir -p /etc/backhaul
+[ -s "/etc/backhaul/$n.crt" ] && [ -s "/etc/backhaul/$n.key" ] || openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$n" -keyout "/etc/backhaul/$n.key" -out "/etc/backhaul/$n.crt" >/dev/null 2>&1
+chmod 600 "/etc/backhaul/$n.key"; echo "TLS_OK $n"
+""", {"NAME": _TNAME}),
+
     # remove everything a tunnel of ours left on a server: units, scripts, configs, the GRE interface
     "remove_tunnel_files": (r"""n='@NAME@'; p='@PORT@'; tr='@TRANSPORT@'
 systemctl disable --now "nikatel-gre-check-$n.timer" >/dev/null 2>&1 || true
 systemctl disable --now "nikatel-gre-$n.service" >/dev/null 2>&1 || true
 [ -x "/usr/local/sbin/nikatel-gre-down-$n" ] && "/usr/local/sbin/nikatel-gre-down-$n" || true
 for u in "backhaul-iran-$tr-$p.service" "backhaul-kharej-$tr-$p.service"; do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; done
-rm -f "/etc/backhaul/iran-$tr-$p.toml" "/etc/backhaul/kharej-$tr-$p.toml"
+rm -f "/etc/backhaul/iran-$tr-$p.toml" "/etc/backhaul/kharej-$tr-$p.toml" "/etc/backhaul/$n.crt" "/etc/backhaul/$n.key"
 rm -f "/etc/systemd/system/nikatel-gre-$n.service" "/etc/systemd/system/nikatel-gre-check-$n.service" "/etc/systemd/system/nikatel-gre-check-$n.timer"
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/usr/local/sbin/nikatel-gre-check-$n"
 systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true; echo "REMOVED $n"

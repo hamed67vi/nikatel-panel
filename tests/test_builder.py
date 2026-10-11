@@ -215,3 +215,14 @@ def test_server_locks_do_not_block_other_servers(monkeypatch):
 
     with builder.server_locks([911, 912], 1), builder.server_locks([913, 914], 2):
         pass
+
+def test_backhaul_wssmux_server_names_its_certificate():
+    from nikatel.services.builder import PortMap, backhaul_texts
+    from nikatel.ssh import render_action
+
+    iran, foreign = backhaul_texts("10.1.1.1", 9910, "tok", "wssmux", [PortMap(8075, 8075)], tls_name="fi1-ir1")
+    assert 'tls_cert = "/etc/backhaul/fi1-ir1.crt"' in iran and 'tls_key = "/etc/backhaul/fi1-ir1.key"' in iran and "tls_cert" not in foreign
+    plain, _ = backhaul_texts("10.1.1.1", 9910, "tok", "tcpmux", [PortMap(8075, 8075)], tls_name="fi1-ir1")
+    assert "tls_cert" not in plain
+    assert "openssl req -x509" in render_action("backhaul_tls", {"NAME": "fi1-ir1"})
+    assert '"/etc/backhaul/$n.crt"' in render_action("remove_tunnel_files", {"NAME": "fi1-ir1", "PORT": "9910", "TRANSPORT": "wssmux"})

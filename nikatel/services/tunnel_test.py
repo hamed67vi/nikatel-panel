@@ -435,6 +435,22 @@ def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign
         _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 
+def explain_failure(kind: str, error: str) -> str:
+    """Pure: a failed kind in plain words. What the real tests showed on Iranian routes: clear-text WebSocket and QUIC are filtered while their TLS / plain-UDP cousins pass."""
+    e = str(error or "")
+
+    if not e:
+        return e
+
+    if kind in ("bp:ws", "bp:wsmux") and "no data" in e:
+        return e + " — clear-text WebSocket is usually filtered on Iranian routes; use the TLS variant (wss / wssmux)."
+
+    if "quic" in kind:
+        return e + " — QUIC is blocked on most Iranian routes; use UDP (BackPack Direct · UDP) or KCP instead."
+
+    return e
+
+
 def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full") -> str:
     kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
 
@@ -481,7 +497,7 @@ def _compare_worker(job: dict) -> None:
                 ok, story = False, ["the test took too long"]
 
             r = dict(RESULTS.get(aid) or {})
-            r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else (story[-1] if story else "no result")[:160])   # a failed build says why
+            r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else explain_failure(kind, (story[-1] if story else "no result")[:160]))   # a failed build says why
             job["results"].append(r)
     finally:
         job["current"], job["current_aid"], job["done"] = "", None, True

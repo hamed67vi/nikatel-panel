@@ -104,3 +104,10 @@ def test_purge_test_leftovers_action_is_scoped_to_test_units_and_the_test_port()
 
     with pytest.raises(ValueError):
         render_action("purge_test_leftovers", {"TESTPORT": "39400; reboot"})
+
+def test_failed_kinds_are_explained_in_plain_words():
+    from nikatel.services.tunnel_test import explain_failure
+
+    assert "TLS variant" in explain_failure("bp:ws", "Build failed: no data passes through it")
+    assert "QUIC is blocked" in explain_failure("bpd:quic", "the tunnel network does not come up")
+    assert explain_failure("tcpmux", "port busy") == "port busy" and explain_failure("bp:ws", "") == ""
