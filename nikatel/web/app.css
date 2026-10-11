@@ -1214,3 +1214,7 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 .sline > small { color: var(--mut); font-weight: 700; letter-spacing: .5px; text-transform: uppercase; font-size: 10.5px; } .sline .rc { display: inline-flex; align-items: baseline; gap: 6px; } .sline .rc small { color: var(--mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; }
 .tchip { display: inline-flex; align-items: center; gap: 6px; } .tchip small { color: var(--mut); } .tchip .st { width: 8px; height: 8px; border-radius: 50%; display: inline-block; padding: 0; background: var(--unk); } .tchip .st.up { background: var(--ok); } .tchip .st.down { background: var(--bad); } .tchip .st.degraded { background: var(--warn); }
 @media (max-width: 900px) { .sgrid { grid-template-columns: 1fr; } }
+
+/* the button bar is ONE row: the buttons share the width, shrink their padding and font when the window is narrow, and never wrap */
+.sbar { flex-wrap: nowrap; gap: 3px; overflow: hidden; } .sbar .sg { flex: 1 1 auto; flex-wrap: nowrap; gap: 3px; min-width: 0; } .sbar .sg:last-child { flex: 0 0 auto; } .sbar .sep { flex: none; margin: 0 4px; }
+.sbar .abtn { flex: 1 1 auto; min-width: 0; justify-content: center; padding: 0 clamp(4px, .7vw, 10px); font-size: clamp(10px, .82vw, 12px); gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .sbar .abtn i { font-size: clamp(10px, .85vw, 13px); }

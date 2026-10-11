@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.28 - 2026-10-11 - The server button bar is always one row
+
+* The buttons of a server window share the width of the bar and shrink their padding and font when the window is narrow; they never wrap into a second row.
+
 ## 1.16.27 - 2026-10-11 - The server window, rebuilt from scratch
 
 * **One button bar:** every action of a server (GRE test, Connect SSH, SSH password, Forget host key, Filtering, Abuse-Defender, Windows ssh, PuTTY, MobaXterm, Reboot) is in a single bar at the top, grouped by thin dividers; Console, Edit and Delete stay in the window header.
