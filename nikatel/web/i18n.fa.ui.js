@@ -2,7 +2,7 @@
 I18N.add({
 /* ---- navigation and page heads */
 "Dashboard": "داشبورد", "Nodes": "سرورها", "Tunnels": "تانل‌ها", "Panels": "پنل‌ها", "Shop bot": "ربات فروش", "Settings": "تنظیمات",
-"Home": "خانه", "Bot": "ربات", "Sign out": "خروج", "Sign in": "ورود", "control panel": "پنل کنترل", "NIKATEL": "NIKATEL",
+"Home": "خانه", "Bot": "ربات", "Sign out": "خروج", "Sign in": "ورود", "control panel": "پنل کنترل", "Network operations": "مرکز عملیات شبکه", "NIKATEL": "NIKATEL",
 "What needs attention right now, and what happened.": "آنچه همین حالا نیاز به توجه دارد و آنچه رخ داده است.",
 "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs.": "سرورهای ایران و خارج با منابعشان، گیت‌وی ایران، رویدادها، کارها و لاگ‌ها.",
 "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH.": "همه‌ی سرورهای ایران و خارج: در دسترس بودن، بار، حافظه و دیسک. هر ۲ دقیقه با SSH نمونه‌گیری می‌شود.",

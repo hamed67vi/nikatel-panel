@@ -223,7 +223,7 @@ let pendScroll = null;   // the scroll positions a refresh wants back: the list 
 (() => {
   const pg = $("#page"); if (!pg) return;
   let q = 0;
-  const fit = () => pg.querySelectorAll(".lbox").forEach(b => { b.style.maxHeight = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24) + "px"; });   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
+  const fit = () => { const fixed = !!pg.querySelector(".cf-top") && innerWidth > 760; pg.querySelectorAll(".lbox").forEach(b => { const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
   const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
   window.addEventListener("resize", () => requestAnimationFrame(fit));
@@ -520,7 +520,7 @@ PAGES.servers = async () => {
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = (!s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls} clk" onclick="toggleDetail(${s.id})" data-q="${esc((s.name + " " + s.host + " " + (s.provider || "")).toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
-      <td class="name">${s.role === "foreign" && s.country ? flagImg(s.country) + " " : ""}${esc(s.name)}${sameName(s)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
+      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${sameName(s)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
       <td>${srvBusy(s) ? `<span class="busy-chip" title="${esc(srvBusy(s).what + (srvBusy(s).detail ? ": " + srvBusy(s).detail : ""))}"><i class="spin"></i>${esc(srvBusy(s).what)}…${srvBusy(s).detail ? `<span class="busy-detail">${esc(srvBusy(s).detail)}</span>` : ""}</span>` : noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
@@ -1344,10 +1344,10 @@ PAGES.actions = async () => {
   const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
-  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : '${(outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`}'; })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><span class="mut ap-err">${esc(outage && outage.by_tunnel && outage.by_tunnel[t.name] ? outage.by_tunnel[t.name].join(" · ") + " — nothing is done until it is back" : kind === "lossy" ? ((t.detail || {}).loss_pct || 0) + " % packet loss on the link" : (t.last_error || "").slice(0, 70))}</span><span class="sp"></span>${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
+  const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(t.state)}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : ((outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`); })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span>${(() => { const off = outage && outage.by_tunnel && outage.by_tunnel[t.name], loss = (t.detail || {}).loss_pct || 0, why = off ? `A server of this tunnel is off (${off.join(", ")}): nothing is done until it is back.` : kind === "lossy" ? `${Math.round(loss)} % of the data is lost on this link.` : t.state === "down" ? "The tunnel does not answer." : "Part of the link works, part does not."; return `<span class="ap-why ${off ? "mut" : ""}" title="${esc(why)}">${esc(why)}</span>` + (off || t.last_error || kind === "lossy" ? `<a class="ap-detail" onclick="apDetail(${t.id})" title="The full reason and the log">Detail</a>` : ""); })()}${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
-  const work = outage && (outage.working || []).length ? `<div class="nw-box work-box"><b class="nw-title">🔧 Working now</b>${outage.working.map(w => `<div class="nw-row"><span class="wrench">🔧</span><b>${esc(w.name)}</b><span class="mut">${w.mode === "look" ? "looking at it" : "repairing"}</span><span class="work-line">${esc(w.line)}</span><button class="sm" onclick="apLive(${(state.tunnelsCache || []).find(t => t.name === w.name)?.id || 0}, '${esc(w.name)}')">📡 Live</button></div>`).join("")}</div>` : "";
+  const work = outage && (outage.working || []).length ? `<div class="nw-box work-box"><b class="nw-title">🔧 Working now</b>${outage.working.map(w => `<div class="nw-row"><span class="wrench">🔧</span><b>${esc(w.name)}</b><span class="mut">${w.mode === "look" ? "looking at it" : "repairing"}</span><span class="work-line" title="${esc(w.line)}">${esc(w.line)}</span><a class="ap-detail" onclick="apLive(${(state.tunnelsCache || []).find(t => t.name === w.name)?.id || 0}, '${esc(w.name)}')" title="The full live log">Detail</a></div>`).join("")}</div>` : "";
   const mineOf = nm => tl.filter(t => t.iran_name === nm || t.foreign_name === nm).map(t => t.name);
   const issues = [...(srvs || []).filter(s => s.enabled && s.online === false).map(s => ({kind: "off", role: s.role, name: s.name, why: s.last_error || "", tunnels: mineOf(s.name)})),
     ...((nw && nw.items) || []).filter(i => !(srvs || []).some(s => s.name === i.server && s.enabled && s.online === false)).map(i => ({kind: "net", role: i.kind === "iran_server" ? "iran" : "foreign", name: i.server, text: i.text, tunnels: i.tunnels || []}))];
@@ -1436,6 +1436,11 @@ window.foPoint = async () => {
 window.foRestore = async id => {
   if (!await gconfirm("Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.", {danger: true})) return;
   try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + r.fqdn + " points at " + r.old + " again", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.apDetail = id => {
+  const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return;
+  const d = t.detail || {}, lines = [`Tunnel: ${t.name}`, `State: ${t.state}`, t.last_error ? `Last error: ${t.last_error}` : "", d.loss_pct != null ? `Packet loss on the link: ${d.loss_pct} %` : "", d.rtt_ms != null ? `Delay: ${d.rtt_ms} ms` : ""].filter(Boolean);
+  showModal(`<b>${esc(t.name)}</b>`, `<pre class="gl-out">${esc(lines.join("\n"))}</pre><div class="frm-act"><button class="sm" onclick="closeModal();apLive(${t.id}, '${esc(t.name)}')">📡 Live log</button><button class="sm" onclick="closeModal();apDiagnose(${t.id})">🩺 Diagnose</button></div>`, "mid");
 };
 window.apLive = async (id, name) => {
   /* the live log of what the Tunnel Doctor does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
@@ -1529,6 +1534,7 @@ const FLAGS = {de: "de", germany: "de", fi: "fi", finland: "fi", nl: "nl", nethe
 function cfFlag(name) { for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return `<small class="cc" title="${esc(FLAGS[t].toUpperCase())}">${esc(FLAGS[t].toUpperCase())}</small> `; return ""; }   // the country code as small text instead of a flag picture: calmer lists
 const pingCls = v => v == null ? "mut" : v < 800 ? "ok" : v < 1000 ? "warn" : "bad";   // config delay: under 800 ms green, 800-999 yellow, above red
 const mb = v => v == null ? "—" : Number(v).toFixed(v >= 100 ? 0 : 1);
+const SRV_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="b" x="3" y="3.5" width="18" height="7" rx="2.2"/><rect class="b" x="3" y="13.5" width="18" height="7" rx="2.2"/><path class="b" d="M12 7h6M12 17h6"/><circle class="led" cx="7" cy="7" r="1.15"/><circle class="led l2" cx="7" cy="17" r="1.15"/></svg>';
 PAGES.configsList = async () => {
   const [d, subs, tl] = await Promise.all([api("/api/configs"), api("/api/subscriptions"), api("/api/tunnels").catch(() => [])]);
   
@@ -1544,7 +1550,7 @@ PAGES.configsList = async () => {
   const title = c => `${cfFlag(c.name)}${esc(shown(c))}${c.enabled ? "" : '<span class="pill">disabled</span>'}`;
   const inAll = cf.group === "__all";
   const gcell = c => inAll ? `<td class="cf-sub">${c.group ? esc(c.group) : "—"}</td>` : "";
-  const acts = c => `<button class="sm" onclick="event.stopPropagation();cfEdit(${c.id})">Edit</button><button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
+  const acts = c => `<button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
   const MBs = v => v == null ? "—" : mb(v / 8);   // the table speaks MB/s like a v2ray client; the stat boxes elsewhere stay in Mb/s
   const row = c => { const m = c.meta || {}; return `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})">
       <td><span class="td-type">${esc((m.proto || "—").toUpperCase())}</span></td>
@@ -2546,8 +2552,8 @@ PAGES.settings = async () => {
         <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testAi()">Test the key</button><button type="button" class="danger" onclick="forgetAi()">Remove the key</button></div></form></div>
 
     <div class="card"><h3>Appearance</h3>
-      <div class="frm">
-        <div style="grid-column:1/-1"><small class="mut">Theme</small><div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b><small>${desc}</small></button>`).join("")}</div></div>
+      <div class="frm look-frm">
+        <div style="grid-column:1/-1"><small class="mut">Theme</small><div class="theme-grid">${THEMES.map(([k, name, desc, bg, a, c, flat]) => `<button type="button" class="tsw ${flat ? "flat" : ""} ${LOOK.theme === k ? "on" : ""}" title="${esc(desc)}" style="--tb:${bg};--ta:${a};--tc:${c}" onclick="lookSet('theme', '${k}'); refresh()"><i></i><b>${name}</b><small>${desc}</small></button>`).join("")}</div></div>
         <label>Day / night<select onchange="lookSet('mode', this.value)">${[["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]].map(([k, l]) => `<option value="${k}" ${LOOK.mode === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label>Text size<select onchange="lookSet('size', this.value)">${[["small", "Small"], ["normal", "Normal"], ["large", "Large"]].map(([k, l]) => `<option value="${k}" ${LOOK.size === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label>Animations<select onchange="lookSet('anim', this.value)">${[["on", "On"], ["off", "Off (calmer)"]].map(([k, l]) => `<option value="${k}" ${LOOK.anim === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -2628,19 +2634,19 @@ window.testArvan = async () => { toast("Asking ArvanCloud (read only)…"); try 
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } toast("Updating… the page reloads in 40 s"); setTimeout(() => location.reload(), 40000); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview
-  ["aurora", "Aurora glass", "frosted glass over a soft aurora - the default", "#070a17", "rgba(124,131,255,.7)", "rgba(56,217,245,.5)"],
-  ["ocean", "Ocean", "deep water, teal and sky, faint waves", "#04101c", "rgba(45,212,191,.7)", "rgba(56,189,248,.5)"],
-  ["emerald", "Emerald", "forest greens on a dotted grid", "#05120d", "rgba(16,185,129,.7)", "rgba(163,230,53,.45)"],
-  ["sunset", "Sunset", "warm rose, amber and violet", "#140a12", "rgba(244,63,94,.65)", "rgba(251,146,60,.55)"],
-  ["royal", "Royal", "indigo and violet under small stars", "#0a0716", "rgba(124,58,237,.7)", "rgba(240,171,252,.45)"],
-  ["gold", "Gold luxury", "dark with warm gold light", "#0b0a08", "rgba(230,184,92,.7)", "rgba(246,217,138,.45)"],
-  ["neon", "Cyber neon", "magenta and cyan on black", "#040409", "rgba(255,43,214,.6)", "rgba(25,245,255,.5)"],
-  ["graphite", "Graphite", "quiet professional dark, thin grid, blue accent", "#0d0f12", "rgba(96,165,250,.55)", "rgba(148,163,184,.35)"],
-  ["classic", "Classic", "plain admin look: solid surfaces, thin borders, flat blue", "#111827", "#2563eb", "#1f2937", true],
-  ["minimal", "Minimal", "almost no decoration", "#0c0d10", "rgba(156,163,175,.4)", "rgba(203,213,225,.25)"],
+  ["aurora", "Aurora", "frosted glass, soft aurora", "#0b1030", "rgba(124,131,255,.95)", "rgba(56,217,245,.8)"],
+  ["ocean", "Ocean", "deep water, slow waves", "#062b3d", "rgba(45,212,191,.95)", "rgba(56,189,248,.8)"],
+  ["emerald", "Emerald", "forest green, light beams", "#07271b", "rgba(16,185,129,.95)", "rgba(163,230,53,.7)"],
+  ["sunset", "Sunset", "rose, amber and violet", "#2a1020", "rgba(244,63,94,.95)", "rgba(251,146,60,.85)"],
+  ["royal", "Royal", "indigo night with stars", "#160d33", "rgba(124,58,237,.95)", "rgba(240,171,252,.75)"],
+  ["gold", "Gold luxury", "dark with gold shimmer", "#1c1608", "rgba(230,184,92,.95)", "rgba(246,217,138,.75)"],
+  ["neon", "Cyber neon", "magenta, cyan, grid floor", "#0a0620", "rgba(255,43,214,.9)", "rgba(25,245,255,.8)"],
+  ["graphite", "Graphite", "quiet pro dark, blue", "#1a1e26", "rgba(96,165,250,.8)", "rgba(148,163,184,.55)"],
+  ["classic", "Classic", "plain admin, flat blue", "#1c2638", "#2563eb", "#33415a", true],
+  ["minimal", "Minimal", "almost no decoration", "#1a1c21", "rgba(156,163,175,.6)", "rgba(203,213,225,.4)"],
 ];
 const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "on"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
-function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; }
+function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; const lg = document.querySelector(".logo-orb svg"); if (lg && lg.pauseAnimations) { if (LOOK.anim === "off") lg.pauseAnimations(); else lg.unpauseAnimations(); } }
 window.lookSet = (k, v) => { LOOK[k] = v; localStorage.setItem("nk.look", JSON.stringify(LOOK)); lookApply(); };
 window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOOK, {theme: "aurora", mode: "dark", size: "normal", anim: "on"}); lookApply(); refresh(); };
 window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
@@ -2858,4 +2864,39 @@ window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dock
     const was = glide.has(el); glide.set(el, g);
     if (!was) g.raf = requestAnimationFrame(() => step(el));
   }, {passive: false});
+})();
+
+/* the net of nodes and lines at the foot of the side menu: it drifts softly and small signals run along the lines */
+(() => {
+  const mk = () => {
+    const side = document.querySelector(".side"); if (!side || side.querySelector(".side-net")) return;
+    const NS = "http://www.w3.org/2000/svg", W = 360, H = 700, el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const svg = el("svg", {class: "side-net", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "xMidYMax slice", "aria-hidden": "true"});
+    const defs = el("defs"), g = el("linearGradient", {id: "sn-g", x1: 0, y1: 0, x2: 1, y2: 1}); g.append(el("stop", {offset: 0, style: "stop-color:var(--acc-2)"}), el("stop", {offset: 1, style: "stop-color:var(--acc)"}));
+    const glow = el("filter", {id: "sn-b", x: "-80%", y: "-80%", width: "260%", height: "260%"}); glow.append(el("feGaussianBlur", {stdDeviation: 2.2})); defs.append(g, glow); svg.append(defs);
+    const nodes = []; const cols = 4, rows = 8;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { if (rnd() < .18) continue; nodes.push({bx: (c + .5) * W / cols + (rnd() - .5) * 46, by: 250 + (r + .5) * (H - 270) / rows + (rnd() - .5) * 30, ax: 7 + rnd() * 12, ay: 7 + rnd() * 12, sx: .45 + rnd() * .5, sy: .4 + rnd() * .5, px: rnd() * 6.28, py: rnd() * 6.28, r: 2.2 + rnd() * 2.6}); }
+    const edges = [], seen = new Set();
+    nodes.forEach((a, i) => { nodes.map((b, j) => ({j, d: Math.hypot(a.bx - b.bx, a.by - b.by)})).filter(x => x.j !== i).sort((x, y) => x.d - y.d).slice(0, 3).forEach(({j}) => { const k = i < j ? i + "-" + j : j + "-" + i; if (!seen.has(k)) { seen.add(k); edges.push([i, j]); } }); });
+    const lg = el("g", {stroke: "url(#sn-g)", "stroke-width": 1.1, fill: "none", opacity: .55}), ng = el("g", {fill: "url(#sn-g)"}), pg = el("g");
+    const lines = edges.map(() => lg.appendChild(el("line"))), dots = nodes.map(n => ng.appendChild(el("circle", {r: n.r})));
+    const pulses = Array.from({length: 7}, () => ({e: Math.floor(rnd() * edges.length), t: rnd(), v: .1 + rnd() * .12, halo: pg.appendChild(el("circle", {r: 4.5, fill: "url(#sn-g)", opacity: .5, filter: "url(#sn-b)"})), core: pg.appendChild(el("circle", {r: 1.7, fill: "#fff", opacity: .9}))}));
+    svg.append(lg, ng, pg); side.prepend(svg);
+    let last = 0;
+    const frame = now => {
+      requestAnimationFrame(frame);
+      if (document.hidden || document.documentElement.dataset.anim === "off" || innerWidth <= 900) { if (!last) draw(0); return; }
+      if (last && now - last < 33) return; const dt = Math.min(.08, (now - (last || now)) / 1000); last = now; draw(now / 1000, dt);      // 30 pictures a second are plenty for a slow drift
+    };
+    const pos = (n, t) => [n.bx + Math.sin(t * n.sx + n.px) * n.ax, n.by + Math.cos(t * n.sy + n.py) * n.ay];
+    const P = nodes.map(() => [0, 0]);
+    function draw(t, dt = 0) {
+      nodes.forEach((n, i) => { P[i] = pos(n, t); dots[i].setAttribute("cx", P[i][0].toFixed(1)); dots[i].setAttribute("cy", P[i][1].toFixed(1)); });
+      edges.forEach(([a, b], i) => { const l = lines[i]; l.setAttribute("x1", P[a][0].toFixed(1)); l.setAttribute("y1", P[a][1].toFixed(1)); l.setAttribute("x2", P[b][0].toFixed(1)); l.setAttribute("y2", P[b][1].toFixed(1)); });
+      pulses.forEach(p => { p.t += p.v * dt; if (p.t >= 1) { p.t = 0; p.e = Math.floor(rnd() * edges.length); } const [a, b] = edges[p.e], x = P[a][0] + (P[b][0] - P[a][0]) * p.t, y = P[a][1] + (P[b][1] - P[a][1]) * p.t, o = Math.sin(p.t * Math.PI); p.halo.setAttribute("cx", x.toFixed(1)); p.halo.setAttribute("cy", y.toFixed(1)); p.core.setAttribute("cx", x.toFixed(1)); p.core.setAttribute("cy", y.toFixed(1)); p.halo.setAttribute("opacity", (.55 * o).toFixed(2)); p.core.setAttribute("opacity", (.95 * o).toFixed(2)); });
+    }
+    draw(0); requestAnimationFrame(frame);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mk); else mk();
 })();

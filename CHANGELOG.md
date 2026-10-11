@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.34
+
+- Name and logo: NIKATEL in the Unbounded font (static), subtitle "Network operations"; the logo has its own slow animation (turning ring, breathing glow, a light running along the N, signals along the tunnel). The side-menu net is now a live SVG: nodes drift softly, small signals run along the lines.
+- Themes: day mode now works in every theme (each has its own light page; before the dark theme colours won). Button colours follow the theme (the "primary" button was gold everywhere). New very slow backgrounds: ocean waves, emerald light beams, royal twinkling stars, sunset sun, neon floor grid, gold light sweep, graphite scan line; all stop with Animations = Off and on reduced-motion. The Appearance box is compact (5 columns, one-line notes) with brighter previews.
+- Servers list: a server picture (green online, red offline, amber warning, grey disabled) replaces the coloured edge; a foreign server's flag lies faded under its name and gets richer under the mouse. The "Copied" mark of an address is solid and sits on the address.
+- Tunnel Doctor rows: one plain sentence per row and a "Detail" word for the full reason / log; the broken ` ` ` text and the squeezed Live button are fixed.
+- Configs list: no Edit button in the rows (it is in the config window); rows grow a little under the mouse (also users, servers, tunnels).
 ## 1.17.33
 
 - Panels > Users: the list is one fixed box down to the pager, which stays on the bottom edge; the rows are stretched to fill it, so nothing scrolls and no empty strip is left. The pager keeps seven slots of one width, so the buttons no longer jump when the page changes.

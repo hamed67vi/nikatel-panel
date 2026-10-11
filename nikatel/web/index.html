@@ -11,10 +11,11 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<div class="bg-scene" aria-hidden="true"></div>
 <div id="login" class="login hidden">
   <form id="login-form" class="login-box" autocomplete="on">
     <button type="button" class="lang-btn login-lang" data-notr onclick="toggleLang()" title="فارسی">فا</button>
-    <div class="brand"><b>NIKATEL</b><small>control panel</small></div>
+    <div class="brand"><div><b data-notr>NIKATEL</b><small>Network operations</small></div></div>
     <div id="ls-pass" class="lstep">
       <label>User<input name="user" value="admin" autocomplete="username"></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" autofocus></label>
@@ -42,7 +43,34 @@
 
 <div id="app" class="app hidden">
   <aside class="side">
-    <div class="brand"><img class="logo-img" src="/static/favicon.svg" alt="" width="34" height="34"><div><b data-notr>NIKATEL</b><small>control panel</small></div></div>
+    <div class="brand"><span class="logo-orb"><svg viewBox="0 0 128 128" width="36" height="36" aria-hidden="true">
+      <defs>
+        <linearGradient id="lg-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2150"/><stop offset=".55" stop-color="#0d1130"/><stop offset="1" stop-color="#070a1c"/></linearGradient>
+        <linearGradient id="lg-ac" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7cff"/><stop offset=".5" stop-color="#4aa8ff"/><stop offset="1" stop-color="#2fe0d0"/></linearGradient>
+        <linearGradient id="lg-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".4" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#fff" stop-opacity=".12"/></linearGradient>
+        <radialGradient id="lg-glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4aa8ff" stop-opacity=".55"/><stop offset="1" stop-color="#4aa8ff" stop-opacity="0"/></radialGradient>
+        <filter id="lg-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter>
+      </defs>
+      <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#lg-bg)"/>
+      <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="29.3" fill="none" stroke="url(#lg-rim)" stroke-width="1.5"/>
+      <circle class="lg-halo" cx="64" cy="64" r="52" fill="url(#lg-glow)"/>
+      <g stroke="#6f8cff" stroke-opacity=".16" stroke-width="1" fill="none"><circle cx="64" cy="64" r="44"/><circle cx="64" cy="64" r="30"/><path d="M64 18V110M18 64H110"/></g>
+      <path d="M26 92C44 52 84 52 102 92" fill="none" stroke="url(#lg-ac)" stroke-opacity=".5" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/>
+      <path d="M38 94V36L90 94V36" fill="none" stroke="url(#lg-ac)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" filter="url(#lg-soft)" opacity=".55"/>
+      <path d="M38 94V36L90 94V36" fill="none" stroke="url(#lg-ac)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      <path class="lg-run" d="M38 94V36L90 94V36" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" pathLength="100" stroke-dasharray="7 93"/>
+      <g class="lg-nodes">
+        <circle class="lg-n" cx="38" cy="36" r="7.5" fill="#0d1130" stroke="#8b7cff" stroke-width="3"/><circle cx="38" cy="36" r="2.6" fill="#fff"/>
+        <circle class="lg-n" cx="90" cy="36" r="7.5" fill="#0d1130" stroke="#2fe0d0" stroke-width="3"/><circle cx="90" cy="36" r="2.6" fill="#fff"/>
+        <circle class="lg-n" cx="38" cy="94" r="7.5" fill="#0d1130" stroke="#6aa0ff" stroke-width="3"/><circle cx="38" cy="94" r="2.6" fill="#fff"/>
+        <circle class="lg-n" cx="90" cy="94" r="7.5" fill="#0d1130" stroke="#4fd8e6" stroke-width="3"/><circle cx="90" cy="94" r="2.6" fill="#fff"/>
+      </g>
+      <g fill="#fff">
+        <circle r="2.3"><animateMotion dur="3.6s" repeatCount="indefinite" path="M26 92C44 52 84 52 102 92"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.15;.85;1" dur="3.6s" repeatCount="indefinite"/></circle>
+        <circle r="1.7" fill-opacity=".75"><animateMotion dur="3.6s" begin="1.2s" repeatCount="indefinite" path="M26 92C44 52 84 52 102 92"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.15;.85;1" dur="3.6s" begin="1.2s" repeatCount="indefinite"/></circle>
+        <circle r="1.7" fill-opacity=".75"><animateMotion dur="3.6s" begin="2.4s" repeatCount="indefinite" path="M26 92C44 52 84 52 102 92"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.15;.85;1" dur="3.6s" begin="2.4s" repeatCount="indefinite"/></circle>
+      </g>
+    </svg></span><div><b data-notr>NIKATEL</b><small>Network operations</small></div></div>
     <nav id="nav">
       <a data-page="dashboard" class="on" data-icon="▦" data-short="Home"><i class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="5" rx="2"/><rect x="13.5" y="11" width="7.5" height="10" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/></svg></i><span>Dashboard</span></a>
       <a data-page="nodes" data-icon="🖥" data-short="Servers"><i class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="7" rx="2.2"/><rect x="3" y="13.5" width="18" height="7" rx="2.2"/><path d="M12 7h6M12 17h6"/><circle class="led" cx="7" cy="7" r="1" fill="currentColor"/><circle class="led l2" cx="7" cy="17" r="1" fill="currentColor"/></svg></i><span>Servers</span></a>
