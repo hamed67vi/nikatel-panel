@@ -1283,3 +1283,9 @@ select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; 
 /* the four numbers of a panel sit in its top bar */
 .pstat .tc { gap: 6px; } .pstat .tc i { display: none; } .pstat small { color: var(--mut); font-size: 11px; } .pstat .tc.click { cursor: pointer; } .pstat .tc.click:hover { background: rgba(255,255,255,.06); }
 .pstat .tc { padding: 0 10px; }
+
+/* the users list: a page holds what fits the window; numbered pages sit under it */
+.pgn { min-width: 28px; height: 26px; padding: 0 8px; } .pgn.on { background: var(--grad); color: #1a1405; border-color: transparent; } .pgn-gap { color: var(--mut); padding: 0 4px; }
+
+.pn-foot { display: flex; align-items: center; gap: 10px; margin: 6px 0 0; padding: 4px 8px; } .pn-foot .tabs { flex: none; } .pgs { display: inline-flex; gap: 4px; align-items: center; } .pn-foot .sp { flex: 1; }
+#pn-body > .toolbar { margin-bottom: 6px; }

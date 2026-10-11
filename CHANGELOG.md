@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.3 - 2026-10-11 - The users list without scrolling
+
+* A page of the users list holds exactly the rows that fit the window (measured from the real row height), so the list never scrolls; numbered pages (1 2 3 … last, ‹ ›) and the range are under it.
+* *Users | Hosts* moved from the top to the bottom strip, next to the page numbers; the space above the list is gone.
+
 ## 1.17.2 - 2026-10-11 - Panel numbers in the top bar
 
 * The four boxes of a panel (Users, Nodes, Load, Traffic) are gone: their numbers sit in one framed strip of the top bar, details in tooltips; Nodes still opens the node list.

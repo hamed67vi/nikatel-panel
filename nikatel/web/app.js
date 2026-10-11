@@ -1726,8 +1726,7 @@ PAGES.panels = async () => {
       <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnTestConfig(${p.id}, '${esc(p.name)}')" title="A small test user on this panel whose subscription is kept and measured on the probe as the group ${esc(p.name)}">🧪 Test config on probe${s.test_user ? " ✓" : ""}</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
     ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
-    <div class="fstrip"><div class="tabs">${[["users", `Users${s.users_total != null ? ` <small>${s.users_total}</small>` : ""}`], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>
-    <div id="pn-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;
+    <div id="pn-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot">${pnFoot("")}</div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
@@ -1762,24 +1761,37 @@ window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (awa
 /* users */
 async function pnUsersLoad(id) {
   const box = $("#pn-body"); if (!box) return;
-  const key = `${id}|${pn.uq}|${pn.ustatus}|${pn.uoff}`;
+  const ps = pnPS(); pn.uoff = Math.floor(pn.uoff / ps) * ps;       // a page holds exactly what fits the window: the list never scrolls
+  const key = `${id}|${pn.uq}|${pn.ustatus}|${pn.uoff}|${ps}`;
   if (!pn.users || pn.usersKey !== key) {   // read from the panel only when the question changed, not on every refresh
-    try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=40&sort=-created_at`); pn.usersKey = key; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+    try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=${ps}&sort=-created_at`); pn.usersKey = key; } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
   box.innerHTML = `<div class="toolbar"><input id="pn-uq" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)"><select onchange="pn.ustatus=this.value;pn.uoff=0;refresh()">${["", "active", "disabled", "limited", "expired", "on_hold"].map(s => `<option value="${s}" ${pn.ustatus === s ? "selected" : ""}>${s || "all statuses"}</option>`).join("")}</select><span class="mut">${u.total} users</span><button class="sm" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
       <button class="sm" onclick="pnBulk(${id}, 'disable')">Disable ticked</button><button class="sm" onclick="pnBulk(${id}, 'enable')">Enable ticked</button><button class="sm" onclick="pnBulkRenew(${id})">Renew ticked…</button></div>
-    <table class="tbl lift"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:170px"></colgroup>
+    <table class="tbl lift"><colgroup><col style="width:30px"><col style="width:22%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col><col style="width:215px"></colgroup>
       <thead><tr><th></th><th>User</th><th>Status</th><th>Traffic</th><th>Expires</th><th>Note</th><th></th></tr></thead>
       <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}"><td><input type="checkbox" class="pn-uchk" value="${esc(x.username)}"></td><td class="name">${esc(x.username)}</td><td><span class="st ${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"}">${esc(x.status)}</span></td>
         <td class="num">${fmtB(x.used || 0)} / ${gb(x.limit)}</td><td class="num">${exp(x)}</td><td class="mut">${esc(x.note)}</td>
         <td><button class="sm" onclick="pnUserOpen(${id}, '${esc(x.username)}')">Edit</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', '${x.status === "active" ? "disable" : "enable"}')">${x.status === "active" ? "Disable" : "Enable"}</button> <button class="sm" onclick="pnUAct(${id}, '${esc(x.username)}', 'reset')">Reset</button></td></tr>
 `).join("") || '<tr><td colspan="7" class="mut">nobody matches</td></tr>'}</tbody></table>
-    <div class="fstrip pager"><button class="sm" ${pn.uoff ? "" : "disabled"} onclick="pnPage(-1)">‹ Previous</button><span class="mut">${u.total ? pn.uoff + 1 : 0}–${Math.min(pn.uoff + 40, u.total)} of ${u.total}</span><button class="sm" ${pn.uoff + 40 < u.total ? "" : "disabled"} onclick="pnPage(1)">Next ›</button></div>`;
+`;
+  const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot(pnPager(u.total, ps));
   const q = $("#pn-uq"); if (q && pn.uq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  const rows = box.querySelectorAll("tbody tr");                 // the first time, the real height of a row is measured and the page size follows it
+  if (!pnRow.done && rows.length > 2) { pnRow.done = true; const pitch = (rows[rows.length - 1].getBoundingClientRect().bottom - rows[0].getBoundingClientRect().top) / rows.length; if (pitch > 20 && Math.abs(pitch - pnRow.h) > 0.5) { pnRow.h = pitch; if (pnPS() !== ps) pnUsersLoad(id); } }
 }
-window.pnPage = d => { pn.uoff = Math.max(0, pn.uoff + d * 40); state.resetScroll = true; refresh(); };      // the page changes from the bottom of the list and the list is shown from its top again
+const pnRow = {h: 46, done: false};
+const pnPS = () => { const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((innerHeight - top - 54 - 34 - 50 - 40) / pnRow.h))); };
+const pnFoot = mid => `<div class="tabs">${[["users", "Users"], ["hosts", "Hosts"]].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>${mid}`;
+function pnPager(total, ps) {
+  const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(pn.uoff / ps), show = [];
+  for (let i = 0; i < pages; i++) if (i === 0 || i === pages - 1 || Math.abs(i - cur) <= 2) show.push(i);
+  const btns = show.map((i, k) => (k && i - show[k - 1] > 1 ? `<span class="pgn-gap">…</span>` : "") + `<button class="sm pgn ${i === cur ? "on" : ""}" onclick="pnGo(${i})">${i + 1}</button>`).join("");
+  return `<span class="sp"></span><span class="pgs"><button class="sm pgn" ${cur ? "" : "disabled"} onclick="pnGo(${cur - 1})">‹</button>${btns}<button class="sm pgn" ${cur + 1 < pages ? "" : "disabled"} onclick="pnGo(${cur + 1})">›</button></span><span class="sp"></span><span class="mut">${total ? pn.uoff + 1 : 0}–${Math.min(pn.uoff + ps, total)} of ${total}</span>`;
+}
+window.pnGo = i => { pn.uoff = Math.max(0, i) * pnPS(); refresh(); };      // the page changes from the bottom of the list and the list is shown from its top again
 /* the inbounds of a user (Marzban): one tick per inbound, grouped by protocol; a protocol with no tick is removed from the user */
 const ibHtml = u => {
   const opts = (u.options || {}).inbounds || []; if (!opts.length || !u.inbounds) return "";
