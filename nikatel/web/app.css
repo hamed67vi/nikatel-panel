@@ -1186,3 +1186,13 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 @media (max-width: 760px) { .chk-list { grid-template-columns: 1fr; } }
 /* the server name cell shows its badges whole (network, bad route, disabled): the datacentre name is in the window, not here */
 .srv-tbl td.name { overflow: visible; text-overflow: clip; } .srv-tbl td.name .pill { margin-left: 6px; }
+
+/* ---- every list box has a fixed height and scrolls inside; its header row stays on top */
+.lbox { max-height: calc(100vh - 290px); min-height: 150px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.22) transparent; }
+.lbox.full { margin: 0 0 10px; border-top: 1px solid transparent; border-radius: 18px; }
+.lbox thead th { position: sticky; top: 0; z-index: 3; background: #11162b; background: color-mix(in srgb, var(--bg) 88%, white 12%); }
+.lbox .tbl { margin: 0; } .lbox.full .tbl.lift, .lbox.full .tbl { padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; }
+.lbox.full > .cf-grid { padding: 6px; background: none; border: 0; box-shadow: none; }
+.lbox::-webkit-scrollbar { width: 8px; height: 8px; } .lbox::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 8px; }
+@media (max-width: 760px) { .lbox { max-height: none; } }
+html[data-mode="light"] .lbox thead th { background: #e9edf6; }

@@ -269,7 +269,7 @@ def cli(argv: list[str] | None = None) -> int:
     if s.tls_cert and s.tls_key and s.tls_cert.exists() and s.tls_key.exists():
         kw = {"ssl_certfile": str(s.tls_cert), "ssl_keyfile": str(s.tls_key)}
 
-    uvicorn.run(create_app(), host=s.listen_host, port=s.listen_port, log_config=None, access_log=False, **kw)
+    uvicorn.run(create_app(), host=s.listen_host, port=s.listen_port, log_config=None, access_log=False, timeout_graceful_shutdown=4, **kw)      # a restart waits 4 s for open connections, not 16 s of 502s
     return 0
 
 

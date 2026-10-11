@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.24 - 2026-10-11 - Every list is a fixed box that scrolls inside; shorter restarts
+
+* Every list of the panel (server list, config list and cards, panel users and hosts, shop bot tables ...) sits in a box of a fixed height with its own scrollbar and a header row that stays on top; the page itself no longer grows with the list. The scroll position survives the refreshes.
+* *HTTP 502 / the panel did not answer* in the Messages window: that was a restart of the panel for an update (14:15:34 - 14:15:52) while a server was being added; the restart took 18 s because the panel waited for open connections to close. It now waits 4 s.
+
 ## 1.16.23 - 2026-10-11 - No datacentre name in the server list
 
 * The server list no longer shows the datacentre / provider name beside the server name (it is in the server window); the *network* and *bad route* badges are shown whole instead of being cut off.

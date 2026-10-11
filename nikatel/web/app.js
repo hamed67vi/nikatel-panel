@@ -172,9 +172,16 @@ PAGES.nodes = async () => {
 document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.page));
 
 
+/* every list (a table or the config cards) sits in a box of a fixed height with its own scrollbar and a header that stays on top; done once for whatever a page draws, also what loads later */
+(() => {
+  const pg = $("#page"); if (!pg) return;
+  let q = 0;
+  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); };
+  new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
+})();
 /* A refresh rebuilds the page from fresh data. Every scrolling box keeps its position through it (the page, a window, the lists inside the dashboard, the logs),
    so nothing jumps back to the top when new data arrives. Opening another page starts at the top. */
-const SCROLLERS = [".main", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".sub-nodes", ".ob-inbounds", ".fix"];
+const SCROLLERS = [".main", ".lbox", ".modal-body", ".act-list", ".pb-list", ".hl-list", ".tt-log", ".sub-nodes", ".ob-inbounds", ".fix"];
 const scrollSnapshot = () => SCROLLERS.map(sel => { const el = $(sel); return el ? [sel, el.scrollTop, el.scrollTop + el.clientHeight >= el.scrollHeight - 12 && sel === ".tt-log"] : null; }).filter(Boolean);
 const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $(sel); if (el) el.scrollTop = atEnd ? el.scrollHeight : top; });
 /* The page is painted only when its HTML really changed: a refresh that brings the same data touches nothing (no flicker, no lost hover or selection).
