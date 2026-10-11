@@ -1098,3 +1098,14 @@ html[data-mode="light"][data-theme="ocean"] body::before, html[data-mode="light"
 body.tabbed #page > .tiles:first-child { border-top-left-radius: 0; margin-top: 0; }
 .toolbar.joined:not(.card .toolbar) { margin-bottom: 0 !important; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 0; }
 .tbl.lift.joined { border-top-left-radius: 0; border-top-right-radius: 0; }
+/* Tunnels: the buttons are one piece with the list box; inside it the groups (Backhaul over GRE ...) and their tables sit frameless */
+.lbox { box-sizing: border-box; padding: 4px 10px 10px; border: 1px solid transparent; border-top: 0; border-radius: 0 0 18px 18px; box-shadow: 0 14px 40px rgba(0,0,0,.26);
+  background: radial-gradient(760px 200px at 10% 0%, rgba(124,131,255,.11), transparent 70%) padding-box, radial-gradient(640px 180px at 96% 100%, rgba(52,211,153,.07), transparent 70%) padding-box, linear-gradient(rgba(12,15,27,.62), rgba(12,15,27,.62)) padding-box, linear-gradient(110deg, rgba(255,255,255,.18), rgba(255,255,255,.05) 55%, rgba(255,255,255,0)) border-box; }
+.lbox .tbl.lift { padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; } .lbox .nk-ghead { margin: 8px 2px 2px; } .lbox .trashbox { margin: 8px 0 4px; }
+html[data-mode="light"] .lbox { background: radial-gradient(760px 200px at 10% 0%, rgba(124,131,255,.12), transparent 70%) padding-box, linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55)) padding-box, linear-gradient(110deg, rgba(60,70,120,.22), rgba(60,70,120,.06) 55%, rgba(60,70,120,0)) border-box; box-shadow: 0 10px 28px rgba(30,40,80,.10); }
+html[data-theme="classic"] .lbox { background: #161e2c; border: 1px solid #374151; border-top: 0; box-shadow: none; }
+
+/* the monitoring part of a window: smaller tiles and charts, no helper text */
+.modal .mon { gap: 6px; } .modal .mon .mhead small { display: none; } .modal .mrange button { height: 24px; padding: 0 10px; font-size: 11.5px; }
+.modal .mtile { padding: 5px 10px; } .modal .mtile b { font-size: 16px; } .modal .mtile span { font-size: 10.5px; }
+.modal .mcard { padding: 6px 10px 5px; } .modal .mcard h6 { margin-bottom: 3px; } .modal .mcard svg, .modal .mcard canvas { max-height: 110px; }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.7 - 2026-10-11 - Tunnels: buttons joined to the list; smaller monitoring
+
+* On Tunnels the row of buttons is one piece with the list box; the groups and their tables sit inside it.
+* The monitoring part of a window (config, tunnel, server) is smaller: tighter tiles and charts, no helper text.
+
 ## 1.16.6 - 2026-10-11 - Nodes: tiles on top, buttons joined to the list
 
 * On Nodes the four tiles come first (in their frame, with the Iran / Foreign tabs standing on it); the row of buttons sits under them and is one piece with the list box.
