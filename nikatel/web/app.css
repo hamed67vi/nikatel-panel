@@ -3028,3 +3028,8 @@ html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,8
   body #page .sb-lr > .mono { font-size: 12.5px; }
   html[data-mode="light"] body #page .sb-lr > [data-h]::before, html[data-mode="light"] body #page .sb-prow2 > [data-h]::before { color: #5b667c; }
 }
+
+/* ---- the server window: the certificate box of "Marzban node" is always there (dimmed), so ticking the box does not resize the window; no entrance when the window only changes its content ---- */
+body .srv-after .x-cert.off { opacity: .38; pointer-events: none; } body .srv-after .x-cert.hidden { display: grid; }
+body .srv-after label.chk.x-cert.off { display: flex; }
+body .overlay[style*="animation:none"], body .overlay[style*="animation:none"] .modal { animation: none !important; }

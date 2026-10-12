@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.19.4
+
+- Server window, Edit form: ticking "Marzban node" no longer makes the window grow by 110 px (the certificate box is always there, dimmed until the box is ticked); switching between the details and the edit form no longer re-plays the window's fly-in and the dark layer's fade (the window only changes its content).
+- Servers page: the list is drawn BEFORE the window, and a window that fails to draw shows a message instead of stopping the page - a fault in a window can never leave the list empty.
+
 ## 1.19.3
 
 - Phone layout of the shop bot lists, continued: every cell carries the name of its column as a small label (the header row is hidden on a phone), so a bare number still says what it is; the Payments and Orders rows fold the same way as the other lists.

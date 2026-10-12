@@ -287,7 +287,8 @@ function showModal(title, body, cls = "", acts = "") {
     cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;
     return;
   }
-  m.innerHTML = `<div class="overlay" onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"><div class="modal-head">${head}</div><div class="modal-body">${body}</div></div></div>`;
+  const still = cur ? " style=\"animation:none\"" : "";      // another window in place of this one (details ↔ edit form): it is already on screen, so it does not fly in again
+  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="modal-body">${body}</div></div></div>`;
 }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
@@ -467,9 +468,9 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
     <div class="sbox srv-after"><h5><i>⚙</i>${s ? "Install after saving" : "Install after adding"}<small>optional · needs root · the server is ${s ? "saved" : "added"} first</small></h5>
       <div class="srv-opts">
         <label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>
-        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="this.closest('.srv-after').querySelectorAll('.x-cert').forEach(e => e.classList.toggle('hidden', !this.checked))"> Marzban node</label></div>
-      <label class="x-cert hidden">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
-      <label class="chk x-cert hidden"><input name="x_cert_save" type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>
+        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="this.closest('.srv-after').querySelectorAll('.x-cert').forEach(e => { e.classList.toggle('off', !this.checked); e.querySelectorAll('textarea, input').forEach(i => { i.disabled = !this.checked; }); })"> Marzban node</label></div>
+      <label class="x-cert off">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" disabled spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
+      <label class="chk x-cert off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>
     <div class="sbar bld-foot"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<span class="sp"></span>
       <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install acts on the server itself." : "Without a password the panel's key must already be in the server's authorized_keys (Settings shows the key)."}</small></div>
   </form>`;
@@ -530,7 +531,7 @@ PAGES.servers = async () => {
       <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>
       <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}</div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
-  if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal();
+  const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
   $("#page").innerHTML = `<div class="toolbar joined">
       <button class="cta cta-server" onclick="newServer()" title="Add one server, or several at once with one password"><i class="cta-ic">＋</i>Add server</button><i class="sep"></i><button onclick="greCheckAll()" title="Look for the GRE links on every server of this tab and ping their other end">⇄ Check GRE links</button><i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 Download my SSH key</a>
       
@@ -538,7 +539,8 @@ PAGES.servers = async () => {
       <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>${searchSeg()}</div>
     <table class="tbl lift srv-tbl joined"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">'}</colgroup>
       <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;;
+      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;
+  showWin();
   applyQ();
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
