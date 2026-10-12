@@ -515,6 +515,34 @@ def user_get(c: dict, username: str) -> dict:
     return out
 
 
+def options(c: dict) -> dict:
+    """The inbounds (Marzban, and PasarGuard's tags) and the groups (PasarGuard) a panel offers: what a plan can hand to its accounts."""
+    out: dict = {"inbounds": [], "groups": []}
+
+    try:
+        ib = call(c, "GET", "/api/inbounds")
+
+        if isinstance(ib, dict):
+            for proto, lst in ib.items():
+                for i in lst if isinstance(lst, list) else []:
+                    out["inbounds"].append({"protocol": proto, "tag": i.get("tag"), "port": i.get("port")})
+        elif isinstance(ib, list):
+            for i in ib:
+                out["inbounds"].append({"protocol": i.get("protocol", ""), "tag": i.get("tag"), "port": i.get("port")})
+    except (PanelError, ValueError, AttributeError):
+        pass
+
+    if c.get("type") == "pasarguard":
+        try:
+            g = call(c, "GET", "/api/groups")
+            g = g.get("groups") if isinstance(g, dict) else g
+            out["groups"] = [{"id": x.get("id"), "name": x.get("name")} for x in g or [] if isinstance(x, dict)]
+        except (PanelError, ValueError):
+            pass
+
+    return out
+
+
 def user_body(ch: dict, cur_expire, typ: str) -> dict:
     """The PUT body for the fields in `ch`: status, expire_date ('' = unlimited), limit_gb (0 = unlimited), reset, note, inbounds, group_ids."""
     body: dict = {}

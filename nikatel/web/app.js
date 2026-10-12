@@ -2603,8 +2603,8 @@ Object.assign(sb, {pe: null});
 window.sbPlanEdit = id => {
   const p = id ? (sb.plans || []).find(x => +x.id === +id) || {} : {}, has = v => v && v !== "NULL";
   sb.pe = {id: id || 0, title: p.title || "", catid: String(has(p.catid) ? p.catid : 0), server_id: String(p.server_id || ((sb.servers || [])[0] || {}).id || ""), days: String(id ? +p.days || 0 : 30), volume: String(id ? +p.volume || 0 : 20), price: id ? String(+p.price || "") : "", acount: String(id ? +p.acount || 0 : 0), limitip: String(id ? +p.limitip || 0 : 1),
-    active: !id || p.active === "1", descr: has(p.descr) ? p.descr : "", json: has(p.custom_sni) ? p.custom_sni : "", err: ""};
-  peDraw();
+    active: !id || p.active === "1", descr: has(p.descr) ? p.descr : "", json: has(p.custom_sni) ? p.custom_sni : "", err: "", apply: false};
+  peDraw(); sbPeInb();
 };
 function peDraw() {
   const f = sb.pe, cats = sb.cats || [], srv = sb.servers || [], opt = (v, l, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`;
@@ -2612,13 +2612,14 @@ function peDraw() {
   showModal(`<b>${f.id ? "Edit plan #" + f.id : "New plan"}</b>`, `<form class="qp" onsubmit="return sbPlanSave(event)" novalidate>
       <div class="qp-grid three">${txt("title", "Title")}
         <div class="qp-f"><label for="pe-catid">Category</label><span class="qp-sw"><select id="pe-catid" class="qp-sel" onchange="sb.pe.catid=this.value;sbPeErr('')">${opt(0, "— none —", f.catid)}${cats.map(c => opt(c.id, c.title, f.catid)).join("")}</select>${qpChev}</span></div>
-        <div class="qp-f"><label for="pe-server_id">Server (panel)</label><span class="qp-sw"><select id="pe-server_id" class="qp-sel" onchange="sb.pe.server_id=this.value;sbPeErr('')">${opt(0, "— none —", f.server_id)}${srv.map(s => opt(s.id, s.title + (s.type ? " · " + s.type : ""), f.server_id)).join("")}</select>${qpChev}</span></div>
+        <div class="qp-f"><label for="pe-server_id">Server (panel)</label><span class="qp-sw"><select id="pe-server_id" class="qp-sel" onchange="sb.pe.server_id=this.value;sb.pe.json='';sb.pe.apply=false;sbPeErr('');peDraw();sbPeInb()">${opt(0, "— none —", f.server_id)}${srv.map(s => opt(s.id, s.title + (s.type ? " · " + s.type : ""), f.server_id)).join("")}</select>${qpChev}</span></div>
         ${txt("days", "Days", "num")}${txt("volume", "Volume (GB, 0 = unlimited)", "dec")}${txt("price", "Price (Toman)", "num")}${txt("acount", "Stock (0 = unlimited)", "num")}${txt("limitip", "Max devices (IP limit, 0 = no limit)", "num")}
         <div class="qp-f"><label>&nbsp;</label><button type="button" class="qp-chk" role="checkbox" aria-checked="${f.active}" onclick="sb.pe.active=!sb.pe.active;peDraw()"><span class="${f.active ? "on" : ""}">${f.active ? '<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3L12.5 5"/></svg>' : ""}</span>Active (shown in the bot)</button></div></div>
       <div class="qp-f"><label for="pe-descr">Description</label><textarea id="pe-descr" class="qp-ta" dir="auto" rows="2" oninput="sb.pe.descr=this.value">${esc(f.descr)}</textarea></div>
-      <div class="qp-f"><label for="pe-json">Panel settings (JSON) <small class="mut">Which groups or inbounds the account gets. PasarGuard: <code>{"group_ids":[1]}</code> · Marzban: <code>{"inbounds":{"vless":["VLESS TCP"]}}</code></small></label><textarea id="pe-json" class="qp-ta mono" rows="2" spellcheck="false" oninput="sb.pe.json=this.value;sbPeErr('')">${esc(f.json)}</textarea></div>
+      <div class="qp-f"><label>Inbounds <small>what the account gets on the panel</small></label><div id="pe-pick" class="pe-pick"></div></div>
+      <details class="pe-adv"><summary>Panel settings (JSON)</summary><div class="qp-f"><label for="pe-json"><small class="mut">Which groups or inbounds the account gets. PasarGuard: <code>{"group_ids":[1]}</code> &middot; Marzban: <code>{"inbounds":{"vless":["VLESS TCP"]}}</code></small></label><textarea id="pe-json" class="qp-ta mono" rows="2" spellcheck="false" oninput="sb.pe.json=this.value;sbPeErr('')">${esc(f.json)}</textarea></div></details>
       <div class="qp-act"><span class="qp-lerr"><button type="submit" class="qp-pri">Save</button><span role="alert" id="qp-err"></span></span></div></form>`, "plan-add plan-edit");
-  sbPeErr(f.err);
+  sbPeErr(f.err); sbPeInbDraw();
 }
 window.sbPe = (k, el, mode) => { const v = mode === "text" ? el.value : mode === "dec" ? el.value.replace(/[۰-۹]/g, c => "۰۱۲۳۴۵۶۷۸۹".indexOf(c)).replace(/[^0-9.]/g, "") : sbDigits(el); if (v !== el.value) el.value = v; sb.pe[k] = v; sbPeErr(""); };
 window.sbPeErr = m => {
@@ -2626,6 +2627,48 @@ window.sbPeErr = m => {
   const key = {Type: "title", Days: "days", Volume: "volume", Price: "price", Stock: "stock", Max: "limitip", Panel: "json"}[(m || "").split(" ")[0]], id = {stock: "acount"}[key] || key;
   document.querySelectorAll("#modal .qp-in, #modal .qp-ta").forEach(i => { const bad = !!m && i.id === "pe-" + id; i.classList.toggle("bad", bad); i.setAttribute("aria-invalid", bad); });
 };
+/* the inbounds of a plan: pick them from what the plan's panel offers; one tick gives the change to the accounts already bought as well */
+const PE_PROXY = {vmess: [], vless: {flow: ""}, trojan: [], shadowsocks: {method: "chacha20-ietf-poly1305"}};
+window.sbPeInb = async () => {
+  const f = sb.pe, sid = f.server_id; f.inb = null; f.count = null; sbPeInbDraw();
+  if (!sid || sid === "0") return;
+  try { const r = await api(`/api/shopbot/plan-inbounds?server_id=${sid}`); if (sb.pe !== f || f.server_id !== sid) return; f.inb = r; } catch (e) { f.inb = {panel_id: null, error: e.message}; }
+  if (f.id) { try { f.count = (await api(`/api/shopbot/plans/${f.id}/accounts`)).count; } catch (e) { f.count = null; } }
+  if (sb.pe !== f) return;
+  let cur = {}; try { cur = JSON.parse(f.json || "{}") || {}; } catch (e) { /* a text that is not JSON: the picker starts empty */ }
+  f.sel = {}; Object.entries(cur.inbounds || {}).forEach(([p, t]) => { f.sel[p] = [...t]; }); f.gsel = [...(cur.group_ids || [])];
+  sbPeInbDraw();
+};
+function sbPeInbDraw() {
+  const box = $("#pe-pick"), f = sb.pe; if (!box || !f) return; const r = f.inb;
+  if (!r) { box.innerHTML = `<div class="mut">${f.server_id && f.server_id !== "0" ? "Reading the panel…" : "Pick a server first."}</div>`; return; }
+  if (r.panel_id == null) { box.innerHTML = `<div class="pe-note">${r.error ? esc(r.error) + " · " : ""}This server's panel is not in <b>Panels</b>, so its inbounds cannot be listed. Add the panel there, or write the settings in the JSON box below.</div>`; return; }
+  let body;
+  if (r.type === "pasarguard") {
+    body = `<div class="pe-grp"><div class="pe-gh"><b>Groups</b><span class="sp"></span></div><div class="pe-chs">${(r.groups || []).map((g, i) => `<button type="button" class="pe-ch ${f.gsel.includes(g.id) ? "on" : ""}" role="checkbox" aria-checked="${f.gsel.includes(g.id)}" onclick="sbPeGroup(${i})">${esc(g.name)}<small>#${esc(g.id)}</small></button>`).join("") || '<span class="mut">no group on the panel</span>'}</div></div>`;
+  } else {
+    f.protos = Object.entries((r.inbounds || []).reduce((a, i) => { (a[i.protocol] = a[i.protocol] || []).push(i); return a; }, {}));
+    body = f.protos.map(([p, list], pi) => { const on = (f.sel[p] || []).length; return `<div class="pe-grp"><div class="pe-gh"><b>${esc(p)}</b><small>${on} / ${list.length}</small><span class="sp"></span><button type="button" class="pe-lk" onclick="sbPeAll(${pi}, 1)">all</button><button type="button" class="pe-lk" onclick="sbPeAll(${pi}, 0)">none</button></div>
+      <div class="pe-chs">${list.map((i, ti) => { const ck = (f.sel[p] || []).includes(i.tag); return `<button type="button" class="pe-ch ${ck ? "on" : ""}" role="checkbox" aria-checked="${ck}" onclick="sbPeTog(${pi}, ${ti})">${esc(i.tag)}${i.port ? `<small>${esc(i.port)}</small>` : ""}</button>`; }).join("")}</div></div>`; }).join("") || '<span class="mut">no inbound on the panel</span>';
+  }
+  box.innerHTML = `<div class="pe-box">${body}</div>${f.id ? qpChk(!!f.apply, "sbPeApplyTog()", `Also change the accounts already bought with this plan${f.count != null ? ` <small>(${f.count} active)</small>` : ""}`) : ""}`;
+}
+function sbPeBuild() {      // the picker writes the JSON the bot reads (the other keys and the proxy settings of the plan stay)
+  const f = sb.pe, r = f.inb; let cur = {}; try { cur = JSON.parse(f.json || "{}") || {}; } catch (e) { cur = {}; }
+  if (r.type === "pasarguard") cur.group_ids = [...f.gsel];
+  else { const inb = Object.fromEntries(Object.entries(f.sel).filter(([, t]) => t.length)); cur.inbounds = inb; cur.proxies = Object.fromEntries(Object.keys(inb).map(p => [p, (cur.proxies || {})[p] ?? PE_PROXY[p] ?? {}])); }
+  f.json = JSON.stringify(cur); const t = $("#pe-json"); if (t) t.value = f.json; sbPeErr("");
+}
+window.sbPeTog = (pi, ti) => { const f = sb.pe, [p, list] = f.protos[pi], tag = list[ti].tag, s = f.sel[p] = f.sel[p] || []; const k = s.indexOf(tag); if (k < 0) s.push(tag); else s.splice(k, 1); sbPeBuild(); sbPeInbDraw(); };
+window.sbPeAll = (pi, on) => { const f = sb.pe, [p, list] = f.protos[pi]; f.sel[p] = on ? list.map(i => i.tag) : []; sbPeBuild(); sbPeInbDraw(); };
+window.sbPeGroup = i => { const f = sb.pe, id = f.inb.groups[i].id, k = f.gsel.indexOf(id); if (k < 0) f.gsel.push(id); else f.gsel.splice(k, 1); sbPeBuild(); sbPeInbDraw(); };
+window.sbPeApplyTog = () => { sb.pe.apply = !sb.pe.apply; sbPeInbDraw(); };
+async function sbPeRun(id) {
+  try {
+    const r = await api(`/api/shopbot/plans/${id}/apply`, {method: "POST"}); toast(`Changing ${r.total} accounts on the panel…`);
+    const t = setInterval(async () => { try { const j = await api(`/api/shopbot/jobs/${r.job}`); if (j.finished) { clearInterval(t); toast(`✓ ${j.done} of ${j.total} accounts changed${j.failed ? ` · ${j.failed} failed: ${j.errors[0] || ""}` : ""}`, j.failed ? "bad" : "ok"); } } catch (e) { clearInterval(t); toast("✕ " + e.message, "bad"); } }, 2500);
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+}
 window.sbPlanSave = async e => {
   e.preventDefault(); const f = sb.pe, fail = m => { sbPeErr(m); return false; }, n = k => f[k] === "" ? NaN : parseFloat(f[k]);
   if (!f.title.trim()) return fail("Type a title.");
@@ -2635,11 +2678,13 @@ window.sbPlanSave = async e => {
   if (!(n("acount") >= 0)) return fail("Stock must be 0 (unlimited) or more.");
   if (!(n("limitip") >= 0)) return fail("Max devices must be 0 or more.");
   if (f.json.trim()) { try { JSON.parse(f.json); } catch (x) { return fail("Panel settings must be valid JSON."); } }
+  if (f.apply && f.id && !await gconfirm(`Change the inbounds of ${f.count != null ? f.count : "all the"} accounts already bought with this plan, on the panel?\n\nTheir links, traffic and expiry stay; only the inbounds change. New purchases get them anyway.`)) return false;
   const fields = {title: f.title.trim(), catid: +f.catid || 0, server_id: +f.server_id || 0, days: n("days"), volume: n("volume"), price: Math.round(n("price")), acount: Math.round(n("acount")), limitip: Math.round(n("limitip")), active: f.active ? 1 : 0, descr: f.descr, custom_sni: f.json.trim()};
   try {
     const r = await api(f.id ? `/api/shopbot/plans/${f.id}` : "/api/shopbot/plans", {method: f.id ? "PUT" : "POST", body: JSON.stringify({fields})});
     closeModal(); toast(f.id ? `✓ Saved plan #${f.id}.${f.active ? "" : " It is hidden from the bot."}` : "✓ Plan added to the bot", "ok");
     sb.pl.flash = r.id; await sbPlans(); setTimeout(() => { if (+sb.pl.flash === +r.id) { sb.pl.flash = 0; sbPlDraw(); } }, 2600);
+    if (f.apply && f.id) sbPeRun(f.id);
   } catch (err) { fail(err.message); } return false;
 };
 const FA = n => String(n).replace(/\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]);

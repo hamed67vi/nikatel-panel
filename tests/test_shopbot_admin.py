@@ -248,3 +248,41 @@ def test_orders_take_a_page_size_and_report_their_counts(client, db):
     r = client.get("/api/shopbot/orders?limit=12").json()
     assert r["per"] == 12 and r["counts"] == {"all": 10, "active": 7} and r["rows"][0]["id"] == "5"
     assert client.get("/api/shopbot/orders").json()["per"] == adm.PAGE
+
+
+def test_plan_inbounds_are_given_to_the_accounts_already_bought(db, monkeypatch):
+    import time as _t
+
+    from nikatel.services import panels
+
+    db.answers = {"FROM server_plans WHERE id = 5": [{"server_id": "3", "custom_sni": json.dumps({"inbounds": {"vless": ["VLESS TCP"]}})}],
+                  "FROM orders_list WHERE fileid = 5 AND status = 1": [{"remark": "u-1"}, {"remark": "u-2"}, {"remark": "u-bad"}]}
+    seen = []
+
+    def fake_update(c, name, change):
+        seen.append((name, change))
+
+        if name == "u-bad":
+            raise panels.PanelError("user not found")
+
+    monkeypatch.setattr("nikatel.config.get_settings", lambda: type("S", (), {"read_only": False})())      # the test settings are read-only
+    monkeypatch.setattr(adm, "_managed_panel", lambda sid: 9)
+    monkeypatch.setattr(panels, "cred_for", lambda pid: {"id": pid})
+    monkeypatch.setattr(panels, "user_update", fake_update)
+    monkeypatch.setattr(adm, "emit", lambda *a, **k: None)
+    monkeypatch.setattr(adm, "session", lambda: __import__("contextlib").nullcontext(None))
+    r = adm.plan_apply_start(5)
+    assert r["total"] == 3
+
+    for _ in range(100):
+        j = adm.job(r["job"])
+
+        if j["finished"]:
+            break
+
+        _t.sleep(0.05)
+
+    assert j["done"] == 2 and j["failed"] == 1 and ("u-1", {"inbounds": {"vless": ["VLESS TCP"]}}) in seen
+    monkeypatch.setattr(adm, "_managed_panel", lambda sid: None)
+    with pytest.raises(ValueError, match="Panels"):
+        adm.plan_apply_start(5)

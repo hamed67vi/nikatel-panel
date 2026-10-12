@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.2
+
+- Edit plan: the inbounds are picked from what the plan's panel offers (tick chips by protocol, all / none per protocol; PasarGuard: its groups) instead of writing JSON; the JSON stays in a fold. A tick "Also change the accounts already bought with this plan" gives the change to the active accounts on the panel too (asks first, runs in the background, tells how many changed and how many failed); new purchases get the plan's inbounds as before. The plan's server must be a panel in Panels (matched by address).
+- The services strip of the shop bot is one row at the left corner.
+
 ## 1.18.1
 
 - Shop bot, Plans: sorted by category the list is grouped (a header row with the number of plans for each category, repeated at the top of the next page when a group goes on). The status strip above the tabs is lower: the label over the number and its note on one line, the services in one row.

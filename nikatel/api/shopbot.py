@@ -207,6 +207,26 @@ def plans():
     return {"ok": True, "plans": _wrap(adm.plans), "categories": _wrap(adm.categories), "servers": _wrap(adm.servers)}
 
 
+@router.get("/shopbot/plan-inbounds")
+def plan_inbounds(server_id: int):
+    return {"ok": True, **_wrap(adm.plan_inbounds, server_id)}
+
+
+@router.get("/shopbot/plans/{plan_id}/accounts")
+def plan_accounts(plan_id: int):
+    return {"ok": True, "count": _wrap(adm.plan_accounts, plan_id)}
+
+
+@router.post("/shopbot/plans/{plan_id}/apply", status_code=202)
+def plan_apply(plan_id: int):
+    return {"ok": True, **_wrap(adm.plan_apply_start, plan_id)}
+
+
+@router.get("/shopbot/jobs/{jid}")
+def plan_job(jid: str):
+    return {"ok": True, **_wrap(adm.job, jid)}
+
+
 @router.post("/shopbot/plans", status_code=201)
 def plan_add(body: Fields):
     return {"ok": True, "id": _wrap(adm.plan_save, None, body.fields)}

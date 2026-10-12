@@ -21,6 +21,7 @@ from .events import emit
 
 log = get_logger("shopbot")
 PAGE = 40
+_JOBS: dict[str, dict] = {}      # the jobs that change many accounts on a panel: progress is read while they run
 GROUPS = {"all": "every user", "has": "users with an active subscription", "none": "users without an active subscription", "agents": "agents"}
 AUDIENCES = ("all", "agents", "non_agents", "buyers", "non_buyers", "has_active_order", "no_active_order", "user")
 TICKET_OPEN, TICKET_CLOSED = 1, 2
@@ -358,6 +359,110 @@ def category_delete(cat_id: int) -> None:
         raise ValueError(f"{k} sub-categor{'y' if k == 1 else 'ies'} still inside - move or delete them first")
 
     write(f"DELETE FROM server_categories WHERE id = {int(cat_id)}")
+
+
+# ------------------------------------------------------------------ the inbounds of a plan, and the accounts already bought with it
+def _managed_panel(server_id: int):
+    """The panel of this control panel (Panels page) that is the same address as the bot server's panel; None when it is not added there."""
+    from urllib.parse import urlparse
+
+    from sqlalchemy import select
+
+    from ..models import Panel
+
+    rows = read(f"SELECT panel_url FROM server_config WHERE id = {int(server_id)}")
+    host = urlparse(str(rows[0].get("panel_url") or "")).netloc.lower() if rows else ""
+
+    if not host:
+        return None
+
+    with session() as db:
+        for p in db.scalars(select(Panel)):
+            if urlparse(p.url).netloc.lower() == host:
+                return p.id
+
+    return None
+
+
+def plan_inbounds(server_id: int) -> dict:
+    from . import panels
+
+    pid = _managed_panel(server_id)
+
+    if pid is None:
+        return {"panel_id": None, "type": "", "inbounds": [], "groups": []}
+
+    c = panels.cred_for(pid)
+    return {"panel_id": pid, "type": c.get("type", ""), **panels.options(c)}
+
+
+def plan_accounts(plan_id: int) -> int:
+    return int(read(f"SELECT COUNT(*) AS n FROM orders_list WHERE fileid = {int(plan_id)} AND status = 1")[0]["n"])
+
+
+def plan_apply_start(plan_id: int) -> dict:
+    """Give every ACTIVE account bought with this plan the inbounds / groups the plan has now (the bot gives them to new purchases by itself).
+    Runs in the background; progress is read with job()."""
+    import threading
+    import uuid
+
+    from ..config import get_settings
+    from . import panels
+    from .panels import PanelError
+
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server")
+
+    rows = read(f"SELECT server_id, custom_sni FROM server_plans WHERE id = {int(plan_id)}")
+
+    if not rows:
+        raise ValueError("plan not found")
+
+    try:
+        cfg = json.loads(rows[0].get("custom_sni") or "{}")
+    except ValueError:
+        raise ValueError("the plan's panel settings are not valid JSON") from None
+
+    pid = _managed_panel(int(rows[0]["server_id"]))
+
+    if pid is None:
+        raise ValueError("this plan's server is not a panel in Panels: add it there first, then the accounts can be changed")
+
+    change = {"inbounds": cfg["inbounds"]} if isinstance(cfg.get("inbounds"), dict) else {"group_ids": cfg["group_ids"]} if isinstance(cfg.get("group_ids"), list) else None
+
+    if not change:
+        raise ValueError("the plan has no inbounds or groups to apply")
+
+    names = [r["remark"] for r in read(f"SELECT remark FROM orders_list WHERE fileid = {int(plan_id)} AND status = 1") if r.get("remark")]
+    jid = uuid.uuid4().hex[:10]
+    job = _JOBS[jid] = {"id": jid, "plan": int(plan_id), "total": len(names), "done": 0, "failed": 0, "errors": [], "finished": False}
+    c = panels.cred_for(pid)
+
+    def run() -> None:
+        for n in names:
+            try:
+                panels.user_update(c, n, change)
+                job["done"] += 1
+            except (PanelError, ValueError) as e:
+                job["failed"] += 1
+                job["errors"] = (job["errors"] + [f"{n}: {str(e)[:80]}"])[:10]
+
+        job["finished"] = True
+
+        with session() as db:
+            emit(db, "warn", "shopbot", f"Plan #{plan_id}: {job['done']} of {job['total']} accounts changed to the plan's inbounds ({job['failed']} failed).", "")
+
+    threading.Thread(target=run, name=f"plan-apply-{jid}", daemon=True).start()
+    return {"job": jid, "total": len(names)}
+
+
+def job(jid: str) -> dict:
+    j = _JOBS.get(str(jid))
+
+    if j is None:
+        raise ValueError("job not found")
+
+    return dict(j)
 
 
 # ------------------------------------------------------------------ the panels the bot sells from (server_info + server_config)
