@@ -826,6 +826,13 @@ mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "$SQL SET FOREIGN_KEY_CHECKS=1;"
 for t in $TABLES; do echo "TABLE $t $(mysql -N -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT COUNT(*) FROM \`$t\`")"; done
 echo IMPORTED""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$"}),
 
+    # shop bot: the bot's cron on / off - a rename of /etc/cron.d/nikabot (cron ignores names with a dot), nothing is lost
+    "bot_cron": (r"""case '@STATE@' in
+  on) [ -f /etc/cron.d/nikabot.disabled ] && mv /etc/cron.d/nikabot.disabled /etc/cron.d/nikabot; [ -f /etc/cron.d/nikabot ] && echo "CRON ON" || echo "CRON MISSING";;
+  off) [ -f /etc/cron.d/nikabot ] && mv /etc/cron.d/nikabot /etc/cron.d/nikabot.disabled; [ -f /etc/cron.d/nikabot.disabled ] && echo "CRON OFF" || echo "CRON MISSING";;
+esac
+""", {"STATE": r"^(on|off)$"}),
+
     # shop bot: restart PHP / clear the bot's log files
     "bot_restart_php": (r"""for u in php8.3-fpm php8.2-fpm php-fpm; do systemctl is-active "$u" >/dev/null 2>&1 && systemctl restart "$u" && echo "RESTARTED $u"; done; true
 """, {}),

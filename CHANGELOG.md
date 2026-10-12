@@ -2,6 +2,7 @@
 
 ## 1.17.38
 
+- Shop bot page built from its design: a Services card (a red cron chip with a Start button, a click on a green one pauses it) next to four number cards, the tabs in four labelled boxes (Home / Sell / People / Setup) with coloured icons, a Needs attention card whose database import asks and runs in place (Cancel / Dump live DB, then import / Importing…), Telegram and panels cards with Copy buttons, and the bot log with the newest backups. New action: the bot's cron on / off (a rename of its cron file). The import of the real database now copies by column name.
 - Shop bot page redesigned: one slim status strip, the tabs grouped by what you do (Sell / People / Setup) with line icons and badges, and an Overview that starts from what needs you (payments to confirm, open tickets, a broadcast running, the real database waiting - each with its button), the sales numbers, quick actions, Telegram and panels, and the bot log folded away.
 - Configs page like its design: a toolbar card with pill buttons and line icons (Add, Ping all, Test all, Delete all), status chips, a Grid / Compact / List segmented switch, the group chips with counts, and the list as rows of cards (a down config has a red-tinted row) with Test and Delete pills.
 - Tunnel test: the Quick and Start test buttons have a gap between them (the button groups of the toolbars are flex rows again).

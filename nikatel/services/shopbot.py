@@ -333,6 +333,10 @@ def action(act: str) -> dict:
         run_action(_node(), "bot_clear_logs", {"DIR": c["dir"]}, timeout=30)
         return {"done": True, "message": "logs cleared"}
 
+    if act in ("cron_on", "cron_off"):
+        out = run_action(_node(), "bot_cron", {"STATE": act[5:]}, timeout=30)
+        return {"done": ("CRON " + act[5:].upper()) in out, "message": out.strip()[-60:] or "no answer"}
+
     if act == "backup":
         return {"done": True, "message": backup("manual")}
 

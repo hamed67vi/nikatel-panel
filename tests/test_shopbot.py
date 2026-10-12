@@ -85,6 +85,8 @@ def test_info_users_and_import_through_api(client, monkeypatch):
             return "BACKUP /opt/nikabot/backups/before-import-1.sql.gz 2048\n"
         if name == "bot_import_stage":
             return "TABLE users 15583\nTABLE orders_list 2962\nIMPORTED\n"
+        if name == "bot_cron":
+            return "CRON " + params["STATE"].upper() + "\n"
         return "DONE\n"
 
     monkeypatch.setattr(shopbot, "run_script", fake_script)
@@ -126,6 +128,11 @@ def test_info_users_and_import_through_api(client, monkeypatch):
     assert r.status_code == 200 and r.json()["tables"]["users"] == 15583 and r.json()["backup"].endswith(".sql.gz")
     names = [c[1] for c in calls if c[0] == "action"]
     assert names.index("bot_backup") < names.index("bot_import_stage")          # dump first, then import
+
+    r = client.post("/api/shopbot/action/cron_off")
+    assert r.status_code == 200 and r.json()["done"] is True
+    assert any(c[1] == "bot_cron" and c[2]["STATE"] == "off" for c in calls)
+    assert client.post("/api/shopbot/action/cron_maybe").status_code == 400
 
 
 def test_import_refuses_without_import_marker(client, monkeypatch):

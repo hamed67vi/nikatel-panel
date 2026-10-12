@@ -154,4 +154,6 @@ I18N.add({
 "Bot log": "لاگ ربات", "no errors logged": "خطایی ثبت نشده",
 "+{} today": "+{} امروز", "{} orders": "{} سفارش", "7 days": "۷ روز", "30 days": "۳۰ روز", "Today": "امروز", "Users": "کاربران",
 "Home": "خانه",
-});
+"Services": "سرویس‌ها", "Webhook set": "وب‌هوک تنظیم است", "Webhook not set": "وب‌هوک تنظیم نشده", "Webhook error": "خطای وب‌هوک", "Bot": "ربات", "Webhook": "وب‌هوک", "Pending updates": "به‌روزرسانی‌های در صف", "Copy": "کپی", "Copied": "کپی شد", "Manage": "مدیریت", "Backups (newest first)": "پشتیبان‌ها (تازه‌ترین اول)", "No errors logged": "خطایی ثبت نشده", "All clear": "همه‌چیز مرتب", "Replace the live database?": "دیتابیس زنده جایگزین شود؟", "Dump live DB, then import": "بکاپ از دیتابیس زنده و بعد ایمپورت", "Importing…": "در حال ایمپورت…", "Importing the real database": "در حال ایمپورت دیتابیس واقعی", "Start": "شروع", "Show the log": "نمایش لاگ", "no backup yet": "هنوز پشتیبانی نیست",
+"The live database is dumped first as a backup. Broadcast queues are not copied. The bot has {} users now; the copy has {}.": "اول از دیتابیس زنده بکاپ گرفته می‌شود و صف پیام‌های همگانی کپی نمی‌شود. ربات الان {} کاربر دارد و نسخه‌ی واقعی {} کاربر.", "Dumping the live database, then copying {} users. Keep this page open.": "در حال بکاپ از دیتابیس زنده و بعد کپی {} کاربر. این صفحه را باز نگه دارید.",
+"Click to pause the bot's scheduled jobs": "برای مکث کارهای زمان‌بندی‌شده‌ی ربات کلیک کنید", "Cron is off. Click to start it.": "کرون خاموش است. برای روشن کردن کلیک کنید.",});
