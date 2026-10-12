@@ -68,6 +68,8 @@ def parse_facts(out: str) -> dict:
         "ram_used_mb": int(ram_used / 1024),
         "ram_total_mb": int(mt / 1024),
         "swap": round((st - sf) * 100.0 / st, 1) if st else 0.0,
+        "swap_used_mb": int(max(0.0, st - sf) / 1024),
+        "swap_total_mb": int(st / 1024),
         "disk": round(dsk_used * 100.0 / dsk_total, 1) if dsk_total else 0.0,
         "disk_used_gb": round(dsk_used / 1048576.0, 1),
         "disk_total_gb": round(dsk_total / 1048576.0, 1),

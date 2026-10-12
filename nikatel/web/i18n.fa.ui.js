@@ -101,7 +101,7 @@ I18N.add({
 "Type the tunnel name to confirm:": "برای تأیید نام تانل را بنویسید:", "Your password, to confirm:": "برای تأیید گذرواژه‌ی خود را بنویسید:",
 "Asking every server… (up to a minute)": "پرسیدن از همه‌ی سرورها… (تا یک دقیقه)", "GRE ✓": "GRE ✓", "GRE ✕ not OK": "GRE ✕ مشکل دارد", "✓ GRE OK": "✓ GRE سالم", "✕ GRE not OK": "✕ GRE مشکل دارد", "✓ no GRE links": "✓ لینک GRE ندارد", "✓ Reboot requested": "✓ درخواست ری‌بوت ارسال شد",
 "Clean": "سالم", "Filtered": "فیلتر", "✓ Clean": "✓ سالم", "✕ Filtered": "✕ فیلتر", "✕ Blocked": "✕ مسدود", "none": "هیچ", "no tunnels": "بدون تانل", "servers up": "سرور بالا", "tunnels up": "تانل بالا",
-"Not filtered - all {} Iranian locations 4/4": "فیلتر نیست - همه‌ی {} نقطه‌ی ایران ۴/۴", "no GRE link on this server": "این سرور لینک GRE ندارد", "no GRE links": "بدون لینک GRE",
+"Not filtered - all {} Iranian locations 4/4": "فیلتر نیست - همه‌ی {} نقطه‌ی ایران ۴/۴", "no GRE link on this server": "این سرور لینک GRE ندارد", "This server has no GRE link, so there is nothing to test (a tunnel creates one)": "این سرور لینک GRE ندارد، پس چیزی برای تست نیست (با ساخت تانل ساخته می‌شود)", "no GRE links": "بدون لینک GRE",
 "Windows ssh ": "SSH ویندوز", "PuTTY": "PuTTY", "MobaXterm": "MobaXterm", "✓ Launcher downloaded. Once: put your key from Servers →": "✓ راه‌انداز دانلود شد. یک‌بار: کلیدتان را از سرورها →",
 
 /* ---- tunnels */

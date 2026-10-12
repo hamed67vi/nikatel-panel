@@ -3413,3 +3413,55 @@ html body .srv-tbl td.iss-cell .pill.err { color: #ff8a9b; background: rgba(255,
 html body .srv-tbl td.iss-cell .pill.warn { color: #ffd60a; background: rgba(255,214,10,.1); border-color: rgba(255,214,10,.3); }
 html body .srv-tbl td.iss-cell .pill.off { color: #8f9ab0; }
 .srv-tbl .iss-ok { opacity: .4; } .srv-tbl td.iss-cell .busy-chip { margin: 0; }
+
+/* ---- the server window, after the operator's design: a header in three groups, and three tidy boxes (System, Resources, Access & status) ---- */
+#modal .modal-head { align-items: center; gap: 8px; }
+#modal .mh-who { display: inline-flex; align-items: center; gap: 12px; min-width: 0; } #modal .mh-who .st { flex: none; }
+#modal .mh-txt { display: grid; gap: 2px; min-width: 0; } #modal .mh-txt > b { font-size: 17px; font-weight: 700; line-height: 1.15; }
+#modal .mh-meta { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--mut); white-space: nowrap; } #modal .mh-meta i { font-style: normal; opacity: .5; } #modal .mh-meta .mh-ip { font-size: 12px; }
+#modal .modal-head > .sp { flex: 1; }
+#modal .modal-head .sm, #modal .modal-head .srv-sw { height: 34px; box-sizing: border-box; display: inline-flex; align-items: center; margin: 0; }
+#modal .modal-head .srv-sw { padding: 0 14px 0 8px; font-size: 12.5px; }
+#modal .mh-sep { flex: none; width: 1px; height: 22px; margin: 0 6px; background: rgba(255,255,255,.14); }
+#modal .modal-head > .min-btn { width: 34px; padding: 0; justify-content: center; }
+#modal .sbox[data-b="system"], #modal .sbox[data-b="resources"], #modal .sbox[data-b="access"] { padding: 12px 16px 8px; border-radius: 16px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.09); }
+#modal .sbox[data-b] > h5 { margin: 0 0 4px; padding: 0 0 10px; gap: 10px; font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; color: #5aa9ff; border-bottom: 1px solid rgba(255,255,255,.08); }
+#modal .sbox[data-b] > h5 > i { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+#modal .sbox[data-b="system"] > h5 > i { background: #0a84ff; } #modal .sbox[data-b="resources"] > h5 > i { background: #7d6bff; } #modal .sbox[data-b="access"] > h5 > i { background: #30c36b; }
+#modal .sbox[data-b] > h5 > i svg { width: 16px; height: 16px; }
+#modal .sbox[data-b] .kv2, #modal .sbox[data-b] .rrow { min-height: 38px; padding: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,.06); }
+#modal .sbox[data-b] > h5 + .kv2, #modal .sbox[data-b] > h5 + .rrow { border-top: 0; }
+#modal .sbox[data-b] .kv2 > span:first-child, #modal .sbox[data-b] .rrow > span:first-child { width: 96px; flex: none; font-size: 13.5px; font-weight: 500; color: #98a3ba; }
+#modal .sbox[data-b] .kv2 > div { gap: 8px; font-size: 13.5px; }
+#modal .sbox[data-b] .rrow { grid-template-columns: 56px minmax(40px, 1fr) 118px; gap: 14px; }
+#modal .sbox[data-b] .rrow > .rbar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; display: block; } #modal .sbox[data-b] .rrow > .rbar > u { display: block; height: 100%; border-radius: 4px; text-decoration: none; }
+#modal .rrow.r-cpu u { background: #30d158; } #modal .rrow.r-ram u { background: #0a84ff; } #modal .rrow.r-swap u { background: #bf5af2; } #modal .rrow.r-disk u { background: #ffb02e; }
+#modal .rrow u.warn { background: #ff9f0a !important; } #modal .rrow u.bad { background: #ff453a !important; }
+#modal .sbox[data-b] .rrow > em { display: grid; justify-items: end; gap: 0; line-height: 1.2; } #modal .sbox[data-b] .rrow > em b { font-size: 13.5px; } #modal .sbox[data-b] .rrow > em small { min-width: 0; font-size: 11.5px; }
+#modal .sbox[data-b] .rrow > em .trf + .trf { margin-left: 12px; } #modal .sbox[data-b] .rrow > em:has(.trf) { display: flex; justify-content: flex-end; }
+#modal .kv2 a.cp { flex: none; display: inline-flex; color: var(--mut); cursor: pointer; } #modal .kv2 a.cp:hover { color: #fff; }
+#modal .kv2 a.ext { display: inline-flex; align-items: center; gap: 8px; color: #e6eaf3; font-weight: 600; text-decoration: none; } #modal .kv2 a.ext:hover { color: #5aa9ff; } #modal .kv2 .ic-ext { flex: none; color: var(--mut); }
+#modal .kv2 .dotc { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #5b667c; } #modal .kv2 .dotc.ok { background: #30d158; box-shadow: 0 0 8px rgba(48,209,88,.55); } #modal .kv2 .dotc.bad { background: #ff453a; box-shadow: 0 0 8px rgba(255,69,58,.5); }
+#modal .kv2 .prov-site { display: inline-flex; align-items: center; gap: 10px; text-align: left; } #modal .kv2 .prov-site .two { display: grid; gap: 1px; line-height: 1.25; } #modal .kv2 .prov-site .two small { font-size: 11.5px; }
+#modal .kv2 .chk { flex: none; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; font-weight: 800; color: #08210f; } #modal .kv2 .chk.ok { background: #30d158; } #modal .kv2 .chk.bad { background: #ff453a; color: #fff; }
+
+/* the server window has ONE size from the first moment: the whole height the screen allows, the body scrolls inside */
+#modal .modal.srvwin { height: min(880px, calc(100vh - 96px)); min-height: 0 !important; } #modal .modal.srvwin .modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+@media (max-width: 760px) { #modal .modal.srvwin { height: 100%; } }
+/* the small message in the header of a window: one line between the name and the buttons; a click opens the whole text under the header */
+#modal .modal { position: relative; }
+.hmsg { display: none; position: absolute; z-index: 6; top: -15px; left: 50%; transform: translateX(-50%); width: max-content; align-items: center; gap: 8px; max-width: min(520px, 80%); min-width: 0; height: 28px; box-sizing: border-box; padding: 0 6px 0 14px; border-radius: 14px; font-size: 12px; font-weight: 600; background: #1b2438; border: 1px solid rgba(255,255,255,.16); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.hmsg:not(:empty) { display: inline-flex; } .hmsg > span { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; } .hmsg > time { flex: none; font-size: 10.5px; opacity: .6; font-weight: 500; }
+.hmsg .mm-x { flex: none; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 0; cursor: pointer; background: rgba(255,255,255,.12); color: inherit; line-height: 1; }
+.hmsg.ok { color: #5ee07f; border-color: rgba(48,209,88,.5); } .hmsg.bad { color: #ff8a9b; border-color: rgba(255,69,58,.55); } .hmsg.info { color: #9cc8ff; border-color: rgba(10,132,255,.5); }
+.hmsg.open > span { position: fixed; z-index: 30; top: 60px; left: 50%; transform: translateX(-50%); width: min(560px, 90vw); max-width: none; white-space: normal; padding: 10px 14px; border-radius: 12px; background: #1b2438; border: 1px solid rgba(255,255,255,.18); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #f2f5fb; }
+
+/* the three boxes of the server window, tighter: smaller rows, the detail of a bar on the same line */
+#modal .sbox[data-b="system"], #modal .sbox[data-b="resources"], #modal .sbox[data-b="access"] { padding: 9px 14px 5px; border-radius: 14px; }
+#modal .sbox[data-b] > h5 { padding: 0 0 7px; gap: 9px; font-size: 14px; } #modal .sbox[data-b] > h5 > i { width: 24px; height: 24px; border-radius: 7px; } #modal .sbox[data-b] > h5 > i svg { width: 14px; height: 14px; }
+#modal .sbox[data-b] .kv2, #modal .sbox[data-b] .rrow { min-height: 28px; padding: 1px 0; }
+#modal .sbox[data-b] .kv2 > span:first-child, #modal .sbox[data-b] .rrow > span:first-child { font-size: 13px; } #modal .sbox[data-b] .kv2 > div, #modal .sbox[data-b] .kv2 > div b, #modal .sbox[data-b] .kv2 > div a { font-size: 13px; }
+#modal .sbox[data-b] .rrow { grid-template-columns: 48px minmax(40px, 1fr) 150px; gap: 10px; }
+#modal .sbox[data-b] .rrow > em { display: flex; align-items: baseline; justify-content: flex-end; gap: 7px; } #modal .sbox[data-b] .rrow > em b { font-size: 13px; } #modal .sbox[data-b] .rrow > em small { font-size: 11px; min-width: 0; }
+#modal .sbox[data-b] .rrow > .rbar { height: 7px; }
+#modal .kv2 .prov-site .two { display: flex; align-items: baseline; gap: 7px; } #modal .kv2 .prov-site { gap: 8px; }

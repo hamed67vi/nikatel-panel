@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.30.8
+
+**The server window, after the operator's design.** One fixed size from the first moment (the whole height the screen allows; the body scrolls inside), so nothing jumps when the charts arrive or Console / Edit / Back are pressed. The header is in three groups: the name with its address, role and host underneath; the Enabled switch; Console / Edit / Delete; then minimise and close. The three boxes (System, Resources, Access & status) are tighter, with title-case headings, coloured icons, coloured bars with the used / total beside them, a copy button on the SSH address, the provider as a link, the site check with an icon, and a dot for status and GRE (`swap_used_mb` / `swap_total_mb` are new in the facts). The outcome of an action is a small message on the top edge of the window (a notch over the border), never over a button and never changing the size; a click on it shows the whole text.
+
+The GRE test of a server that has no GRE link says so in plain words (nothing to test) instead of a red error. **Edit** from the console now leaves the console: Back returns to the main window.
+
 ## 1.30.7
 
 Servers list: the **Status** column (online / offline) is back next to the server name, beside the new **Issues** column.

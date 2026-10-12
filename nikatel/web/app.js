@@ -49,7 +49,14 @@ function toast(text, cls, undo) {      // undo: a function; the status bar then 
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
   if (undo) { const b = document.createElement("button"); b.type = "button"; b.className = "sb-undo"; b.textContent = "Undo"; b.onclick = e => { e.stopPropagation(); b.remove(); undo(); }; $(".sb-text", bar).after(b); }
   clearTimeout(toastT); toastT = setTimeout(() => { bar.classList.remove("live"); bar.querySelectorAll(".sb-undo").forEach(b => b.remove()); }, undo ? 9000 : 7000);
-  const mb = $("#modal .modal-body");          // a window that is open shows the outcome at its top: nobody can read the bar behind it
+  const hm = $("#modal .modal > .hmsg");      // a window that is open shows the outcome small, on its top edge (a notch over the border): it never covers a button and never changes the size of the window
+  if (hm) {
+    const stamp = String(Date.now()); hm.dataset.t = stamp; hm.className = "hmsg " + (cls || "info"); hm.title = String(text);
+    hm.innerHTML = `<span onclick="this.parentElement.classList.toggle('open')">${esc(String(text))}</span><time>${new Date().toLocaleTimeString(undefined, {hour12: false})}</time><button type="button" class="mm-x" title="Dismiss" aria-label="Dismiss" onclick="this.parentElement.innerHTML = ''; this.parentElement.className = 'hmsg'">×</button>`;
+    if (cls !== "bad") setTimeout(() => { if (hm.isConnected && hm.dataset.t === stamp) { hm.innerHTML = ""; hm.className = "hmsg"; } }, 12000);
+    return;
+  }
+  const mb = $("#modal .modal-body");          // a window with no room in its header shows the outcome at its top: nobody can read the bar behind it
   if (mb) {      // laid over the top of the window (not in its flow): the window never grows or shrinks because a message came; a small × removes it, a good one goes by itself
     let w = mb.querySelector(".modal-msg-wrap"); if (!w) { w = document.createElement("div"); w.className = "modal-msg-wrap"; w.innerHTML = '<div class="modal-msg"></div>'; mb.prepend(w); }
     const m = w.firstElementChild, stamp = String(Date.now()); w.dataset.t = stamp;
@@ -306,12 +313,12 @@ function showModal(title, body, cls = "", acts = "") {
   const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
   if (cur && mb && cur.className.replace(/\s*\bediting\b/, "").trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
     const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg-wrap"); cur.style.minHeight = cur.offsetHeight + "px";
-    cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;
+    cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;      // (the message on the top edge lives outside the header and the body: a redraw leaves it as it is)
     if (msg && Date.now() - (+msg.dataset.t || 0) < 20000) mb.prepend(msg);      // the outcome of what was just done stays readable after the redraw
     return;
   }
   const still = cur ? " style=\"animation:none\"" : "";      // another window in place of this one (details ↔ edit form): it is already on screen, so it does not fly in again
-  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="modal-body">${body}</div></div></div>`;
+  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"${still}><div class="hmsg"></div><div class="modal-head">${head}</div><div class="modal-body">${body}</div></div></div>`;
 }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
@@ -587,13 +594,13 @@ PAGES.servers = async () => {
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
   if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
 };
-function srvModal(s) {   // while the edit form is open the header keeps only the name: the form has Save and Back
-  const f = s.facts || {}, editing = state.edit === s.id;
-  showModal(`${flagImg(s.role === "iran" ? "IR" : s.country)}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span><label class="srv-sw ${s.enabled !== false ? "on" : ""}" title="${s.enabled !== false ? "Enabled: the panel checks this server. Switch off to disable it: it is not checked and gives no alerts (nothing changes on the server)." : "Disabled: the panel does not check this server. Switch on to enable it."}"><input type="checkbox" ${s.enabled !== false ? "checked" : ""} onchange="srvToggle(${s.id})" aria-label="Enable or disable ${esc(s.name)}"><i></i><b>${s.enabled !== false ? "Enabled" : "Disabled"}</b></label>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`,
-    `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide",
-    editing ? "" : `<button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}><i class="bi">${SI.term}</i>Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port"><i class="bi">${SI.edit}</i>Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)"><i class="bi">${SI.trash}</i>Delete</button>`);
-  const mdl = $("#modal .modal");      // details and edit form are ONE window: it keeps the biggest height it has had, so Edit / Back never make it jump
-  if (mdl) { mdl.classList.toggle("editing", editing); const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }
+function srvModal(s) {   // while the edit form is open the header keeps only the name and the switch: the form has Save and Back
+  const f = s.facts || {}, editing = state.edit === s.id, on = s.enabled !== false;
+  const sw = `<label class="srv-sw ${on ? "on" : ""}" title="${on ? "Enabled: the panel checks this server. Switch off to disable it: it is not checked and gives no alerts (nothing changes on the server)." : "Disabled: the panel does not check this server. Switch on to enable it."}"><input type="checkbox" ${on ? "checked" : ""} onchange="srvToggle(${s.id})" aria-label="Enable or disable ${esc(s.name)}"><i></i><b>${on ? "Enabled" : "Disabled"}</b></label>`;
+  const who = `<span class="mh-who">${flagImg(s.role === "iran" ? "IR" : s.country)}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><span class="mh-txt"><b>${esc(s.name)}</b><span class="mh-meta"><span class="mono ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span><i>·</i><span>${esc(s.role)}</span>${f.hostname ? `<i>·</i><span>${esc(f.hostname)}</span>` : ""}</span></span></span>`;
+  const acts = `${sw}${editing ? "" : `<i class="mh-sep"></i><button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}><i class="bi">${SI.term}</i>Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port"><i class="bi">${SI.edit}</i>Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)"><i class="bi">${SI.trash}</i>Delete</button>`}<i class="mh-sep"></i>`;
+  showModal(who, `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide srvwin", acts);      // details and edit form are ONE window of ONE fixed size (see .srvwin): nothing grows when the charts arrive or Edit / Back / Console are pressed
+  const mdl = $("#modal .modal"); if (mdl) mdl.classList.toggle("editing", editing);
 }
 function tunModal(t) {
   showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
@@ -631,23 +638,25 @@ function serverGridHtml(s) {
   const f = s.facts || {}, x = s.extra || {}, fl = x.iran_filter, g = x.gre, geo = x.geo || {}, pg = (s.extra || {}).geo || {};
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
   const kv = (l, v, id) => `<div class="kv2"><span>${l}</span><div ${id ? `id="res-${id}"` : ""}>${v}</div></div>`;
-  const rr = (l, v, warn, bad, detail) => `<div class="rrow"><span>${l}</span><i class="rbar"><u class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${v == null ? 0 : Math.min(100, v)}%"></u></i><em><b>${v == null ? "—" : v + "%"}</b>${detail ? `<small>${detail}</small>` : ""}</em></div>`;
+  const mb = v => v == null ? "" : v >= 1024 ? (v / 1024).toFixed(1).replace(/\.0$/, "") + " GB" : v + " MB";
+  const rr = (l, v, warn, bad, detail, kind) => `<div class="rrow r-${kind || "x"}"><span>${l}</span><i class="rbar"><u class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${v == null ? 0 : Math.min(100, v)}%"></u></i><em><b>${v == null ? "—" : v + "%"}</b>${detail ? `<small>${detail}</small>` : ""}</em></div>`;
   const rt = (l, v, id) => `<div class="rrow"><span>${l}</span><i></i><em ${id ? `id="res-${id}"` : ""}><b>${v}</b></em></div>`;
   const box = (icon, title, rows) => `<div class="sbox" data-b="${title.split(" ")[0].toLowerCase()}"><h5><i>${icon}</i>${title}</h5>${rows.join("")}</div>`;
   const dom = pg.domain || "", pname = pg.provider || s.provider || "";
   if (dom || pname) setTimeout(() => provSite(s.name), 0);
-  const provider = dom || pname ? `${dom ? `<a href="https://${esc(dom)}" target="_blank" rel="noopener">${esc(dom)} ↗</a>` : ""} <small class="mut">${esc(pname)}</small>` : '<span class="mut">not found yet</span>';
+  const EXT = '<svg class="ic-ext" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5h4.5V7M13.5 2.5L7.5 8.5M12 10v2.5a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1H6"/></svg>', CP = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.5v-.4a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h.4"/></svg>';
+  const provider = dom || pname ? (dom ? `<a class="ext" href="https://${esc(dom)}" target="_blank" rel="noopener" title="${esc(dom)}">${EXT}${esc(pname || dom)}</a>` : `<span>${esc(pname)}</span>`) : '<span class="mut">not found yet</span>';
   const site = `<span class="prov-site" data-srv="${esc(s.name)}"><small class="mut">checking…</small></span>`;
   const lv = fl ? (FLT_LEVEL[fl.level] || ["warn", "⚠ " + esc(fl.level || "unknown")]) : null;
-  const gre = g ? `<b class="${g.ok || !g.links ? "gw-ok" : "err"}">${g.ok ? "✓ OK" : g.links ? "✕ failing" : "no GRE links"}</b> <small class="mut">${ago(g.at)} ago</small>` : '<span class="mut">not tested</span>';
+  const gre = g ? `<i class="dotc ${g.ok ? "ok" : g.links ? "bad" : ""}"></i>${g.links ? `<b class="${g.ok ? "gw-ok" : "err"}">${g.ok ? "GRE ok" : "failing"}</b>` : '<span class="mut">no GRE links</span>'} <small class="mut">${ago(g.at)} ago</small>` : '<i class="dotc"></i><span class="mut">not tested</span>';
   const tunnels = mine.length ? mine.map(t => `<span class="tchip"><i class="st ${t.state}"></i>${esc(t.name)}</span>`).join("") : '<span class="mut">none</span>';
   const sys = box(SI.server, "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
     kv("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), kv("Top process", esc(f.top || "—")), kv("Connections", f.conn != null ? f.conn : "—")]);
-  const res = box(SI.bars, "Resources", [rr("CPU", f.cpu, 80, 92, f.cores ? f.cores + (f.cores === 1 ? " core" : " cores") : ""), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? f.ram_used_mb + " / " + f.ram_total_mb + " MB" : ""), rr("Swap", f.swap, 50, 80, ""),
-    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : ""), rt("Traffic", f.rx_mbps != null ? `↓ ${f.rx_mbps} ↑ ${f.tx_mbps} Mb/s` : "—"), rt("Sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
-  const acc = box(SI.key, "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span>`), kv("Provider", provider),
+  const res = box(SI.bars, "Resources", [rr("CPU", f.cpu, 80, 92, f.cores ? f.cores + (f.cores === 1 ? " core" : " cores") : "", "cpu"), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? mb(f.ram_used_mb) + " / " + mb(f.ram_total_mb) : "", "ram"), rr("Swap", f.swap, 50, 80, f.swap_total_mb != null ? mb(f.swap_used_mb) + " / " + mb(f.swap_total_mb) : "", "swap"),
+    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "", "disk"), rt("Traffic", f.rx_mbps != null ? `<span class="trf">↓ ${f.rx_mbps}</span><span class="trf">↑ ${f.tx_mbps}</span>` : "—"), rt("Last sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
+  const acc = box(SI.key, "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span><a class="cp" title="Copy" onclick="copyText('${esc(s.ssh_user)}@${esc(s.host)}')">${CP}</a>`), kv("Provider", provider),
     s.role === "foreign" ? kv("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")}`) : kv("Site", site),
-    s.role === "foreign" ? kv("Filtering", fl ? `<b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.online ? '<b class="gw-ok">online</b>' : '<b class="err">offline</b>'),
+    s.role === "foreign" ? kv("Filtering", fl ? `<b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.enabled === false ? '<i class="dotc"></i><span class="mut">disabled</span>' : s.online ? '<i class="dotc ok"></i><b>online</b>' : '<i class="dotc bad"></i><b class="err">offline</b>'),
     kv("GRE", gre, "gre"), kv("Tunnels", tunnels)]);
   const pings = fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : "";
   return `<div class="sgrid">${sys}${res}${acc}</div>${pings}`;
@@ -686,7 +695,7 @@ function provCell(s) {
 async function provSite(name) {
   let d = state.dcs; if (!d || !d.rows) { try { d = state.dcs = await api("/api/datacentres"); } catch (e) { d = null; } }
   const row = d && d.rows && d.rows.find(r => r.servers.some(x => x.name === name)), st = row && row.site;
-  document.querySelectorAll(".prov-site").forEach(el => { if (el.dataset.srv === name) el.innerHTML = !st || st.ok == null ? '<small class="mut">site not checked</small>' : st.ok ? `<b class="gw-ok">✓ site answers</b> <small class="mut">${st.ms} ms${st.via ? " from " + esc(st.via) : ""}</small>` : `<b class="err">✕ site does not answer</b>${st.via ? ` <small class="mut">from ${esc(st.via)}</small>` : ""}`; });
+  document.querySelectorAll(".prov-site").forEach(el => { if (el.dataset.srv === name) el.innerHTML = !st || st.ok == null ? '<small class="mut">site not checked</small>' : st.ok ? `<i class="chk ok">✓</i><span class="two"><span><b class="gw-ok">site answers</b> <small class="mut">${st.ms} ms</small></span>${st.via ? `<small class="mut">from ${esc(st.via)}</small>` : ""}</span>` : `<i class="chk bad">✕</i><span class="two"><b class="err">site does not answer</b>${st.via ? `<small class="mut">from ${esc(st.via)}</small>` : ""}</span>`; });
 }
 /* a window tab only redraws the window body - no API call, the list behind it stays as it is */
 window.copyText = t => { const done = () => toast("✓ Copied " + t, "ok"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => {}); else { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) { /* no clipboard */ } ta.remove(); } };
@@ -719,7 +728,7 @@ function resBox(s) {
   return `<div class="wgroup"><h4>Last results</h4><div class="ibox res-box">${row("GRE", "gre", g ? greTxt(g) : '<span class="mut">not tested yet</span>')}
     ${s.role === "foreign" ? row("Filtering in Iran", "flt", f ? fltTxt(f) : '<span class="mut">not checked yet</span>') + row("Abuse-Defender", "abuse", abuseOn ? `<b class="gw-ok">✓ Installed</b> · ${rules} ranges blocked${ab.updated_at ? " · list " + ago(ab.updated_at) + " ago" : ""}` : '<span class="mut">not installed</span>') : ""}
     ${row("Last sample", "sample", s.last_seen_at ? `${ago(s.last_seen_at)} ago${fc.uptime ? " · up " + esc(String(fc.uptime)) : ""}` : '<span class="mut">never</span>')}</div></div>`;
-}window.greCheck = async id => { setRes("gre", '<span class="mut">⏳ checking… (up to 30 s)</span>'); toast("Checking GRE… (up to 30 s)"); try { const r = await api(`/api/servers/${id}/gre-check`, {method: "POST"}); toast((r.ok ? "✓ " : "✕ ") + r.detail, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+}window.greCheck = async id => { setRes("gre", '<span class="mut">⏳ checking… (up to 30 s)</span>'); toast("Checking GRE… (up to 30 s)"); try { const r = await api(`/api/servers/${id}/gre-check`, {method: "POST"}); if (!r.links) toast("This server has no GRE link, so there is nothing to test (a tunnel creates one)", "info"); else toast((r.ok ? "✓ " : "✕ ") + r.detail, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.srvFilter = async id => { setRes("flt", '<span class="mut">⏳ pinging from your Iran servers… (about 30 s)</span>'); toast("Pinging from Iran… (about 30 s)"); try { const r = await api(`/api/servers/${id}/filter-check`, {method: "POST"}); toast((r.level === "clean" ? "✓ " : "⚠ ") + r.verdict, r.level === "clean" ? "ok" : "bad"); state.flt = id; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvReboot = async (id, name) => { if (!await gconfirm(`Reboot ${name}? Its tunnels are down until it is back (usually under a minute).`)) return; try { await api(`/api/servers/${id}/reboot`, {method: "POST"}); toast("✓ Reboot requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.greCheckAll = async () => { toast("Checking GRE on every server… (up to a minute)"); try { const r = await api("/api/servers/gre-check-all?role=" + encodeURIComponent(state.tab), {method: "POST"}); toast(`GRE: ${r.ok} ok · ${r.no_gre} without GRE · ${r.bad.length} not OK` + (r.bad.length ? " — " + r.bad.slice(0, 3).join("; ") : ""), r.bad.length ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
@@ -826,7 +835,7 @@ window.srvSet = async (id, on, undoing) => {
   } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
-window.editServer = id => { state.edit = id; state.open = id; refresh(); };
+window.editServer = id => { state.edit = id; state.open = id; state.wtab = "overview"; refresh(); };      // Edit leaves the console: Back from the form returns to the main window, not to the console
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
 window.openBuild = () => { state.build = true; state.open = null; refresh(); };
 window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "list") { state.build = true; go("tunnels"); state.sub.tunnels = "list"; refresh(); } else openBuild(); };
