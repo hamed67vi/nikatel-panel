@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.1
+
+- The retransmit finding no longer says the kernel cannot help: on real servers BBR lowered the retransmits clearly (2.05 % to 0.35 %), so the tuning is tried first and only what stays is blamed on the route.
+
 ## 1.25.0
 
 - **The Tunnel Doctor watches the underused servers.** A server that carries little may be slow. Every 30 minutes the Doctor looks at two of the idle, light or redundant servers (each at most every 12 hours; read only: the TCP settings, the packets sent again while the server downloads a test file for a few seconds, the CPU steal, the drops, the line speed), says what is wrong in plain words, and fixes what the kernel settings can fix (BBR, fq, bigger buffers: the tuning the tunnel builder gives its own servers; measured before and after and put back when it did not help; Undo on the row). A fault of the provider's network (lost packets on the route, a slow line, a stolen CPU) cannot be fixed from here: it is written once a day to the events. Analyst -> Servers shows each server's own network next to its use, with Check now / Fix / Undo, and a switch for the automatic fixing. The History lists these fixes as solved / not solved. New read-only script net_health and action sysctl_untune.

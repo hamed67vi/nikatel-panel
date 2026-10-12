@@ -93,7 +93,7 @@ def judge(p: dict, fleet_down: float | None = None) -> dict:
         f.append({"id": "qdisc", "fix": "tune", "text": "The packet scheduler is not fq: TCP pacing is off."})
 
     if p.get("retrans") is not None and p["retrans"] >= RETRANS_WARN:
-        f.append({"id": "retrans", "fix": None, "text": f"{p['retrans']} % of the TCP segments are sent again while the server downloads: the route from this server loses packets. A kernel setting does not cure that; the provider's network or this location is the cause."})
+        f.append({"id": "retrans", "fix": None, "text": f"{p['retrans']} % of the TCP segments are sent again while the server downloads: the route from this server loses packets. BBR often lowers it (the tuning is tried first); what stays after that is the provider's network or this location."})
 
     if p.get("steal") is not None and p["steal"] >= STEAL_WARN:
         f.append({"id": "steal", "fix": None, "text": f"The provider's host takes {p['steal']} % of this server's CPU time (steal): the node is oversold. Ask the provider or move the server."})
