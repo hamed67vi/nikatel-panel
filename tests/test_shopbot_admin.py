@@ -182,9 +182,10 @@ def test_texts_are_read_from_php_and_overrides_written_as_json(monkeypatch):
 def test_admin_api_routes(client, monkeypatch, db):
     client.put("/api/settings/shopbot", json={"host": "9.9.9.9"})
     pay = {"id": "1", "hash_id": "h", "user_id": "5", "price": "1000", "state": "pending", "chat_id": "", "message_id": "", "admins_messages": ""}
-    db.answers = {"SELECT p.id, p.hash_id": lambda: [{"id": "1", "user_id": "5", "name": "A", "price": "1000", "state": "pending"}], "COUNT(*) AS n FROM pays": [{"n": "1"}],
+    db.answers = {"SELECT p.id, p.hash_id": lambda: [{"id": "1", "user_id": "5", "name": "A", "price": "1000", "state": "pending"}], "COUNT(*) AS n FROM pays": [{"n": "1"}], "GROUP BY p.state": [{"state": "pending", "c": "1"}, {"state": "approved", "c": "4"}, {"state": "have_sent", "c": "2"}],
                   "FROM pays WHERE id = 1": [pay], "COALESCE(wallet, 0) AS w": [{"w": "0"}], "FROM needed_sofwares ORDER BY id DESC": [{"id": "2"}]}
     r = client.get("/api/shopbot/pays?state=pending").json()
+    assert r["counts"] == {"confirm": 2, "pending": 1, "approved": 4, "declined": 0, "all": 7}
     assert r["total"] == 1 and r["rows"][0]["name"] == "A"
     assert client.post("/api/shopbot/pays/1/approve").json()["wallet"] == 1000
     pay["state"] = "approved"

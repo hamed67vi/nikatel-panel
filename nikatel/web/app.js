@@ -2173,15 +2173,45 @@ window.sbCopy = (b, text) => { try { navigator.clipboard.writeText(text); } catc
 window.sbImportStep = st => { sb.imp = st; sbOverview(); };
 window.sbImportGo = async () => { sb.imp = "busy"; sbOverview(); try { const r = await api("/api/shopbot/import-stage", {method: "POST"}); toast(`✓ Imported: ${r.tables.users} users, ${r.tables.orders_list} orders · backup ${r.backup.split("/").pop()}`, "ok"); sb.imp = null; sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); sb.imp = "ask"; sbOverview(); } };
 window.sbCron = async on => { if (!await gconfirm(on ? "Start the bot's scheduled jobs?\n\nExpiry warnings, auto renew, broadcasts and reports then run every few minutes on the data in the bot." : "Pause the bot's scheduled jobs?\n\nNothing is lost: the jobs start again when you turn them on.", {danger: false})) return; try { const r = await api(`/api/shopbot/action/${on ? "cron_on" : "cron_off"}`, {method: "POST"}); toast(r.done ? (on ? "✓ Cron started" : "✓ Cron paused") : "✕ " + r.message, r.done ? "ok" : "bad"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };/* ---- payments */
+/* the payments tab like Payments.dc.html: filter tabs with counts, a search, a pager, rows with Approve / Decline that ask inside the row */
+Object.assign(sb, {payAsk: null, payData: null});
+const SB_PTYPE = {INCREASE_WALLET: "Wallet top-up", BUY_SUB: "Subscription", RENEW_ACCOUNT: "Renewal", INCREASE_DAY: "Extra days", INCREASE_VOLUME: "Extra volume"};
 async function sbPays() {
-  const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}`);
-  const st = s => s === "have_sent" ? '<span class="pill warn">receipt sent</span>' : s === "pending" ? '<span class="pill">awaiting receipt</span>' : s === "approved" ? '<span class="pill ok">approved</span>' : s === "declined" ? '<span class="pill err">declined</span>' : `<span class="pill">${esc(s)}</span>`;
-  sbBody(`<div class="toolbar"><div class="tabs">${[["confirm", "To confirm"], ["pending", "Awaiting receipt"], ["approved", "Approved"], ["declined", "Declined"], ["all", "All"]].map(([k, l]) => `<button class="${sb.payState === k ? "on" : ""}" onclick="sb.payState='${k}';sb.payPage=0;refresh()">${l}</button>`).join("")}</div><input type="search" placeholder="user id, name, hash…" value="${esc(sb.payQ)}" oninput="sb.payQ=this.value.trim();sb.payPage=0;clearTimeout(qT);qT=setTimeout(refresh,350)">${sbPager(r.page, r.total, "sbPayPage")}</div>
-    <table class="tbl"><colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:10%"><col style="width:9%"><col style="width:10%"><col></colgroup><thead><tr><th>#</th><th>User</th><th>Amount</th><th>Type</th><th>Asked</th><th>State</th><th></th></tr></thead>
-    <tbody>${r.rows.map(p => `<tr class="${p.state === "have_sent" || p.state === "pending" ? "" : p.state === "approved" ? "up" : "down"}"><td class="num">${esc(p.id)}</td><td class="name"><a class="mut" onclick="sbUser('${esc(p.user_id)}')">${esc(p.name || p.user_id)}</a> <small class="mut">${p.username ? "@" + esc(p.username) : esc(p.user_id)}</small></td><td class="num"><b>${money(p.price)}</b></td><td>${esc(p.type || "")}</td><td class="mut">${tsFa(p.request_date)}</td><td>${st(p.state)}</td>
-      <td><div class="td-act">${p.state === "have_sent" || p.state === "pending" ? `<button class="sm pri" onclick="sbPayDo(${p.id}, 'approve')">✓ Approve</button><button class="sm danger" onclick="sbPayDo(${p.id}, 'decline')">✕ Decline</button>` : p.approved_by && p.approved_by !== "NULL" ? `<small class="mut">by ${esc(p.approved_by)}</small>` : ""}</div></td></tr>`).join("") || '<tr><td colspan="7" class="empty">Nothing here.</td></tr>'}</tbody></table>`);
+  const defs = [["confirm", "To confirm"], ["pending", "Awaiting receipt"], ["approved", "Approved"], ["declined", "Declined"], ["all", "All"]];
+  sbBody(`<div class="sb-card sb-ptool"><div id="pay-tabs" class="sb-ptabs">${defs.map(([k, l]) => `<button type="button" class="sb-ptab ${sb.payState === k ? "on" : ""}" onclick="sb.payState='${k}';sb.payPage=0;sbPaysLoad()">${l}<span id="pc-${k}">…</span></button>`).join("")}</div>
+      <label class="sb-psearch"><i>${SI.search}</i><input id="pay-q" type="text" placeholder="User id, name, hash…" value="${esc(sb.payQ)}" oninput="sb.payQ=this.value.trim();sb.payPage=0;clearTimeout(qT);qT=setTimeout(sbPaysLoad,350)" autocomplete="off" spellcheck="false"></label>
+      <span class="sb-pager"><small id="pay-pg"></small><button type="button" id="pay-prev" aria-label="Previous page" onclick="sbPayPage(sb.payPage-1)"><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8 10 12.5"/></svg></button><button type="button" id="pay-next" aria-label="Next page" onclick="sbPayPage(sb.payPage+1)"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button></span></div>
+    <div class="sb-card sb-ptable"><div class="sb-phead"><span>#</span><span>User</span><span class="r">Amount</span><span>Type</span><span>Asked</span><span>State</span><span class="r">Action</span></div><div id="pay-rows" class="sb-prows"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div></div>`);
+  await sbPaysLoad();
 }
-window.sbPayPage = p => { sb.payPage = p; refresh(); };
+async function sbPaysLoad() {
+  const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}`);
+  sb.payData = r; sb.payAsk = null; sbPaysDraw();
+}
+function sbPaysDraw() {
+  const r = sb.payData; if (!r || !$("#pay-rows")) return;
+  Object.entries(r.counts || {}).forEach(([k, v]) => { const e = $("#pc-" + k); if (e) e.textContent = fmt(v); });
+  document.querySelectorAll("#pay-tabs .sb-ptab").forEach((b, i) => b.classList.toggle("on", ["confirm", "pending", "approved", "declined", "all"][i] === sb.payState));
+  const per = 40, from = r.page * per + 1, to = r.page * per + r.rows.length, pg = $("#pay-pg");
+  if (pg) pg.textContent = r.total === 0 ? "0 rows" : r.total <= per ? `${r.total} rows` : `${from}–${to} of ${fmt(r.total)}`;
+  const pv = $("#pay-prev"), nx = $("#pay-next"); if (pv) pv.disabled = r.page === 0; if (nx) nx.disabled = (r.page + 1) * per >= r.total;
+  const chip = s => s === "have_sent" ? ["receipt sent", "warn"] : s === "pending" ? ["awaiting receipt", "wait"] : s === "approved" ? ["approved", "ok"] : s === "declined" ? ["declined", "bad"] : [String(s || "").replace(/_/g, " "), "wait"];
+  const dt = v => { const n = +v; if (!(n > 1000000000)) return [esc(v || "—"), ""]; const d = new Date(n * 1000); return [d.toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"}), d.toLocaleTimeString("en-GB")]; };
+  const ask = sb.payAsk;
+  $("#pay-rows").innerHTML = r.rows.map(p => {
+    const [sl, sc] = chip(p.state), [d1, d2] = dt(p.request_date), open = p.state === "have_sent" || p.state === "pending", asking = ask && ask.id === String(p.id), appr = asking && ask.act === "approve";
+    const money = fmt(p.price) + " T", sub = p.username && p.username !== "NULL" ? "@" + esc(p.username) : esc(p.user_id);
+    const acts = asking ? `<span class="sb-pask">${appr ? `Credit ${money}?` : `<input id="pay-why" class="sb-why" placeholder="Reason for the user (optional)" maxlength="200">`}</span><button type="button" class="sb-btn sm0" onclick="sbPayAsk(null)">Cancel</button><button type="button" class="sb-btn ${appr ? "pri" : "red"} sm0" onclick="sbPayGo(${p.id}, '${ask.act}')">${appr ? "Approve" : "Decline"}</button>`
+      : p.state === "have_sent" ? `<button type="button" class="sb-btn pri sm0" aria-label="Approve payment ${p.id}" onclick="sbPayAsk('${p.id}', 'approve')"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3L12.5 5"/></svg>Approve</button><button type="button" class="sb-btn dec sm0" aria-label="Decline payment ${p.id}" onclick="sbPayAsk('${p.id}', 'decline')"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>Decline</button>`
+      : `<span class="sb-pdone">${p.state === "pending" ? "Waiting for the user to send a receipt" : p.state === "approved" ? `Approved${p.approved_by && p.approved_by !== "NULL" ? " · " + esc(p.approved_by) : ""}` : p.state === "declined" ? "Declined" : ""}</span>`;
+    return `<div class="sb-prow2 ${asking ? (appr ? "ask-ok" : "ask-no") : ""}"><span class="mono">${esc(p.id)}</span><span class="sb-pu"><b dir="auto" onclick="sbUser('${esc(p.user_id)}')">${esc(p.name && p.name !== "NULL" ? p.name : p.user_id)}</b><small dir="auto">${sub}</small></span><span class="r sb-pa"><b>${fmt(p.price)}</b> <em>T</em></span><span class="sb-pt"><b>${esc(SB_PTYPE[p.type] || String(p.type || "—").replace(/_/g, " ").toLowerCase().replace(/^./, c => c.toUpperCase()))}</b><small class="mono">${esc(p.type || "")}</small></span><span class="sb-pd"><b>${d1}</b><small>${d2}</small></span><span><span class="sb-pc2 ${sc}">${sl}</span></span><span class="sb-pact">${acts}</span></div>`;
+  }).join("") || `<div class="sb-pempty"><i>${SI.check}</i>${sb.payQ ? `No payment matches “${esc(sb.payQ)}”.` : sb.payState === "confirm" ? "Nothing to confirm. All receipts are handled." : "No payments in this list."}</div>`;
+}
+window.sbPayAsk = (id, act) => { sb.payAsk = id ? {id, act} : null; sbPaysDraw(); };
+window.sbPayGo = async (id, act) => {
+  const body = act === "decline" ? {reason: ($("#pay-why") || {}).value || ""} : {};
+  try { const r = await api(`/api/shopbot/pays/${id}/${act}`, {method: "POST", body: JSON.stringify(body)}); toast(act === "approve" ? `✓ Approved #${id} — wallet now ${money(r.wallet)}` : `✓ Declined #${id}`, "ok"); sb.infoAt = 0; sb.payAsk = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};window.sbPayPage = p => { sb.payPage = Math.max(0, p); sbPaysLoad(); };
 window.sbPayDo = async (id, act) => {
   let body = {};
   if (act === "approve") { if (!await gconfirm(`Approve payment #${id}? The amount goes to the user's wallet and the user is told on Telegram.`)) return; }
@@ -2619,6 +2649,7 @@ const SI = {   // line icons
   wrench: '<svg viewBox="0 0 24 24"><path d="M14.500 6.500a4 4 0 0 0-5 5L4 17l3 3 5.500-5.500a4 4 0 0 0 5-5l-2.500 2.500-2.500-.5-.5-2.500z"/></svg>',
   gridi: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.500" height="6.500" rx="1.600"/><rect x="13.500" y="4" width="6.500" height="6.500" rx="1.600"/><rect x="4" y="13.500" width="6.500" height="6.500" rx="1.600"/><rect x="13.500" y="13.500" width="6.500" height="6.500" rx="1.600"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></svg>',  partner: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="12" rx="2.2"/><path d="M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5M3.5 12.5h17M10.5 12.5v1.500h3v-1.500"/></svg>',
+  search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.500"/><path d="M16 16l4.500 4.500"/></svg>',
   buoy: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>',
   lock: on => `<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="${on ? "M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" : "M8.2 10.5V8a3.8 3.8 0 0 1 7.2-1.7"}"/><path d="M12 14.6v2.2"/></svg>`,
 };
