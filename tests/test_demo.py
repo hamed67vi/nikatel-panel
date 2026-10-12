@@ -64,3 +64,19 @@ def test_demo_slows_down_a_client_that_asks_too_often(demo_client, monkeypatch):
     codes = [demo_client.get("/api/health").status_code for _ in range(30)]
     assert codes[:20] == [200] * 20 and set(codes[20:]) == {429}
     main._DEMO_HITS.clear()
+
+
+def test_a_named_proxy_is_believed_about_the_client_address(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from nikatel import auth
+    from nikatel.config import get_settings
+
+    def req(peer, xff):
+        return SimpleNamespace(client=SimpleNamespace(host=peer), headers={"x-forwarded-for": xff}, url=SimpleNamespace(scheme="http"))
+
+    assert auth.client_ip(req("203.0.113.9", "198.51.100.7")) == "203.0.113.9"           # a stranger cannot name itself
+    monkeypatch.setattr(get_settings(), "trusted_proxies", "203.0.113.9, 203.0.113.10")
+    assert auth.client_ip(req("203.0.113.9", "198.51.100.7, 10.0.0.1")) == "198.51.100.7"
+    assert auth.client_ip(req("203.0.113.77", "198.51.100.7")) == "203.0.113.77"
+    assert auth.client_ip(req("127.0.0.1", "198.51.100.8")) == "198.51.100.8"

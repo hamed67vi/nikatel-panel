@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     license: str = ""
     # the public demo: invented data, no sign-in, every change refused (see services/demo.py); never on a real install
     demo: bool = False
+    # addresses of reverse proxies in front of the panel (comma separated) whose X-Forwarded-For / -Proto are believed, besides the local machine
+    trusted_proxies: str = ""
 
     @property
     def db_url(self) -> str:

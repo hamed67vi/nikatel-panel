@@ -178,14 +178,19 @@ def is_https(request: Request) -> bool:
         return True
 
     peer = request.client.host if request.client else ""
-    return peer in ("127.0.0.1", "::1") and request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+    return _from_proxy(peer) and request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+
+
+def _from_proxy(peer: str) -> bool:
+    """The request came from the local reverse proxy, or from one named in NIKATEL_TRUSTED_PROXIES."""
+    return peer in ("127.0.0.1", "::1") or peer in {p.strip() for p in get_settings().trusted_proxies.split(",") if p.strip()}
 
 
 def client_ip(request: Request) -> str:
     """The real client: X-Forwarded-For only when the request came from the local reverse proxy."""
     peer = request.client.host if request.client else "?"
 
-    if peer in ("127.0.0.1", "::1"):
+    if _from_proxy(peer):
         xff = request.headers.get("x-forwarded-for", "")
 
         if xff:

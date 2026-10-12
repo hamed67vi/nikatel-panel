@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.23.4
+
+- **Reverse proxy on another machine.** NIKATEL_TRUSTED_PROXIES (comma separated addresses): a request from one of them is believed about the client address (X-Forwarded-For) and about HTTPS (X-Forwarded-Proto), like a request from the local machine. The demo uses it behind a TLS proxy so every visitor has their own rate limit.
+
 ## 1.23.3
 
 - **The demo is hardened for the public** (the 1.23.2 tag holds the same code but still reported 1.23.1). It no longer serves the operator's key pair (the first read made one), the log, the update check, the API description or the launcher; a client that asks more than 300 times a minute gets a 429; the Persian language is switched off in the demo for now (English only, no language switch).
