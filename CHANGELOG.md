@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.5
+
+- Servers: pressing SSH password (or any question box) over a server window made the server list behind it vanish from the picture - three blurred layers stacked (page, window, question) and the browser dropped the one behind. While a question is open the layers below stop blurring and the question itself is a plain dim layer; nothing is redrawn.
+
 ## 1.19.4
 
 - Server window, Edit form: ticking "Marzban node" no longer makes the window grow by 110 px (the certificate box is always there, dimmed until the box is ticked); switching between the details and the edit form no longer re-plays the window's fly-in and the dark layer's fade (the window only changes its content).

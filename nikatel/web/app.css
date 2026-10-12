@@ -3033,3 +3033,10 @@ html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,8
 body .srv-after .x-cert.off { opacity: .38; pointer-events: none; } body .srv-after .x-cert.hidden { display: grid; }
 body .srv-after label.chk.x-cert.off { display: flex; }
 body .overlay[style*="animation:none"], body .overlay[style*="animation:none"] .modal { animation: none !important; }
+
+/* ---- a question box (SSH password, confirm, prompt) over a window: three blurred layers stacked (page > window > question) made the browser drop the list behind from the picture; while a question is open the layers below it stop blurring and the question itself is a plain dim layer ---- */
+body #ask .overlay, body #ask .modal.ask-box { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body #ask .overlay { background: rgba(4,6,18,.66) !important; }
+body #ask .modal.ask-box { background: #141b2e !important; }
+body:has(#ask .overlay) #modal .overlay, body:has(#ask .overlay) #modal .modal { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html[data-mode="light"] body #ask .modal.ask-box { background: #ffffff !important; } html[data-mode="light"] body #ask .overlay { background: rgba(60,70,100,.35) !important; }
