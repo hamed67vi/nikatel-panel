@@ -242,6 +242,7 @@ if [ -f $d/$n.ok ]; then echo "STATE ok"; cat $d/$n.out 2>/dev/null | tail -n 3
 elif [ -f $d/$n.fail ]; then echo "STATE failed"; tail -n 12 $d/$n.log 2>/dev/null
 elif pgrep -f "nikatel-install/$n.sh" >/dev/null 2>&1; then echo "STATE running"; tail -n 2 $d/$n.log 2>/dev/null; tail -n 1 $d/mz-install.log 2>/dev/null
 else echo "STATE none"; fi
+exit 0
 """, {"NAME": r"^(btblock|mznode)$"}),
 
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
@@ -533,7 +534,7 @@ def _exec_once(node: Node, script: str, timeout: int, jump: Node | None = None) 
 
     if r.returncode != 0:
         tail = out.strip().splitlines()[-1] if out.strip() else f"exit {r.returncode}"
-        log.warning("ssh %s exit %s: %s", node.host, r.returncode, out.strip().replace("\n", " | ")[-400:])
+        log.debug("ssh %s exit %s: %s", node.host, r.returncode, out.strip().replace("\n", " | ")[-400:])      # the caller logs what it was doing and why it failed; the raw output is for debugging
 
         if "Permission denied" in out:
             tail = "the panel's key is not accepted (authorized_keys)"

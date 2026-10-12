@@ -40,6 +40,28 @@ def parse_health(answer: dict) -> list[dict]:
     return out
 
 
+CONFIRM_CHECKS = 2        # a config changes its status only after this many reads of the probe agree: its test from a data centre is noisy, one SSL timeout is not a dead config
+
+
+def settle_config(old: str, judged: str, pend: dict | None) -> tuple[str, dict]:
+    """Flapping control for a config: the stored status moves to `judged` once CONFIRM_CHECKS reads in a row said so. A config never judged before takes
+    its first status at once. Pure: see test_configs."""
+    pend = dict(pend or {})
+
+    if pend.get("status") == judged:
+        pend["n"] = int(pend.get("n", 0)) + 1
+    else:
+        pend = {"status": judged, "n": 1}
+
+    if judged == old or old in ("", "unknown"):
+        return judged, pend
+
+    if pend["n"] < CONFIRM_CHECKS:
+        return old, pend
+
+    return judged, pend
+
+
 def link_name(uri: str) -> str:
     """The remark (#fragment or vmess 'ps') of a link, or ''."""
     uri = uri.strip()
@@ -307,18 +329,23 @@ def _sync() -> list[str]:
                     c.meta = {k: v for k, v in m.items() if k != "reach"}
 
             old = c.status
+            status, pend = settle_config(old, r["status"], (c.meta or {}).get("pend"))
+            c.meta = {**(c.meta or {}), "pend": pend}
             c.slug, c.port, c.enabled = r["slug"], r["port"], r["enabled"]
-            c.ping_ms, c.last_error, c.checked_at = r["ping_ms"], r["error"], r["checked_at"] or now
+            c.ping_ms, c.checked_at = r["ping_ms"], r["checked_at"] or now
+
+            if status == r["status"]:           # the reason of a read that did not move the status is not shown: one lost test is not a dead config
+                c.last_error = r["error"]
 
             if r["down_mbps"] is not None:
                 c.down_mbps, c.up_mbps, c.speed_at = r["down_mbps"], r["up_mbps"], r["speed_at"]
 
-            if r["status"] != old:
-                c.status, c.status_since = r["status"], now
+            if status != old:
+                c.status, c.status_since = status, now
 
-                if r["status"] == "down":
+                if status == "down":
                     emit(db, "bad", "configs", f"Config {c.name} is not working: {r['error'] or 'the probe gets no answer through it'}", c.name)
-                elif r["status"] == "up" and old == "down":
+                elif status == "up" and old == "down":
                     emit(db, "ok", "configs", f"Config {c.name} works again.", c.name)
 
             db.add(ConfigSample(config_id=c.id, ts=now, up=r["status"] == "up", ping_ms=r["ping_ms"]))

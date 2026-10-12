@@ -4,7 +4,7 @@ The old panel keeps running untouched. The new one grows beside it and takes a j
 when it does that job better. The one thing that must never happen: a tunnel users depend on
 goes down because of the panel.
 
-Each milestone = GitHub milestone; each line = one issue = one PR with tests. Branch `main` is
+Each milestone = GitHub milestone; each line = one issue = one PR with tests (`[x]` done, `[~]` carried by another line). Branch `main` is
 always installable; a milestone ends with a tag.
 
 ## M0 · Foundation
@@ -82,9 +82,9 @@ always installable; a milestone ends with a tag.
 - [ ] #54 License server and AI proxy on the vendor's side (token issue, metered AI credits, releases, revocation)
 - [x] #55 Mini App in the panel's glass look (pill buttons, glass cards, floating tab bar, hero balance)
 - [x] #56 Phone layout of the shop bot lists: rows become cards, no sideways scroll
-- [ ] #57 Split `app.js` / `app.css` into one file per page (same order, no build step) - carried by #65
-- [ ] #58 Language switch for the strings still in English only (#45 continued) - carried by #67
-- [ ] #59 "Mark receipts handled" and an AI desk for the shop bot - parked, see #68 and #73
+- [~] #57 Split `app.js` / `app.css` into one file per page (same order, no build step) - carried by #65
+- [~] #58 Language switch for the strings still in English only (#45 continued) - carried by #67
+- [~] #59 "Mark receipts handled" and an AI desk for the shop bot - parked, see #68 and #73
 
 ## M10 · Stable and API-first (the way forward - no new features; see docs/engineering-plan.md)
 - [ ] #60 API contract: one error shape (`ok`, `error`, `code`) from one handler on every route, one long-work pattern (202 + action id + /api/actions/{id}) on every slow route, versioning policy written down (`/api` stays v1), `docs/api.md`

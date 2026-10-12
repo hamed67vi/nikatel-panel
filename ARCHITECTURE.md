@@ -24,7 +24,7 @@ nikatel/
   log.py           log format, request id, secret masking
   db.py            engine, sessions, numbered migrations (MIGRATIONS, _add_column)
   models.py        tables: Server (+extra), ServerSample, Tunnel, TunnelCheck, Event, Job, AlertState,
-                   Maintenance, Config, ConfigSample, Subscription, Panel, Action
+                   Maintenance, Config, ConfigSample, Subscription, Panel, ActionLog, Gateway, RepairCase
   ssh.py           Node, run_script(name, params) over the reviewed SCRIPTS and ACTIONS; run_raw only read-write
   auth.py          one admin, scrypt, signed cookie
   jobs.py          background loops with their status in the jobs table; stop_all waits for in-flight SSH
@@ -38,7 +38,9 @@ nikatel/
     detect.py        find tunnels already running on the servers and adopt them; auto choice of the Iran side
     trash.py         removed tunnels kept for a while with everything needed to put them back
     retune.py        apply newer tunnel defaults one tunnel at a time, checked, put back when worse
-    pulse.py         a 10 s heartbeat that marks a switched-off server off quickly
+    pulse.py         a 5 s heartbeat that marks a switched-off server off within seconds and wakes the fast lane of the tunnel checks
+    pathscan.py      the route of a tunnel measured from both servers (where the loss is: this pair, one server's own network, the anchors)
+    extras.py        installs started right after a server is added (torrent block, Marzban node): detached on the server, followed by polling
     netwatch.py      the network disturbances of a server (its own route is poor: repair only watches)
     tunnel_test.py   quality of one / all tunnels; pair test over several transports with comparison
     gateway.py       Iran Xray gateway: ports → node, borrowed configs, exit test
@@ -51,9 +53,18 @@ nikatel/
                      fix_all, explain (the AI reads the whole situation), config diagnosis (SNI, reachability)
     failover.py      the move of a dead or cut-off Iran server: plans (approve / auto), route_plan after a failed ladder,
                      replace_plan after Create, follow_ip_change after a new address, dns_log with restore, Telegram notices
-    arvan.py         ArvanCloud CDN API client: records of every domain, swap_ip (pure), apply with read-back, test
+    arvan.py         ArvanCloud CDN API client: records of every domain, swap_ip (pure), apply with read-back, test; create / edit / delete A records
+    cloudflare.py    Cloudflare DNS API client (one address per record, proxied flag); dnsprov.py: the DNS accounts (several ArvanCloud, Cloudflare) under one list
+    gate.py          the secret entry path: the panel answers 404 to everyone who does not know it
     license.py       owner / licensed / free: a signed NK1 token (Ed25519), features, the gates the rest of the panel asks
     ai.py            Anthropic advice inside Fix (key in settings, never in the repo)
+    balance.py       CPU on the cores: a busy server whose packets sit on one core gets RPS (probe / judge pure, apply with before-after and rollback)
+    analyst.py       what the history says: tunnel profiles (availability, outages, latency, weak hours), outages that come together, what fixes what,
+                     servers at the peak (idle / redundant); hints the smart repair asks before it climbs (RepairCase rows)
+    underuse.py      a server that carries little is looked at (net_health probe): what the kernel settings can fix is fixed (sysctl_tune, measured,
+                     rolled back when worse); a fault of the provider's network is reported once
+    housekeeping.py  the growing tables trimmed (events 60 days, finished stories 90 days), the write-ahead log folded back
+    demo.py          the public demo: invented data, no sign-in, every change refused (NIKATEL_DEMO=true; docs/demo.md)
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
     configs.py       configs on the probe, subscriptions, group sync; probe.py probe API client; probe_install.py
     panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
@@ -69,8 +80,8 @@ nikatel/
     settings.py      typed settings in the database (secrets masked in responses)
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
-                   (servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels,
-                    radar, shopbot, alerts, events, jobs, system = update of the panel itself)
+                   (auth, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, radar, shopbot,
+                    alerts, events, jobs, failover, dns, license, balance, analyst, system = health, logs, update of the panel itself)
   web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
                    glass modal windows (showModal), themes (LOOK), a loading box on every page change
                    and automatic retry when a load fails, a status bar for messages, phone layout
@@ -152,8 +163,8 @@ old file is replaced, previous copy kept) and reads its state with `bot_miniapp_
 
 ## 4. Data
 
-SQLite in WAL mode at `<data_dir>/nikatel.db`. Samples kept 7 days, tunnel checks 14 days,
-events forever (small). Schema changes are entries in `db.MIGRATIONS`, applied on start.
+SQLite in WAL mode at `<data_dir>/nikatel.db`. What is kept: server and config samples 7 days, tunnel checks 14 days,
+events 60 days, finished repair stories 90 days, the last 2,000 repair cases (`services/housekeeping.py` runs every 6 hours). Schema changes are entries in `db.MIGRATIONS`, applied on start.
 
 ## 5. Adding a feature
 

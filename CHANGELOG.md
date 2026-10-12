@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.25.3
+
+**Alignment round 1** (the audit of 2026-10-12: docs against code, the live log, the growing tables).
+
+- **Configs no longer flap.** A config changes its status only after two reads of the probe agree (one SSL timeout from a data centre is not a dead config), the reason of a read that did not move the status is not shown, and events and alerts come only for real changes. The live panel wrote about 400 config events a day for six configs that flipped every few minutes.
+- **Housekeeping job** (every 6 hours): events older than 60 days and finished repair stories older than 90 days are removed, the write-ahead log is folded back. Events and repair stories were kept for ever.
+- **Install status fixed:** following a detached install (torrent block, Marzban node) raised "STATE running" as an error while the install ran, and after twelve polls declared it failed.
+- **Quieter log:** the raw output of a failed SSH call is logged at debug (the caller already says what failed and why); two source files lost their byte-order mark.
+- **Docs aligned:** ARCHITECTURE names every module and the real retention; `docs/operations.md` lists every setting; features describe the Tunnel Doctor, the Analyst and the DNS page as they are; the stale version badge is gone; `docs/development.md` names the hotspots.
+- **Tests that keep it aligned:** `tests/test_alignment.py` (docs vs modules, settings vs docs, routers behind the sign-in, SSH scripts used, no BOM / CRLF).
+- Roadmap: `[~]` marks a line carried by another (#57 → #65, #58 → #67, #59 → #68 / #73); the sync closes it as superseded.
+
 ## 1.25.2
 
 - **The way forward is written down:** docs/engineering-plan.md (stable first, API-first, features later; the measured state of the code; four phases; the definition of done) and roadmap milestones M10 (the work: contract, machine tokens, OpenAPI as the manual, test depth, operations, front-end split, pilot, Persian) and M11 (parked ideas, not built now). CI syntax-checks every JS file, not only the first.

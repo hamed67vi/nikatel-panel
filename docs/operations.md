@@ -16,6 +16,26 @@ repository. They live in the database on the panel server.
 | service | `systemctl status nikatel` |
 | URL | `https://<server>:9443` · API docs `/api/docs` · liveness `/api/health` |
 
+## Settings (`/etc/nikatel/nikatel.env`)
+
+Every value of `nikatel/config.py` can be set as `NIKATEL_<NAME>`; a change needs `systemctl restart nikatel`.
+
+| variable | default | what |
+|---|---|---|
+| `NIKATEL_LISTEN_HOST` / `NIKATEL_LISTEN_PORT` | `0.0.0.0` / `9443` | where the panel listens |
+| `NIKATEL_TLS_CERT` / `NIKATEL_TLS_KEY` | `/etc/nikatel/tls.{crt,key}` | the certificate; plain HTTP when the files do not exist |
+| `NIKATEL_DATA_DIR` / `NIKATEL_LOG_DIR` | `/var/lib/nikatel/{data,logs}` | database, keys, backups / the log file |
+| `NIKATEL_BOOTSTRAP_DIR` | `/etc/nikatel` | `probe.json` / `panels.json` read once on the first start |
+| `NIKATEL_READ_ONLY` | `true` | only the reviewed read-only scripts may run (turn off here, never in the UI) |
+| `NIKATEL_SSH_KEY` | `/root/.ssh/nikatel_v2_node` | the panel's own key for the servers |
+| `NIKATEL_SSH_CONNECT_TIMEOUT` / `NIKATEL_SSH_MULTIPLEX` / `NIKATEL_SSH_WORKERS` | `10` / `true` / `8` | SSH connect timeout, one shared connection per server, parallel checks |
+| `NIKATEL_SERVER_SAMPLE_INTERVAL` / `NIKATEL_TUNNEL_CHECK_INTERVAL` | `120` / `60` | seconds between server samples / tunnel checks |
+| `NIKATEL_SESSION_HOURS` | `24` | how long a browser session lives |
+| `NIKATEL_LOG_LEVEL` | `INFO` | `DEBUG` shows every SSH call |
+| `NIKATEL_LICENSE` | empty | `owner` on the vendor's own installs; empty = a token from Settings or the free tier |
+| `NIKATEL_TRUSTED_PROXIES` | empty | addresses of reverse proxies whose `X-Forwarded-For` / `-Proto` are believed (the local machine always is) |
+| `NIKATEL_DEMO` | `false` | the public demo with invented data and no sign-in - never on a real install (`docs/demo.md`) |
+
 ## Install / recover
 
 ```bash

@@ -39,6 +39,17 @@ panel server. Small PRs; one issue each.
 SSH is never real: test `parse_*` / `judge` with captured output strings, test the API with
 imported fixtures. A bug fix adds the failing case first.
 
+## Alignment
+
+`tests/test_alignment.py` fails when the docs and the code drift apart: every service and API module must be named in
+`ARCHITECTURE.md`, every setting of `config.py` documented in `docs/operations.md`, every API router behind the sign-in,
+every SSH script used somewhere, and no byte-order mark or Windows line ending anywhere. When you add a module, a setting
+or a script, the test tells you where to write about it.
+
+Hotspots (functions over 100 lines, read with care, split only with tests around them): `builder._build`,
+`build_other._build`, `configs.import_subscription`, `create.start`, `actions._fix`, `autopilot.smart_fix`,
+`autopilot.diagnose`, `tunnels._check_tunnel`, `alerts.run`, `main.create_app`.
+
 ## Releases
 
 `nikatel/__init__.py` holds the version. A milestone ends with a `CHANGELOG.md` section and

@@ -310,3 +310,26 @@ def test_picking_two_new_nodes_keeps_the_order_of_the_whole_subscription(client,
 
     configs.import_subscription("grp", "https://sub.example.net/x", picks=["Beta"])
     assert [c["name"] for c in client.get("/api/configs").json()["configs"]] == ["Zed", "Alpha", "Mid", "Beta"]      # as the subscription lists them, not alphabetical
+
+
+def test_a_config_changes_status_only_after_two_reads_agree(client, monkeypatch):
+    up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
+    down = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
+    monkeypatch.setattr(probe, "health", lambda: up)
+    configs.sync()
+    monkeypatch.setattr(probe, "health", lambda: down)
+    configs.sync()
+    r = client.get("/api/configs").json()["configs"][0]
+    assert r["status"] == "up" and not r["last_error"]                       # one failed read: still up, no reason shown, no event
+    assert not any("not working" in e["text"] for e in client.get("/api/events?domain=configs").json()["events"])
+    configs.sync()
+    r = client.get("/api/configs").json()["configs"][0]
+    assert r["status"] == "down" and "timeout" in r["last_error"]
+    monkeypatch.setattr(probe, "health", lambda: up)
+    configs.sync()
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "down"
+    configs.sync()
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "up"
+    ev = client.get("/api/events?domain=configs").json()["events"]
+    assert sum("not working" in e["text"] for e in ev) == 1 and sum("works again" in e["text"] for e in ev) == 1
+    assert configs.settle_config("unknown", "down", None) == ("down", {"status": "down", "n": 1})       # a new config takes its first status at once
