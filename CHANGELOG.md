@@ -2,6 +2,7 @@
 
 ## 1.17.38
 
+- Shop bot page redesigned: one slim status strip, the tabs grouped by what you do (Sell / People / Setup) with line icons and badges, and an Overview that starts from what needs you (payments to confirm, open tickets, a broadcast running, the real database waiting - each with its button), the sales numbers, quick actions, Telegram and panels, and the bot log folded away.
 - Configs page like its design: a toolbar card with pill buttons and line icons (Add, Ping all, Test all, Delete all), status chips, a Grid / Compact / List segmented switch, the group chips with counts, and the list as rows of cards (a down config has a red-tinted row) with Test and Delete pills.
 - Tunnel test: the Quick and Start test buttons have a gap between them (the button groups of the toolbars are flex rows again).
 - Every window and question opens the same soft way: a short fade and a small rise, no blur, tilt or spring (the little jump at the end of the old animation is gone). The Tunnel Doctor page fits the window without a page scroll: the log and the history scroll inside their own boxes.

@@ -2074,6 +2074,8 @@ INFO.bot = ["Shop bot", "Your sales bot, run from here: payments to confirm, ord
 const sb = {tab: localStorage.getItem("nk.sb.tab") || "overview", info: null, infoAt: 0, uq: "", table: "users", tpage: 0, tq: "", sql: "", qres: null, payState: "confirm", payPage: 0, payQ: "", ordQ: "", ordPage: 0, ordActive: false,   // tool defaults to the Mini App card
             tkState: "open", tkPage: 0, txKind: "text", txQ: "", txData: null, tool: "miniapp", stData: null};
 const SB_TABS = [["overview", "Overview"], ["payments", "Payments"], ["orders", "Orders"], ["users", "Users"], ["plans", "Plans"], ["categories", "Categories"], ["servers", "Servers"], ["discounts", "Discounts"], ["gifts", "Gift codes"], ["broadcast", "Broadcast"], ["tickets", "Tickets"], ["texts", "Texts"], ["settings", "Settings"], ["tools", "Tools"]];
+const SB_GROUPS = [["", ["overview"]], ["Sell", ["payments", "orders", "plans", "categories", "discounts", "gifts"]], ["People", ["users", "tickets", "broadcast"]], ["Setup", ["servers", "texts", "settings", "tools"]]];      // the tabs by what you do with them
+const SB_IC = () => ({overview: SI.home, payments: SI.card, orders: SI.cart, users: SI.users, plans: SI.doc, categories: SI.gridi, servers: SI.server, discounts: SI.tag, gifts: SI.gift, broadcast: SI.megaphone, tickets: SI.ticket, texts: SI.textt, settings: SI.rules, tools: SI.wrench});
 const fmt = n => (+n || 0).toLocaleString();
 const disc = v => { if (v == null || v === "" || v === "NULL") return 0; try { const j = JSON.parse(v); return +(j && j.normal) || 0; } catch (e) { return +v || 0; } };   // the bot keeps the discount as JSON
 const money = v => v == null ? "—" : fmt(v) + " T";
@@ -2090,30 +2092,39 @@ PAGES.bot = async () => {
   const php = Object.keys(u).find(k => /php/.test(k)), dbu = Object.keys(u).find(k => /mariadb|mysql/.test(k)), web = Object.keys(u).find(k => /caddy|nginx/.test(k));
   const unit = k => k ? `<span class="pill ${u[k] === "active" ? "ok" : "err"}">${esc(k)} ${esc(u[k])}</span>` : '<span class="pill err">missing</span>';
   const n = {pending: c.pending_pays || 0, tickets: d.tickets || 0, queue: d.queue || 0};
-  pg.innerHTML = `<div class="toolbar sb-top">${d.installed ? '<span class="pill ok">● installed</span>' : '<span class="pill err">● not installed</span>'}${unit(php)}${unit(dbu)}${unit(web)}<span class="pill ${d.cron ? "ok" : "err"}">cron ${d.cron ? d.cron + " jobs" : "off"}</span><span class="sp"></span>
-      ${n.pending ? `<button class="sm pri" onclick="sbTab('payments')">💳 ${n.pending} payment${n.pending > 1 ? "s" : ""} to confirm</button>` : ""}${n.tickets ? `<button class="sm" onclick="sbTab('tickets')">🎫 ${n.tickets} open ticket${n.tickets > 1 ? "s" : ""}</button>` : ""}${n.queue ? `<button class="sm" onclick="sbTab('broadcast')">📣 ${n.queue} broadcast running</button>` : ""}<button class="sm" onclick="sb.infoAt=0;refresh()" title="Read the bot's state again">↻</button></div>
-    <div class="tiles sb-tiles">
-      <div class="tile"><small>Users</small><b>${fmt(c.users)}</b><span>+${s.new_users_today ?? "—"} today · +${s.new_users_week ?? "—"} this week</span></div>
-      <div class="tile ok"><small>Today</small><b>${money((s.today || {}).income)}</b><span>${(s.today || {}).orders ?? "—"} orders</span></div>
-      <div class="tile"><small>7 days</small><b>${money((s.week || {}).income)}</b><span>${(s.week || {}).orders ?? "—"} orders</span></div>
-      <div class="tile"><small>30 days</small><b>${money((s.month || {}).income)}</b><span>${(s.month || {}).orders ?? "—"} orders · ${fmt(c.orders)} in all</span></div></div>
-    ${d.stage_users != null && d.stage_users > (c.users || 0) ? `<div class="gw-out"><b>Real database waiting:</b> the staging copy on the bot server holds ${fmt(d.stage_users)} users, the live bot has ${fmt(c.users)}. <button class="pri sm" onclick="sbImport()">Import the real database now</button> <small class="mut">(the live database is dumped first; broadcast queues are not copied)</small></div>` : ""}
-    <div class="fstrip"><div class="tabs sb-tabs">${SB_TABS.map(([k, label]) => `<button class="${sb.tab === k ? "on" : ""}" onclick="sbTab('${k}')">${label}${k === "payments" && n.pending ? ` <small>${n.pending}</small>` : k === "tickets" && n.tickets ? ` <small>${n.tickets}</small>` : ""}</button>`).join("")}</div></div>
-    <div id="sb-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;
-  const load = {overview: sbOverview, payments: sbPays, orders: sbOrders, users: sbUsersLoad, plans: sbPlans, categories: sbCategories, servers: sbServers, discounts: sbDiscounts, gifts: sbGifts, broadcast: sbBroadcast, tickets: sbTickets, texts: sbTexts, settings: sbSettings, tools: sbTools}[sb.tab] || sbOverview;
+  const attn = (d.stage_users != null && d.stage_users > (c.users || 0)) ? 1 : 0;
+  const tabLabel = Object.fromEntries(SB_TABS), badge = k => k === "payments" && n.pending ? n.pending : k === "tickets" && n.tickets ? n.tickets : k === "overview" && attn ? "!" : "";
+  pg.innerHTML = `<div class="toolbar sb-top">${d.installed ? '<span class="pill ok">● installed</span>' : '<span class="pill err">● not installed</span>'}${unit(php)}${unit(dbu)}${unit(web)}<span class="pill ${d.cron ? "ok" : "err"}">cron ${d.cron ? d.cron + " jobs" : "off"}</span><span class="sp"></span><button class="sm" onclick="sb.infoAt=0;refresh()" title="Read the bot's state again"><i class="bi">${SI.restore}</i>Refresh</button></div>
+    <div class="fstrip"><div class="tabs sb-tabs">${SB_GROUPS.map(([g, ks]) => `<span class="sb-g">${g ? `<em>${g}</em>` : ""}${ks.map(k => `<button class="${sb.tab === k ? "on" : ""}" onclick="sbTab('${k}')"><i class="ti">${SB_IC()[k]}</i>${tabLabel[k]}${badge(k) ? ` <small>${badge(k)}</small>` : ""}</button>`).join("")}</span>`).join("")}</div></div>
+    <div id="sb-body"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div>`;  const load = {overview: sbOverview, payments: sbPays, orders: sbOrders, users: sbUsersLoad, plans: sbPlans, categories: sbCategories, servers: sbServers, discounts: sbDiscounts, gifts: sbGifts, broadcast: sbBroadcast, tickets: sbTickets, texts: sbTexts, settings: sbSettings, tools: sbTools}[sb.tab] || sbOverview;
   try { await load(); } catch (e) { const b = $("#sb-body"); if (b) b.innerHTML = `<div class="page-err"><b>This tab could not be loaded</b><span>${esc(e.message)}</span><button class="sm" onclick="refresh()">Try again</button></div>`; }
 };
 const sbBody = html => { const b = $("#sb-body"); if (b) b.innerHTML = html; };
 /* ---- overview */
 async function sbOverview() {
-  const d = sb.info;
-  sbBody(`<div class="grid2"><div class="card"><h3>Telegram</h3><div id="sb-tg" class="kv"><div class="mut">asking Telegram…</div></div></div>
+  const d = sb.info, c = d.counts || {}, s = d.sales || {}, n = {pending: c.pending_pays || 0, tickets: d.tickets || 0, queue: d.queue || 0}, errs = (d.logs.errors || []).length;
+  const need = [];
+  if (n.pending) need.push(["warn", SI.card, `<b>${n.pending}</b> ${n.pending > 1 ? "payments" : "payment"} to confirm`, "People sent a receipt: approve or decline each one.", `<button class="pri" onclick="sbTab('payments')">Open payments</button>`]);
+  if (n.tickets) need.push(["warn", SI.ticket, `<b>${n.tickets}</b> open ${n.tickets > 1 ? "tickets" : "ticket"}`, "Answer the users who wrote to you.", `<button onclick="sbTab('tickets')">Open tickets</button>`]);
+  if (n.queue) need.push(["info", SI.megaphone, `<b>${n.queue}</b> broadcast running`, "A broadcast is being sent to the users.", `<button onclick="sbTab('broadcast')">Open broadcast</button>`]);
+  if (d.stage_users != null && d.stage_users > (c.users || 0)) need.push(["bad", SI.db, "Real database waiting", `The staging copy on the bot server holds ${fmt(d.stage_users)} users, the live bot has ${fmt(c.users)}. The live database is dumped first; broadcast queues are not copied.`, `<button class="pri" onclick="sbImport()">Import the real database now</button>`]);
+  if (errs) need.push(["info", SI.doc, `<b>${errs}</b> ${errs > 1 ? "errors" : "error"} in the bot log`, "Look at them below; the log keeps the latest ones.", `<button onclick="const l=document.querySelector('.sb-log');l.open=true;l.scrollIntoView({behavior:'smooth',block:'center'})">Show the log</button>`]);
+  const attn = need.length ? need.map(([tone, ic, t, sub, btn]) => `<div class="sb-ar ${tone}"><i class="ss-ic">${ic}</i><div class="si-t"><b>${t}</b><small>${sub}</small></div><span class="si-a">${btn}</span></div>`).join("") : `<div class="sb-ar ok"><i class="ss-ic">${SI.check}</i><div class="si-t"><b>Everything is handled</b><small>No payment, ticket or broadcast is waiting.</small></div></div>`;
+  const qa = [["payments", SI.card, "Confirm payments", "approve or decline receipts"], ["plans", SI.doc, "New plan", "prices and volumes you sell"], ["broadcast", SI.megaphone, "Send a broadcast", "a message to all or some users"], ["gifts", SI.gift, "Gift codes", "make or review gift codes"], ["users", SI.users, "Find a user", "wallet, services, orders"], ["tools", SI.wrench, "Tools", "backup, import, Mini App, SQL"]];
+  sbBody(`<div class="card sb-attn"><h3>Needs attention <span class="sp"></span><span class="pill ${need.length ? "warn" : "ok"}">${need.length || "all clear"}</span></h3>${attn}</div>
+    <div class="tiles sb-tiles">
+      <div class="tile"><small>Users</small><b>${fmt(c.users)}</b><span>+${s.new_users_today ?? "—"} today · +${s.new_users_week ?? "—"} this week</span></div>
+      <div class="tile ok"><small>Today</small><b>${money((s.today || {}).income)}</b><span>${(s.today || {}).orders ?? "—"} orders</span></div>
+      <div class="tile"><small>7 days</small><b>${money((s.week || {}).income)}</b><span>${(s.week || {}).orders ?? "—"} orders</span></div>
+      <div class="tile"><small>30 days</small><b>${money((s.month || {}).income)}</b><span>${(s.month || {}).orders ?? "—"} orders · ${fmt(c.orders)} in all</span></div></div>
+    <div class="sb-qa-h">Quick actions</div>
+    <div class="sb-qa">${qa.map(([k, ic, t, sub]) => `<button class="sb-q" onclick="sbTab('${k}')"><i class="ss-ic">${ic}</i><span><b>${t}</b><small>${sub}</small></span></button>`).join("")}</div>
+    <div class="grid2"><div class="card"><h3>Telegram</h3><div id="sb-tg" class="kv"><div class="mut">asking Telegram…</div></div></div>
     <div class="card"><h3>Panels the bot sells from <span class="sp"></span><a class="mut" onclick="sbTab('servers')">manage</a></h3>${(d.panels || []).map(p => `<div class="gw-row"><span><b>#${esc(p.id)}</b> ${esc(p.type)}</span><span class="mut">${esc(p.host)}</span><span></span></div>`).join("") || '<div class="mut">none yet — add one in Servers</div>'}</div></div>
-    <div class="card"><h3>Latest bot errors <span class="sp"></span><small class="mut">${(d.backups || []).length ? "backups: " + esc(d.backups.join(", ")) : ""}</small></h3><pre class="gl-out">${esc((d.logs.errors || []).join("\n") || "(no errors logged)")}</pre>${(d.logs.php || []).length ? `<pre class="gl-out">${esc(d.logs.php.join("\n"))}</pre>` : ""}</div>`);
+    <details class="card sb-log"><summary>Bot log <span class="pill ${errs ? "warn" : "ok"}">${errs ? errs + " errors" : "no errors logged"}</span><span class="sp"></span><small class="mut">${(d.backups || []).length ? "backups: " + esc(d.backups.slice(-3).join(", ")) : ""}</small></summary><pre class="gl-out">${esc((d.logs.errors || []).join("\n") || "(no errors logged)")}</pre>${(d.logs.php || []).length ? `<pre class="gl-out">${esc(d.logs.php.join("\n"))}</pre>` : ""}</details>`);
   try { const t = await api("/api/shopbot/telegram"); const box = $("#sb-tg"); if (box) box.innerHTML = `<div><span>bot</span> @${esc(t.bot.username || "?")} ${esc(t.bot.name || "")}</div><div><span>webhook</span> ${esc(t.webhook.url || "not set")}</div><div><span>pending updates</span> ${t.webhook.pending}</div>${t.webhook.last_error ? `<div><span>last error</span> <b class="err">${esc(t.webhook.last_error)}</b> ${ago(t.webhook.last_error_at)} ago</div>` : ""}`; }
   catch (e) { const box = $("#sb-tg"); if (box) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
-}
-/* ---- payments */
+}/* ---- payments */
 async function sbPays() {
   const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}`);
   const st = s => s === "have_sent" ? '<span class="pill warn">receipt sent</span>' : s === "pending" ? '<span class="pill">awaiting receipt</span>' : s === "approved" ? '<span class="pill ok">approved</span>' : s === "declined" ? '<span class="pill err">declined</span>' : `<span class="pill">${esc(s)}</span>`;
@@ -2550,7 +2561,16 @@ const SI = {   // line icons
   users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6M16 6.4a3 3 0 0 1 0 5.2M17.5 14.6c1.8.5 3 1.9 3.4 4.4"/></svg>',  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   vgrid: '<svg viewBox="0 0 16 16"><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z"/></svg>',
   vcompact: '<svg viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>',
-  vlist: '<svg viewBox="0 0 16 16"><path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4v.01M2.5 8v.01M2.5 12v.01"/></svg>',  buoy: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>',
+  vlist: '<svg viewBox="0 0 16 16"><path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4v.01M2.5 8v.01M2.5 12v.01"/></svg>',  home: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8.5a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>',
+  card: '<svg viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/></svg>',
+  tag: '<svg viewBox="0 0 24 24"><path d="M3.5 12.2V4.5h7.7l9.3 9.3a1.4 1.4 0 0 1 0 2l-5.7 5.7a1.4 1.4 0 0 1-2 0z"/><circle cx="8" cy="9" r="1.2"/></svg>',
+  gift: '<svg viewBox="0 0 24 24"><rect x="3.5" y="9" width="17" height="11" rx="1.8"/><path d="M12 9v11M3.5 13h17M12 9c-2.5 0-4.5-.8-4.5-2.7S10 3.5 12 7c2-3.5 4.5-1.6 4.5-.7S14.500 9 12 9z"/></svg>',
+  megaphone: '<svg viewBox="0 0 24 24"><path d="M4 10v4h3l8 4.5v-13L7 10zM18.500 9.500a3.500 3.500 0 0 1 0 5"/><path d="M7 14l1.200 4.500"/></svg>',
+  ticket: '<svg viewBox="0 0 24 24"><path d="M4 7.5h16v3a1.8 1.8 0 0 0 0 3.500V17H4v-3a1.8 1.8 0 0 0 0-3.500z"/><path d="M14 7.500v9" stroke-dasharray="1.800 2"/></svg>',
+  textt: '<svg viewBox="0 0 24 24"><path d="M5 6.500h14M12 6.500V19M9 19h6"/></svg>',
+  wrench: '<svg viewBox="0 0 24 24"><path d="M14.500 6.500a4 4 0 0 0-5 5L4 17l3 3 5.500-5.500a4 4 0 0 0 5-5l-2.500 2.500-2.500-.5-.5-2.500z"/></svg>',
+  gridi: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.500" height="6.500" rx="1.600"/><rect x="13.500" y="4" width="6.500" height="6.500" rx="1.600"/><rect x="4" y="13.500" width="6.500" height="6.500" rx="1.600"/><rect x="13.500" y="13.500" width="6.500" height="6.500" rx="1.600"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></svg>',  buoy: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/><path d="M6 6l3.6 3.6M18 6l-3.6 3.6M6 18l3.6-3.6M18 18l-3.6-3.6"/></svg>',
   lock: on => `<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="${on ? "M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" : "M8.2 10.5V8a3.8 3.8 0 0 1 7.2-1.7"}"/><path d="M12 14.6v2.2"/></svg>`,
 };
 /* the building blocks */
