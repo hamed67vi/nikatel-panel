@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.3
+
+**Servers list, after the operator's design (Servers.dc.html).** Four tabs with counts (All / Online / Problems / Disabled); a **Turn on / Turn off** button in every row (Turn off asks first in the row itself, with what stops; Turn on shows *Starting...*, looks at the server at once, and the status bar offers **Undo**); a turned-off row says so in one line and is not counted in the Online total. The GRE column is gone: a `GRE` mark next to the name appears only for a server whose GRE is not ok (click = check again).
+
 ## 1.30.2
 
 The Tunnel Doctor lists show the repairs that worked too (the newest 60 actions were mostly "look" runs, so older successful repairs never reached the list: the API takes `kinds=` now), and the cards are smaller: tighter text and spacing, the story link sits in the card's header.

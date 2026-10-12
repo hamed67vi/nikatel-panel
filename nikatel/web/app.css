@@ -3366,3 +3366,13 @@ html[data-mode="light"] .modal-msg-wrap .modal-msg { background: #fff; }
 /* the on / off of a server: green when the panel checks it, grey when it does not */
 .sbar .abtn.onoff.on { color: var(--ok); border-color: rgba(48,209,88,.45); } .sbar .abtn.onoff.on i { color: var(--ok); }
 .sbar .abtn.onoff.off { color: var(--mut); background: rgba(255,255,255,.04); } .sbar .abtn.onoff.off i { color: var(--mut); }
+
+/* servers list: the four tabs with their counts, the POWER cell in every row, the turned-off row, the question under a row */
+.srv-tabs button { display: inline-flex; align-items: center; gap: 8px; } .srv-tabs .cnt { font-style: normal; min-width: 18px; height: 18px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; font-size: 11px; font-weight: 700; background: rgba(255,255,255,.08); color: var(--mut); }
+.srv-tabs button.on .cnt { background: rgba(10,132,255,.25); color: #9cc8ff; }
+.srv-tbl .td-act { display: flex; align-items: center; justify-content: flex-end; gap: 6px; } .srv-tbl .td-pow { display: inline-flex; align-items: center; gap: 6px; }
+.srv-tbl .td-pow .sm { height: 28px; border-radius: 14px; padding: 0 14px; white-space: nowrap; } .srv-tbl .td-pow .pow-on { box-shadow: 0 3px 10px rgba(10,132,255,.3); }
+.srv-tbl tr.srv-off { opacity: .8; } .srv-tbl td.off-note { color: var(--mut); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-tbl tr.ask > td { background: rgba(255,69,58,.07); } .srv-tbl tr.ask-row > td { padding: 6px 14px 8px 56px; font-size: 12.5px; color: #ffb3bd; background: rgba(255,69,58,.07); }
+.statusbar .sb-undo { margin-left: 10px; height: 24px; padding: 0 12px; font-size: 12px; font-weight: 700; border-radius: 12px; cursor: pointer; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.14); color: inherit; }
+.srv-tbl .gre-bad { cursor: pointer; margin-left: 6px; }

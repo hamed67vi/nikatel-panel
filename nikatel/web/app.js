@@ -41,12 +41,14 @@ async function api(path, opts = {}) {
 /* Messages of the panel go to a status bar at the bottom (not into a pop-up in the corner): bright for a few seconds, then quiet but still readable. Click it for the last ones. */
 let toastT;
 const MSGS = [];
-function toast(text, cls) {
+function toast(text, cls, undo) {      // undo: a function; the status bar then shows an Undo button for as long as the message is bright
   const bar = $("#statusbar"); if (!bar) return;
+  bar.querySelectorAll(".sb-undo").forEach(b => b.remove());
   MSGS.unshift({t: Date.now(), text: String(text), cls: cls || ""}); MSGS.length = Math.min(MSGS.length, 40);
   bar.className = "statusbar live " + (cls || "");
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
-  clearTimeout(toastT); toastT = setTimeout(() => bar.classList.remove("live"), 7000);
+  if (undo) { const b = document.createElement("button"); b.type = "button"; b.className = "sb-undo"; b.textContent = "Undo"; b.onclick = e => { e.stopPropagation(); b.remove(); undo(); }; $(".sb-text", bar).after(b); }
+  clearTimeout(toastT); toastT = setTimeout(() => { bar.classList.remove("live"); bar.querySelectorAll(".sb-undo").forEach(b => b.remove()); }, undo ? 9000 : 7000);
   const mb = $("#modal .modal-body");          // a window that is open shows the outcome at its top: nobody can read the bar behind it
   if (mb) {      // laid over the top of the window (not in its flow): the window never grows or shrinks because a message came; a small × removes it, a good one goes by itself
     let w = mb.querySelector(".modal-msg-wrap"); if (!w) { w = document.createElement("div"); w.className = "modal-msg-wrap"; w.innerHTML = '<div class="modal-msg"></div>'; mb.prepend(w); }
@@ -146,7 +148,7 @@ const NAV_ALIAS = {servers: "nodes", gateway: "configs", monitor: "nodes", actio
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
-  nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
+  nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A turned-off server is not checked and gives no alerts."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A turned-off server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains and which server each one points at; point one at another Iran server by hand. The automatic switching is paused while it is tested."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
@@ -518,23 +520,17 @@ PAGES.servers = async () => {
   const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.serversCache = list;
   const mine = list.filter(s => s.role === state.tab);
-  const rows = mine.filter(s => (state.mtab !== "problems" || srvProblem(s)));
+  const MT = {all: () => true, online: s => s.enabled && s.online === true, problems: srvProblem, disabled: s => !s.enabled}, mt = MT[state.mtab] ? state.mtab : "all";
+  const rows = mine.filter(MT[mt]);
   const hostN = {}; list.forEach(s => { hostN[s.host] = (hostN[s.host] || 0) + 1; });   // the same address added as two servers
   const dupHost = s => hostN[s.host] > 1 ? `<span class="pill err" title="Another server in the list has the same address (${esc(s.host)}): a duplicate?">duplicate IP</span>` : "";
-  const nProb = mine.filter(srvProblem).length, online = mine.filter(s => s.online).length;
+  const live = mine.filter(s => s.enabled), nProb = mine.filter(srvProblem).length, online = live.filter(s => s.online).length, nOff = mine.length - live.length;      // a turned-off server is not counted in the totals
   const avg = k => { const v = mine.filter(s => s.online && s.facts && s.facts[k] != null).map(s => s.facts[k]); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
   const sumNet = mine.reduce((a, s) => a + ((s.facts || {}).rx_mbps || 0) + ((s.facts || {}).tx_mbps || 0), 0);
-  const greCell = s => {   // the GRE tunnels this server carries: all up / some down / all down / none
-    const ts = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre"));
-    if (!ts.length) {   // no GRE tunnel of the panel on this server: a check button, then the answer
-      const g = (s.extra || {}).gre;
-      if (!g) return `<span class="gre-none" onclick="event.stopPropagation();greCheck(${s.id})" title="Checked by itself when a server is added; click to look now">not checked</span>`;
-      const tip = `${g.detail} · checked ${ago(g.at)} ago - click to check again`;
-      return g.ok ? `<b class="gw-ok" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✓</b> <small class="mut">${g.links}</small>` : g.links ? `<b class="err" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✕</b>` : `<span style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})"><b class="gw-ok">GRE ✓</b> <small class="mut">0</small></span>`;
-    }
-    const up = ts.filter(t => t.state === "up").length, bad = ts.filter(t => t.state === "down").length;
-    const cls = bad === ts.length ? "err" : bad || up < ts.length ? "warn" : "gw-ok", txt = bad === ts.length ? "GRE ✕" : bad ? "GRE ✓/✕" : up === ts.length ? "GRE ✓" : "GRE ~";
-    return `<b class="${cls}" title="${esc(ts.map(t => t.name + ": " + t.state).join(", "))}">${txt}</b> <small class="mut">${ts.length}</small>`;
+  const greMark = s => {   // only a GRE that is NOT ok gets a mark, next to the name; a good or never-checked GRE shows nothing
+    const ts = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre")), mk = (txt, tip) => `<span class="pill err gre-bad" onclick="event.stopPropagation();greCheck(${s.id})" title="${esc(tip + " - click to check again")}">${txt}</span>`;
+    if (ts.length) { const bad = ts.filter(t => t.state === "down"); return bad.length ? mk(bad.length === ts.length ? "GRE ✕" : "GRE ✓/✕", ts.map(t => t.name + ": " + t.state).join(", ")) : ""; }
+    const g = (s.extra || {}).gre; return g && !g.ok && g.links ? mk("GRE ✕", g.detail + " · checked " + ago(g.at) + " ago") : "";
   };
   // Marzban / PasarGuard nodes that sit on this server's address: "Panel ✓ name" chips next to the status
   const pnl = await api("/api/panels").catch(() => ({panels: []}));
@@ -546,27 +542,28 @@ PAGES.servers = async () => {
   if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (state.page === "nodes") refresh(); }, 3000); }
   const nameN = {}; (state.serversCache || list).forEach(x => { const k = String(x.name).toLowerCase(); nameN[k] = (nameN[k] || 0) + 1; });      // a name that more than one server carries is marked
   const sameName = s => nameN[String(s.name).toLowerCase()] > 1 ? `<span class="dup" title="${nameN[String(s.name).toLowerCase()]} servers have this name (capitals do not count): rename one of them">⚠ ×${nameN[String(s.name).toLowerCase()]}</span>` : "";
+  const powerBtn = s => srvBusy(s) ? `<span class="busy-chip"><i class="spin"></i>${esc(srvBusy(s).what)}…</span>` : s.enabled ? `<button class="sm pow-off" onclick="event.stopPropagation();srvAskOff(${s.id})" title="Stop checking this server (nothing changes on the server itself)" aria-label="Turn off ${esc(s.name)}">Turn off</button>` : `<button class="sm pri pow-on" onclick="event.stopPropagation();srvSet(${s.id}, true)" title="Check this server again" aria-label="Turn on ${esc(s.name)}">⏻ Turn on</button>`;
   const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
-    const cls = (!s.enabled ? "" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
-    return `<tr class="${cls} clk" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
-      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${sameName(s)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
+    const cls = (!s.enabled ? "srv-off" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
+    return `<tr class="${cls} clk" data-id="${s.id}" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
+      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${s.enabled ? greMark(s) : ""}${sameName(s)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
       <td>${srvBusy(s) ? `<span class="busy-chip" title="${esc(srvBusy(s).what + (srvBusy(s).detail ? ": " + srvBusy(s).detail : ""))}"><i class="spin"></i>${esc(srvBusy(s).what)}…${srvBusy(s).detail ? `<span class="busy-detail">${esc(srvBusy(s).detail)}</span>` : ""}</span>` : noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>${s.online && /^SSH does not answer/.test(s.last_error || "") ? `<small class="pill warn" title="${esc(s.last_error)}">SSH ✕</small>` : ""}`}</td>
       ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
-      <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td><td>${greCell(s)}</td>
-      <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>
-      <td><div class="td-act">${!s.enabled ? `<button class="sm" onclick="event.stopPropagation();srvToggle(${s.id})" title="The panel does not check this server: turn it on">Turn on</button>` : ""}${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}</div></td></tr>`;
+      <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td>
+      ${s.enabled ? `<td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>` : `<td colspan="3" class="off-note" title="Turned off: the panel does not check it, sends no alerts for it and does not count it in the totals">Turned off: not checked, no alerts.</td>`}
+      <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}<span class="td-pow">${powerBtn(s)}</span></div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
   $("#page").innerHTML = `<div class="toolbar joined">
       <button class="cta cta-server" onclick="newServer()" title="Add one server, or several at once with one password"><i class="cta-ic">＋</i>Add server</button><i class="sep"></i><button onclick="greCheckAll()" title="Look for the GRE links on every server of this tab and ping their other end">⇄ Check GRE links</button><i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 Download my SSH key</a>
       
-      <span class="tcount pstat nd-stats"><span class="tc ${online < mine.length ? "bad" : "ok"}" title="${mine.length - online ? (mine.length - online) + " not answering" : "every server answers"}">Online <b>${online} / ${mine.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span>
-      <span class="sp"></span><div class="tabs"><button class="${state.mtab !== "problems" ? "on" : ""}" onclick="state.mtab='all';refresh()">All (${mine.length})</button><button class="${state.mtab === "problems" ? "on" : ""}" onclick="state.mtab='problems';refresh()">⚠ Problems (${nProb})</button></div>${searchSeg()}</div>
-    <table class="tbl lift srv-tbl joined"><colgroup>${foreignTab ? '<col style="width:13%"><col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">' : '<col style="width:15%"><col style="width:7%"><col style="width:15%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">'}</colgroup>
-      <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>GRE</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 10 : 9}" class="empty">No server.</td></tr>`}</tbody></table>`;
+      <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " turned off" : ""}">Online <b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span>
+      <span class="sp"></span><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div>${searchSeg()}</div>
+    <table class="tbl lift srv-tbl joined"><colgroup>${foreignTab ? '<col style="width:14%"><col style="width:7%"><col style="width:7%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:15%">' : '<col style="width:16%"><col style="width:8%"><col style="width:13%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:15%">'}</colgroup>
+      <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 9 : 8}" class="empty">No server.</td></tr>`}</tbody></table>`;
   showWin();
   applyQ();
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);
@@ -800,12 +797,31 @@ function applyQ() {
 const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
 window.setQ = v => { holdBoxes(); state.q = v.trim().toLowerCase(); applyQ(); };
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.srvToggle = async id => {      // on / off: the panel checks the server or leaves it alone (nothing changes on the server itself)
+window.srvToggle = id => { const s = (state.serversCache || []).find(x => x.id === id); if (s) srvSet(id, s.enabled === false); };      // the on / off button of the server window
+/* on / off of a server: on = the panel checks it again (and looks at once), off = it is not checked and gives no alerts; nothing changes on the server itself. The status bar offers Undo. */
+window.srvSet = async (id, on, undoing) => {
   const s = (state.serversCache || []).find(x => x.id === id); if (!s) return;
-  const on = s.enabled === false;
-  try { await api(`/api/servers/${id}`, {method: "PUT", body: JSON.stringify({name: s.name, host: s.host, role: s.role, ssh_user: s.ssh_user, ssh_port: s.ssh_port, provider: s.provider || "", enabled: on})}); toast(on ? `✓ ${s.name} is on: the panel checks it again` : `✓ ${s.name} is off: the panel does not check it`, "ok"); refresh(); }
-  catch (e) { toast("✕ " + e.message, "bad"); }
+  const cell = document.querySelector(`#page tr[data-id="${id}"] .td-pow`); if (cell && on) cell.innerHTML = '<span class="busy-chip"><i class="spin"></i>Starting…</span>';
+  const undo = () => srvSet(id, !on, true);
+  try {
+    await api(`/api/servers/${id}`, {method: "PUT", body: JSON.stringify({name: s.name, host: s.host, role: s.role, ssh_user: s.ssh_user, ssh_port: s.ssh_port, provider: s.provider || "", enabled: on})});
+    if (!on) { toast(undoing ? `${s.name} is off again.` : `${s.name} is off. It is no longer checked.`, "ok", undoing ? null : undo); refresh(); return; }
+    let seen = null; try { seen = await api(`/api/servers/${id}/check`, {method: "POST"}); } catch (e) { seen = {error: e.message}; }
+    toast(undoing ? `${s.name} is back on.` : seen && seen.error ? `${s.name} is on, but it does not answer yet: ${String(seen.error).slice(0, 90)}` : `${s.name} is on and online. It is checked again from now.`, seen && seen.error ? "bad" : "ok", undoing ? null : undo); refresh();
+  } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
+/* Turn off asks first, in the row itself: one line with what stops, and Keep on / Turn off */
+window.srvAskOff = id => {
+  const s = (state.serversCache || []).find(x => x.id === id), tr = document.querySelector(`#page tr[data-id="${id}"]`); if (!s || !tr) return;
+  document.querySelectorAll("#page tr.ask").forEach(t => srvKeepOn(+t.dataset.id));
+  const n = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name).length, cell = tr.querySelector(".td-pow");
+  cell.dataset.was = cell.innerHTML; tr.classList.add("ask");
+  cell.innerHTML = `<button class="sm" onclick="event.stopPropagation();srvKeepOn(${id})">Keep on</button><button class="sm danger-fill" onclick="event.stopPropagation();srvSet(${id}, false)">Turn off</button>`;
+  const note = document.createElement("tr"); note.className = "ask-row";
+  note.innerHTML = `<td colspan="99">Turn off ${esc(s.name)}? ${n ? `${n} tunnel${n === 1 ? "" : "s"} use${n === 1 ? "s" : ""} it: they keep running on the servers, but the panel stops checking this server and sends no alerts for it.` : "Checks and alerts for it stop. It keeps its settings."}</td>`;
+  tr.after(note);
+};
+window.srvKeepOn = id => { const tr = document.querySelector(`#page tr[data-id="${id}"]`); if (!tr) return; const cell = tr.querySelector(".td-pow"); if (cell && cell.dataset.was) cell.innerHTML = cell.dataset.was; tr.classList.remove("ask"); const nx = tr.nextElementSibling; if (nx && nx.classList.contains("ask-row")) nx.remove(); };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
