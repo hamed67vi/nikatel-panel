@@ -42,6 +42,15 @@ def _read_all() -> None:
     _CACHE.update(at=time.time(), rows=rows, accounts=accs)
 
 
+def warm() -> None:
+    """At start: read the accounts once in the background, so the first open of the DNS page is served from the cache too."""
+    try:
+        if dnsprov.accounts():
+            _refresh_in_background()
+    except Exception:
+        log.exception("DNS warm-up skipped")
+
+
 def _refresh_in_background() -> None:
     with _REFRESH_LOCK:
         if _CACHE["refreshing"]:

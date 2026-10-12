@@ -44,7 +44,9 @@ imported fixtures. A bug fix adds the failing case first.
 `tests/test_alignment.py` fails when the docs and the code drift apart: every service and API module must be named in
 `ARCHITECTURE.md`, every setting of `config.py` documented in `docs/operations.md`, every API router behind the sign-in,
 every SSH script used somewhere, and no byte-order mark or Windows line ending anywhere. When you add a module, a setting
-or a script, the test tells you where to write about it.
+or a script, the test tells you where to write about it. `python3 scripts/audit_code.py` prints the wider
+picture (swallowed exceptions, routes that block on a server, retention, long functions, threads, unused scripts, the
+front-end files) - run it before every stabilisation round and fix what it shows.
 
 Hotspots (functions over 100 lines, read with care, split only with tests around them): `builder._build`,
 `build_other._build`, `configs.import_subscription`, `create.start`, `actions._fix`, `autopilot.smart_fix`,

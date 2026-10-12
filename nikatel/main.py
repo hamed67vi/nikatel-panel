@@ -165,6 +165,10 @@ async def _lifespan(app: FastAPI):
         _register_jobs()
         jobs.start_all()
 
+        from .api import dns as dns_api
+
+        dns_api.warm()                         # the records of the DNS accounts are read once now, so the first open of the DNS page does not wait
+
         try:
             builder.resume_pending()
             extras.resume_pending()

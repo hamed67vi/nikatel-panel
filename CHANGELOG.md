@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.5
+
+- The records of the DNS accounts are read once at start, in the background, so even the first open of the DNS page is served at once.
+- `scripts/audit_code.py` is in the repository: the static audit of the alignment rounds (docs vs code, settings vs docs, guards, swallowed exceptions, blocking routes, retention, long functions, threads, unused scripts) in one command.
+
 ## 1.25.4
 
 **Alignment round 2** (every page measured in the browser and on the server; the slow spots fixed).
