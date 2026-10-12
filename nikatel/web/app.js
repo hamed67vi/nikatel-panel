@@ -2570,12 +2570,25 @@ function sbPlDraw() {
     && (!f.q || (p.title + " " + (p.descr || "") + " " + (p.category || "") + " " + (p.server || "")).toLowerCase().includes(f.q)));
   list.sort(f.sort === "price" ? (a, b) => num(a.price) - num(b.price) : f.sort === "sold" ? (a, b) => num(b.sold) - num(a.sold) : f.sort === "new" ? (a, b) => num(b.id) - num(a.id)
     : (a, b) => String(plHas(a.catid) ? a.category || "" : "￿").localeCompare(String(plHas(b.catid) ? b.category || "" : "￿")) || num(a.days) - num(b.days) || num(a.price) - num(b.price));
-  const ps = f.ps || 10, pages = Math.max(1, Math.ceil(list.length / ps)); f.page = Math.min(f.page, pages - 1);
-  const rows = list.slice(f.page * ps, f.page * ps + ps), pbar = $("#pl-pager");
-  if (pbar) pbar.innerHTML = list.length ? `<small class="mut">${list.length > ps ? `${f.page * ps + 1}–${f.page * ps + rows.length} of ${fmt(list.length)}` : `${fmt(list.length)} plans`}</small><span class="sp"></span>${list.length > ps ? pnPager(list.length, ps, f.page * ps, "sbPlPage") : ""}` : "";
+  /* sorted by category the list is grouped: a header row for each category (repeated at the top of the next page when a group goes on), the pages are filled with whole rows */
+  const ps = f.ps || 10, pagesArr = [];
+  if (f.sort === "cat") {
+    let cur = [], last = null;
+    list.forEach(p => {
+      const g = cn(p);
+      if (cur.length && (cur.length >= ps || (g !== last && cur.length > ps - 2))) { pagesArr.push(cur); cur = []; }
+      if (g !== last || !cur.length) cur.push({hdr: g, title: plHas(p.catid) ? p.category || "" : "", n: list.filter(x => cn(x) === g).length});
+      cur.push(p); last = g;
+    });
+    if (cur.length) pagesArr.push(cur);
+  } else for (let i = 0; i < list.length; i += ps) pagesArr.push(list.slice(i, i + ps));
+  const pages = Math.max(1, pagesArr.length); f.page = Math.min(f.page, pages - 1);
+  const rows = pagesArr[f.page] || [], pbar = $("#pl-pager");
+  if (pbar) pbar.innerHTML = list.length ? `<small class="mut">${fmt(list.length)} plans</small>${pages > 1 ? pnPager(pages, 1, f.page, "sbPlPage") : ""}` : "";
   box.innerHTML = rows.map(p => {
+    if (p.hdr !== undefined) return `<div class="sb-lr sb-gh" style="--cols:${PL_COLS}"><span class="sb-gt" dir="auto">${p.title ? esc(p.title) : "No category"}<small>${p.n}</small></span></div>`;
     const d = p.descr && p.descr !== "NULL" ? p.descr : "", ask = +f.ask === +p.id, on = p.active === "1";
-    const head = `<span class="sb-pu"><b dir="auto" title="${esc(p.title)}">${esc(p.title)}</b><small class="sb-sub"><b>#${esc(p.id)}</b>${d ? `<span dir="auto">${esc(d.slice(0, 60))}</span>` : ""}</small></span>`;
+    const head = `<span class="sb-pu"><b dir="auto" title="${esc(p.title)}">${esc(p.title)}</b><small class="sb-sub"><b>#${esc(p.id)}</b>${d ? `<span dir="auto">${esc(d.split("\n")[0].slice(0, 70))}</span>` : ""}</small></span>`;
     const cells = ask ? `<span class="sb-pask" style="grid-column:2 / 9">Delete this plan? Subscriptions already sold are not touched.</span>`
       : `<span class="sb-cut" dir="auto">${plHas(p.catid) ? esc(p.category || "") : '<span class="mut">No category</span>'}</span><span class="sb-cut" dir="auto" title="${esc(p.server || "")}">${esc(p.server || p.server_id || "")}</span><span>${num(p.days) >= 1000 ? "∞" : num(p.days) ? esc(p.days) + " days" : "∞"}</span><span>${num(p.volume) ? esc(p.volume) + " GB" : "Unlimited"}</span><span class="r sb-pa"><b>${num(p.price) ? fmt(p.price) : "—"}</b>${num(p.price) ? " <em>T</em>" : ""}</span><span class="r">${fmt(p.sold || 0)}</span><span>${sbSw(on, `sbPlanToggle(${p.id}, ${on ? 0 : 1})`, `Show plan ${p.title} in the bot`, on ? "Shown in the bot: click to hide it" : "Hidden from the bot: click to show it")}</span>`;
     const acts = ask ? `<button type="button" class="sb-btn sm0" onclick="sb.pl.ask=0;sbPlDraw()">Keep</button><button type="button" class="sb-btn red sm0" onclick="sbPlanDel(${p.id})">Delete</button>`

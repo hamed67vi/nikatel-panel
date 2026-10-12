@@ -2958,3 +2958,13 @@ body #page .st-sec .st-grid { grid-template-columns: minmax(0, 1fr); }
 /* the list card has no padding of its own (the rows touch its edges), and the plans toolbar fits one line */
 body #page .sb-card.sb-ptable { padding: 0; gap: 0; }
 body #page .sb-pltool .sb-psearch input { width: 190px; } body #page .sb-pltool .sb-sel { max-width: 165px; }
+
+/* the plans grouped by category */
+body #page .sb-lr.sb-gh { background: rgba(10,132,255,.08); border-bottom-color: rgba(10,132,255,.22); } body #page .sb-lr.sb-gh:hover { background: rgba(10,132,255,.08); }
+body #page .sb-gt { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 700; letter-spacing: .03em; color: #5aa9ff; text-align: left; } body #page .sb-gt small { min-width: 20px; height: 20px; padding: 0 7px; box-sizing: border-box; display: inline-grid; place-items: center; font-size: 12px; font-weight: 600; color: #9cc8ff; background: rgba(10,132,255,.2); border-radius: 10px; }
+
+/* the status strip of the shop bot: lower - the label above, the number and its note on one line; the services in one row */
+body #page .sb-stat { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 0; padding: 6px 14px 7px; } body #page .sb-stat .sb-lab { flex: 0 0 100%; }
+body #page .sb-stat .sb-sv b { font-size: 20px; line-height: 1.2; } body #page .sb-stat .sb-ss { font-size: 13px; }
+body #page .sb-svc { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 6px 14px; } body #page .sb-svc .sb-chips { flex-wrap: wrap; gap: 5px; }
+body #page .sb-head { gap: 8px; margin-bottom: 8px; } body #page .sb-stat4 { gap: 8px; }

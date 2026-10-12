@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.18.1
+
+- Shop bot, Plans: sorted by category the list is grouped (a header row with the number of plans for each category, repeated at the top of the next page when a group goes on). The status strip above the tabs is lower: the label over the number and its note on one line, the services in one row.
+- The plan descriptions of the bot (what the customer reads) were rewritten short and clear, one per plan, by server kind, with the size and the period; the old ones are kept in a dump of server_plans on the bot server.
+- Bot, /buttons: the list shows the premium emoji of a button as its icon and marks a changed button with a pencil; after a text, colour or reset a back button returns to the same page of the list.
+
 ## 1.18.0
 
 - Shop bot, one engine for every list (Users, Partners, Categories, Servers, Discounts, Gift codes, Broadcast, Tickets, Tables, Apps, Backups, Texts): whole rows that fit the window, a numbered pager, no scroll and no jump when you type in a search box or add a button (a search box keeps its focus and caret when its tab draws again). Rows are lower; only the height shrank, not the text. Headers and cells start at the same place whatever the script. Toolbars: filters and search at the right, the Add button at the left.
