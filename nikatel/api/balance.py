@@ -20,12 +20,14 @@ class ApplyIn(BaseModel):
 
 @router.get("/balance")
 def balance_get():
+    """The CPU-on-the-cores card: automatic or not, and what was found on each server (cores, RPS, verdict)."""
     s = st.get("balance")
     return {"ok": True, "auto": bool(s.get("auto", True)), "read_only": get_settings().read_only, "servers": s.get("servers", {})}
 
 
 @router.put("/balance")
 def balance_put(body: AutoIn):
+    """Switch the Doctor's automatic RPS on or off."""
     st.put("balance", {"auto": body.auto})
     return balance_get()
 

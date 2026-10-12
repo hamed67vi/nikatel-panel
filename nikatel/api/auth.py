@@ -51,6 +51,7 @@ class PwCodeIn(BaseModel):
 
 @router.post("/auth/login")
 def login(body: LoginIn, request: Request, response: Response):
+    """Sign in with the admin password; with two-step sign-in on, the answer carries a ticket for the code step."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -71,6 +72,7 @@ def login(body: LoginIn, request: Request, response: Response):
 
 @router.post("/auth/login/2fa")
 def login_2fa(body: CodeIn, request: Request, response: Response):
+    """The second step: the authenticator code (or a recovery code) with the ticket of the first step."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
     user = auth.read_ticket(body.ticket)
@@ -93,12 +95,14 @@ def login_2fa(body: CodeIn, request: Request, response: Response):
 
 @router.post("/auth/logout")
 def logout(response: Response):
+    """Sign out: the session cookie is dropped."""
     response.delete_cookie(auth.COOKIE)
     return {"ok": True}
 
 
 @router.get("/auth/me")
 def me(user: str = Depends(auth.current_user)):
+    """Who is signed in - 'admin' from the browser, 'token:<name>' from a machine - and whether this is the demo."""
     from ..config import get_settings
 
     return {"ok": True, "user": user, "demo": bool(get_settings().demo)}
@@ -106,6 +110,7 @@ def me(user: str = Depends(auth.current_user)):
 
 @router.post("/auth/password")
 def change_password(body: PasswordIn, request: Request, response: Response, user: str = Depends(auth.current_user)):
+    """Change the admin password (the current one is needed); the other sessions can be ended at the same time."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -133,6 +138,7 @@ def recovery_options():
 
 @router.post("/auth/recover/telegram")
 def recover_telegram(request: Request):
+    """Send a reset code to the Telegram chat of the alerts (for a forgotten password)."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
     auth.throttle_fail(ip)             # asking for a code counts as an attempt: no flooding of your chat
@@ -179,6 +185,7 @@ def recover(body: ResetIn, request: Request):
 # ------------------------------------------------------------------ security settings (signed in)
 @router.get("/auth/security")
 def security(user: str = Depends(auth.current_user)):
+    """The state of the protections: two-step sign-in, recovery codes left, the secret entry path."""
     d = auth.load()
     t = d.get("totp") or {}
     return {"ok": True, "totp_enabled": auth.totp_enabled(), "totp_pending": bool(t.get("secret") and not t.get("enabled")), "recovery_left": auth.recovery_left(),
@@ -187,6 +194,7 @@ def security(user: str = Depends(auth.current_user)):
 
 @router.post("/auth/2fa/setup")
 def totp_setup(body: PwCodeIn, request: Request, user: str = Depends(auth.current_user)):
+    """Start two-step sign-in: a new secret and its QR picture (the password is needed); nothing is on until it is confirmed."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -214,6 +222,7 @@ def totp_setup(body: PwCodeIn, request: Request, user: str = Depends(auth.curren
 
 @router.post("/auth/2fa/enable")
 def totp_enable(body: PwCodeIn, request: Request, response: Response, user: str = Depends(auth.current_user)):
+    """Confirm two-step sign-in with the first code from the app; the recovery codes come back once."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -230,6 +239,7 @@ def totp_enable(body: PwCodeIn, request: Request, response: Response, user: str 
 
 @router.post("/auth/2fa/disable")
 def totp_disable(body: PwCodeIn, request: Request, response: Response, user: str = Depends(auth.current_user)):
+    """Turn two-step sign-in off (the password and a code are needed)."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -245,6 +255,7 @@ def totp_disable(body: PwCodeIn, request: Request, response: Response, user: str
 
 @router.post("/auth/recovery/regenerate")
 def recovery_regenerate(body: PwCodeIn, request: Request, user: str = Depends(auth.current_user)):
+    """Make a new set of recovery codes (the old ones stop working); shown once."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -263,6 +274,7 @@ class EntryIn(BaseModel):
 
 @router.put("/auth/entry-path")
 def entry_path(body: EntryIn, request: Request, response: Response, user: str = Depends(auth.current_user)):
+    """Set, change or clear the secret entry path (the password is needed); the panel answers 404 to everyone else."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -284,6 +296,7 @@ def entry_path(body: EntryIn, request: Request, response: Response, user: str = 
 
 @router.get("/auth/security-log")
 def security_log(user: str = Depends(auth.current_user)):
+    """The security log: sign-ins, failed attempts, password and protection changes, tokens made and revoked."""
     from sqlalchemy import select
 
     from ..models import Event

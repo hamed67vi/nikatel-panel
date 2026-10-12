@@ -8,6 +8,7 @@ router = APIRouter(tags=["engines"], dependencies=[Depends(current_user)])
 
 @router.get("/engines")
 def last():
+    """The last engine check: the version of each tunnel core on every server against the newest release."""
     return {"ok": True, **engines.last()}
 
 
@@ -19,6 +20,7 @@ def check():
 
 @router.post("/engines/{engine}/update")
 def update(engine: str):
+    """Update one tunnel core on every outdated server (verified download, units restarted); refused while another update runs."""
     try:
         job = engines.update(engine)
     except ValueError as e:

@@ -21,11 +21,13 @@ class AutoIn(BaseModel):
 
 @router.get("/analyst/underuse")
 def underuse_get():
+    """Whether the Doctor looks at the underused servers by itself."""
     return {"ok": True, "auto": bool((st.get("underuse") or {}).get("auto", True))}
 
 
 @router.put("/analyst/underuse")
 def underuse_put(body: AutoIn):
+    """Switch the automatic look at the underused servers on or off."""
     st.put("underuse", {"auto": body.auto})
     return underuse_get()
 
@@ -53,6 +55,7 @@ def underuse_tune(server_id: int):
 
 @router.post("/analyst/server/{server_id}/untune", status_code=202)
 def underuse_untune(server_id: int):
+    """Put the kernel settings of a server back as they were before the tuning, as an action."""
     try:
         return {"ok": True, "action_id": underuse.untune_start(server_id)}
     except ValueError as e:

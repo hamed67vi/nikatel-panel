@@ -11,6 +11,7 @@ router = APIRouter(tags=["events"], dependencies=[Depends(current_user)])
 
 @router.get("/events")
 def list_events(limit: int = 100, domain: str | None = None, level: str | None = None, after: int = 0):
+    """The events the operator reads (what happened to servers, tunnels, configs, repairs), newest first; filters by domain, level and id."""
     with session() as db:
         q = select(Event).order_by(Event.id.desc()).limit(min(limit, 500))
 

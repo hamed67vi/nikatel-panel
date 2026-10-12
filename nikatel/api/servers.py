@@ -51,6 +51,7 @@ class ServerIn(BaseModel):
 
 @router.get("/servers", response_model=list[ServerOut])
 def list_servers(role: str | None = None):
+    """Every server with its live facts (cpu, ram, disk, traffic) and extra (geo, network, underuse); `role` filters."""
     with session() as db:
         q = select(Server).order_by(Server.role, Server.name)
 
@@ -62,6 +63,7 @@ def list_servers(role: str | None = None):
 
 @router.get("/servers/{server_id}", response_model=ServerOut)
 def get_server(server_id: int):
+    """One server in full."""
     with session() as db:
         s = db.get(Server, server_id)
 
@@ -73,6 +75,7 @@ def get_server(server_id: int):
 
 @router.get("/servers/{server_id}/samples")
 def samples(server_id: int, hours: int = 24):
+    """The samples of a server over the last hours (cpu, ram, disk, load, traffic, connections)."""
     with session() as db:
         rows = db.scalars(select(ServerSample).where(ServerSample.server_id == server_id,
                                                      ServerSample.ts >= int(time.time()) - hours * 3600).order_by(ServerSample.ts))
@@ -82,6 +85,7 @@ def samples(server_id: int, hours: int = 24):
 
 @router.post("/servers", response_model=ServerOut, status_code=201)
 def add_server(body: ServerIn):
+    """Add a server (name, address, role, SSH user and port); it is sampled at the next round."""
     with session() as db:
         why = server_conflict(db, body.name, body.host)
 
@@ -97,6 +101,7 @@ def add_server(body: ServerIn):
 
 @router.put("/servers/{server_id}", response_model=ServerOut)
 def update_server(server_id: int, body: ServerIn):
+    """Change a server; a new address rebuilds its tunnels and moves its DNS records."""
     with session() as db:
         s = db.get(Server, server_id)
 
@@ -139,6 +144,7 @@ def update_server(server_id: int, body: ServerIn):
 
 @router.delete("/servers/{server_id}")
 def delete_server(server_id: int):
+    """Delete a server from the inventory (nothing changes on the server; refused while tunnels use it)."""
     with session() as db:
         s = db.get(Server, server_id)
 
@@ -157,6 +163,7 @@ def delete_server(server_id: int):
 
 @router.post("/servers/{server_id}/check", response_model=ServerOut)
 def check_now(server_id: int):
+    """Sample a server now (over SSH, a few seconds) and return it."""
     sample_server(server_id)
     return get_server(server_id)
 

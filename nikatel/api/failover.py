@@ -20,11 +20,13 @@ class ArvanIn(BaseModel):
 
 @router.get("/settings/arvan")
 def arvan_get():
+    """The ArvanCloud failover settings: mode, minutes before a plan, domains (the key is masked)."""
     return {"ok": True, **st.public("arvan")}
 
 
 @router.put("/settings/arvan")
 def arvan_put(body: ArvanIn):
+    """Save the failover settings and the key (an empty key keeps the stored one)."""
     if body.mode not in ("off", "approve", "auto"):
         raise HTTPException(400, "mode must be off, approve or auto")
 
@@ -58,6 +60,7 @@ def arvan_test():
 
 @router.get("/failover")
 def fo_state():
+    """The failover state: plans pending, history, every DNS change with its Restore, whether automatic switching is on."""
     return {"ok": True, **failover.state()}
 
 
@@ -80,6 +83,7 @@ def _writable():
 
 @router.post("/failover/{plan_id}/approve")
 def fo_approve(plan_id: str):
+    """Run a pending failover plan (the tunnels are moved, then the records re-pointed)."""
     _writable()
 
     try:
@@ -90,6 +94,7 @@ def fo_approve(plan_id: str):
 
 @router.post("/failover/{plan_id}/dismiss")
 def fo_dismiss(plan_id: str):
+    """Drop a pending plan."""
     try:
         failover.dismiss(plan_id)
     except ValueError as e:
@@ -100,6 +105,7 @@ def fo_dismiss(plan_id: str):
 
 @router.post("/failover/{plan_id}/undo")
 def fo_undo(plan_id: str):
+    """Undo a failover that ran: records back, tunnels back."""
     _writable()
 
     try:

@@ -99,6 +99,7 @@ class RecordIn(BaseModel):
 
 @router.get("/dns/accounts")
 def accounts_list():
+    """The DNS accounts (ArvanCloud, Cloudflare) by name and provider; the keys never come back."""
     return {"ok": True, "accounts": [dnsprov.public(a) for a in dnsprov.accounts()], "providers": dnsprov.PROVIDERS}
 
 
@@ -120,6 +121,7 @@ def accounts_add(body: AccountIn):
 
 @router.put("/dns/accounts/{account_id}")
 def accounts_edit(account_id: str, body: AccountEdit):
+    """Rename an account or give it a new key (tried first)."""
     _writable()
 
     try:
@@ -135,6 +137,7 @@ def accounts_edit(account_id: str, body: AccountEdit):
 
 @router.delete("/dns/accounts/{account_id}")
 def accounts_remove(account_id: str):
+    """Remove an account from the panel."""
     _writable()
 
     try:
@@ -181,6 +184,7 @@ def _fq(domain: str, name: str) -> str:
 
 @router.post("/dns/records", status_code=201)
 def record_create(body: RecordIn):
+    """Make an A record in one of the domains of an account (kept under Changes with a Restore)."""
     _writable()
 
     try:
@@ -214,6 +218,7 @@ def record_edit(account: str, domain: str, record_id: str, body: RecordIn):
 
 @router.delete("/dns/records/{account}/{domain}/{record_id}")
 def record_delete(account: str, domain: str, record_id: str):
+    """Delete a record (kept under Changes with a Restore that makes it again)."""
     _writable()
 
     try:

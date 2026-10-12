@@ -26,11 +26,13 @@ class TelegramIn(BaseModel):
 
 @router.get("/settings/telegram")
 def telegram_get():
+    """The Telegram bot and chat the alerts go to (the token is masked)."""
     return {"ok": True, **st.public("telegram")}
 
 
 @router.put("/settings/telegram")
 def telegram_put(body: TelegramIn):
+    """Save the Telegram bot token and chat id (the token's shape is checked)."""
     if body.token and not valid_token(body.token):
         raise HTTPException(400, "this does not look like a bot token (digits:letters, from @BotFather)")
 
@@ -43,6 +45,7 @@ def telegram_put(body: TelegramIn):
 
 @router.post("/settings/telegram/test")
 def telegram_test():
+    """Send a test message to the chat."""
     ok, why = send_text("✅ Nikatel panel: Telegram works.", require_enabled=False)
 
     if not ok:
@@ -65,16 +68,19 @@ class RulesIn(BaseModel):
 
 @router.get("/settings/alerts")
 def alerts_get():
+    """The alert rules: failed checks before DOWN, minimum down time, stable time before UP, reminders, the flapping guard, mutes."""
     return {"ok": True, **st.get("alerts")}
 
 
 @router.put("/settings/alerts")
 def alerts_put(body: RulesIn):
+    """Save the alert rules."""
     return {"ok": True, **st.put("alerts", body.model_dump())}
 
 
 @router.post("/settings/alerts/mute")
 def mute(ref: str, muted: bool = True):
+    """Mute or unmute one tunnel, server or config."""
     conf = st.get("alerts")
     m = set(conf.get("muted") or [])
     (m.add if muted else m.discard)(ref)
@@ -91,6 +97,7 @@ class MaintenanceIn(BaseModel):
 
 @router.get("/maintenance")
 def maintenance_list():
+    """The maintenance windows (no alerts inside them), with whether each is active now."""
     now = int(time.time())
 
     with session() as db:
@@ -100,6 +107,7 @@ def maintenance_list():
 
 @router.post("/maintenance", status_code=201)
 def maintenance_add(body: MaintenanceIn):
+    """Add a maintenance window."""
     if body.end <= body.start:
         raise HTTPException(400, "the window must end after it starts")
 
@@ -115,6 +123,7 @@ def maintenance_add(body: MaintenanceIn):
 
 @router.delete("/maintenance/{mid}")
 def maintenance_delete(mid: int):
+    """Delete a maintenance window."""
     with session() as db:
         m = db.get(Maintenance, mid)
 
@@ -134,21 +143,25 @@ class ReportIn(BaseModel):
 
 @router.get("/settings/report")
 def report_get():
+    """The daily report: on or off, and the hour it is sent."""
     return {"ok": True, **st.get("report")}
 
 
 @router.put("/settings/report")
 def report_put(body: ReportIn):
+    """Save the daily report settings."""
     return {"ok": True, **st.put("report", body.model_dump())}
 
 
 @router.get("/report/preview")
 def report_preview():
+    """The daily report as it would be sent now."""
     return {"ok": True, "text": report.build()}
 
 
 @router.post("/report/send")
 def report_send():
+    """Send the daily report now."""
     text = report.run(force=True)
     return {"ok": True, "text": text}
 
@@ -186,11 +199,13 @@ def _backup_view() -> dict:
 
 @router.get("/settings/backup")
 def backup_get():
+    """The backup settings and the parts (panel, bot) with their last files."""
     return {"ok": True, **_backup_view()}
 
 
 @router.put("/settings/backup")
 def backup_put(body: BackupIn):
+    """Save the backup schedule, retention and Telegram delivery."""
     st.put("backup", body.model_dump())
     return {"ok": True, **_backup_view()}
 
@@ -246,6 +261,7 @@ def backup_topic_unlink(part: str):
 
 @router.post("/settings/backup/passphrase")
 def backup_pass(body: PassIn):
+    """Set the passphrase the backups are encrypted with (once; never shown again)."""
     try:
         backup.set_passphrase(body.passphrase)
     except ValueError as e:
@@ -256,6 +272,7 @@ def backup_pass(body: PassIn):
 
 @router.post("/backup/now")
 def backup_now(send: bool = True, part: str = ""):
+    """Make a backup now (and send it to Telegram when asked); `part` limits it to the panel or the bot."""
     r = backup.run(send=send, part=part)
 
     if not r.get("ok"):
@@ -302,6 +319,7 @@ async def backup_restore_upload(request: Request):
 
 @router.get("/backup/download/{name}")
 def backup_download(name: str):
+    """Download one backup file kept on this server."""
     from fastapi.responses import FileResponse
 
     p = Path(backup.get_settings().data_dir.parent / "backups" / name)

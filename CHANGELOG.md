@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.0
+
+**M10 #62 - the OpenAPI document is the manual.** Every one of the 284 routes now has a one-sentence description (232 were written today; 52 existed), so `/api/docs` and `/api/openapi.json` explain what each route does, for people and for programs that drive the panel. `tests/test_openapi.py` fails on a route without a description, so it stays that way. Typed response models for every route are not done yet (most answers are plain dicts with `ok` first); they come with #65 when the page becomes a pure client.
+
 ## 1.27.0
 
 **M10 #61 - machine access.** Settings → Security → **API tokens**: a token for a script, a Telegram bot or an AI agent, made with the admin password, shown once (the panel keeps only its SHA-256), with a scope - `read` (GET only), `act` (also the routes that start checks, repairs, builds and DNS changes), `admin` (everything; it may make tokens without a password) - revocable at once, every use timed, making and revoking in the security log. Sent as `Authorization: Bearer nkt_…`; a valid token also passes the secret entry path. The browser keeps its session cookie; a request a token may not make answers 403 `token_scope`. Table `api_tokens` (migration 13). docs/api.md section 3.

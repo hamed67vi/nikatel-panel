@@ -11,6 +11,7 @@ router = APIRouter(tags=["jobs"], dependencies=[Depends(current_user)])
 
 @router.get("/jobs")
 def list_jobs():
+    """Every background job: interval, last run, how long it took, failures and the last failure."""
     with session() as db:
         return {"ok": True, "jobs": [{"name": j.name, "interval": j.interval, "enabled": j.enabled, "running": j.running,
                                      "last_start": j.last_start, "last_ok": j.last_ok, "last_duration_ms": j.last_duration_ms,
@@ -20,6 +21,7 @@ def list_jobs():
 
 @router.post("/jobs/{name}/run")
 def run_now(name: str):
+    """Run a job now (its next tick comes at once)."""
     try:
         jobs.trigger(name)
     except KeyError:
@@ -30,6 +32,7 @@ def run_now(name: str):
 
 @router.post("/jobs/{name}/enabled")
 def set_enabled(name: str, enabled: bool):
+    """Pause or resume a job."""
     with session() as db:
         j = db.get(Job, name)
 

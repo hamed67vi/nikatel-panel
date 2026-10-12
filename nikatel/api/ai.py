@@ -17,11 +17,13 @@ class AiIn(BaseModel):
 
 @router.get("/settings/ai")
 def ai_get():
+    """The AI assistant settings: on or off, model, whether a key is kept (masked)."""
     return {"ok": True, **st.public("ai")}
 
 
 @router.put("/settings/ai")
 def ai_put(body: AiIn):
+    """Save the AI settings and key (an empty key keeps the stored one)."""
     if body.model and len(body.model) > 60:
         raise HTTPException(400, "model name too long")
 
@@ -36,6 +38,7 @@ def ai_put(body: AiIn):
 
 @router.delete("/settings/ai/key")
 def ai_forget_key():
+    """Forget the AI key and switch the assistant off."""
     st.put("ai", {"api_key": "-"})          # a non-empty value replaces the key ...
     st.put("ai", {"enabled": False, "status": {}})
 
@@ -55,6 +58,7 @@ def ai_forget_key():
 
 @router.post("/settings/ai/test")
 def ai_test():
+    """Try the AI key with one small request."""
     res = ai.check()
 
     if not res["ok"]:

@@ -17,6 +17,7 @@ class RepairIn(BaseModel):
 
 @router.post("/tunnels/{tunnel_id}/fix")
 def start_fix(tunnel_id: int, dry_run: bool = False):
+    """Start the plain repair of a tunnel (restart what is not working, one unit at a time, checked after each), as an action; `dry_run` only shows the plan."""
     try:
         aid = actions.fix(tunnel_id, source="manual", dry_run=dry_run)
     except ValueError as e:
@@ -27,6 +28,7 @@ def start_fix(tunnel_id: int, dry_run: bool = False):
 
 @router.get("/actions/{aid}")
 def action_status(aid: int):
+    """One action: its story so far, whether it is done and whether it succeeded."""
     s = actions.status(aid)
 
     if s is None:
@@ -37,16 +39,19 @@ def action_status(aid: int):
 
 @router.get("/actions")
 def action_history(ref: str | None = None, limit: int = 50):
+    """The history of actions (repairs, builds, tests, checks), newest first; `ref` filters by tunnel or server."""
     return {"ok": True, "actions": actions.history(ref, min(limit, 200)), "read_only": get_settings().read_only}
 
 
 @router.get("/settings/repair")
 def repair_get():
+    """The auto-repair settings: on or off, how long a tunnel stays down first, how far the repair may go."""
     return {"ok": True, **st.get("repair"), "read_only": get_settings().read_only, "max_per_hour": actions.MAX_PER_HOUR}
 
 
 @router.put("/settings/repair")
 def repair_put(body: RepairIn):
+    """Save the auto-repair settings (needs read-only off to turn it on)."""
     if body.auto and get_settings().read_only:
         raise HTTPException(400, "auto-repair needs NIKATEL_READ_ONLY=false on the panel server first")
 

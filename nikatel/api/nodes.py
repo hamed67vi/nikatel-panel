@@ -25,6 +25,7 @@ def datacentres():
 
 @router.get("/nodes/presets")
 def presets():
+    """The console presets (named read-only commands) a server can be asked to run."""
     return {"ok": True, "presets": [{"key": k, "label": v[0], "command": v[1]} for k, v in nodes.PRESETS.items()]}
 
 
@@ -34,6 +35,7 @@ class Cmd(BaseModel):
 
 @router.post("/servers/{server_id}/console")
 def console(server_id: int, body: Cmd):
+    """Run one console preset on a server and return its output (read only)."""
     return {"ok": True, **_wrap(nodes.console, server_id, body.command)}
 
 
@@ -47,6 +49,7 @@ class NodesIn(BaseModel):
 
 @router.get("/settings/nodes")
 def nodes_get():
+    """The settings of Add server: the Marzban node certificate filled in by default."""
     from ..services import settings as st
 
     return {"ok": True, **st.get("nodes")}
@@ -95,6 +98,7 @@ def change_password(server_id: int, body: NewPw):
 
 @router.post("/servers/{server_id}/connect")
 def connect(server_id: int, body: Pw):
+    """Install the panel's SSH key on a server with its password (the password is used once and never kept)."""
     return {"ok": True, **_wrap(nodes.connect, server_id, body.password)}
 
 
@@ -108,11 +112,13 @@ class Many(BaseModel):
 
 @router.post("/servers/add-many")
 def add_many(body: Many):
+    """Add several servers from pasted lines (name, address, password), installing the key on each."""
     return {"ok": True, "items": _wrap(nodes.add_many, body.role, body.lines, body.password, body.ssh_user, body.ssh_port)}
 
 
 @router.get("/servers/{server_id}/launcher")
 def launcher(server_id: int, app: str = "ssh"):
+    """A launcher file for ssh, PuTTY or MobaXterm that opens this server with the operator's own key."""
     name, body = _wrap(nodes.launcher, server_id, app)
     return Response(body, media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
@@ -135,30 +141,36 @@ class Act(BaseModel):
 
 @router.post("/servers/{server_id}/abuse")
 def abuse(server_id: int, body: Act):
+    """Install, update or remove the Abuse-Defender rules (torrent and abuse traffic blocked) on a server."""
     return {"ok": True, **_wrap(nodes.abuse, server_id, body.action)}
 
 
 @router.post("/servers/{server_id}/reboot")
 def reboot(server_id: int):
+    """Reboot a server (its tunnels come back with it)."""
     _wrap(nodes.reboot, server_id)
     return {"ok": True}
 
 
 @router.post("/servers/geo-refresh")
 def geo_refresh(only_missing: bool = False):
+    """Look the country and the hosting provider of the servers up again (all, or only the ones without)."""
     return {"ok": True, "changes": _wrap(nodes.geo_refresh, only_missing)}
 
 
 @router.post("/servers/gre-check-all")
 def gre_check_all(role: str = ""):
+    """Check the GRE links of every server (or of one role) now."""
     return {"ok": True, **_wrap(nodes.gre_check_all, role)}
 
 
 @router.post("/servers/{server_id}/gre-check")
 def gre_check(server_id: int):
+    """Check the GRE links of one server now."""
     return {"ok": True, **_wrap(nodes.gre_check, server_id)}
 
 
 @router.post("/servers/{server_id}/filter-check")
 def filter_check(server_id: int):
+    """Is this server's address filtered inside Iran right now (asked from an Iran server)."""
     return {"ok": True, **_wrap(nodes.filter_check, server_id)}

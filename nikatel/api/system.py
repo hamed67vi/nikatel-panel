@@ -27,6 +27,7 @@ def health():
 
 @router.get("/overview", dependencies=[Depends(current_user)])
 def overview():
+    """The dashboard's numbers: servers online and offline, tunnels by state, jobs stale or failing."""
     s = get_settings()
     now = int(time.time())
 

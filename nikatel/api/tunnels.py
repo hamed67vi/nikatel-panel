@@ -32,6 +32,7 @@ class BuildIn(BaseModel):
 
 @router.post("/tunnels", status_code=202)
 def build(body: BuildIn):
+    """Build a tunnel (any engine) as an action; the answer is its id. 0 as the Iran server = the best one is chosen."""
     try:
         transport = body.transport or ("tcpmux" if body.kind == "backhaul" else "")     # an empty transport means the default of the engine
 
@@ -129,6 +130,7 @@ class PortsIn(BaseModel):
 
 @router.put("/tunnels/{tunnel_id}/ports")
 def set_ports(tunnel_id: int, body: PortsIn):
+    """Change the forwarded ports of a tunnel on both servers (the units are rewritten and restarted)."""
     from ..ssh import SSHError
 
     try:
@@ -159,6 +161,7 @@ class AutoIn(BaseModel):
 
 @router.post("/tunnels/auto-iran")
 def auto_iran(body: AutoIn):
+    """Rank the Iran servers for a foreign server and say which one to build on."""
     from ..services import detect as dt
 
     try:
@@ -169,6 +172,7 @@ def auto_iran(body: AutoIn):
 
 @router.post("/tunnels/{tunnel_id}/quality")
 def quality(tunnel_id: int):
+    """Measure one tunnel: 30 pings over the link for latency, jitter, loss and a score (about 10 s)."""
     from ..services import tunnel_test as tt
     from ..ssh import SSHError
 
@@ -215,6 +219,7 @@ class CompareIn(BaseModel):
 
 @router.get("/tunnel-test/kinds")
 def test_kinds():
+    """Every tunnel kind the pair test can build, grouped by engine."""
     from ..services import tunnel_test as tt
 
     return {"ok": True, "kinds": [{"key": k, "label": lbl, "note": note, "group": grp, "default": dflt} for k, lbl, note, grp, dflt in tt.KINDS]}
@@ -222,6 +227,7 @@ def test_kinds():
 
 @router.post("/tunnel-test/compare", status_code=202)
 def compare_start(body: CompareIn):
+    """Build the chosen kinds between two servers one after the other, measure each and compare; follow /tunnel-test/compare/{jid}."""
     from ..services import tunnel_test as tt
 
     try:
@@ -234,6 +240,7 @@ def compare_start(body: CompareIn):
 
 @router.get("/tunnel-test/compare/{jid}")
 def compare_status(jid: str):
+    """How far a comparison is, and the results so far."""
     from ..services import tunnel_test as tt
 
     try:
@@ -244,6 +251,7 @@ def compare_status(jid: str):
 
 @router.post("/tunnel-test/compare/{jid}/stop")
 def compare_stop(jid: str):
+    """Stop a comparison; the temporary tunnel is removed."""
     from ..services import tunnel_test as tt
 
     try:
@@ -256,6 +264,7 @@ def compare_stop(jid: str):
 
 @router.post("/tunnel-test", status_code=202)
 def tunnel_test(body: TestIn):
+    """Build one temporary tunnel between two servers, measure it and remove it, as an action."""
     from ..services import tunnel_test as tt
 
     try:
@@ -266,6 +275,7 @@ def tunnel_test(body: TestIn):
 
 @router.delete("/tunnels/{tunnel_id}")
 def delete(tunnel_id: int):
+    """Remove a tunnel from both servers; it goes to the trash, from where it can be put back."""
     try:
         return {"ok": True, "results": builder.delete_tunnel(tunnel_id, trash=True)}
     except ValueError as e:
@@ -274,6 +284,7 @@ def delete(tunnel_id: int):
 
 @router.post("/tunnels/{tunnel_id}/rebuild", status_code=202)
 def rebuild(tunnel_id: int):
+    """Rebuild a tunnel as an action (the old one comes back when the new build fails)."""
     try:
         return {"ok": True, "id": builder.rebuild_tunnel(tunnel_id)}
     except ValueError as e:
@@ -345,6 +356,7 @@ def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], know
 
 @router.get("/tunnels", response_model=list[TunnelOut])
 def list_tunnels():
+    """Every tunnel with its live state, units, quality and the servers at both ends."""
     from ..models import Server
     from ..services import settings as st
 
@@ -361,6 +373,7 @@ def list_tunnels():
 
 @router.get("/tunnels/{tunnel_id}", response_model=TunnelOut)
 def get_tunnel(tunnel_id: int):
+    """One tunnel in full."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -372,6 +385,7 @@ def get_tunnel(tunnel_id: int):
 
 @router.get("/tunnels/{tunnel_id}/checks")
 def checks(tunnel_id: int, hours: int = 24):
+    """The checks of a tunnel over the last hours: ok, latency, throughput, reason."""
     with session() as db:
         rows = db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id,
                                                     TunnelCheck.ts >= int(time.time()) - hours * 3600).order_by(TunnelCheck.ts))
@@ -400,6 +414,7 @@ def restart_all():
 
 @router.post("/tunnels/{tunnel_id}/restart")
 def restart_one(tunnel_id: int):
+    """Restart the tunnel's units on both servers now and check it again (a few seconds)."""
     from ..services import actions
 
     try:
@@ -410,12 +425,14 @@ def restart_one(tunnel_id: int):
 
 @router.post("/tunnels/{tunnel_id}/check", response_model=TunnelOut)
 def check_now(tunnel_id: int):
+    """Check one tunnel now (both servers over SSH, about five seconds) and return it."""
     check_tunnel(tunnel_id)
     return get_tunnel(tunnel_id)
 
 # ------------------------------------------------------------------ removed tunnels (restore)
 @router.get("/tunnel-trash")
 def trash_items():
+    """Removed tunnels kept for a while with everything needed to put them back."""
     from ..services import trash
 
     return {"ok": True, "items": [{k: v for k, v in i.items() if k != "args"} for i in trash.items()]}
@@ -423,6 +440,7 @@ def trash_items():
 
 @router.post("/tunnel-trash/{item_id}/restore", status_code=202)
 def trash_restore(item_id: str = Path(pattern=r"^[A-Za-z0-9._-]{1,90}$")):
+    """Build a removed tunnel again from the trash, as an action."""
     from ..services import trash
 
     try:
@@ -433,6 +451,7 @@ def trash_restore(item_id: str = Path(pattern=r"^[A-Za-z0-9._-]{1,90}$")):
 
 @router.delete("/tunnel-trash/{item_id}")
 def trash_forget(item_id: str = Path(pattern=r"^[A-Za-z0-9._-]{1,90}$")):
+    """Forget a removed tunnel for good."""
     from ..services import trash
 
     trash.forget(item_id)

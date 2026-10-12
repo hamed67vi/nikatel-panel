@@ -19,6 +19,7 @@ def _wrap(fn, *a, **kw):
 
 @router.get("/autopilot/diagnose/{tunnel_id}")
 def diagnose(tunnel_id: int):
+    """Why a tunnel is down or lossy: both servers, the route, GRE, the control port, the data path (read only, about 20 s)."""
     return {"ok": True, **_wrap(autopilot.diagnose, tunnel_id)}
 
 
@@ -29,11 +30,13 @@ class FixIn(BaseModel):
 
 @router.get("/autopilot/diagnose-config/{config_id}")
 def diagnose_config(config_id: int):
+    """Why a config fails the probe: the address, the port from Iran, the SNI (read only)."""
     return {"ok": True, **_wrap(autopilot.diagnose_config, config_id)}
 
 
 @router.post("/autopilot/smart-fix", status_code=202)
 def smart_fix(body: FixIn):
+    """Diagnose a tunnel and climb the repair ladder up to the level (restart, rebuild, new link, another type, move), as an action."""
     return {"ok": True, "id": _wrap(autopilot.smart_fix_start, body.tunnel_id, body.level)}
 
 
@@ -43,6 +46,7 @@ class LevelIn(BaseModel):
 
 @router.post("/autopilot/fix-all", status_code=202)
 def fix_all(body: LevelIn):
+    """The smart repair on every tunnel that is down or lossy, one after the other, as an action."""
     return {"ok": True, "id": _wrap(autopilot.fix_all_start, body.level)}
 
 
@@ -52,6 +56,7 @@ class ExplainIn(BaseModel):
 
 @router.post("/autopilot/explain")
 def explain(body: ExplainIn):
+    """The AI reads what the panel knows about a tunnel (or everything) and says what to do first."""
     return {"ok": True, **_wrap(autopilot.explain, body.tunnel_id)}
 
 
@@ -71,6 +76,7 @@ def outage():
 
 @router.get("/autopilot/situation")
 def situation():
+    """The whole situation in one dict: servers, tunnels, configs, disturbances, repairs running."""
     return {"ok": True, **_wrap(autopilot.situation)}
 
 
@@ -82,6 +88,7 @@ class RecommendIn(BaseModel):
 
 @router.post("/autopilot/recommend", status_code=202)
 def recommend(body: RecommendIn):
+    """Test the chosen tunnel kinds between two servers beside what runs and rank them, as an action."""
     return {"ok": True, "id": _wrap(autopilot.recommend_start, body.iran_id, body.foreign_id, body.kinds)}
 
 
@@ -92,6 +99,7 @@ class ReplaceIn(BaseModel):
 
 @router.post("/autopilot/replace", status_code=202)
 def replace(body: ReplaceIn):
+    """Replace a tunnel with one of another kind (same name and ports), as an action; the old one comes back when the new fails."""
     return {"ok": True, "id": _wrap(autopilot.replace_start, body.tunnel_id, body.kind)}
 
 
@@ -102,9 +110,11 @@ class MoveIn(BaseModel):
 
 @router.post("/autopilot/move", status_code=202)
 def move(body: MoveIn):
+    """Move a tunnel to another Iran server, as an action (its DNS records follow through the IP switch)."""
     return {"ok": True, "id": _wrap(autopilot.move_start, body.tunnel_id, body.iran_id)}
 
 
 @router.get("/autopilot/ranking/{tunnel_id}")
 def ranking(tunnel_id: int):
+    """The Iran servers ranked for this tunnel's foreign server (where a move would go)."""
     return {"ok": True, "ranking": _wrap(autopilot.ranking, tunnel_id)}

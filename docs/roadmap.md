@@ -89,7 +89,7 @@ always installable; a milestone ends with a tag.
 ## M10 · Stable and API-first (the way forward - no new features; see docs/engineering-plan.md)
 - [x] #60 API contract: one error shape (`ok`, `error`, `code`) from one handler on every route, one long-work pattern (202 + action id + /api/actions/{id}) on every slow route, versioning policy written down (`/api` stays v1), `docs/api.md`
 - [x] #61 Machine access: API tokens with scopes (read / act / admin) made in Settings, shown once, hashed at rest, revocable, every use logged; the browser keeps the session cookie, every bot or AI uses a token
-- [ ] #62 The OpenAPI document as the manual: a one-sentence description and typed request / response models on all 281 routes; a CI check that fails on a route without a description
+- [x] #62 The OpenAPI document as the manual: a one-sentence description and typed request / response models on all 281 routes; a CI check that fails on a route without a description
 - [ ] #63 Test depth: coverage measured and shown in CI, the pure helpers of every service covered, the SSH layer behind one fake; install on a clean container in CI; upgrade from the previous tag with data intact
 - [ ] #64 Operations: `/api/health` that says what is wrong (database, late job, SSH key, disk, probe), self-check on start, structured logs with the request id everywhere, backup-restore and release-rollback rehearsed and documented with timings
 - [ ] #65 Front end as a pure client: split one file per page (#57), every JS file syntax-checked in CI, an audit of every `api()` call against the documented routes, no logic in the UI the API does not offer

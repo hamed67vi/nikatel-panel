@@ -24,6 +24,7 @@ def _wrap(fn, *a, **kw):
 
 @router.get("/configs")
 def list_configs():
+    """Every client config on the probe with its state, ping, speed and group, in the order of its subscription."""
     with session() as db:
         order = {s.name: {n: i for i, n in enumerate(s.nodes or [])} for s in db.scalars(select(Subscription))}      # a group lists its configs in the order of its subscription
         rows = sorted(db.scalars(select(Config)), key=lambda c: (c.group or "", order.get(c.group or "", {}).get(c.name, 10**6), c.name.lower()))
@@ -35,6 +36,7 @@ def list_configs():
 
 @router.get("/configs/{config_id}/samples")
 def samples(config_id: int, hours: int = 24):
+    """The up / down history and the pings of one config over the last hours."""
     with session() as db:
         rows = db.scalars(select(ConfigSample).where(ConfigSample.config_id == config_id, ConfigSample.ts >= int(time.time()) - hours * 3600).order_by(ConfigSample.ts))
         return {"ok": True, "columns": ["ts", "up", "ping_ms"], "samples": [[r.ts, r.up, r.ping_ms] for r in rows]}
@@ -42,6 +44,7 @@ def samples(config_id: int, hours: int = 24):
 
 @router.get("/configs/{config_id}/uri")
 def get_uri(config_id: int):
+    """The share link of one config (as kept on the probe)."""
     with session() as db:
         c = db.get(Config, config_id)
 
@@ -61,6 +64,7 @@ class AddIn(BaseModel):
 
 @router.post("/configs", status_code=201)
 def add(body: AddIn):
+    """Add a config from a share link; it is written to the probe."""
     return {"ok": True, "name": _wrap(configs.add, body.uri, body.name, body.group)}
 
 
@@ -74,6 +78,7 @@ class UpdateIn(BaseModel):
 
 @router.put("/configs/{config_id}")
 def update(config_id: int, body: UpdateIn):
+    """Change a config's name, link, group, tunnel label or CDN port."""
     with session() as db:
         c = db.get(Config, config_id)
 
@@ -92,6 +97,7 @@ class DeleteMany(BaseModel):
 
 @router.post("/configs/delete-many")
 def remove_many(body: DeleteMany):
+    """Delete several configs at once (the rows go now, the probe is told in the background)."""
     with session() as db:
         names = [c.name for c in db.scalars(select(Config).where(Config.id.in_(body.ids)))]
 
@@ -99,6 +105,7 @@ def remove_many(body: DeleteMany):
 
 @router.delete("/configs/{config_id}")
 def remove(config_id: int):
+    """Delete one config."""
     with session() as db:
         c = db.get(Config, config_id)
 
@@ -113,12 +120,14 @@ def remove(config_id: int):
 
 @router.post("/configs/sync")
 def sync_now():
+    """Read the probe now instead of at the next round."""
     configs.sync()
     return {"ok": True, "probe": probe.active()}
 
 
 @router.get("/configs/{config_id}/speed")
 def speed(config_id: int):
+    """The last speed test of one config."""
     with session() as db:
         c = db.get(Config, config_id)
 
@@ -152,6 +161,7 @@ def _sub_url(body: SubIn) -> str:
 
 @router.get("/subscriptions")
 def subs():
+    """The subscriptions whose nodes were imported as groups of configs."""
     with session() as db:
         return {"ok": True, "subscriptions": [{"id": s.id, "name": s.name, "nodes": s.nodes, "excluded": s.excluded or [], "last_import": s.last_import, "url_host": s.url.split("/")[2] if "//" in s.url else ""}
                                               for s in db.scalars(select(Subscription).order_by(Subscription.name))]}
@@ -159,6 +169,7 @@ def subs():
 
 @router.post("/subscriptions/preview")
 def sub_preview(body: SubIn):
+    """Read a subscription link and list its nodes without importing."""
     nodes = _wrap(configs.fetch_subscription, _sub_url(body))
 
     with session() as db:
@@ -174,6 +185,7 @@ class ExcludedIn(BaseModel):
 
 @router.put("/subscriptions/excluded")
 def sub_excluded(body: ExcludedIn):
+    """Which nodes of a subscription are never imported (unticked)."""
     with session() as db:
         s = db.scalar(select(Subscription).where(Subscription.name == body.name))
 
@@ -187,16 +199,19 @@ def sub_excluded(body: ExcludedIn):
 
 @router.post("/subscriptions/sync")
 def sub_sync(body: SubIn):
+    """Make the group equal to its subscription again: add the new nodes, remove the gone ones."""
     return {"ok": True, **_wrap(configs.sync_subscription, body.name)}
 
 
 @router.post("/subscriptions/import")
 def sub_import(body: SubIn):
+    """Import the chosen nodes of a subscription as the configs of one group."""
     return {"ok": True, **_wrap(configs.import_subscription, body.name, _sub_url(body), body.picks)}
 
 
 @router.delete("/subscriptions/{sid}")
 def sub_delete(sid: int):
+    """Forget a subscription record (its configs stay)."""
     with session() as db:
         s = db.get(Subscription, sid)
 
@@ -218,6 +233,7 @@ class ProbeIn(BaseModel):
 
 @router.get("/settings/probe")
 def probe_get():
+    """The probe (primary and standby): addresses, whether a token is kept, the server it runs on."""
     d = st.public("probe")
     d["standby"] = [{"name": x.get("name", ""), "api_url": x.get("api_url", ""), "has_token": bool(x.get("api_token"))} for x in d.get("standby") or []]
     return {"ok": True, **d, "state": probe.active()}
@@ -225,6 +241,7 @@ def probe_get():
 
 @router.put("/settings/probe")
 def probe_put(body: ProbeIn):
+    """Save the probe addresses and tokens (an empty token keeps the stored one)."""
     if body.api_url and not probe.valid_url(body.api_url):
         raise HTTPException(400, "the probe address looks like http://host:port")
 
@@ -246,6 +263,7 @@ def probe_put(body: ProbeIn):
 
 @router.post("/settings/probe/install")
 def probe_install(server_id: int, as_standby: bool = False):
+    """Install a probe on an Iran server of the inventory, as an action (primary or standby)."""
     from ..services import probe_install as pi
 
     return {"ok": True, **_wrap(pi.install, server_id, as_standby)}
@@ -282,5 +300,6 @@ def speedtest(config_id: int):
 
 @router.post("/settings/probe/test")
 def probe_test():
+    """Ask the active probe for its config list (read only)."""
     d = _wrap(probe.request, "GET", "/api/config/list", None, 30)
     return {"ok": True, "configs": len(d.get("configs") or []), "probe": probe.active()}
