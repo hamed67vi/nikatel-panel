@@ -153,4 +153,5 @@ I18N.add({
 "Quick actions": "کارهای سریع", "Confirm payments": "تأیید پرداخت‌ها", "approve or decline receipts": "تأیید یا رد رسیدها", "New plan": "پلن جدید", "prices and volumes you sell": "قیمت و حجم‌هایی که می‌فروشید", "Send a broadcast": "ارسال پیام همگانی", "a message to all or some users": "پیام به همه یا بعضی کاربران", "make or review gift codes": "ساخت یا بررسی کد هدیه", "Find a user": "پیدا کردن کاربر", "wallet, services, orders": "کیف پول، سرویس‌ها، سفارش‌ها", "backup, import, Mini App, SQL": "پشتیبان، ایمپورت، Mini App، SQL",
 "Bot log": "لاگ ربات", "no errors logged": "خطایی ثبت نشده",
 "+{} today": "+{} امروز", "{} orders": "{} سفارش", "7 days": "۷ روز", "30 days": "۳۰ روز", "Today": "امروز", "Users": "کاربران",
+"Home": "خانه",
 });

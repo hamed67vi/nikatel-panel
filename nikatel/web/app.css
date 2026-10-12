@@ -2697,3 +2697,13 @@ body #page .sb-q span { display: grid; gap: 2px; min-width: 0; } body #page .sb-
 body #page .sb-log > summary { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; list-style: none; } body #page .sb-log > summary::-webkit-details-marker { display: none; }
 @media (max-width: 1100px) { body #page .sb-qa { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { body #page .sb-qa { grid-template-columns: 1fr; } body #page .sb-ar { grid-template-columns: 40px minmax(0, 1fr); } body #page .sb-ar .si-a { grid-column: 1 / -1; } body #page .sb-tabs .sb-g + .sb-g { border-left: 0; padding-left: 0; } }
+
+/* ---- the shop bot tabs: every group is one tidy box with its name on top and equal buttons; a group never splits across rows ---- */
+body #page .sb-tabs { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; padding: 0 !important; }
+body #page .sb-tabs .sb-g, body #page .sb-tabs .sb-g + .sb-g { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px !important; border: 1px solid rgba(255,255,255,.09) !important; border-radius: 14px; background: rgba(255,255,255,.025); }
+body #page .sb-tabs .sb-g em { display: block; margin: 0 0 0 4px; font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #5aa9ff; line-height: 1; }
+body #page .sb-tabs .sb-gb { display: flex; flex-wrap: nowrap; gap: 6px; }
+body #page .sb-tabs .sb-gb button { height: 36px; min-width: 0; padding: 0 12px; gap: 7px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+body #page .sb-tabs .sb-gb button.on { font-weight: 600; }
+body #page .sb-tabs .sb-gb button .ti svg { width: 16px; height: 16px; }
+@media (max-width: 760px) { body #page .sb-tabs .sb-gb { flex-wrap: wrap; } }

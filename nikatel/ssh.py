@@ -813,12 +813,18 @@ echo "RESTORED $(mysql -N -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT COUNT
     # shop bot: copy every table of the staging database (the real data) over the live one,
     # except the broadcast queues; tables that exist only in one of them are left alone
     "bot_import_stage": (r"""set -e; set -a; . '@ENV@'; set +a
-TABLES=$(mysql -N -e "SELECT s.table_name FROM information_schema.tables s JOIN information_schema.tables l ON l.table_name=s.table_name AND l.table_schema='$DB_NAME' WHERE s.table_schema='nikabot_stage' AND s.table_name NOT IN ('bc_jobs','bc_messages')")
+# the staging copy over the live database, table by table and column by column BY NAME (the real database and the bot's own schema differ in the order and the list of columns); the broadcast queues are not copied
+TABLES=$(mysql -N -e "SELECT s.table_name FROM information_schema.tables s JOIN information_schema.tables l ON l.table_name=s.table_name AND l.table_schema='$DB_NAME' WHERE s.table_schema='nikabot_stage' AND s.table_name NOT IN ('bc_jobs','bc_messages','send_list')")
 [ -n "$TABLES" ] || { echo "NO_STAGE"; exit 1; }
-mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SET FOREIGN_KEY_CHECKS=0; $(for t in $TABLES; do echo "TRUNCATE TABLE \`$t\`; INSERT INTO \`$t\` SELECT * FROM nikabot_stage.\`$t\`;"; done) SET FOREIGN_KEY_CHECKS=1;"
+SQL="SET FOREIGN_KEY_CHECKS=0; SET SESSION sql_mode='';"
+for t in $TABLES; do
+  ROW=$(mysql -N -e "SELECT GROUP_CONCAT(CONCAT('\`',s.column_name,'\`') ORDER BY l.ordinal_position SEPARATOR ','), GROUP_CONCAT(CASE WHEN l.data_type IN ('bigint','int') AND s.data_type IN ('datetime','timestamp') THEN CONCAT('UNIX_TIMESTAMP(\`',s.column_name,'\`)') WHEN l.data_type IN ('datetime','timestamp') AND s.data_type IN ('bigint','int') THEN CONCAT('FROM_UNIXTIME(\`',s.column_name,'\`)') ELSE CONCAT('\`',s.column_name,'\`') END ORDER BY l.ordinal_position SEPARATOR ',') FROM information_schema.columns s JOIN information_schema.columns l ON l.table_schema='$DB_NAME' AND l.table_name=s.table_name AND l.column_name=s.column_name WHERE s.table_schema='nikabot_stage' AND s.table_name='$t'")
+  COLS=$(printf '%s' "$ROW" | cut -f1); SEL=$(printf '%s' "$ROW" | cut -f2)
+  [ -n "$COLS" ] && SQL="$SQL TRUNCATE TABLE \`$t\`; INSERT INTO \`$t\` ($COLS) SELECT $SEL FROM nikabot_stage.\`$t\`;"
+done
+mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "$SQL SET FOREIGN_KEY_CHECKS=1;"
 for t in $TABLES; do echo "TABLE $t $(mysql -N -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT COUNT(*) FROM \`$t\`")"; done
-echo IMPORTED
-""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$"}),
+echo IMPORTED""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$"}),
 
     # shop bot: restart PHP / clear the bot's log files
     "bot_restart_php": (r"""for u in php8.3-fpm php8.2-fpm php-fpm; do systemctl is-active "$u" >/dev/null 2>&1 && systemctl restart "$u" && echo "RESTARTED $u"; done; true
