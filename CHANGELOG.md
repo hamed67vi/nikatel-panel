@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.4
+
+- Mini App 3.0.1: the quick-access buttons of the home page sit in one tidy row (up to 4 buttons) or two rows of three (5-6 buttons) or four (7-8) - no lone button on the last line.
+
 ## 1.20.3
 
 - Server window: the CPU line says how many cores the server has ("4 cores") next to the percentage, like the RAM line shows its megabytes.

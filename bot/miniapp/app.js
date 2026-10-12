@@ -112,7 +112,7 @@ VIEWS.home = async () => {
       <div class="hbtns">${F.card ? `<button class="btn pri" onclick="setTab('wallet')">💳 شارژ کیف پول</button>` : ""}${F.sell ? `<button class="btn" onclick="setTab('buy')">🛍 خرید سرویس</button>` : ""}</div></div>` : "";
   return `${hero}
     <div class="card"><h3>سرویس‌های من <span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></h3><div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
-    <div class="card"><h3>دسترسی سریع</h3><div class="qa">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
+    <div class="card"><h3>دسترسی سریع</h3><div class="qa" style="--cols:${qa.length <= 4 ? Math.max(qa.length, 1) : qa.length <= 6 ? 3 : 4}">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
     ${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">@${esc(S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
 };
 AFTER.home = async () => {
