@@ -22,7 +22,7 @@ ts(UTC)               LEVEL   domain     message key=value …          rid
 | DEBUG | each SSH call, parsed outputs. `NIKATEL_LOG_LEVEL=DEBUG`. |
 | INFO | state changes: sample ok, check result, login, migration, job start. |
 | WARNING | degraded but working: a server did not answer, a 4xx on the API, a job slower than its interval. |
-| ERROR | a job failed, an unhandled exception in a request. Always with `exc_info`. |
+| ERROR | a job failed, an unhandled exception in a request. Always with `exc_info`. Never an event: what happens to servers, tunnels and configs is written at WARNING / INFO, so ERROR means the panel itself. |
 
 ## Sinks
 

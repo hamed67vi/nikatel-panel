@@ -180,12 +180,20 @@ async def _lifespan(app: FastAPI):
 
         dns_api.warm()                         # the records of the DNS accounts are read once now, so the first open of the DNS page does not wait
 
-        try:
-            builder.resume_pending()
-            extras.resume_pending()
-            tunnel_test.purge_stale()          # a test that a restart cut short: its temporary tunnel goes now, not in ten minutes
-        except Exception:
-            log.exception("resuming interrupted rebuilds failed")
+        def resume() -> None:
+            """What a restart interrupted is picked up again - in the background: it talks to servers for seconds, and the panel must answer /api/health at once."""
+            time.sleep(2)
+
+            try:
+                builder.resume_pending()
+                extras.resume_pending()
+                tunnel_test.purge_stale()      # a test that a restart cut short: its temporary tunnel goes now, not in ten minutes
+            except Exception:
+                log.exception("resuming interrupted work failed")
+
+        import threading
+
+        threading.Thread(target=resume, name="resume", daemon=True).start()
 
     log.info("nikatel %s listening on %s:%s read_only=%s", __version__, s.listen_host, s.listen_port, s.read_only)
     yield

@@ -333,3 +333,32 @@ def test_a_config_changes_status_only_after_two_reads_agree(client, monkeypatch)
     ev = client.get("/api/events?domain=configs").json()["events"]
     assert sum("not working" in e["text"] for e in ev) == 1 and sum("works again" in e["text"] for e in ev) == 1
     assert configs.settle_config("unknown", "down", None) == ("down", {"status": "down", "n": 1})       # a new config takes its first status at once
+
+
+def test_the_second_look_of_a_round_does_not_count_as_a_second_read(client, monkeypatch):
+    up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
+    down = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
+    monkeypatch.setattr(probe, "health", lambda: up)
+    configs.sync()
+    monkeypatch.setattr(probe, "health", lambda: down)
+    monkeypatch.setattr(configs, "refresh_reach", lambda names: True)         # a reachability answer arrived: the round looks again
+    configs.sync()
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "up"      # one round is one read, however many looks
+    configs.sync()
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "down"
+
+
+def test_a_config_that_flips_again_and_again_gets_one_unstable_event_then_quiet(client, monkeypatch):
+    up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
+    down = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
+    monkeypatch.setattr(probe, "health", lambda: up)
+    configs.sync()
+
+    for i in range(10):                                                         # down down up up down down up up down down: a flip every second read
+        monkeypatch.setattr(probe, "health", lambda h=(down if (i // 2) % 2 == 0 else up): h)
+        configs.sync()
+
+    texts = [e["text"] for e in client.get("/api/events?domain=configs").json()["events"]]
+    assert sum("is unstable" in t for t in texts) == 1
+    assert sum("not working" in t for t in texts) + sum("works again" in t for t in texts) == 2      # the first two flips were said; from the third the feed is quiet
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "down"                      # the status itself keeps moving

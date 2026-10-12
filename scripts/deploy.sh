@@ -9,7 +9,7 @@ STATE=/var/lib/nikatel/last-good-commit
 PORT=$(grep -oE '^NIKATEL_LISTEN_PORT=[0-9]+' /etc/nikatel/nikatel.env 2>/dev/null | cut -d= -f2); PORT=${PORT:-9443}
 cd "$SRC"
 
-health() { for _ in 1 2 3 4 5 6 7 8; do sleep 1; curl -sk -m 5 "https://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '"ok":true' && return 0; done; return 1; }
+health() { for _ in $(seq 1 45); do sleep 2; curl -sk -m 5 "https://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '"ok":true' && return 0; done; return 1; }      # a graceful stop waits up to 40 s for running checks: the answer may take a minute
 install() {
     "$VENV/bin/pip" install -q -e "$SRC[dev]"
     # the unit file travels with the source: install it when it changed

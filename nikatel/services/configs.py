@@ -40,6 +40,8 @@ def parse_health(answer: dict) -> list[dict]:
     return out
 
 
+FLAP_WINDOW = 2 * 3600    # a config that changes status FLAP_FLIPS times within this window is "unstable": one event says so, then the feed stays calm until it kept one status for the whole window
+FLAP_FLIPS = 3
 CONFIRM_CHECKS = 2        # a config changes its status only after this many reads of the probe agree: its test from a data centre is noisy, one SSL timeout is not a dead config
 
 
@@ -210,7 +212,7 @@ def sync() -> None:
             down_direct = [c.name for c in db.scalars(select(Config).where(Config.status == "down")) if _direct_tcp(c.meta)]
 
         if refresh_reach(sorted(set(down_tcp) | set(down_direct))):
-            _sync()                  # the answer is there: show it now, not at the next round
+            _sync(settle=False)      # the answer is there: show it now, not at the next round - as a second look, not as a second read
     except Exception:
         log.exception("reach check failed")
 
@@ -281,7 +283,7 @@ def refresh_reach(names: list[str]) -> bool:
     return changed
 
 
-def _sync() -> list[str]:
+def _sync(settle: bool = True) -> list[str]:
     try:
         with _PLOCK:
             pending = set(_PENDING)
@@ -312,10 +314,11 @@ def _sync() -> list[str]:
                 emit(db, "info", "configs", f"Config {r['name']} appeared on the probe.", r["name"])
 
             seen.add(r["name"])
-            m = c.meta or {}
+            meta = dict(c.meta or {})
+            overridden = False
 
-            if _direct_tcp(m):          # direct TCP: down only when the port really does not open from Iran
-                reach = m.get("reach") or {}
+            if _direct_tcp(meta):          # direct TCP: down only when the port really does not open from Iran
+                reach = meta.get("reach") or {}
                 fresh = now - int(reach.get("at", 0)) < REACH_TTL * 6
 
                 if r["status"] == "down":
@@ -323,14 +326,19 @@ def _sync() -> list[str]:
 
                     if reach.get("ok") and fresh:
                         r = {**r, "status": "up", "ping_ms": reach.get("ms"), "error": "the port opens from Iran (the delay is the connect time); the probe's full proxy test does not pass from a data centre"}
+                        overridden = True
                     elif reach.get("ok") is False and fresh:
                         r = {**r, "error": "the port does not open from Iran: the address is filtered or its server is off"}
                 elif r["status"] == "up" and reach:
-                    c.meta = {k: v for k, v in m.items() if k != "reach"}
+                    meta.pop("reach", None)
 
             old = c.status
-            status, pend = settle_config(old, r["status"], (c.meta or {}).get("pend"))
-            c.meta = {**(c.meta or {}), "pend": pend}
+
+            if settle:
+                status, meta["pend"] = settle_config(old, r["status"], meta.get("pend"))
+            else:                            # the second look of one round (after a reachability answer): only a measured override moves the status; nothing is counted twice
+                status = r["status"] if overridden else old
+
             c.slug, c.port, c.enabled = r["slug"], r["port"], r["enabled"]
             c.ping_ms, c.checked_at = r["ping_ms"], r["checked_at"] or now
 
@@ -342,13 +350,25 @@ def _sync() -> list[str]:
 
             if status != old:
                 c.status, c.status_since = status, now
+                flips = [t for t in meta.get("flips") or [] if now - t < FLAP_WINDOW] + ([now] if old not in ("", "unknown") else [])      # the first status of a new config is not a flip
+                meta["flips"] = flips[-20:]
+                quiet = int(meta.get("quiet_until") or 0)
+                why = r["error"] or "the probe gets no answer through it"
 
-                if status == "down":
-                    emit(db, "bad", "configs", f"Config {c.name} is not working: {r['error'] or 'the probe gets no answer through it'}", c.name)
+                if now < quiet:
+                    meta["quiet_until"] = now + FLAP_WINDOW          # still flipping: the quiet lasts until it kept one status for the whole window
+                elif len(flips) >= FLAP_FLIPS:
+                    meta["quiet_until"] = now + FLAP_WINDOW
+                    emit(db, "warn", "configs", f"Config {c.name} is unstable: {len(flips)} changes in the last {FLAP_WINDOW // 3600} hours ({why}). No more events for it until it keeps one status for {FLAP_WINDOW // 3600} hours.", c.name)
+                elif status == "down":
+                    emit(db, "bad", "configs", f"Config {c.name} is not working: {why}", c.name)
                 elif status == "up" and old == "down":
                     emit(db, "ok", "configs", f"Config {c.name} works again.", c.name)
 
-            db.add(ConfigSample(config_id=c.id, ts=now, up=r["status"] == "up", ping_ms=r["ping_ms"]))
+            c.meta = meta
+
+            if settle:
+                db.add(ConfigSample(config_id=c.id, ts=now, up=r["status"] == "up", ping_ms=r["ping_ms"]))
 
         for name, c in by_name.items():
             if name not in seen:

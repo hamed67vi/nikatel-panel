@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.26.1
+
+- **The config hysteresis really holds now.** A round of the configs job looked at the probe twice when a direct config was down (the second look after the reachability answer), and the two looks counted as two agreeing reads, so a config still flipped every two minutes. The second look no longer counts; only a measured override (the port opens from Iran) moves the status at once.
+- **A config that flips again and again is called unstable once**, and the feed stays quiet about it until it kept one status for two hours (the status itself keeps moving, the alerts keep their own guard). Fastly and five other configs wrote up to 14 events an hour each.
+- Events are never written at ERROR in the log: what happens to servers, tunnels and configs is a finding; ERROR means the panel itself failed.
+- **Start-up answers at once:** what a restart interrupted (pending rebuilds, installs, a cut-short tunnel test) is picked up in a background thread two seconds after the start; before, a leftover test tunnel was removed over SSH inside the start-up and the health check of the deploy timed out, so the deploy rolled back a working release. The deploy now waits up to 90 s for the health answer (a graceful stop alone can take 40 s), and the ship records the shipped commit as the last good one (a rollback went two releases back).
+
 ## 1.26.0
 
 **M10 #60 - the API contract** (`docs/api.md`).
