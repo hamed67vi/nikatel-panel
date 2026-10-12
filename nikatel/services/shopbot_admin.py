@@ -118,7 +118,7 @@ def _event(level: str, text: str, ref: str = "") -> None:
 
 
 # ------------------------------------------------------------------ payments (card to card and the others the admin confirms)
-def pays(state: str = "pending", page: int = 0, q: str = "") -> dict:
+def pays(state: str = "pending", page: int = 0, q: str = "", limit: int = 0) -> dict:
     # the bot's states: pending = asked, no receipt yet; have_sent = receipt sent, waits for an admin; approved / declined; expired_*
     where = {"confirm": 'p.state = "have_sent"', "pending": 'p.state = "pending"', "approved": 'p.state = "approved"', "declined": 'p.state = "declined"', "all": "1 = 1"}.get(state, 'p.state = "have_sent"')
     e = re.sub(r"[;'\"`\\%]", "", str(q or ""))
@@ -126,12 +126,13 @@ def pays(state: str = "pending", page: int = 0, q: str = "") -> dict:
     if e:
         where += f' AND (p.user_id = "{e}" OR u.name LIKE "%{e}%" OR u.username LIKE "%{e}%" OR p.hash_id LIKE "%{e}%")'
 
+    per = max(5, min(100, int(limit))) if limit else PAGE          # the page holds what fits the window: the client says how many rows
     total = int(read(f"SELECT COUNT(*) AS n FROM pays p LEFT JOIN users u ON u.userid = p.user_id WHERE {where}")[0]["n"])
     rows = read(f"SELECT p.id, p.hash_id, p.user_id, u.name, u.username, p.price, p.type, p.state, p.request_date, p.plan_id, p.volume, p.day, p.approved_by, "
-                f"LEFT(p.description, 200) AS description FROM pays p LEFT JOIN users u ON u.userid = p.user_id WHERE {where} ORDER BY p.id DESC LIMIT {PAGE} OFFSET {max(0, page) * PAGE}")
+                f"LEFT(p.description, 200) AS description FROM pays p LEFT JOIN users u ON u.userid = p.user_id WHERE {where} ORDER BY p.id DESC LIMIT {per} OFFSET {max(0, page) * per}")
     cnt = {r["state"]: int(r["c"]) for r in read("SELECT p.state, COUNT(*) AS c FROM pays p GROUP BY p.state")}      # the number on each filter tab
     counts = {"confirm": cnt.get("have_sent", 0), "pending": cnt.get("pending", 0), "approved": cnt.get("approved", 0), "declined": cnt.get("declined", 0), "all": sum(cnt.values())}
-    return {"rows": rows, "total": total, "page": max(0, page), "counts": counts}
+    return {"rows": rows, "total": total, "page": max(0, page), "per": per, "counts": counts}
 
 
 def _pay(pay_id: int) -> dict:

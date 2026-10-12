@@ -2745,3 +2745,8 @@ body #page .sb-btn.dec { color: #ff6b81; background: rgba(255,69,58,.14); border
 body #page .sb-pask { font-size: 13px; color: #ffb3bd; white-space: nowrap; } body #page .sb-why { width: 230px; height: 32px; border-radius: 16px; padding: 0 12px; font-size: 13px; }
 body #page .sb-pdone { font-size: 13px; color: #8791a8; }
 body #page .sb-pempty { height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #9aa4b8; font-size: 14px; } body #page .sb-pempty i { width: 44px; height: 44px; border-radius: 13px; background: rgba(48,209,88,.12); color: #30d158; display: grid; place-items: center; } body #page .sb-pempty svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+body #page .sb-prows { max-height: none; min-height: 0; overflow: hidden; }
+body #page .sb-pu b, body #page .sb-pu small { text-align: left; unicode-bidi: plaintext; direction: ltr; }
+body #page .sb-pfoot { height: 52px; box-sizing: border-box; padding: 0 14px; display: flex; align-items: center; border-top: 1px solid rgba(255,255,255,.07); min-width: 1220px; }
+body #page .sb-pfoot .pgbar { display: flex; align-items: center; gap: 12px; width: 100%; } body #page .sb-pfoot .pgbar .sp { flex: 1; } body #page .sb-pfoot .pgs { display: inline-flex; align-items: center; gap: 4px; }

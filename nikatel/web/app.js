@@ -2180,27 +2180,32 @@ async function sbPays() {
   const defs = [["confirm", "To confirm"], ["pending", "Awaiting receipt"], ["approved", "Approved"], ["declined", "Declined"], ["all", "All"]];
   sbBody(`<div class="sb-card sb-ptool"><div id="pay-tabs" class="sb-ptabs">${defs.map(([k, l]) => `<button type="button" class="sb-ptab ${sb.payState === k ? "on" : ""}" onclick="sb.payState='${k}';sb.payPage=0;sbPaysLoad()">${l}<span id="pc-${k}">…</span></button>`).join("")}</div>
       <label class="sb-psearch"><i>${SI.search}</i><input id="pay-q" type="text" placeholder="User id, name, hash…" value="${esc(sb.payQ)}" oninput="sb.payQ=this.value.trim();sb.payPage=0;clearTimeout(qT);qT=setTimeout(sbPaysLoad,350)" autocomplete="off" spellcheck="false"></label>
-      <span class="sb-pager"><small id="pay-pg"></small><button type="button" id="pay-prev" aria-label="Previous page" onclick="sbPayPage(sb.payPage-1)"><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8 10 12.5"/></svg></button><button type="button" id="pay-next" aria-label="Next page" onclick="sbPayPage(sb.payPage+1)"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button></span></div>
-    <div class="sb-card sb-ptable"><div class="sb-phead"><span>#</span><span>User</span><span class="r">Amount</span><span>Type</span><span>Asked</span><span>State</span><span class="r">Action</span></div><div id="pay-rows" class="sb-prows"><div class="loading"><i class="spin"></i><span>Loading…</span></div></div></div>`);
+      <span class="sb-pager"><small id="pay-pg"></small></span></div>
+    <div class="sb-card sb-ptable"><div class="sb-phead"><span>#</span><span>User</span><span class="r">Amount</span><span>Type</span><span>Asked</span><span>State</span><span class="r">Action</span></div><div id="pay-rows" class="sb-prows"></div><div class="sb-pfoot"><span id="pay-pager" class="pgbar"></span></div></div>`);
+  sbPayFit(); if (sb.payCounts) Object.entries(sb.payCounts).forEach(([k, v]) => { const e = $("#pc-" + k); if (e) e.textContent = fmt(v); });
   await sbPaysLoad();
 }
+/* the rows of a page fill the window exactly (56 px each): the list never scrolls and a short last page keeps the same box, so nothing moves */
+const sbPayRowH = 56;
+function sbPayFit() { const box = $("#pay-rows"); if (!box) return; sb.payPS = Math.max(5, Math.floor((mainBottom() - box.getBoundingClientRect().top - 52 - 28) / sbPayRowH)); box.style.height = sb.payPS * sbPayRowH + "px"; }
+addEventListener("resize", () => { clearTimeout(sbPayFit.t); sbPayFit.t = setTimeout(() => { if (sb.tab === "payments" && $("#pay-rows")) { const old = sb.payPS; sbPayFit(); if (sb.payPS !== old) { sb.payPage = 0; sbPaysLoad(); } } }, 200); });
 async function sbPaysLoad() {
-  const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}`);
+  const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}&limit=${sb.payPS || 0}`);
   sb.payData = r; sb.payAsk = null; sbPaysDraw();
 }
 function sbPaysDraw() {
   const r = sb.payData; if (!r || !$("#pay-rows")) return;
-  Object.entries(r.counts || {}).forEach(([k, v]) => { const e = $("#pc-" + k); if (e) e.textContent = fmt(v); });
+  sb.payCounts = r.counts || sb.payCounts; Object.entries(sb.payCounts || {}).forEach(([k, v]) => { const e = $("#pc-" + k); if (e) e.textContent = fmt(v); });
   document.querySelectorAll("#pay-tabs .sb-ptab").forEach((b, i) => b.classList.toggle("on", ["confirm", "pending", "approved", "declined", "all"][i] === sb.payState));
-  const per = 40, from = r.page * per + 1, to = r.page * per + r.rows.length, pg = $("#pay-pg");
+  const per = r.per || 40, from = r.page * per + 1, to = r.page * per + r.rows.length, pg = $("#pay-pg"), pbar = $("#pay-pager");
   if (pg) pg.textContent = r.total === 0 ? "0 rows" : r.total <= per ? `${r.total} rows` : `${from}–${to} of ${fmt(r.total)}`;
-  const pv = $("#pay-prev"), nx = $("#pay-next"); if (pv) pv.disabled = r.page === 0; if (nx) nx.disabled = (r.page + 1) * per >= r.total;
+  if (pbar) pbar.innerHTML = r.total > per ? `<small class="mut">${r.total === 0 ? "" : `Page ${r.page + 1} of ${Math.ceil(r.total / per)}`}</small>${pnPager(r.total, per, r.page * per, "sbPayPage")}` : "";
   const chip = s => s === "have_sent" ? ["receipt sent", "warn"] : s === "pending" ? ["awaiting receipt", "wait"] : s === "approved" ? ["approved", "ok"] : s === "declined" ? ["declined", "bad"] : [String(s || "").replace(/_/g, " "), "wait"];
   const dt = v => { const n = +v; if (!(n > 1000000000)) return [esc(v || "—"), ""]; const d = new Date(n * 1000); return [d.toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"}), d.toLocaleTimeString("en-GB")]; };
   const ask = sb.payAsk;
   $("#pay-rows").innerHTML = r.rows.map(p => {
     const [sl, sc] = chip(p.state), [d1, d2] = dt(p.request_date), open = p.state === "have_sent" || p.state === "pending", asking = ask && ask.id === String(p.id), appr = asking && ask.act === "approve";
-    const money = fmt(p.price) + " T", sub = p.username && p.username !== "NULL" ? "@" + esc(p.username) : esc(p.user_id);
+    const money = fmt(p.price) + " T", sub = p.username && p.username !== "NULL" && p.username !== "ندارد" ? "@" + esc(p.username) : esc(p.user_id);
     const acts = asking ? `<span class="sb-pask">${appr ? `Credit ${money}?` : `<input id="pay-why" class="sb-why" placeholder="Reason for the user (optional)" maxlength="200">`}</span><button type="button" class="sb-btn sm0" onclick="sbPayAsk(null)">Cancel</button><button type="button" class="sb-btn ${appr ? "pri" : "red"} sm0" onclick="sbPayGo(${p.id}, '${ask.act}')">${appr ? "Approve" : "Decline"}</button>`
       : p.state === "have_sent" ? `<button type="button" class="sb-btn pri sm0" aria-label="Approve payment ${p.id}" onclick="sbPayAsk('${p.id}', 'approve')"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3L12.5 5"/></svg>Approve</button><button type="button" class="sb-btn dec sm0" aria-label="Decline payment ${p.id}" onclick="sbPayAsk('${p.id}', 'decline')"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>Decline</button>`
       : `<span class="sb-pdone">${p.state === "pending" ? "Waiting for the user to send a receipt" : p.state === "approved" ? `Approved${p.approved_by && p.approved_by !== "NULL" ? " · " + esc(p.approved_by) : ""}` : p.state === "declined" ? "Declined" : ""}</span>`;

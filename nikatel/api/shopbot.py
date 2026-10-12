@@ -132,8 +132,8 @@ def settings_put(body: BotSettings):
 
 # ------------------------------------------------------------------ the shop itself: payments, orders, users
 @router.get("/shopbot/pays")
-def pays(state: str = "pending", page: int = 0, q: str = ""):
-    return {"ok": True, **_wrap(adm.pays, state, page, q)}
+def pays(state: str = "pending", page: int = 0, q: str = "", limit: int = 0):
+    return {"ok": True, **_wrap(adm.pays, state, page, q, limit)}
 
 
 class Reason(BaseModel):

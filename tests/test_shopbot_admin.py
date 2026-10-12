@@ -185,7 +185,8 @@ def test_admin_api_routes(client, monkeypatch, db):
     db.answers = {"SELECT p.id, p.hash_id": lambda: [{"id": "1", "user_id": "5", "name": "A", "price": "1000", "state": "pending"}], "COUNT(*) AS n FROM pays": [{"n": "1"}], "GROUP BY p.state": [{"state": "pending", "c": "1"}, {"state": "approved", "c": "4"}, {"state": "have_sent", "c": "2"}],
                   "FROM pays WHERE id = 1": [pay], "COALESCE(wallet, 0) AS w": [{"w": "0"}], "FROM needed_sofwares ORDER BY id DESC": [{"id": "2"}]}
     r = client.get("/api/shopbot/pays?state=pending").json()
-    assert r["counts"] == {"confirm": 2, "pending": 1, "approved": 4, "declined": 0, "all": 7}
+    assert r["counts"] == {"confirm": 2, "pending": 1, "approved": 4, "declined": 0, "all": 7} and r["per"] == 40
+    assert client.get("/api/shopbot/pays?state=pending&limit=9").json()["per"] == 9 and client.get("/api/shopbot/pays?limit=1").json()["per"] == 5
     assert r["total"] == 1 and r["rows"][0]["name"] == "A"
     assert client.post("/api/shopbot/pays/1/approve").json()["wallet"] == 1000
     pay["state"] = "approved"
