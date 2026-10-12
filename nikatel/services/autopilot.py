@@ -123,9 +123,9 @@ def ladder_for(cause: str, kind: str, level: str = "switch") -> list[str]:
         if rank >= 2:
             steps.append("switch")      # a tunnel that still carries data is not cut for a guess: candidates (a fresh GRE link and the other types) are TESTED beside it, and it is replaced only by one that measures clearly better
 
-        steps.append("move")            # the move goes through the failover: approval first, or automatic (Smart repair → Failover · CDN)
+        steps.append("move")            # the move goes through the failover: approval first, or automatic (Tunnels → DNS · IP switch)
     elif cause == "route_cut":
-        steps.append("move")        # the move goes through the failover: approval first, or automatic (Smart repair → Failover · CDN)
+        steps.append("move")        # the move goes through the failover: approval first, or automatic (Tunnels → DNS · IP switch)
 
     return steps
 
@@ -468,6 +468,14 @@ def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False) -> tuple[b
 
 def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], patience: int = 1200) -> list[dict]:
     """Test the candidate types. Only one tunnel test runs at a time on the panel, so when another repair is testing, wait for its turn."""
+    from . import license
+
+    kinds = [k for k in kinds if license.tunnel_kind_allowed(k)]
+
+    if not kinds:
+        _say(aid, "No other tunnel type can be tried: the free tier builds Backhaul TCP Mux only (Settings → About → License).")
+        return []
+
     end_wait, said = time.time() + patience, False
 
     while True:

@@ -7,7 +7,17 @@ from ..services import shopbot
 from ..services import shopbot_admin as adm
 from ..ssh import SSHError
 
-router = APIRouter(tags=["shopbot"], dependencies=[Depends(current_user)])
+
+def _licensed():
+    from ..services import license
+
+    try:
+        license.require("shopbot")
+    except ValueError as e:
+        raise HTTPException(402, str(e))
+
+
+router = APIRouter(tags=["shopbot"], dependencies=[Depends(current_user), Depends(_licensed)])
 
 
 def _wrap(fn, *a, **kw):

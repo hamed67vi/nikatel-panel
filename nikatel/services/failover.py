@@ -9,7 +9,7 @@ Two triggers:
     that also serves a tunnel that stays would break it, so such tunnels are moved too (the plan says so).
 
   plan_for(server_id)      the dead-server plan  ·  route_plan(tunnel_id)  the route plan  ·  both: target, tunnels, DNS, problems
-  approve / dismiss        mode "approve" waits for a click on Smart repair → Failover (a Telegram notice says so); mode "auto"
+  approve / dismiss        mode "approve" waits for a click on Tunnels → DNS · IP switch (a Telegram notice says so); mode "auto"
                            runs clean plans by itself
   restore(log_id)          point ONE changed record back at the address it had before (the tunnels are left where they are)
   undo(plan_id)            the same for every record of one failover
@@ -32,7 +32,7 @@ from . import settings as st
 from .events import emit
 
 log = get_logger("failover")
-ENABLED = False      # the whole ArvanCloud / Iran-server failover is switched off for now (code and settings stay): the tunnels and the smart repair are tested first
+ENABLED = True       # the kill switch of the whole ArvanCloud / Iran-server failover (tests flip it); what really decides is `enabled()`: a key and a mode
 ROUTE_CAUSES = ("gre_blocked", "route_cut", "lossy_route", "port_blocked")
 REASONS = {"down": "the server does not answer",
            "gre_blocked": "GRE is filtered on its route and no other tunnel type works",
@@ -43,6 +43,53 @@ REASONS = {"down": "the server does not answer",
 
 def conf() -> dict:
     return st.get("arvan")
+
+
+def has_key() -> bool:
+    """The DNS can be touched at all: the kill switch is on, the feature is licensed and an ArvanCloud key is saved."""
+    from . import license
+
+    return ENABLED and license.has("failover") and bool(conf().get("api_key"))
+
+
+def enabled() -> bool:
+    """The automatic failover may plan and move: a key, and a mode other than off (approve = ask first, auto = do it)."""
+    return has_key() and conf().get("mode", "off") in ("approve", "auto")
+
+
+def follow_ip_change(aid: int, old_ip: str, new_ip: str, server_name: str) -> list[dict]:
+    """An Iran server got a new address: every A record that pointed at the old one follows (written to dns_log, so each can be put back)."""
+    if not has_key():
+        autopilot._say(aid, "DNS: no ArvanCloud key is saved, the records that pointed at the old address are not changed.")
+        return []
+
+    try:
+        recs = arvan.find_by_ip(old_ip, conf().get("domains") or None)
+    except RuntimeError as e:
+        autopilot._say(aid, f"DNS: ArvanCloud did not answer: {str(e)[:140]}")
+        return []
+
+    if not recs:
+        autopilot._say(aid, f"DNS: no record pointed at {old_ip}.")
+        return []
+
+    done, s_ = [], _state()
+    now = int(time.time())
+
+    for r in recs:
+        try:
+            done.append(arvan.apply(r["domain"], r["id"], old_ip, new_ip))
+            s_["dns_log"].append({"id": f"ip-{aid}:{r['id']}", "at": now, "plan_id": f"ip-{aid}", "server": server_name, "target": server_name, "domain": r["domain"], "record_id": str(r["id"]),
+                                  "fqdn": r["fqdn"], "old": old_ip, "new": new_ip, "configs": [], "restored": False, "restored_at": None})
+            autopilot._say(aid, f"DNS {r['fqdn']}: {old_ip} → {new_ip}")
+        except RuntimeError as e:
+            autopilot._say(aid, f"DNS {r['fqdn']}: not changed: {str(e)[:140]}")
+
+    if done:
+        _save(s_)
+        _notice(f"🌐 DNS: {len(done)} record(s) of {server_name} now point at its new address {new_ip}.")
+
+    return done
 
 
 # ------------------------------------------------------------------ the plan
@@ -219,7 +266,7 @@ def _describe(p: dict) -> str:
 
 def _notify_plan(p: dict, headline: str) -> None:
     _notice(f"🔶 {headline}\nPlan: {_describe(p)}." + (f"\nAlso moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else "")
-            + (f"\nProblems: {'; '.join(p['problems'])}" if p.get("problems") else "") + "\nOpen the panel → Tunnels → Smart repair → Failover to approve or dismiss.")
+            + (f"\nProblems: {'; '.join(p['problems'])}" if p.get("problems") else "") + "\nOpen the panel → Tunnels → Tunnels → DNS · IP switch to approve or dismiss.")
 
 
 def _busy(s: dict, sid: int, now: int) -> bool:
@@ -232,7 +279,7 @@ def check() -> None:
     c = conf()
     mode = c.get("mode", "off")
 
-    if not ENABLED or mode not in ("approve", "auto") or get_settings().read_only:
+    if not enabled() or get_settings().read_only:
         return
 
     now = int(time.time())
@@ -340,12 +387,12 @@ def run_plan(p: dict) -> int:
 
 def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
     """Called by the smart repair when a route problem survived every step: the move to another Iran server, with the DNS.
-    Mode "approve": the plan waits on Smart repair → Failover (a Telegram notice says so). Mode "auto": done now, inside this story.
+    Mode "approve": the plan waits on Tunnels → DNS · IP switch (a Telegram notice says so). Mode "auto": done now, inside this story.
     Returns True when the tunnel was moved."""
     mode = conf().get("mode", "off")
 
-    if not ENABLED or mode not in ("approve", "auto"):
-        autopilot._say(aid, "Moving the tunnel to another Iran server is switched off for now: the tunnel stays where it is.")
+    if not enabled():
+        autopilot._say(aid, "Moving the tunnel to another Iran server is switched off (Tunnels → DNS · IP switch: a key and the mode “ask me” or “automatic” switch it on): the tunnel stays where it is.")
         return False
 
     try:
@@ -357,7 +404,7 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
     s = _state()
 
     if any(x["server_id"] == p["server_id"] and x.get("reason") != "replace" for x in s["pending"]):
-        autopilot._say(aid, f"A failover plan for {p['server']} is already waiting for approval on Smart repair → Failover.")
+        autopilot._say(aid, f"A failover plan for {p['server']} is already waiting for approval on Tunnels → DNS · IP switch.")
         return False
 
     p["id"] = f"{p['server_id']}-{int(time.time())}"
@@ -373,7 +420,7 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
 
     s["pending"].append(p)
     _save(s)
-    autopilot._say(aid, "Failover plan prepared, waiting for your approval on Smart repair → Failover · CDN: " + _describe(p) + extra)
+    autopilot._say(aid, "Failover plan prepared, waiting for your approval on Tunnels → DNS · IP switch: " + _describe(p) + extra)
     _notify_plan(p, f"{p['server']}: {p['why']}.")
     return False
 
@@ -424,10 +471,10 @@ def after_replace(aid: int, p: dict, immediate: bool = False) -> None:
         s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
         s["pending"].append(p)
         _save(s)
-        autopilot._say(aid, f"DNS: {names} still point at {p['ip']}; the plan to point them at {p['target']['ip']} waits for your approval on Smart repair → Failover · CDN.")
+        autopilot._say(aid, f"DNS: {names} still point at {p['ip']}; the plan to point them at {p['target']['ip']} waits for your approval on Tunnels → DNS · IP switch.")
         _notify_plan(p, f"{p['old_tunnel']} was replaced by a tunnel on {p['target']['name']}.")
     else:
-        autopilot._say(aid, f"DNS: {names} still point at {p['ip']} (the failover is off: change them yourself, or switch it on under Smart repair → Failover · CDN).")
+        autopilot._say(aid, f"DNS: {names} still point at {p['ip']} (the failover is off: change them yourself, or switch it on under Tunnels → DNS · IP switch).")
 
 
 def _domain_of(fqdn: str, domains: list[str]) -> str:
@@ -449,8 +496,8 @@ def point_names(aid: int, names: list[str], iran_id: int, tag: str = "create") -
         target = {"id": s.id, "name": s.name, "ip": s.host}
         hosts = {x.host: x.name for x in db.scalars(select(Server))}
 
-    if not conf().get("api_key"):
-        autopilot._say(aid, "DNS: no ArvanCloud key is saved (Smart repair → Failover · CDN), the names are not changed.")
+    if not has_key():
+        autopilot._say(aid, "DNS: no ArvanCloud key is saved (Tunnels → DNS · IP switch), the names are not changed.")
         return []
 
     try:

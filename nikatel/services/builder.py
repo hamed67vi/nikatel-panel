@@ -509,6 +509,11 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
     if transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
         raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
+    from . import license
+
+    if not license.tunnel_kind_allowed(transport):          # the free tier builds Backhaul TCP Mux only
+        license.require("tunnels")
+
     ports = parse_ports(ports_text)
     opts = clean_bh_opts(opts)
 
@@ -914,6 +919,53 @@ def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
         return build_other.start_build(iran_id, foreign_id, ports_text, kind, transport.replace("l3:", ""), opts, forced_name=name)
 
     return start_build(iran_id, foreign_id, ports_text, transport, mtu, keepalive, forced_name=name, nodelay=bool(rec.get("nodelay", True)), opts=opts)
+
+
+def follow_server_host(server_id: int, old_host: str, new_host: str) -> list[str]:
+    """A server got a new public address (edited in the panel): the GRE links of its tunnels carry the old address in their scripts, so each
+    tunnel is built again on the new one (same name, same ports; a build that fails puts the old record back in 'Recently removed'). For an
+    Iran server the ArvanCloud records that pointed at the old address follow, when a key is saved. Returns the names of the tunnels started."""
+    from . import autopilot, failover
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            return []
+
+        role, name = s.role, s.name
+        ids = [(t.id, t.name) for t in db.scalars(select(Tunnel).where((Tunnel.iran_server_id == server_id) | (Tunnel.foreign_server_id == server_id), Tunnel.enabled.is_(True)))
+               if not is_temp(t.name)]
+
+    if get_settings().read_only or not ids:
+        return []
+
+    def run(aid: int) -> None:
+        autopilot._say(aid, f"{name}: the address changed from {old_host} to {new_host}. Its {len(ids)} tunnel(s) are built again on the new address, one after the other.")
+        healed = 0
+
+        for tid, tname in ids:
+            try:
+                ok, story = autopilot._rebuild_safe(aid, tid)
+                autopilot._say(aid, f"{tname}: " + (story[-1] if story else "no result"))
+                healed += 1 if ok else 0
+            except (ValueError, RuntimeError, SSHError) as e:
+                autopilot._say(aid, f"{tname}: not rebuilt: {str(e)[:160]}")
+
+        if role == "iran" and re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", old_host or "") and re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", new_host or ""):
+            failover.follow_ip_change(aid, old_host, new_host, name)
+
+        autopilot._say(aid, f"Done: {healed} of {len(ids)} tunnel(s) run on the new address.", done=True, ok=healed == len(ids))
+
+    try:
+        autopilot._start(f"address {name}", run, action="create")
+    except ValueError:
+        return []
+
+    with session() as db:
+        emit(db, "warn", "servers", f"Server {name}: address {old_host} → {new_host}; its {len(ids)} tunnel(s) are rebuilt on the new address.", name)
+
+    return [n for _, n in ids]
 
 
 # ------------------------------------------------------------------ names

@@ -168,6 +168,16 @@ _FAILS: dict[str, list[float]] = {}
 LIMIT, WINDOW = 5, 15 * 60
 
 
+def is_https(request: Request) -> bool:
+    """The browser talks TLS: either to the panel itself or to the local reverse proxy in front of it (X-Forwarded-Proto, trusted from
+    localhost only). The session and gate cookies carry the Secure flag then, so they never travel in clear."""
+    if request.url.scheme == "https":
+        return True
+
+    peer = request.client.host if request.client else ""
+    return peer in ("127.0.0.1", "::1") and request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+
+
 def client_ip(request: Request) -> str:
     """The real client: X-Forwarded-For only when the request came from the local reverse proxy."""
     peer = request.client.host if request.client else "?"

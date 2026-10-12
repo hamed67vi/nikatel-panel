@@ -417,6 +417,10 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
     if kind not in KINDS:
         raise ValueError("unknown tunnel type")
 
+    from . import license
+
+    license.require("tunnels")                               # BackPack, Paqet and Chisel are not in the free tier
+
     opts = dict(opts or {})
     transport = str(transport or "").strip().lower()
 

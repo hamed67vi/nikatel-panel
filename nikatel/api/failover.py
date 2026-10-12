@@ -71,8 +71,8 @@ def fo_plan(server_id: int):
 
 
 def _writable():
-    if not failover.ENABLED:
-        raise HTTPException(403, "the ArvanCloud failover is switched off for now")
+    if not failover.has_key():
+        raise HTTPException(403, "no ArvanCloud key is saved (Tunnels → DNS · IP switch)" if failover.ENABLED else "the ArvanCloud failover is switched off")
 
     if get_settings().read_only:
         raise HTTPException(403, "the panel is read-only")

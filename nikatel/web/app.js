@@ -127,7 +127,7 @@ if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
   nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains: which Iran server each one points at, point one at another server with one click, and the failover of a dead server."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -834,6 +834,7 @@ PAGES.tunnels = async () => {
   renderSub();
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
+  if (s === "dns") return PAGES.dns();
   if (s === "test") return PAGES.tunnelTest();
   if (s === "create") { state.sub.tunnels = "list"; state.build = true; }
   return PAGES.tunnelsList();
@@ -1185,7 +1186,7 @@ function bkCheckRender(form) {
     ? `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${b.id}" ${bk.chk["replace_" + b.id] ? "checked" : ""} onchange="bkBtn(this.closest('form'))"> ⚠ Port ${b.ports.join(", ")} is used on ${esc(c.iran)} by ${esc(b.tunnel)} (${esc(b.state)}) — replace it: it is removed first${(b.all_ports || []).length > b.ports.length ? ` (its other ports ${b.all_ports.filter(x => !b.ports.includes(x)).join(", ")} stop too)` : ""}, restorable for 30 days from <i>Recently removed</i></label></div>`
     : `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
   const conf = c.conflicts.map(t => `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${t.id}" ${t.replaceable ? "checked" : ""}> ⚠ Port ${t.ports.join(", ")} already goes to this foreign server through ${esc(t.name)} (${esc(t.iran)}, ${esc(stName(t.state))}${t.state !== "up" && t.since ? " for " + ago(t.since) : ""}) — remove it first and replace it</label></div>`).join("");
-  const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Tunnel Doctor → Failover)"}</small></label>` : "";
+  const dns = c.conflicts.length && bk.arvan ? `<label class="chk"><input type="checkbox" name="dns_follow" checked> then point the CDN records of the replaced tunnel at the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Tunnels → DNS · IP switch)"}</small></label>` : "";
   const stale = (c.stale || []).map(s => `<div class="bconf"><label class="chk"><input type="checkbox" name="stale_${esc(s.unit)}" checked> ⚠ Port ${s.port} on ${esc(c.iran)} is held by an old tunnel (${esc(s.unit)}): ${esc(s.why)} — remove it and use the port</label></div>`).join("");
   box.innerHTML = busy + stale + conf + dns + (c.error ? `<div class="mut">${esc(c.error)}</div>` : "");
   bkBtn(form);
@@ -1340,14 +1341,14 @@ function storyHtml(s) {
     (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${["autopilot", "fix"].includes(s.action) && !s.dry_run ? (s.ok ? "All done - the problem is fixed." : "Repair did not succeed.") : `${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : s.action === "observe" ? "Look" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.`}</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 /* ---- Tunnel Doctor: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
-const ARVAN_UI = false;   // the ArvanCloud failover is switched off for now (also server side: failover.ENABLED); flip both to bring it back
+const ARVAN_UI = true;    // the ArvanCloud DNS failover and IP switch live under Tunnels → DNS · IP switch
 
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
-  const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), ARVAN_UI ? api("/api/failover").catch(() => null) : null, ARVAN_UI ? api("/api/settings/arvan").catch(() => ({})) : {}, ARVAN_UI ? api("/api/servers?role=iran").catch(() => []) : []]);
+  const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), null, {}, []]);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(stName(t.state))}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : ((outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`); })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span>${(() => { const off = outage && outage.by_tunnel && outage.by_tunnel[t.name], loss = (t.detail || {}).loss_pct || 0, why = off ? `A server of this tunnel is off (${off.join(", ")}): nothing is done until it is back.` : kind === "lossy" ? `${Math.round(loss)} % of the data is lost on this link.` : t.state === "down" ? "The tunnel does not answer." : "Part of the link works, part does not."; return `<span class="ap-why ${off ? "mut" : ""}" title="${esc(why)}">${esc(why)}</span>` + (off || t.last_error || kind === "lossy" ? `<a class="ap-detail" onclick="apDetail(${t.id})" title="The full reason and the log">Detail</a>` : ""); })()}${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
@@ -1366,7 +1367,7 @@ PAGES.actions = async () => {
   const intro = `<div class="card ap-intro" data-tab="att"><h3>🩺 What the Tunnel Doctor does</h3><div class="ap-steps">
       <div><b>1 · Watches</b><span>Every tunnel is checked each minute: its services, the GRE link, the control port and whether data really passes - and the packet loss.</span></div>
       <div><b>2 · Restarts</b><span>A tunnel that stays down for ${esc(rp.after_seconds || 180)} s gets its service restarted, one tunnel at a time.</span></div>
-      <div><b>3 · Repairs</b><span>If a restart is not enough it climbs, once per half hour per tunnel, up to the level you chose: rebuild, a new GRE link, another tunnel type. It never moves a tunnel to another Iran server by itself.</span></div>
+      <div><b>3 · Repairs</b><span>If a restart is not enough it climbs, once per half hour per tunnel, up to the level you chose: rebuild, a new GRE link, another tunnel type. A move to another Iran server goes through <i>DNS · IP switch</i>: it asks you first, or runs by itself when you set it so.</span></div>
       <div><b>4 · Looks at loss</b><span>From 5 % packet loss it only reads and writes what it sees (the live log); from 15 % - what users feel - it acts, after testing first.</span></div>
       <div><b>5 · Waits</b><span>While a server of a tunnel is off, or during a mass disruption, it does nothing to the tunnel: there is nothing to repair until the server is back.</span></div>
       <div><b>6 · Tells you</b><span>Every step, test and build is written in <i>History</i> with its full story. <i>Explain with AI</i> reads the situation and says what to do first.</span></div></div></div>`;
@@ -1384,9 +1385,8 @@ PAGES.actions = async () => {
       <small class="mut">At most ${rp.max_per_hour || "a few"} restarts per tunnel per hour; never while a server is unreachable.${d.read_only ? " Repairs need NIKATEL_READ_ONLY=false in the env file first." : ""}</small></div>
     <div class="card ap-histcard"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
       <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div></div>
-    ${foCard(fo, av, irn)}${ARVAN_UI ? dnsCard(fo, av, irn) : ""}`;
-  const nPend = (fo && fo.pending.length) || 0;
-  pageTabs("actions", [["att", "🔧 Working now"], ["fo", "🔁 Failover · CDN"]].filter(t => t[0] !== "fo" || fo), nPend ? "fo" : "att", {att: n, fo: nPend});
+    `;
+  pageTabs("actions", [["att", "🔧 Working now"]], "att", {att: n});
   apFit(fo);
 };
 /* the Tunnel Doctor page fits the window: its height is what is left under the top, the log and the history scroll inside their own boxes */
@@ -3342,6 +3342,7 @@ PAGES.settings = async () => {
   /* about & update */
   const about = sFrame("About & update", "This panel, the tunnel cores on your servers, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
     `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small>Update pulls, tests, restarts and checks health — it rolls back by itself when the new version does not start.</small></div><div class="ss-hr"><button class="sm" onclick="aboutLoad()">↻ Check</button><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div><pre class="gl-out hidden" id="about-log"></pre>`
+    + sGrp({icon: SI.shield(false), title: "License", desc: "which features this install may use", cls: "x flat", rows: '<div class="sr x" id="lic-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x flat", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x flat",
         rows: sWide(`<div class="eff-grid"><span><em>Mode</em><b>${ro ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div>`)}));
@@ -3351,7 +3352,7 @@ PAGES.settings = async () => {
 
   $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${about}</div>`;
   settingsTabs();
-  if (state.stab === "update") { aboutLoad(); enginesLoad(); }
+  if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); }
   if ($("#sec-box")) secLoad();
 };/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
 const sec = {setup: null, codes: null};
@@ -3683,3 +3684,53 @@ window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dock
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mk); else mk();
 })();
+
+/* ---- Tunnels → DNS · IP switch: the A records of the ArvanCloud account, which server each one points at, point one at another Iran server with one click;
+   the failover of a dead Iran server (plans to approve, history) and every DNS change with its Restore live here too ---- */
+PAGES.dns = async () => {
+  renderSub();
+  const [fo, av, irn, all] = await Promise.all([api("/api/failover").catch(() => null), api("/api/settings/arvan").catch(() => ({})), api("/api/servers?role=iran").catch(() => []), api("/api/servers").catch(() => [])]);
+  const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
+  const ok = av.has_api_key && (av.status || {}).ok;
+  let recs = null, err = "";
+  if (ok) { try { recs = (await api("/api/arvan/records")).records; } catch (e) { err = e.message; } }
+  const opts = cur => irn.map(s => `<option value="${s.id}" ${byIp[cur] && byIp[cur].id === s.id ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("");
+  const row = r => { const mine = r.ips.filter(ip => byIp[ip]); return `<div class="dns-rec ${mine.length ? "mine" : ""}"><b dir="ltr">${esc(r.fqdn)}</b><span class="dns-ips">${r.ips.map(ip => `<span class="dns-ip"><span class="mono">${esc(ip)}</span>${byIp[ip] ? `<small class="pill ${byIp[ip].role === "iran" ? "ok" : ""}">${esc(byIp[ip].name)}</small>` : '<small class="pill">not a server of this panel</small>'}</span>`).join("")}</span>
+      <span class="dns-act"><select class="sm">${opts(r.ips[0])}</select><button type="button" class="sm pri" onclick="dnsPoint('${esc(r.fqdn)}', this.previousElementSibling)" ${irn.length ? "" : "disabled"}>Point</button></span></div>`; };
+  const intro = `<div class="card dns-intro"><h3>🌐 IP switch · ArvanCloud DNS</h3><div class="ap-steps">
+      <div><b>1 · What it is</b><span>Your configs use domain names; ArvanCloud holds their A records. Pointing a record at another Iran server moves the users there without touching their configs (they reconnect within the record's TTL, about a minute).</span></div>
+      <div><b>2 · By hand</b><span>Pick the server next to a record and press Point. Every change is listed below with a Restore.</span></div>
+      <div><b>3 · By itself</b><span>When an Iran server dies, or its route is cut and no tunnel type works, the panel plans the move of its tunnels and records. Mode “ask me first” shows the plan here and sends a Telegram notice; “automatic” runs clean plans by itself.</span></div>
+      <div><b>4 · A new address</b><span>When you change a server's address in Servers, its tunnels are rebuilt on the new address and the records that pointed at the old one follow.</span></div></div></div>`;
+  const list = !av.has_api_key ? `<div class="card"><h3>🔑 Connect ArvanCloud</h3><div class="mut" style="margin-bottom:8px">Save the API key of your ArvanCloud account below; the panel reads the DNS records of your domains and can change the address inside a record.</div>${foForm(av)}</div>`
+    : !ok ? `<div class="card"><h3>🔑 ArvanCloud · not connected</h3><div class="err">${esc((av.status || {}).error || "press “Test the key”")}</div>${foForm(av)}</div>`
+    : `<div class="card"><h3>📇 Records <span class="pill">${recs ? recs.length : "…"}</span><span class="sp"></span><small class="mut">${(av.status || {}).domains} domain(s) · the servers of this panel are named</small><button type="button" class="sm" onclick="refresh()">↻</button></h3>
+        <div class="dns-recs">${err ? `<div class="err">${esc(err)}</div>` : (recs || []).map(row).join("") || '<div class="empty">No A record in the account.</div>'}</div></div>`;
+  $("#page").innerHTML = `${intro}${list}${fo ? foCard(fo, av, irn) : ""}${dnsCard(fo, av, irn)}`;
+};
+window.dnsPoint = async (name, sel) => {
+  if (!sel || !sel.value) return;
+  const label = sel.options[sel.selectedIndex].textContent;
+  if (!await gconfirm(`Point ${name} at ${label} now?\n\nUsers of this name reach that server within about a minute. The change is listed below and can be put back with Restore.`, {danger: true})) return;
+  try { const r = await api("/api/failover/point", {method: "POST", body: JSON.stringify({names: [name], iran_id: +sel.value})}); showModal("<b>🌐 DNS</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>'); followStory(r.action_id, $("#ap-story"), 120).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+
+/* ---- Settings → About: the license (owner / licensed / free), the features it switches on, the install id for a bound token ---- */
+async function licLoad() {
+  const box = $("#lic-box"); if (!box) return;
+  try {
+    const l = await api("/api/license");
+    const feats = Object.entries(l.all_features || {}).map(([k, d]) => `<span class="pill ${l.features.includes(k) ? "ok" : ""}" title="${esc(d)}">${l.features.includes(k) ? "✓" : "✕"} ${k}</span>`).join(" ");
+    const head = l.mode === "owner" ? "Owner install: every feature is on." : l.mode === "licensed" ? `Licensed to ${esc(l.holder || "—")}${l.expires ? " · until " + esc(when(l.expires).slice(0, 10)) : " · no end"}` : "Free tier: Backhaul TCP Mux tunnels. The other engines, the AI, the DNS failover and the shop bot pages need a license.";
+    box.innerHTML = `<div class="lic-top"><b>${head}</b><div class="lic-feats">${feats}</div>${l.error ? `<div class="err">${esc(l.error)}</div>` : ""}<small class="mut">Install id <code>${esc(l.install_id)}</code> — give it to the vendor for a license bound to this install.</small></div>
+      ${l.mode === "owner" ? "" : `<form class="lic-form" onsubmit="return licSave(event)"><textarea name="token" class="ob-raw" rows="2" placeholder="NK1.… paste the license token here" spellcheck="false"></textarea><div class="frm-act"><button class="pri sm" type="submit">Save the license</button>${l.has_token ? '<button type="button" class="sm" onclick="licSave(null, true)">Remove the license</button>' : ""}</div></form>`}`;
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+window.licSave = async (e, remove) => {
+  if (e) e.preventDefault();
+  const ta = document.querySelector(".lic-form textarea"), tok = remove ? "" : (ta ? ta.value.trim() : "");
+  if (!remove && !tok) { toast("Paste the token first", "bad"); return false; }
+  if (remove && !await gconfirm("Remove the license? The panel falls back to the free tier (Backhaul TCP Mux only).", {danger: true})) return false;
+  try { await api("/api/license", {method: "PUT", body: JSON.stringify({token: tok})}); toast(remove ? "✓ License removed" : "✓ License saved", "ok"); licLoad(); } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};

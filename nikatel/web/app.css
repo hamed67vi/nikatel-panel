@@ -2985,3 +2985,13 @@ body .pe-note { padding: 10px 12px; font-size: 13px; color: #ffd60a; background:
 body .pe-adv > summary { cursor: pointer; font-size: 13px; color: #9aa4b8; padding: 4px 0; } body .pe-adv[open] > summary { margin-bottom: 6px; }
 body .pe-pick .qp-chk { margin-top: 6px; }
 html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,80,130,.18); } html[data-mode="light"] body .pe-ch { color: #1c1f2a; background: rgba(60,80,130,.07); border-color: rgba(60,80,130,.16); } html[data-mode="light"] body .pe-ch.on { color: #0a62c9; background: rgba(10,132,255,.15); }
+
+/* ---- Tunnels → DNS · IP switch ---- */
+.dns-intro .ap-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dns-recs { display: flex; flex-direction: column; gap: 6px; }
+.dns-rec { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(200px, 1.6fr) auto; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.dns-rec.mine { border-color: rgba(10,132,255,.35); } .dns-rec > b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dns-ips { display: flex; flex-wrap: wrap; gap: 6px 12px; } .dns-ip { display: inline-flex; align-items: center; gap: 6px; } .dns-ip .mono { font-size: 12.5px; }
+.dns-act { display: inline-flex; align-items: center; gap: 6px; } .dns-act select { max-width: 220px; }
+.lic-top { display: flex; flex-direction: column; gap: 8px; width: 100%; } .lic-feats { display: flex; flex-wrap: wrap; gap: 6px; } .lic-form { width: 100%; margin-top: 10px; } .lic-form textarea { width: 100%; min-height: 56px; }
+@media (max-width: 1100px) { .dns-intro .ap-steps { grid-template-columns: 1fr 1fr; } .dns-rec { grid-template-columns: 1fr; } }

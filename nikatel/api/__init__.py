@@ -12,6 +12,7 @@ from . import (
     failover,
     gateway,
     jobs,
+    license,
     nodes,
     panels,
     radar,
@@ -23,5 +24,5 @@ from . import (
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover):
+for mod in (auth, system, servers, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license):
     router.include_router(mod.router)

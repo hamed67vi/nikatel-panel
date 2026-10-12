@@ -83,8 +83,7 @@ def _register_jobs() -> None:
     jobs.register("repair", 60, autopilot.repair_cycle)         # the plain restarts every minute; the smart repair and the look at lossy tunnels every five minutes (one job, not three)
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
-    if failover.ENABLED:                                          # while the DNS failover is switched off there is nothing to check every minute
-        jobs.register("failover", 60, failover.check)
+    jobs.register("failover", 60, failover.check)              # does nothing until a key and a mode are set (Tunnels → DNS · IP switch)
 
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 30, panels.check_all)          # a node that drops off a Marzban / PasarGuard panel shows within half a minute
@@ -144,7 +143,7 @@ def create_app(run_jobs: bool = True) -> FastAPI:
             if entry and p.rstrip("/") == "/" + entry and request.method == "GET":
                 # the secret door: set the gate cookie and show the login page
                 resp = HTMLResponse(_index_html())
-                resp.set_cookie(auth.GATE_COOKIE, gate.make_cookie(entry), httponly=True, samesite="strict", secure=request.url.scheme == "https", max_age=30 * 86400, path="/")
+                resp.set_cookie(auth.GATE_COOKIE, gate.make_cookie(entry), httponly=True, samesite="strict", secure=auth.is_https(request), max_age=30 * 86400, path="/")
                 resp.headers["X-Request-Id"] = rid
                 _harden(resp)
                 return resp

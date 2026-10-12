@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     ssh_workers: int = 8
 
     log_level: str = "INFO"
+    # the license mode: "owner" on the vendor's own installs (every feature on, no token); empty = a token from Settings → About → License or the free tier
+    license: str = ""
 
     @property
     def db_url(self) -> str:

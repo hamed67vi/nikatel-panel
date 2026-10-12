@@ -35,9 +35,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "security": {"entry_path": ""},
     # Add server → Marzban node: the certificate of the Marzban panel that is filled in by default (a public certificate, kept in the panel database only)
     "nodes": {"marzban_cert": ""},
+    # the license token (see services/license.py); empty = the free tier, unless NIKATEL_LICENSE=owner
+    "license": {"token": ""},
 }
 
-SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",)}
+SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}
 
 
 def get(key: str) -> dict:

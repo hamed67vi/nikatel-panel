@@ -33,6 +33,11 @@ def conf() -> dict:
 
 
 def ask(system: str, user: str, max_tokens: int = 700, timeout: float = 45) -> str:
+    from . import license
+
+    if not license.has("ai"):
+        raise RuntimeError("the AI assistant needs a license (Settings → About → License)")
+
     s = conf()
 
     if not s.get("api_key"):

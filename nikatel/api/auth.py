@@ -20,7 +20,7 @@ def _audit(level: str, text: str) -> None:
 
 def _cookie(request: Request, response: Response, user: str) -> None:
     response.set_cookie(auth.COOKIE, auth.make_session(user), httponly=True, samesite="strict",
-                        secure=request.url.scheme == "https", max_age=auth.get_settings().session_hours * 3600)
+                        secure=auth.is_https(request), max_age=auth.get_settings().session_hours * 3600)
 
 
 class LoginIn(BaseModel):
@@ -274,7 +274,7 @@ def entry_path(body: EntryIn, request: Request, response: Response, user: str = 
         raise HTTPException(400, str(e))
 
     if path:       # this browser keeps working: it gets the new gate cookie now
-        response.set_cookie(auth.GATE_COOKIE, gate.make_cookie(path), httponly=True, samesite="strict", secure=request.url.scheme == "https", max_age=30 * 86400, path="/")
+        response.set_cookie(auth.GATE_COOKIE, gate.make_cookie(path), httponly=True, samesite="strict", secure=auth.is_https(request), max_age=30 * 86400, path="/")
 
     _audit("warn", "The secret entry path was " + ("changed." if path else "removed: the panel answers on / again."))
     return {"ok": True, "path": path}

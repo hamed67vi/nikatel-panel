@@ -10,6 +10,7 @@ os.environ["NIKATEL_LOG_DIR"] = _TMP + "/logs"
 os.environ["NIKATEL_SSH_KEY"] = _TMP + "/no-key"
 os.environ["NIKATEL_READ_ONLY"] = "true"
 os.environ["NIKATEL_BOOTSTRAP_DIR"] = _TMP + "/etc"      # never the real /etc/nikatel of the machine the tests run on
+os.environ["NIKATEL_LICENSE"] = "owner"                  # every feature on; test_license switches to the free tier on purpose
 
 from nikatel import db
 from nikatel.config import get_settings

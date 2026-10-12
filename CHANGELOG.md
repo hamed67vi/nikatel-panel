@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.19.0
+
+- Tunnels → DNS · IP switch (new tab): the A records of the ArvanCloud account with the panel server each one points at, a Point button that moves a record to another Iran server (asks first, live story, listed below with Restore), the failover plans and settings, the DNS change log. The Failover tab of the Tunnel Doctor moved here. The failover is on again (it stayed off since 1.8.x), but only when an ArvanCloud key is saved; a plan in mode "ask me first" waits here and sends a Telegram notice.
+- Servers: changing a server's address rebuilds its tunnels on the new address (each one safely: the old one comes back when the new build fails) and, for an Iran server with an ArvanCloud key, re-points the records that carried the old address.
+- License (Settings → About): the panel now has three modes - owner (`NIKATEL_LICENSE=owner`), licensed (a signed `NK1.` token, Ed25519, bound to an install id or floating, with an end date or none) and the free tier (Backhaul TCP Mux tunnels only). Features: tunnels (every engine), ai, failover, shopbot. The gates sit in the builders, the tunnel test, the smart repair's choice of kinds, the AI and the shop bot API (402). docs/licensing.md says what this does and does not protect and how the license server and AI proxy are meant to work. The `cryptography` package is a dependency now.
+- Security: the session and gate cookies are marked Secure behind a TLS proxy too (X-Forwarded-Proto from the proxy on this machine is trusted), not only when the panel itself speaks TLS.
+- Real test of every tunnel kind (14 kinds, one pair of servers, 2026-10-12): Backhaul tcpmux 60 · tcp 93 · wsmux 59 · wssmux 60, BackPack tcpmux 81 · tcp 94 · stealth 92 · wssmux 82 · kcp 50, BackPack dynamic udp 74 · pck 72, Paqet 55, Chisel 72 · tls 70 - all built, carried data and were removed again.
+
 ## 1.18.2
 
 - Edit plan: the inbounds are picked from what the plan's panel offers (tick chips by protocol, all / none per protocol; PasarGuard: its groups) instead of writing JSON; the JSON stays in a fold. A tick "Also change the accounts already bought with this plan" gives the change to the active accounts on the panel too (asks first, runs in the background, tells how many changed and how many failed); new purchases get the plan's inbounds as before. The plan's server must be a panel in Panels (matched by address).

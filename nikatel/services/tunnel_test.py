@@ -464,7 +464,15 @@ def explain_failure(kind: str, error: str) -> str:
 
 
 def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full") -> str:
+    from . import license
+
     kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
+    allowed = [k for k in kinds if license.tunnel_kind_allowed(k)]
+
+    if not allowed:
+        license.require("tunnels")
+
+    kinds = allowed
 
     if any(not j["done"] for j in _COMPARE.values()):
         raise RuntimeError("another tunnel test is still running")

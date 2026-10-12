@@ -105,6 +105,7 @@ def test_restore_puts_one_record_back_and_marks_the_failover_undone(client, monk
              "old": "203.0.113.5", "new": "203.0.113.9", "configs": ["c1"], "restored": False, "restored_at": None}
     hist = {"id": "1-1", "at": 1, "server_id": 1, "server": "ir1", "ip": "203.0.113.5", "target": {"id": 2, "name": "ir2", "ip": "203.0.113.9"}, "moved": 1, "tunnels": 1, "dns": [], "errors": [], "ok": True, "undone": False}
     st.put("failover", {"dns_log": [entry], "history": [hist]})
+    st.put("arvan", {"api_key": "k-test"})                                     # a change of a record needs the ArvanCloud key (403 without one)
     j = client.get("/api/failover").json()
     assert j["dns_log"][0]["fqdn"] == "ir.example.test" and j["dns_log"][0]["restored"] is False and j["history"][0]["undone"] is False
     r = client.post("/api/failover/dns/1-1%3Ar1/restore")

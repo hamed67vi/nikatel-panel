@@ -108,7 +108,7 @@ def update_server(server_id: int, body: ServerIn):
         if why:
             raise HTTPException(409, why[0].upper() + why[1:])
 
-        was_enabled, old_name = s.enabled, s.name
+        was_enabled, old_name, old_host = s.enabled, s.name, s.host
 
         for k, v in body.model_dump().items():
             setattr(s, k, v)
@@ -127,7 +127,14 @@ def update_server(server_id: int, body: ServerIn):
             emit(db, "info", "servers", f"Server {s.name} enabled again.", s.name)
 
         db.flush()
-        return ServerOut.model_validate(s)
+        out = ServerOut.model_validate(s)
+
+    if body.host != old_host:                        # a new public address: the tunnels (their GRE links name the address) follow, and the DNS of an Iran server
+        from ..services import builder
+
+        builder.follow_server_host(server_id, old_host, body.host)
+
+    return out
 
 
 @router.delete("/servers/{server_id}")
