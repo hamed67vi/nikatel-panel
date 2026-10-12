@@ -29,7 +29,7 @@ async function api(path, opts = {}) {
   if (r.status === 401) { showLogin(); throw new Error("not logged in"); }
   if (!r.ok) {
     const rid = r.headers.get("X-Request-Id");
-    let msg = (body && (body.detail || body.error)) || "HTTP " + r.status;
+    let msg = (body && (body.error || body.detail)) || "HTTP " + r.status;      // docs/api.md: every error is {ok:false, error, code}
     if (Array.isArray(msg)) msg = msg.map(x => (x.loc || []).slice(-1)[0] + ": " + x.msg).join("; ");
     const bare = /^HTTP \d+$/.test(msg);
     if (bare && [502, 503, 504].includes(r.status)) msg = "The panel did not answer (HTTP " + r.status + "): it is most likely restarting after an update. Wait about 10 seconds and try again";   // the server said nothing: name what was being done, so the message is never just a number
@@ -974,10 +974,16 @@ window.checkAll = async () => {
   refresh();
 };
 const LOSS_HIGH_PCT = 10;window.tunFilter = m => { localStorage.setItem("nk.tf", m); refresh(); };
-window.healthAll = async () => { toast("Checking every tunnel… (up to a minute)"); try { const r = await api("/api/tunnels/health-all", {method: "POST"}); toast(`Health: ${r.up} up · ${r.degraded} unstable · ${r.down} down` + (r.unknown ? ` · ${r.unknown} unknown` : ""), r.down || r.degraded ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+/* long work on the server (202 + action_id, docs/api.md): followed here until it is done; resolves with the status of the action */
+async function followAction(id, every = 2000, limitSeconds = 900) {
+  for (let i = 0; i < limitSeconds * 1000 / every; i++) { await new Promise(r => setTimeout(r, every)); const s = await api(`/api/actions/${id}`); if (s.done) return s; }
+  return {done: false, ok: false, story: ["still running - see the History of the Tunnel Doctor"]};
+}
+const lastLine = s => (s.story || []).slice(-1)[0] || "";
+window.healthAll = async () => { toast("Checking every tunnel… (up to a minute)"); try { const r = await api("/api/tunnels/health-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.restartTunnel = async (id, name) => { if (!await gconfirm(`Restart ${name} on both servers? It is down for a few seconds.`)) return; toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); toast(`Restarted: ${r.up} up · ${r.degraded} unstable · ${r.down} down` + (r.unknown ? ` · ${r.unknown} unknown` : ""), r.down || r.degraded ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); toast(`✓ ${r.results.filter(x => !x.error).length} measured`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 async function enginesLoad() {
   const box = $("#eng-box"); if (!box) return;
   const d = await api("/api/engines");

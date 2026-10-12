@@ -33,7 +33,7 @@ def test_speed_sink_is_validated():
 
 def test_tunnel_test_api_read_only(client):
     r = client.post("/api/tunnel-test", json={"iran_id": 1, "foreign_id": 2})
-    assert r.status_code == 400 and "read-only" in r.json()["detail"]
+    assert r.status_code == 400 and "read-only" in r.json()["error"]
 
 
 def test_cleanup_also_removes_a_renamed_temporary_tunnel(monkeypatch):

@@ -158,7 +158,9 @@ old file is replaced, previous copy kept) and reads its state with `bot_miniapp_
    and the UI, not in a dead thread.
 7. **Errors are sentences**: 400 bad input · 401 login · 404 no such thing · 409 conflict ·
    502 a server or panel did not answer · 500 our bug (logged with the request id the browser
-   shows). Never a traceback to the browser.
+   shows). Never a traceback to the browser. One handler gives every error the one shape
+   `{"ok": false, "error": <sentence>, "code": <slug>}`, and work longer than a few seconds answers 202 with an
+   action id (`docs/api.md`).
 8. **Every change ships with a test**; `scripts/deploy.sh` and CI refuse a red suite.
 
 ## 4. Data

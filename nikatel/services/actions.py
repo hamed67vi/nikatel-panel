@@ -396,6 +396,42 @@ def restart_all() -> list[dict]:
         return list(ex.map(one, ids))
 
 
+def _states(rows: list[dict]) -> str:
+    return " · ".join(f"{sum(1 for r in rows if r.get(chr(115) + chr(116) + chr(97) + chr(116) + chr(101)) == k)} {label}" for k, label in (("up", "up"), ("degraded", "unstable"), ("down", "down"), ("unknown", "unknown")))
+
+
+def health_all_start(source: str = "manual") -> int:
+    """The health check of every tunnel as an action (202 now; the states in the story when it is done). Read only."""
+    from . import autopilot
+
+    def work(aid: int) -> None:
+        rows = health_all()
+
+        for r in rows:
+            if r["state"] != "up":
+                _say(aid, f"{r[chr(110) + chr(97) + chr(109) + chr(101)]}: {r[chr(115) + chr(116) + chr(97) + chr(116) + chr(101)]}" + (" - " + r["why"] if r.get("why") else ""))
+
+        _say(aid, f"Checked {len(rows)} tunnel" + ("s" if len(rows) != 1 else "") + f": {_states(rows)}.", done=True, ok=True)
+
+    return autopilot._start("health of all tunnels", work, action="health", source=source, allow_read_only=True)
+
+
+def restart_all_start(source: str = "manual") -> int:
+    """Restart every tunnel on both servers, four at a time, as an action (needs read-only off)."""
+    from . import autopilot
+
+    def work(aid: int) -> None:
+        rows = restart_all()
+
+        for r in rows:
+            if r["state"] != "up":
+                _say(aid, f"{r[chr(110) + chr(97) + chr(109) + chr(101)]}: {r[chr(115) + chr(116) + chr(97) + chr(116) + chr(101)]}" + (" - " + r["why"] if r.get("why") else ""))
+
+        _say(aid, f"Restarted {len(rows)} tunnel" + ("s" if len(rows) != 1 else "") + f": {_states(rows)}.", done=True, ok=not any(r["state"] == "down" for r in rows))
+
+    return autopilot._start("restart of all tunnels", work, action="restart", source=source)
+
+
 def health_all() -> list[dict]:
     """check_tunnel on every enabled tunnel, eight at a time; the list of states afterwards."""
     with session() as db:

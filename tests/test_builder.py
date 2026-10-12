@@ -104,9 +104,9 @@ def test_start_build_refused_in_read_only(client):
         start_build(1, 2, "8072")
 
     r = client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072"})
-    assert r.status_code == 400 and "read-only" in r.json()["detail"]
+    assert r.status_code == 400 and "read-only" in r.json()["error"]
     r = client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "transport": "udp"})
-    assert r.status_code == 400 and "transport must be" in r.json()["detail"]
+    assert r.status_code == 400 and "transport must be" in r.json()["error"]
     assert client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "transport": "u dp"}).status_code == 422
 
 

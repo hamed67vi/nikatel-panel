@@ -199,11 +199,12 @@ def full_check():
     return {"ok": True, **tt.full_check()}
 
 
-@router.post("/tunnels/quality-all")
+@router.post("/tunnels/quality-all", status_code=202)
 def quality_all():
+    """Measure the quality of every tunnel (10 s of pings each), as an action: follow /api/actions/{action_id}. Read only."""
     from ..services import tunnel_test as tt
 
-    return {"ok": True, "results": tt.quality_all()}
+    return {"ok": True, "action_id": tt.quality_all_start()}
 
 
 class CompareIn(BaseModel):
@@ -378,24 +379,23 @@ def checks(tunnel_id: int, hours: int = 24):
                 "checks": [[r.ts, r.ok, r.rtt_ms, r.rx_mbps, r.tx_mbps, r.error] for r in rows]}
 
 
-@router.post("/tunnels/health-all")
+@router.post("/tunnels/health-all", status_code=202)
 def health_all():
+    """Check every tunnel now, as an action: follow /api/actions/{action_id}; the last line of the story is the count of states. Read only."""
     from ..services import actions
 
-    rows = actions.health_all()
-    return {"ok": True, "results": rows, **{k: sum(1 for r in rows if r["state"] == k) for k in ("up", "degraded", "down", "unknown")}}
+    return {"ok": True, "action_id": actions.health_all_start()}
 
 
-@router.post("/tunnels/restart-all")
+@router.post("/tunnels/restart-all", status_code=202)
 def restart_all():
+    """Restart every tunnel on both servers, four at a time, as an action (needs read-only off; 409 while one is already running)."""
     from ..services import actions
 
     try:
-        rows = actions.restart_all()
+        return {"ok": True, "action_id": actions.restart_all_start()}
     except ValueError as e:
         raise HTTPException(409, str(e)) from e
-
-    return {"ok": True, "results": rows, **{k: sum(1 for r in rows if r["state"] == k) for k in ("up", "degraded", "down", "unknown")}}
 
 
 @router.post("/tunnels/{tunnel_id}/restart")

@@ -32,7 +32,7 @@ def test_delete_refused_when_a_tunnel_uses_it(client, tmp_path):
     import_seed_dir(tmp_path)
     sid = client.get("/api/servers?role=iran").json()[0]["id"]
     r = client.delete(f"/api/servers/{sid}")
-    assert r.status_code == 409 and "t1" in r.json()["detail"]
+    assert r.status_code == 409 and "t1" in r.json()["error"]
 
 
 def test_forget_hostkey_touches_only_our_file(client):

@@ -171,7 +171,7 @@ def test_core_save_backup_and_rollback(client, fake, monkeypatch):
 
     # read-only panel refuses to write
     r = client.post(f"/api/panels/{pid}/core/outbounds", json={"uri": "vless://11111111-1111-1111-1111-111111111111@2.2.2.2:443?type=ws&security=tls&sni=x#fi", "tag": "fi"})
-    assert r.status_code == 400 and "read-only" in r.json()["detail"]
+    assert r.status_code == 400 and "read-only" in r.json()["error"]
 
     real = core.get_settings()
     monkeypatch.setattr(core, "get_settings", lambda: type("S", (), {"read_only": False, "data_dir": real.data_dir})())
@@ -184,7 +184,7 @@ def test_core_save_backup_and_rollback(client, fake, monkeypatch):
     # a failing write puts the old config back
     fake.fail_put = True
     r = client.delete(f"/api/panels/{pid}/core/outbounds/fi")
-    assert r.status_code == 502 and "old config" in r.json()["detail"]
+    assert r.status_code == 502 and "old config" in r.json()["error"]
     fake.fail_put = False
     assert [o["tag"] for o in fake.core["outbounds"]] == ["fi", "direct", "block"]
 

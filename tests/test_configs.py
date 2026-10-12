@@ -131,7 +131,7 @@ def test_probe_install_guards(client, monkeypatch):
 
     # read-only panel refuses
     r = client.post("/api/settings/probe/install?server_id=1")
-    assert r.status_code == 400 and "read-only" in r.json()["detail"]
+    assert r.status_code == 400 and "read-only" in r.json()["error"]
 
     class S:
         read_only = False
@@ -145,7 +145,7 @@ def test_probe_install_guards(client, monkeypatch):
     monkeypatch.setattr(probe_install, "get_settings", lambda: S())
     r = client.post("/api/settings/probe/install?server_id=1")
     # no Xray in the (fake) engine cache -> 502 with a clear hint
-    assert r.status_code == 502 and "Xray" in r.json()["detail"]
+    assert r.status_code == 502 and "Xray" in r.json()["error"]
     assert sorted(p.name for p in probe_install.SRC.glob("*.py"))[:2] == ["bulk-import.py", "daily-speed.py"]
     assert set(probe_install.UNITS) >= {"nikatel-speed-api.service", "nikatel-probe-manager.service", "nikatel-daily-speed.timer"}
 

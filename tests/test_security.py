@@ -59,7 +59,7 @@ def test_wrong_attempts_lock_the_address(client):
         assert other.post("/api/auth/login", json={"user": "admin", "password": "nope-nope-nope"}).status_code == 401
 
     r = other.post("/api/auth/login", json={"user": "admin", "password": PW})
-    assert r.status_code == 429 and "try again" in r.json()["detail"]
+    assert r.status_code == 429 and "try again" in r.json()["error"]
 
 
 def test_changing_the_password_ends_other_sessions(client):
@@ -112,7 +112,7 @@ def test_secret_entry_path(client):
 
     for url in ("/", "/api/auth/me", "/static/app.js", "/api/docs", "/api/auth/recovery-options", "/anything"):
         r = stranger.get(url)
-        assert r.status_code == 404 and r.json() == {"detail": "Not Found"}, url
+        assert r.status_code == 404 and r.json() == {"ok": False, "error": "Not Found", "code": "not_found"}, url       # the same answer as any unknown path
 
     assert stranger.post("/api/auth/login", json={"user": "admin", "password": PW}).status_code == 404
     door = stranger.get("/my-secret-door-9")

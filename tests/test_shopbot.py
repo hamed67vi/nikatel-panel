@@ -200,7 +200,7 @@ def test_import_refuses_without_import_marker(client, monkeypatch):
     monkeypatch.setattr(shopbot, "run_action", lambda node, name, params=None, timeout=90: "BACKUP /b.sql.gz 1\n" if name == "bot_backup" else "ERROR 1049 unknown database\n")
     client.put("/api/settings/shopbot", json={"host": "9.9.9.9"})
     r = client.post("/api/shopbot/import-stage")
-    assert r.status_code == 502 and "import failed after backup" in r.json()["detail"]
+    assert r.status_code == 502 and "import failed after backup" in r.json()["error"]
 
 
 def test_unknown_table_and_settings_validation(client):

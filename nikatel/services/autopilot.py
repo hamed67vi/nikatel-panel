@@ -378,9 +378,10 @@ def _wait(aid: int, limit: int = 900) -> tuple[bool, list[str]]:
     return False, ["timed out"]
 
 
-def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manual") -> int:
-    """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id. `source` says who started it (manual / auto)."""
-    if get_settings().read_only:
+def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manual", allow_read_only: bool = False) -> int:
+    """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id. `source` says who started it (manual / auto).
+    `allow_read_only`: work that only reads the servers (a health check, a measurement) may run while the panel is read-only."""
+    if get_settings().read_only and not allow_read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server")
 
     with _LOCK:

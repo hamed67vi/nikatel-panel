@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.26.0
+
+**M10 #60 - the API contract** (`docs/api.md`).
+
+- **One error shape on every route**, from one handler: `{"ok": false, "error": "<sentence>", "code": "<slug>"}` with the status that fits (`bad_request`, `not_signed_in`, `license_needed`, `forbidden`, `not_found`, `conflict`, `invalid`, `too_many_requests`, `internal`, `upstream_failed`). A body that does not fit the model answers 422 with one sentence per field instead of a list of objects; an unknown path and the secret-door refusal answer the same way. The page reads `error`.
+- **Long work as actions:** *Check every tunnel*, *Restart every tunnel* and *Measure every tunnel* answer 202 with an action id at once; the page follows the action and shows its last line (they blocked the request for up to minutes). A read-only check or measurement may run while the panel is read-only; a restart may not.
+- **The versioning policy** is written down: `/api` stays version 1 and compatible; a breaking change ships beside the old route under `/api/v2`.
+- The contract is covered by `tests/test_api_contract.py`.
+
 ## 1.25.5
 
 - The records of the DNS accounts are read once at start, in the background, so even the first open of the DNS page is served at once.

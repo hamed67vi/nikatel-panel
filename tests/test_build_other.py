@@ -85,7 +85,7 @@ def test_build_other_refused_in_read_only(client):
         bo.start_build(1, 2, "8072", "backpack", "tcpmux")
 
     r = client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "kind": "paqet"})
-    assert r.status_code == 400 and "read-only" in r.json()["detail"]
+    assert r.status_code == 400 and "read-only" in r.json()["error"]
     assert client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "kind": "rocket"}).status_code == 422
     kinds = client.get("/api/tunnels/kinds").json()["kinds"]
     assert [k["key"] for k in kinds] == ["backhaul", "backpack", "backpack_direct", "paqet", "chisel"] and len(kinds[1]["transports"]) == 12

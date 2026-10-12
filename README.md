@@ -11,7 +11,7 @@ client configs tested from inside Iran, Marzban / PasarGuard panels, a Telegram 
 ![python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![stack](https://img.shields.io/badge/FastAPI%20%2B%20SQLite%20%2B%20plain%20JS-no%20build%20step-success)
 
-[Features](docs/features.md) · [Tunnels](docs/tunnels.md) · [Shop bot](docs/shop-bot.md) · [Operations](docs/operations.md) · [Security](SECURITY.md) · [Architecture](ARCHITECTURE.md) · [Changelog](CHANGELOG.md)
+[Features](docs/features.md) · [Tunnels](docs/tunnels.md) · [Shop bot](docs/shop-bot.md) · [API](docs/api.md) · [Operations](docs/operations.md) · [Security](SECURITY.md) · [Architecture](ARCHITECTURE.md) · [Changelog](CHANGELOG.md)
 
 </div>
 

@@ -62,7 +62,19 @@ def test_tunnel_quality(client, monkeypatch):
     r = client.post("/api/tunnels/1/quality").json()
     assert r["loss_pct"] == 0 and 80 <= r["latency_ms"] <= 82 and r["score"] > 0
     assert client.get("/api/tunnels").json()[0]["quality"]["score"] == r["score"]
-    assert len(client.post("/api/tunnels/quality-all").json()["results"]) == 1
+    import time as _t
+
+    aid = client.post("/api/tunnels/quality-all").json()["action_id"]
+
+    for _ in range(50):
+        s = client.get(f"/api/actions/{aid}").json()
+
+        if s["done"]:
+            break
+
+        _t.sleep(0.1)
+
+    assert s["done"] and s["story"][-1] == "Measured 1 of 1 tunnel."
 
 
 def test_panel_test_user_marzban(monkeypatch):

@@ -9,8 +9,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__, auth, jobs
 from . import log as logmod
@@ -42,6 +44,15 @@ from .services import (
 
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
+ERROR_CODES = {400: "bad_request", 401: "not_signed_in", 402: "license_needed", 403: "forbidden", 404: "not_found", 409: "conflict", 422: "invalid",
+               429: "too_many_requests", 500: "internal", 502: "upstream_failed", 503: "unavailable"}      # docs/api.md: one error shape, these codes
+
+
+def error_json(status: int, message: str, code: str | None = None, headers: dict | None = None) -> JSONResponse:
+    """The one error shape of the API: {"ok": false, "error": <sentence>, "code": <slug>}."""
+    return JSONResponse({"ok": False, "error": str(message), "code": code or ERROR_CODES.get(status, "error")}, status_code=status, headers=headers)
+
+
 SLOW_MS = 3000          # an API answer slower than this is written to the log, so the slow routes are found instead of guessed
 
 
@@ -76,10 +87,10 @@ def _demo_refuse(request: Request) -> JSONResponse | None:
     msg = "This is a read-only demo with invented data - nothing can be changed here."
 
     if request.method not in ("GET", "HEAD", "OPTIONS"):
-        return JSONResponse({"ok": False, "error": msg, "detail": msg}, status_code=403)
+        return error_json(403, msg, "read_only_demo")
 
     if any(b in p for b in _DEMO_BLOCK):
-        return JSONResponse({"ok": False, "error": "Not available in the demo.", "detail": "Not available in the demo."}, status_code=403)
+        return error_json(403, "Not available in the demo.", "read_only_demo")
 
     ip, now = auth.client_ip(request), time.time()
     hits = [t for t in _DEMO_HITS.get(ip, []) if now - t < _DEMO_WINDOW]
@@ -91,7 +102,7 @@ def _demo_refuse(request: Request) -> JSONResponse | None:
             _DEMO_HITS.pop(k, None)
 
     if len(hits) > _DEMO_LIMIT:
-        return JSONResponse({"ok": False, "error": "Too many requests - slow down a little.", "detail": "Too many requests - slow down a little."}, status_code=429, headers={"Retry-After": "30"})
+        return error_json(429, "Too many requests - slow down a little.", headers={"Retry-After": "30"})
 
     return None
 
@@ -215,15 +226,15 @@ def create_app(run_jobs: bool = True) -> FastAPI:
                     return refused
 
             if not gate.allowed(request):
-                return JSONResponse({"detail": "Not Found"}, status_code=404, headers={"X-Request-Id": rid})   # looks exactly like a missing page
+                return error_json(404, "Not Found", headers={"X-Request-Id": rid})   # looks exactly like a missing page
 
             if p in ("/api/docs", "/api/openapi.json") and not auth.session_user(request):   # the API description is for the signed-in operator only
-                return JSONResponse({"detail": "not logged in"}, status_code=401, headers={"X-Request-Id": rid})
+                return error_json(401, "not logged in", headers={"X-Request-Id": rid})
 
             response = await call_next(request)
         except Exception:  # the boundary: never a traceback to the browser
             log.exception("unhandled %s %s", request.method, request.url.path)
-            return JSONResponse({"ok": False, "error": "internal error", "rid": rid}, status_code=500, headers={"X-Request-Id": rid})
+            return error_json(500, "internal error (request id " + rid + ")", headers={"X-Request-Id": rid})
         finally:
             logmod.request_id.reset(token)
 
@@ -248,10 +259,31 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
         return response
 
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_error(request: Request, exc: StarletteHTTPException):
+        """Every HTTPException a route raises, and every unknown path, in the one shape."""
+        d = exc.detail
+
+        if isinstance(d, dict):
+            return error_json(exc.status_code, d.get("error") or d.get("detail") or "", d.get("code"), getattr(exc, "headers", None))
+
+        return error_json(exc.status_code, d, None, getattr(exc, "headers", None))
+
+    @app.exception_handler(RequestValidationError)
+    async def _invalid(request: Request, exc: RequestValidationError):
+        """A body or query that does not fit the model: one sentence per field."""
+        parts = []
+
+        for e in exc.errors()[:6]:
+            loc = ".".join(str(x) for x in e.get("loc", ()) if x not in ("body", "query", "path"))
+            parts.append((loc + ": " if loc else "") + str(e.get("msg", "invalid")))
+
+        return error_json(422, "; ".join(parts) or "invalid request", "invalid")
+
     @app.exception_handler(Exception)
     async def _any(request: Request, exc: Exception):
         log.error("error in %s %s: %s", request.method, request.url.path, exc, exc_info=exc)
-        return JSONResponse({"ok": False, "error": str(exc)[:200]}, status_code=500)
+        return error_json(500, "internal error: " + str(exc)[:160])
 
     if WEB.exists():
         app.mount("/static", StaticFiles(directory=WEB), name="static")

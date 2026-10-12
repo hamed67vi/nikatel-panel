@@ -163,9 +163,26 @@ def test_restart_all_and_health_all_report_the_states(client, monkeypatch):
     monkeypatch.setattr(actions, "restart_all", lambda: rows)
     monkeypatch.setattr(actions, "health_all", lambda: rows)
 
+    import time as _t
+
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+
     for path in ("restart-all", "health-all"):
-        j = client.post(f"/api/tunnels/{path}").json()
-        assert j["up"] == 1 and j["down"] == 1 and j["degraded"] == 0 and len(j["results"]) == 2
+        r = client.post(f"/api/tunnels/{path}")
+        assert r.status_code == 202, r.text
+        aid = r.json()["action_id"]
+
+        for _ in range(50):
+            s = client.get(f"/api/actions/{aid}").json()
+
+            if s["done"]:
+                break
+
+            _t.sleep(0.1)
+
+        assert s["done"] and "1 up" in s["story"][-1] and "1 down" in s["story"][-1] and "b: down - x" in s["story"]
 
     assert client.post("/api/tunnels/999/restart").status_code == 409
 
@@ -385,9 +402,9 @@ def test_a_server_name_is_never_added_twice(client):
     r = client.post("/api/servers", json={"name": "dupA", "host": "203.0.113.61", "role": "iran"})
     assert r.status_code == 201
     r = client.post("/api/servers", json={"name": "DUPA", "host": "203.0.113.62", "role": "foreign"})        # same name, other capitals
-    assert r.status_code == 409 and "dupA" in r.json()["detail"] and "name" in r.json()["detail"].lower()
+    assert r.status_code == 409 and "dupA" in r.json()["error"] and "name" in r.json()["error"].lower()
     r = client.post("/api/servers", json={"name": "other", "host": "203.0.113.61", "role": "foreign"})        # same address
-    assert r.status_code == 409 and "203.0.113.61" in r.json()["detail"]
+    assert r.status_code == 409 and "203.0.113.61" in r.json()["error"]
 
 def test_the_same_node_under_another_user_is_not_imported_twice():
     from nikatel.services.configs import endpoint_sig, meta_from_uri

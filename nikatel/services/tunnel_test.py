@@ -88,6 +88,22 @@ def quality(tunnel_id: int) -> dict:
     return {"name": name, **q}
 
 
+def quality_all_start(source: str = "manual") -> int:
+    """The quality of every tunnel (10 s of pings each, one after the other) as an action. Read only."""
+    from . import autopilot
+
+    def work(aid: int) -> None:
+        out = quality_all()
+
+        for r in out:
+            _say(aid, f"{r.get(chr(110) + chr(97) + chr(109) + chr(101), r.get(chr(105) + chr(100)))}: " + (("error: " + r["error"]) if r.get("error") else f"score {r.get(chr(115) + chr(99) + chr(111) + chr(114) + chr(101))}/100"))
+
+        good = sum(1 for r in out if not r.get("error"))
+        _say(aid, f"Measured {good} of {len(out)} tunnel" + ("s" if len(out) != 1 else "") + ".", done=True, ok=good == len(out))
+
+    return autopilot._start("quality of all tunnels", work, action="quality", source=source, allow_read_only=True)
+
+
 def quality_all() -> list[dict]:
     with session() as db:
         ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
