@@ -170,3 +170,7 @@ carries the real weight (metered AI, releases): [`docs/licensing.md`](docs/licen
 run entirely from the panel (rebuilt page by page from its designs), a Telegram Mini App in the panel's glass look, the
 DNS · IP switch, the license tiers and a real run of every tunnel kind. Open in M9: the license server and AI proxy, the
 language switch of the remaining strings, a split of `app.js` into one file per page.
+
+## The way forward
+
+Stable first, API-first, features later: [docs/engineering-plan.md](docs/engineering-plan.md). New ideas are parked in the roadmap (milestone M11) and built only after milestone M10.

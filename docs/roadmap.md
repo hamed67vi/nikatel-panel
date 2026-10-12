@@ -82,9 +82,31 @@ always installable; a milestone ends with a tag.
 - [ ] #54 License server and AI proxy on the vendor's side (token issue, metered AI credits, releases, revocation)
 - [x] #55 Mini App in the panel's glass look (pill buttons, glass cards, floating tab bar, hero balance)
 - [x] #56 Phone layout of the shop bot lists: rows become cards, no sideways scroll
-- [ ] #57 Split `app.js` / `app.css` into one file per page (same order, no build step)
-- [ ] #58 Language switch for the strings still in English only (#45 continued)
-- [ ] #59 "Mark receipts handled" and an AI desk for the shop bot
+- [ ] #57 Split `app.js` / `app.css` into one file per page (same order, no build step) - carried by #65
+- [ ] #58 Language switch for the strings still in English only (#45 continued) - carried by #67
+- [ ] #59 "Mark receipts handled" and an AI desk for the shop bot - parked, see #68 and #73
+
+## M10 · Stable and API-first (the way forward - no new features; see docs/engineering-plan.md)
+- [ ] #60 API contract: one error shape (`ok`, `error`, `code`) from one handler on every route, one long-work pattern (202 + action id + /api/actions/{id}) on every slow route, versioning policy written down (`/api` stays v1), `docs/api.md`
+- [ ] #61 Machine access: API tokens with scopes (read / act / admin) made in Settings, shown once, hashed at rest, revocable, every use logged; the browser keeps the session cookie, every bot or AI uses a token
+- [ ] #62 The OpenAPI document as the manual: a one-sentence description and typed request / response models on all 281 routes; a CI check that fails on a route without a description
+- [ ] #63 Test depth: coverage measured and shown in CI, the pure helpers of every service covered, the SSH layer behind one fake; install on a clean container in CI; upgrade from the previous tag with data intact
+- [ ] #64 Operations: `/api/health` that says what is wrong (database, late job, SSH key, disk, probe), self-check on start, structured logs with the request id everywhere, backup-restore and release-rollback rehearsed and documented with timings
+- [ ] #65 Front end as a pure client: split one file per page (#57), every JS file syntax-checked in CI, an audit of every `api()` call against the documented routes, no logic in the UI the API does not offer
+- [ ] #66 Pilot with ten operators: install from the GitHub release by the README alone, a "Report a problem" page (version, last log lines without secrets, health), one month of fixes only, exit when a week passes without a new bug
+- [ ] #67 Persian finished (#45, #58) with an i18n coverage test: every key in both languages, no unused key, right-to-left checked on every page
+
+## M11 · Parked ideas (written down so the design leaves room; not built until M10 is done)
+- [ ] #68 Telegram command bot and AI desk that drive the panel over its API with a token ("check this tunnel", "repair", "report"): depends on #61
+- [ ] #69 Outbound events: signed webhooks and an event stream, so external tools react to what the panel sees
+- [ ] #70 Tunnel-move load balancing in the Tunnel Doctor: advice first; automatic moves only when the IP switch is allowed
+- [ ] #71 Move or copy users between the two panel types with a dry-run plan, node pause during bulk writes, the subscription token kept, a result report; designed from a migration tool studied on 2026-10-12 and written from scratch (its licence does not allow copying)
+- [ ] #72 PasarGuard API details the panel does not use yet (subscription URL only with `load_sub`, named cores, `proxy_settings`, ISO dates, 403 for a non-sudo admin, pages of 500)
+- [ ] #73 Shop bot admin menu redesign: grouped menus (users, sales, support, settings), a pending-receipts list, quick user search
+- [ ] #74 Public demo behind HTTPS through a reverse proxy on the panel server (the demo mode exists: `docs/demo.md`)
+- [ ] #75 Server cost view: a price per server entered once; the Analyst says what each idle or redundant server costs per month
+- [ ] #76 Verified self-update: release archives with checksums, the update checks the checksum and rolls the binary back by itself
+- [ ] #77 Metrics endpoint for operators who run Grafana (servers, tunnels, configs, jobs as gauges)
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

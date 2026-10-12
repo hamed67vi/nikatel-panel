@@ -30,7 +30,7 @@ jobs:
       - name: tests
         run: pytest -q
       - name: front-end syntax
-        run: node --check nikatel/web/app.js
+        run: for f in nikatel/web/*.js; do node --check "$f"; done
       - name: installer syntax
         run: bash -n install.sh scripts/*.sh
 

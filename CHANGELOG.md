@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.2
+
+- **The way forward is written down:** docs/engineering-plan.md (stable first, API-first, features later; the measured state of the code; four phases; the definition of done) and roadmap milestones M10 (the work: contract, machine tokens, OpenAPI as the manual, test depth, operations, front-end split, pilot, Persian) and M11 (parked ideas, not built now). CI syntax-checks every JS file, not only the first.
+
 ## 1.25.1
 
 - The retransmit finding no longer says the kernel cannot help: on real servers BBR lowered the retransmits clearly (2.05 % to 0.35 %), so the tuning is tried first and only what stays is blamed on the route.
