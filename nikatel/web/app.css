@@ -3383,3 +3383,25 @@ html body .srv-tbl td.name .pill.new { color: #ffd24a; background: rgba(255,210,
 html body .srv-tbl td.name .pill.err { color: #ff8a9b; background: rgba(255,69,58,.12); border-color: rgba(255,69,58,.32); }
 html body .srv-tbl td.name .pill.warn { color: #ffd60a; background: rgba(255,214,10,.1); border-color: rgba(255,214,10,.28); }
 html body .srv-tbl tr:hover td.name .pill, html body .srv-tbl tr.ask td.name .pill { opacity: 1; }
+
+/* the enable / disable switch next to the server name in its window */
+.srv-sw { margin-left: 8px; display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px 0 6px; border-radius: 13px; cursor: pointer; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); font-size: 11.5px; font-weight: 700; color: var(--mut); user-select: none; }
+.srv-sw input { position: absolute; opacity: 0; pointer-events: none; }
+.srv-sw i { position: relative; width: 28px; height: 16px; border-radius: 8px; background: rgba(255,255,255,.18); transition: background .18s; } .srv-sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform .18s; }
+.srv-sw.on { color: #5ee07f; border-color: rgba(48,209,88,.38); } .srv-sw.on i { background: #30d158; } .srv-sw.on i::after { transform: translateX(12px); }
+.srv-sw:focus-within { outline: 2px solid #5aa9ff; outline-offset: 2px; }
+/* the note of a disabled row: a soft chip inside the card, breathing slowly like something asleep */
+.srv-tbl td.off-note { padding-left: 14px; }
+.off-chip { display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 12px 0 8px; border-radius: 12px; font-size: 11.5px; font-weight: 600; color: #8f9ab0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, rgba(255,255,255,.015) 6px 12px); border: 1px dashed rgba(255,255,255,.16); animation: offBreath 3.6s ease-in-out infinite; }
+.off-chip i { font-style: normal; font-size: 13px; opacity: .85; }
+@keyframes offBreath { 0%, 100% { opacity: .62; } 50% { opacity: 1; } }
+tr:hover .off-chip { animation-play-state: paused; opacity: 1; color: #c7cfdf; }
+@media (prefers-reduced-motion: reduce) { .off-chip { animation: none; } }
+
+/* servers list: the bars are long and aligned (they fill the cell, the number has its own fixed column); nothing sits at the end of a card, only an arrow when the pointer is on it */
+html body .srv-tbl td:has(.pbar) { padding-right: 18px; }
+html body .srv-tbl .pbar { gap: 10px; } html body .srv-tbl .pbar .bar { flex: 1 1 auto; max-width: none; min-width: 40px; height: 6px; } html body .srv-tbl .pbar b { flex: none; width: 46px; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.srv-tbl td:last-child { position: relative; overflow: visible; }
+.srv-tbl td:last-child::after { content: "›"; position: absolute; right: 12px; top: 50%; width: 24px; height: 24px; margin-top: -12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 18px; line-height: 1; padding-bottom: 2px; color: #fff; background: rgba(10,132,255,.85); box-shadow: 0 3px 10px rgba(10,132,255,.35); opacity: 0; transform: translateX(-6px); transition: opacity .15s ease, transform .15s ease; pointer-events: none; }
+.srv-tbl tr.clk:hover td:last-child::after { opacity: 1; transform: none; }
+.srv-tbl tr.ask-row td:last-child::after { content: none; }

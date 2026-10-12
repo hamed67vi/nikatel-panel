@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.5
+
+Servers list, second pass: a server is **enabled / disabled** (not turned on / off: the panel never switches a server off). The row buttons are gone; the switch sits next to the name in the server window. A disabled row shows a soft "Disabled - not checked, no alerts" chip inside the card. The bars are long and aligned (they fill their cell, the number has its own column), nothing sits at the end of a card, and an arrow shows there only under the pointer.
+
 ## 1.30.4
 
 The small tags after a server name (GRE, NEW, disabled, duplicate ...) have one size and one shape, soft colours, and are dim until the pointer is on the row.
