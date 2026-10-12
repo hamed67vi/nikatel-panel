@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.1
+
+- DNS · IP switch: the domain header rows are left-aligned, the page description says the automatic switching is paused.
+
 ## 1.20.0
 
 - **DNS · IP switch redone from zero**, like Servers and Tunnels: a toolbar (the ArvanCloud connection, domains / records / on-the-panel numbers, the tabs Records · Changes · Failover, a search, a refresh) and ONE box under it that ends at the bottom of the window. Records: a table where every domain is a drawer, each record with its address, the server of the panel it points at and a select + Point to point it at an Iran server by hand. Changes: every re-pointed record with its Restore. Failover: the preview of a plan, the ArvanCloud key, earlier failovers. The four intro boxes are gone.
