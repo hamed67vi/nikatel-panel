@@ -44,9 +44,10 @@ _LOCK = threading.Lock()
 
 
 def grace_for(last_error: str, after_seconds: int) -> int:
-    """Pure: how long a down tunnel waits before its plain restart. A tunnel service that is not running (inactive, failed, dead) is no
-    network blip - it is restarted at the next minute; anything else waits `after_seconds` so a short cut is not answered with a restart."""
-    return 0 if re.search(r" is (inactive|failed|dead)\b", last_error or "") else int(after_seconds)
+    """Pure: how long a down tunnel waits before its plain restart. A tunnel service that is not running (inactive, failed, dead) or a GRE
+    interface that is missing is no network blip - it is restarted at the next minute; anything else waits `after_seconds` so a short
+    cut is not answered with a restart."""
+    return 0 if re.search(r" is (inactive|failed|dead|missing)\b", last_error or "") else int(after_seconds)
 
 
 def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: int = 4) -> tuple[str, str]:

@@ -250,10 +250,11 @@ AFTER.buy = async p => {
   S.plans = r.plans; S.sell = r.sell; S.cashback = r.cashback;
   const cats = [...new Set(r.plans.map(x => x.category || x.server))];
   if (!cats.includes(buyCat)) buyCat = cats[0] || "";
-  $("b-seg").innerHTML = cats.length > 1 ? cats.map(c => `<button class="${c === buyCat ? "on" : ""}" onclick="buyCat=${JSON.stringify(c)};paintPlans();document.querySelectorAll('#b-seg button').forEach(b=>b.classList.toggle('on',b===this))">${esc(c)}</button>`).join("") : "";
+  $("b-seg").innerHTML = cats.length > 1 ? cats.map(c => `<button class="${c === buyCat ? "on" : ""}" data-c="${esc(c)}" onclick="buyCatPick(this)">${esc(c)}</button>`).join("") : "";
   paintPlans();
   if (p.plan) { const pl = r.plans.find(x => x.id === p.plan); if (pl) buySheet(pl.id); }
 };
+function buyCatPick(btn) { buyCat = btn.dataset.c || ""; document.querySelectorAll("#b-seg button").forEach(b => b.classList.toggle("on", b === btn)); hap(); paintPlans(); }      // the name sits in a data attribute: a quote in a category name must not break the button
 function paintPlans() {
   const box = $("b-list"), all = S.plans || [];
   const list = all.filter(x => (x.category || x.server) === buyCat || !buyCat);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.19.2
+
+- A GRE interface that is missing is restarted at the next minute too (no grace): it is as deterministic as a stopped service.
+- Mini App, Buy: a category whose name holds a quote broke its filter button (the raw code showed in the button); the name sits in a data attribute now.
+
 ## 1.19.1
 
 - Found in a live test (the tunnel service stopped on the foreign server): the automatic restart healed the tunnel, but the check right after it still read the external probe's answer from BEFORE the restart, called the tunnel "still down", restarted the Iran side for nothing and closed the repair as failed. After a restart the repair now asks another Iran server about the users' port again and checks up to four times over about 40 s (a tunnel service needs a few seconds to dial in again); the manual Restart does the same.

@@ -27,6 +27,7 @@ def _side(units, iface="UNKNOWN", loss=0.0):
 def test_a_stopped_service_is_restarted_without_the_grace_period():
     assert actions.grace_for("foreign: backhaul-kharej-tcpmux-9900.service is inactive", 180) == 0
     assert actions.grace_for("Iran: nikatel-gre-x.service is failed", 180) == 0
+    assert actions.grace_for("the GRE interface x is missing on the Iran server", 180) == 0
     assert actions.grace_for("no answer from the foreign end over the GRE link", 180) == 180      # a cut link may be a blip: wait
     assert actions.grace_for("", 240) == 240
 
