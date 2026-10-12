@@ -202,6 +202,33 @@ def find_users(q: str) -> list[dict]:
     return query(f"SELECT u.id, u.userid, u.name, u.username, u.wallet, u.is_agent, u.discount_percent, u.step, u.phone, u.date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid) AS orders FROM users u WHERE u.userid = \"{e}\" OR u.username LIKE \"%{e}%\" OR u.name LIKE \"%{e}%\" OR u.phone LIKE \"%{e}%\" ORDER BY u.id DESC LIMIT 30")
 
 
+PARTNER_SORT = {"recent": "u.agent_date DESC", "sales": "spent DESC", "wallet": "u.wallet DESC"}
+
+
+def _normal_discount(v) -> int:
+    """The bot keeps the discount as JSON ({"normal": %, ...}): the plain percent a partner gets."""
+    try:
+        d = json.loads(v)
+        return int(float(d.get("normal", 0))) if isinstance(d, dict) else 0
+    except (ValueError, TypeError):
+        return 0
+
+
+def partners(q: str = "", page: int = 0, sort: str = "recent") -> dict:
+    """The partners (agents: users with is_agent = 1): who, since when, their discount, wallet and what they bought as partners."""
+    e = re.sub(r"[;'\"`\\%]", "", str(q or "").strip())[:60]
+    where = "u.is_agent = 1" + (f' AND (u.name LIKE "%{e}%" OR u.username LIKE "%{e}%" OR u.userid = "{e}")' if e else "")
+    page = max(0, int(page))
+    tot = query(f"SELECT COUNT(*) AS n, COALESCE(SUM(u.wallet), 0) AS wallet FROM users u WHERE {where}")[0]
+    rows = query(f"SELECT u.userid, u.name, u.username, u.wallet, u.discount_percent, u.agent_date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid AND o.agent_bought = 1) AS orders, (SELECT COALESCE(SUM(o.amount), 0) FROM orders_list o WHERE o.userid = u.userid AND o.agent_bought = 1) AS spent FROM users u WHERE {where} ORDER BY {PARTNER_SORT.get(sort, PARTNER_SORT['recent'])} LIMIT 40 OFFSET {page * 40}")
+    allo = query("SELECT COUNT(*) AS n FROM orders_list WHERE agent_bought = 1")[0]
+
+    for r in rows:
+        r["discount"] = _normal_discount(r.pop("discount_percent", ""))
+
+    return {"total": int(tot["n"]), "wallet": int(float(tot["wallet"] or 0)), "orders": int(allo["n"]), "page": page, "rows": rows}
+
+
 def user_action(action: str, userid: str, value=None) -> dict:
     uid = str(userid or "").strip()
 

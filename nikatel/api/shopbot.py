@@ -53,6 +53,11 @@ def states(body: States):
     return {"ok": True, "states": _wrap(shopbot.set_states, body.changes)}
 
 
+@router.get("/shopbot/partners")
+def partners(q: str = "", page: int = 0, sort: str = "recent"):
+    return {"ok": True, **_wrap(shopbot.partners, q, page, sort)}
+
+
 @router.get("/shopbot/users")
 def users(q: str = ""):
     return {"ok": True, "users": _wrap(shopbot.find_users, q)}

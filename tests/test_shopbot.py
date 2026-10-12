@@ -63,6 +63,12 @@ def test_info_users_and_import_through_api(client, monkeypatch):
             return INFO
         if name == "bot_query":
             sql = params["SQL"]
+            if "COALESCE(SUM(u.wallet)" in sql:
+                return "n\twallet\n2\t1500\n"
+            if "AS spent FROM users u" in sql:
+                return "userid\tname\tusername\twallet\tdiscount_percent\tagent_date\torders\tspent\n701\tSara\tsara\t1000\t{\"normal\":\"12\"}\t1780000000\t3\t90000\n702\tAmir\t\t500\tNULL\t1781000000\t0\t0\n"
+            if "FROM orders_list WHERE agent_bought = 1" in sql:
+                return "n\n9\n"
             if "FROM users u WHERE" in sql:
                 return "id\tuserid\tname\twallet\n1\t555\tAli\t1000\n"
             if "SELECT 1 AS x" in sql:
@@ -128,6 +134,12 @@ def test_info_users_and_import_through_api(client, monkeypatch):
     assert r.status_code == 200 and r.json()["tables"]["users"] == 15583 and r.json()["backup"].endswith(".sql.gz")
     names = [c[1] for c in calls if c[0] == "action"]
     assert names.index("bot_backup") < names.index("bot_import_stage")          # dump first, then import
+
+    pa = client.get("/api/shopbot/partners?q=Sa&sort=sales").json()
+    assert pa["total"] == 2 and pa["orders"] == 9 and pa["wallet"] == 1500
+    assert pa["rows"][0]["discount"] == 12 and pa["rows"][1]["discount"] == 0 and "discount_percent" not in pa["rows"][0]
+    sql = next(c[2]["SQL"] for c in calls if c[1] == "bot_query" and "AS spent FROM users u" in c[2]["SQL"])
+    assert "ORDER BY spent DESC" in sql and "LIKE" in sql and ";" not in sql
 
     r = client.post("/api/shopbot/action/cron_off")
     assert r.status_code == 200 and r.json()["done"] is True
