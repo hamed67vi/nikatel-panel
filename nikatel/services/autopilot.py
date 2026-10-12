@@ -1014,7 +1014,7 @@ def auto_escalate() -> None:
 
         # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb), and never
         # while a plain repair is still restarting things on this tunnel (seen in a live test: the two ran on the same tunnel at once)
-        if name in muted or name in _BUSY or name in actions._RUNNING or now - since < (int(conf.get("after_seconds", 180)) + 120 if st_ == "down" else 600) or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
+        if name in muted or name in _BUSY or name in actions._RUNNING or now - since < (int(conf.get("after_seconds", 60)) + 120 if st_ == "down" else 600) or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
             continue
 
         with session() as db:

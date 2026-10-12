@@ -245,3 +245,14 @@ def test_the_failover_is_switched_off_for_now(client, monkeypatch):
     monkeypatch.setattr(failover.autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
     assert failover.after_ladder(1, 1, "gre_blocked") is False and "switched off" in said[-1]
     assert client.post("/api/failover/x/approve").status_code == 403 and client.post("/api/failover/point", json={"names": ["a.example.test"], "iran_id": 1}).status_code == 403
+
+def test_while_the_automatic_failover_is_paused_nothing_is_planned_and_old_plans_are_withdrawn(client, monkeypatch):
+    monkeypatch.setattr(failover, "AUTOMATIC", False)
+    st.put("arvan", {"api_key": "k-test", "mode": "auto"})
+    st.put("failover", {"pending": [{"id": "x", "server_id": 1, "server": "ir1"}], "seen": {"1": 1}})
+    assert failover.enabled() is False
+    failover.check()
+    j = client.get("/api/failover").json()
+    assert j["automatic"] is False and j["mode"] == "off" and j["pending"] == []
+    monkeypatch.setattr(failover.autopilot, "_say", lambda *a, **k: None)
+    assert failover.follow_ip_change(0, "203.0.113.5", "203.0.113.6", "ir1") == []      # a changed address does not move any record

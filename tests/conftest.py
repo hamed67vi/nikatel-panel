@@ -54,3 +54,9 @@ def client():
         r = c.post("/api/auth/login", json={"user": "admin", "password": "test-password-1"})
         assert r.status_code == 200, r.text
         yield c
+
+
+# the automatic failover is paused in the product (failover.AUTOMATIC = False); its logic is still tested, so the suite runs with it on - tests of the pause switch it off themselves
+from nikatel.services import failover as _failover
+
+_failover.AUTOMATIC = True

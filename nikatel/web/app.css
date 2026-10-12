@@ -3123,3 +3123,21 @@ body #page .dns-g.open .dns-chev, body #page .dns-g.q-open .dns-chev { transform
 body #page .dns-body { display: none; padding: 2px 8px 8px; flex-direction: column; gap: 3px; border-top: 1px solid rgba(255,255,255,.06); }
 body #page .dns-g.open .dns-body, body #page .dns-g.q-open .dns-body { display: flex; }
 html[data-mode="light"] body #page .dns-g { border-color: rgba(60,80,130,.16); background: rgba(255,255,255,.55); } html[data-mode="light"] body #page .dns-chev { border-color: #5b667c; }
+
+/* ---- DNS · IP switch (the page redone like Servers / Tunnels): one box under the toolbar; the domains are drawers of a table ---- */
+body #page .dns-tbl td { height: 38px; padding-top: 3px; padding-bottom: 3px; } body #page .dns-tbl td.name { font-weight: 600; padding-left: 26px; }
+body #page .dns-tbl tr.dns-dom td { height: 40px; padding-left: 12px; background: linear-gradient(180deg, rgba(77,163,255,.10), rgba(77,163,255,.04)); border-top-color: rgba(77,163,255,.22); }
+body #page .dns-tbl tr.dns-dom td > * { vertical-align: middle; } body #page .dns-tbl tr.dns-dom b { margin: 0 10px 0 4px; font-size: 13.5px; color: #4da3ff; }
+body #page .dns-tbl tr.dns-dom .pill { height: 20px; font-size: 11px; margin-right: 6px; }
+body #page .dns-g:not(.open):not(.q-open) tr.dns-rec { display: none; }
+body #page .dns-chev { display: inline-block; width: 7px; height: 7px; border-right: 2px solid #8791a8; border-bottom: 2px solid #8791a8; transform: rotate(-45deg); transition: transform .18s; margin-right: 6px; vertical-align: middle; }
+body #page .dns-g.open .dns-chev, body #page .dns-g.q-open .dns-chev { transform: rotate(45deg); }
+body #page .dns-tbl select.sm { width: 100%; max-width: 100%; height: 28px; font-size: 12.5px; } body #page .dns-tbl td .mchip { white-space: nowrap; }
+body #page .dns-tbl td.mono { font-size: 12.5px; }
+body #page .dns-pane { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 240px); overflow-y: auto; padding-right: 4px; }
+body #page .dns-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } @media (max-width: 1000px) { body #page .dns-two { grid-template-columns: 1fr; } }
+body #page .dns-pane .card { margin: 0; padding: 10px 14px 12px; } body #page .dns-pane .card h3 { margin: 0 0 8px; }
+body #page .dns-warn { border-color: rgba(255,196,77,.35); background: linear-gradient(180deg, rgba(255,196,77,.08), rgba(255,196,77,.02)); }
+body #page .dns-pane .frm { display: grid; gap: 8px; } body #page .dns-pane .frm label { display: grid; gap: 4px; font-size: 12.5px; }
+html[data-mode="light"] body #page .dns-tbl tr.dns-dom td { background: linear-gradient(180deg, rgba(10,98,201,.10), rgba(10,98,201,.04)); } html[data-mode="light"] body #page .dns-tbl tr.dns-dom b { color: #0a62c9; }
+@media (max-width: 760px) { body #page .dns-tbl { min-width: 0; } }

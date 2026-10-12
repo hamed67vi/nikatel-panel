@@ -7,8 +7,10 @@ can look at the servers but cannot change them. That is the safety net of phase 
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from .config import get_settings
@@ -370,7 +372,44 @@ done
 }
 
 
-def _ssh_base(node: Node) -> list[str]:
+# ---------------------------------------------------------------- a way round a path that stalls
+# Some Iran servers answer on the SSH port but the SSH session from the panel server stalls after the banner (a filter or a bad path on that route; a direct ssh to such a
+# server waits for its whole time-out and every job that needs it fails - the panel called a healthy server "offline"). The same server is reached at once through another
+# Iran server that the panel can reach (ssh -W). After a direct failure that looks like that, the panel goes through a jump server for ten minutes and then tries direct again.
+_VIA: dict[str, tuple[Node, float]] = {}      # host -> (jump server, until when)
+VIA_TTL = 600
+_JUMPS: Callable[[Node], list[Node]] | None = None
+
+
+def set_jump_provider(fn: Callable[[Node], list[Node]] | None) -> None:
+    """The servers that may carry a stalled connection (set by the panel at start-up: its online Iran servers)."""
+    global _JUMPS
+    _JUMPS = fn
+
+
+def via_of(host: str) -> str:
+    """The jump server a host is reached through now (its address), or '."""
+    v = _VIA.get(host)
+    return v[0].host if v and v[1] > time.time() else ""
+
+
+def _link_error(e: SSHError) -> bool:
+    return e.code == 255 and "key is not accepted" not in str(e) and "host key" not in str(e) or str(e).startswith("timeout after")
+
+
+def _proxy_option(jump: Node) -> list[str]:
+    s = get_settings()
+    inner = ["ssh", "-i", str(s.ssh_key), "-p", str(jump.port), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
+             "-o", f"ConnectTimeout={s.ssh_connect_timeout}", "-o", "ServerAliveInterval=10", "-o", "LogLevel=ERROR"]
+
+    if s.ssh_multiplex:        # the jump hop keeps one connection of its own (a ProxyCommand cannot use the %C of the main path)
+        inner += ["-o", "ControlMaster=auto", "-o", f"ControlPath={s.data_dir / 'cm' / ('j-' + re.sub(r'[^A-Za-z0-9.-]', '_', jump.host) + '-' + str(jump.port))}", "-o", "ControlPersist=120"]
+
+    inner += ["-W", "%h:%p", f"{jump.user}@{jump.host}"]
+    return ["-o", "ProxyCommand=" + " ".join(x if x == "%h:%p" else shlex.quote(x) for x in inner)]
+
+
+def _ssh_base(node: Node, jump: Node | None = None) -> list[str]:
     """The ssh command line. With multiplexing on, every command shares one background connection per server (ControlMaster=auto: the first command starts it and it
     stays two minutes after the last use; a second command that races the start simply connects on its own). A new SSH handshake for each of the many short commands
     of the jobs was most of the CPU the panel used."""
@@ -394,11 +433,56 @@ def _ssh_base(node: Node) -> list[str]:
 
         cmd += ["-o", "ControlMaster=auto", "-o", f"ControlPath={s.data_dir / 'cm' / '%C'}", "-o", "ControlPersist=120"]
 
+    if jump is not None:
+        cmd += _proxy_option(jump)
+
     return cmd + [f"{node.user}@{node.host}"]
 
+
 def _exec(node: Node, script: str, timeout: int) -> str:
+    """Run a script on a server: direct, and - when a direct session stalls or drops - through a jump server (see above)."""
+    via = _VIA.get(node.host)
+    cap = timeout
+
+    if via is not None:
+        if via[1] > time.time():
+            try:
+                return _exec_once(node, script, timeout, via[0])
+            except SSHError as e:
+                if not _link_error(e):
+                    raise
+
+                _VIA.pop(node.host, None)         # the jump does not work any more: direct again, then another jump
+        else:
+            cap = min(timeout, 20)               # the time to try direct again: a short try, the jump is still there when it stalls
+
     try:
-        r = subprocess.run(_ssh_base(node) + ["bash -s"], input=script.encode(), stdout=subprocess.PIPE,
+        return _exec_once(node, script, cap)
+    except SSHError as e:
+        if _JUMPS is None or not _link_error(e):
+            raise
+
+        first = e
+
+    for j in (_JUMPS(node) or [])[:2]:
+        try:
+            out = _exec_once(node, script, min(timeout, 40), j)
+        except SSHError as e2:
+            if _link_error(e2):
+                continue
+
+            raise
+
+        _VIA[node.host] = (j, time.time() + VIA_TTL)
+        log.warning("ssh %s: the direct session fails (%s); reached through %s - the panel goes that way for %s min", node.host, str(first)[:80], j.host, VIA_TTL // 60)
+        return out
+
+    raise first
+
+
+def _exec_once(node: Node, script: str, timeout: int, jump: Node | None = None) -> str:
+    try:
+        r = subprocess.run(_ssh_base(node, jump) + ["bash -s"], input=script.encode(), stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, timeout=timeout, check=False)
     except FileNotFoundError:
         raise SSHError("ssh is not installed on the panel server")

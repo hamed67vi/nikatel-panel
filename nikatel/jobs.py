@@ -89,6 +89,8 @@ def _loop(spec: _Spec) -> None:
     time.sleep(3)   # let the server come up first
 
     while not _STOP.is_set():
+        t_start = time.time()
+
         try:
             with session() as db:
                 job = db.get(Job, spec.name)
@@ -99,7 +101,7 @@ def _loop(spec: _Spec) -> None:
         except Exception:
             log.exception("job %s: its loop hit an error (the job goes on next time)", spec.name)
 
-        spec.wake.wait(spec.interval)
+        spec.wake.wait(max(1.0, spec.interval - (time.time() - t_start)))      # every `interval` from the START of the turn; a turn longer than the interval goes on at once
         spec.wake.clear()
 
 

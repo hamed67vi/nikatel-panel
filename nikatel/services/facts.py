@@ -73,6 +73,16 @@ def parse_facts(out: str) -> dict:
     }
 
 
+def _wake_tunnels() -> None:
+    """A server went off or came back: the tunnels that are not up are looked at now (the fast lane), not at the next turn of the slow cycle."""
+    from .. import jobs
+
+    try:
+        jobs.trigger("tunnels-fast")
+    except KeyError:
+        pass
+
+
 def sample_server(server_id: int) -> None:
     """One server: ssh, parse, store. Errors become the server's last_error, never an exception."""
     with session() as db:
@@ -87,12 +97,26 @@ def sample_server(server_id: int) -> None:
         try:
             facts = parse_facts(run_script(node, "facts", timeout=35))
         except (SSHError, ValueError) as e:
+            log.warning("sample failed name=%s host=%s err=%s", srv.name, srv.host, e)
+            from . import pulse
+
+            if pulse.tcp_ok_recently(srv.id) and "key is not accepted" not in str(e) and "host key" not in str(e):
+                # the SSH port answers: the server is ON. Only the SSH session fails (a stalled path, a busy sshd) - it is not "offline"; the reason stays visible
+                srv.last_error = ("SSH does not answer, the server is up (its SSH port answers): " + str(e))[:300]
+
+                if was_online is not True:
+                    srv.online = True
+                    emit(db, "warn", "servers", f"Server {srv.name} is up (its SSH port answers); only its SSH session fails: {e}", srv.name)
+                    _wake_tunnels()
+
+                return
+
             srv.online = False
             srv.last_error = str(e)[:300]
-            log.warning("sample failed name=%s host=%s err=%s", srv.name, srv.host, e)
 
             if was_online:
                 emit(db, "bad", "servers", f"Server {srv.name} does not answer: {e}", srv.name)
+                _wake_tunnels()
 
             return
 
@@ -105,6 +129,7 @@ def sample_server(server_id: int) -> None:
 
         if was_online is False:
             emit(db, "ok", "servers", f"Server {srv.name} answers again.", srv.name)
+            _wake_tunnels()
 
         log.info("sample ok name=%s cpu=%s ram=%s disk=%s", srv.name, facts["cpu"], facts["ram"], facts["disk"])
 

@@ -15,7 +15,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True, "every_minutes": 0, "tg_every": "all", "parts": {"panel": {"enabled": True, "topic": 0, "topic_name": ""}, "bot": {"enabled": True, "topic": 0, "topic_name": ""}}},
     # the smart repair is on by default (restart, rebuild, a new GRE link, another tunnel type - by itself); it can be switched off on Smart repair to work by hand
-    "repair": {"auto": True, "after_seconds": 180, "level": "switch"},   # level: restart | rebuild | switch (how far the automatic repair may go)
+    "repair": {"auto": True, "after_seconds": 60, "level": "switch"},   # level: restart | rebuild | switch (how far the automatic repair may go)
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL

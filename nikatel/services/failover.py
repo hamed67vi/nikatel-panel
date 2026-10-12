@@ -32,6 +32,7 @@ from . import settings as st
 from .events import emit
 
 log = get_logger("failover")
+AUTOMATIC = False     # PAUSED by the operator until the tests are done: the panel never plans, moves or re-points anything by itself (no dead-server plan, no route plan, no follow of a changed address). Pointing a record by hand (Point, Restore) works.
 ENABLED = True       # the kill switch of the whole ArvanCloud / Iran-server failover (tests flip it); what really decides is `enabled()`: a key and a mode
 ROUTE_CAUSES = ("gre_blocked", "route_cut", "lossy_route", "port_blocked")
 REASONS = {"down": "the server does not answer",
@@ -54,11 +55,15 @@ def has_key() -> bool:
 
 def enabled() -> bool:
     """The automatic failover may plan and move: a key, and a mode other than off (approve = ask first, auto = do it)."""
-    return has_key() and conf().get("mode", "off") in ("approve", "auto")
+    return AUTOMATIC and has_key() and conf().get("mode", "off") in ("approve", "auto")
 
 
 def follow_ip_change(aid: int, old_ip: str, new_ip: str, server_name: str) -> list[dict]:
     """An Iran server got a new address: every A record that pointed at the old one follows (written to dns_log, so each can be put back)."""
+    if not AUTOMATIC:
+        autopilot._say(aid, f"DNS: automatic DNS changes are paused while they are tested - the records that pointed at {old_ip} are NOT changed; point them by hand (Tunnels → DNS · IP switch).")
+        return []
+
     if not has_key():
         autopilot._say(aid, "DNS: no ArvanCloud key is saved, the records that pointed at the old address are not changed.")
         return []
@@ -246,7 +251,7 @@ def _save(s: dict) -> None:
 
 def state() -> dict:
     s = _state()
-    return {"mode": conf().get("mode", "off"), "confirm_minutes": conf().get("confirm_minutes", 5), "pending": s["pending"], "history": list(reversed(s["history"]))[:15],
+    return {"automatic": AUTOMATIC, "mode": conf().get("mode", "off") if AUTOMATIC else "off", "confirm_minutes": conf().get("confirm_minutes", 5), "pending": s["pending"], "history": list(reversed(s["history"]))[:15],
             "dns_log": list(reversed(s["dns_log"]))[:50]}
 
 
@@ -280,6 +285,13 @@ def check() -> None:
     mode = c.get("mode", "off")
 
     if not enabled() or get_settings().read_only:
+        if not AUTOMATIC:
+            s0 = _state()
+
+            if s0["pending"] or s0["seen"]:             # plans prepared before the pause are withdrawn: nothing waits for an Approve that must not happen
+                s0["pending"], s0["seen"] = [], {}
+                _save(s0)
+
         return
 
     now = int(time.time())
@@ -454,7 +466,7 @@ def replace_plan(old_tunnel_id: int, new_iran_id: int) -> dict:
 def after_replace(aid: int, p: dict, immediate: bool = False) -> None:
     """After a manual replacement built fine: the DNS plan is applied now (mode auto, or `immediate` = the operator ticked it in the
     Create form), kept for approval (approve) or only told (off)."""
-    mode = conf().get("mode", "off")
+    mode = conf().get("mode", "off") if AUTOMATIC else "off"          # paused: only what the operator ticked in the Create form (immediate) is applied
 
     if not p["dns"]:
         autopilot._say(aid, f"DNS: no CDN record served only {p['old_tunnel']}" + (f" (left alone, they also serve tunnels that stay: {', '.join(d['fqdn'] for d in p['left_alone'])})" if p["left_alone"] else "")

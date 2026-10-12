@@ -337,7 +337,7 @@ def auto_repair() -> None:
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 
-        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 180))) or name in _RUNNING or recent_fixes(name) >= MAX_PER_HOUR:
+        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 60))) or name in _RUNNING or recent_fixes(name) >= MAX_PER_HOUR:
             continue
 
         log.info("auto repair of %s (down for %ss)", name, now - since)

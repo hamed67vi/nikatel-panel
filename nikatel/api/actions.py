@@ -11,7 +11,7 @@ router = APIRouter(tags=["actions"], dependencies=[Depends(current_user)])
 
 class RepairIn(BaseModel):
     auto: bool = False
-    after_seconds: int = Field(180, ge=60, le=3600)
+    after_seconds: int = Field(60, ge=30, le=3600)
     level: str = Field("restart", pattern=r"^(restart|rebuild|switch)$")
 
 

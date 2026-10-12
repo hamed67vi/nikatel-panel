@@ -14,6 +14,7 @@ Unit names follow the conventions of the servers (see docs/tunnels.md):
 from __future__ import annotations
 
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -404,7 +405,31 @@ def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
     return Side()
 
 
-def check_tunnel(tunnel_id: int) -> None:
+_CHECKING: set[int] = set()
+_CK_LOCK = threading.Lock()
+
+
+def check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
+    """One check of a tunnel. Only one at a time per tunnel (the slow cycle, the fast lane and a repair may all want it: two at once would count one
+    failure twice); a second caller waits for the first and then makes its own, so it always sees what happened after it asked."""
+    for _ in range(120):
+        with _CK_LOCK:
+            if tunnel_id not in _CHECKING:
+                _CHECKING.add(tunnel_id)
+                break
+
+        time.sleep(0.5)
+    else:
+        return
+
+    try:
+        _check_tunnel(tunnel_id, fresh_ext)
+    finally:
+        with _CK_LOCK:
+            _CHECKING.discard(tunnel_id)
+
+
+def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -415,12 +440,27 @@ def check_tunnel(tunnel_id: int) -> None:
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         prev = dict(t.detail or {})
-        iran_host = t.iran.host
+        iran_host, iran_id = t.iran.host, t.iran_server_id
+        iran_off, foreign_off = t.iran.enabled and t.iran.online is False, t.foreign.enabled and t.foreign.online is False
+
+    def ask(node, is_iran, off):
+        if off:                  # the pulse already knows the server is off: asking it over SSH would only wait for a time-out (10-15 s each, for every tunnel of that server)
+            s = Side()
+            s.error = "the server is off or does not answer"
+            return s
+
+        return _query(node, plan, is_iran)
 
     with ThreadPoolExecutor(2) as ex:
-        fi = ex.submit(_query, iran_node, plan, True)
-        ff = ex.submit(_query, foreign_node, plan, False)
+        fi = ex.submit(ask, iran_node, True, iran_off)
+        ff = ex.submit(ask, foreign_node, False, foreign_off)
         iran, foreign = fi.result(), ff.result()
+
+    if fresh_ext and not iran.error and (iran.data_port or plan.ports):
+        try:
+            external_probe_one(iran_host, int(iran.data_port or plan.ports[0]), iran_id)
+        except Exception:
+            log.exception("single external probe failed")
 
     if (iran.error or foreign.error) and jobs.stopping():
         log.info("check name=%s skipped: the panel is restarting", plan.iface or tunnel_id)
@@ -499,6 +539,20 @@ def check_tunnel(tunnel_id: int) -> None:
         log.info("check name=%s state=%s judged=%s loss=%s rtt=%s rx=%s tx=%s %s", t.name, state, judged, iran.loss_pct, iran.rtt_ms, rx, tx, reason)
 
 
+def check_unhealthy() -> None:
+    """The fast lane (every ~8 s): the tunnels that are not up - down, unknown (a server did not answer), starting - are looked at again at once, each with a fresh
+    look from another Iran server, so a tunnel that came back (or a server that came back) is seen in seconds, not at the next turn of the slow cycle. A tunnel that
+    is only degraded stays in the slow cycle (its hysteresis counts minutes)."""
+    now = int(time.time())
+
+    with session() as db:
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "unknown", "starting")))) if now - int(t.last_check_at or 0) >= 6]
+
+    if ids:
+        with ThreadPoolExecutor(max(1, min(4, len(ids)))) as ex:
+            list(ex.map(lambda i: check_tunnel(i, fresh_ext=True), ids))
+
+
 def check_all() -> None:
     with session() as db:
         ids = list(db.scalars(select(Tunnel.id).where(Tunnel.enabled.is_(True))))
@@ -508,7 +562,7 @@ def check_all() -> None:
     except Exception:
         log.exception("external probe failed")
 
-    with ThreadPoolExecutor(max(1, get_settings().ssh_workers // 2)) as ex:
+    with ThreadPoolExecutor(max(1, get_settings().ssh_workers)) as ex:      # all the workers: with half of them one turn of 20 tunnels took ~95 s
         list(ex.map(check_tunnel, ids))
 
     with session() as db:

@@ -75,12 +75,16 @@ def _harden(resp) -> None:
 def _register_jobs() -> None:
     s = get_settings()
     jobs.register("servers", s.server_sample_interval, facts.sample_all)
-    jobs.register("pulse", 10, pulse.run)                       # a server that is switched off is called off within ~20 s, not at the next full sample
+    from . import ssh as _ssh
+
+    _ssh.set_jump_provider(nodes.jump_candidates)                # a server whose direct SSH stalls is reached through another Iran server (ssh.py)
+    jobs.register("pulse", 5, pulse.run)                        # a server that is switched off is called off within ~12 s, a server that came back is put back within seconds
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
+    jobs.register("tunnels-fast", 8, tunnels.check_unhealthy)   # the tunnels that are not up are looked at again every ~8 s (and at once when a server goes off or comes back)
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
     jobs.register("backup", 300, backup.scheduled)
-    jobs.register("repair", 60, autopilot.repair_cycle)         # the plain restarts every minute; the smart repair and the look at lossy tunnels every five minutes (one job, not three)
+    jobs.register("repair", 20, autopilot.repair_cycle)         # the plain restarts every 20 s (a tunnel that is down waits only its grace, not a whole minute more); the smart repair and the look at lossy tunnels every five minutes (one job, not three)
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("failover", 60, failover.check)              # does nothing until a key and a mode are set (Tunnels → DNS · IP switch)

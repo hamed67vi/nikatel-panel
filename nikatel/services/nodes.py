@@ -179,6 +179,22 @@ def set_password(server_id: int, password: str) -> dict:
     return {"user": user}
 
 
+def jump_candidates(target: Node) -> list[Node]:
+    """The servers that may carry an SSH session to a server whose direct session stalls (ssh.py): enabled Iran servers that answer, are not themselves reached through a
+    jump, and are not the target - the probe server first (it sits where the users are), then by name."""
+    from .. import ssh as _ssh
+    from . import settings as st
+
+    pid = int(st.get("probe").get("server_id") or 0)
+
+    with session() as db:
+        rows = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))
+                if s.host != target.host and not _ssh.via_of(s.host)]
+
+    rows.sort(key=lambda r: (0 if r[0] == pid else 1, r[1]))
+    return [r[2] for r in rows]
+
+
 def server_conflict(db, name: str, host: str, exclude_id: int = 0) -> str:
     """"" when the name and the address are free, else the sentence that says what is taken. Names are compared without capitals: TR1 and tr1 are the same name."""
     from sqlalchemy import func

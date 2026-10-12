@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.20.0
+
+- **DNS · IP switch redone from zero**, like Servers and Tunnels: a toolbar (the ArvanCloud connection, domains / records / on-the-panel numbers, the tabs Records · Changes · Failover, a search, a refresh) and ONE box under it that ends at the bottom of the window. Records: a table where every domain is a drawer, each record with its address, the server of the panel it points at and a select + Point to point it at an Iran server by hand. Changes: every re-pointed record with its Restore. Failover: the preview of a plan, the ArvanCloud key, earlier failovers. The four intro boxes are gone.
+- **Automatic IP changes are PAUSED** until they are tested (`failover.AUTOMATIC = False`): no plan for a dead server, no route plan, no follow of a changed server address, mode "auto" of Create does not apply DNS by itself; plans prepared earlier are withdrawn. Pointing a record by hand (Point, Restore) works as before. The Failover tab says so.
+
+Detection speed and the "offline" that was not (found with three live servers shown offline while they were up):
+
+- **Servers called offline while they were on.** Three Iran servers answered on the SSH port and their tunnels carried users, but the SSH session from the panel server stalled right after the banner (a filter or a bad path on that route; a direct ssh waited its whole 35 s time-out, every sample failed, the server was marked offline, and its tunnels showed "Iran server off"). Now: (1) the same server is reached through another Iran server (ssh -W, the panel's own key): after a direct failure that looks like a stalled or dropped session the panel goes through a jump server - the probe server first - remembers it for ten minutes and then tries direct again with a short time-out; (2) a server whose SSH port answered in the last 30 s is never called offline by a failed sample: it stays online and shows a small amber "SSH ✕" with the reason. Measured: all three were reached through the probe server in under 4 s while the direct session timed out at 25 s.
+- **A server that came back took up to two minutes to show online** when the full sample had called it off (the pulse put back only the servers it had marked itself). Now the pulse (every 5 s, 2 s time-out, two misses = off in ~12 s) asks the server over SSH the moment its port answers again (once per 15 s), and every change of a server's state wakes the tunnel checks at once.
+- **Tunnels: ~155 s cycle -> ~60 s.** One turn of 20 tunnels took 95 s (half the workers, and a turn started its 60 s wait AFTER it ended). All workers are used now, and every job repeats from the START of its turn. A tunnel whose server is off is no longer asked over SSH (each such check waited 10-15 s for a time-out); a second check of a tunnel never runs at the same moment as the first.
+- **A fast lane for the tunnels that are not up** (down / unknown / starting): looked at again every ~8 s with a fresh look from another Iran server, and at once when a server goes off or comes back - a tunnel that is back shows up in seconds.
+- **Repair starts sooner:** the repair job runs every 20 s (was 60), the grace of a down tunnel before its first restart is 60 s (was 180; the setting is on the Tunnel Doctor page), the smart repair follows after the restarts as before.
+
 ## 1.19.15
 
 - DNS · IP switch: the records were read once and kept for five minutes, and the card's numbers (domains, DNS records) came only from the last key test - a record removed in ArvanCloud still showed. The records are kept for one minute now, the ↻ button reads them from ArvanCloud again at once, and every read updates the numbers of the card (119 -> 60 in the test).
