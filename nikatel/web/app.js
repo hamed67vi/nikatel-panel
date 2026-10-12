@@ -3728,14 +3728,18 @@ PAGES.dns = async () => {
   const onPanel = recs.filter(r => r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;
   const conn = !av.has_api_key ? chip("warn", "ArvanCloud", "no key") : connected ? chip("ok", "ArvanCloud", "connected") : chip("bad", "ArvanCloud", "not connected", (av.status || {}).error || "");
+  const doms = [...new Set(recs.map(r => r.domain || r.fqdn))].sort(), saved = localStorage.getItem("nk.dns.dom") || "";
+  const dom = saved === "*" || doms.includes(saved) ? saved : (doms[0] || "*");
+  const count = d => recs.filter(r => (r.domain || r.fqdn) === d).length;
+  const domSel = `<label class="dns-dsel" title="Choose a domain: its records are listed below"><span>Domain</span><select onchange="dnsPickDom(this.value)">${doms.map(d => `<option value="${esc(d)}" ${d === dom ? "selected" : ""}>${esc(d)} · ${count(d)}</option>`).join("")}<option value="*" ${dom === "*" ? "selected" : ""}>All domains · ${recs.length}</option></select></label>`;
   const tabs = [["records", "Records", recs.length], ["changes", "Changes", log.length], ["failover", "Failover", (fo && fo.pending || []).length]];
   const bar = `<div class="toolbar joined">
       <span class="tcount pstat nd-stats">${conn}${connected ? chip("info", "Domains", nDom) + chip("info", "Records", recs.length) + chip("ok", "On the panel", onPanel, "Records that point at a server added to this panel") : ""}${chip("warn", "Automatic switching", "off", "The panel never changes an IP by itself while this is being tested. You can still point a record by hand.")}</span>
-      <span class="sp"></span><div class="tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>
+      ${tab === "records" && connected && doms.length ? domSel : ""}<span class="sp"></span><div class="tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>
       ${tab === "records" && connected ? searchSeg() + `<button type="button" class="sm" onclick="state.dnsFresh = true; toast('Reading ArvanCloud…'); refresh()" title="Read the records from ArvanCloud again">↻</button>` : ""}</div>`;
   let body = "";
 
-  if (tab === "records") body = !av.has_api_key || !connected ? dnsConnect(av) : dnsRecords(recs, rr.err, byIp, irn);
+  if (tab === "records") body = !av.has_api_key || !connected ? dnsConnect(av) : dnsRecords(dom === "*" ? recs : recs.filter(r => (r.domain || r.fqdn) === dom), rr.err, byIp, irn, dom);
   else if (tab === "changes") body = dnsChanges(log);
   else body = dnsFailover(fo, av, irn, connected);
 
@@ -3751,25 +3755,20 @@ const dnsKeyForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
     <input type="hidden" name="mode" value="off"><input type="hidden" name="confirm_minutes" value="${av.confirm_minutes || 5}">
     <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testArvan()">Test the key (read only)</button></div></form>
   <details class="mut" style="margin-top:6px"><summary>How to get the key</summary><ol style="margin:6px 18px;line-height:1.7"><li>panel.arvancloud.ir → profile menu → <b>Machine Users</b> → create one.</li><li>Open it → <b>Access rules</b> and give it the <b>CDN</b> service with a manager role (not only “server manager”).</li><li>Create an access key for it, copy it at once (shown once) and paste it above.</li></ol></details>`;
-function dnsRecords(recs, err, byIp, irn) {
+function dnsRecords(recs, err, byIp, irn, dom) {
   if (err) return `<div class="card dns-pane"><div class="err">${esc(err)}</div></div>`;
   const opts = cur => (byIp[cur] && byIp[cur].role === "iran" ? "" : `<option value="" selected>— point it at… —</option>`) + irn.map(s => `<option value="${s.id}" ${byIp[cur] && byIp[cur].id === s.id ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("");
-  const row = r => { const cur = r.ips[0], names = r.ips.map(ip => byIp[ip]).filter(Boolean), short = r.domain && r.fqdn !== r.domain && r.fqdn.endsWith("." + r.domain) ? r.fqdn.slice(0, -r.domain.length - 1) : r.fqdn;
+  const row = r => { const cur = r.ips[0], names = r.ips.map(ip => byIp[ip]).filter(Boolean), short = dom !== "*" && r.domain && r.fqdn !== r.domain && r.fqdn.endsWith("." + r.domain) ? r.fqdn.slice(0, -r.domain.length - 1) : r.fqdn;
     return `<tr class="dr-rec ${names.length ? "mine" : ""}" data-q="${esc((r.fqdn + " " + r.ips.map(ip => ip + " " + (byIp[ip] ? byIp[ip].name : "")).join(" ")).toLowerCase())}">
       <td class="name" dir="ltr" title="${esc(r.fqdn)}">${esc(short)}</td>
       <td class="mono">${r.ips.map(esc).join(" · ")}</td>
       <td>${r.ips.map(ip => byIp[ip] ? `<span class="mchip ${byIp[ip].role === "iran" ? "ok" : ""}">${esc(byIp[ip].name)}</span>` : `<span class="mchip" title="This address is not one of the servers added to this panel (a CDN, another provider, or a server you did not add here).">outside the panel</span>`).join(" ")}</td>
       <td><select class="sm" aria-label="Server to point ${esc(r.fqdn)} at">${opts(cur)}</select></td>
       <td><button type="button" class="sm pri" onclick="dnsPoint('${esc(r.fqdn)}', this.closest('tr').querySelector('select'))" ${irn.length ? "" : "disabled"}>Point</button></td></tr>`; };
-  const by = {}; recs.forEach(r => { (by[r.domain || r.fqdn] = by[r.domain || r.fqdn] || []).push(r); });
-  let open; try { open = JSON.parse(localStorage.getItem("nk.dns.open") || "[]"); } catch (e) { open = []; }
-  const groups = Object.keys(by).sort().map(d => { const mine = by[d].filter(r => r.ips.some(ip => byIp[ip])).length;
-    return `<tbody class="dr-g ${open.includes(d) ? "open" : ""}" data-dom="${esc(d)}"><tr class="dr-dom clk" onclick="dnsToggle(this)"><td colspan="5"><i class="dr-chev"></i><b dir="ltr">${esc(d)}</b><span class="pill">${by[d].length} record${by[d].length === 1 ? "" : "s"}</span>${mine ? `<span class="pill ok" title="Records that point at a server of this panel">${mine} on the panel</span>` : ""}</td></tr>${by[d].map(row).join("")}</tbody>`; }).join("");
   return `<table class="tbl lift srv-tbl dns-tbl joined"><colgroup><col style="width:24%"><col style="width:17%"><col style="width:17%"><col style="width:32%"><col style="width:10%"></colgroup>
-    <thead><tr><th>Name</th><th>Address</th><th>On the panel</th><th>Point it at</th><th></th></tr></thead>${groups || '<tbody><tr><td colspan="5" class="empty">No A record in the account.</td></tr></tbody>'}</table>`;
+    <thead><tr><th>Name</th><th>Address</th><th>On the panel</th><th>Point it at</th><th></th></tr></thead><tbody>${recs.map(row).join("") || '<tr><td colspan="5" class="empty">No A record in this domain.</td></tr>'}</tbody></table>`;
 }
-window.dnsToggle = tr => { const g = tr.closest(".dr-g"), on = g.classList.toggle("open"), d = g.dataset.dom; let o; try { o = JSON.parse(localStorage.getItem("nk.dns.open") || "[]"); } catch (e) { o = []; } o = o.filter(x => x !== d); if (on) o.push(d); try { localStorage.setItem("nk.dns.open", JSON.stringify(o)); } catch (e) { /* private window */ } };
-function dnsChanges(log) {
+window.dnsPickDom = d => { try { localStorage.setItem("nk.dns.dom", d); } catch (e) { /* private window */ } refresh(); };function dnsChanges(log) {
   const row = e => `<tr class="${e.restored ? "" : "up"}"><td class="mut" title="${when(e.at)}">${ago(e.at)} ago</td><td class="name" dir="ltr">${esc(e.fqdn)}</td><td class="mono">${esc(e.old)} → ${esc(e.new)}</td><td>${esc(e.server)}${e.target && e.target !== e.server ? " → " + esc(e.target) : ""}</td>
     <td>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : '<span class="pill ok">active</span>'}</td>
     <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}')" title="Point this record back at ${esc(e.old)}">↩ Restore</button>`}</td></tr>`;

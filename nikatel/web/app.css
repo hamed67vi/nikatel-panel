@@ -3160,3 +3160,11 @@ body #page details.ap-intro .ap-steps { grid-template-columns: repeat(3, minmax(
 body #page details.ap-intro .ap-steps > div { grid-template-columns: 26px minmax(0, 1fr); padding: 8px 10px; column-gap: 9px; border-radius: 12px; }
 body #page details.ap-intro .ap-steps > div::before { width: 26px; height: 26px; border-radius: 8px; background-size: 15px; }
 body #page details.ap-intro .ap-steps > div > b { font-size: 12.5px; } body #page details.ap-intro .ap-steps > div > span { font-size: 11.5px; line-height: 1.35; }
+
+/* ---- Settings frames: the boxes inside a frame (the update card, License, Tunnel cores, Service settings) are the same distance apart, 12 px - they touched each other before ---- */
+html body #page .sf > .ss, html body #page .sf > .ss-hero { margin: 0 0 12px !important; } html body #page .sf > .ss:last-child { margin-bottom: 0 !important; }
+html body#page-x, html body #page .sf > .ss-hero.ss-hero.ss-hero { margin-bottom: 12px !important; }
+
+/* the domain chooser of the DNS toolbar */
+body #page .dns-dsel { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mut); white-space: nowrap; } body #page .dns-dsel select { height: 32px; min-width: 210px; max-width: 280px; font-size: 13px; font-weight: 600; border-radius: 12px; }
+body #page .dns-tbl td.name { padding-left: 12px; }

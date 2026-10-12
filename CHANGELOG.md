@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.20.7
+
+- DNS · IP switch: the domains are a drop-down in the top bar (each with its number of records, and All domains); the table below lists the records of the chosen domain only - no drawers. The choice is remembered.
+
+## 1.20.6
+
+- Settings: the boxes of a frame (About & update: the update card, License, Tunnel cores, Service settings) are 12 px apart everywhere; three of them touched each other.
+
 ## 1.20.5
 
 - Tunnel Doctor page tidied into one bar: the switch (repair a down tunnel by itself), the delay, how far it may go, Save, Fix all / Explain with AI and the count are one row; under it the list of tunnels and the history side by side; the six steps are a drawer that is closed until clicked. The duplicate switch and the separate settings card are gone.
