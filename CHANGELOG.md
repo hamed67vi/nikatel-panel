@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.3
+
+- Server window: the CPU line says how many cores the server has ("4 cores") next to the percentage, like the RAM line shows its megabytes.
+
 ## 1.20.2
 
 - Servers: only a server that is cut (off) is red. A server that is on but has a problem - high CPU, RAM or disk, no login, SSH failing - is yellow (a CPU at 94 % made the icon red before).
