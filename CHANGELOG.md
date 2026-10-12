@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.8
+
+- Search is more sensitive in every box of Nodes, Tunnels, Configs and DNS: each word of what you type may sit anywhere (the middle of a name too), several words must all be found, and separators do not matter (a name with a dash, a dot, a space or nothing between its parts is the same). A server can also be found by its role, provider (a part of the provider name finds all its servers), country, host name, state; a tunnel by the provider of its two servers, its transport, state and ports.
+
 ## 1.20.7
 
 - DNS · IP switch: the domains are a drop-down in the top bar (each with its number of records, and All domains); the table below lists the records of the chosen domain only - no drawers. The choice is remembered.
