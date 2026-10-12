@@ -7,6 +7,7 @@ import hashlib
 import io
 import re
 import tarfile
+import threading
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -30,7 +31,8 @@ ENGINES = {
     "chisel": {"title": "Chisel", "repo": "jpillora/chisel", "asset": r"^chisel_.*_linux_amd64\.gz$", "member": "chisel", "bin": "/usr/local/bin/nikatel-chisel", "units": "chisel-*.service"},
     "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service"},
 }
-_STATE: dict = {"checked_at": 0, "result": None, "job": None}
+_STATE: dict = {"checked_at": 0, "result": None, "job": None, "checking": False}
+_CHECK_LOCK = threading.Lock()
 
 
 def parse_versions(out: str) -> dict:
@@ -98,8 +100,28 @@ def check() -> dict:
     return {"engines": result, "checked_at": _STATE["checked_at"]}
 
 
+def check_start() -> bool:
+    """Start the check in the background (it asks every server over SSH: up to half a minute). False when one is already running."""
+    with _CHECK_LOCK:
+        if _STATE.get("checking"):
+            return False
+
+        _STATE["checking"] = True
+
+    def work() -> None:
+        try:
+            check()
+        except Exception:
+            log.exception("engine check failed")
+        finally:
+            _STATE["checking"] = False
+
+    threading.Thread(target=work, name="engines-check", daemon=True).start()
+    return True
+
+
 def last() -> dict:
-    return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"]}
+    return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking"))}
 
 
 def _download(engine: str) -> tuple[str, bytes]:

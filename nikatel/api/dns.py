@@ -1,3 +1,4 @@
+import threading
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,10 +6,58 @@ from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..config import get_settings
+from ..log import get_logger
 from ..services import dnsprov, failover, license
 
+log = get_logger("dns")
 router = APIRouter(tags=["dns"], dependencies=[Depends(current_user)])
-_CACHE: dict = {"at": 0.0, "rows": [], "accounts": []}
+_CACHE: dict = {"at": 0.0, "rows": [], "accounts": [], "refreshing": False}
+_REFRESH_LOCK = threading.Lock()
+CACHE_SECONDS = 60
+
+
+def _read_all() -> None:
+    """Read the records of every account (one that fails does not hide the others) into the cache."""
+    rows, accs = [], []
+
+    for a in dnsprov.accounts():
+        info = {"id": a.id, "name": a.name, "provider": a.provider, "ok": True, "error": "", "domains": [], "ttls": [[v, t] for v, t in dnsprov.provider_of(a).ttls]}
+        n = 0
+
+        try:
+            prov = dnsprov.provider_of(a)
+
+            for d in prov.domains():
+                got = prov.records(d)
+                n += len(got)
+                info["domains"].append(d)
+                rows.extend(got)
+        except (RuntimeError, ValueError) as e:
+            info["ok"], info["error"] = False, str(e)[:200]
+        else:
+            dnsprov._set_status(a.id, {"ok": True, "domains": len(info["domains"]), "records": n})
+
+        accs.append(info)
+
+    _CACHE.update(at=time.time(), rows=rows, accounts=accs)
+
+
+def _refresh_in_background() -> None:
+    with _REFRESH_LOCK:
+        if _CACHE["refreshing"]:
+            return
+
+        _CACHE["refreshing"] = True
+
+    def work() -> None:
+        try:
+            _read_all()
+        except Exception:
+            log.exception("the DNS records could not be renewed in the background")
+        finally:
+            _CACHE["refreshing"] = False
+
+    threading.Thread(target=work, name="dns-refresh", daemon=True).start()
 
 
 def _writable():
@@ -107,32 +156,14 @@ def accounts_test(account_id: str):
 
 @router.get("/dns/records")
 def records_list(fresh: bool = False):
-    """The records of every account (all types; read only), kept for one minute; `fresh` reads them again now. One account that fails does not hide the others."""
-    if fresh or time.time() - _CACHE["at"] > 60:
-        rows, accs = [], []
+    """The records of every account (all types; read only). The first read and `fresh` ask the accounts now (seconds); otherwise the page gets what was
+    read last at once, and a read older than a minute is renewed in the background (`refreshing` says so; ask again in a few seconds)."""
+    if fresh or not _CACHE["at"]:
+        _read_all()
+    elif time.time() - _CACHE["at"] > CACHE_SECONDS:
+        _refresh_in_background()
 
-        for a in dnsprov.accounts():
-            info = {"id": a.id, "name": a.name, "provider": a.provider, "ok": True, "error": "", "domains": [], "ttls": [[v, t] for v, t in dnsprov.provider_of(a).ttls]}
-            n = 0
-
-            try:
-                prov = dnsprov.provider_of(a)
-
-                for d in prov.domains():
-                    got = prov.records(d)
-                    n += len(got)
-                    info["domains"].append(d)
-                    rows.extend(got)
-            except (RuntimeError, ValueError) as e:
-                info["ok"], info["error"] = False, str(e)[:200]
-            else:
-                dnsprov._set_status(a.id, {"ok": True, "domains": len(info["domains"]), "records": n})
-
-            accs.append(info)
-
-        _CACHE.update(at=time.time(), rows=rows, accounts=accs)
-
-    return {"ok": True, "records": _CACHE["rows"], "accounts": _CACHE["accounts"]}
+    return {"ok": True, "records": _CACHE["rows"], "accounts": _CACHE["accounts"], "cached_at": int(_CACHE["at"]), "refreshing": bool(_CACHE["refreshing"])}
 
 
 def _fq(domain: str, name: str) -> str:

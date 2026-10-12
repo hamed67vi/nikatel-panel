@@ -31,7 +31,18 @@ def test_engines_check_api(client, monkeypatch):
     client.post("/api/servers", json={"name": "ir1", "host": "1.1.1.1", "role": "iran"})
     monkeypatch.setattr(engines, "latest", lambda e: {"version": "v0.6.6", "url": "u", "page": "p", "digest": ""})
     monkeypatch.setattr(engines, "run_script", lambda node, name, params=None, timeout=25: "ENGINE backhaul v0.6.5\nENGINE xray NONE\n")
-    d = client.post("/api/engines/check").json()["engines"]
+    import time as _t
+
+    engines._STATE.update(result=None, checked_at=0, checking=False)
+    assert client.post("/api/engines/check").json()["started"] is True
+
+    for _ in range(40):                                              # the check runs in the background: wait for it
+        _t.sleep(0.1)
+
+        if not client.get("/api/engines").json()["checking"]:
+            break
+
+    d = client.get("/api/engines").json()["engines"]
     assert d["backhaul"]["outdated"] == 1 and d["backhaul"]["nodes"][0]["state"] == "outdated"
     assert d["xray"]["nodes"][0]["state"] == "not installed"
     assert client.post("/api/engines/nope/update").status_code == 400

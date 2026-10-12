@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.25.4
+
+**Alignment round 2** (every page measured in the browser and on the server; the slow spots fixed).
+
+- **About & update no longer freezes for half a minute:** the engine check (every server over SSH) runs in the background; the page shows "checking every server…" and redraws when it is done. Before, opening the tab waited 26 s on the check.
+- **The DNS page opens at once:** the records read last are shown immediately and renewed in the background when older than a minute ("renewing…"); only the first read after a start, and ↻, wait for the accounts. Before, a cold open waited 8 s.
+- **Settings tabs switch without re-reading eleven routes:** one read, kept 20 s, forgotten after any change.
+- **Jobs remember their last failure** (`last_failure`, when) even after later runs succeed, so a job that failed 24 times in the night can be understood in the morning (migration 12). The Jobs page shows it.
+- **Slow API answers are written to the log** (over 3 s), so slow routes are found instead of guessed.
+- Measured on the server: every GET route the pages open with answers in under 60 ms; what the browser feels is the network.
+- **Deploy is safer after a real failure today:** the first build of this version shipped a migration with a broken DDL (`DEFAULT '` lost a quote); the service could not start and the rollback was blocked by the uncommitted files, so the panel was down for about three minutes. Now `scripts/deploy.sh` runs the migrations against a copy of the live database BEFORE the restart (`scripts/migrate_check.py`), and a rollback puts the last good files back without switching branches (uncommitted work goes to a stash). `tests/test_migrations.py` runs every ADD COLUMN DDL for real and checks the numbering.
+
 ## 1.25.3
 
 **Alignment round 1** (the audit of 2026-10-12: docs against code, the live log, the growing tables).

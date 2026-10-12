@@ -42,6 +42,7 @@ from .services import (
 
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
+SLOW_MS = 3000          # an API answer slower than this is written to the log, so the slow routes are found instead of guessed
 
 
 def _index_html() -> str:
@@ -234,8 +235,12 @@ def create_app(run_jobs: bool = True) -> FastAPI:
         elif request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
 
+        ms = (time.time() - t0) * 1000
+
         if request.url.path.startswith("/api/") and response.status_code >= 400:
-            log.warning("%s %s -> %s in %dms", request.method, request.url.path, response.status_code, (time.time() - t0) * 1000)
+            log.warning("%s %s -> %s in %dms", request.method, request.url.path, response.status_code, ms)
+        elif request.url.path.startswith("/api/") and ms > SLOW_MS:
+            log.warning("slow %s %s -> %s in %dms", request.method, request.url.path, response.status_code, ms)      # a route that blocks this long belongs behind an action id (docs/api.md)
 
         return response
 

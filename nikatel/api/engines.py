@@ -11,9 +11,10 @@ def last():
     return {"ok": True, **engines.last()}
 
 
-@router.post("/engines/check")
+@router.post("/engines/check", status_code=202)
 def check():
-    return {"ok": True, **engines.check()}
+    """Start the version check of every server in the background; follow it with GET /engines (`checking`, then `checked_at`)."""
+    return {"ok": True, "started": engines.check_start(), **engines.last()}
 
 
 @router.post("/engines/{engine}/update")

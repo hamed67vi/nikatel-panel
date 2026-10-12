@@ -296,3 +296,5 @@ class Job(Base):
     last_error: Mapped[str] = mapped_column(String(300), default="")
     runs: Mapped[int] = mapped_column(Integer, default=0)
     failures: Mapped[int] = mapped_column(Integer, default=0)
+    last_failure: Mapped[str] = mapped_column(String(300), default="")      # the last failure is kept even after later runs succeed (last_error is cleared by a success)
+    last_failure_at: Mapped[int] = mapped_column(Integer, default=0)

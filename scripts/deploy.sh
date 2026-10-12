@@ -27,12 +27,20 @@ fi
 PREV=$(cat "$STATE" 2>/dev/null || true)
 echo "== no secrets in the repo";  bash scripts/check_no_secrets.sh
 echo "== tests";                    "$VENV/bin/python" -m pytest -q
+echo "== migrations on a copy of the live database"; "$VENV/bin/python" scripts/migrate_check.py /var/lib/nikatel/data
 echo "== install $(git rev-parse --short HEAD)"; install
 
 if health; then
     git rev-parse HEAD > "$STATE"; echo "DEPLOY OK $(git rev-parse --short HEAD)"
 else
     echo "HEALTH CHECK FAILED"; journalctl -u nikatel -n 20 --no-pager
-    if [ -n "$PREV" ]; then echo "rolling back to ${PREV:0:7}"; git checkout -q "$PREV"; install; fi
+    if [ -n "$PREV" ]; then
+        echo "rolling back to ${PREV:0:7}"
+        # the files of the last good commit come back into the working tree (HEAD stays on the branch, so the next deploy commits the fix on top);
+        # uncommitted work is put aside first: git stash pop brings it back
+        if [ -n "$(git status --porcelain)" ]; then git stash push -u -q -m "deploy failed $(date -u +%FT%TZ)" && echo "uncommitted work put aside (git stash pop brings it back)"; fi
+        git checkout -q "$PREV" -- . && install
+        health && echo "rolled back: the panel runs ${PREV:0:7} again" || { echo "STILL DOWN after the rollback: journalctl -u nikatel -n 50"; }
+    fi
     exit 1
 fi

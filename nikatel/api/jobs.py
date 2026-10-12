@@ -14,7 +14,7 @@ def list_jobs():
     with session() as db:
         return {"ok": True, "jobs": [{"name": j.name, "interval": j.interval, "enabled": j.enabled, "running": j.running,
                                      "last_start": j.last_start, "last_ok": j.last_ok, "last_duration_ms": j.last_duration_ms,
-                                     "last_error": j.last_error, "runs": j.runs, "failures": j.failures}
+                                     "last_error": j.last_error, "runs": j.runs, "failures": j.failures, "last_failure": j.last_failure, "last_failure_at": j.last_failure_at}
                                     for j in db.scalars(select(Job).order_by(Job.name))]}
 
 

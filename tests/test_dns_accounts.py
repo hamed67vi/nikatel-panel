@@ -151,3 +151,21 @@ def test_every_type_is_listed_and_a_records_are_made_changed_deleted_and_restore
 def test_the_main_arvan_key_can_be_removed(client, fakes):
     assert client.delete("/api/dns/accounts/arvan").status_code == 200
     assert dnsprov.accounts() == []
+
+
+def test_the_record_list_is_served_from_the_cache_and_renewed_in_the_background(client, fakes, monkeypatch):
+    import time as _t
+
+    from nikatel.api import dns as api_dns
+
+    api_dns._CACHE.update(at=0.0, rows=[], accounts=[], refreshing=False)
+    first = client.get("/api/dns/records").json()
+    assert first["refreshing"] is False and first["cached_at"] > 0 and any(r["type"] == "MX" for r in first["records"])
+    api_dns._CACHE["at"] = _t.time() - 600                               # stale: the page gets the old rows at once, a thread renews them
+    seen = []
+    monkeypatch.setattr(api_dns, "_read_all", lambda: (seen.append(1), api_dns._CACHE.update(at=_t.time())))
+    stale = client.get("/api/dns/records").json()
+    assert any(r["type"] == "MX" for r in stale["records"])
+    _t.sleep(0.3)
+    assert seen == [1] and client.get("/api/dns/records").json()["refreshing"] is False
+    assert client.get("/api/dns/records?fresh=true").json()["ok"] and seen == [1, 1]           # fresh waits for a real read

@@ -70,6 +70,7 @@ def run_once(name: str) -> None:
                     if err:
                         job.failures += 1
                         job.last_error = err
+                        job.last_failure, job.last_failure_at = err, int(time.time())
                     else:
                         job.last_ok = int(time.time())
                         job.last_error = ""

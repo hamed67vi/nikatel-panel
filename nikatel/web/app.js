@@ -20,6 +20,7 @@ function apiWhat(path, opts) {
 }
 async function api(path, opts = {}) {
   const ctl = (!opts.method || String(opts.method).toUpperCase() === "GET") && !KEEP_ALIVE.test(path) ? navCtl : null;
+  if (opts.method && String(opts.method).toUpperCase() !== "GET") state.setCache = null;      // something changed: the settings page reads again
   let r, body = null;
   try {
     r = await fetch(path, Object.assign({headers: {"Content-Type": "application/json"}}, opts, ctl ? {signal: ctl.signal} : {}));
@@ -990,13 +991,17 @@ async function enginesLoad() {
     const status = e.error ? `<span class="err">${esc(e.error)}</span>` : !nodes.length ? '<span class="mut">press Check</span>' : outdated ? `<b class="warn">New version ${esc(e.latest)} is out</b> <small class="mut">· ${outdated} server${outdated > 1 ? "s" : ""} to update</small>` : `<b class="gw-ok">✓ Up to date</b>${unreach ? ` <small class="mut">· ${unreach} unreachable</small>` : ""}`;
     return `<div class="eng-row"><span class="eng-name"><b>${esc(e.title)}</b><small class="mut" title="${have.length} of ${nodes.length} servers have it">${have.length}/${nodes.length}</small></span><span class="eng-ver" title="${esc(nodes.map(n => n.name + ": " + (n.version || "—")).join(", "))}">${installed || '<span class="mut">not installed</span>'}</span><span class="eng-latest">${e.latest ? esc(e.latest) : "—"}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener" title="Release notes">↗</a>` : ""}</span><span class="eng-st">${status}</span><span class="eng-act">${outdated ? `<button class="pri sm" onclick="engineUpdate('${k}')" title="Update ${outdated} server${outdated > 1 ? "s" : ""} to ${esc(e.latest)}">⬆ Update</button>` : ""}</span></div>`;
   };
-  box.innerHTML = `<div class="eng-bar"><small class="mut">${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : "checking…"} · nothing updates by itself, Update asks you first</small><button class="sm" onclick="engineCheck()">↻ Check now</button></div>
+  box.innerHTML = `<div class="eng-bar"><small class="mut">${d.checking ? "checking every server… " : ""}${d.checked_at ? "checked " + ago(d.checked_at) + " ago" : (d.checking ? "" : "not checked yet")} · nothing updates by itself, Update asks you first</small><button class="sm" onclick="engineCheck()">↻ Check now</button></div>
     <div class="eng-head"><span>Core</span><span>Installed</span><span>Newest</span><span>Status</span><span></span></div>
     ${Object.entries(eng).map(([k, e]) => row(k, e)).join("") || '<div class="empty">Press “Check for updates” to compare the cores on your servers with the newest releases.</div>'}
     ${d.job ? `<div class="mut" style="margin-top:6px">Last update: <b>${esc(d.job.engine)} ${esc(d.job.version || "")}</b> ${d.job.done ? `— ${(d.job.items || []).filter(i => i.state === "ok").length} of ${(d.job.items || []).length} servers updated${(d.job.items || []).some(i => i.state !== "ok") ? ` <span class="err">(${(d.job.items || []).filter(i => i.state !== "ok").map(i => esc(i.name)).join(", ")} failed)</span>` : ""}` : "(running…)"}${d.job.error ? ` <span class="err">${esc(d.job.error)}</span>` : ""}</div>` : ""}`;
-  if (!d.checked_at || Date.now() / 1000 - d.checked_at > 3600) { if (!enginesLoad.busy) { enginesLoad.busy = true; api("/api/engines/check", {method: "POST"}).then(() => enginesLoad()).catch(() => {}).finally(() => { enginesLoad.busy = false; }); } }   // checked by itself when the last check is old
+  if (d.checking) { if (!enginesLoad.busy) { enginesLoad.busy = true; engineFollow().finally(() => { enginesLoad.busy = false; }); } }
+  else if (!d.checked_at || Date.now() / 1000 - d.checked_at > 3600) { if (!enginesLoad.busy) { enginesLoad.busy = true; api("/api/engines/check", {method: "POST"}).then(() => engineFollow()).catch(() => {}).finally(() => { enginesLoad.busy = false; }); } }   // checked by itself when the last check is old; the page never waits for it
 };
-window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); toast("✓ Checked", "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+async function engineFollow() {   // the check runs on the server; the box is redrawn when it is done (polled every 5 s, up to two minutes)
+  for (let i = 0; i < 24; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (!d || !d.checking) { enginesLoad(); return; } }
+}
+window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); enginesLoad(); engineFollow(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 PAGES.tunnelsList = async () => {
   const [list, trashRes, outageRes, srvAll] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []})), api("/api/autopilot/outage").catch(() => null), api("/api/servers").catch(() => null)]);
@@ -3211,7 +3216,7 @@ PAGES.jobs = async () => {
       <td><span class="st ${x.running ? "degraded" : x.enabled ? "up" : ""}">${x.running ? "running" : x.enabled ? "on" : "off"}</span></td>
       <td class="mut">${x.last_ok ? ago(x.last_ok) + " ago" : "never"}</td><td class="mut">${x.last_start ? ago(x.last_start) + " ago" : "never"}</td>
       <td class="num">${x.last_duration_ms ? (x.last_duration_ms / 1000).toFixed(1) + "s" : "—"}</td>
-      <td class="mut" title="${esc(x.last_error)}">${esc(x.last_error).slice(0, 60)} ${x.failures ? `<span class="pill">${x.failures}/${x.runs} failed</span>` : ""}</td>
+      <td class="mut" title="${esc(x.last_error || (x.last_failure ? "last failure " + ago(x.last_failure_at) + " ago: " + x.last_failure : ""))}">${esc(x.last_error || (x.last_failure && x.failures ? "last failure " + ago(x.last_failure_at) + " ago: " + x.last_failure : "")).slice(0, 60)} ${x.failures ? `<span class="pill">${x.failures}/${x.runs} failed</span>` : ""}</td>
       <td><button class="sm" onclick="runJob('${esc(x.name)}')">Run now</button> <button class="sm" onclick="jobEnabled('${esc(x.name)}', ${!x.enabled})">${x.enabled ? "Pause" : "Resume"}</button></td></tr>`).join("")}</tbody></table>`;
 };
 window.runJob = async n => { try { await api(`/api/jobs/${n}/run`, {method: "POST"}); toast("✓ " + n + " runs now", "ok"); setTimeout(refresh, 1500); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -3314,7 +3319,8 @@ const sSeg = flags => `<span class="sec-seg">${flags.map(f => `<i class="${f ? "
 const sSel = (name, opts, cur, attrs = "") => `<select name="${name}" ${attrs}>${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 
 PAGES.settings = async () => {
-  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")]);
+  if (!state.setCache || Date.now() - state.setCache.at > 20000) state.setCache = {at: Date.now(), data: await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")])};   // one read for all the tabs (a tab switch does not ask eleven routes again); a change through the API forgets it
+  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = state.setCache.data;
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   const srvOpts = (cur, none) => (none ? [["0", "—"]] : []).concat(iranList.map(x => [x.id, x.name])), ro = s.read_only;
 
@@ -3785,7 +3791,7 @@ PAGES.dns = async () => {
   const bar = `<div class="toolbar joined">${addBtn}
       <span class="tcount pstat nd-stats">${conn}${connected ? chip("info", "Domains", nDom) + chip("info", "A records", nA) + chip("ok", "On the panel", onPanel, "A records that point at a server added to this panel") : ""}${chip("warn", "Automatic switching", "off", "The panel never changes an IP by itself while this is being tested. You can still change a record by hand.")}</span>
       ${tab === "records" && connected ? domSel : ""}<span class="sp"></span><div class="tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>
-      ${tab === "records" && connected ? searchSeg() + `<button type="button" class="sm" onclick="state.dnsFresh = true; toast('Reading the DNS accounts…'); refresh()" title="Read the records from the accounts again">↻</button>` : ""}</div>`;
+      ${tab === "records" && connected ? searchSeg() + `<button type="button" class="sm" onclick="state.dnsFresh = true; toast('Reading the DNS accounts…'); refresh()" title="Read the records from the accounts again">↻</button>` : ""}${rr.refreshing ? '<small class="mut dns-renew" title="The list shown was read a while ago; the accounts are being asked again right now">renewing…</small>' : ""}</div>`;
   let body = "";
 
   if (tab === "records") body = !accounts.length ? dnsEmpty() : dnsRecords(recs, rr.err, byIp, cur, live);
