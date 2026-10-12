@@ -42,7 +42,7 @@ The customers' app inside Telegram, installed from the panel: services with live
 * **Encrypted backups** (aes-256, passphrase set once) kept locally and sent to Telegram; one-command restore.
 
 ## 8. Settings
-Account (password, two-step sign-in with recovery codes, reset by Telegram code) · Alerts · Backups · Probe (primary + standby with failover, installer for any Iran server) · Repairs & AI (auto-repair level and delay, Anthropic key) · Shop bot (where it runs) · Appearance (themes, day / night, text size, animations) · Update (one click from GitHub with rollback, tunnel cores).
+Account (password, two-step sign-in with recovery codes, reset by Telegram code, **API tokens** with a scope for scripts, bots and AI) · Alerts · Backups · Probe (primary + standby with failover, installer for any Iran server) · Repairs & AI (auto-repair level and delay, Anthropic key) · Shop bot (where it runs) · Appearance (themes, day / night, text size, animations) · Update (one click from GitHub with rollback, tunnel cores).
 
 ## 9. Interface
 Plain JS, no build step; hover fade on every button and row; a loading box and automatic retry so a page switch never shows the old page; fixed-height log boxes; phone layout with a bottom bar; the installer, the updater and the docs are in the repository.

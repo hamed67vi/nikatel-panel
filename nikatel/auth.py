@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Cookie, HTTPException, Request
+from fastapi import Cookie, Header, HTTPException, Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .config import get_settings
@@ -120,10 +120,24 @@ def make_session(user: str) -> str:
     return _serializer().dumps({"u": user, "e": epoch()})
 
 
-def current_user(request: Request, nikatel_session: str | None = Cookie(default=None)) -> str:
-    """FastAPI dependency: the logged-in user, or 401."""
+def current_user(request: Request, nikatel_session: str | None = Cookie(default=None), authorization: str | None = Header(default=None)) -> str:
+    """FastAPI dependency: the signed-in user ("admin" from the browser, "token:<name>" from a machine), or 401."""
     if get_settings().demo:
         return "demo"           # the public demo shows itself without a sign-in (it holds invented data and refuses every change)
+
+    if isinstance(authorization, str) and authorization.lower().startswith("bearer "):          # a machine: an API token with a scope (docs/api.md section 3)
+        from .services import tokens
+
+        row = tokens.verify(authorization[7:])
+
+        if row is None:
+            raise HTTPException(401, "this API token is not valid (revoked, or never made here)")
+
+        if not tokens.allowed(row["scope"], request.method, request.url.path):
+            raise HTTPException(403, {"error": f"the token {row[chr(110) + chr(97) + chr(109) + chr(101)]!r} has the scope {row[chr(115) + chr(99) + chr(111) + chr(112) + chr(101)]}: it may not do this", "code": "token_scope"})
+
+        request.state.token = row
+        return "token:" + row["name"]
 
     if not nikatel_session:
         raise HTTPException(401, "not logged in")
@@ -144,7 +158,7 @@ def current_user(request: Request, nikatel_session: str | None = Cookie(default=
 def session_user(request: Request) -> str | None:
     """The signed-in user of a request, or None - the same check as `current_user`, usable outside a dependency."""
     try:
-        return current_user(request, request.cookies.get(COOKIE))
+        return current_user(request, request.cookies.get(COOKIE), request.headers.get("authorization"))
     except HTTPException:
         return None
 

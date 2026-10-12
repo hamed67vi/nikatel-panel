@@ -50,8 +50,18 @@ than three seconds is written to the log as `slow …`, so the list of what shou
 ## 3. Authentication
 
 The browser signs in once and carries the `nikatel_session` cookie (24 h, two-step sign-in and a secret entry path when enabled).
-Machine access (a bot, a script, an AI) uses an API token with a scope (`read`, `act`, `admin`) made under Settings → Security →
-API tokens and sent as `Authorization: Bearer <token>` (roadmap #61: the tokens arrive with it; until then a machine has no sign-in).
+Machine access (a bot, a script, an AI) uses an API token made under Settings → Security → API tokens (the admin password is asked;
+the token is shown once; the panel keeps only its hash) and sent on every request as `Authorization: Bearer nkt_…`. Scopes:
+
+| scope | may |
+|---|---|
+| `read` | every GET except the settings, the sign-in, the tokens, the log and the licence |
+| `act` | `read`, plus the routes that start work: checks, repairs, builds, tests, DNS records |
+| `admin` | everything, including settings, tokens (it may make tokens without a password), the log |
+
+A token that is revoked stops at once. Every use is logged on the token (`last_used_at`); making and revoking are written to the
+security log. A valid token passes the secret entry path; a wrong one sees the missing page like everyone else. The answer to a
+request a token may not make is `403` with `"code": "token_scope"`.
 
 ## 4. Versions
 

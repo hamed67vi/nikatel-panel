@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.27.0
+
+**M10 #61 - machine access.** Settings → Security → **API tokens**: a token for a script, a Telegram bot or an AI agent, made with the admin password, shown once (the panel keeps only its SHA-256), with a scope - `read` (GET only), `act` (also the routes that start checks, repairs, builds and DNS changes), `admin` (everything; it may make tokens without a password) - revocable at once, every use timed, making and revoking in the security log. Sent as `Authorization: Bearer nkt_…`; a valid token also passes the secret entry path. The browser keeps its session cookie; a request a token may not make answers 403 `token_scope`. Table `api_tokens` (migration 13). docs/api.md section 3.
+
 ## 1.26.1
 
 - **The config hysteresis really holds now.** A round of the configs job looked at the probe twice when a direct config was down (the second look after the reachability answer), and the two looks counted as two agreeing reads, so a config still flipped every two minutes. The second look no longer counts; only a measured override (the port opens from Iran) moves the status at once.

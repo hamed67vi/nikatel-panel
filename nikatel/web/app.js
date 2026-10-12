@@ -3420,7 +3420,7 @@ PAGES.settings = async () => {
 const sec = {setup: null, codes: null};
 async function secLoad() {
   const box = $("#sec-box"); if (!box) return;
-  const s = await api("/api/auth/security");
+  const [s, tk] = await Promise.all([api("/api/auth/security"), api("/api/tokens").catch(() => ({tokens: []}))]);
   const pill = $("#sec-pill"); if (pill) { pill.textContent = s.totp_enabled ? "2-step on" : "2-step OFF"; pill.className = "pill " + (s.totp_enabled ? "ok" : "err"); }
   const url = s.entry_path ? location.origin + "/" + s.entry_path : "";
   const on2 = !!s.totp_enabled, onR = (s.recovery_left || 0) > 0, onP = !!url, score = [on2, onR, onP].filter(Boolean).length;
@@ -3437,8 +3437,24 @@ async function secLoad() {
       field: `<input class="si-f" id="sec-path" placeholder="${onP ? esc(s.entry_path) : "your own path (8-64 letters, digits, - _)"}" value="" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')secPathSet()">`,
       acts: `<button class="sm pri" onclick="secPathSet()">Set</button><button class="sm" onclick="secPath(true)">Random</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`});
   const gW = `<form class="sl" onsubmit="return changePassword(event)"><div class="si pw"><i class="ss-ic">${SI.key}</i><div class="si-b"><div class="si-t"><span class="si-n"><b>Password</b></span><small>at least 10 characters</small></div></div><div class="pwf-f">${pwBox("cur", "current", "Current password", "current-password")}${pwBox("nw", "new", "New password", "new-password", " minlength=\"10\"")}${pwBox("nw", "again", "Repeat the new one", "new-password", " minlength=\"10\"")}</div></div><div class="si so"><input type="checkbox" class="sw" name="logout_others" checked><div class="si-b"><div class="si-t"><span class="si-n"><b>Sign out of other devices</b></span><small>Terminate all active sessions except this device.</small></div></div><span class="si-a si-x"><button class="pri sm" type="submit"><i class="bi">${SI.lock(false)}</i>Change password</button></span></div></form>`;
-  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}</div>${gW}`;
-}const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
+  const toks = tk.tokens || [];
+  const gT = sItem({chev: true, ok: toks.length > 0 ? true : undefined, icon: SI.key, title: "API tokens", pill: `<span class="pill ${toks.length ? "ok" : ""}">${toks.length}</span>`, desc: "the sign-in of a script, a Telegram bot or an AI that drives the panel over its API (docs/api.md): read, act or admin",
+      field: `<div class="tok-list">${toks.map(t => `<div class="tok-row"><b>${esc(t.name)}</b><span class="pill">${esc(t.scope)}</span><code>${esc(t.prefix)}…</code><small class="mut">${t.last_used_at ? "used " + ago(t.last_used_at) + " ago" : "never used"} · made ${ago(t.created_at)} ago</small><button type="button" class="sm danger" onclick="tokRevoke(${t.id}, this.closest('.tok-row').querySelector('b').textContent)">Revoke</button></div>`).join("") || '<small class="mut">No token yet. A token is shown once, when it is made; the panel keeps only its hash.</small>'}</div>`,
+      acts: `<input class="si-f" id="tok-name" placeholder="name (what will use it)" maxlength="40" autocomplete="off"><select id="tok-scope" title="read: GET only · act: also start checks, repairs, builds · admin: everything"><option value="read">read</option><option value="act">act</option><option value="admin">admin</option></select><button type="button" class="sm pri" onclick="tokCreate()">Make</button>`});
+  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}${gT}</div>${gW}`;
+}
+window.tokCreate = async () => {
+  const name = ($("#tok-name") || {}).value || "", scope = ($("#tok-scope") || {}).value || "read";
+  if (!name.trim()) { toast("Give the token a name first", "bad"); return; }
+  const pw = await askPw(); if (!pw) return;
+  try {
+    const r = await api("/api/tokens", {method: "POST", body: JSON.stringify({name: name.trim(), scope, password: pw})});
+    showModal("<b>Your new API token</b>", `<p>This is the only time it is shown. Copy it now and keep it where the script or bot reads it.</p><div class="tok-show"><code id="tok-new">${esc(r.token)}</code><button class="sm pri" onclick="navigator.clipboard.writeText(document.getElementById('tok-new').textContent).then(() => toast('Copied', 'ok'))">Copy</button></div>
+      <p class="mut">Use it as <code>Authorization: Bearer ${esc(r.prefix)}…</code> on every request. Scope <b>${esc(r.scope)}</b>: ${r.scope === "read" ? "GET only" : r.scope === "act" ? "reads, and the routes that start checks, repairs and builds; not the settings" : "everything"}.</p>`, "narrow");
+    secLoad();
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.tokRevoke = async (id, name) => { if (!await gconfirm(`Revoke the token ${name}? Whatever uses it stops working at once.`)) return; try { await api(`/api/tokens/${id}`, {method: "DELETE"}); toast("Token revoked", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
 window.secSetup = async () => { const pw = await askPw(); if (!pw) return; try { sec.setup = await api("/api/auth/2fa/setup", {method: "POST", body: JSON.stringify({password: pw})}); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secEnable = async () => { try { const r = await api("/api/auth/2fa/enable", {method: "POST", body: JSON.stringify({password: "", code: $("#sec-code").value})}); sec.setup = null; sec.codes = r.recovery_codes; toast("✓ Two-step sign-in is on", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secOff = async () => { const pw = await askPw(); if (!pw) return; const code = await gprompt("A code from the app, or a recovery code:"); if (!code) return; try { await api("/api/auth/2fa/disable", {method: "POST", body: JSON.stringify({password: pw, code})}); toast("Two-step sign-in is off", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };

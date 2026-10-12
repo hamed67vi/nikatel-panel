@@ -24,7 +24,7 @@ nikatel/
   log.py           log format, request id, secret masking
   db.py            engine, sessions, numbered migrations (MIGRATIONS, _add_column)
   models.py        tables: Server (+extra), ServerSample, Tunnel, TunnelCheck, Event, Job, AlertState,
-                   Maintenance, Config, ConfigSample, Subscription, Panel, ActionLog, Gateway, RepairCase
+                   Maintenance, Config, ConfigSample, Subscription, Panel, ActionLog, Gateway, RepairCase, ApiToken
   ssh.py           Node, run_script(name, params) over the reviewed SCRIPTS and ACTIONS; run_raw only read-write
   auth.py          one admin, scrypt, signed cookie
   jobs.py          background loops with their status in the jobs table; stop_all waits for in-flight SSH
@@ -55,7 +55,8 @@ nikatel/
                      replace_plan after Create, follow_ip_change after a new address, dns_log with restore, Telegram notices
     arvan.py         ArvanCloud CDN API client: records of every domain, swap_ip (pure), apply with read-back, test; create / edit / delete A records
     cloudflare.py    Cloudflare DNS API client (one address per record, proxied flag); dnsprov.py: the DNS accounts (several ArvanCloud, Cloudflare) under one list
-    gate.py          the secret entry path: the panel answers 404 to everyone who does not know it
+    gate.py          the secret entry path: the panel answers 404 to everyone who does not know it (a live API token passes it)
+    tokens.py        API tokens for machines: hashed at rest, shown once, scoped read / act / admin (`allowed` is pure), revocable
     license.py       owner / licensed / free: a signed NK1 token (Ed25519), features, the gates the rest of the panel asks
     ai.py            Anthropic advice inside Fix (key in settings, never in the repo)
     balance.py       CPU on the cores: a busy server whose packets sit on one core gets RPS (probe / judge pure, apply with before-after and rollback)
@@ -80,7 +81,7 @@ nikatel/
     settings.py      typed settings in the database (secrets masked in responses)
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
-                   (auth, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, radar, shopbot,
+                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, radar, shopbot,
                     alerts, events, jobs, failover, dns, license, balance, analyst, system = health, logs, update of the panel itself)
   web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
                    glass modal windows (showModal), themes (LOOK), a loading box on every page change

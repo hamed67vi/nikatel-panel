@@ -3244,3 +3244,9 @@ body #page .bal-row .ap-why.good { color: #32d74b; } body #page .bal-row .ap-why
 .ana-why td { padding-top: 0 !important; border-top: 0 !important; } .ana-why small { color: var(--mut, #8b93a7); line-height: 1.5; }
 .ana-act { white-space: nowrap; text-align: right; } .ana-act .sm { margin-left: 4px; }
 .ok-t { color: #32d74b; }
+/* API tokens (Settings -> Security) */
+.tok-list { display: grid; gap: 4px; width: 100%; }
+.tok-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 9px; box-shadow: var(--edge); font-size: 12.5px; flex-wrap: wrap; }
+.tok-row code { font-family: var(--mono); font-size: 11.5px; opacity: .85; } .tok-row small { flex: 1; }
+.tok-show { display: flex; align-items: center; gap: 10px; margin: 10px 0; padding: 10px 12px; border-radius: 11px; box-shadow: var(--edge); }
+.tok-show code { font-family: var(--mono); font-size: 13px; word-break: break-all; flex: 1; }

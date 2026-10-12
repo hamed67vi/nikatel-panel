@@ -78,4 +78,14 @@ def allowed(request: Request) -> bool:
     if not path or is_local_direct(request):
         return True
 
-    return cookie_ok(request.cookies.get(auth.GATE_COOKIE), path)
+    if cookie_ok(request.cookies.get(auth.GATE_COOKIE), path):
+        return True
+
+    bearer = request.headers.get("authorization", "")
+
+    if bearer.lower().startswith("bearer "):                   # a machine with a live API token needs no door cookie; a wrong token sees the missing page like everyone else
+        from . import tokens
+
+        return tokens.verify(bearer[7:]) is not None
+
+    return False

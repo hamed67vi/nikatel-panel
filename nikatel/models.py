@@ -282,6 +282,21 @@ class Panel(Base):
     created_at: Mapped[int] = mapped_column(Integer, default=now)
 
 
+class ApiToken(Base):
+    """The sign-in of a machine (docs/api.md section 3): only the hash of the token is kept; the token itself is shown once when it is made."""
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40))
+    scope: Mapped[str] = mapped_column(String(8))                        # read | act | admin
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    prefix: Mapped[str] = mapped_column(String(12), default="")          # the first characters, so the operator can tell tokens apart
+    created_at: Mapped[int] = mapped_column(Integer, default=now)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    last_used_at: Mapped[int] = mapped_column(Integer, default=0)
+    revoked_at: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Job(Base):
     """Status of every background job, so nothing fails silently."""
     __tablename__ = "jobs"

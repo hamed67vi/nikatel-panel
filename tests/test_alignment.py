@@ -37,7 +37,7 @@ def test_every_api_router_is_behind_the_sign_in():
         if "APIRouter(" not in s or p.stem in open_by_design or p.stem.startswith("__"):
             continue
 
-        if "dependencies=[Depends(current_user)" not in s:
+        if not re.search(r"dependencies=\[Depends\((auth\.)?current_user\)", s):
             bad.append(p.stem)
 
     assert not bad, f"routers without the sign-in dependency: {bad}"
