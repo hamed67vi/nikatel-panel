@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.6
+
+Servers list: the **Status** and **Filtered** columns are gone (the dot on the server's icon still says online / offline). One new **Issues** column shows whatever is wrong with a server as small tags, and a dash when nothing is: Disabled, No login, Offline, SSH ✕, Not checked yet, GRE ✕, Filtered, Bad route, Network cut / ⚠, duplicate name or address, or the work the panel is doing on it. Same columns on the Iran and the Foreign tab.
+
 ## 1.30.5
 
 Servers list, second pass: a server is **enabled / disabled** (not turned on / off: the panel never switches a server off). The row buttons are gone; the switch sits next to the name in the server window. A disabled row shows a soft "Disabled - not checked, no alerts" chip inside the card. The bars are long and aligned (they fill their cell, the number has its own column), nothing sits at the end of a card, and an arrow shows there only under the pointer.

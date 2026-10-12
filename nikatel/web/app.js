@@ -542,15 +542,33 @@ PAGES.servers = async () => {
   if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (state.page === "nodes") refresh(); }, 3000); }
   const nameN = {}; (state.serversCache || list).forEach(x => { const k = String(x.name).toLowerCase(); nameN[k] = (nameN[k] || 0) + 1; });      // a name that more than one server carries is marked
   const sameName = s => nameN[String(s.name).toLowerCase()] > 1 ? `<span class="dup" title="${nameN[String(s.name).toLowerCase()]} servers have this name (capitals do not count): rename one of them">⚠ ×${nameN[String(s.name).toLowerCase()]}</span>` : "";
+  /* ONE column for whatever is wrong with a server (nothing at all when it is fine): busy, disabled, no login, offline, SSH, GRE, filtered, bad route, network, duplicates */
+  const issues = s => {
+    const x = s.extra || {}, flt = x.iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked"), b = srvBusy(s), out = [];
+    const tag = (cls, txt, tip) => out.push(`<span class="pill ${cls}" title="${esc(tip || txt)}">${txt}</span>`);
+    if (b) return `<span class="busy-chip" title="${esc(b.what + (b.detail ? ": " + b.detail : ""))}"><i class="spin"></i>${esc(b.what)}…</span>`;
+    if (!s.enabled) return `<span class="pill off">Disabled</span>`;
+    if (noLogin(s)) tag("err", "No login", s.last_error);
+    else if (s.online === false) tag("err", "Offline", s.last_error || "The server does not answer");
+    else if (s.online && /^SSH does not answer/.test(s.last_error || "")) tag("warn", "SSH ✕", s.last_error);
+    else if (s.online == null) tag("off", "Not checked yet", "The panel has not looked at it yet");
+    out.push(greMark(s));
+    if (blocked) tag("err", "Filtered", "Not reachable from inside Iran");
+    if ((x.reach_ir || {}).level === "bad") tag("err", "Bad route", x.reach_ir.bad + " of " + x.reach_ir.total + " Iran servers lose packets toward it (worst " + x.reach_ir.worst + " %): the fault is this server or its provider");
+    if ((x.net || {}).level === "down") tag("err", "Network cut", "This Iran server cannot reach the internet");
+    else if ((x.net || {}).level === "bad") tag("warn", "Network ⚠", "internet " + x.net.anchor + "%, other Iran servers " + x.net.domestic + "%, foreign servers " + x.net.foreign + "% lost");
+    out.push(sameName(s), dupHost(s));
+    const html = out.filter(Boolean).join("");
+    return html || '<span class="mut iss-ok">—</span>';
+  };
   const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = (!s.enabled ? "srv-off" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls} clk" data-id="${s.id}" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
-      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${s.enabled ? greMark(s) : ""}${sameName(s)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}${s.enabled ? "" : '<span class="pill">disabled</span>'}${dupHost(s)}${((s.extra || {}).reach_ir || {}).level === "bad" ? `<span class="pill err" title="${esc(s.extra.reach_ir.bad + " of " + s.extra.reach_ir.total + " Iran servers lose packets toward it (worst " + s.extra.reach_ir.worst + " %): the fault is this server or its provider")}">bad route</span>` : ""}${((s.extra || {}).net || {}).level === "down" ? '<span class="pill err" title="This Iran server cannot reach the internet">network cut</span>' : ((s.extra || {}).net || {}).level === "bad" ? `<span class="pill warn" title="${esc("internet " + s.extra.net.anchor + "%, other Iran servers " + s.extra.net.domestic + "%, foreign servers " + s.extra.net.foreign + "% lost")}">network ⚠</span>` : ""}</td>
-      <td>${srvBusy(s) ? `<span class="busy-chip" title="${esc(srvBusy(s).what + (srvBusy(s).detail ? ": " + srvBusy(s).detail : ""))}"><i class="spin"></i>${esc(srvBusy(s).what)}…${srvBusy(s).detail ? `<span class="busy-detail">${esc(srvBusy(s).detail)}</span>` : ""}</span>` : noLogin(s) ? `<span class="st offline" title="${esc(s.last_error)}">no login</span><small class="err td-err" title="${esc(s.last_error)}">${esc(s.last_error).replace(/^SSH login failed: /, "").slice(0, 40)}</small>` : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>${s.online && /^SSH does not answer/.test(s.last_error || "") ? `<small class="pill warn" title="${esc(s.last_error)}">SSH ✕</small>` : ""}`}</td>
-      ${foreignTab ? `<td>${blocked ? '<span class="mchip bad" title="Not reachable from inside Iran">filtered</span>' : ""}</td>` : ""}
+      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</td>
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td>
+      <td class="iss-cell">${issues(s)}</td>
       ${s.enabled ? `<td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>` : `<td colspan="3" class="off-note" title="Disabled: the panel does not check it, sends no alerts for it and does not count it in the totals"><span class="off-chip"><i>⏾</i>Disabled · not checked, no alerts</span></td>`}
       <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}</div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
@@ -560,9 +578,9 @@ PAGES.servers = async () => {
       
       <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}">Online <b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span>
       <span class="sp"></span><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div>${searchSeg()}</div>
-    <table class="tbl lift srv-tbl joined"><colgroup>${foreignTab ? '<col style="width:16%"><col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:11%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:7%">' : '<col style="width:17%"><col style="width:9%"><col style="width:10%"><col style="width:12%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:7%">'}</colgroup>
-      <thead><tr><th>Server</th><th>Status</th>${foreignTab ? "<th>Filtered</th>" : ""}<th>Panel</th><th>IPv4</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || `<tr><td colspan="${foreignTab ? 9 : 8}" class="empty">No server.</td></tr>`}</tbody></table>`;
+    <table class="tbl lift srv-tbl joined"><colgroup><col style="width:16%"><col style="width:9%"><col style="width:12%"><col style="width:18%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:6%"></colgroup>
+      <thead><tr><th>Server</th><th>Panel</th><th>IPv4</th><th>Issues</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join("") || `<tr><td colspan="8" class="empty">No server.</td></tr>`}</tbody></table>`;
   showWin();
   applyQ();
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);

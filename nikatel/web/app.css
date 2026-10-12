@@ -3405,3 +3405,11 @@ html body .srv-tbl .pbar { gap: 10px; } html body .srv-tbl .pbar .bar { flex: 1 
 .srv-tbl td:last-child::after { content: "›"; position: absolute; right: 12px; top: 50%; width: 24px; height: 24px; margin-top: -12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 18px; line-height: 1; padding-bottom: 2px; color: #fff; background: rgba(10,132,255,.85); box-shadow: 0 3px 10px rgba(10,132,255,.35); opacity: 0; transform: translateX(-6px); transition: opacity .15s ease, transform .15s ease; pointer-events: none; }
 .srv-tbl tr.clk:hover td:last-child::after { opacity: 1; transform: none; }
 .srv-tbl tr.ask-row td:last-child::after { content: none; }
+
+/* the Issues column: whatever is wrong with a server, as small tags (empty dash when it is fine) */
+.srv-tbl td.iss-cell { display: table-cell; white-space: nowrap; overflow: hidden; text-overflow: clip; } .srv-tbl td.iss-cell > * { vertical-align: middle; }
+html body .srv-tbl td.iss-cell .pill { height: 20px; margin: 0 6px 0 0; padding: 0 9px; display: inline-flex; align-items: center; box-sizing: border-box; font-size: 11px; font-weight: 700; letter-spacing: .02em; line-height: 1; border-radius: 10px; text-transform: none; box-shadow: none; color: #aeb7ca; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); }
+html body .srv-tbl td.iss-cell .pill.err { color: #ff8a9b; background: rgba(255,69,58,.13); border-color: rgba(255,69,58,.34); }
+html body .srv-tbl td.iss-cell .pill.warn { color: #ffd60a; background: rgba(255,214,10,.1); border-color: rgba(255,214,10,.3); }
+html body .srv-tbl td.iss-cell .pill.off { color: #8f9ab0; }
+.srv-tbl .iss-ok { opacity: .4; } .srv-tbl td.iss-cell .busy-chip { margin: 0; }
