@@ -297,6 +297,15 @@ def server_verdicts(rows: list[dict]) -> list[dict]:
 _CACHE: dict = {}
 
 
+def _underuse_view(u: dict | None) -> dict | None:
+    """The part of the underuse record the screen needs (not the raw probe)."""
+    if not u or not u.get("at"):
+        return None
+
+    p = u.get("probe") or {}
+    return {"at": u["at"], "verdict": u.get("verdict"), "findings": [{"id": x["id"], "text": x["text"], "fix": x.get("fix")} for x in u.get("findings") or []], "down_mbit": p.get("down_mbit"),
+            "retrans": p.get("retrans"), "cc": p.get("cc"), "tuned": p.get("tuned"), "tune": u.get("tune"), "tune_at": u.get("tune_at"), "error": u.get("error")}
+
 def _kind_of(t: Tunnel) -> str:
     from . import autopilot
 
@@ -398,7 +407,7 @@ def overview(days: int = 7) -> dict:
 
         trows = [{"id": t.id, "name": t.name, "iran": t.iran.name, "foreign": t.foreign.name, "kind": _kind_of(t), "state": t.state, "mbps": (t.rx_mbps or 0) + (t.tx_mbps or 0)} for t in tunnels]
         srows = {sid: {"name": s.name, "role": s.role, "online": s.online, "city": (((s.extra or {}).get("geo") or {}).get("city") or "") or "", "cores": (s.facts or {}).get("cores") or 1,
-                       "provider": (((s.extra or {}).get("geo") or {}).get("provider") or s.provider or ""), "id": sid} for sid, s in servers.items()}
+                       "provider": (((s.extra or {}).get("geo") or {}).get("provider") or s.provider or ""), "id": sid, "underuse": _underuse_view((s.extra or {}).get("underuse"))} for sid, s in servers.items()}
 
     hour_now = int(time.strftime("%H", time.localtime(now)))
     profiles, risks, all_outs = [], [], {}

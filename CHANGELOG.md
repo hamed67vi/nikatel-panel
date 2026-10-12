@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.0
+
+- **The Tunnel Doctor watches the underused servers.** A server that carries little may be slow. Every 30 minutes the Doctor looks at two of the idle, light or redundant servers (each at most every 12 hours; read only: the TCP settings, the packets sent again while the server downloads a test file for a few seconds, the CPU steal, the drops, the line speed), says what is wrong in plain words, and fixes what the kernel settings can fix (BBR, fq, bigger buffers: the tuning the tunnel builder gives its own servers; measured before and after and put back when it did not help; Undo on the row). A fault of the provider's network (lost packets on the route, a slow line, a stolen CPU) cannot be fixed from here: it is written once a day to the events. Analyst -> Servers shows each server's own network next to its use, with Check now / Fix / Undo, and a switch for the automatic fixing. The History lists these fixes as solved / not solved. New read-only script net_health and action sysctl_untune.
+
 ## 1.24.0
 
 - **The analyst (Tunnel Doctor -> Analyst).** A read-only view of what the history says: a profile of every tunnel (availability, outages and how long they last, normal latency and whether it is rising, weak hours, verdict stable / watch / chronic), the tunnels that are at risk, outages that happen together on tunnels that share a server, what fixes what (how often each repair step healed which cause, and how fast), and how the servers are used in the peak hours (idle, redundant, busy). **It helps the smart repair:** every smart repair is now kept step by step (new table, migration 11); before the ladder is climbed the repair asks the analyst, and a restart or a rebuild that failed again and again on a tunnel, or almost never works for a cause, is skipped (the story says why; a move or a switch is never skipped, a dead service is always restarted first, the ladder is never empty). See docs/analyst.md.

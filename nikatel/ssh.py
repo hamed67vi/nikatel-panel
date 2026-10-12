@@ -53,6 +53,27 @@ grep NET_RX /proc/softirqs | sed 's/^ *NET_RX: */N2 /'
 echo "UNIT $(systemctl is-enabled nikatel-rps.service 2>/dev/null || echo no)"
 """, {}),
 
+    # how healthy the server's own network is, measured while it really downloads for a few seconds: TCP settings, retransmits, steal, drops, the speed (read only)
+    "net_health": (r"""IF=$(ip -o -4 route show default 2>/dev/null | awk '{print $5}' | head -1)
+echo "IF $IF"
+echo "SPEED $(cat /sys/class/net/$IF/speed 2>/dev/null || echo -1)"
+echo "MTU $(cat /sys/class/net/$IF/mtu 2>/dev/null || echo 0)"
+echo "CC $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
+echo "QDISC $(tc qdisc show dev $IF 2>/dev/null | head -1 | awk '{print $2}') $(sysctl -n net.core.default_qdisc 2>/dev/null)"
+echo "RMEM $(sysctl -n net.core.rmem_max 2>/dev/null) $(sysctl -n net.core.wmem_max 2>/dev/null)"
+echo "TCPMEM $(sysctl -n net.ipv4.tcp_rmem 2>/dev/null | awk '{print $3}') $(sysctl -n net.ipv4.tcp_wmem 2>/dev/null | awk '{print $3}')"
+echo "MTUPROBE $(sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null)"
+echo "CT $(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null || echo -1) $(cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || echo -1)"
+echo "TUNED $([ -f /etc/sysctl.d/99-nikatel-tunnel.conf ] && echo yes || echo no)"
+echo "MEM $(awk '/MemAvailable/{print $2}' /proc/meminfo) $(awk '/MemTotal/{print $2}' /proc/meminfo) $(awk '/SwapTotal/{t=$2}/SwapFree/{f=$2}END{print t-f}' /proc/meminfo)"
+st() { awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8+$9, $9}' /proc/stat; }
+tcpc() { awk '/^Tcp:/{if(h){print $12, $13}; h=1}' /proc/net/snmp; }
+ifs() { for f in rx_packets tx_packets rx_errors tx_errors rx_dropped tx_dropped; do printf '%s ' "$(cat /sys/class/net/$IF/statistics/$f 2>/dev/null || echo 0)"; done; echo; }
+echo "ST1 $(st)"; echo "TCP1 $(tcpc)"; echo "IF1 $(ifs)"
+echo "DOWN $(curl -s -o /dev/null -m 8 --connect-timeout 4 -w '%{speed_download} %{size_download}' 'https://speed.cloudflare.com/__down?bytes=30000000' 2>/dev/null || echo '0 0')"
+echo "ST2 $(st)"; echo "TCP2 $(tcpc)"; echo "IF2 $(ifs)"
+""", {}),
+
     # resources of a server, one second of CPU and network counters
     "facts": (r"""s1=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
 r1=$(awk 'NR>2 && $1!~/^(lo|docker|veth|br-)/{gsub(":"," ");rx+=$2;tx+=$10}END{print rx+0,tx+0}' /proc/net/dev)
@@ -655,6 +676,13 @@ net.ipv4.conf.default.rp_filter = 0
 EOF
 sysctl -q -p /etc/sysctl.d/99-nikatel-tunnel.conf >/dev/null 2>&1 || true
 echo "TUNED cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null) qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null)"
+""", {}),
+
+    # the kernel tuning put back as it was before sysctl_tune (the values it saved once), and its file removed
+    "sysctl_untune": (r"""set -e
+if [ -f /etc/nikatel/sysctl-before.conf ]; then while IFS= read -r l; do k="${l%% =*}"; v="${l#*= }"; [ -n "$k" ] && sysctl -q -w "$k=$v" >/dev/null 2>&1 || true; done < /etc/nikatel/sysctl-before.conf; fi
+unlink /etc/sysctl.d/99-nikatel-tunnel.conf 2>/dev/null || true
+echo "UNTUNED cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
 """, {}),
 
     # a throw-away web server on 127.0.0.1 for 14 s, to prove the data path through a forwarded port

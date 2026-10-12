@@ -3240,3 +3240,7 @@ html[data-mode="light"] body #page .dns-tbl .tybadge { background: rgba(60,80,13
 .hist-res { font-weight: 700; text-transform: none; letter-spacing: 0; }
 .hist-res.ok { color: #32d74b; } .hist-res.bad { color: #ff6b6b; } .hist-res.run { color: #ffd60a; }
 body #page .bal-row .ap-why.good { color: #32d74b; } body #page .bal-row .ap-why.calm { color: var(--mut, #8b93a7); }
+.ana-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ana-why td { padding-top: 0 !important; border-top: 0 !important; } .ana-why small { color: var(--mut, #8b93a7); line-height: 1.5; }
+.ana-act { white-space: nowrap; text-align: right; } .ana-act .sm { margin-left: 4px; }
+.ok-t { color: #32d74b; }

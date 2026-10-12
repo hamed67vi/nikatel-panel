@@ -28,6 +28,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # DNS accounts added on the DNS page (ArvanCloud accounts, Cloudflare); the main ArvanCloud key stays in "arvan" (the failover uses it). Keys never come back through the API.
     "dns": {"accounts": []},
     "balance": {"auto": True, "servers": {}},
+    "underuse": {"auto": True},       # the Doctor fixes what the kernel settings can fix on a server that carries little (services/underuse.py)
     "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
