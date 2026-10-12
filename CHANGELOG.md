@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.4
+
+The small tags after a server name (GRE, NEW, disabled, duplicate ...) have one size and one shape, soft colours, and are dim until the pointer is on the row.
+
 ## 1.30.3
 
 **Servers list, after the operator's design (Servers.dc.html).** Four tabs with counts (All / Online / Problems / Disabled); a **Turn on / Turn off** button in every row (Turn off asks first in the row itself, with what stops; Turn on shows *Starting...*, looks at the server at once, and the status bar offers **Undo**); a turned-off row says so in one line and is not counted in the Online total. The GRE column is gone: a `GRE` mark next to the name appears only for a server whose GRE is not ok (click = check again).
