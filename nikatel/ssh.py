@@ -58,9 +58,16 @@ echo "UNIT $(systemctl is-enabled nikatel-rps.service 2>/dev/null || echo no)"
 r1=$(awk 'NR>2 && $1!~/^(lo|docker|veth|br-)/{gsub(":"," ");rx+=$2;tx+=$10}END{print rx+0,tx+0}' /proc/net/dev)
 sleep 1
 s2=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
+sleep 1
+s3=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
+sleep 1
+s4=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
 r2=$(awk 'NR>2 && $1!~/^(lo|docker|veth|br-)/{gsub(":"," ");rx+=$2;tx+=$10}END{print rx+0,tx+0}' /proc/net/dev)
 echo "CPU=$s1 $s2"
+echo "CPU2=$s2 $s3"
+echo "CPU3=$s3 $s4"
 echo "NET=$r1 $r2"
+echo "NETDT=3"
 awk '/^MemTotal/{t=$2}/^MemAvailable/{a=$2}/^SwapTotal/{st=$2}/^SwapFree/{sf=$2}END{print "MEM="t" "a" "st" "sf}' /proc/meminfo
 df -P / | awk 'NR==2{print "DISK="$2" "$3}'
 echo "LOAD=$(cut -d' ' -f1-3 /proc/loadavg) $(nproc)"
@@ -241,7 +248,7 @@ echo "NOW $(date +%s)"
 
     # the users' path, looked at from another Iran server: one HTTP request to host:port (several at once, in parallel) - http first,
     # then https without verification for TLS ports. "REACH host port <http code> <seconds>": any code but 000 proves the port answers from Iran.
-    "reach_many": (r"""for hp in @TARGETS@; do ( h=${hp%:*}; p=${hp##*:}; r=$(curl -s -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "http://$h:$p/" 2>/dev/null); c=${r%% *}; if [ -z "$r" ] || [ "$c" = "000" ]; then r=$(curl -sk -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "https://$h:$p/" 2>/dev/null); fi; [ -n "$r" ] || r="000 0"; echo "REACH $h $p $r" ) & done; wait
+    "reach_many": (r"""i=0; for hp in @TARGETS@; do i=$((i+1)); [ $((i % 6)) -eq 0 ] && wait; ( h=${hp%:*}; p=${hp##*:}; r=$(curl -s -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "http://$h:$p/" 2>/dev/null); c=${r%% *}; if [ -z "$r" ] || [ "$c" = "000" ]; then r=$(curl -sk -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "https://$h:$p/" 2>/dev/null); fi; [ -n "$r" ] || r="000 0"; echo "REACH $h $p $r" ) & done; wait
 """, {"TARGETS": r"^[A-Za-z0-9.\-]{1,253}:\d{1,5}( [A-Za-z0-9.\-]{1,253}:\d{1,5}){0,80}$"}),
 
     # can this server open a TCP connection to host:port (several at once): "REACH host:port 1|0 <connect ms>". Only connects, sends nothing.

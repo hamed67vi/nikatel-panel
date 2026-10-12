@@ -130,7 +130,7 @@ def arvan_records(fresh: bool = False):
                 for r in recs:
                     if str(r.get("type", "")).lower() == "a":
                         name = str(r.get("name") or "@")
-                        rows.append({"fqdn": d if name == "@" else f"{name}.{d}", "domain": d, "ips": [str(i.get("ip")) for i in (r.get("value") or []) if isinstance(i, dict) and i.get("ip")]})
+                        rows.append({"id": str(r.get("id") or ""), "name": name, "ttl": r.get("ttl"), "cloud": bool(r.get("cloud")), "fqdn": d if name == "@" else f"{name}.{d}", "domain": d, "ips": [str(i.get("ip")) for i in (r.get("value") or []) if isinstance(i, dict) and i.get("ip")]})
 
             _RECORDS.update(at=_t.time(), rows=sorted(rows, key=lambda x: x["fqdn"]))
             conf = st.get("arvan")

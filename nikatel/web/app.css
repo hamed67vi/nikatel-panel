@@ -3175,3 +3175,16 @@ body #page .ap-bal select { height: 28px; font-size: 12.5px; } body #page .ap-ba
 body #page .bal-row { display: flex; align-items: center; gap: 12px; min-height: 40px; flex-wrap: wrap; }
 body #page .bal-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 26px; width: 74px; padding: 2px; border-radius: 6px; background: rgba(255,255,255,.05); } body #page .bal-bars i { flex: 1; background: #30d158; border-radius: 2px; min-height: 2px; } body #page .bal-bars i.warn { background: #ffcf3a; } body #page .bal-bars i.bad { background: #ff5c7a; }
 body #page .bal-row .ap-why { flex: 1; min-width: 200px; }
+body #page .dns-tbl td.dr-act { white-space: nowrap; } body #page .dns-tbl td.dr-act button + button { margin-left: 4px; padding: 0 9px; }
+
+/* ---- DNS table like ArvanCloud's own: Type · Name · Value · TTL · Cloud · edit / delete ---- */
+body #page .dns-tbl td { height: 44px; } body #page .dns-tbl td.name { padding-left: 12px; font-weight: 600; }
+body #page .dns-tbl .tybadge { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 22px; padding: 0 8px; border-radius: 6px; background: rgba(255,255,255,.08); font-size: 11.5px; font-weight: 700; letter-spacing: .04em; color: #c7cfdf; }
+body #page .tybadge.arvan { background: rgba(10,132,255,.16); color: #7ab8ff; } body #page .tybadge.cloudflare { background: rgba(255,153,0,.16); color: #ffb454; }
+body #page .dns-tbl td.val { white-space: normal; line-height: 1.5; } body #page .dns-tbl td.val .mono { font-size: 12.5px; } body #page .mchip.port { background: rgba(20,184,166,.14); color: #5eead4; border-color: rgba(20,184,166,.3); }
+body #page .dns-tbl tr.ro td { opacity: .72; }
+body #page .dns-tbl td.cl { white-space: nowrap; } body #page .dns-tbl .cl-ic { display: inline-grid; place-items: center; width: 30px; height: 28px; margin-right: 10px; border-radius: 8px; background: rgba(255,255,255,.06); color: #8791a8; vertical-align: middle; } body #page .dns-tbl .cl-ic.on { background: rgba(20,184,166,.18); color: #2dd4bf; }
+body #page .dns-tbl .sb-swc { vertical-align: middle; }
+body #page .dns-tbl td.dr-act { text-align: right; white-space: nowrap; } body #page .dns-tbl td.dr-act .ic { width: 30px; height: 30px; padding: 0; border-radius: 8px; background: transparent; border-color: transparent; box-shadow: none; font-size: 15px; } body #page .dns-tbl td.dr-act .ic:hover { background: rgba(255,255,255,.08); } body #page .dns-tbl td.dr-act .ic.danger { color: #ff6b81; }
+body #page .dns-tbl td.ty { padding-left: 12px; }
+html[data-mode="light"] body #page .dns-tbl .tybadge { background: rgba(60,80,130,.1); color: #3a4358; } html[data-mode="light"] body #page .dns-tbl .cl-ic { background: rgba(60,80,130,.08); }

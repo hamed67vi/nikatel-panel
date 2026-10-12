@@ -3733,89 +3733,165 @@ window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dock
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mk); else mk();
 })();
 
-/* ---- Tunnels → DNS · IP switch, one view like Servers / Tunnels: a toolbar (the connection, the numbers, the three tabs, the search) and ONE box under it that ends at the bottom of the window.
-   Records: every domain of the ArvanCloud account is a drawer; each record says which server of the panel it points at and can be pointed at another Iran server by hand.
-   Changes: every record that was re-pointed, with its Restore.  Failover: the plans (the automatic part is paused while it is tested), the preview, the ArvanCloud key. ---- */
+/* ---- Tunnels → DNS · IP switch, like the DNS table of ArvanCloud itself: Type · Name · Value · TTL · Cloud · edit / delete, for every domain of every account (ArvanCloud, several accounts; Cloudflare).
+   Under one toolbar (Add record, the numbers, the domain chooser, the tabs, the search) ONE box that ends at the bottom of the window.
+   Records: all types are listed, the A records can be made, changed, deleted and put back; the cloud switch is the orange cloud. Changes: every record changed by hand (or by the failover) with its Restore.
+   Accounts: the API keys. Failover: the preview of a plan and the earlier failovers (the automatic part is paused while it is tested). ---- */
 state.dnsTab = localStorage.getItem("nk.dns.tab") || "records";
 window.dnsSetTab = t => { state.dnsTab = t; try { localStorage.setItem("nk.dns.tab", t); } catch (e) { /* private window */ } refresh(); };
+const dnsKey = r => `${r.account}|${r.domain}|${r.id}`;
+const dnsTtl = v => { v = +v; if (v === 1) return "Auto"; if (!v) return "—"; if (v < 3600) return v / 60 + " min"; if (v < 86400) return v / 3600 + " h"; return v / 86400 + " d"; };
+const DNS_CLOUD = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 01-.6-8.96A6 6 0 0117.8 8.6 4.7 4.7 0 0117 18H7z"/></svg>';
 PAGES.dns = async () => {
   renderSub();
   const fresh = state.dnsFresh ? "?fresh=true" : ""; state.dnsFresh = false;
-  const recsP = api("/api/arvan/records" + fresh).then(r => ({recs: r.records})).catch(e => ({err: e.message}));
-  const [fo, irn, all] = await Promise.all([api("/api/failover").catch(() => null), api("/api/servers?role=iran").catch(() => []), api("/api/servers").catch(() => [])]);
-  const rr = await recsP, av = await api("/api/settings/arvan").catch(() => ({}));      // after the records: reading them updates the numbers of the connection
+  const [rr, accs, fo, all] = await Promise.all([api("/api/dns/records" + fresh).catch(e => ({err: e.message, records: [], accounts: []})), api("/api/dns/accounts").catch(() => ({accounts: [], providers: {}})), api("/api/failover").catch(() => null), api("/api/servers").catch(() => [])]);
   const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
-  const connected = !!(av.has_api_key && (av.status || {}).ok), recs = connected ? rr.recs || [] : [], log = (fo && fo.dns_log) || [];
-  const tab = ["records", "changes", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
-  const onPanel = recs.filter(r => r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.domain)).size;
+  const recs = rr.records || [], log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];
+  const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
+  const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;
-  const conn = !av.has_api_key ? chip("warn", "ArvanCloud", "no key") : connected ? chip("ok", "ArvanCloud", "connected") : chip("bad", "ArvanCloud", "not connected", (av.status || {}).error || "");
-  const doms = [...new Set(recs.map(r => r.domain || r.fqdn))].sort(), saved = localStorage.getItem("nk.dns.dom") || "";
-  const dom = saved === "*" || doms.includes(saved) ? saved : (doms[0] || "*");
-  const count = d => recs.filter(r => (r.domain || r.fqdn) === d).length;
-  const domSel = `<label class="dns-dsel" title="Choose a domain: its records are listed below"><span>Domain</span><select onchange="dnsPickDom(this.value)">${doms.map(d => `<option value="${esc(d)}" ${d === dom ? "selected" : ""}>${esc(d)} · ${count(d)}</option>`).join("")}<option value="*" ${dom === "*" ? "selected" : ""}>All domains · ${recs.length}</option></select></label>`;
-  const tabs = [["records", "Records", recs.length], ["changes", "Changes", log.length], ["failover", "Failover", (fo && fo.pending || []).length]];
-  const bar = `<div class="toolbar joined">
-      <span class="tcount pstat nd-stats">${conn}${connected ? chip("info", "Domains", nDom) + chip("info", "Records", recs.length) + chip("ok", "On the panel", onPanel, "Records that point at a server added to this panel") : ""}${chip("warn", "Automatic switching", "off", "The panel never changes an IP by itself while this is being tested. You can still point a record by hand.")}</span>
-      ${tab === "records" && connected && doms.length ? domSel : ""}<span class="sp"></span><div class="tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>
-      ${tab === "records" && connected ? searchSeg() + `<button type="button" class="sm" onclick="state.dnsFresh = true; toast('Reading ArvanCloud…'); refresh()" title="Read the records from ArvanCloud again">↻</button>` : ""}</div>`;
+  const bad = live.filter(a => !a.ok), connected = accounts.length > 0 && live.some(a => a.ok);
+  const conn = !accounts.length ? chip("warn", "DNS", "no account") : bad.length ? chip("bad", "Accounts", `${live.length - bad.length} of ${live.length} connected`, bad.map(a => a.name + ": " + a.error).join("\n")) : chip("ok", "Accounts", accounts.length + " connected");
+  state.dnsAccounts = live; state.dnsServers = all;
+  // the domain chooser: grouped by account
+  const sel = localStorage.getItem("nk.dns.sel") || "";
+  const opts = live.filter(a => a.ok).map(a => ({a, doms: (a.domains || []).slice().sort()})).filter(x => x.doms.length);
+  const valid = new Set(["*", ...opts.flatMap(x => x.doms.map(d => x.a.id + "|" + d))]), cur = valid.has(sel) ? sel : (opts[0] ? opts[0].a.id + "|" + opts[0].doms[0] : "*");
+  const cnt = (id, d) => recs.filter(r => r.account === id && r.domain === d).length;
+  const domSel = `<label class="dns-dsel" title="Choose a domain: its records are listed below"><span>Domain</span><select onchange="dnsPickDom(this.value)">${opts.map(({a, doms}) => `<optgroup label="${esc(a.name)}">${doms.map(d => `<option value="${esc(a.id + "|" + d)}" ${cur === a.id + "|" + d ? "selected" : ""}>${esc(d)} · ${cnt(a.id, d)}</option>`).join("")}</optgroup>`).join("")}<option value="*" ${cur === "*" ? "selected" : ""}>All domains · ${recs.length}</option></select></label>`;
+  const addBtn = tab === "records" && connected ? `<button class="cta cta-server" onclick="dnsForm('')" title="Make a new A record in one of your domains"><i class="cta-ic">＋</i>Add record</button><i class="sep"></i>` : tab === "accounts" ? `<button class="cta cta-server" onclick="dnsAccForm('')" title="Add an ArvanCloud account or a Cloudflare account"><i class="cta-ic">＋</i>Add account</button><i class="sep"></i>` : "";
+  const tabs = [["records", "Records", recs.length], ["changes", "Changes", log.length], ["accounts", "Accounts", accounts.length], ["failover", "Failover", (fo && fo.pending || []).length]];
+  const bar = `<div class="toolbar joined">${addBtn}
+      <span class="tcount pstat nd-stats">${conn}${connected ? chip("info", "Domains", nDom) + chip("info", "A records", nA) + chip("ok", "On the panel", onPanel, "A records that point at a server added to this panel") : ""}${chip("warn", "Automatic switching", "off", "The panel never changes an IP by itself while this is being tested. You can still change a record by hand.")}</span>
+      ${tab === "records" && connected ? domSel : ""}<span class="sp"></span><div class="tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>
+      ${tab === "records" && connected ? searchSeg() + `<button type="button" class="sm" onclick="state.dnsFresh = true; toast('Reading the DNS accounts…'); refresh()" title="Read the records from the accounts again">↻</button>` : ""}</div>`;
   let body = "";
 
-  if (tab === "records") body = !av.has_api_key || !connected ? dnsConnect(av) : dnsRecords(dom === "*" ? recs : recs.filter(r => (r.domain || r.fqdn) === dom), rr.err, byIp, irn, dom);
-  else if (tab === "changes") body = dnsChanges(log);
-  else body = dnsFailover(fo, av, irn, connected);
+  if (tab === "records") body = !accounts.length ? dnsEmpty() : dnsRecords(recs, rr.err, byIp, cur, live);
+  else if (tab === "changes") body = dnsChanges(log, accounts);
+  else if (tab === "accounts") body = dnsAccounts(accounts, live);
+  else body = dnsFailover(fo, all.filter(s => s.role === "iran"), connected);
 
   $("#page").innerHTML = bar + body;
   applyQ();
 };
-const dnsConnect = av => `<div class="card dns-pane"><h3>🔑 ${av.has_api_key ? "ArvanCloud · not connected" : "Connect ArvanCloud"}</h3>
-    ${av.has_api_key ? `<div class="err" style="margin-bottom:8px">${esc((av.status || {}).error || "Press “Test the key”.")}</div>` : `<div class="mut" style="margin-bottom:8px">Save the API key of your ArvanCloud account: the panel reads the DNS records of your domains and can change the address inside a record when you ask it to.</div>`}
-    ${dnsKeyForm(av)}</div>`;
-const dnsKeyForm = av => `<form class="frm" onsubmit="return saveArvan(event)">
-    <label>ArvanCloud API key <small>(empty keeps the saved one; it stays on this server)</small><input name="api_key" type="password" placeholder="${av.has_api_key ? "•••••••• saved" : "paste the key here"}" autocomplete="new-password" data-lpignore="true"></label>
-    <label>Only these domains <small>(empty = all, comma separated)</small><input name="domains" value="${esc((av.domains || []).join(", "))}" placeholder="all domains of the account"></label>
-    <input type="hidden" name="mode" value="off"><input type="hidden" name="confirm_minutes" value="${av.confirm_minutes || 5}">
-    <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="testArvan()">Test the key (read only)</button></div></form>
-  <details class="mut" style="margin-top:6px"><summary>How to get the key</summary><ol style="margin:6px 18px;line-height:1.7"><li>panel.arvancloud.ir → profile menu → <b>Machine Users</b> → create one.</li><li>Open it → <b>Access rules</b> and give it the <b>CDN</b> service with a manager role (not only “server manager”).</li><li>Create an access key for it, copy it at once (shown once) and paste it above.</li></ol></details>`;
-function dnsRecords(recs, err, byIp, irn, dom) {
-  if (err) return `<div class="card dns-pane"><div class="err">${esc(err)}</div></div>`;
-  const opts = cur => (byIp[cur] && byIp[cur].role === "iran" ? "" : `<option value="" selected>— point it at… —</option>`) + irn.map(s => `<option value="${s.id}" ${byIp[cur] && byIp[cur].id === s.id ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("");
-  const row = r => { const cur = r.ips[0], names = r.ips.map(ip => byIp[ip]).filter(Boolean), short = dom !== "*" && r.domain && r.fqdn !== r.domain && r.fqdn.endsWith("." + r.domain) ? r.fqdn.slice(0, -r.domain.length - 1) : r.fqdn;
-    return `<tr class="dr-rec ${names.length ? "mine" : ""}" data-q="${esc((r.fqdn + " " + r.ips.map(ip => ip + " " + (byIp[ip] ? byIp[ip].name : "")).join(" ")).toLowerCase())}">
-      <td class="name" dir="ltr" title="${esc(r.fqdn)}">${esc(short)}</td>
-      <td class="mono">${r.ips.map(esc).join(" · ")}</td>
-      <td>${r.ips.map(ip => byIp[ip] ? `<span class="mchip ${byIp[ip].role === "iran" ? "ok" : ""}">${esc(byIp[ip].name)}</span>` : `<span class="mchip" title="This address is not one of the servers added to this panel (a CDN, another provider, or a server you did not add here).">outside the panel</span>`).join(" ")}</td>
-      <td><select class="sm" aria-label="Server to point ${esc(r.fqdn)} at">${opts(cur)}</select></td>
-      <td><button type="button" class="sm pri" onclick="dnsPoint('${esc(r.fqdn)}', this.closest('tr').querySelector('select'))" ${irn.length ? "" : "disabled"}>Point</button></td></tr>`; };
-  return `<table class="tbl lift srv-tbl dns-tbl joined"><colgroup><col style="width:24%"><col style="width:17%"><col style="width:17%"><col style="width:32%"><col style="width:10%"></colgroup>
-    <thead><tr><th>Name</th><th>Address</th><th>On the panel</th><th>Point it at</th><th></th></tr></thead><tbody>${recs.map(row).join("") || '<tr><td colspan="5" class="empty">No A record in this domain.</td></tr>'}</tbody></table>`;
+const dnsEmpty = () => `<div class="card dns-pane"><h3>🌐 No DNS account yet</h3><div class="mut" style="margin-bottom:10px">Add the API key of your ArvanCloud account (or a Cloudflare token): the panel then lists the DNS records of your domains like the account's own DNS page, and lets you add, change and delete A records.</div><button class="pri" onclick="dnsAccForm('')">＋ Add an account</button></div>`;
+function dnsRecords(recs, err, byIp, cur, live) {
+  const failed = live.filter(a => !a.ok).map(a => `<div class="err" style="margin:0 0 6px">${esc(a.name)}: ${esc(a.error)}</div>`).join("");
+  const list = (cur === "*" ? recs : recs.filter(r => r.account + "|" + r.domain === cur)).slice().sort((a, b) => (a.type === "A" ? 0 : 1) - (b.type === "A" ? 0 : 1) || a.fqdn.localeCompare(b.fqdn) || a.type.localeCompare(b.type));
+  state.dnsRecs = {}; recs.forEach(r => { state.dnsRecs[dnsKey(r)] = r; });
+  const multi = new Set(recs.map(r => r.account)).size > 1, accName = id => (live.find(a => a.id === id) || {}).name || id;
+  const row = r => { const k = esc(dnsKey(r)), ed = r.editable, short = cur === "*" ? r.fqdn : r.name;
+    const val = r.type === "A" ? r.ips.map(ip => `<span class="mono">${esc(ip)}</span>${byIp[ip] ? ` <span class="mchip ${byIp[ip].role === "iran" ? "ok" : ""}" title="A server of this panel">${esc(byIp[ip].name)}</span>` : ""}`).join(" · ") + (r.port ? ` <span class="mchip port" title="Port">port ${esc(r.port)}</span>` : "") : `<span class="mut">${esc(r.value)}</span>`;
+    return `<tr class="dr-rec ${ed ? "" : "ro"}" data-q="${esc([r.type, r.fqdn, r.value, r.ips.map(ip => byIp[ip] ? byIp[ip].name : "").join(" "), accName(r.account)].join(" ").toLowerCase())}">
+      <td class="ty"><span class="tybadge">${esc(r.type)}</span></td>
+      <td class="name" dir="ltr" title="${esc(r.fqdn)}">${esc(short)}${multi && cur === "*" ? ` <small class="mut">${esc(accName(r.account))}</small>` : ""}</td>
+      <td class="val">${val}</td>
+      <td class="mut">${dnsTtl(r.ttl)}</td>
+      <td class="cl">${r.cloud === null ? "" : `<span class="cl-ic ${r.cloud ? "on" : ""}" title="${r.cloud ? "Through the CDN" : "DNS only"}">${DNS_CLOUD}</span>${ed ? sbSw(!!r.cloud, `dnsCloud('${k}')`, "Cloud", "Turn the CDN (orange cloud) on or off for this record").replace(/<em[^>]*>.*?<\/em>/, "") : ""}`}</td>
+      <td class="dr-act">${ed ? `<button type="button" class="ic" title="Edit this record" onclick="dnsForm('${k}')">✎</button><button type="button" class="ic danger" title="Delete this record (kept under Changes with a Restore)" onclick="dnsDel('${k}')">🗑</button>` : ""}</td></tr>`; };
+  return `${failed}<table class="tbl lift srv-tbl dns-tbl joined"><colgroup><col style="width:7%"><col style="width:21%"><col style="width:34%"><col style="width:9%"><col style="width:13%"><col style="width:10%"></colgroup>
+    <thead><tr><th>Type</th><th>Name</th><th>Value</th><th>TTL</th><th>Cloud</th><th></th></tr></thead><tbody>${list.map(row).join("") || '<tr><td colspan="6" class="empty">No record in this domain.</td></tr>'}</tbody></table>`;
 }
-window.dnsPickDom = d => { try { localStorage.setItem("nk.dns.dom", d); } catch (e) { /* private window */ } refresh(); };function dnsChanges(log) {
-  const row = e => `<tr class="${e.restored ? "" : "up"}"><td class="mut" title="${when(e.at)}">${ago(e.at)} ago</td><td class="name" dir="ltr">${esc(e.fqdn)}</td><td class="mono">${esc(e.old)} → ${esc(e.new)}</td><td>${esc(e.server)}${e.target && e.target !== e.server ? " → " + esc(e.target) : ""}</td>
+window.dnsPickDom = d => { try { localStorage.setItem("nk.dns.sel", d); } catch (e) { /* private window */ } refresh(); };
+window.dnsCloud = async k => {
+  const r = (state.dnsRecs || {})[k]; if (!r || !r.editable) return;
+  try { await api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`, {method: "PUT", body: JSON.stringify({account: r.account, domain: r.domain, name: r.name, ips: r.ips, ttl: +r.ttl || 120, cloud: !r.cloud})}); toast(r.cloud ? "Cloud turned off" : "Cloud turned on", "ok"); state.dnsFresh = true; refresh(); }
+  catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
+};
+/* make / change / delete an A record by hand (each kept under Changes with a Restore) */
+window.dnsForm = k => {
+  const r = k ? (state.dnsRecs || {})[k] : null, accs = (state.dnsAccounts || []).filter(a => a.ok);
+  if (k && !r) { toast("Read the records again (↻) first", "bad"); return; }
+  const sel = (localStorage.getItem("nk.dns.sel") || "").split("|"), acc = r ? r.account : (accs.find(a => a.id === sel[0]) || accs[0] || {}).id, a0 = accs.find(a => a.id === acc) || {}, dom = r ? r.domain : (sel[1] && (a0.domains || []).includes(sel[1]) ? sel[1] : (a0.domains || [])[0] || "");
+  const ttls = (a0.ttls || [[120, "2 minutes"]]), ttl = r && r.ttl ? +r.ttl : (ttls[0] ? ttls[0][0] : 120), servers = (state.dnsServers || []).filter(s => s.enabled), chev = '<svg viewBox="0 0 16 16"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>';
+  const sw = (inner, extra = "") => `<div class="qp-sw" ${extra}>${inner}${chev}</div>`;
+  showModal(`<b>${r ? "✎ Edit record" : "＋ Add record"}</b>`, `<form class="qp" onsubmit="return dnsSave(event, ${r ? `'${esc(k)}'` : "''"})">
+    <p class="qp-sub">${r ? "Change the name, the addresses, the TTL or the cloud of this A record; everything else stays as it is." : "Make an A record in one of your domains."} Every change is kept under <b>Changes</b> with a Restore.</p>
+    <div class="qp-grid">
+      <div class="qp-f"><label>Account</label>${sw(`<select class="qp-sel" name="account" ${r ? "disabled" : ""} onchange="dnsFormAcc(this.form)">${accs.map(a => `<option value="${esc(a.id)}" ${a.id === acc ? "selected" : ""}>${esc(a.name)} (${esc(a.provider === "arvan" ? "ArvanCloud" : "Cloudflare")})</option>`).join("")}</select>`)}</div>
+      <div class="qp-f"><label>Domain</label>${sw(`<select class="qp-sel" name="domain" ${r ? "disabled" : ""} onchange="dnsPrev(this.form)">${(a0.domains || []).map(d => `<option ${d === dom ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`)}</div>
+      <div class="qp-f"><label>Name <small>(before the domain · @ = the domain itself)</small></label><input class="qp-in" name="name" value="${esc(r ? r.name : "")}" required maxlength="120" placeholder="sub" autocomplete="off" oninput="dnsPrev(this.form)"></div>
+      <div class="qp-f"><label>TTL</label>${sw(`<select class="qp-sel" name="ttl">${ttls.map(([v, l]) => `<option value="${v}" ${v === ttl ? "selected" : ""}>${l}</option>`).join("")}${ttls.some(t => t[0] === ttl) ? "" : `<option value="${ttl}" selected>${ttl} s</option>`}</select>`)}</div>
+      <div class="qp-f" style="grid-column:1/-1"><label>Address <small id="dns-ipnote">(IPv4; several, separated by commas, share the traffic)</small></label><input class="qp-in" name="ips" value="${esc(r ? r.ips.join(", ") : "")}" required placeholder="203.0.113.10" autocomplete="off" dir="ltr" oninput="dnsPrev(this.form)">
+        <div class="qp-row" style="margin-top:6px">${sw(`<select class="qp-sel" onchange="if(this.value){this.form.elements.ips.value=this.value;dnsPrev(this.form);this.selectedIndex=0}"><option value="">…or the address of a server of the panel</option>${servers.map(s => `<option value="${esc(s.host)}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select>`)}</div></div>
+      <div class="qp-f"><label>Cloud</label><label class="chk" style="height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" name="cloud" ${r && r.cloud ? "checked" : ""}> through the CDN (orange cloud)</label></div></div>
+    <div class="qp-prev" id="dns-prev"></div>
+    <div class="qp-act"><span class="qp-hint">${r ? "Restore under Changes gives the old values back." : "Restore under Changes deletes it again."}</span><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add");
+  setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f) { dnsFormAcc(f, true); dnsPrev(f); f.elements.name.focus(); } }, 60);
+};
+window.dnsFormAcc = (f, keep) => {      // the account decides the domains and the TTL choices
+  const a = (state.dnsAccounts || []).find(x => x.id === f.elements.account.value) || {}, d = f.elements.domain, t = f.elements.ttl;
+  if (!keep && !d.disabled) { d.innerHTML = (a.domains || []).map(x => `<option>${esc(x)}</option>`).join(""); t.innerHTML = (a.ttls || []).map(([v, l]) => `<option value="${v}">${l}</option>`).join(""); }
+  const n = $("#dns-ipnote"); if (n) n.textContent = a.provider === "cloudflare" ? "(IPv4; Cloudflare keeps ONE address per record - make one record per address)" : "(IPv4; several, separated by commas, share the traffic)";
+  dnsPrev(f);
+};
+window.dnsPrev = f => { const el = $("#dns-prev"); if (!el || !f) return; const n = f.elements.name.value.trim().toLowerCase(), d = f.elements.domain.value, ips = f.elements.ips.value.split(/[,\s]+/).filter(Boolean); el.innerHTML = n && ips.length ? `<b dir="ltr">${esc(n === "@" ? d : n + "." + d)}</b> <span class="mut">→</span> <span class="mono">${esc(ips.join(" · "))}</span>` : ""; };
+window.dnsSave = async (e, k) => {
+  e.preventDefault(); const f = e.target, r = k ? (state.dnsRecs || {})[k] : null, body = {account: r ? r.account : f.elements.account.value, domain: r ? r.domain : f.elements.domain.value, name: f.elements.name.value.trim(), ips: f.elements.ips.value.split(/[,\s]+/).filter(Boolean), ttl: +f.elements.ttl.value, cloud: f.elements.cloud.checked};
+  const btn = f.querySelector(".qp-pri"); btn.disabled = true;
+  try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); state.dnsFresh = true; refresh(); }
+  catch (err) { btn.disabled = false; toast("✕ " + err.message, "bad"); }
+  return false;
+};
+window.dnsDel = async k => {
+  const r = (state.dnsRecs || {})[k]; if (!r) return;
+  if (!await gconfirm(`Delete ${r.fqdn} (${r.value})? It is kept under Changes: Restore makes it again.`, {danger: true})) return;
+  try { await api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`, {method: "DELETE"}); toast("✓ Record deleted", "ok"); state.dnsFresh = true; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+function dnsChanges(log, accounts) {
+  const an = id => (accounts.find(a => a.id === (id || "arvan")) || {}).name || "ArvanCloud", opName = {create: "made", edit: "changed", delete: "deleted"};
+  const row = e => `<tr class="${e.restored ? "" : "up"}"><td class="mut" title="${when(e.at)}">${ago(e.at)} ago</td><td class="name" dir="ltr">${esc(e.fqdn)}</td><td class="mono">${e.op ? esc((e.old || "—") + " → " + (e.new || "—")) : esc(e.old) + " → " + esc(e.new)}</td><td>${e.op ? esc(an(e.account)) + " · by hand · " + opName[e.op] : esc(e.server) + (e.target && e.target !== e.server ? " → " + esc(e.target) : "")}</td>
     <td>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : '<span class="pill ok">active</span>'}</td>
-    <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}')" title="Point this record back at ${esc(e.old)}">↩ Restore</button>`}</td></tr>`;
-  return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:12%"><col style="width:26%"><col style="width:24%"><col style="width:18%"><col style="width:9%"><col style="width:11%"></colgroup>
-    <thead><tr><th>When</th><th>Name</th><th>Address</th><th>Server</th><th>State</th><th></th></tr></thead>
-    <tbody>${log.map(row).join("") || '<tr><td colspan="6" class="empty">No record has been changed yet. Every record you point (or the failover re-points) is listed here and can be put back with one click.</td></tr>'}</tbody></table>`;
+    <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}')" title="Put this change back">↩ Restore</button>`}</td></tr>`;
+  return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:11%"><col style="width:24%"><col style="width:22%"><col style="width:23%"><col style="width:9%"><col style="width:11%"></colgroup>
+    <thead><tr><th>When</th><th>Name</th><th>Address</th><th>Who</th><th>State</th><th></th></tr></thead>
+    <tbody>${log.map(row).join("") || '<tr><td colspan="6" class="empty">No record has been changed yet. Every record you make, change or delete (or the failover re-points) is listed here and can be put back with one click.</td></tr>'}</tbody></table>`;
 }
-function dnsFailover(fo, av, irn, connected) {
+function dnsAccounts(accounts, live) {
+  const row = a => { const l = live.find(x => x.id === a.id) || {}, s = a.status || {}, ok = l.ok !== undefined ? l.ok : s.ok;
+    return `<tr><td><span class="tybadge ${a.provider}">${esc(a.provider_name)}</span></td><td class="name">${esc(a.name)}${a.main ? ' <small class="mut">(main · the failover uses it)</small>' : ""}</td><td class="mono">${a.key_tail ? "•••• " + esc(a.key_tail) : "••••"}</td>
+      <td>${ok ? (l.domains ? l.domains.length : s.domains || 0) + " domains" : ""}</td><td>${ok ? '<span class="pill ok">connected</span>' : `<span class="pill err" title="${esc(l.error || s.error || "")}">${l.error || s.error ? "not working" : "not tested"}</span>`}</td>
+      <td class="dr-act"><button class="sm" onclick="dnsAccTest('${esc(a.id)}')" title="Try the key (read only)">Test</button><button class="ic" title="Change the name or the key" onclick="dnsAccForm('${esc(a.id)}')">✎</button><button class="ic danger" title="Remove this account from the panel (nothing changes at the provider)" onclick="dnsAccDel('${esc(a.id)}', '${esc(a.name)}')">🗑</button></td></tr>`; };
+  return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:13%"><col style="width:27%"><col style="width:12%"><col style="width:14%"><col style="width:14%"><col style="width:20%"></colgroup>
+    <thead><tr><th>Provider</th><th>Name</th><th>Key</th><th>Domains</th><th>State</th><th></th></tr></thead>
+    <tbody>${accounts.map(row).join("") || '<tr><td colspan="6" class="empty">No account yet. Add an ArvanCloud account or a Cloudflare token with “＋ Add account”.</td></tr>'}</tbody></table>`;
+}
+window.dnsAccForm = id => {
+  const a = id ? (state.dnsAccounts || []).find(x => x.id === id) : null, chev = '<svg viewBox="0 0 16 16"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>';
+  showModal(`<b>${a ? "✎ Edit account" : "＋ Add account"}</b>`, `<form class="qp" onsubmit="return dnsAccSave(event, '${esc(id || "")}')">
+    <p class="qp-sub">${a ? "Change the name, or paste a new key (it is tried first)." : "The key is tried before it is saved (the domains are listed - read only). It stays on this server and never comes back to the browser."}</p>
+    <div class="qp-grid">
+      ${a ? "" : `<div class="qp-f"><label>Provider</label><div class="qp-sw"><select class="qp-sel" name="provider" onchange="dnsAccHint(this.form)"><option value="arvan">ArvanCloud</option><option value="cloudflare">Cloudflare</option></select>${chev}</div></div>`}
+      <div class="qp-f" ${a ? 'style="grid-column:1/-1"' : ""}><label>Name <small>(to tell the accounts apart)</small></label><input class="qp-in" name="name" value="${esc(a ? a.name : "")}" maxlength="40" placeholder="${a ? "" : "e.g. My second account"}" autocomplete="off"></div>
+      <div class="qp-f" style="grid-column:1/-1"><label id="dns-keylab">API key</label><input class="qp-in" name="key" type="password" ${a ? "" : "required"} placeholder="${a ? "empty keeps the saved key" : "paste the key here"}" autocomplete="new-password" data-lpignore="true" dir="ltr"></div></div>
+    <div class="qp-prev" id="dns-keyhint"></div>
+    <div class="qp-act"><span class="qp-hint"></span><button class="qp-pri" type="submit">${a ? "Save" : "Add the account"}</button></div></form>`, "plan-add");
+  setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f && f.elements.provider) dnsAccHint(f); }, 60);
+};
+window.dnsAccHint = f => { const cf = f.elements.provider.value === "cloudflare"; $("#dns-keylab").textContent = cf ? "Cloudflare API token" : "ArvanCloud API key"; $("#dns-keyhint").innerHTML = cf ? "Cloudflare dashboard → My Profile → <b>API Tokens</b> → Create Token → <b>Edit zone DNS</b> template (permissions: Zone · DNS · Edit, Zone · Zone · Read) for the zones you want." : "panel.arvancloud.ir → profile → <b>Machine Users</b> → give it the <b>CDN</b> service with a manager role → create an access key and paste it (shown once)."; };
+window.dnsAccSave = async (e, id) => {
+  e.preventDefault(); const f = e.target, btn = f.querySelector(".qp-pri"); btn.disabled = true;
+  try {
+    if (id) await api("/api/dns/accounts/" + encodeURIComponent(id), {method: "PUT", body: JSON.stringify({name: f.elements.name.value, key: f.elements.key.value})});
+    else await api("/api/dns/accounts", {method: "POST", body: JSON.stringify({provider: f.elements.provider.value, name: f.elements.name.value, key: f.elements.key.value})});
+    closeModal(); toast(id ? "✓ Account saved" : "✓ Account added - its domains are listed", "ok"); state.dnsFresh = true; refresh();
+  } catch (err) { btn.disabled = false; toast("✕ " + err.message, "bad"); }
+  return false;
+};
+window.dnsAccTest = async id => { toast("Asking the provider (read only)…"); try { const r = await api(`/api/dns/accounts/${encodeURIComponent(id)}/test`, {method: "POST"}); toast(`✓ Connected: ${r.domains.length} domain(s), ${r.records} record(s)`, "ok"); state.dnsFresh = true; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };
+window.dnsAccDel = async (id, name) => { if (!await gconfirm(`Remove the account ${name} from the panel? Nothing changes at the provider; its records are no longer listed here.`, {danger: true})) return; try { await api("/api/dns/accounts/" + encodeURIComponent(id), {method: "DELETE"}); toast("✓ Account removed", "ok"); state.dnsFresh = true; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+function dnsFailover(fo, irn, connected) {
   const his = h => `<div class="ev ${h.ok === true ? "ok" : h.ok === false ? "bad" : "warn"}"><time title="${when(h.at)}">${ago(h.at)} ago</time><i></i><small>${h.reason && h.reason !== "down" ? "route · " : ""}${h.dismissed ? "dismissed" : h.undone ? "undone" : "done"}</small><span><b>${esc(h.server)}</b> ${h.dismissed ? "" : `→ ${h.target ? esc(h.target.name) : "?"}: ${h.moved}/${h.tunnels} tunnels, ${h.dns.length} DNS record(s)${h.errors.length ? ", errors: " + esc(h.errors.join("; ")) : ""}`} ${h.dns.length && !h.undone ? `<a class="mut" onclick="foUndo('${esc(h.id)}')">↩ point the DNS back</a>` : ""}</span></div>`;
   return `<div class="dns-pane dns-fo">
     <div class="card dns-warn"><h3>⏸ Automatic switching is off <span class="sp"></span><span class="pill warn">while it is tested</span></h3>
-      <div class="mut">The panel does not move tunnels or change an IP by itself - not when an Iran server stops answering, not when its route is cut, not when a server's address is edited. Nothing changes in ArvanCloud unless you press <b>Point</b> yourself (Records tab); every such change is kept under <b>Changes</b> with a Restore.</div></div>
-    <div class="dns-two">
-      <div class="card"><h3>👁 Preview <span class="sp"></span><small class="mut">what a failover would do - nothing is changed</small></h3>
-        ${connected ? `<div class="frm-act"><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select><button type="button" class="sm pri" onclick="foPreview()">Show the plan if it went down</button></div>` : '<div class="mut">Connect ArvanCloud first (below).</div>'}
-        <small class="mut" style="display:block;margin-top:8px">It lists the tunnels that would move, the server that would take them and the DNS records that would change.</small></div>
-      <div class="card"><h3>🔑 ArvanCloud key</h3>${dnsKeyForm(av)}</div></div>
+      <div class="mut">The panel does not move tunnels or change an IP by itself - not when an Iran server stops answering, not when its route is cut, not when a server's address is edited. Nothing changes in your DNS unless you change a record yourself (Records tab); every such change is kept under <b>Changes</b> with a Restore.</div></div>
+    <div class="card"><h3>👁 Preview <span class="sp"></span><small class="mut">what a failover would do - nothing is changed</small></h3>
+      ${connected ? `<div class="frm-act"><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select><button type="button" class="sm pri" onclick="foPreview()">Show the plan if it went down</button></div>` : '<div class="mut">Add a DNS account first (Accounts tab).</div>'}
+      <small class="mut" style="display:block;margin-top:8px">It lists the tunnels that would move, the server that would take them and the DNS records that would change (the failover uses the main ArvanCloud account).</small></div>
     <div class="card"><h3>🗒 Earlier failovers</h3>${((fo && fo.history) || []).map(his).join("") || '<div class="mut">None yet.</div>'}</div></div>`;
 }
-window.dnsPoint = async (name, sel) => {
-  if (!sel || !sel.value) return;
-  const label = sel.options[sel.selectedIndex].textContent;
-  if (!await gconfirm(`Point ${name} at ${label} now?\n\nUsers of this name reach that server within about a minute. The change is listed below and can be put back with Restore.`, {danger: true})) return;
-  try { const r = await api("/api/failover/point", {method: "POST", body: JSON.stringify({names: [name], iran_id: +sel.value})}); showModal("<b>🌐 DNS</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>'); followStory(r.action_id, $("#ap-story"), 120).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
-};
 
 /* ---- Settings → About: the license (owner / licensed / free), the features it switches on, the install id for a bound token ---- */
 async function licLoad() {

@@ -36,10 +36,21 @@ def parse_facts(out: str) -> dict:
 
         return [float(x) for x in parts[:n]]
 
-    t1, i1, t2, i2 = nums("CPU", 4)
-    dt = t2 - t1
-    cpu = max(0.0, min(100.0, (dt - (i2 - i1)) * 100.0 / dt)) if dt > 0 else 0.0
+    windows = []
+
+    for key in ("CPU", "CPU2", "CPU3"):
+        try:
+            t1, i1, t2, i2 = nums(key, 4)
+        except (ValueError, KeyError):
+            continue
+
+        if t2 - t1 > 0:
+            windows.append(max(0.0, min(100.0, ((t2 - t1) - (i2 - i1)) * 100.0 / (t2 - t1))))
+
+    windows.sort()
+    cpu = windows[len(windows) // 2] if windows else 0.0      # the MEDIAN of the one-second windows: a burst that happens to fall into one second does not read as a full server
     rx1, tx1, rx2, tx2 = nums("NET", 4)
+    netdt = max(1.0, float(kv.get("NETDT", "1").split()[0] or 1)) if kv.get("NETDT") else 1.0
     mt, ma, st, sf = nums("MEM", 4)
     dsk_total, dsk_used = nums("DISK", 2)
     l1, l5, l15, cores = nums("LOAD", 4)
@@ -63,8 +74,8 @@ def parse_facts(out: str) -> dict:
         "load1": l1, "load5": l5, "load15": l15,
         "cores": int(cores) or 1,
         "uptime": int(up),
-        "rx_mbps": round(max(0.0, rx2 - rx1) * 8 / 1e6, 2),
-        "tx_mbps": round(max(0.0, tx2 - tx1) * 8 / 1e6, 2),
+        "rx_mbps": round(max(0.0, rx2 - rx1) * 8 / 1e6 / netdt, 2),
+        "tx_mbps": round(max(0.0, tx2 - tx1) * 8 / 1e6 / netdt, 2),
         "conn": conn,
         "hostname": host[0] if host else "",
         "kernel": host[1] if len(host) > 1 else "",

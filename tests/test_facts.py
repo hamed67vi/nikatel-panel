@@ -27,3 +27,13 @@ def test_parse_facts_numbers():
 def test_parse_facts_incomplete():
     with pytest.raises(ValueError):
         parse_facts("CPU=1 2\n")
+
+
+def test_cpu_is_the_median_of_the_windows_so_one_burst_does_not_read_as_a_full_server():
+    # three one-second windows: 99 %, 30 %, 32 % busy -> the median (32 %), not the first one
+    text = SAMPLE.replace("CPU=1000 800 1100 870", "CPU=1000 800 1100 801\nCPU2=1100 801 1200 871\nCPU3=1200 871 1300 939")
+    f = parse_facts(text)
+    assert 30 <= f["cpu"] <= 32
+    # the traffic is the average over the three seconds
+    f3 = parse_facts(text + "NETDT=3\n")
+    assert f3["rx_mbps"] < parse_facts(text)["rx_mbps"]

@@ -9,6 +9,8 @@ The key lives in the panel's settings (never in the repository, never shown agai
 service only. `swap_ip` is pure and tested; everything else goes through `_req`."""
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import copy
 import ipaddress
 import re
@@ -24,8 +26,22 @@ BASE = "https://napi.arvancloud.ir/cdn/4.0"
 KEEP = ("type", "name", "value", "ttl", "cloud", "upstream_https", "ip_filter_mode", "cname", "text", "mx", "ns", "txt")
 
 
+_KEY: contextvars.ContextVar[str | None] = contextvars.ContextVar("arvan_key", default=None)
+
+
+@contextlib.contextmanager
+def using(api_key: str):
+    """Inside the block every call of this module uses THIS key (another ArvanCloud account), not the one in the settings."""
+    tok = _KEY.set(str(api_key or ""))
+
+    try:
+        yield
+    finally:
+        _KEY.reset(tok)
+
+
 def key() -> str:
-    k = str(st.get("arvan").get("api_key") or "").strip()
+    k = str(_KEY.get() or st.get("arvan").get("api_key") or "").strip()
     return k.removeprefix("Apikey ").removeprefix("apikey ").strip()
 
 

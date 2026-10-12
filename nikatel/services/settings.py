@@ -25,6 +25,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # ArvanCloud DNS: the failover of an Iran server points the records that used its address at the replacement (mode: off | approve | auto)
     "arvan": {"api_key": "", "mode": "off", "confirm_minutes": 5, "domains": [], "status": {}},
     # CPU balance: the Tunnel Doctor turns RPS on for a busy multi-core server whose network work sits on one core (auto), what was found per server
+    # DNS accounts added on the DNS page (ArvanCloud accounts, Cloudflare); the main ArvanCloud key stays in "arvan" (the failover uses it). Keys never come back through the API.
+    "dns": {"accounts": []},
     "balance": {"auto": True, "servers": {}},
     "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt

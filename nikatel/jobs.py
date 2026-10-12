@@ -86,7 +86,7 @@ def _loop(spec: _Spec) -> None:
     """The thread of one job. NOTHING may end it: a "database is locked" while the job row was being updated once killed five job threads at the same moment
     and the panel kept running with no checks for hours. Whatever goes wrong is logged and the loop waits and goes on."""
     assert spec.wake is not None
-    time.sleep(3)   # let the server come up first
+    time.sleep(3 + (sum(map(ord, spec.name)) * 7) % 23)   # let the server come up first; every job has its own start (a fixed rate from one common start would make jobs fire in the same second for ever)
 
     while not _STOP.is_set():
         t_start = time.time()

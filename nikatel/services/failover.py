@@ -27,7 +27,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Config, Server, Tunnel
-from . import arvan, autopilot, telegram
+from . import arvan, autopilot, dnsprov, telegram
 from . import settings as st
 from .events import emit
 
@@ -599,8 +599,21 @@ def dismiss(plan_id: str) -> None:
     _save(s)
 
 
+def log_manual(op: str, domain: str, fqdn: str, record_id: str, old: str, new: str, before: dict | None = None, account: str = "arvan") -> dict:
+    """A record made, changed or deleted BY HAND (the operator asked): kept in the DNS log with everything needed to put it back (op: create | edit | delete)."""
+    s = _state()
+    now = int(time.time())
+    e = {"id": f"m-{now}-{len(s['dns_log'])}:{record_id}", "at": now, "plan_id": f"m-{now}-{len(s['dns_log'])}", "op": op, "server": {"create": "made by hand", "edit": "changed by hand", "delete": "deleted by hand"}[op], "target": "",
+         "account": account, "domain": domain, "record_id": str(record_id), "fqdn": fqdn, "old": old, "new": new, "before": before, "configs": [], "restored": False, "restored_at": None}
+    s["dns_log"].append(e)
+    _save(s)
+    _notice(f"🌐 DNS {fqdn}: {op} by hand ({old or '-'} → {new or '-'}).")
+    return e
+
+
 def restore(log_id: str) -> dict:
-    """Point one re-pointed record back at the address it had before the failover. The tunnels stay where they are."""
+    """Put ONE DNS change back: a re-pointed record at the address it had (the tunnels stay where they are); a record made by hand is deleted again, a deleted one is made again,
+    a changed one gets its old values back."""
     s = _state()
     e = next((x for x in s["dns_log"] if x["id"] == log_id), None)
 
@@ -608,10 +621,34 @@ def restore(log_id: str) -> dict:
         raise ValueError("this DNS change is not in the list any more")
 
     if e.get("restored"):
-        raise ValueError(f"{e['fqdn']} already points at {e['old']} again")
+        raise ValueError(f"{e['fqdn']} is already back as it was")
 
-    arvan.apply(e["domain"], e["record_id"], e["new"], e["old"])
+    op = e.get("op")
+    prov = dnsprov.provider(e.get("account") or "arvan") if op else None
+
+    if op == "create":
+        prov.delete(e["domain"], e["record_id"])
+    elif op == "delete":
+        old_id, new_id = e["record_id"], prov.create_from(e["domain"], e.get("before") or {})
+
+        for x in s["dns_log"]:                      # the record has a new id now: the older changes of it that are still open follow it
+            if x["domain"] == e["domain"] and x["record_id"] == old_id and not x.get("restored"):
+                x["record_id"] = new_id
+    elif op == "edit":
+        prov.put_back(e["domain"], e["record_id"], e.get("before") or {})
+    else:
+        arvan.apply(e["domain"], e["record_id"], e["new"], e["old"])
+
     e["restored"], e["restored_at"] = True, int(time.time())
+
+    if op:
+        _save(s)
+
+        with session() as db:
+            emit(db, "warn", "actions", f"DNS {e['fqdn']}: the change by hand ({op}) was put back.", e["fqdn"])
+
+        _notice(f"↩ DNS {e['fqdn']}: the change by hand ({op}) was put back.")
+        return dict(e)
 
     if not any(x["plan_id"] == e["plan_id"] and not x.get("restored") for x in s["dns_log"]):
         for h in s["history"]:
