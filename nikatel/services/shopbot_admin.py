@@ -127,9 +127,9 @@ def pays(state: str = "pending", page: int = 0, q: str = "", limit: int = 0) -> 
         where += f' AND (p.user_id = "{e}" OR u.name LIKE "%{e}%" OR u.username LIKE "%{e}%" OR p.hash_id LIKE "%{e}%")'
 
     per = max(5, min(100, int(limit))) if limit else PAGE          # the page holds what fits the window: the client says how many rows
-    total = int(read(f"SELECT COUNT(*) AS n FROM pays p LEFT JOIN users u ON u.userid = p.user_id WHERE {where}")[0]["n"])
+    total = int(read(f"SELECT COUNT(*) AS n FROM pays p LEFT JOIN users u ON u.userid = CAST(p.user_id AS CHAR) COLLATE utf8mb4_unicode_ci WHERE {where}")[0]["n"])
     rows = read(f"SELECT p.id, p.hash_id, p.user_id, u.name, u.username, p.price, p.type, p.state, p.request_date, p.plan_id, p.volume, p.day, p.approved_by, "
-                f"LEFT(p.description, 200) AS description FROM pays p LEFT JOIN users u ON u.userid = p.user_id WHERE {where} ORDER BY p.id DESC LIMIT {per} OFFSET {max(0, page) * per}")
+                f"LEFT(p.description, 200) AS description FROM pays p LEFT JOIN users u ON u.userid = CAST(p.user_id AS CHAR) COLLATE utf8mb4_unicode_ci WHERE {where} ORDER BY p.id DESC LIMIT {per} OFFSET {max(0, page) * per}")
     cnt = {r["state"]: int(r["c"]) for r in read("SELECT p.state, COUNT(*) AS c FROM pays p GROUP BY p.state")}      # the number on each filter tab
     counts = {"confirm": cnt.get("have_sent", 0), "pending": cnt.get("pending", 0), "approved": cnt.get("approved", 0), "declined": cnt.get("declined", 0), "all": sum(cnt.values())}
     return {"rows": rows, "total": total, "page": max(0, page), "per": per, "counts": counts}
@@ -205,17 +205,19 @@ def pay_decline(pay_id: int, reason: str = "") -> dict:
 
 
 # ------------------------------------------------------------------ orders (subscriptions sold)
-def orders(q: str = "", page: int = 0, only_active: bool = False) -> dict:
+def orders(q: str = "", page: int = 0, only_active: bool = False, limit: int = 0) -> dict:
     where = "o.status = 1" if only_active else "1 = 1"
     e = re.sub(r"[;'\"`\\%]", "", str(q or ""))
 
     if e:
         where += f' AND (o.userid = "{e}" OR o.remark LIKE "%{e}%" OR u.name LIKE "%{e}%" OR u.username LIKE "%{e}%")'
 
+    per = max(5, min(100, int(limit))) if limit else PAGE          # the page holds what fits the window
     total = int(read(f"SELECT COUNT(*) AS n FROM orders_list o LEFT JOIN users u ON u.userid = o.userid WHERE {where}")[0]["n"])
     rows = read(f"SELECT o.id, o.userid, u.name, u.username, o.remark, o.amount, o.date, o.expire_date, o.status, o.server_id, s.title AS server, o.protocol, o.autoRenew, o.agent_bought "
-                f"FROM orders_list o LEFT JOIN users u ON u.userid = o.userid LEFT JOIN server_info s ON s.id = o.server_id WHERE {where} ORDER BY o.id DESC LIMIT {PAGE} OFFSET {max(0, page) * PAGE}")
-    return {"rows": rows, "total": total, "page": max(0, page)}
+                f"FROM orders_list o LEFT JOIN users u ON u.userid = o.userid LEFT JOIN server_info s ON s.id = o.server_id WHERE {where} ORDER BY o.id DESC LIMIT {per} OFFSET {max(0, page) * per}")
+    st = {r["status"]: int(r["c"]) for r in read("SELECT o.status, COUNT(*) AS c FROM orders_list o GROUP BY o.status")}
+    return {"rows": rows, "total": total, "page": max(0, page), "per": per, "counts": {"all": sum(st.values()), "active": st.get("1", 0)}}
 
 
 def order_status(order_id: int, active: bool) -> None:
@@ -350,6 +352,11 @@ def category_delete(cat_id: int) -> None:
     if n:
         raise ValueError(f"{n} plan(s) still use this category - move or delete them first")
 
+    k = int(read(f"SELECT COUNT(*) AS n FROM server_categories WHERE parent = {int(cat_id)}")[0]["n"])
+
+    if k:
+        raise ValueError(f"{k} sub-categor{'y' if k == 1 else 'ies'} still inside - move or delete them first")
+
     write(f"DELETE FROM server_categories WHERE id = {int(cat_id)}")
 
 
@@ -464,7 +471,7 @@ def discount_save(disc_id: int | None, f: dict) -> int:
     if kind == "percent" and not 1 <= amount <= 100:
         raise ValueError("a percent discount is between 1 and 100")
 
-    vals = {"hash_id": code, "type": kind, "amount": amount, "expire_date": int(time.time()) + days * 86400 if days else 0, "expire_count": num(f.get("expire_count", 0)), "can_use": num(f.get("can_use", 1)),
+    vals = {"hash_id": code, "type": kind, "amount": amount, "expire_date": num(f["expire_at"]) if f.get("expire_at") not in (None, "") else (int(time.time()) + days * 86400 if days else 0), "expire_count": num(f.get("expire_count", 0)), "can_use": num(f.get("can_use", 1)),
             "audience_type": audience, "audience_user_id": num(f.get("audience_user_id", 0)), "target_type": target, "target_id": num(f.get("target_id", 0)), "min_price": num(f.get("min_price", 0)),
             "max_discount": num(f.get("max_discount", 0)), "is_active": 1 if str(f.get("is_active", 1)) not in ("0", "false", "False") else 0}
 
@@ -481,6 +488,10 @@ def discount_save(disc_id: int | None, f: dict) -> int:
     return int(disc_id)
 
 
+def discount_active(disc_id: int, active: bool) -> None:
+    write(f"UPDATE discounts SET is_active = {1 if active else 0} WHERE id = {int(disc_id)}")
+
+
 def discount_delete(disc_id: int) -> None:
     write(f"DELETE FROM discounts WHERE id = {int(disc_id)}")
 
@@ -490,14 +501,18 @@ def gifts() -> list[dict]:
     return read("SELECT id, code, amount, max_uses, used, expires, created, note FROM gift_codes ORDER BY id DESC LIMIT 200")
 
 
-def gift_save(code: str, amount: int, max_uses: int = 1, days: int = 0, note: str = "") -> int:
+def gift_save(code: str, amount: int, max_uses: int = 1, days: int = 0, note: str = "", expires: int = 0) -> int:
     code = re.sub(r"[^A-Za-z0-9_-]", "", str(code or ""))[:40] or base64.b32encode(str(time.time()).encode()).decode()[:10]
     amount, max_uses = num(amount), max(1, num(max_uses, 1))
 
     if amount <= 0:
         raise ValueError("the amount must be above zero")
 
-    write(f"INSERT INTO gift_codes (code, amount, max_uses, used, used_by, expires, created, note) VALUES ({lit(code)}, {amount}, {max_uses}, 0, \"[]\", {int(time.time()) + num(days) * 86400 if num(days) else 0}, {int(time.time())}, {lit(note or '')})")
+    if num(expires) and num(expires) <= time.time():
+        raise ValueError("expires must be in the future")
+
+    end = num(expires) or (int(time.time()) + num(days) * 86400 if num(days) else 0)      # an exact moment wins over a number of days
+    write(f"INSERT INTO gift_codes (code, amount, max_uses, used, used_by, expires, created, note) VALUES ({lit(code)}, {amount}, {max_uses}, 0, \"[]\", {end}, {int(time.time())}, {lit(note or '')})")
     _event("info", f"Bot gift code {code} ({amount:,} Toman × {max_uses}) added from the panel.", "")
     return last_id("gift_codes")
 
@@ -508,7 +523,7 @@ def gift_delete(gift_id: int) -> None:
 
 # ------------------------------------------------------------------ broadcasts (the bot's cron sends them, one user at a time)
 def broadcasts() -> list[dict]:
-    return read("SELECT id, title, type, target_group, state, sent, total_cnt, deleted_cnt, created_at, updated_at, LEFT(text, 160) AS text FROM send_list ORDER BY id DESC LIMIT 60")
+    return read("SELECT id, title, type, target_group, state, sent, total_cnt, deleted_cnt, created_at, updated_at, LEFT(text, 160) AS text FROM send_list ORDER BY id DESC LIMIT 300")
 
 
 def broadcast_create(title: str, text: str, group: str = "all") -> int:
@@ -532,12 +547,14 @@ def broadcast_cancel(bid: int) -> None:
 
 
 # ------------------------------------------------------------------ tickets
-def tickets(state: str = "open", page: int = 0) -> dict:
+def tickets(state: str = "open", page: int = 0, limit: int = 0) -> dict:
     where = f"c.state = {TICKET_OPEN}" if state == "open" else f"c.state = {TICKET_CLOSED}" if state == "closed" else "1 = 1"
+    per = max(5, min(100, int(limit))) if limit else PAGE
     total = int(read(f"SELECT COUNT(*) AS n FROM chats c WHERE {where}")[0]["n"])
     rows = read(f"SELECT c.id, c.user_id, u.name, u.username, c.title, c.category, c.state, c.rate, c.create_date, (SELECT COUNT(*) FROM chats_info m WHERE m.chat_id = c.id) AS messages, "
-                f"(SELECT MAX(m.sent_date) FROM chats_info m WHERE m.chat_id = c.id) AS last_at FROM chats c LEFT JOIN users u ON u.userid = c.user_id WHERE {where} ORDER BY c.id DESC LIMIT {PAGE} OFFSET {max(0, page) * PAGE}")
-    return {"rows": rows, "total": total, "page": max(0, page)}
+                f"(SELECT MAX(m.sent_date) FROM chats_info m WHERE m.chat_id = c.id) AS last_at FROM chats c LEFT JOIN users u ON u.userid = c.user_id WHERE {where} ORDER BY c.id DESC LIMIT {per} OFFSET {max(0, page) * per}")
+    st = {r["state"]: int(r["c"]) for r in read("SELECT c.state, COUNT(*) AS c FROM chats c GROUP BY c.state")}
+    return {"rows": rows, "total": total, "page": max(0, page), "per": per, "counts": {"open": st.get(str(TICKET_OPEN), 0), "closed": st.get(str(TICKET_CLOSED), 0), "all": sum(st.values())}}
 
 
 def ticket_messages(chat_id: int) -> list[dict]:

@@ -1,3 +1,4 @@
+import base64
 import re
 
 import pytest
@@ -40,6 +41,40 @@ def test_parse_info():
     assert d["tickets"] == 3 and d["queue"] == 1 and d["texts_hooked"] is False
 
 
+def test_cron_file_has_a_line_per_running_job_and_keeps_the_stopped_ones():
+    text = shopbot.cron_file([{"key": "warnusers", "schedule": "*/15  * * * *", "enabled": True}, {"key": "tronChecker", "schedule": "*/5 * * * *", "enabled": False}], "/var/www/nikabot")
+    lines = text.splitlines()
+    assert "*/15 * * * * www-data cd /var/www/nikabot/settings && timeout 300 php warnusers.php >/dev/null 2>&1" in lines
+    assert "#OFF */5 * * * * www-data cd /var/www/nikabot/settings && timeout 240 php tronChecker.php >/dev/null 2>&1" in lines
+    assert sum(1 for ln in lines if ln.startswith("#OFF ")) == 4       # every job not named is kept as a stopped line with its default schedule
+    # the script on the server accepts exactly these lines: a plain schedule, www-data, one of the five scripts
+    ok = re.compile(r"^(#OFF )?[0-9*/,-]+( [0-9*/,-]+){4} www-data cd /var/www/[A-Za-z0-9._-]+/settings && timeout [0-9]{1,3} php (messagewizwiz|warnusers|rewardReport|tronChecker|dailyjobs)\.php >/dev/null 2>&1$")
+    assert all(ok.match(ln) for ln in lines if " php " in ln)
+    with pytest.raises(ValueError):
+        shopbot.cron_file([{"key": "warnusers", "schedule": "* * * * * ; reboot", "enabled": True}], "/var/www/nikabot")
+    with pytest.raises(ValueError):
+        shopbot.cron_file([{"key": "../../etc/passwd", "schedule": "* * * * *", "enabled": True}], "/var/www/nikabot")
+
+
+def test_cron_jobs_are_read_from_the_file_and_set_through_the_action(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(shopbot, "_node", lambda: object())
+    monkeypatch.setattr(shopbot, "conf", lambda: {"dir": "/var/www/nikabot", "host": "h"})
+    monkeypatch.setattr(shopbot, "run_script", lambda n, name, p=None, timeout=0: "CRONFILE active\n# x\n*/10 * * * * www-data cd /var/www/nikabot/settings && timeout 300 php warnusers.php >/dev/null 2>&1\n#OFF */5 * * * * www-data cd /var/www/nikabot/settings && timeout 240 php tronChecker.php >/dev/null 2>&1\n")
+    r = shopbot.cron_jobs()
+    on = {j["key"]: j["enabled"] for j in r["jobs"]}
+    assert r["state"] == "on" and on["warnusers"] is True and on["tronChecker"] is False and on["dailyjobs"] is False
+
+    def fake_action(n, name, params=None, timeout=0):
+        seen["body"] = base64.b64decode(params["B64"]).decode()
+        return "CRON_SET 1\n"
+
+    monkeypatch.setattr(shopbot, "run_action", fake_action)
+    monkeypatch.setattr(shopbot, "session", lambda: __import__("contextlib").nullcontext(None))
+    monkeypatch.setattr(shopbot, "emit", lambda *a, **k: None)
+    assert shopbot.cron_set([{"key": "warnusers", "schedule": "*/10 * * * *", "enabled": True}]) == {"active": 1}
+    assert "php warnusers.php" in seen["body"] and re.match(ssh.ACTIONS["bot_cron_set"][1]["B64"], base64.b64encode(seen["body"].encode()).decode())
+
 def test_sql_scripts_accept_only_safe_statements():
     sel = ssh.SCRIPTS["bot_query"][1]["SQL"]
     assert re.match(sel, "'SELECT * FROM users LIMIT 10'")
@@ -51,6 +86,20 @@ def test_sql_scripts_accept_only_safe_statements():
     assert not re.match(upd, "'DROP TABLE users'")
     assert not re.match(upd, "'UPDATE x SET a = 1; DELETE FROM y'")
     assert shopbot._q("it's; `x` \\") == "'its x '"
+
+
+def test_a_text_with_new_lines_stays_in_its_row_and_comes_back_whole():
+    # mysql --batch writes newline, tab and backslash inside a value as \n, \t, \\ : the plan description with several lines used to split into junk rows
+    out = "id\ttitle\tdescr\tjson\n7\tPlan\tline one\\nline two\\twith tab\t{\"a\":\"b\\\\u0627\"}\n8\tSecond\tplain\tNULL\n"
+    rows = shopbot._rows(out)
+    assert [r["id"] for r in rows] == ["7", "8"]
+    assert rows[0]["descr"] == "line one\nline two\twith tab" and rows[0]["json"] == "{\"a\":\"b\\u0627\"}"
+    assert rows[1]["json"] == "NULL"
+    rows = shopbot._rows("id\tdescr\n1\tcarriage\rreturn and \u2028 separator\n2\tnext\n")      # only \n ends a record
+    assert [r["id"] for r in rows] == ["1", "2"] and "carriage\rreturn" in rows[0]["descr"]
+    assert "--raw" not in ssh.SCRIPTS["bot_query"][0]
+    with pytest.raises(RuntimeError, match="Illegal mix"):      # an error that comes after the echoed statement is still an error, not a row
+        shopbot._rows("--------------\nSELECT 1\n--------------\n\nERROR 1267 (HY000) at line 1: Illegal mix of collations\n")
 
 
 def test_info_users_and_import_through_api(client, monkeypatch):

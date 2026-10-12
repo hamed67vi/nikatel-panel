@@ -40,17 +40,27 @@ def _q(v) -> str:
     return "'" + re.sub(r"[;'`\\]", "", str(v)) + "'"
 
 
+_ESC = {"n": "\n", "t": "\t", "0": "\0", "\\": "\\"}
+
+
+def _unescape(v: str) -> str:
+    """mysql --batch writes a newline, a tab and a backslash inside a value as \\n, \\t and \\\\ (so one record stays on one line): put them back."""
+    return re.sub(r"\\(.)", lambda m: _ESC.get(m.group(1), m.group(0)), v) if "\\" in v else v
+
+
 def _rows(out: str) -> list[dict]:
-    lines = [ln for ln in out.splitlines() if ln and not ln.startswith("mysql: [Warning]")]
+    lines = [ln for ln in out.split("\n") if ln and not ln.startswith("mysql: [Warning]")]      # not splitlines(): a stray \r or U+2028 inside a text is not a record end
 
     if not lines:
         return []
 
-    if lines[0].startswith("ERROR"):
-        raise RuntimeError(lines[0][:200])
+    bad = next((ln for ln in lines if ln.startswith("ERROR")), None)      # mysql may echo the statement before its ERROR line
+
+    if bad:
+        raise RuntimeError(bad[:200])
 
     head = lines[0].split("\t")
-    return [dict(zip(head, ln.split("\t"))) for ln in lines[1:]]
+    return [dict(zip(head, (_unescape(v) for v in ln.split("\t")))) for ln in lines[1:]]
 
 
 def query(sql: str) -> list[dict]:
@@ -202,6 +212,21 @@ def find_users(q: str) -> list[dict]:
     return query(f"SELECT u.id, u.userid, u.name, u.username, u.wallet, u.is_agent, u.discount_percent, u.step, u.phone, u.date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid) AS orders FROM users u WHERE u.userid = \"{e}\" OR u.username LIKE \"%{e}%\" OR u.name LIKE \"%{e}%\" OR u.phone LIKE \"%{e}%\" ORDER BY u.id DESC LIMIT 30")
 
 
+USER_KINDS = {"all": "1 = 1", "agents": "u.is_agent = 1", "banned": 'u.step = "banned"'}
+
+
+def users_page(q: str = "", kind: str = "all", page: int = 0, limit: int = 0) -> dict:
+    """The bot's users, newest first, a page that fits the window; q looks in id, username, name and phone; counts for the tabs."""
+    e = re.sub(r"[;'\"`\\%]", "", str(q or "").strip())[:60]
+    where = USER_KINDS.get(kind, "1 = 1") + (f' AND (u.userid = "{e}" OR u.username LIKE "%{e}%" OR u.name LIKE "%{e}%" OR u.phone LIKE "%{e}%")' if e else "")
+    per = max(5, min(100, int(limit))) if limit else 40
+    page = max(0, int(page))
+    total = int(query(f"SELECT COUNT(*) AS n FROM users u WHERE {where}")[0]["n"])
+    rows = query(f"SELECT u.userid, u.name, u.username, u.wallet, u.is_agent, u.discount_percent, u.step, u.date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid) AS orders FROM users u WHERE {where} ORDER BY u.id DESC LIMIT {per} OFFSET {page * per}")
+    c = query('SELECT COUNT(*) AS n, COALESCE(SUM(u.is_agent = 1), 0) AS agents, COALESCE(SUM(u.step = "banned"), 0) AS banned FROM users u')[0]
+    return {"rows": rows, "total": total, "page": page, "per": per, "counts": {"all": int(c["n"]), "agents": int(float(c["agents"])), "banned": int(float(c["banned"]))}}
+
+
 PARTNER_SORT = {"recent": "u.agent_date DESC", "sales": "spent DESC", "wallet": "u.wallet DESC"}
 
 
@@ -214,19 +239,20 @@ def _normal_discount(v) -> int:
         return 0
 
 
-def partners(q: str = "", page: int = 0, sort: str = "recent") -> dict:
+def partners(q: str = "", page: int = 0, sort: str = "recent", limit: int = 0) -> dict:
     """The partners (agents: users with is_agent = 1): who, since when, their discount, wallet and what they bought as partners."""
     e = re.sub(r"[;'\"`\\%]", "", str(q or "").strip())[:60]
     where = "u.is_agent = 1" + (f' AND (u.name LIKE "%{e}%" OR u.username LIKE "%{e}%" OR u.userid = "{e}")' if e else "")
     page = max(0, int(page))
+    per = max(5, min(100, int(limit))) if limit else 40
     tot = query(f"SELECT COUNT(*) AS n, COALESCE(SUM(u.wallet), 0) AS wallet FROM users u WHERE {where}")[0]
-    rows = query(f"SELECT u.userid, u.name, u.username, u.wallet, u.discount_percent, u.agent_date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid AND o.agent_bought = 1) AS orders, (SELECT COALESCE(SUM(o.amount), 0) FROM orders_list o WHERE o.userid = u.userid AND o.agent_bought = 1) AS spent FROM users u WHERE {where} ORDER BY {PARTNER_SORT.get(sort, PARTNER_SORT['recent'])} LIMIT 40 OFFSET {page * 40}")
+    rows = query(f"SELECT u.userid, u.name, u.username, u.wallet, u.discount_percent, u.agent_date, (SELECT COUNT(*) FROM orders_list o WHERE o.userid = u.userid AND o.agent_bought = 1) AS orders, (SELECT COALESCE(SUM(o.amount), 0) FROM orders_list o WHERE o.userid = u.userid AND o.agent_bought = 1) AS spent FROM users u WHERE {where} ORDER BY {PARTNER_SORT.get(sort, PARTNER_SORT['recent'])} LIMIT {per} OFFSET {page * per}")
     allo = query("SELECT COUNT(*) AS n FROM orders_list WHERE agent_bought = 1")[0]
 
     for r in rows:
         r["discount"] = _normal_discount(r.pop("discount_percent", ""))
 
-    return {"total": int(tot["n"]), "wallet": int(float(tot["wallet"] or 0)), "orders": int(allo["n"]), "page": page, "rows": rows}
+    return {"total": int(tot["n"]), "wallet": int(float(tot["wallet"] or 0)), "orders": int(allo["n"]), "page": page, "per": per, "rows": rows}
 
 
 def user_action(action: str, userid: str, value=None) -> dict:
@@ -280,11 +306,12 @@ def user_action(action: str, userid: str, value=None) -> dict:
     return query(f"SELECT userid, name, username, wallet, is_agent, discount_percent, step FROM users WHERE userid = \"{uid}\"")[0]
 
 
-def table(name: str, page: int = 0, q: str = "") -> dict:
+def table(name: str, page: int = 0, q: str = "", limit: int = 0) -> dict:
     if name not in TABLES:
         raise ValueError("unknown table")
 
     page = max(0, int(page or 0))
+    per = max(5, min(100, int(limit))) if limit else 40
     where = ""
 
     if q:
@@ -293,14 +320,14 @@ def table(name: str, page: int = 0, q: str = "") -> dict:
         where = " WHERE " + " OR ".join(f'{c} LIKE "%{e}%"' for c in cols if c)
 
     total = int(query(f"SELECT COUNT(*) AS n FROM {name}{where}")[0]["n"])
-    rows = query(f"SELECT * FROM {name}{where} ORDER BY id DESC LIMIT 40 OFFSET {page * 40}")
+    rows = query(f"SELECT * FROM {name}{where} ORDER BY id DESC LIMIT {per} OFFSET {page * per}")
 
     for r in rows:
         for k, v in r.items():
             if v is not None and len(v) > 160:
                 r[k] = v[:160] + "…"
 
-    return {"rows": rows, "total": total, "page": page, "columns": list(rows[0].keys()) if rows else []}
+    return {"rows": rows, "total": total, "page": page, "per": per, "columns": list(rows[0].keys()) if rows else []}
 
 
 def stats() -> dict:
@@ -311,6 +338,75 @@ def stats() -> dict:
     out["pending_pays"] = query("SELECT p.id, p.user_id, u.name, p.price, p.type, p.request_date FROM pays p LEFT JOIN users u ON u.userid = p.user_id WHERE p.state = \"pending\" ORDER BY p.id DESC LIMIT 20")
     return out
 
+
+# ------------------------------------------------------------------ the bot's cron jobs (one file, /etc/cron.d/nikabot): which run, how often, and the bot settings each one reads
+CRON_JOBS = [
+    {"key": "messagewizwiz", "title": "Broadcasts and rates", "descr": "Sends the queued broadcasts and refreshes the dollar and TRX rates.", "schedule": "* * * * *", "timeout": 55, "settings": ["rateLimit", "USDRate", "TRXRate"]},
+    {"key": "warnusers", "title": "Expiry and volume warnings", "descr": "Warns the users whose subscription is ending and renews from the wallet when auto renew is on.", "schedule": "*/10 * * * *", "timeout": 300, "settings": ["renewAutoState", "rewardChannel"]},
+    {"key": "rewardReport", "title": "Receipts and channel reports", "descr": "Accepts card-to-card receipts by itself when that is on and posts the sales report to the channel.", "schedule": "*/5 * * * *", "timeout": 240, "settings": ["cartToCartAutoAcceptState", "cartToCartAutoAcceptType", "cartToCartAutoAcceptTime", "rewardChannel", "rewaredTime"]},
+    {"key": "tronChecker", "title": "TRON payments", "descr": "Looks for TRON payments to the wallet and credits them.", "schedule": "*/5 * * * *", "timeout": 240, "settings": ["tronWallet"]},
+    {"key": "dailyjobs", "title": "Nightly jobs", "descr": "The daily report, the lottery and the housekeeping (23:35 server time).", "schedule": "35 23 * * *", "timeout": 300, "settings": ["lotteryState", "lotteryPrize", "cleanupDays"]},
+]
+CRON_SCHEDULE = re.compile(r"^[0-9*/,\-]{1,20}( [0-9*/,\-]{1,20}){4}$")
+_CRON_LINE = re.compile(r"^(#OFF )?([0-9*/,\-]+(?: [0-9*/,\-]+){4}) www-data cd \S+ && timeout \d+ php (\w+)\.php")
+
+
+def cron_jobs() -> dict:
+    """The five jobs with their schedule and whether they run now (an active line in the cron file)."""
+    lines = run_script(_node(), "bot_cron_get", timeout=20).splitlines()
+    active = bool(lines) and lines[0].strip() == "CRONFILE active"
+    found = {}
+
+    for ln in lines[1:]:
+        m = _CRON_LINE.match(ln.strip())
+
+        if m:
+            found[m.group(3)] = {"schedule": m.group(2), "on": active and not m.group(1)}
+
+    jobs = [{**j, "default": j["schedule"], "schedule": found.get(j["key"], {}).get("schedule", j["schedule"]), "enabled": bool(found.get(j["key"], {}).get("on"))} for j in CRON_JOBS]
+    return {"state": "on" if any(j["enabled"] for j in jobs) else "off", "jobs": jobs}
+
+
+def cron_file(jobs: list[dict], bot_dir: str) -> str:
+    """The text of the cron file for the chosen jobs: a running job is a line, a stopped one is kept as a #OFF line with its schedule."""
+    want = {}
+
+    for j in jobs or []:
+        key = str(j.get("key", ""))
+        sched = " ".join(str(j.get("schedule", "")).split())
+
+        if key not in {x["key"] for x in CRON_JOBS}:
+            raise ValueError("unknown job")
+
+        if not CRON_SCHEDULE.match(sched):
+            raise ValueError(f"{key}: the schedule is five fields like */5 * * * *")
+
+        want[key] = (sched, bool(j.get("enabled")))
+
+    out = ["SHELL=/bin/bash", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+
+    for j in CRON_JOBS:
+        sched, on = want.get(j["key"], (j["schedule"], False))
+        out.append("# " + j["title"])
+        out.append(("" if on else "#OFF ") + f"{sched} www-data cd {bot_dir}/settings && timeout {j['timeout']} php {j['key']}.php >/dev/null 2>&1")
+
+    return "\n".join(out) + "\n"
+
+
+def cron_set(jobs: list[dict]) -> dict:
+    body = cron_file(jobs, conf()["dir"])
+    out = run_action(_node(), "bot_cron_set", {"B64": base64.b64encode(body.encode()).decode()}, timeout=30)
+    m = re.search(r"CRON_SET (\d+)", out)
+
+    if not m:
+        raise RuntimeError("the cron file was not written: " + out.strip()[-120:])
+
+    n = int(m.group(1))
+
+    with session() as db:
+        emit(db, "warn" if n else "info", "shopbot", f"Bot cron: {n} job(s) now run" if n else "Bot cron: all jobs paused", "")
+
+    return {"active": n}
 
 # ------------------------------------------------------------------ actions
 def backup(name: str = "manual") -> str:

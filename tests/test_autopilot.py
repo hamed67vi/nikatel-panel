@@ -299,3 +299,20 @@ def test_a_job_that_is_gone_leaves_the_jobs_list(monkeypatch):
 
     with session() as db:
         assert db.get(Job, "old-job") is None
+
+
+def test_a_failed_rebuild_puts_the_old_tunnel_back(monkeypatch):
+    # the Canada tunnel was removed by a relink that could not work (GRE filtered) and nothing built it again: a failed rebuild now rebuilds the old one
+    snap = {"id": 7, "name": "xx-demo1", "iran_id": 1, "foreign_id": 2, "type": "", "transport": "tcpmux", "record": {"opts": {"x": 1}}, "ports": "8075", "label": "xx-demo1"}
+    built, said = [], []
+    monkeypatch.setattr(ap, "_snapshot", lambda tid: snap)
+    monkeypatch.setattr(ap.builder, "rebuild_tunnel", lambda tid, fresh_link=False: 101)
+    monkeypatch.setattr(ap, "_build_kind", lambda sn, i, f, kind, opts=None: built.append((i, f, kind, opts)) or 102)
+    monkeypatch.setattr(ap, "_wait", lambda aid, limit=900: (False, ["Stopped: GRE is filtered"]) if aid == 101 else (True, ["built"]))
+    monkeypatch.setattr(ap, "_say", lambda aid, line, **k: said.append(line))
+    ok, _story = ap._rebuild_safe(5, 7)
+    assert ok is False and built == [(1, 2, "tcpmux", {"x": 1})]
+    assert any("Putting the old tcpmux tunnel back" in ln for ln in said) and any("old tunnel is back" in ln for ln in said)
+    monkeypatch.setattr(ap, "_wait", lambda aid, limit=900: (True, ["built"]))
+    built.clear()
+    assert ap._rebuild_safe(5, 7)[0] is True and built == []        # a rebuild that works builds nothing more

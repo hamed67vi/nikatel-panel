@@ -450,6 +450,22 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
     return False
 
 
+def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False) -> tuple[bool, list[str]]:
+    """Remove the tunnel and build it again (same name, same ports). A rebuild that fails never leaves the operator with nothing:
+    the old tunnel is built again from the copy taken before it was removed (and stays in 'Recently removed' if even that fails)."""
+    snap = _snapshot(tunnel_id)
+    old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
+    ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=fresh_link))
+
+    if ok:
+        return True, story
+
+    _say(aid, f"The new build failed ({story[-1][:160] if story else '?'}). Putting the old {old_kind} tunnel back so it is not lost.")
+    ok2, _ = _wait(_build_kind(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts")))
+    _say(aid, "The old tunnel is back." if ok2 else "The old tunnel could not be built again either (the cause is still there). Its copy is in 'Recently removed' on the Tunnels page: Restore builds it when the cause is gone.")
+    return False, story
+
+
 def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], patience: int = 1200) -> list[dict]:
     """Test the candidate types. Only one tunnel test runs at a time on the panel, so when another repair is testing, wait for its turn."""
     end_wait, said = time.time() + patience, False
@@ -564,12 +580,20 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
             _say(aid, "Restart: " + (story[-1] if story else "no result"))
             healed = ok
         elif step == "rebuild":
-            ok, story = _wait(builder.rebuild_tunnel(tunnel_id))
+            ok, story = _rebuild_safe(aid, tunnel_id)
             _say(aid, "Rebuild: " + (story[-1] if story else "no result"))
             healed = ok
         elif step == "relink":
-            _say(aid, "Removing the link and building it again with a new inner network and a new GRE key…")
-            ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=True))
+            _say(aid, "Before the link is touched, a new GRE link (new inner network, new key) is tested BESIDE the old tunnel: the tunnel is only rebuilt when the new link works.")
+            probe_kind = d["kind"] if d["kind"] in tunnel_test.KIND_KEYS else "tcpmux"
+            res = _recommend_now(aid, snap["iran_id"], snap["foreign_id"], [probe_kind])
+
+            if not any(r.get("ok") for r in res):
+                _say(aid, "A new GRE link does not pass either: GRE is filtered on this route, so rebuilding the same kind would only remove the tunnel. Nothing was removed; the tunnel stays as it is.")
+                continue
+
+            _say(aid, "The new link works: removing the old link and building it again.")
+            ok, story = _rebuild_safe(aid, tunnel_id, fresh_link=True)
             plan_line = next((ln for ln in story if ln.startswith("Plan:")), "")
             _say(aid, "New link: " + (plan_line.replace("Plan: ", "") + " → " if plan_line else "") + (story[-1] if story else "no result"))
             healed = ok

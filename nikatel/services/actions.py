@@ -237,7 +237,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
 
         with session() as db:
             t = db.get(Tunnel, tunnel_id)
-            now_state, now_reason = t.state, t.last_error
+            now_state, now_reason = (t.state, t.last_error) if t is not None else ("removed", "the tunnel was removed meanwhile")
 
         if now_state == "up":
             _say(aid, "Checked again: the tunnel works.", done=True, ok=True)
@@ -336,7 +336,7 @@ def restart_now(tunnel_id: int, source: str = "manual") -> dict:
 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
-        state, why = t.state, t.last_error or ""
+        state, why = (t.state, t.last_error or "") if t is not None else ("removed", "the tunnel was removed meanwhile")
         emit(db, "ok" if state == "up" else "warn", "actions", f"Restart of {name} ({source}): {state}" + (f" - {why}" if why else ""), name)
 
     return {"id": tunnel_id, "name": name, "state": state, "why": why, "steps": done}

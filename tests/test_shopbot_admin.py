@@ -85,7 +85,7 @@ def test_decline_tells_the_user_the_reason(db):
 
 def test_plans_categories_and_servers_are_written_with_base64_text(db):
     db.answers = {"FROM server_plans ORDER BY id DESC": [{"id": "12"}], "FROM server_categories ORDER BY id DESC": [{"id": "3"}], "FROM server_info ORDER BY id DESC": [{"id": "4"}],
-                  "COUNT(*) AS n FROM server_plans WHERE catid": [{"n": "0"}], "COUNT(*) AS n FROM orders_list WHERE server_id": [{"n": "0"}]}
+                  "COUNT(*) AS n FROM server_plans WHERE catid": [{"n": "0"}], "COUNT(*) AS n FROM server_categories WHERE parent": [{"n": "0"}], "COUNT(*) AS n FROM orders_list WHERE server_id": [{"n": "0"}]}
     assert adm.plan_save(None, {"title": "پلن ۳۰ روزه", "days": 30, "volume": 50, "price": 120000, "catid": 1, "server_id": 2, "bogus": "x"}) == 12
     ins = db.writes[-1]
     assert ins.startswith("INSERT INTO server_plans (") and adm.lit("پلن ۳۰ روزه") in ins and "bogus" not in ins and "active" in ins
@@ -101,7 +101,12 @@ def test_plans_categories_and_servers_are_written_with_base64_text(db):
     assert "UPDATE server_info SET ucount = 900 WHERE id = 4" in db.writes[-1] and not any("UPDATE server_config SET password" in w for w in db.writes)
     with pytest.raises(ValueError):
         adm.server_save(None, {"title": "x"}, {"type": "unknown"})
+    adm.discount_active(5, False)
+    assert db.writes[-1] == "UPDATE discounts SET is_active = 0 WHERE id = 5"
     adm.category_delete(3)
+    db.answers["COUNT(*) AS n FROM server_categories WHERE parent"] = [{"n": "2"}]
+    with pytest.raises(ValueError, match="sub-categories"):
+        adm.category_delete(3)      # a category with categories inside it is not deleted
     adm.server_delete(4)
     assert db.writes[-1] == "DELETE FROM server_info WHERE id = 4"
 
@@ -119,6 +124,13 @@ def test_discounts_gifts_broadcasts(db):
     assert "INSERT INTO gift_codes (code, amount, max_uses, used, used_by, expires, created, note)" in db.writes[-1] and ", 50000, 10, 0, \"[]\"," in db.writes[-1]
     with pytest.raises(ValueError):
         adm.gift_save("X", 0)
+    future = int(__import__("time").time()) + 5 * 86400
+    adm.gift_save("EXACT", 1000, 1, 0, "", future)      # an exact expiry moment is kept as it is
+    assert f", {future}, " in db.writes[-1]
+    with pytest.raises(ValueError, match="future"):
+        adm.gift_save("PAST", 1000, 1, 0, "", 1000000000)
+    adm.discount_save(None, {"hash_id": "EXACT", "type": "percent", "amount": 10, "expire_at": future})
+    assert f", {future}, " in db.writes[-1]
 
     assert adm.broadcast_create("Hi", "سلام به همه 👋\nخط دوم", "agents") == 8
     assert db.writes[-1].startswith('INSERT INTO send_list (type, title, text, target_group, state, created_at) VALUES ("text",') and ", 1, " in db.writes[-1]
@@ -229,3 +241,10 @@ def test_miniapp_deploy_sends_every_file_through_the_reviewed_action(monkeypatch
         name = p["PATH"].rsplit("/", 1)[1]
         assert base64.b64decode(p["B64"]) == (adm.miniapp_dir() / name).read_bytes()
     assert st["installed"] and st["version"] == "2.0.0"
+
+
+def test_orders_take_a_page_size_and_report_their_counts(client, db):
+    db.answers = {"SELECT o.id": lambda: [{"id": "5", "userid": "1", "status": "1"}], "COUNT(*) AS n FROM orders_list": [{"n": "1"}], "GROUP BY o.status": [{"status": "1", "c": "7"}, {"status": "0", "c": "3"}]}
+    r = client.get("/api/shopbot/orders?limit=12").json()
+    assert r["per"] == 12 and r["counts"] == {"all": 10, "active": 7} and r["rows"][0]["id"] == "5"
+    assert client.get("/api/shopbot/orders").json()["per"] == adm.PAGE

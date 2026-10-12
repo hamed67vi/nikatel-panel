@@ -53,9 +53,27 @@ def states(body: States):
     return {"ok": True, "states": _wrap(shopbot.set_states, body.changes)}
 
 
+class CronIn(BaseModel):
+    jobs: list[dict]
+
+
+@router.get("/shopbot/cron")
+def cron_get():
+    return {"ok": True, **_wrap(shopbot.cron_jobs)}
+
+
+@router.put("/shopbot/cron")
+def cron_put(body: CronIn):
+    return {"ok": True, **_wrap(shopbot.cron_set, body.jobs)}
+
 @router.get("/shopbot/partners")
-def partners(q: str = "", page: int = 0, sort: str = "recent"):
-    return {"ok": True, **_wrap(shopbot.partners, q, page, sort)}
+def partners(q: str = "", page: int = 0, sort: str = "recent", limit: int = 0):
+    return {"ok": True, **_wrap(shopbot.partners, q, page, sort, limit)}
+
+
+@router.get("/shopbot/userlist")
+def userlist(q: str = "", kind: str = "all", page: int = 0, limit: int = 0):
+    return {"ok": True, **_wrap(shopbot.users_page, q, kind, page, limit)}
 
 
 @router.get("/shopbot/users")
@@ -75,8 +93,8 @@ def user_action(body: UserAct):
 
 
 @router.get("/shopbot/table/{name}")
-def table(name: str, page: int = 0, q: str = ""):
-    return {"ok": True, **_wrap(shopbot.table, name, page, q)}
+def table(name: str, page: int = 0, q: str = "", limit: int = 0):
+    return {"ok": True, **_wrap(shopbot.table, name, page, q, limit)}
 
 
 class Query(BaseModel):
@@ -151,8 +169,8 @@ def pay_decline(pay_id: int, body: Reason):
 
 
 @router.get("/shopbot/orders")
-def orders(q: str = "", page: int = 0, active: bool = False):
-    return {"ok": True, **_wrap(adm.orders, q, page, active)}
+def orders(q: str = "", page: int = 0, active: bool = False, limit: int = 0):
+    return {"ok": True, **_wrap(adm.orders, q, page, active, limit)}
 
 
 class Active(BaseModel):
@@ -285,6 +303,12 @@ def discount_edit(disc_id: int, body: Fields):
     return {"ok": True, "id": _wrap(adm.discount_save, disc_id, body.fields)}
 
 
+@router.put("/shopbot/discounts/{disc_id}/active")
+def discount_active(disc_id: int, body: Active):
+    _wrap(adm.discount_active, disc_id, body.active)
+    return {"ok": True}
+
+
 @router.delete("/shopbot/discounts/{disc_id}")
 def discount_delete(disc_id: int):
     _wrap(adm.discount_delete, disc_id)
@@ -296,6 +320,7 @@ class GiftIn(BaseModel):
     amount: int
     max_uses: int = 1
     days: int = 0
+    expires: int = 0
     note: str = Field("", max_length=190)
 
 
@@ -306,7 +331,7 @@ def gifts():
 
 @router.post("/shopbot/gifts", status_code=201)
 def gift_add(body: GiftIn):
-    return {"ok": True, "id": _wrap(adm.gift_save, body.code, body.amount, body.max_uses, body.days, body.note)}
+    return {"ok": True, "id": _wrap(adm.gift_save, body.code, body.amount, body.max_uses, body.days, body.note, body.expires)}
 
 
 @router.delete("/shopbot/gifts/{gift_id}")
@@ -339,8 +364,8 @@ def broadcast_cancel(bid: int):
 
 # ------------------------------------------------------------------ tickets
 @router.get("/shopbot/tickets")
-def tickets(state: str = "open", page: int = 0):
-    return {"ok": True, **_wrap(adm.tickets, state, page)}
+def tickets(state: str = "open", page: int = 0, limit: int = 0):
+    return {"ok": True, **_wrap(adm.tickets, state, page, limit)}
 
 
 @router.get("/shopbot/tickets/{chat_id}")

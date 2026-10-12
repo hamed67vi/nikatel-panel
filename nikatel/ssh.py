@@ -284,7 +284,7 @@ curl -s -m 20 "https://api.telegram.org/bot$TOK/@METHOD@" | head -c 4000
 
     # one read-only query against the bot's database (SELECT / SHOW only, no second statement)
     "bot_query": (r"""set -a; [ -f '@ENV@' ] && . '@ENV@'; set +a
-mysql --batch --raw --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e @SQL@ 2>&1 | head -c 200000
+mysql --batch --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e @SQL@ 2>&1 | head -c 200000
 """, {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "SQL": r"^'(SELECT|SHOW|DESCRIBE)\b[^;'`\\]{0,1500}'$"}),
 
     # the bot's own texts and button labels (values.php, read by PHP itself) and the panel's overrides next to them
@@ -300,6 +300,11 @@ echo "HOOKED $(grep -c text_overrides.json config.php 2>/dev/null || echo 0)"
     "bot_fetch_dump": (r"""f='@FILE@'; if [ -f "$f" ] && [ "$(stat -c %s "$f")" -lt 30000000 ]; then base64 -w0 "$f"; else echo TOO_BIG_OR_MISSING; fi
 """, {"FILE": r"^/opt/nikabot/backups/[A-Za-z0-9._-]{1,80}\.sql\.gz$"}),
 
+    # shop bot: the bot's cron jobs, as the cron file is now (active, or renamed with .disabled)
+    "bot_cron_get": (r"""if [ -f /etc/cron.d/nikabot ]; then echo "CRONFILE active"; cat /etc/cron.d/nikabot
+elif [ -f /etc/cron.d/nikabot.disabled ]; then echo "CRONFILE disabled"; cat /etc/cron.d/nikabot.disabled
+else echo "CRONFILE missing"; fi
+""", {}),
     "bot_backups": (r"""for f in /opt/nikabot/backups/*.sql.gz; do [ -f "$f" ] && echo "BACKUP $(basename "$f") $(stat -c %s "$f")"; done; true
 """, {}),
 
@@ -823,6 +828,8 @@ for t in $TABLES; do
   [ -n "$COLS" ] && SQL="$SQL TRUNCATE TABLE \`$t\`; INSERT INTO \`$t\` ($COLS) SELECT $SEL FROM nikabot_stage.\`$t\`;"
 done
 mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "$SQL SET FOREIGN_KEY_CHECKS=1;"
+# the bot's schema has only primary keys: the panel and the bot join on userid, so these indexes keep every list fast with 15 000 users (best effort)
+mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "ALTER TABLE users ADD INDEX IF NOT EXISTS idx_users_userid (userid); ALTER TABLE orders_list ADD INDEX IF NOT EXISTS idx_orders_userid (userid), ADD INDEX IF NOT EXISTS idx_orders_status_id (status, id); ALTER TABLE pays ADD INDEX IF NOT EXISTS idx_pays_user (user_id), ADD INDEX IF NOT EXISTS idx_pays_state_id (state, id);" >/dev/null 2>&1 || true
 for t in $TABLES; do echo "TABLE $t $(mysql -N -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT COUNT(*) FROM \`$t\`")"; done
 echo IMPORTED""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$"}),
 
@@ -833,6 +840,19 @@ echo IMPORTED""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$"}),
 esac
 """, {"STATE": r"^(on|off)$"}),
 
+    # shop bot: write the bot's cron jobs. The file comes base64 from the panel and every line is checked again here: only the five known scripts of the bot, only a plain schedule.
+    # At least one active line -> /etc/cron.d/nikabot; none -> the same text is kept as nikabot.disabled (cron ignores names with a dot), nothing is lost.
+    "bot_cron_set": (r"""echo '@B64@' | base64 -d > /tmp/nikabot.cron.new || { echo CRON_BAD_B64; exit 1; }
+BAD=$(grep -vE '^(#[^`$]*|SHELL=/bin/bash|PATH=[A-Za-z0-9/:._-]+|)$|^(#OFF )?[0-9*/,-]+( [0-9*/,-]+){4} www-data cd /var/www/[A-Za-z0-9._-]+/settings && timeout [0-9]{1,3} php (messagewizwiz|warnusers|rewardReport|tronChecker|dailyjobs)\.php >/dev/null 2>&1$' /tmp/nikabot.cron.new || true)
+[ -z "$BAD" ] || { echo CRON_BAD_LINE; unlink /tmp/nikabot.cron.new; exit 1; }
+if grep -qE '^[0-9*]' /tmp/nikabot.cron.new; then
+  install -m 644 -o root -g root /tmp/nikabot.cron.new /etc/cron.d/nikabot; unlink /etc/cron.d/nikabot.disabled 2>/dev/null || true
+else
+  install -m 644 -o root -g root /tmp/nikabot.cron.new /etc/cron.d/nikabot.disabled; unlink /etc/cron.d/nikabot 2>/dev/null || true
+fi
+unlink /tmp/nikabot.cron.new
+echo "CRON_SET $(grep -cE '^[0-9*]' /etc/cron.d/nikabot 2>/dev/null || echo 0)"
+""", {"B64": r"^[A-Za-z0-9+/=]{1,6000}$"}),
     # shop bot: restart PHP / clear the bot's log files
     "bot_restart_php": (r"""for u in php8.3-fpm php8.2-fpm php-fpm; do systemctl is-active "$u" >/dev/null 2>&1 && systemctl restart "$u" && echo "RESTARTED $u"; done; true
 """, {}),
