@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.2
+
+- Servers: only a server that is cut (off) is red. A server that is on but has a problem - high CPU, RAM or disk, no login, SSH failing - is yellow (a CPU at 94 % made the icon red before).
+
 ## 1.20.1
 
 - DNS · IP switch: the domain header rows are left-aligned, the page description says the automatic switching is paused.

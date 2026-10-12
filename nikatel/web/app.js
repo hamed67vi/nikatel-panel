@@ -485,7 +485,7 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
 
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
 /* severity colours of the rows: red = fully down (or a server that cannot be reached / is critical), yellow = everything else that is wrong - packet loss of any size, degraded, slow, loaded */
-const srvSev = s => { if (!s.enabled) return ""; const f = s.facts || {}; if (s.online === false || noLogin(s) || (f.cpu || 0) >= 92 || (f.ram || 0) >= 92 || (f.disk || 0) >= 95) return "sev-red"; return (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };
+const srvSev = s => { if (!s.enabled) return ""; const f = s.facts || {}; if (s.online === false) return "sev-red"; return noLogin(s) || /^SSH does not answer/.test(s.last_error || "") || (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };      // red = the server is cut (off); a server that is on but has a problem (a full disk, a high CPU, no login, SSH failing) is yellow
 const SHOW_LOSS = 20;   // packet loss under this is normal for the Iran-abroad paths: not shown, not coloured
 const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.state === "down") return "sev-red"; return t.state === "unknown" || t.state === "starting" || loss >= SHOW_LOSS ? "sev-yellow" : ""; };
 /* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
