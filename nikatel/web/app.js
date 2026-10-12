@@ -72,6 +72,8 @@ function demoBanner() {
   d.id = "demo-pill";
   d.innerHTML = "<b>Demo</b> · نسخه نمایشی · داده‌ها ساختگی و فقط‌خواندنی است";
   document.body.appendChild(d);
+  document.querySelectorAll("#nav a[data-page=bot]").forEach(a => a.remove());      // the shop bot needs a real bot server: nothing to show in the demo
+  document.querySelectorAll("#logout, .signout, [onclick*=logout]").forEach(b => b.remove());      // there is no sign-in to sign out of
 }
 function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); api("/api/settings/nodes").then(r => { window.NODE_CERT = r.marzban_cert || ""; }).catch(() => {}); }
 

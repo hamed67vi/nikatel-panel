@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.23.1
+
+- The demo hides the Shop bot page and the Sign out button (neither has anything to show there).
+
 ## 1.23.0
 
 - **A read-only demo with invented data (`NIKATEL_DEMO=true`).** For showing the panel to other people: no sign-in, fourteen invented servers, twelve tunnels (one degraded, one down), configs, a panel, events and repair stories, all from the documentation address ranges; every change (POST, PUT, DELETE) is refused with a clear message, no SSH key is used, no job reaches a machine, and one small job keeps the numbers moving. `nikatel demo-seed` fills an empty database (it never touches one that has servers). A small "Demo" pill shows at the top. See docs/demo.md.
