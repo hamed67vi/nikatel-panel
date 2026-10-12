@@ -2750,3 +2750,14 @@ body #page .sb-prows { max-height: none; min-height: 0; overflow: hidden; }
 body #page .sb-pu b, body #page .sb-pu small { text-align: left; unicode-bidi: plaintext; direction: ltr; }
 body #page .sb-pfoot { height: 52px; box-sizing: border-box; padding: 0 14px; display: flex; align-items: center; border-top: 1px solid rgba(255,255,255,.07); min-width: 1220px; }
 body #page .sb-pfoot .pgbar { display: flex; align-items: center; gap: 12px; width: 100%; } body #page .sb-pfoot .pgbar .sp { flex: 1; } body #page .sb-pfoot .pgs { display: inline-flex; align-items: center; gap: 4px; }
+
+body #page .sb-prow2 { height: var(--prh, 56px); }
+/* the shop bot cards: a little smaller, and each one grows slightly under the mouse */
+body #page .sb-card { padding: 9px 14px 11px; gap: 7px; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+body #page .sb-card:not(.sb-ptable):not(.sb-ptool):hover { transform: scale(1.025); border-color: rgba(10,132,255,.38); box-shadow: 0 10px 26px rgba(0,0,0,.38); position: relative; z-index: 3; }
+body #page .sb-card.sb-attn:hover, body #page .sb-card.sb-log:hover, body #page .sb-two > .sb-card:hover { transform: scale(1.008); }
+body #page .sb-sv b { font-size: 21px; } body #page .sb-stat { gap: 3px; } body #page .sb-svc .sb-chips { gap: 6px; } body #page .sb-chip { height: 26px; }
+body #page .sb-head, body #page .sb-stat4, body #page .sb-two, body #page .sb-pa-top { gap: 10px; } body #page .sb-nav { margin-bottom: 10px; } body #page .sb-head { margin-bottom: 10px; }
+body #page .sb-ar { min-height: 56px; } body #page .sb-ar .ss-ic { width: 36px; height: 36px; }
+body #page:has(.sb-head) { overflow-x: clip; }
+@media (prefers-reduced-motion: reduce) { body #page .sb-card { transition: none; } body #page .sb-card:hover { transform: none !important; } }

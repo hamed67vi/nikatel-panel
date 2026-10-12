@@ -81,7 +81,7 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
 
     text = "\n".join(s["story"])
     assert s["done"] and s["ok"] is True and s["action"] == "create", text
-    assert "Order (quality first" in text and "ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
+    assert "Order (GRE not OK last; quality first" in text and "ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
     assert applied == [("example.test", "ra", "203.0.113.5", "203.0.113.9")] and "DNS (as ticked)" in text        # the tick is the approval: applied at once
     hist, log = st.get("failover")["history"], st.get("failover")["dns_log"]
     assert hist[-1]["reason"] == "replace" and hist[-1]["ok"] is True and hist[-1]["target"]["id"] == w["ir2"] and st.get("failover")["pending"] == []
@@ -179,7 +179,7 @@ def test_the_smart_choice_goes_on_to_the_next_server_when_a_build_fails(client, 
         time.sleep(0.1)
 
     text = "\n".join(s["story"])
-    assert s["ok"] is True and tried == [w["ir1"], w["ir2"]] and "ir1: did not work - trying the next Iran server" in text and "Order (quality first" in text
+    assert s["ok"] is True and tried == [w["ir1"], w["ir2"]] and "ir1: did not work - trying the next Iran server" in text and "Order (GRE not OK last; quality first" in text
 
 
 def test_the_smart_test_leaves_a_poor_server_and_takes_the_next(client, monkeypatch):

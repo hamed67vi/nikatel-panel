@@ -2187,7 +2187,7 @@ async function sbPays() {
 }
 /* the rows of a page fill the window exactly (56 px each): the list never scrolls and a short last page keeps the same box, so nothing moves */
 const sbPayRowH = 56;
-function sbPayFit() { const box = $("#pay-rows"); if (!box) return; sb.payPS = Math.max(5, Math.floor((mainBottom() - box.getBoundingClientRect().top - 52 - 28) / sbPayRowH)); box.style.height = sb.payPS * sbPayRowH + "px"; }
+function sbPayFit() { const box = $("#pay-rows"); if (!box) return; const avail = Math.floor(mainBottom() - box.getBoundingClientRect().top - 52 - 24); sb.payPS = Math.max(5, Math.floor(avail / sbPayRowH)); const rh = Math.floor(avail / sb.payPS * 10) / 10; box.style.height = sb.payPS * rh + "px"; box.style.setProperty("--prh", rh + "px"); }      // whole rows, a little taller if needed, so the box ends at the bottom of the page
 addEventListener("resize", () => { clearTimeout(sbPayFit.t); sbPayFit.t = setTimeout(() => { if (sb.tab === "payments" && $("#pay-rows")) { const old = sb.payPS; sbPayFit(); if (sb.payPS !== old) { sb.payPage = 0; sbPaysLoad(); } } }, 200); });
 async function sbPaysLoad() {
   const r = await api(`/api/shopbot/pays?state=${sb.payState}&page=${sb.payPage}&q=${encodeURIComponent(sb.payQ)}&limit=${sb.payPS || 0}`);

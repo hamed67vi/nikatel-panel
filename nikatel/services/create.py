@@ -184,7 +184,7 @@ def smart_test(foreign_id: int, ports: str, kind: str) -> int:
             autopilot._say(aid, "No Iran server can carry this tunnel right now.", done=True, ok=False)
             return
 
-        autopilot._say(aid, "Order (quality first, then free resources): " + ", ".join(r["name"] for r in usable))
+        autopilot._say(aid, "Order (GRE not OK last; quality first, then free resources): " + ", ".join(f"{r['name']} ({r.get('reason', '')})" for r in usable))
         tried = []
 
         for n, r in enumerate(usable):
@@ -277,7 +277,7 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
                 return
 
             candidates = [r["id"] for r in usable[:MAX_TRIES]]
-            autopilot._say(aid, "Order (quality first, then free resources): " + ", ".join(f"{r['name']} ({r.get('reason', '')})" for r in usable[:MAX_TRIES]))
+            autopilot._say(aid, "Order (GRE not OK last; quality first, then free resources): " + ", ".join(f"{r['name']} ({r.get('reason', '')})" for r in usable[:MAX_TRIES]))
 
         for unit in replace_units if candidates and candidates[0] else []:          # an old Iran-side tunnel that holds a port and that nobody connects to: checked again now, then removed
             _, ctl = parse_backhaul_unit(unit)
