@@ -2673,3 +2673,27 @@ html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st small { col
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st b { font-weight: 700; font-variant-numeric: tabular-nums; color: #f2f5fb; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st.ok b { color: #5ee07f; }
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st i { font-style: normal; color: #8791a8; font-size: 11.5px; }
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs { gap: 6px 10px; flex-wrap: wrap; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g { gap: 4px; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g + .sb-g { padding-left: 10px; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs button { height: 36px; padding: 0 10px; gap: 6px; font-size: 13px; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g em { font-size: 10.5px; margin-right: 2px; }
+
+/* ---- the shop bot layout does not depend on the theme: spacing, group names, the joined numbers, the cards ---- */
+body #page .sb-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 0 !important; border: 0 !important; background: none !important; }
+body #page .sb-tabs .sb-g { display: inline-flex; align-items: center; gap: 6px; }
+body #page .sb-tabs .sb-g + .sb-g { padding-left: 14px; border-left: 1px solid rgba(255,255,255,.12); }
+body #page .sb-tabs .sb-g em { font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #5aa9ff; margin-right: 4px; }
+body #page .sb-tabs button { height: 36px; padding: 0 12px; gap: 7px; display: inline-flex; align-items: center; margin: 0; border-radius: 12px; font-size: 13px; }
+body #page .sb-tabs button small { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: #ff9f0a; color: #1b1300; }
+body #page .sb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+body #page .sb-stats { display: inline-flex; align-items: stretch; height: 34px; border: 1px solid rgba(255,255,255,.10); border-radius: 17px; overflow: hidden; margin-left: 8px; }
+body #page .sb-st { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 13px; white-space: nowrap; } body #page .sb-st + .sb-st { border-left: 1px solid rgba(255,255,255,.10); }
+body #page .sb-st small { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; opacity: .8; } body #page .sb-st i { font-style: normal; opacity: .6; font-size: 11.5px; }
+body #page .sb-attn { padding: 14px 18px 8px; border-radius: 14px; }
+body #page .sb-ar { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.07); }
+body #page .sb-ar .ss-ic, body #page .sb-q .ss-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; }
+body #page .sb-ar .ss-ic svg, body #page .sb-q .ss-ic svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+body #page .sb-ar .si-t { display: grid; gap: 2px; min-width: 0; } body #page .sb-ar .si-t small { white-space: normal; opacity: .7; line-height: 1.4; }
+body #page .sb-ar .si-a { display: flex; gap: 8px; align-items: center; }
+body #page .sb-qa { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+body #page .sb-q { display: grid !important; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: center; height: auto !important; padding: 14px 16px !important; text-align: left; border-radius: 14px !important; }
+body #page .sb-q span { display: grid; gap: 2px; min-width: 0; } body #page .sb-q small { white-space: normal; opacity: .7; font-weight: 400; }
+body #page .sb-log > summary { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; list-style: none; } body #page .sb-log > summary::-webkit-details-marker { display: none; }
+@media (max-width: 1100px) { body #page .sb-qa { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { body #page .sb-qa { grid-template-columns: 1fr; } body #page .sb-ar { grid-template-columns: 40px minmax(0, 1fr); } body #page .sb-ar .si-a { grid-column: 1 / -1; } body #page .sb-tabs .sb-g + .sb-g { border-left: 0; padding-left: 0; } }
