@@ -6,6 +6,7 @@ from . import (
     alerts,
     auth,
     autopilot,
+    balance,
     configs,
     engines,
     events,
@@ -24,5 +25,5 @@ from . import (
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license):
+for mod in (auth, system, servers, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license, balance):
     router.include_router(mod.router)

@@ -41,6 +41,18 @@ _PORTS = r"^(\d{1,5}( \d{1,5})*)?$"
 _UNITS = r"^([A-Za-z0-9][A-Za-z0-9._@-]{0,63}(\.service)?( |$))+$"
 
 SCRIPTS: dict[str, tuple[str, Mapping[str, str]]] = {
+    # how the network work is spread over the cores: cores, receive queues and their RPS masks, per-core load and NET_RX over two seconds (read only)
+    "cpu_spread": (r"""IF=$(ip -o -4 route show default 2>/dev/null | awk '{print $5}' | head -1); echo "IF $IF"
+echo "CORES $(nproc)"
+for q in /sys/class/net/$IF/queues/rx-*; do [ -d "$q" ] && echo "RXQ $(basename $q) $(cat $q/rps_cpus 2>/dev/null | tr -d ',')"; done
+awk '/^cpu[0-9]/{print "S1", $1, $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat
+grep NET_RX /proc/softirqs | sed 's/^ *NET_RX: */N1 /'
+sleep 2
+awk '/^cpu[0-9]/{print "S2", $1, $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat
+grep NET_RX /proc/softirqs | sed 's/^ *NET_RX: */N2 /'
+echo "UNIT $(systemctl is-enabled nikatel-rps.service 2>/dev/null || echo no)"
+""", {}),
+
     # resources of a server, one second of CPU and network counters
     "facts": (r"""s1=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
 r1=$(awk 'NR>2 && $1!~/^(lo|docker|veth|br-)/{gsub(":"," ");rx+=$2;tx+=$10}END{print rx+0,tx+0}' /proc/net/dev)
@@ -541,6 +553,32 @@ _PATH = r"^/(etc/(systemd/system|backhaul|backpack|paqet|nikatel-chisel|sysctl\.
 _TNAME = r"^[a-z0-9][a-z0-9-]{0,14}$"
 
 ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
+    # RPS on or off for one network card: the steering mask goes to all cores (up to 32), a boot unit keeps it; off puts everything back
+    "rps_set": (r"""set -e
+cat > /usr/local/sbin/nikatel-rps <<'EOS'
+#!/bin/bash
+IF="$1"; MODE="$2"; N=$(nproc); [ "$N" -gt 32 ] && N=32
+if [ "$MODE" = on ]; then MASK=$(printf '%x' $(( (1<<N) - 1 ))); CNT=4096; ENT=32768; else MASK=0; CNT=0; ENT=0; fi
+for q in /sys/class/net/$IF/queues/rx-*; do [ -d "$q" ] || continue; echo $MASK > $q/rps_cpus; echo $CNT > $q/rps_flow_cnt 2>/dev/null || true; done
+sysctl -qw net.core.rps_sock_flow_entries=$ENT || true
+EOS
+chmod 755 /usr/local/sbin/nikatel-rps
+cat > /etc/systemd/system/nikatel-rps.service <<'EOS'
+[Unit]
+Description=Nikatel RPS (network packets on all cores) for @IFACE@
+After=network-online.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/nikatel-rps @IFACE@ on
+ExecStop=/usr/local/sbin/nikatel-rps @IFACE@ off
+[Install]
+WantedBy=multi-user.target
+EOS
+systemctl daemon-reload
+if [ '@MODE@' = on ]; then systemctl enable --now nikatel-rps.service >/dev/null 2>&1 || /usr/local/sbin/nikatel-rps @IFACE@ on; echo "RPS on @IFACE@ ($(cat /sys/class/net/@IFACE@/queues/rx-0/rps_cpus))"; else systemctl disable --now nikatel-rps.service >/dev/null 2>&1 || true; /usr/local/sbin/nikatel-rps @IFACE@ off; echo "RPS off @IFACE@"; fi
+""", {"IFACE": r"^[A-Za-z0-9_.-]{1,15}$", "MODE": r"^(on|off)$"}),
+
     # restart systemd units, one after the other, report each state afterwards
     "restart_units": (r"""for u in @UNITS@; do systemctl restart "$u" 2>/dev/null; sleep 1; echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
 """, {"UNITS": _UNITS}),

@@ -21,6 +21,7 @@ from .services import (
     alerts,
     autopilot,
     backup,
+    balance,
     builder,
     configs,
     extras,
@@ -86,6 +87,7 @@ def _register_jobs() -> None:
     jobs.register("backup", 300, backup.scheduled)
     jobs.register("repair", 20, autopilot.repair_cycle)         # the plain restarts every 20 s (a tunnel that is down waits only its grace, not a whole minute more); the smart repair and the look at lossy tunnels every five minutes (one job, not three)
     jobs.register("netwatch", 300, netwatch.probe_all)
+    jobs.register("cpu-balance", 600, balance.run)              # a busy server whose network work sits on one core gets RPS (the Doctor does it by itself; no tunnel is touched)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("failover", 60, failover.check)              # does nothing until a key and a mode are set (Tunnels → DNS · IP switch)
 

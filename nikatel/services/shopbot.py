@@ -215,10 +215,28 @@ def find_users(q: str) -> list[dict]:
 USER_KINDS = {"all": "1 = 1", "agents": "u.is_agent = 1", "banned": 'u.step = "banned"'}
 
 
+def search_clause(q: str, cols: list[str]) -> str:
+    """SQL for a search box: ` AND (...)` where EVERY word of `q` is found somewhere in the columns (in the middle of a value too), also when the separators
+    (space, dash, dot, underscore) are left out; '' for an empty search. Only double quotes (the reviewed scripts refuse single ones); `%`, `_` and quotes are removed."""
+    words = [w for w in re.sub(r"[;'\"`\\%_]", " ", str(q or "")).lower().split() if w][:6]
+
+    if not words:
+        return ""
+
+    hay = "CONCAT_WS(\" \", " + ", ".join(f'COALESCE(CAST({c} AS CHAR CHARACTER SET utf8mb4), "") COLLATE utf8mb4_unicode_ci' for c in cols) + ")"
+    flat = f'REPLACE(REPLACE(REPLACE(REPLACE({hay}, " ", ""), "-", ""), "_", ""), ".", "")'
+    parts = []
+
+    for w in words:
+        wc = re.sub(r"[\s.-]", "", w)
+        parts.append(f'({hay} LIKE "%{w}%" OR {flat} LIKE "%{wc}%")')
+
+    return " AND (" + " AND ".join(parts) + ")"
+
+
 def users_page(q: str = "", kind: str = "all", page: int = 0, limit: int = 0) -> dict:
     """The bot's users, newest first, a page that fits the window; q looks in id, username, name and phone; counts for the tabs."""
-    e = re.sub(r"[;'\"`\\%]", "", str(q or "").strip())[:60]
-    where = USER_KINDS.get(kind, "1 = 1") + (f' AND (u.userid = "{e}" OR u.username LIKE "%{e}%" OR u.name LIKE "%{e}%" OR u.phone LIKE "%{e}%")' if e else "")
+    where = USER_KINDS.get(kind, "1 = 1") + search_clause(str(q or "")[:60], ["u.userid", "u.username", "u.name", "u.phone"])
     per = max(5, min(100, int(limit))) if limit else 40
     page = max(0, int(page))
     total = int(query(f"SELECT COUNT(*) AS n FROM users u WHERE {where}")[0]["n"])
@@ -241,8 +259,7 @@ def _normal_discount(v) -> int:
 
 def partners(q: str = "", page: int = 0, sort: str = "recent", limit: int = 0) -> dict:
     """The partners (agents: users with is_agent = 1): who, since when, their discount, wallet and what they bought as partners."""
-    e = re.sub(r"[;'\"`\\%]", "", str(q or "").strip())[:60]
-    where = "u.is_agent = 1" + (f' AND (u.name LIKE "%{e}%" OR u.username LIKE "%{e}%" OR u.userid = "{e}")' if e else "")
+    where = "u.is_agent = 1" + search_clause(str(q or "")[:60], ["u.userid", "u.username", "u.name", "u.phone"])
     page = max(0, int(page))
     per = max(5, min(100, int(limit))) if limit else 40
     tot = query(f"SELECT COUNT(*) AS n, COALESCE(SUM(u.wallet), 0) AS wallet FROM users u WHERE {where}")[0]

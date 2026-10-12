@@ -1,6 +1,12 @@
 # Changelog
 
+## 1.21.0
+
+- **Tunnel Doctor: CPU on the cores.** On a virtual server the network card often has one receive queue and one interrupt, so every packet is processed on ONE core while the others idle (a 4-core server was "full" at 40 % of its power: one core at 80-95 %, the other three nearly idle). The Doctor now probes every multi-core server above 55 % CPU every 10 minutes (read only: per-core load and NET_RX over two seconds), finds a server whose packets sit almost all on one busy core, and - when "The Doctor spreads it by itself" is on - turns RPS on (the packet steering goes to all cores; a boot unit keeps it; no connection is dropped, no tunnel is touched), waits, probes again, keeps it when it helped and puts it back when the server got worse; one server per turn, a server is tried again only after six hours. By hand: the card on the Tunnel Doctor page (Check a server, Spread now, Undo). Every step is in the History with its story.
+
 ## 1.20.8
+
+- The same sensitive search is in EVERY search box: the dashboard's section search, the configs, the panel hosts, the shop bot's plans and texts (client side, one rule: every word anywhere, separators ignored), and the shop bot's users, partners, payments and orders and the log viewer (server side: every word must be found in the id, name, username, phone, remark ... joined, also with the separators left out).
 
 - Search is more sensitive in every box of Nodes, Tunnels, Configs and DNS: each word of what you type may sit anywhere (the middle of a name too), several words must all be found, and separators do not matter (a name with a dash, a dot, a space or nothing between its parts is the same). A server can also be found by its role, provider (a part of the provider name finds all its servers), country, host name, state; a tunnel by the provider of its two servers, its transport, state and ports.
 

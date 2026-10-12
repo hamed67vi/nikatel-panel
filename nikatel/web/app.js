@@ -349,9 +349,8 @@ function dqSections() {   // every section of the panel by its name: the pages, 
 }
 function dqItems(q) {   // the sections whose name (or a word of it) starts with what was typed - names of servers, tunnels or configs are not searched here
   q = q.trim().toLowerCase(); if (!q) return [];
-  const starts = n => { n = String(n || "").toLowerCase(); return n.startsWith(q) || n.split(/[-_ .&]+/).some(w => w.startsWith(q)); };
-  return dqSections().filter(s => starts(s.name)).slice(0, 8);
-}const dqHtml = q => { const it = dqItems(q); if (!q.trim()) return ""; return it.length ? it.map((x, i) => `<a class="${i === dqSel ? "on" : ""}" onmousedown="dqPick(${i})"><span class="dq-go">›</span>${esc(x.name)}<small>${esc(x.sub)}</small></a>`).join("") : '<div class="none">No section starts with that.</div>'; };
+  return dqSections().filter(s => nkHit(s.name + " " + s.sub, q)).sort((a, b) => (nkHit(b.name, q) - nkHit(a.name, q)) || (String(a.name).toLowerCase().startsWith(q) ? 0 : 1) - (String(b.name).toLowerCase().startsWith(q) ? 0 : 1)).slice(0, 8);      // a name that contains the words first
+}const dqHtml = q => { const it = dqItems(q); if (!q.trim()) return ""; return it.length ? it.map((x, i) => `<a class="${i === dqSel ? "on" : ""}" onmousedown="dqPick(${i})"><span class="dq-go">›</span>${esc(x.name)}<small>${esc(x.sub)}</small></a>`).join("") : '<div class="none">No section matches that.</div>'; };
 const dashSearch = () => `<div class="dsearch"><input id="dq" type="search" placeholder="Go to a section…" value="${esc(state.dq)}" oninput="dqType(this.value)" onkeydown="dqKey(event)" onblur="setTimeout(()=>{const l=$('#dq-list');if(l)l.innerHTML=''},150)" autocomplete="off" spellcheck="false"><div class="dq-list" id="dq-list">${dqHtml(state.dq)}</div></div>`;
 window.dqType = v => { state.dq = v; dqSel = 0; $("#dq-list").innerHTML = dqHtml(v); };
 window.dqKey = e => {
@@ -754,13 +753,15 @@ async function loadServerCharts(id) {
 }
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT;
+/* ONE rule for every search box: each word of what you type may sit anywhere in the text (the middle of a name too), several words must all be found, and the separators do not matter (a dash, a dot, a space and nothing are the same) */
+const nkCompact = s => String(s).replace(/[\s._\-:\/@]+/g, "");
+const nkHit = (hay, q) => { const h = String(hay || "").toLowerCase(), words = String(q || "").toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return true; const hc = nkCompact(h); return words.every(w => h.includes(w) || hc.includes(nkCompact(w))); };
 /* the search box of Nodes and Tunnels sits in its own bar and hides rows at once: nothing is redrawn, so nothing around it moves */
 const searchSeg = () => `<span class="tb-search"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="if(document.activeElement===this)setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></span>`;
 const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="if(document.activeElement===this)setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></div>`;
 function applyQ() {
   const q = ((state.page === "configs" ? cf.q : state.q) || "").trim(); let shown = 0, total = 0;
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean), compact = s => s.replace(/[\s._\-:\/@]+/g, "");
-  document.querySelectorAll("#page [data-q]").forEach(tr => { const hay = tr.dataset.q, hc = tr._qc || (tr._qc = compact(hay)); const hit = !words.length || words.every(w => hay.includes(w) || hc.includes(compact(w))); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });      // every word may sit anywhere in the name, the address, the provider ...
+  document.querySelectorAll("#page [data-q]").forEach(tr => { const hit = nkHit(tr.dataset.q, q); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });      // every word may sit anywhere in the name, the address, the provider ...
   document.querySelectorAll("#page .nk-ghead").forEach(h => { const tb = h.nextElementSibling; if (tb && tb.matches("table")) h.classList.toggle("q-hide", !!q && !tb.querySelector("tr[data-q]:not(.q-hide)")); });
   document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
   document.querySelectorAll("#page .dr-g").forEach(g => { const any = !!g.querySelector(".dr-rec:not(.q-hide)"); g.classList.toggle("q-hide", !any); g.classList.toggle("q-open", !!q && any); });      // a search opens the groups that have a match
@@ -1360,6 +1361,7 @@ PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
   const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), null, {}, []]);
+  const bl = await api("/api/balance").catch(() => null);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(stName(t.state))}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : ((outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`); })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span>${(() => { const off = outage && outage.by_tunnel && outage.by_tunnel[t.name], loss = (t.detail || {}).loss_pct || 0, why = off ? `A server of this tunnel is off (${off.join(", ")}): nothing is done until it is back.` : kind === "lossy" ? `${Math.round(loss)} % of the data is lost on this link.` : t.state === "down" ? "The tunnel does not answer." : "Part of the link works, part does not."; return `<span class="ap-why ${off ? "mut" : ""}" title="${esc(why)}">${esc(why)}</span>` + (off || t.last_error || kind === "lossy" ? `<a class="ap-detail" onclick="apDetail(${t.id})" title="The full reason and the log">Detail</a>` : ""); })()}${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
@@ -1388,6 +1390,7 @@ PAGES.actions = async () => {
       <label class="ap-f">How far it may go<select name="level">${[["restart", "Restart only (safe)"], ["rebuild", "+ rebuild the tunnel"], ["switch", "+ switch the tunnel type when the route blocks it"]].map(([k, l]) => `<option value="${k}" ${(rp.level || "switch") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <button class="pri" type="submit" ${d.read_only ? "disabled" : ""}>Save</button><span class="sp"></span>
       ${bad.length && !rp.auto ? `<button type="button" class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button type="button" class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></form>
+    ${balCard(bl, srvs)}
     <div class="grid2 ap-two ap-pair2" data-tab="att"><div class="card"><h3>🔧 Working now</h3>
       <div class="ap-att">${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Servers.</div>'}
@@ -1581,7 +1584,7 @@ PAGES.configsList = async () => {
   const gcell = c => inAll ? `<td class="cf-sub">${c.group ? esc(c.group) : "—"}</td>` : "";
   const acts = c => `<button class="sm" onclick="event.stopPropagation();cfSpeed(${c.id})" title="Speed test now">Test</button><button class="sm danger" onclick="event.stopPropagation();cfDel(${c.id}, '${esc(c.name)}')">Delete</button>`;
   const MBs = v => v == null ? "—" : mb(v / 8);   // the table speaks MB/s like a v2ray client; the stat boxes elsewhere stay in Mb/s
-  const row = c => { const m = c.meta || {}; return `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})">
+  const row = c => { const m = c.meta || {}; return `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc([c.name, c.group, c.address, c.port, c.status, c.protocol, c.network, c.security, c.tunnel, c.cdn_port].filter(x => x != null && x !== "").join(" ").toLowerCase())}" onclick="cfToggle(${c.id})">
       <td><span class="td-type">${esc((m.proto || "—").toUpperCase())}</span></td>
       <td class="name"><div class="cf-nm"><i class="sdot ${c.status}" title="${esc(c.status)}"></i>${title(c)}</div></td>
       ${gcell(c)}
@@ -1591,7 +1594,7 @@ PAGES.configsList = async () => {
       <td>${m.security && m.security !== "none" ? `<b class="sec-${esc(m.security)}">${esc(m.security)}</b>` : '<span class="mut">none</span>'}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}</b> <a class="mut cf-rf" title="Refresh ping" onclick="event.stopPropagation();cfSync()">↻</a></td>
       <td class="num">${c.down_mbps != null ? "↓" + MBs(c.down_mbps) + " ↑" + MBs(c.up_mbps) : "—"}</td>
-      <td class="cf-acts">${acts(c)}</td></tr>`; };  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})">
+      <td class="cf-acts">${acts(c)}</td></tr>`; };  const rowC = c => `<tr class="${c.status === "up" ? "up" : c.status === "down" ? "down" : ""} click" data-q="${esc([c.name, c.group, c.address, c.port, c.status, c.protocol, c.network, c.security, c.tunnel, c.cdn_port].filter(x => x != null && x !== "").join(" ").toLowerCase())}" onclick="cfToggle(${c.id})">
       <td class="name">${title(c)}</td>${gcell(c)}<td>${live(c)}</td>
       <td class="num"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) + " ms" : "—"}</b></td>
       <td class="num hide-sm">${c.down_mbps != null ? "↓" + mb(c.down_mbps) + " ↑" + mb(c.up_mbps) : "—"}</td>
@@ -1600,7 +1603,7 @@ PAGES.configsList = async () => {
       <td class="cf-acts">${acts(c)}</td></tr>`;
   const up = d.configs.filter(c => c.status === "up"), down = d.configs.filter(c => c.status === "down"), pings = up.filter(c => c.ping_ms != null).map(c => c.ping_ms);
   cf.view = cf.view || localStorage.getItem("nk.cfview") || "list";
-  const card = c => `<div class="cf-card ${c.status}" data-q="${esc((c.name + " " + (c.group || "")).toLowerCase())}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div>${inAll && c.group ? `<small class="cf-sub">${esc(c.group)}</small>` : ""}
+  const card = c => `<div class="cf-card ${c.status}" data-q="${esc([c.name, c.group, c.address, c.port, c.status, c.protocol, c.network, c.security, c.tunnel, c.cdn_port].filter(x => x != null && x !== "").join(" ").toLowerCase())}" onclick="cfToggle(${c.id})"><div class="cf-top"><b>${title(c)}</b>${live(c)}</div>${inAll && c.group ? `<small class="cf-sub">${esc(c.group)}</small>` : ""}
       <div class="cf-stats"><div class="cf-stat"><b class="${pingCls(c.status === "up" ? c.ping_ms : null)}">${c.ping_ms != null && c.status === "up" ? Math.round(c.ping_ms) : "—"}<small>ms</small></b><span>PING</span></div><div class="cf-stat"><b>${mb(c.down_mbps)}</b><span>DOWN Mbps</span></div><div class="cf-stat"><b>${mb(c.up_mbps)}</b><span>UP Mbps</span></div></div>
       <div class="cf-acts">${acts(c)}<span class="sp"></span><small class="mut">${c.checked_at ? ago(c.checked_at) + " ago" : "—"}</small></div></div>`;
   const sub = names.includes(cf.group) ? subs.subscriptions.find(s => s.name === cf.group) : null;
@@ -2022,7 +2025,7 @@ async function pnHostsLoad(id) {
   }
   const tags = {}; pn.hosts.forEach(h => { tags[h.tag] = (tags[h.tag] || 0) + 1; });
   const q = (pn.hq || "").toLowerCase();
-  const rows = pn.hosts.filter(h => (!pn.hinb || h.tag === pn.hinb) && (!pn.hstate || (pn.hstate === "off") === !!h.disabled) && (!q || [h.remark, h.tag, h.address, h.port].join(" ").toLowerCase().includes(q)));
+  const rows = pn.hosts.filter(h => (!pn.hinb || h.tag === pn.hinb) && (!pn.hstate || (pn.hstate === "off") === !!h.disabled) && (!q || nkHit([h.remark, h.tag, h.address, h.port, h.disabled ? "off disabled" : "on", ...(h.sni ? [h.sni] : []), ...(h.host ? [h.host] : [])].join(" "), q)));
   const byPort = {}; rows.forEach(h => { const k = h.port == null ? "" : String(h.port); (byPort[k] = byPort[k] || []).push(h); });      // one group per port: click a port to see its hosts and inbounds
   const ports = Object.keys(byPort).sort((x, y) => (x === "") - (y === "") || (+x || 0) - (+y || 0));
   pn.hopen = pn.hopen || {};
@@ -2594,7 +2597,7 @@ function sbPlDraw() {
   ["active", "off", "all"].forEach(k => { const e = $("#plc-" + k); if (e) e.textContent = fmt(r.plans.filter(p => k === "all" || (k === "active") === (p.active === "1")).length); });
   document.querySelectorAll(".sb-pltool .sb-ptab").forEach(b => b.classList.toggle("on", b.dataset.k === f.status));
   const list = r.plans.filter(p => (f.status === "all" || (f.status === "active") === (p.active === "1") || f.pin[p.id]) && (!f.cat || cn(p) === f.cat) && (!f.server || String(p.server_id) === f.server)
-    && (!f.q || (p.title + " " + (p.descr || "") + " " + (p.category || "") + " " + (p.server || "")).toLowerCase().includes(f.q)));
+    && (!f.q || nkHit(p.title + " " + (p.descr || "") + " " + (p.category || "") + " " + (p.server || "") + " " + (p.price || "") + " " + (p.volume || "") + " " + (p.days || ""), f.q)));
   list.sort(f.sort === "price" ? (a, b) => num(a.price) - num(b.price) : f.sort === "sold" ? (a, b) => num(b.sold) - num(a.sold) : f.sort === "new" ? (a, b) => num(b.id) - num(a.id)
     : (a, b) => String(plHas(a.catid) ? a.category || "" : "￿").localeCompare(String(plHas(b.catid) ? b.category || "" : "￿")) || num(a.days) - num(b.days) || num(a.price) - num(b.price));
   /* sorted by category the list is grouped: a header row for each category (repeated at the top of the next page when a group goes on), the pages are filled with whole rows */
@@ -2872,7 +2875,7 @@ window.sbUDisc = async (uid, el) => { const v = Math.max(0, Math.min(100, Math.r
 Object.assign(sb, {txEditK: {text: {}, button: {}}});
 const TX_COLS = "minmax(180px, .9fr) minmax(320px, 3fr) 88px";
 const sbTxData = () => { const d = sb.txData, t = sb.txKind === "text"; return {base: t ? d.texts : d.buttons, ov: t ? d.text_overrides : d.button_overrides, ed: sb.txEditK[sb.txKind]}; };
-const sbTxList = () => { const {base, ov} = sbTxData(), q = sb.txQ.toLowerCase(); return Object.keys(base).filter(k => !q || k.toLowerCase().includes(q) || String(base[k]).toLowerCase().includes(q) || String(ov[k] || "").toLowerCase().includes(q)).map(k => ({k, base: base[k], ov: ov[k]})); };
+const sbTxList = () => { const {base, ov} = sbTxData(), q = sb.txQ.toLowerCase(); return Object.keys(base).filter(k => !q || nkHit(k + " " + base[k] + " " + (ov[k] || ""), q)).map(k => ({k, base: base[k], ov: ov[k]})); };
 async function sbTexts() {
   if (!sb.txData) sb.txData = await api("/api/shopbot/texts");
   const d = sb.txData;
@@ -3515,6 +3518,24 @@ window.testProbe = async () => { toast("Asking the probe…"); try { const r = a
 window.installProbe = async e => { e.preventDefault(); const sid = +new FormData(e.target).get("server_id"); if (!await gconfirm("Install the probe on this Iran server? It copies the probe code and Xray (about 65 MB) over SSH and starts three services. Nothing else on the server is touched.")) return false; toast("Installing… (2–5 minutes)"); try { const r = await api(`/api/settings/probe/install?server_id=${sid}`, {method: "POST"}); toast(`✓ Probe on ${r.server} registered as ${r.role}`, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveShopbot = e => { const f = new FormData(e.target); return put(e, "/api/settings/shopbot", {host: f.get("host").trim(), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, dir: f.get("dir").trim(), env: f.get("env").trim(), public_url: f.get("public_url").trim()}, "✓ Shop bot settings saved"); };
 window.saveRepair = e => put(e, "/api/settings/repair", formJson(e, ["after_seconds"], ["auto"]), "✓ Repair settings saved");
+/* CPU on the cores: a busy server whose network work sits on ONE core gets RPS (the packets are steered to all cores); the Doctor does it by itself when this is on */
+const balCard = (bl, srvs) => {
+  if (!bl) return "";
+  const rows = Object.entries(bl.servers || {}).filter(([, v]) => v && v.name).sort((a, b) => (b[1].skewed - a[1].skewed) || (b[1].at - a[1].at));
+  const row = ([id, v]) => `<div class="ap-row bal-row"><b>${esc(v.name)}</b><span class="mut">${v.cores} cores</span><span class="bal-bars" title="${esc((v.busy || []).map((b, i) => "core " + i + ": " + b + " %").join(", "))}">${(v.busy || []).map(b => `<i style="height:${Math.max(6, b)}%" class="${b >= 85 ? "bad" : b >= 60 ? "warn" : ""}"></i>`).join("")}</span>
+      <span class="pill ${v.rps_on ? "ok" : v.skewed ? "err" : ""}">${v.rps_on ? "spread (RPS on)" : v.skewed ? "ONE core" : "balanced"}</span><span class="ap-why" title="${esc(v.why || "")}">${esc(v.why || "")}</span><small class="mut">${v.at ? ago(v.at) + " ago" : ""}</small>
+      ${v.skewed && !v.rps_on ? `<button class="sm pri" onclick="balApply(${id}, true)" title="Steer the network packets to all cores (RPS): at once, no connection is dropped, undone with Undo">⚖ Spread now</button>` : v.rps_on ? `<button class="sm" onclick="balApply(${id}, false)" title="Put the packet steering back as it was">Undo</button>` : ""}<button class="sm" onclick="balScan(${id})" title="Look at this server again (read only)">↻</button></div>`;
+  const ir = (srvs || []).filter(s => s.enabled && s.online !== false);
+  return `<div class="card ap-bal" data-tab="att"><h3>⚖ CPU on the cores <span class="sp"></span><label class="chk" title="On: a busy server whose network work sits on one core gets RPS from the Tunnel Doctor by itself (every 10 minutes, one server at a time, kept only when it helped). Off: only you do it."><input type="checkbox" ${bl.auto ? "checked" : ""} ${bl.read_only ? "disabled" : ""} onchange="balAuto(this)"> The Doctor spreads it by itself</label>
+      <select id="bal-srv" class="sm">${ir.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button class="sm" onclick="balScan(+$('#bal-srv').value)" title="Look at one server: how its cores share the network work (read only)">🔍 Check a server</button></h3>
+    <div class="ap-bal-list">${rows.map(row).join("") || '<div class="mut" style="padding:4px 0">Servers above 55 % CPU are looked at every 10 minutes; none was found yet, or none is busy. A server whose network packets are all processed on one core is shown here, and the Doctor spreads them.</div>'}</div></div>`;
+};
+window.balAuto = async cb => { try { await api("/api/balance", {method: "PUT", body: JSON.stringify({auto: cb.checked})}); toast(cb.checked ? "✓ The Doctor spreads the network work by itself" : "The Doctor leaves it to you", "ok"); } catch (e) { cb.checked = !cb.checked; toast("✕ " + e.message, "bad"); } };
+window.balScan = async id => { if (!id) return; toast("Looking at the server…"); try { const r = await api(`/api/balance/${id}/scan`, {method: "POST"}); toast(`${r.name}: ${r.why}`, r.skewed ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.balApply = async (id, on) => {
+  if (!await gconfirm(on ? "Steer the network packets of this server to all its cores (RPS)? It takes effect at once, no connection is dropped, and the Doctor checks the result and puts it back if the server gets worse." : "Put the packet steering of this server back as it was?", {danger: false})) return;
+  try { const r = await api(`/api/balance/${id}/apply`, {method: "POST", body: JSON.stringify({on})}); showModal("<b>⚖ CPU on the cores</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.action_id, $("#ap-story"), 120).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
 window.saveDoctor = e => { const r = saveRepair(e); setTimeout(refresh, 700); return r; };
 window.saveReport = e => put(e, "/api/settings/report", formJson(e, ["hour", "tz_offset_minutes"], ["enabled"]), "✓ Report settings saved");
 window.previewReport = async () => { const r = await api("/api/report/preview"); const p = $("#report-prev"); p.textContent = r.text; p.classList.remove("hidden"); };

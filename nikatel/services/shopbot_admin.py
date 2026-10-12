@@ -122,10 +122,7 @@ def _event(level: str, text: str, ref: str = "") -> None:
 def pays(state: str = "pending", page: int = 0, q: str = "", limit: int = 0) -> dict:
     # the bot's states: pending = asked, no receipt yet; have_sent = receipt sent, waits for an admin; approved / declined; expired_*
     where = {"confirm": 'p.state = "have_sent"', "pending": 'p.state = "pending"', "approved": 'p.state = "approved"', "declined": 'p.state = "declined"', "all": "1 = 1"}.get(state, 'p.state = "have_sent"')
-    e = re.sub(r"[;'\"`\\%]", "", str(q or ""))
-
-    if e:
-        where += f' AND (p.user_id = "{e}" OR u.name LIKE "%{e}%" OR u.username LIKE "%{e}%" OR p.hash_id LIKE "%{e}%")'
+    where += shopbot.search_clause(str(q or "")[:60], ["p.user_id", "u.name", "u.username", "p.hash_id", "p.price"])
 
     per = max(5, min(100, int(limit))) if limit else PAGE          # the page holds what fits the window: the client says how many rows
     total = int(read(f"SELECT COUNT(*) AS n FROM pays p LEFT JOIN users u ON u.userid = CAST(p.user_id AS CHAR) COLLATE utf8mb4_unicode_ci WHERE {where}")[0]["n"])
@@ -208,10 +205,7 @@ def pay_decline(pay_id: int, reason: str = "") -> dict:
 # ------------------------------------------------------------------ orders (subscriptions sold)
 def orders(q: str = "", page: int = 0, only_active: bool = False, limit: int = 0) -> dict:
     where = "o.status = 1" if only_active else "1 = 1"
-    e = re.sub(r"[;'\"`\\%]", "", str(q or ""))
-
-    if e:
-        where += f' AND (o.userid = "{e}" OR o.remark LIKE "%{e}%" OR u.name LIKE "%{e}%" OR u.username LIKE "%{e}%")'
+    where += shopbot.search_clause(str(q or "")[:60], ["o.userid", "o.remark", "u.name", "u.username", "o.amount"])
 
     per = max(5, min(100, int(limit))) if limit else PAGE          # the page holds what fits the window
     total = int(read(f"SELECT COUNT(*) AS n FROM orders_list o LEFT JOIN users u ON u.userid = o.userid WHERE {where}")[0]["n"])

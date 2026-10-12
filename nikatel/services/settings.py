@@ -24,6 +24,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {}},   # status: the result of the last key test
     # ArvanCloud DNS: the failover of an Iran server points the records that used its address at the replacement (mode: off | approve | auto)
     "arvan": {"api_key": "", "mode": "off", "confirm_minutes": 5, "domains": [], "status": {}},
+    # CPU balance: the Tunnel Doctor turns RPS on for a busy multi-core server whose network work sits on one core (auto), what was found per server
+    "balance": {"auto": True, "servers": {}},
     "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},

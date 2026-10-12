@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import ipaddress
+import re
 
 import httpx
 
@@ -128,6 +129,133 @@ def apply(domain: str, record_id: str, old: str, new: str) -> dict:
 
     log.info("dns %s.%s %s -> %s", cur.get("name"), domain, old, new)
     return {"domain": domain, "id": record_id, "name": cur.get("name"), "old": old, "new": new}
+
+
+TTLS = (120, 180, 300, 600, 900, 1800, 3600, 7200, 18000, 43200, 86400, 172800, 432000)      # the values ArvanCloud accepts
+NAME_RE = re.compile(r"^(@|\*|[a-z0-9_*]([a-z0-9_.*-]{0,120}[a-z0-9_*])?)$")
+
+
+def a_body(name: str, ips: list[str], ttl: int = 120, cloud: bool = False, base: dict | None = None) -> dict:
+    """Pure: the body of an A record (create, or update of `base` = the record as it was read, so every other field stays as it was). ValueError for a wrong name, address or ttl."""
+    n = str(name or "").strip().lower()
+
+    if not NAME_RE.match(n):
+        raise ValueError("the name may only have letters, digits, dots, dashes and underscores (or @ for the domain itself, * for any)")
+
+    clean = []
+
+    for ip in ips:
+        try:
+            clean.append(str(ipaddress.IPv4Address(str(ip).strip())))
+        except ValueError:
+            raise ValueError(f"{str(ip).strip()[:40]!r} is not an IPv4 address")
+
+    if not clean or len(clean) > 10 or len(set(clean)) != len(clean):
+        raise ValueError("give one to ten different IPv4 addresses")
+
+    if int(ttl) not in TTLS:
+        raise ValueError("the TTL must be one of " + ", ".join(str(t) for t in TTLS))
+
+    body = {k: copy.deepcopy(v) for k, v in (base or {}).items() if k in KEEP and v is not None}
+    old_items = [i for i in (body.get("value") or []) if isinstance(i, dict)]
+    body.update({"type": "a", "name": n, "ttl": int(ttl), "cloud": bool(cloud)})
+    body["value"] = [{**next((o for o in old_items if o.get("ip") == ip), {"port": None, "weight": None, "country": ""}), "ip": ip} for ip in clean]
+    body.setdefault("upstream_https", "default")
+    body.setdefault("ip_filter_mode", {"count": "single" if len(clean) == 1 else "multi", "order": "none", "geo_filter": "none"})
+    return body
+
+
+def _check_domain(domain: str) -> str:
+    d = str(domain or "").strip().lower()
+
+    if d not in domains():
+        raise ValueError("this domain is not in the ArvanCloud account")
+
+    return d
+
+
+def get_record(domain: str, record_id: str) -> dict:
+    return _req("GET", f"/domains/{domain}/dns-records/{record_id}").get("data") or {}
+
+
+def create_a(domain: str, name: str, ips: list[str], ttl: int = 120, cloud: bool = False) -> dict:
+    """Make an A record; read it back to be sure. Returns {domain, id, record}."""
+    d = _check_domain(domain)
+    body = a_body(name, ips, ttl, cloud)
+    made = _req("POST", f"/domains/{d}/dns-records", body=body).get("data") or {}
+    rid = str(made.get("id") or "")
+
+    if not rid:
+        raise RuntimeError("ArvanCloud did not say which record it made")
+
+    after = get_record(d, rid)
+
+    if sorted(_ips(after)) != sorted(i["ip"] for i in body["value"]):
+        raise RuntimeError(f"ArvanCloud did not keep the address of {name}.{d}")
+
+    log.info("dns create %s.%s %s", body["name"], d, ",".join(_ips(after)))
+    return {"domain": d, "id": rid, "record": after}
+
+
+def update_a(domain: str, record_id: str, name: str, ips: list[str], ttl: int, cloud: bool) -> dict:
+    """Change an A record (name, addresses, ttl, cloud); everything else stays as it was read; read back. Returns {domain, id, before, after}."""
+    d = _check_domain(domain)
+    before = get_record(d, record_id)
+
+    if str(before.get("type", "")).lower() != "a":
+        raise RuntimeError("only A records are edited here")
+
+    _req("PUT", f"/domains/{d}/dns-records/{record_id}", body=a_body(name, ips, ttl, cloud, base=before))
+    after = get_record(d, record_id)
+
+    if sorted(_ips(after)) != sorted(str(ipaddress.IPv4Address(str(i).strip())) for i in ips):
+        raise RuntimeError(f"ArvanCloud did not keep the new address of {name}.{d}")
+
+    log.info("dns edit %s.%s %s -> %s", before.get("name"), d, ",".join(_ips(before)), ",".join(_ips(after)))
+    return {"domain": d, "id": str(record_id), "before": before, "after": after}
+
+
+def put_back(domain: str, record_id: str, body: dict) -> dict:
+    """Restore: write a record as it was read before (an edit that is undone)."""
+    d = _check_domain(domain)
+    keep = {k: copy.deepcopy(v) for k, v in body.items() if k in KEEP and v is not None}
+    _req("PUT", f"/domains/{d}/dns-records/{record_id}", body=keep)
+    return get_record(d, record_id)
+
+
+def create_from(domain: str, body: dict) -> dict:
+    """Restore: make a record again from what was read before it was deleted."""
+    d = _check_domain(domain)
+    keep = {k: copy.deepcopy(v) for k, v in body.items() if k in KEEP and v is not None}
+    made = _req("POST", f"/domains/{d}/dns-records", body=keep).get("data") or {}
+    rid = str(made.get("id") or "")
+
+    if not rid:
+        raise RuntimeError("ArvanCloud did not say which record it made")
+
+    return {"domain": d, "id": rid, "record": get_record(d, rid)}
+
+
+def delete_record(domain: str, record_id: str) -> dict:
+    """Delete an A record (what it was is returned, so it can be made again); the record must be gone afterwards."""
+    d = _check_domain(domain)
+    before = get_record(d, record_id)
+
+    if str(before.get("type", "")).lower() != "a":
+        raise RuntimeError("only A records are deleted here")
+
+    _req("DELETE", f"/domains/{d}/dns-records/{record_id}")
+
+    try:
+        get_record(d, record_id)
+    except RuntimeError as e:
+        if "404" in str(e):
+            log.info("dns delete %s.%s", before.get("name"), d)
+            return {"domain": d, "id": str(record_id), "before": before}
+
+        raise
+
+    raise RuntimeError(f"ArvanCloud still has {before.get(chr(110)+chr(97)+chr(109)+chr(101))}.{d}")
 
 
 def test() -> dict:

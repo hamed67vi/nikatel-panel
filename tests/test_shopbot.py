@@ -208,3 +208,12 @@ def test_unknown_table_and_settings_validation(client):
     with pytest.raises(ValueError):
         shopbot.table("information_schema.tables")
     assert client.put("/api/settings/shopbot", json={"host": "9.9.9.9", "public_url": "http://plain"}).status_code == 400
+
+def test_the_search_clause_finds_every_word_anywhere():
+    from nikatel.services.shopbot import search_clause
+
+    assert search_clause("", ["u.name"]) == ""
+    c = search_clause("ali reza", ["u.name", "u.username"])
+    assert c.count("LIKE") == 4 and "%ali%" in c and "%reza%" in c and " AND (" in c        # every word, in the columns joined, with and without the separators
+    assert "'" not in c                                                                   # the reviewed scripts accept only double quotes
+    assert "%" not in search_clause("a%b_c;'d", ["u.name"]).replace('"%', "").replace('%"', "")      # the user's own % and _ never become wildcards

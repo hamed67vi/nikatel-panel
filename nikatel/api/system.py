@@ -136,7 +136,7 @@ def logs(lines: int = Query(300, ge=1, le=2000), level: str = "", domain: str = 
 
             ts, lvl, dom, text, rid = m.groups()
 
-            if (want_level and lvl != want_level) or (domain and dom != domain) or (needle and needle not in raw.lower()):
+            if (want_level and lvl != want_level) or (domain and dom != domain) or (needle and not all(w in raw.lower() for w in needle.split())):
                 continue
 
             out.append({"ts": ts, "level": lvl, "domain": dom, "text": text, "rid": rid or ""})
