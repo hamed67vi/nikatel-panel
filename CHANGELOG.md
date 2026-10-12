@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.12
+
+- DNS · IP switch made compact: the four steps are one row of small cards (two rows below 1300 px), the records sit in a box of their own (36 px rows, fixed columns, scrolls inside) with a search box, the cards are smaller.
+
 ## 1.19.11
 
 - Dashboard from Dashboard.dc.html (the rest of it was already in place): the Expand button of the Activity box did nothing (its function was missing) - it now makes the activity the only box, over the whole width, and Collapse brings the three boxes back; the activity loads 60 events first and says "Showing N of M" with a Load more (the events API returns the total); the search box says "Go to a section…".

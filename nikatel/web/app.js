@@ -3721,7 +3721,7 @@ PAGES.dns = async () => {
   let recs = null, err = "";
   if (ok) { try { recs = (await api("/api/arvan/records")).records; } catch (e) { err = e.message; } }
   const opts = cur => irn.map(s => `<option value="${s.id}" ${byIp[cur] && byIp[cur].id === s.id ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("");
-  const row = r => { const mine = r.ips.filter(ip => byIp[ip]); return `<div class="dns-rec ${mine.length ? "mine" : ""}"><b dir="ltr">${esc(r.fqdn)}</b><span class="dns-ips">${r.ips.map(ip => `<span class="dns-ip"><span class="mono">${esc(ip)}</span>${byIp[ip] ? `<small class="pill ${byIp[ip].role === "iran" ? "ok" : ""}">${esc(byIp[ip].name)}</small>` : '<small class="pill">not a server of this panel</small>'}</span>`).join("")}</span>
+  const row = r => { const mine = r.ips.filter(ip => byIp[ip]); return `<div class="dns-rec ${mine.length ? "mine" : ""}" data-q="${esc((r.fqdn + " " + r.ips.map(ip => ip + " " + (byIp[ip] ? byIp[ip].name : "")).join(" ")).toLowerCase())}"><b dir="ltr">${esc(r.fqdn)}</b><span class="dns-ips">${r.ips.map(ip => `<span class="dns-ip"><span class="mono">${esc(ip)}</span>${byIp[ip] ? `<small class="pill ${byIp[ip].role === "iran" ? "ok" : ""}">${esc(byIp[ip].name)}</small>` : '<small class="pill">not a server of this panel</small>'}</span>`).join("")}</span>
       <span class="dns-act"><select class="sm">${opts(r.ips[0])}</select><button type="button" class="sm pri" onclick="dnsPoint('${esc(r.fqdn)}', this.previousElementSibling)" ${irn.length ? "" : "disabled"}>Point</button></span></div>`; };
   const intro = `<div class="card dns-intro"><h3>🌐 IP switch · ArvanCloud DNS</h3><div class="ap-steps">
       <div><b>1 · What it is</b><span>Your configs use domain names; ArvanCloud holds their A records. Pointing a record at another Iran server moves the users there without touching their configs (they reconnect within the record's TTL, about a minute).</span></div>
@@ -3730,9 +3730,10 @@ PAGES.dns = async () => {
       <div><b>4 · A new address</b><span>When you change a server's address in Servers, its tunnels are rebuilt on the new address and the records that pointed at the old one follow.</span></div></div></div>`;
   const list = !av.has_api_key ? `<div class="card"><h3>🔑 Connect ArvanCloud</h3><div class="mut" style="margin-bottom:8px">Save the API key of your ArvanCloud account below; the panel reads the DNS records of your domains and can change the address inside a record.</div>${foForm(av)}</div>`
     : !ok ? `<div class="card"><h3>🔑 ArvanCloud · not connected</h3><div class="err">${esc((av.status || {}).error || "press “Test the key”")}</div>${foForm(av)}</div>`
-    : `<div class="card"><h3>📇 Records <span class="pill">${recs ? recs.length : "…"}</span><span class="sp"></span><small class="mut">${(av.status || {}).domains} domain(s) · the servers of this panel are named</small><button type="button" class="sm" onclick="refresh()">↻</button></h3>
+    : `<div class="card"><h3>📇 Records <span class="pill">${recs ? recs.length : "…"}</span><span class="sp"></span><small class="mut">${(av.status || {}).domains} domain(s) · the servers of this panel are named</small>${searchSeg()}<button type="button" class="sm" onclick="refresh()" title="Read the records again">↻</button></h3>
         <div class="dns-recs">${err ? `<div class="err">${esc(err)}</div>` : (recs || []).map(row).join("") || '<div class="empty">No A record in the account.</div>'}</div></div>`;
   $("#page").innerHTML = `${intro}${list}${fo ? foCard(fo, av, irn) : ""}${dnsCard(fo, av, irn)}`;
+  applyQ();
 };
 window.dnsPoint = async (name, sel) => {
   if (!sel || !sel.value) return;
