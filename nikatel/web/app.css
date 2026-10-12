@@ -3112,3 +3112,14 @@ body #page .dns-dom { display: flex; align-items: center; gap: 8px; padding: 10p
 body #page .dns-dom b { font-size: 12.5px; font-weight: 700; color: #4da3ff; letter-spacing: .02em; } body #page .dns-dom .pill { height: 18px; font-size: 10.5px; }
 html[data-mode="light"] body #page .dns-dom { background: #eef2f9; } html[data-mode="light"] body #page .dns-dom b { color: #0a62c9; }
 body #page .dns-rec > b { padding-left: 8px; font-weight: 600; }
+
+/* the domains as drawers: the header shows the domain, how many records and how many are on this panel; a click opens its records */
+body #page .dns-recs { gap: 4px; }
+body #page .dns-g { border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(255,255,255,.025); overflow: hidden; }
+body #page button.dns-dom { position: static; width: 100%; height: 38px; padding: 0 12px; display: flex; align-items: center; gap: 9px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; font-weight: 600; }
+body #page button.dns-dom::after { display: none; } body #page button.dns-dom:hover { background: rgba(255,255,255,.05); filter: none; box-shadow: none; }
+body #page .dns-chev { width: 8px; height: 8px; border-right: 2px solid #8791a8; border-bottom: 2px solid #8791a8; transform: rotate(-45deg); transition: transform .18s; flex: none; margin: 0 4px 0 2px; }
+body #page .dns-g.open .dns-chev, body #page .dns-g.q-open .dns-chev { transform: rotate(45deg); }
+body #page .dns-body { display: none; padding: 2px 8px 8px; flex-direction: column; gap: 3px; border-top: 1px solid rgba(255,255,255,.06); }
+body #page .dns-g.open .dns-body, body #page .dns-g.q-open .dns-body { display: flex; }
+html[data-mode="light"] body #page .dns-g { border-color: rgba(60,80,130,.16); background: rgba(255,255,255,.55); } html[data-mode="light"] body #page .dns-chev { border-color: #5b667c; }

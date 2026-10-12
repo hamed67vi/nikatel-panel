@@ -112,21 +112,29 @@ _RECORDS: dict = {"at": 0.0, "rows": []}
 
 
 @router.get("/arvan/records")
-def arvan_records():
-    """The A records of the account (read only, kept for five minutes): names to pick from in Create tunnel and on the DNS changes box."""
+def arvan_records(fresh: bool = False):
+    """The A records of the account (read only, kept for one minute; `fresh` reads them again now): names to pick from in Create tunnel and on the DNS page.
+    A read also updates the numbers of the connection card (domains and records), so a record removed in ArvanCloud shows here after the next read."""
     import time as _t
 
-    if _t.time() - _RECORDS["at"] > 300:
+    if fresh or _t.time() - _RECORDS["at"] > 60:
         try:
             rows = []
+            total = 0
+            doms = arvan.domains()
 
-            for d in arvan.domains():
-                for r in arvan.records(d):
+            for d in doms:
+                recs = arvan.records(d)
+                total += len(recs)
+
+                for r in recs:
                     if str(r.get("type", "")).lower() == "a":
                         name = str(r.get("name") or "@")
                         rows.append({"fqdn": d if name == "@" else f"{name}.{d}", "domain": d, "ips": [str(i.get("ip")) for i in (r.get("value") or []) if isinstance(i, dict) and i.get("ip")]})
 
             _RECORDS.update(at=_t.time(), rows=sorted(rows, key=lambda x: x["fqdn"]))
+            conf = st.get("arvan")
+            st.put("arvan", {"status": {**(conf.get("status") or {}), "ok": True, "domains": len(doms), "records": total}})
         except RuntimeError as e:
             raise HTTPException(502, str(e))
 

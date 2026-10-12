@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.19.15
+
+- DNS · IP switch: the records were read once and kept for five minutes, and the card's numbers (domains, DNS records) came only from the last key test - a record removed in ArvanCloud still showed. The records are kept for one minute now, the ↻ button reads them from ArvanCloud again at once, and every read updates the numbers of the card (119 -> 60 in the test).
+- DNS · IP switch: the domains are drawers - one line per domain (the domain, how many records, how many are on this panel), a click opens its records; the open ones are remembered; a search opens the domains that have a match.
+
 ## 1.19.14
 
 - DNS · IP switch: the records of each domain are together under a small header (the domain and how many records), the name shows without the domain part; the tag "not a server of this panel" is now "outside the panel" with an explanation on hover (the address is not one of the servers added to this panel: a CDN, another provider, a server you did not add), and such a record no longer preselects the first Iran server in its list - you choose.
