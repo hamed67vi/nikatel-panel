@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.10
+
+- Day theme, shop bot switches: a switch that is On was grey (the day theme's grey rule beat the green one); it is green now, Off stays grey, and the On word is a darker green.
+
 ## 1.19.9
 
 - The question box (SSH password and every other prompt) redone: a dark field with a lock, an eye to show / hide the password, a Generate button that makes a strong password and shows it, a hint line, buttons at the right; no browser autofill colour. A value the browser puts into a search box by itself never filters the list now (the box must have the focus).

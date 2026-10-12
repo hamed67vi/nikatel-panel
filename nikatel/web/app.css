@@ -3076,3 +3076,8 @@ html[data-mode="light"] body #ask .ask-field input.ask-in { color: #1c1f2a; -web
 html[data-mode="light"] body #ask .ask-eye { color: #5b667c; } html[data-mode="light"] body #ask .ask-eye:hover { background: rgba(60,80,130,.08); color: #1c1f2a; }
 html[data-mode="light"] body #ask .ask-lk { color: #5b667c; } html[data-mode="light"] body #ask .ask-hint { color: #5b667c; } html[data-mode="light"] body #ask .ask-gen { color: #0a62c9; }
 body #ask .ask-lk svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* the day theme: a switch that is On is green, Off is grey (the grey rule of the day theme was stronger than the green of .on) */
+html[data-mode="light"] body #page .sb-tog.on, html[data-mode="light"] body #page .sb-tog.on:hover { background: #30d158; }
+html[data-mode="light"] body #page .sb-tog:not(.on):hover { background: rgba(60,80,130,.38); }
+html[data-mode="light"] body #page .sb-swc em.ok { color: #1f9d45; }
