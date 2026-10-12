@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..auth import current_user
 from ..db import session
@@ -23,5 +23,7 @@ def list_events(limit: int = 100, domain: str | None = None, level: str | None =
         if after:
             q = q.where(Event.id > after)
 
-        return {"ok": True, "events": [{"id": e.id, "ts": e.ts, "level": e.level, "domain": e.domain, "text": e.text, "ref": e.ref}
+        total = db.scalar(select(func.count(Event.id)).where(*(([Event.domain == domain] if domain else []) + ([Event.level == level] if level else []) + ([Event.id > after] if after else [])))) or 0
+
+        return {"ok": True, "total": total, "events": [{"id": e.id, "ts": e.ts, "level": e.level, "domain": e.domain, "text": e.text, "ref": e.ref}
                                        for e in db.scalars(q)]}

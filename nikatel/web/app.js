@@ -352,7 +352,7 @@ function dqItems(q) {   // the sections whose name (or a word of it) starts with
   const starts = n => { n = String(n || "").toLowerCase(); return n.startsWith(q) || n.split(/[-_ .&]+/).some(w => w.startsWith(q)); };
   return dqSections().filter(s => starts(s.name)).slice(0, 8);
 }const dqHtml = q => { const it = dqItems(q); if (!q.trim()) return ""; return it.length ? it.map((x, i) => `<a class="${i === dqSel ? "on" : ""}" onmousedown="dqPick(${i})"><span class="dq-go">›</span>${esc(x.name)}<small>${esc(x.sub)}</small></a>`).join("") : '<div class="none">No section starts with that.</div>'; };
-const dashSearch = () => `<div class="dsearch"><input id="dq" type="search" placeholder="Search a section…" value="${esc(state.dq)}" oninput="dqType(this.value)" onkeydown="dqKey(event)" onblur="setTimeout(()=>{const l=$('#dq-list');if(l)l.innerHTML=''},150)" autocomplete="off" spellcheck="false"><div class="dq-list" id="dq-list">${dqHtml(state.dq)}</div></div>`;
+const dashSearch = () => `<div class="dsearch"><input id="dq" type="search" placeholder="Go to a section…" value="${esc(state.dq)}" oninput="dqType(this.value)" onkeydown="dqKey(event)" onblur="setTimeout(()=>{const l=$('#dq-list');if(l)l.innerHTML=''},150)" autocomplete="off" spellcheck="false"><div class="dq-list" id="dq-list">${dqHtml(state.dq)}</div></div>`;
 window.dqType = v => { state.dq = v; dqSel = 0; $("#dq-list").innerHTML = dqHtml(v); };
 window.dqKey = e => {
   const n = dqItems(state.dq).length;
@@ -377,7 +377,7 @@ const dashKpis = (o, cfg, cUp) => {
 };
 const dashFree = () => `<div class="dash-free"><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div></div>`;
 PAGES.dashboard = async () => {
-  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=300"), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
+  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=" + state.actLimit), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.serversCache = srv;
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
  
@@ -387,7 +387,7 @@ PAGES.dashboard = async () => {
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   $("#page").innerHTML = `
     <div class="dash-top">${dashSearch()}${dashKpis(o, cfg, cUp)}</div>
-    <div class="dash-cols"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
+    <div class="dash-cols ${state.actBig ? "exp" : ""}"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " unstable" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
       ${hrow("VLESS / VMess connectivity", cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
@@ -395,12 +395,16 @@ PAGES.dashboard = async () => {
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
-    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Same height as the health box" : "Taller log box"}">${state.actBig ? "⤡ Shrink" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div></div></div>
-    ${dashFree()}`;
+    <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Back to the three boxes" : "The activity alone, the whole width"}">${state.actBig ? "⤡ Collapse" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div>${actFoot(ev)}</div></div>
+    ${state.actBig ? "" : dashFree()}`;
 };
 /* ---- the Problems box: only what is wrong right now (read from the live state, so a solved problem leaves it by itself), each with its way to fix it */
 /* the raw error of a check in plain words (the full text stays as the tooltip) */
 const plainErr = e => { e = String(e || ""); if (!e) return ""; if (/Could not resolve|resolve host/i.test(e)) return "the domain does not resolve"; if (/SSL|TLS|handshake/i.test(e)) return "TLS handshake failed (blocked, or the TLS settings are wrong)"; if (/timed out|timeout/i.test(e)) return "no answer within 5 seconds"; if (/refused/i.test(e)) return "the port refuses the connection"; if (/reset by peer|closed/i.test(e)) return "the connection is cut while it is being made"; if (/flaps/i.test(e)) return "the link keeps dropping"; const m = e.match(/(\d+(?:\.\d+)?)\s*% (?:packet )?loss/i); if (m) return m[1] + " % of the packets are lost"; if (/not listening/i.test(e)) return "the port is closed on the server"; if (/no data/i.test(e)) return "connects, but no data comes back"; if (/Permission denied|key/i.test(e)) return "the panel can not log in over SSH"; if (/Iran servers lose packets/.test(e)) return e.slice(0, 140); return e.replace(/^curl: \(\d+\) /, "").slice(0, 90); };
+state.actBig = false; state.actLimit = 60;
+window.actBig = () => { state.actBig = !state.actBig; refresh(); };
+window.actMore = () => { state.actLimit = Math.min(500, state.actLimit + 60); refresh(); };
+const actFoot = ev => { const n = actFilter(ev.events).length, tot = ev.total || ev.events.length, more = ev.events.length < tot && state.actLimit < 500; return `<div class="act-foot"><span>Showing ${n} of ${fmt(tot)}${state.actProb || state.actCat !== "all" ? " (filtered)" : ""}</span>${more ? `<button class="sm" onclick="actMore()">Load more</button>` : ""}</div>`; };
 state.pbAll = false; window.pbAll = () => { state.pbAll = !state.pbAll; refresh(); };
 function problemsCard(o, tl, srv, configs, filtered) {
   const rows = [];
@@ -3169,7 +3173,7 @@ window.gwRemove = async () => { if (!await gconfirm("Remove the gateway from thi
 
 /* ---- events */
 PAGES.events = async () => {
-  const ev = await api("/api/events?limit=300");
+  const ev = await api("/api/events?limit=" + state.actLimit);
   $("#page").innerHTML = `<div class="card">${eventsHtml(ev.events)}</div>`;
 };
 

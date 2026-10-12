@@ -3081,3 +3081,10 @@ body #ask .ask-lk svg { fill: none; stroke: currentColor; stroke-width: 1.8; str
 html[data-mode="light"] body #page .sb-tog.on, html[data-mode="light"] body #page .sb-tog.on:hover { background: #30d158; }
 html[data-mode="light"] body #page .sb-tog:not(.on):hover { background: rgba(60,80,130,.38); }
 html[data-mode="light"] body #page .sb-swc em.ok { color: #1f9d45; }
+
+/* ---- Dashboard.dc.html: Expand = the activity alone, over the whole width; the footer of the activity says how many of how many and loads more ---- */
+body #page .dash-cols.exp { grid-template-columns: minmax(0, 1fr); } body #page .dash-cols.exp > .card:not(.act) { display: none; }
+body #page .dash-cols > .card.act.big { height: calc(100vh - 190px) !important; }
+body #page .act-foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 6px 2px; font-size: 12.5px; color: #8791a8; border-top: 1px solid rgba(255,255,255,.06); font-variant-numeric: tabular-nums; }
+body #page .act-foot button { height: 28px; padding: 0 14px; font-size: 12.5px; font-weight: 500; }
+html[data-mode="light"] body #page .act-foot { color: #5b667c; border-color: rgba(60,80,130,.14); }

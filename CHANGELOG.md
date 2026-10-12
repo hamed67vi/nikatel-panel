@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.11
+
+- Dashboard from Dashboard.dc.html (the rest of it was already in place): the Expand button of the Activity box did nothing (its function was missing) - it now makes the activity the only box, over the whole width, and Collapse brings the three boxes back; the activity loads 60 events first and says "Showing N of M" with a Load more (the events API returns the total); the search box says "Go to a section…".
+
 ## 1.19.10
 
 - Day theme, shop bot switches: a switch that is On was grey (the day theme's grey rule beat the green one); it is green now, Off stays grey, and the On word is a darker green.

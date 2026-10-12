@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 
 from nikatel.config import get_settings
@@ -99,3 +99,14 @@ def test_gre_check_all_counts_every_server_and_survives_a_dead_one(client, monke
     assert j["total"] == 3 and j["ok"] == 1 and j["no_gre"] == 0
     assert any("a2" in b for b in j["bad"]) and any("a3" in b and "check failed" in b for b in j["bad"])
     assert client.post("/api/servers/gre-check-all?role=foreign").json()["total"] == 1
+
+def test_events_say_how_many_there_are_in_all(client):
+    from nikatel.db import session
+    from nikatel.services.events import emit
+
+    with session() as db:
+        for i in range(5):
+            emit(db, "info", "servers", f"sample {i}", "x")
+
+    r = client.get("/api/events?limit=2&domain=servers").json()
+    assert len(r["events"]) == 2 and r["total"] >= 5

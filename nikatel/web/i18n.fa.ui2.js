@@ -245,4 +245,5 @@ I18N.add({
 "the AI assistant needs a license (Settings → About → License)": "دستیار هوش مصنوعی به لایسنس نیاز دارد (تنظیمات ← درباره ← لایسنس)", "the shop bot pages need a license (Settings → About → License)": "صفحه‌های بات فروش به لایسنس نیاز دارند (تنظیمات ← درباره ← لایسنس)",
 "no ArvanCloud key is saved (Tunnels → DNS · IP switch)": "کلید آروان‌کلودی ذخیره نشده است (تانل‌ها ← DNS · تعویض IP)",
 "Show the password": "نمایش رمز", "Hide the password": "پنهان کردن رمز", "Show or hide the password": "نمایش یا پنهان کردن رمز", "Generate": "ساخت رمز", "Make a strong password and show it": "یک رمز قوی بساز و نشان بده", "At least 8 characters. Empty = the panel makes a strong one and shows it once.": "حداقل ۸ کاراکتر. خالی = پنل یک رمز قوی می‌سازد و یک بار نشان می‌دهد.",
+"Go to a section…": "رفتن به یک بخش…", "⤡ Collapse": "⤡ جمع کردن", "Back to the three boxes": "برگشت به سه کادر", "The activity alone, the whole width": "فقط فعالیت، تمام عرض", "Showing {} of {}": "نمایش {} از {}", "Showing {} of {} (filtered)": "نمایش {} از {} (فیلتر شده)", "Load more": "بیشتر",
 });
