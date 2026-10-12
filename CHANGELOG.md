@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.7
+
+- Windows and question boxes no longer blur what is behind them: the list behind a window could disappear from the picture while a window or a question (SSH password...) was open - on the operator's browser; it could not be reproduced here (the page's data and layout stay intact), so the blur - the one thing that stacks layers the browser may drop - is removed. The dim layer stays; the window is solid.
+
 ## 1.19.6
 
 - The real cause of the list "vanishing" behind a question box (SSH password...): the window under it already dims the page to ~28 %, the question's own dim layer dimmed it again to ~9 % - the list was there but unreadable. A question over a window now adds almost no dimming.

@@ -3044,3 +3044,10 @@ html[data-mode="light"] body #ask .modal.ask-box { background: #ffffff !importan
 /* the question box over a window: the window already dims the page (72 %), a second dim layer left the list at ~9 % - it looked gone. Over a window the question adds almost no dimming (the window under it is just kept visible). */
 body:has(#modal .overlay) #ask .overlay { background: rgba(4,6,18,.18) !important; }
 html[data-mode="light"] body:has(#modal .overlay) #ask .overlay { background: rgba(60,70,100,.12) !important; }
+
+/* ---- windows without backdrop blur: blurring the page behind a window (and a window behind a question) made some browsers/GPUs drop the list behind it from the picture while a window or a question was open. The dim layer is enough; the window is solid. ---- */
+body .overlay, body .overlay .modal, body #ask .overlay, body #ask .modal.ask-box { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body #modal .overlay { background: rgba(4,6,18,.62) !important; }
+body #modal .modal:not(.ask-box) { background: #0f1626 !important; }
+html[data-mode="light"] body #modal .overlay { background: rgba(60,70,100,.40) !important; }
+html[data-mode="light"] body #modal .modal:not(.ask-box) { background: #f4f6fb !important; }
