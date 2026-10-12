@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.6
+
+- The real cause of the list "vanishing" behind a question box (SSH password...): the window under it already dims the page to ~28 %, the question's own dim layer dimmed it again to ~9 % - the list was there but unreadable. A question over a window now adds almost no dimming.
+
 ## 1.19.5
 
 - Servers: pressing SSH password (or any question box) over a server window made the server list behind it vanish from the picture - three blurred layers stacked (page, window, question) and the browser dropped the one behind. While a question is open the layers below stop blurring and the question itself is a plain dim layer; nothing is redrawn.

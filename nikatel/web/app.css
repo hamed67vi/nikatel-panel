@@ -3040,3 +3040,7 @@ body #ask .overlay { background: rgba(4,6,18,.66) !important; }
 body #ask .modal.ask-box { background: #141b2e !important; }
 body:has(#ask .overlay) #modal .overlay, body:has(#ask .overlay) #modal .modal { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 html[data-mode="light"] body #ask .modal.ask-box { background: #ffffff !important; } html[data-mode="light"] body #ask .overlay { background: rgba(60,70,100,.35) !important; }
+
+/* the question box over a window: the window already dims the page (72 %), a second dim layer left the list at ~9 % - it looked gone. Over a window the question adds almost no dimming (the window under it is just kept visible). */
+body:has(#modal .overlay) #ask .overlay { background: rgba(4,6,18,.18) !important; }
+html[data-mode="light"] body:has(#modal .overlay) #ask .overlay { background: rgba(60,70,100,.12) !important; }
