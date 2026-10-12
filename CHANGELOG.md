@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.30.0
+
+**M10 #64 - reading a problem.** Every warning and error the panel writes is now classified as the panel's own, a service on your server, or outside the panel (the route, the other side, a provider), with one plain sentence on what to do (`services/diagnosis.py`, pure rules, tested with the sentences the panel really writes).
+
+- **Logs page:** a summary of the last 24 hours on top (counts by where the problem is, the commonest sentences with their hint), a filter by origin, and the origin on every warning line. API: `GET /api/logs?origin=` and `GET /api/logs/summary?hours=`.
+- **Actions** return a `summary` (problem / what was tried / result / origin / hint). The History box reads as a story: *Working on it* and *Finished* lists, the Analyst is a tab of the Tunnel Doctor box, an entry that never finished and is older than an hour is shown as "Stopped early - the panel was restarted".
+- **UI:** a small x closes the message at the top of a window; windows keep their size when the tab changes (no jump on Console / Back); the server window texts are uniform; the add-server name check accepts dots and dashes like the API.
+
 ## 1.29.0
 
 **M10 #63 - test depth.** CI measures the coverage and shows it in the job summary; `tests/test_upgrade.py` makes the database of the previous release (`git archive <tag>`) and opens it with the current code, so a migration that only works on a fresh database fails in CI, not on the panel server; a new CI job installs the panel on a clean runner with `install.sh` from the checkout, waits for `/api/health`, and runs the installer again as an upgrade. The two small leftovers of the UI round: the "Where" hint wraps instead of being cut, and the install story keeps one height so the window does not jump while lines arrive.

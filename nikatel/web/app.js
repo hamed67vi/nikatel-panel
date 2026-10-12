@@ -48,7 +48,12 @@ function toast(text, cls) {
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
   clearTimeout(toastT); toastT = setTimeout(() => bar.classList.remove("live"), 7000);
   const mb = $("#modal .modal-body");          // a window that is open shows the outcome at its top: nobody can read the bar behind it
-  if (mb) { let m = mb.querySelector(".modal-msg"); if (!m) { m = document.createElement("div"); mb.prepend(m); } m.className = "modal-msg " + (cls || "info"); m.dataset.t = Date.now(); m.innerHTML = `<span>${esc(String(text))}</span><time>${new Date().toLocaleTimeString(undefined, {hour12: false})}</time>`; }
+  if (mb) {      // laid over the top of the window (not in its flow): the window never grows or shrinks because a message came; a small × removes it, a good one goes by itself
+    let w = mb.querySelector(".modal-msg-wrap"); if (!w) { w = document.createElement("div"); w.className = "modal-msg-wrap"; w.innerHTML = '<div class="modal-msg"></div>'; mb.prepend(w); }
+    const m = w.firstElementChild, stamp = String(Date.now()); w.dataset.t = stamp;
+    m.className = "modal-msg " + (cls || "info"); m.innerHTML = `<span>${esc(String(text))}</span><time>${new Date().toLocaleTimeString(undefined, {hour12: false})}</time><button type="button" class="mm-x" title="Dismiss" aria-label="Dismiss" onclick="this.closest('.modal-msg-wrap').remove()">×</button>`;
+    if (cls !== "bad") setTimeout(() => { if (w.isConnected && w.dataset.t === stamp) w.remove(); }, 12000);
+  }
 }
 window.sbHistory = () => showModal("<b>Messages</b>", MSGS.length ? MSGS.map(m => `<div class="msg-row ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">No message yet.</div>');
 
@@ -122,7 +127,7 @@ $("#logout").onclick = async () => {
 };
 
 /* ---- router */
-const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: ""}};
+const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: "", origin: ""}};
 const PAGES = {};
 const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
 const INFO = {
@@ -298,7 +303,7 @@ function showModal(title, body, cls = "", acts = "") {
   const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button>`;
   const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
   if (cur && mb && cur.className.trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
-    const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg"); cur.style.minHeight = cur.offsetHeight + "px";
+    const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg-wrap"); cur.style.minHeight = cur.offsetHeight + "px";
     cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;
     if (msg && Date.now() - (+msg.dataset.t || 0) < 20000) mb.prepend(msg);      // the outcome of what was just done stays readable after the redraw
     return;
@@ -476,7 +481,7 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
   return `<form class="frm srv-form2" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
     <div class="sgrid two srv-two">
       <div class="sbox"><h5><i>🖥</i>Server</h5>
-        ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value="${esc(s ? s.name : "")}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)">`)}
+        ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" value="${esc(s ? s.name : "")}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)">`)}
         ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
         <label class="kv2 kf bf"><span>Where</span><input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></label>
         <label class="kv2 kf bf"><span>Checked</span><span class="chkline"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> by the panel</span></label></div>
@@ -671,7 +676,8 @@ window.copyText = t => { const done = () => toast("✓ Copied " + t, "ok"); if (
 window.wtab = k => {
   state.wtab = k;
   const body = $("#modal .modal-body");
-  if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { body.innerHTML = `<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
+  if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { const mdl = body.closest(".modal"); if (mdl) { const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // the window never gets shorter while its tabs change, so Console → Back does not jump
+    body.innerHTML =`<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
   if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); loadTunnelCharts(t.id); return; } }
   if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; cfLoadChart(c.id); return; } }
   refresh();
@@ -756,6 +762,9 @@ window.mrange = h => { state.mrange = h; localStorage.setItem("nk.mrange", h); c
 async function loadServerCharts(id) {
   const box = document.getElementById("srv-charts-" + id);
   if (!box) return;
+  state.chartCache = state.chartCache || {};
+  const cached = state.chartCache[id + ":" + state.mrange];
+  if (cached) { box.className = "mon"; box.innerHTML = cached; }          // what was drawn last time is back at once, so the window keeps its height; the fresh data replaces it in place
   const d = await api(`/api/servers/${id}/samples?hours=${state.mrange}`);
   const pk = document.getElementById("srv-peaks-" + id); if (pk) pk.remove();
   const ts = d.samples.map(r => r[0]), col = n => d.samples.map(r => r[d.columns.indexOf(n)]), series = n => ts.map((t, i) => [t, col(n)[i]]);
@@ -764,8 +773,9 @@ async function loadServerCharts(id) {
   const f1 = v => v == null ? "—" : (Math.round(v * 10) / 10), pc = v => f1(v) + "%";
   box.className = "mon";
   box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${d.samples.length} samples · one every 2 minutes · hover a chart for exact values</small></div>
-    <div class="mtiles">${mtile("CPU", pc(avgOf(cpu)), "peak " + pc(cpu.length ? Math.max(...cpu) : null), avgOf(cpu) > 85 ? "bad" : "")}${mtile("RAM", pc(avgOf(ram)), "peak " + pc(ram.length ? Math.max(...ram) : null), avgOf(ram) > 90 ? "bad" : "")}${mtile("Disk", pc(disk.length ? disk[disk.length - 1] : null), "now", disk.length && disk[disk.length - 1] > 85 ? "bad" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg · peak ↓" + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}${mtile("Connections", conn.length ? Math.round(avgOf(conn)) : "—", "peak " + (conn.length ? Math.max(...conn) : "—"))}</div>
+    <div class="mtiles">${mtile("CPU", pc(avgOf(cpu)), "peak " + pc(cpu.length ? Math.max(...cpu) : null), avgOf(cpu) > 85 ? "bad" : "")}${mtile("RAM", pc(avgOf(ram)), "peak " + pc(ram.length ? Math.max(...ram) : null), avgOf(ram) > 90 ? "bad" : "")}${mtile("Disk", pc(disk.length ? disk[disk.length - 1] : null), "now", disk.length && disk[disk.length - 1] > 85 ? "bad" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}${mtile("Connections", conn.length ? Math.round(avgOf(conn)) : "—", "peak " + (conn.length ? Math.max(...conn) : "—"))}</div>
     <div class="mgrid">${chartCard("CPU", series("cpu"), {col: "blue", ic: SI.cpu, max: 100, unit: "%", warn: 70, bad: 85, fmt: v => Math.round(v)})}${chartCard("RAM", series("ram"), {col: "purple", ic: SI.ram, max: 100, unit: "%", warn: 80, bad: 90, fmt: v => Math.round(v)})}${chartCard("Load (1 min)", series("load1"), {col: "blue", ic: SI.pulse, fmt: v => (Math.round(v * 100) / 100)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}${chartCard("Connections", series("conn"), {col: "cyan", ic: SI.users, fmt: v => Math.round(v)})}</div>`;
+  state.chartCache[id + ":" + state.mrange] = box.innerHTML;
 }
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT;
@@ -1130,7 +1140,7 @@ async function loadTunnelCharts(id) {
   const down = out.reduce((a, o) => a + (o.to - o.from), 0), f1 = v => v == null ? "—" : (Math.round(v * 10) / 10);
   box.className = "mon";
   box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
-    <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length} checks up`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) + " in total" : "none in this range", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) + " · worst " + Math.round(Math.max(...rtt)) + " ms" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg · peak ↓" + f1(rx.length ? Math.max(...rx) : null) + " ↑ " + f1(tx.length ? Math.max(...tx) : null))}</div>
+    <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length} checks up`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) + " in total" : "none in this range", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) + " · worst " + Math.round(Math.max(...rtt)) + " ms" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}</div>
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
     <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {col: "blue", ic: SI.pulse, unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}
       <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
@@ -1388,6 +1398,16 @@ const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack ·
 const apName = k => AP_LABEL[k] || k;
 /* the history lists only PROBLEMS and how they ended: a look that found nothing, a dry run and a tunnel that needed nothing are not shown */
 const histRows = list => list.filter(a => !a.dry_run && ["fix", "autopilot", "balance", "underuse"].includes(a.action) && !/nothing to do|nothing to repair|is healthy|only watching|looks fine|nothing to look/i.test((a.story || []).slice(-2).join(" ")));
+/* the two lists of the Tunnel Doctor, written for someone who is not an expert: what is being fixed now, and what was done with the result */
+const TK_ORIGIN = {outside: "Outside the panel", server: "A service on your server", panel: "The panel itself", unknown: ""};
+const tkSimple = a => { const s = a.summary || {}, ok = a.ok === true, stale = a.ok == null && !a.done && Date.now() / 1000 - a.ts > 3600, run = a.ok == null && !stale;
+  const did = (s.tried || []).length ? s.tried.map(esc).join(" → ") : (ok ? "The Doctor fixed it by itself." : "Nothing more could be done from the panel.");
+  const why = stale ? `<div class="tk-line tk-why"><span class="tk-or o-panel">The panel was restarted</span><span>This job was cut short when the panel restarted, so it never finished. Look at the tunnel again: if it is still down the Doctor starts a new repair by itself.</span></div>` : !ok && !run && s.hint ? `<div class="tk-line tk-why">${s.origin && s.origin !== "unknown" ? `<span class="tk-or o-${esc(s.origin)}">${esc(TK_ORIGIN[s.origin])}</span>` : ""}<span>${esc(s.hint)}</span></div>` : "";
+  return `<div class="tk ${ok ? "ok" : run ? "run" : "bad"}"><div class="tk-head"><span class="tk-res">${ok ? "✓ Fixed" : run ? "… Working on it" : stale ? "✕ Stopped early" : "✕ Could not fix"}</span><b>${esc(a.ref)}</b><time title="${when(a.ts)}">${ago(a.ts)} ago</time></div>
+    ${s.problem ? `<div class="tk-line"><em>Problem</em><span>${esc(s.problem)}</span></div>` : ""}<div class="tk-line"><em>What was done</em><span>${did}</span></div>${why}
+    <a class="mut tk-more" onclick="this.nextElementSibling.classList.toggle('hidden')">full story</a><div class="fix hidden">${(a.story || []).map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></div>`; };
+const tkWorking = w => `<div class="tk run"><div class="tk-head"><span class="tk-res">… Fixing it now</span><b>${esc(w.name)}</b></div><div class="tk-line"><em>Right now</em><span>${esc(w.line || (w.mode === "look" ? "looking at it" : "repairing"))}</span></div></div>`;
+window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "ana"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); if (k === "ana") anaLoad(); };
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
@@ -1397,6 +1417,9 @@ PAGES.actions = async () => {
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(stName(t.state))}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : ((outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`); })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span>${(() => { const off = outage && outage.by_tunnel && outage.by_tunnel[t.name], loss = (t.detail || {}).loss_pct || 0, why = off ? `A server of this tunnel is off (${off.join(", ")}): nothing is done until it is back.` : kind === "lossy" ? `${Math.round(loss)} % of the data is lost on this link.` : t.state === "down" ? "The tunnel does not answer." : "Part of the link works, part does not."; return `<span class="ap-why ${off ? "mut" : ""}" title="${esc(why)}">${esc(why)}</span>` + (off || t.last_error || kind === "lossy" ? `<a class="ap-detail" onclick="apDetail(${t.id})" title="The full reason and the log">Detail</a>` : ""); })()}${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
+  let apTab = "now"; try { const v = localStorage.getItem("nk.aptab"); apTab = ["done", "ana"].includes(v) ? v : "now"; } catch (e) { /* private window */ }
+  const working = (outage && outage.working) || [], inList = w => bad.concat(lossy).some(t => t.name === w.name), workingRows = working.filter(w => !inList(w)).map(tkWorking).join(""), nowN = bad.length + lossy.length + working.filter(w => !inList(w)).length;
+  const doneList = histRows(d.actions), doneN = doneList.length, doneRows = doneList.map(tkSimple).join("");
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
   const work = outage && (outage.working || []).length ? `<div class="nw-box work-box"><b class="nw-title">🔧 Working now</b>${outage.working.map(w => `<div class="nw-row"><span class="wrench">🔧</span><b>${esc(w.name)}</b><span class="mut">${w.mode === "look" ? "looking at it" : "repairing"}</span><span class="work-line" title="${esc(w.line)}">${esc(w.line)}</span><a class="ap-detail" onclick="apLive(${(state.tunnelsCache || []).find(t => t.name === w.name)?.id || 0}, '${esc(w.name)}')" title="The full live log">Detail</a></div>`).join("")}</div>` : "";
   const mineOf = nm => tl.filter(t => t.iran_name === nm || t.foreign_name === nm).map(t => t.name);
@@ -1422,17 +1445,16 @@ PAGES.actions = async () => {
       <button class="pri" type="submit" ${d.read_only ? "disabled" : ""}>Save</button><span class="sp"></span>
       ${bad.length && !rp.auto ? `<button type="button" class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button type="button" class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></form>
     ${balCard(bl, srvs)}
-    <div class="grid2 ap-two ap-pair2" data-tab="att"><div class="card"><h3>🔧 Working now</h3>
-      <div class="ap-att">${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
-      ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Servers.</div>'}
-      </div>
-      <small class="mut ap-note">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto}. At most ${rp.max_per_hour || "a few"} restarts per tunnel per hour; never while a server is unreachable.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
-    <div class="card ap-histcard"><h3>🗒 History <span class="sp"></span><small class="mut">only the problems, and whether they were solved</small></h3><div class="ap-hist">${histRows(d.actions).map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small class="hist-res ${a.ok === true ? "ok" : a.ok === false ? "bad" : "run"}">${a.ok === true ? "solved" : a.ok === false ? "not solved" : "working"}</small>
-      <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No problem so far: nothing needed repairing.</div>'}</div></div></div>
+    <div class="card ap-tasks" data-tab="att">
+      <div class="ap-ttabs"><button data-k="now" class="${apTab === "now" ? "on" : ""}" onclick="apTasksTab('now')">🔧 In progress${nowN ? ` <i class="cnt">${nowN}</i>` : ""}</button><button data-k="done" class="${apTab === "done" ? "on" : ""}" onclick="apTasksTab('done')">✔ Finished${doneN ? ` <i class="cnt">${doneN}</i>` : ""}</button><button data-k="ana" class="${apTab === "ana" ? "on" : ""}" onclick="apTasksTab('ana')" title="What the history says about the tunnels and the servers">📊 Analyst</button></div>
+      <div class="ap-tbody ${apTab === "now" ? "" : "hidden"}" id="ap-t-now"><div class="ap-att">${workingRows}${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
+        ${nowN ? "" : '<div class="tk-empty"><b>✓ Nothing to fix right now.</b><span>Every tunnel works. When one stops working it appears here, and the Doctor starts fixing it by itself. What it did, and whether it worked, moves to “Finished”.</span></div>'}</div>
+        <small class="mut ap-note">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto}. At most ${rp.max_per_hour || "a few"} restarts per tunnel per hour; never while a server is unreachable.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
+      <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || '<div class="tk-empty"><b>Nothing to show yet.</b><span>Every problem the Doctor looked at shows here with the result: fixed, or could not be fixed and why.</span></div>'}</div></div>
+      <div class="ap-tbody ${apTab === "ana" ? "" : "hidden"}" id="ap-t-ana"><div id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div></div>
+    </div>
     `;
-  $("#page").insertAdjacentHTML("beforeend", '<div data-tab="ana" class="ana" id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div>');
-  const tab = pageTabs("actions", [["att", "🔧 Working now"], ["ana", "📊 Analyst"]], "att", {att: n});
-  if (tab === "ana") anaLoad();
+  if (apTab === "ana") anaLoad();          // the Analyst is the third list of the Doctor's box (In progress · Finished · Analyst)
   apFit(fo);
 };
 /* the Tunnel Doctor page fits the window: its height is what is left under the top, the log and the history scroll inside their own boxes */
@@ -3237,13 +3259,19 @@ window.jobEnabled = async (n, on) => { try { await api(`/api/jobs/${n}/enabled?e
 /* ---- logs */
 PAGES.logs = async () => {
   const L = state.logs;
-  const d = await api(`/api/logs?lines=400&level=${encodeURIComponent(L.level)}&domain=${encodeURIComponent(L.domain)}&q=${encodeURIComponent(L.q)}`);
-  const domains = ["", "http", "auth", "servers", "tunnels", "ssh", "jobs", "db", "events", "import"];
-  $("#page").innerHTML = `<div class="toolbar">
+  const [d, sm] = await Promise.all([api(`/api/logs?lines=400&level=${encodeURIComponent(L.level)}&domain=${encodeURIComponent(L.domain)}&q=${encodeURIComponent(L.q)}&origin=${encodeURIComponent(L.origin || "")}`), api("/api/logs/summary?hours=24").catch(() => null)]);
+  const domains = ["", "http", "auth", "servers", "tunnels", "ssh", "jobs", "db", "events", "import", "configs", "alerts", "underuse", "analyst", "housekeeping"];
+  const OR = {panel: "The panel itself", server: "A service on your server", outside: "Outside the panel", unknown: "Not determined"};
+  const orChip = o => o ? `<span class="tk-or o-${esc(o)}" title="${esc(OR[o] || "")}">${esc(({panel: "panel", server: "your server", outside: "outside", unknown: "?"})[o] || o)}</span>` : "";
+  const sum = sm && sm.total ? `<div class="card log-sum"><h3>What went wrong in the last 24 hours <span class="sp"></span><small class="mut">${sm.total} warning${sm.total === 1 ? "" : "s"} and errors, grouped by where the problem is</small></h3>
+      <div class="ls-chips">${["panel", "server", "outside", "unknown"].map(o => `<button type="button" class="ls-chip o-${o} ${L.origin === o ? "on" : ""}" onclick="setLog('origin', '${L.origin === o ? "" : o}')"><b>${sm.by_origin[o] || 0}</b><span>${OR[o]}</span></button>`).join("")}</div>
+      <div class="ls-list">${sm.groups.slice(0, 6).map(g => `<div class="ls-row"><span class="ls-n">${g.count}×</span>${orChip(g.origin)}<span class="ls-t" title="${esc(g.sample)}">${esc(g.sample)}</span><a class="mut" onclick="state.logs.q = ${esc(JSON.stringify(g.sample.slice(0, 40)))}; refresh()">show</a><small class="mut ls-h">${esc(g.hint)}</small></div>`).join("")}</div></div>` : `<div class="card log-sum"><h3>✓ Nothing went wrong in the last 24 hours</h3></div>`;
+  $("#page").innerHTML = `${sum}<div class="toolbar">
       <select onchange="setLog('level', this.value)">${["", "INFO", "WARNING", "ERROR", "DEBUG"].map(l => `<option value="${l}" ${L.level === l ? "selected" : ""}>${l || "all levels"}</option>`).join("")}</select>
       <select onchange="setLog('domain', this.value)">${domains.map(x => `<option value="${x}" ${L.domain === x ? "selected" : ""}>${x || "all domains"}</option>`).join("")}</select>
-      <input type="search" id="lq" placeholder="text or rid…" value="${esc(L.q)}" oninput="setLogQ(this.value)"><span class="sp"></span><span class="mut">${d.lines.length} lines</span></div>
-    <div class="card log">${d.lines.map(l => `<div class="ll ${l.level}"><time>${esc(l.ts.slice(11, 19))}</time><b>${esc(l.level)}</b><i>${esc(l.domain)}</i><span>${esc(l.text)}</span><small>${esc(l.rid)}</small></div>`).join("") || '<div class="empty">No matching log line.</div>'}</div>`;
+      <select onchange="setLog('origin', this.value)" title="Where the problem is">${[["", "everywhere"], ["panel", "the panel itself"], ["server", "a service on your server"], ["outside", "outside the panel"], ["unknown", "not determined"]].map(([v, l]) => `<option value="${v}" ${(L.origin || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <input type="search" id="lq" placeholder="text or request id…" value="${esc(L.q)}" oninput="setLogQ(this.value)"><span class="sp"></span><span class="mut">${d.lines.length} lines</span></div>
+    <div class="card log">${d.lines.map(l => `<div class="ll ${l.level}"><time>${esc(l.ts.slice(11, 19))}</time><b>${esc(l.level)}</b><i>${esc(l.domain)}</i><span>${esc(l.text)}</span>${orChip(l.origin)}<small>${esc(l.rid)}</small></div>`).join("") || '<div class="empty">No matching log line.</div>'}</div>`;
   const q = $("#lq"); if (q && L.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 };
 window.setLog = (k, v) => { state.logs[k] = v; refresh(); };

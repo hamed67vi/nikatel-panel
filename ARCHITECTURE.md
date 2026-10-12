@@ -62,6 +62,7 @@ nikatel/
     balance.py       CPU on the cores: a busy server whose packets sit on one core gets RPS (probe / judge pure, apply with before-after and rollback)
     analyst.py       what the history says: tunnel profiles (availability, outages, latency, weak hours), outages that come together, what fixes what,
                      servers at the peak (idle / redundant); hints the smart repair asks before it climbs (RepairCase rows)
+    diagnosis.py     reads a failure: is it the panel, a service on your server, or outside it? (pure rules; a repair's plain summary and the log summary use it)
     underuse.py      a server that carries little is looked at (net_health probe): what the kernel settings can fix is fixed (sysctl_tune, measured,
                      rolled back when worse); a fault of the provider's network is reported once
     housekeeping.py  the growing tables trimmed (events 60 days, finished stories 90 days), the write-ahead log folded back

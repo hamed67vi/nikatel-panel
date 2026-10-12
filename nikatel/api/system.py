@@ -114,8 +114,8 @@ def update_now():
 
 
 @router.get("/logs", dependencies=[Depends(current_user)])
-def logs(lines: int = Query(300, ge=1, le=2000), level: str = "", domain: str = "", q: str = ""):
-    """The tail of the panel's own log, newest first, filtered. Lines are already secret-masked."""
+def logs(lines: int = Query(300, ge=1, le=2000), level: str = "", domain: str = "", q: str = "", origin: str = Query("", pattern="^(panel|server|outside|unknown)?$")):
+    """The tail of the panel's own log, newest first, filtered (level, domain, text, and `origin`: panel / server / outside). Each warning or error carries its origin. Lines are already secret-masked."""
     path = get_settings().log_dir / "nikatel.log"
 
     if not path.exists():
@@ -142,4 +142,39 @@ def logs(lines: int = Query(300, ge=1, le=2000), level: str = "", domain: str = 
 
             out.append({"ts": ts, "level": lvl, "domain": dom, "text": text, "rid": rid or ""})
 
-    return {"ok": True, "lines": list(reversed(out))}
+    from ..services.diagnosis import classify
+
+    rows = list(reversed(out))
+
+    for r in rows:
+        r["origin"] = classify(r["text"])["origin"] if r["level"] in ("WARNING", "ERROR") else ""
+
+    if origin:
+        rows = [r for r in rows if r["origin"] == origin]
+
+    return {"ok": True, "lines": rows}
+
+
+@router.get("/logs/summary", dependencies=[Depends(current_user)])
+def logs_summary(hours: int = Query(24, ge=1, le=168)):
+    """What went wrong in the last hours, grouped: how many findings are the panel's own, a service on your server, or outside the panel, with the commonest sentences and what each means."""
+    from datetime import datetime, timedelta, timezone
+
+    from ..services.diagnosis import group_findings
+
+    path = get_settings().log_dir / "nikatel.log"
+
+    if not path.exists():
+        return {"ok": True, "hours": hours, "by_origin": {}, "groups": [], "total": 0}
+
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    keep: deque = deque(maxlen=30000)
+
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            m = _LOG_LINE.match(raw.rstrip("\n"))
+
+            if m and m.group(2) in ("WARNING", "ERROR") and m.group(1) >= since:
+                keep.append({"ts": m.group(1), "level": m.group(2), "domain": m.group(3), "text": m.group(4)})
+
+    return {"ok": True, "hours": hours, **group_findings(list(keep))}

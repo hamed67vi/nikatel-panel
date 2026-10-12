@@ -3292,3 +3292,62 @@ tr.sev-blue .srv-ic { color: var(--acc); filter: drop-shadow(0 0 5px color-mix(i
 
 .srv-form2 .kf > .srv-where { flex: 1 1 auto; width: auto !important; min-width: 0; }
 #modal input[type=search] { padding: 0 10px 0 36px; height: 32px; border-radius: 12px; color: var(--text-in); }
+
+/* the Tunnel Doctor's one box with two lists: In progress / Finished - plain words, big result */
+.ap-tasks { padding: 8px 12px 12px; }
+.ap-ttabs { display: flex; gap: 8px; margin: 0 0 10px; padding: 3px; width: max-content; border-radius: 14px; background: rgba(0,0,0,.18); border: 1px solid var(--line); }
+.ap-ttabs button { height: 32px; padding: 0 16px; border-radius: 11px; border: 0; background: transparent; font-size: 13px; font-weight: 700; color: var(--mut); cursor: pointer; }
+.ap-ttabs button.on { background: var(--grad); color: #fff; box-shadow: 0 4px 14px rgba(124,131,255,.35); } .ap-ttabs .cnt { font-style: normal; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: rgba(255,255,255,.18); font-size: 11px; }
+.ap-tasks .ap-att, .ap-tasks .ap-hist { display: grid; gap: 8px; align-content: start; max-height: calc(100vh - 360px); min-height: 200px; overflow: auto; padding-right: 2px; }
+.tk { padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,.035); border-left-width: 4px; }
+.tk.ok { border-left-color: var(--ok); } .tk.bad { border-left-color: var(--bad); } .tk.run { border-left-color: var(--warn); }
+.tk-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; } .tk-head b { font-size: 14px; } .tk-head time { margin-left: auto; font-size: 11.5px; color: var(--mut); }
+.tk-res { font-weight: 800; font-size: 13px; } .tk.ok .tk-res { color: var(--ok); } .tk.bad .tk-res { color: var(--bad); } .tk.run .tk-res { color: var(--warn); }
+.tk-line { display: grid; grid-template-columns: 104px 1fr; gap: 10px; padding: 2px 0; font-size: 13px; line-height: 1.45; } .tk-line em { font-style: normal; color: var(--mut); font-size: 12px; }
+.tk-why { grid-template-columns: auto 1fr; align-items: start; margin-top: 4px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.05); font-size: 12.5px; }
+.tk-or { padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; background: rgba(255,255,255,.1); }
+.tk-or.o-outside { color: #64d2ff; } .tk-or.o-server { color: #ffd60a; } .tk-or.o-panel { color: #ff9fb3; }
+.tk-more { display: inline-block; margin-top: 4px; font-size: 11.5px; cursor: pointer; }
+.tk-empty { display: grid; gap: 6px; padding: 24px 18px; text-align: center; border-radius: 14px; border: 1px dashed var(--line); } .tk-empty b { font-size: 14px; } .tk-empty span { color: var(--mut); font-size: 13px; line-height: 1.5; }
+
+/* the server window: ONE text style. Labels 13/500 grey; values 13/600 in the same font (no monospace, no 900 / 700 mix); the second part of a value
+   (units, "4 cores", "2d ago", the provider's name) 12/500 grey; the tiles: caption 11 caps, number 18/700, note 12 grey - nothing is cut with "…" */
+#modal .kv2, #modal .rrow { font-size: 13px; min-height: 31px; }
+#modal .kv2 > span:first-child, #modal .rrow > span:first-child { font-size: 13px; font-weight: 500; color: var(--mut); }
+#modal .kv2 > div, #modal .kv2 > div *, #modal .rrow em, #modal .rrow em b { font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+#modal .kv2 > div, #modal .kv2 > div b, #modal .kv2 > div strong, #modal .kv2 > div a, #modal .kv2 > div .mono, #modal .rrow em b { font-size: 13px; font-weight: 600; }
+#modal .kv2 > div small, #modal .kv2 > div .mut, #modal .kv2 > div .pill, #modal .rrow em small { font-size: 12px; font-weight: 500; color: var(--mut); }
+#modal .kv2 > div .gw-ok, #modal .kv2 > div .err, #modal .kv2 > div .warn { font-size: 13px; font-weight: 600; }
+#modal .kv2 > div { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
+#modal .rrow em { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; font-style: normal; min-width: 0; }
+#modal .mtiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.25fr) minmax(0, 1.5fr); grid-auto-flow: row; grid-auto-columns: auto; gap: 8px; }
+#modal .mtile { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "cap note" "val val"; align-items: baseline; column-gap: 8px; row-gap: 1px; min-width: 0; padding: 7px 12px 8px; border-radius: 12px; }
+#modal .mtile small { grid-area: cap; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--acc-2); white-space: nowrap; margin: 0; }
+#modal .mtile span { grid-area: note; justify-self: end; font-size: 12px; font-weight: 500; color: var(--mut); white-space: nowrap; margin: 0; overflow: visible; text-overflow: clip; }
+#modal .mtile b { grid-area: val; font-size: 18px; font-weight: 700; line-height: 1.25; margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { #modal .mtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }#modal .mcard h6 { font-size: 11px; font-weight: 700; letter-spacing: .6px; } #modal .mcard .mval { font-size: 15px; font-weight: 700; }
+#modal .mstat { font-size: 11.5px; } #modal .mstat b { font-weight: 600; }
+
+/* a window never changes size by itself: no animated min-height (it grew from 0 every time a tab changed), and a message laid over the window's top, out of its flow */
+html body #modal .modal { transition: none !important; }
+.modal-body { position: relative; }
+.modal-msg-wrap { position: sticky; top: 0; height: 0; z-index: 30; overflow: visible; }
+.modal-msg-wrap .modal-msg { position: absolute; left: 0; right: 0; top: 0; margin: 0; padding: 9px 12px 9px 14px; box-shadow: 0 10px 28px rgba(0,0,0,.45); background: #121a2e; }
+.modal-msg-wrap .modal-msg.ok { background: color-mix(in srgb, var(--ok) 20%, #0f1530); } .modal-msg-wrap .modal-msg.bad { background: color-mix(in srgb, var(--bad) 20%, #0f1530); }
+.modal-msg .mm-x { margin-left: 8px; flex: none; width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 0; background: rgba(255,255,255,.14); color: inherit; font-size: 16px; line-height: 20px; cursor: pointer; }
+.modal-msg .mm-x:hover { background: rgba(255,255,255,.28); }
+.modal-msg time { margin-left: auto; }
+html[data-mode="light"] .modal-msg-wrap .modal-msg { background: #fff; }
+#modal .mtile { column-gap: 6px; padding-left: 10px; padding-right: 10px; } #modal .mtile small { letter-spacing: .4px; }
+
+/* the log page: a summary on top (where the problems are), the origin of every warning in its line */
+.log-sum { margin-bottom: 10px; padding: 10px 14px 12px; }
+.log-sum h3 { margin: 0 0 8px; font-size: 14px; }
+.ls-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ls-chip { display: inline-flex; align-items: baseline; gap: 8px; height: 34px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,.04); cursor: pointer; font-size: 12.5px; }
+.ls-chip b { font-size: 16px; } .ls-chip span { color: var(--mut); } .ls-chip.on { border-color: rgba(124,131,255,.7); background: rgba(124,131,255,.16); }
+.ls-chip.o-panel b { color: #ff9fb3; } .ls-chip.o-server b { color: #ffd60a; } .ls-chip.o-outside b { color: #64d2ff; }
+.ls-list { display: grid; gap: 4px; }
+.ls-row { display: grid; grid-template-columns: 44px auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 9px; font-size: 12.5px; box-shadow: var(--edge); }
+.ls-n { font-weight: 800; text-align: right; } .ls-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ls-h { grid-column: 3 / -1; font-size: 11.5px; line-height: 1.35; }
+.ll .tk-or { margin: 0 6px; align-self: center; font-size: 10px; }

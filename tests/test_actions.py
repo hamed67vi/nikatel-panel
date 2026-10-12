@@ -144,3 +144,19 @@ def test_fix_budget_counts_only_real_attempts(client, tmp_path, monkeypatch):
 
     assert s["done"] and s["ok"] is False and "already repaired 2 times" in s["story"][-1] and s["action"] == "fix-skip"
     assert actions.recent_fixes("t1") == 2                   # the refusal did not eat the budget
+
+
+def test_the_action_status_carries_a_plain_summary(client):
+    from nikatel.db import session
+    from nikatel.models import ActionLog
+    from nikatel.services import actions
+
+    with session() as db:
+        e = ActionLog(ref="t1", action="autopilot", source="auto", ok=False, finished_at=2, story=["Starting…", "t1: the two servers cannot reach each other (loss 100% / 100%): the route between them is cut or filtered", "t1: still not up. A human should look at it."])
+        db.add(e)
+        db.flush()
+        aid = e.id
+
+    s = actions.status(aid)["summary"]
+    assert s["origin"] == "outside" and s["kind"] == "route" and s["problem"].startswith("the two servers") and s["ok"] is False
+    assert client.get(f"/api/actions/{aid}").json()["summary"]["hint"]

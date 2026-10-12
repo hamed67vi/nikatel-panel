@@ -48,3 +48,16 @@ asserts it. Do not log request bodies.
 * `except Exception: pass` does not exist in this codebase. Minimum is `log.debug(..., exc_info=True)`.
 * API errors: `HTTPException(code, "<plain sentence>")`. 500s are logged with `rid`; the
   browser gets `{"ok": false, "error": "internal error", "rid": "…"}`.
+
+## Reading a problem: the panel, your server, or outside?
+
+`services/diagnosis.py` classifies every sentence the panel writes about a failure (a log line, the story of a repair) into one origin, with a plain hint:
+
+| origin | meaning | example |
+|---|---|---|
+| `outside` | the panel works; something it reaches does not answer | ssh connection timed out, the route between two servers cut, a probe test that timed out, a DNS provider answering 502 |
+| `server` | a service on one of your servers stopped or is blocked | tunnel units not running, the control port closed, the GRE interface missing |
+| `panel` | the panel itself | a bug (`internal error` with a request id), a locked database, read-only mode, being busy with another job, its own safety limits |
+| `unknown` | no rule matched: nothing is guessed, the full text is shown | |
+
+A repair's `summary` (in `GET /api/actions/{id}` and the History) has the problem, what was tried, the result, and the origin with its hint. The Tunnel Doctor shows two lists: **In progress** and **Finished** (fixed, or could not be fixed and why).

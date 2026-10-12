@@ -303,8 +303,11 @@ def status(aid: int) -> dict | None:
         if e is None:
             return None
 
+        from .diagnosis import summarize
+
         return {"id": e.id, "ref": e.ref, "action": e.action, "source": e.source, "dry_run": e.dry_run, "ok": e.ok,
-                "done": e.finished_at > 0, "story": list(e.story or []), "ts": e.ts, "finished_at": e.finished_at}
+                "done": e.finished_at > 0, "story": list(e.story or []), "ts": e.ts, "finished_at": e.finished_at,
+                "summary": summarize(list(e.story or []), e.ok, e.action, e.ref)}
 
 
 def history(ref: str | None = None, limit: int = 50) -> list[dict]:

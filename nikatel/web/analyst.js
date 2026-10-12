@@ -76,7 +76,7 @@ function anaDraw() {
   const sm = a.summary, T = state.anaTab;
   const tabs = [["tunnels", "Tunnels", sm.chronic + sm.watch], ["risk", "At risk", a.risks.length + a.common.length], ["repairs", "What fixes what", 0], ["servers", "Servers", sm.idle + sm.redundant]];
   const body = T === "tunnels" ? anaTunnels(a) : T === "risk" ? anaRisk(a) : T === "repairs" ? anaRepairs(a) : anaServers(a);
-  box.innerHTML = `<div class="card ana-card"><div class="ana-head"><div class="tabs">${tabs.map(([k, l, c]) => `<button class="${k === T ? "on" : ""}" onclick="anaPick('${k}')">${l}${c ? ` <i class="cnt">${c}</i>` : ""}</button>`).join("")}</div><span class="sp"></span>
+  box.innerHTML = `<div class="ana-card"><div class="ana-head"><div class="tabs">${tabs.map(([k, l, c]) => `<button class="${k === T ? "on" : ""}" onclick="anaPick('${k}')">${l}${c ? ` <i class="cnt">${c}</i>` : ""}</button>`).join("")}</div><span class="sp"></span>
       <span class="tcount pstat"><span class="tc info">Tunnels <b>${sm.tunnels}</b></span><span class="tc ${sm.chronic ? "bad" : "ok"}">Chronic <b>${sm.chronic}</b></span><span class="tc ${sm.at_risk ? "warn" : "ok"}">At risk <b>${sm.at_risk}</b></span><span class="tc info">Available <b>${sm.availability} %</b></span></span>
       <select onchange="anaDays(this.value)" title="How many days of history to read">${[1, 3, 7, 14].map(d => `<option value="${d}" ${d === a.days ? "selected" : ""}>${d} day${d > 1 ? "s" : ""}</option>`).join("")}</select></div>
     <div class="ana-body">${body}</div></div>`;
