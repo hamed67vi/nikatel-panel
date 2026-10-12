@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.14
+
+- DNS · IP switch: the records of each domain are together under a small header (the domain and how many records), the name shows without the domain part; the tag "not a server of this panel" is now "outside the panel" with an explanation on hover (the address is not one of the servers added to this panel: a CDN, another provider, a server you did not add), and such a record no longer preselects the first Iran server in its list - you choose.
+
 ## 1.19.13
 
 - DNS · IP switch: the server tag next to an address no longer wraps onto two lines.

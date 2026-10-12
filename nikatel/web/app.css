@@ -3106,3 +3106,9 @@ body #page .dns-recs + .empty, body #page .card:has(> .dns-recs) > h3 { gap: 10p
 body #page .card:has(> .dns-recs) { padding: 8px 12px 10px; }
 @media (max-width: 760px) { body #page .dns-rec { grid-template-columns: 1fr; } body #page .dns-recs { max-height: none; } }
 body #page .dns-ip { white-space: nowrap; } body #page .dns-ip .pill { white-space: nowrap; } body #page .dns-rec > b { overflow: hidden; text-overflow: ellipsis; }
+
+/* the records of one domain together, under a small header with the domain and how many */
+body #page .dns-dom { display: flex; align-items: center; gap: 8px; padding: 10px 6px 3px; position: sticky; top: 0; z-index: 2; background: #101828; } body #page .dns-dom:first-child { padding-top: 2px; }
+body #page .dns-dom b { font-size: 12.5px; font-weight: 700; color: #4da3ff; letter-spacing: .02em; } body #page .dns-dom .pill { height: 18px; font-size: 10.5px; }
+html[data-mode="light"] body #page .dns-dom { background: #eef2f9; } html[data-mode="light"] body #page .dns-dom b { color: #0a62c9; }
+body #page .dns-rec > b { padding-left: 8px; font-weight: 600; }
