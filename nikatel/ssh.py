@@ -237,13 +237,20 @@ __NK_PY__
 """, {"PATH": r"^/etc/backhaul/[A-Za-z0-9._-]{1,80}\.toml$"}),
 
     # how far a detached install (install_btblock / install_marzban_node) is: "STATE running|ok|failed|none" and the last lines of its log or result. Read-only.
-    "install_status": (r"""d=/var/lib/nikatel-install; n=@NAME@; s="$n"; [ "$n" = btblock ] && s=btblock; [ "$n" = mznode ] && s=mznode
+    "install_status": (r"""d=/var/lib/nikatel-install; n=@NAME@
 if [ -f $d/$n.ok ]; then echo "STATE ok"; cat $d/$n.out 2>/dev/null | tail -n 3
 elif [ -f $d/$n.fail ]; then echo "STATE failed"; tail -n 12 $d/$n.log 2>/dev/null
 elif pgrep -f "nikatel-install/$n.sh" >/dev/null 2>&1; then echo "STATE running"; tail -n 2 $d/$n.log 2>/dev/null; tail -n 1 $d/mz-install.log 2>/dev/null
 else echo "STATE none"; fi
 exit 0
-""", {"NAME": r"^(btblock|mznode)$"}),
+""", {"NAME": r"^(btblock|mznode|pgnode|osupdate)$"}),
+
+    # the PUBLIC certificate of a PasarGuard node (never a key): the operator pastes it into the PasarGuard panel. Read-only.
+    "pgnode_cert": (r"""for f in $(find / -xdev -maxdepth 6 -type f \( -path '*pg-node*' -o -path '*pasarguard*' \) \( -name '*cert*' -o -name '*.crt' -o -name '*.pem' \) ! -iname '*key*' 2>/dev/null | head -20); do
+  if grep -q 'BEGIN CERTIFICATE' "$f" 2>/dev/null && ! grep -q 'PRIVATE KEY' "$f" 2>/dev/null; then cat "$f"; exit 0; fi
+done
+echo NO_CERT
+""", {}),
 
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
@@ -686,6 +693,31 @@ unlink /etc/sysctl.d/99-nikatel-tunnel.conf 2>/dev/null || true
 echo "UNTUNED cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
 """, {}),
 
+    # GRE reach test, step 1 (on BOTH servers): a temporary GRE interface nkgpN with a small private network from 10.253.x.x, and the firewall rules (tagged) that let protocol 47 and the interface through. Nothing is written to disk; gre_probe_down removes it again.
+    "gre_probe_up": (r"""set -e; n='@NAME@'; tag="nikatel-gre-probe-$n"
+modprobe ip_gre 2>/dev/null || true
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -s '@REMOTE@' -d '@LOCAL@' -p gre -m comment --comment "$tag" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -s '@REMOTE@' -d '@LOCAL@' -p gre -m comment --comment "$tag" -j ACCEPT
+  iptables -C OUTPUT -s '@LOCAL@' -d '@REMOTE@' -p gre -m comment --comment "$tag" -j ACCEPT 2>/dev/null || iptables -I OUTPUT 1 -s '@LOCAL@' -d '@REMOTE@' -p gre -m comment --comment "$tag" -j ACCEPT
+  iptables -C INPUT -i "$n" -m comment --comment "$tag" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -i "$n" -m comment --comment "$tag" -j ACCEPT
+  iptables -C OUTPUT -o "$n" -m comment --comment "$tag" -j ACCEPT 2>/dev/null || iptables -I OUTPUT 1 -o "$n" -m comment --comment "$tag" -j ACCEPT
+fi
+ip tunnel del "$n" 2>/dev/null || true
+ip tunnel add "$n" mode gre local '@LOCAL@' remote '@REMOTE@' key '@KEY@' ttl 64
+ip addr add '@ADDR@' dev "$n"; ip link set "$n" mtu 1400 up
+sysctl -qw "net.ipv4.conf.$n.rp_filter=0" 2>/dev/null || true
+echo "PROBE_UP $n"
+""", {"NAME": r"^nkgp[0-9]{1,3}$", "LOCAL": _IPV4, "REMOTE": _IPV4, "KEY": r"^\d{1,9}$", "ADDR": r"^10\.253\.\d{1,3}\.\d{1,3}/30$"}),
+
+    # GRE reach test, last step (on BOTH servers, always run): the temporary interface and its tagged firewall rules are removed
+    "gre_probe_down": (r"""n='@NAME@'; tag="nikatel-gre-probe-$n"
+ip link set "$n" down 2>/dev/null || true; ip tunnel del "$n" 2>/dev/null || true
+if command -v iptables >/dev/null 2>&1; then
+  for chain in INPUT OUTPUT; do iptables -S "$chain" 2>/dev/null | grep -- "--comment $tag" | sed "s/^-A/-D/" | while read -r rule; do iptables $rule 2>/dev/null || true; done; done
+fi
+echo "PROBE_DOWN $n"
+""", {"NAME": r"^nkgp[0-9]{1,3}$"}),
+
     # a throw-away web server on 127.0.0.1 for 14 s, to prove the data path through a forwarded port
     "data_test_server": (r"""(timeout 14 python3 -m http.server '@PORT@' --bind 127.0.0.1 >/dev/null 2>&1 &); sleep 1; echo started
 """, {"PORT": r"^\d{1,5}$"}),
@@ -1115,6 +1147,46 @@ EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/mznode.sh > /var/lib/nikatel-install/mznode.log 2>&1 && touch /var/lib/nikatel-install/mznode.ok || touch /var/lib/nikatel-install/mznode.fail' >/dev/null 2>&1 &
 echo STARTED
 """, {"B64": _B64}),
+
+    # a PasarGuard node, installed the way PasarGuard documents it: bash -c "$(curl -sL .../pg-node.sh)" @ install. The installer asks for the API key that the PasarGuard panel gives (answered from the
+    # panel; the key sits in a 0600 file only while the installer runs and is shredded) and makes the node's certificate, which the operator then sets in the panel (see pgnode_cert). Detached.
+    "install_pasarguard_node": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
+[ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
+command -v pg-node >/dev/null 2>&1 && { echo PGNODE_EXISTS; exit 0; }
+if pgrep -f 'nikatel-install/pgnode.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
+rm -f $d/pgnode.ok $d/pgnode.fail $d/pgnode.out
+( umask 077; printf '%s\n' '@KEY@' > $d/pgnode.key )
+cat > $d/pgnode.sh <<'EOS'
+set -e; export DEBIAN_FRONTEND=noninteractive
+d=/var/lib/nikatel-install; cd $d
+command -v curl >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null; }
+curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pg-node.sh -o pg-node.sh
+[ -s pg-node.sh ] || { echo DOWNLOAD_FAILED; shred -u pgnode.key 2>/dev/null; exit 1; }
+( cat pgnode.key; printf '\n\n\n\n' ) | timeout 900 bash -c "$(cat pg-node.sh)" @ install > pg-install.log 2>&1 || true
+shred -u pgnode.key 2>/dev/null || unlink pgnode.key 2>/dev/null || true
+pkill -f 'docker.* logs' 2>/dev/null || true
+if command -v pg-node >/dev/null 2>&1; then echo "PGNODE_OK installed" > pgnode.out; else echo PGNODE_FAILED; tail -n 12 pg-install.log | cut -c1-200; exit 1; fi
+EOS
+nohup setsid bash -c 'bash /var/lib/nikatel-install/pgnode.sh > /var/lib/nikatel-install/pgnode.log 2>&1 && touch /var/lib/nikatel-install/pgnode.ok || touch /var/lib/nikatel-install/pgnode.fail' >/dev/null 2>&1 &
+echo STARTED
+""", {"KEY": r"^[A-Za-z0-9._:+/=-]{8,200}$"}),
+
+    # update the system packages of the server (apt update + upgrade, no questions, old config files kept); the server is NOT rebooted. Detached.
+    "install_os_update": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
+[ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
+command -v apt-get >/dev/null 2>&1 || { echo NO_APT; exit 1; }
+if pgrep -f 'nikatel-install/osupdate.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
+rm -f $d/osupdate.ok $d/osupdate.fail $d/osupdate.out
+cat > $d/osupdate.sh <<'EOS'
+set -e; export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get -y -qq -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef upgrade
+r=no; [ -f /var/run/reboot-required ] && r=yes
+echo "OSUPDATE_OK packages updated; a reboot is needed: $r" > /var/lib/nikatel-install/osupdate.out
+EOS
+nohup setsid bash -c 'bash /var/lib/nikatel-install/osupdate.sh > /var/lib/nikatel-install/osupdate.log 2>&1 && touch /var/lib/nikatel-install/osupdate.ok || touch /var/lib/nikatel-install/osupdate.fail' >/dev/null 2>&1 &
+echo STARTED
+""", {}),
 
     # change the login password of the SSH user (the payload is base64 of "user:password"; it never appears in the logs). The panel logs in with its key, so it is not affected.
     "set_password": (r"""set -e; u=$(echo '@B64@' | base64 -d | cut -d: -f1); [ "$u" = '@USER@' ] || { echo BAD_USER; exit 1; }

@@ -64,7 +64,15 @@ function toast(text, cls, undo) {      // undo: a function; the status bar then 
     if (cls !== "bad") setTimeout(() => { if (w.isConnected && w.dataset.t === stamp) w.remove(); }, 12000);
   }
 }
-window.sbHistory = () => showModal("<b>Messages</b>", MSGS.length ? MSGS.map(m => `<div class="msg-row ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">No message yet.</div>');
+/* the log box (a click on the status bar): ONE fixed size; the tab "This session" lists what the panel said since the page was opened, the tab "History" the events the panel wrote earlier (kept on the server) */
+window.sbHistory = (tab, only) => {
+  tab = tab === "history" ? "history" : "now"; state.sbOnly = only === undefined ? state.sbOnly || "all" : only;
+  const head = `<div class="tabs lg-tabs"><button class="${tab === "now" ? "on" : ""}" onclick="sbHistory('now')">This session<i class="cnt">${MSGS.length}</i></button><button class="${tab === "history" ? "on" : ""}" onclick="sbHistory('history')">History</button>${tab === "history" ? `<span class="sp"></span><button class="${state.sbOnly === "all" ? "on" : ""}" onclick="sbHistory('history', 'all')">All</button><button class="${state.sbOnly === "bad" ? "on" : ""}" onclick="sbHistory('history', 'bad')">Problems</button>` : ""}</div>`;
+  const now = MSGS.length ? MSGS.map(m => `<div class="msg-row ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">Nothing yet since this page was opened. Older events are in History.</div>';
+  showModal("<b>Messages</b>", head + `<div class="lg-list" id="lg-list">${tab === "now" ? now : '<div class="empty">Loading the history…</div>'}</div>`, "wide logwin");
+  if (tab === "history") api("/api/events?limit=300").then(ev => { const el = $("#lg-list"); if (!el || state.sbTab === "now") return; const list = state.sbOnly === "bad" ? ev.events.filter(e => e.level !== "info" && e.level !== "ok") : ev.events; el.innerHTML = eventsHtml(list); }).catch(e => { const el = $("#lg-list"); if (el) el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+  state.sbTab = tab;
+};
 
 /* a tiny inline chart: values -> svg polyline, optional threshold colouring */
 function spark(values, opts = {}) {
@@ -318,7 +326,7 @@ function showModal(title, body, cls = "", acts = "") {
     return;
   }
   const still = cur ? " style=\"animation:none\"" : "";      // another window in place of this one (details ↔ edit form): it is already on screen, so it does not fly in again
-  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"${still}><div class="hmsg"></div><div class="modal-head">${head}</div><div class="modal-body">${body}</div></div></div>`;
+  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="hmsg"></div><div class="modal-body">${body}</div></div></div>`;
 }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
@@ -554,7 +562,7 @@ PAGES.servers = async () => {
     const x = s.extra || {}, flt = x.iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked"), b = srvBusy(s), out = [];
     const tag = (cls, txt, tip) => out.push(`<span class="pill ${cls}" title="${esc(tip || txt)}">${txt}</span>`);
     if (b) return `<span class="busy-chip" title="${esc(b.what + (b.detail ? ": " + b.detail : ""))}"><i class="spin"></i>${esc(b.what)}…</span>`;
-    if (!s.enabled) return `<span class="pill off">Disabled</span>`;
+    if (!s.enabled) return '<span class="mut iss-ok">—</span>';      // disabled: the Status column says it; nothing is checked, so there is nothing to report
     if (noLogin(s)) tag("err", "No login", s.last_error);
     else if (s.online === false) tag("err", "Offline", s.last_error || "The server does not answer");
     else if (s.online && /^SSH does not answer/.test(s.last_error || "")) tag("warn", "SSH ✕", s.last_error);
@@ -573,7 +581,7 @@ PAGES.servers = async () => {
     const cls = (!s.enabled ? "srv-off" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls} clk" data-id="${s.id}" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
       <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</td>
-      <td>${!s.enabled ? '<span class="st">—</span>' : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
+      <td>${!s.enabled ? '<span class="st dis">disabled</span>' : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td>
       <td class="iss-cell">${issues(s)}</td>
@@ -599,8 +607,8 @@ function srvModal(s) {   // while the edit form is open the header keeps only th
   const sw = `<label class="srv-sw ${on ? "on" : ""}" title="${on ? "Enabled: the panel checks this server. Switch off to disable it: it is not checked and gives no alerts (nothing changes on the server)." : "Disabled: the panel does not check this server. Switch on to enable it."}"><input type="checkbox" ${on ? "checked" : ""} onchange="srvToggle(${s.id})" aria-label="Enable or disable ${esc(s.name)}"><i></i><b>${on ? "Enabled" : "Disabled"}</b></label>`;
   const who = `<span class="mh-who">${flagImg(s.role === "iran" ? "IR" : s.country)}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><span class="mh-txt"><b>${esc(s.name)}</b><span class="mh-meta"><span class="mono ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span><i>·</i><span>${esc(s.role)}</span>${f.hostname ? `<i>·</i><span>${esc(f.hostname)}</span>` : ""}</span></span></span>`;
   const acts = `${sw}${editing ? "" : `<i class="mh-sep"></i><button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}><i class="bi">${SI.term}</i>Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port"><i class="bi">${SI.edit}</i>Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)"><i class="bi">${SI.trash}</i>Delete</button>`}<i class="mh-sep"></i>`;
-  showModal(who, `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide srvwin", acts);      // details and edit form are ONE window of ONE fixed size (see .srvwin): nothing grows when the charts arrive or Edit / Back / Console are pressed
-  const mdl = $("#modal .modal"); if (mdl) mdl.classList.toggle("editing", editing);
+  showModal(who, `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide srvwin", acts);      // details and edit form are ONE window of ONE fixed size (see .srvwin): the charts area is reserved, so nothing grows when the charts arrive, and Edit / Back / Console never shrink it
+  const mdl = $("#modal .modal"); if (mdl) { mdl.classList.toggle("editing", editing); const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // Edit / Back / Console never make the window shorter than it has been
 }
 function tunModal(t) {
   showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
@@ -615,6 +623,7 @@ const ibox = (icon, title, rows) => `<div class="ibox"><h5><i>${icon}</i>${title
    Console, Edit and Delete are in the window header. The console is the only other view, with a Back link. */
 function serverDetailHtml(s) {
   if (state.wtab === "console") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + serverPartHtml(s, "console");
+  if (state.wtab === "install") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + installHtml(s);
   return serverBar(s) + serverGridHtml(s) + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>`;
 }
 function serverBar(s) {
@@ -624,8 +633,8 @@ function serverBar(s) {
   const hostKeyChanged = /host key/i.test(s.last_error || "");        // only when the panel refuses the server because it was reinstalled: then its old identity must be forgotten
   const groups = [
     [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
-    s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`),
-      b("🛡", abuseOn ? "Remove Abuse-Defender" : "Abuse-Defender", abuseOn ? "Stop dropping traffic to abused ranges" : "Drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)] : [],
+    [...(s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`)] : []),
+      b("📦", "Install", "Install a Marzban or PasarGuard node or the Abuse-Defender, or update the server", `wtab('install')`)],
     [b("🔐", "Change password", "Set a new SSH login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`),
      `<select class="sm abtn abtn-open" title="Open this server in a program on your computer" onchange="if(this.value){srvOpen(${s.id}, this.value);this.selectedIndex=0}"><option value="">🖥 Open in…</option><option value="ssh">Windows ssh</option><option value="putty">PuTTY</option><option value="mobaxterm">MobaXterm</option></select>`,
      ...(hostKeyChanged ? [b("↺", "Trust the new server", "The server was reinstalled and its SSH identity changed: forget the old one so the panel can connect again", `forgetKey(${s.id}, '${nm}')`, "", true)] : [])],
@@ -648,7 +657,7 @@ function serverGridHtml(s) {
   const provider = dom || pname ? (dom ? `<a class="ext" href="https://${esc(dom)}" target="_blank" rel="noopener" title="${esc(dom)}">${EXT}${esc(pname || dom)}</a>` : `<span>${esc(pname)}</span>`) : '<span class="mut">not found yet</span>';
   const site = `<span class="prov-site" data-srv="${esc(s.name)}"><small class="mut">checking…</small></span>`;
   const lv = fl ? (FLT_LEVEL[fl.level] || ["warn", "⚠ " + esc(fl.level || "unknown")]) : null;
-  const gre = g ? `<i class="dotc ${g.ok ? "ok" : g.links ? "bad" : ""}"></i>${g.links ? `<b class="${g.ok ? "gw-ok" : "err"}">${g.ok ? "GRE ok" : "failing"}</b>` : '<span class="mut">no GRE links</span>'} <small class="mut">${ago(g.at)} ago</small>` : '<i class="dotc"></i><span class="mut">not tested</span>';
+  const gre = g ? `<i class="dotc ${g.ok ? "ok" : g.links ? "bad" : ""}"></i>${g.links ? `<b class="${g.ok ? "gw-ok" : "err"}">${g.ok ? "GRE ok" : "failing"}</b>` : '<span class="mut">no GRE links</span>'} <small class="mut">${g.via ? "via " + esc(g.via) + " · " : ""}${ago(g.at)} ago</small>` : '<i class="dotc"></i><span class="mut">not tested</span>';
   const tunnels = mine.length ? mine.map(t => `<span class="tchip"><i class="st ${t.state}"></i>${esc(t.name)}</span>`).join("") : '<span class="mut">none</span>';
   const sys = box(SI.server, "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
     kv("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), kv("Top process", esc(f.top || "—")), kv("Connections", f.conn != null ? f.conn : "—")]);
@@ -656,9 +665,9 @@ function serverGridHtml(s) {
     rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "", "disk"), rt("Traffic", f.rx_mbps != null ? `<span class="trf">↓ ${f.rx_mbps}</span><span class="trf">↑ ${f.tx_mbps}</span>` : "—"), rt("Last sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
   const acc = box(SI.key, "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span><a class="cp" title="Copy" onclick="copyText('${esc(s.ssh_user)}@${esc(s.host)}')">${CP}</a>`), kv("Provider", provider),
     s.role === "foreign" ? kv("Country", `${flag(s.country) || "—"} ${esc(geo.city || "")}`) : kv("Site", site),
-    s.role === "foreign" ? kv("Filtering", fl ? `<b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.enabled === false ? '<i class="dotc"></i><span class="mut">disabled</span>' : s.online ? '<i class="dotc ok"></i><b>online</b>' : '<i class="dotc bad"></i><b class="err">offline</b>'),
+    s.role === "foreign" ? kv("Filtering", fl ? `<span class="flt-tip" title="${esc((fl.nodes || []).map(n => (n.pending ? "…" : n.ok + "/" + n.total) + " " + n.city + (n.avg_ms != null ? " " + n.avg_ms + " ms" : "")).join(", "))}"><b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small></span>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.enabled === false ? '<i class="dotc"></i><span class="mut">disabled</span>' : s.online ? '<i class="dotc ok"></i><b>online</b>' : '<i class="dotc bad"></i><b class="err">offline</b>'),
     kv("GRE", gre, "gre"), kv("Tunnels", tunnels)]);
-  const pings = fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : "";
+  const pings = false && fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : "";
   return `<div class="sgrid">${sys}${res}${acc}</div>${pings}`;
 }
 function serverLinesHtml() { return ""; }
@@ -673,7 +682,7 @@ function serverPartHtml(s, tab) {
     ${resBox(s)}
     <div class="wgroup"><h4>Open on my computer</h4><div class="wtools uni">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
     <div class="wgroup"><h4>Danger</h4><div class="wtools uni">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;
-  if (tab === "console") { if (state.con !== s.id) state.con = s.id; return tabs + `<div class="fix" id="con-${s.id}"><div class="frm-act"><select id="con-preset-${s.id}" onchange="$('#con-cmd-${s.id}').value=this.value">${["", ...Object.keys(CON_PRESETS)].map(k => `<option value="${k ? esc(CON_PRESETS[k][1]) : ""}">${k ? esc(CON_PRESETS[k][0]) : "— preset —"}</option>`).join("")}</select><input id="con-cmd-${s.id}" style="flex:1" placeholder="command to run as ${esc(s.ssh_user)}…" onkeydown="if(event.key==='Enter')srvRun(${s.id})"><button class="pri sm" onclick="srvRun(${s.id})">Run</button></div><pre class="gl-out" id="con-out-${s.id}">${esc(state.conOut[s.id] || "")}</pre></div>`; }
+  if (tab === "console") { if (state.con !== s.id) state.con = s.id; return tabs + conHtml(s); }
   if (tab === "charts") return tabs + `<div class="charts" id="srv-charts-${s.id}"><div class="mut">loading 24 h…</div></div><div class="kv" id="srv-peaks-${s.id}"></div>`;
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
   const boxes = [
@@ -703,7 +712,7 @@ window.wtab = k => {
   state.wtab = k;
   const body = $("#modal .modal-body");
   if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { const mdl = body.closest(".modal"); if (mdl) { const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // the window never gets shorter while its tabs change, so Console → Back does not jump
-    body.innerHTML =`<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
+    body.innerHTML =`<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console" && k !== "install") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
   if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); loadTunnelCharts(t.id); return; } }
   if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; cfLoadChart(c.id); return; } }
   refresh();
@@ -711,7 +720,58 @@ window.wtab = k => {
 let CON_PRESETS = {};
 api("/api/nodes/presets").then(d => { d.presets.forEach(p => CON_PRESETS[p.key] = [p.label, p.command]); }).catch(() => {});
 state.conOut = {};
-window.srvConsole = id => { state.con = id; if (state.open === id && $("#modal .modal-body")) { wtab("console"); return; } state.open = id; state.wtab = "console"; refresh(); };
+/* ---- the console, for someone who is not an expert: big plain questions to click (the panel asks the server and shows the answer; nothing is changed), and the old command line for those who want it, folded away */
+const CON_TILES = [["health", "💚", "Is it healthy?", "Load, memory and disk in one look"], ["failed", "🛠", "Is anything broken?", "Stopped services and the tunnel units"], ["logs", "📜", "What happened lately?", "The last 60 lines of the server's log"],
+  ["top", "🔥", "What is slow?", "The programs that use the most CPU"], ["disk", "💾", "Is the disk full?", "Free space and the biggest folders"], ["net", "🌐", "Network and open ports", "Addresses, routes, what the server listens on"]];
+function conHtml(s) {
+  state.conOut = state.conOut || {}; state.conMeta = state.conMeta || {};
+  const m = state.conMeta[s.id] || {}, tile = ([k, ic, t, d]) => `<div role="button" tabindex="0" class="con-tile ${m.key === k ? "on" : ""}" onclick="conAsk(${s.id}, '${k}')" onkeydown="if(event.key==='Enter')conAsk(${s.id}, '${k}')" title="${esc(d)}"><i>${ic}</i><b>${t}</b><small>${d}</small></div>`;
+  return `<div class="con2" id="con-${s.id}"><div class="con-top"><b>What do you want to know about ${esc(s.name)}?</b><small>Click a question: the panel asks the server and shows the answer below. Nothing is changed on the server.</small></div>
+    <div class="con-tiles">${CON_TILES.map(tile).join("")}</div>
+    <div class="con-res ${m.bad ? "bad" : ""}"><div class="con-rh">${m.title ? `<b>${esc(m.title)}</b><span class="mut">${esc(m.note || "")}</span>` : `<span class="mut">The answer shows here.</span>`}</div><pre class="gl-out" id="con-out-${s.id}">${esc(state.conOut[s.id] || "")}</pre></div>
+    <details class="con-adv"><summary>Advanced: type your own command</summary><div class="frm-act"><input id="con-cmd-${s.id}" style="flex:1" placeholder="command to run as ${esc(s.ssh_user)}…" onkeydown="if(event.key==='Enter')srvRun(${s.id})"><button class="pri sm" onclick="srvRun(${s.id})">Run</button></div></details></div>`;
+}
+window.conAsk = async (id, key) => {
+  const t = CON_TILES.find(x => x[0] === key); state.conOut = state.conOut || {}; state.conMeta = state.conMeta || {};
+  state.conMeta[id] = {key, title: t ? t[2] : key, note: "asking the server…"}; state.conOut[id] = ""; if (state.wtab === "console") wtab("console");
+  try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: key})}); state.conOut[id] = (r.output || "").trim() || "(the server answered with nothing)"; state.conMeta[id] = {key, title: t ? t[2] : key, note: `${r.ms} ms${r.code ? " · did not finish well (exit " + r.code + ")" : ""}`, bad: !!r.code}; }
+  catch (e) { state.conOut[id] = e.message; state.conMeta[id] = {key, title: t ? t[2] : key, note: "could not ask", bad: true}; }
+  if (state.wtab === "console") wtab("console");
+};
+/* ---- the Install view of a server window: what can be put on this server, each as a card in plain words */
+function installHtml(s) {
+  const ab = ((s.extra || {}).abuse || {}), abuseOn = ab.installed || ((s.facts || {}).abuse_rules || 0) > 0, seg = state.insNode === "pasarguard" ? "pasarguard" : "marzban";
+  const row = (ic, title, chip, btns, tip) => `<div class="ins-row" title="${esc(tip)}"><i>${ic}</i><b>${title}</b>${chip}<span class="sp"></span>${btns}</div>`;
+  const btn = (label, click, cls = "", off = false) => `<button class="sm ${cls}" ${off ? "disabled" : `onclick="${click}"`}>${label}</button>`;
+  return `<div class="ins3">
+    <div class="ins-node">
+      <div class="tabs ins-seg"><button class="${seg === "marzban" ? "on" : ""}" data-k="marzban" onclick="insSeg(${s.id}, 'marzban')">Marzban node</button><button class="${seg === "pasarguard" ? "on" : ""}" data-k="pasarguard" onclick="insSeg(${s.id}, 'pasarguard')">PasarGuard node</button></div>
+      <div class="ins-pane ${seg === "marzban" ? "" : "hidden"}" data-k="marzban"><textarea id="ins-cert-${s.id}" rows="4" spellcheck="false" placeholder="Certificate from the Marzban panel (Nodes → Add node), from BEGIN to END">${esc(window.NODE_CERT || "")}</textarea>
+        <div class="ins-act"><span class="sp"></span>${btn("Install node", `srvInstall(${s.id}, 'marzban_node')`, "pri")}</div></div>
+      <div class="ins-pane ${seg === "pasarguard" ? "" : "hidden"}" data-k="pasarguard"><input id="ins-key-${s.id}" type="password" autocomplete="off" spellcheck="false" placeholder="API key from the PasarGuard panel">
+        <div class="ins-act"><span class="sp"></span>${btn("Show certificate", `srvPgCert(${s.id})`)}${btn("Install node", `srvInstall(${s.id}, 'pasarguard_node')`, "pri")}</div></div>
+    </div>
+    <div class="ins-rows">
+      ${s.role === "foreign" ? row("🛡", "Abuse-Defender", `<span class="pill ${abuseOn ? "ok" : "off"}">${abuseOn ? "Installed" : "Not installed"}</span>`, btn("Install", `srvAbuse(${s.id}, 'install')`, "pri", abuseOn) + btn("Remove", `srvAbuse(${s.id}, 'remove')`, "danger", !abuseOn), "Drops traffic to abused address ranges") : ""}
+      ${row("⬆", "Update the server", '<span class="pill off">apt</span>', btn("Update", `srvInstall(${s.id}, 'os_update')`, "pri"), "apt update and upgrade of the system packages; the server is not rebooted")}
+    </div></div>`;
+}
+window.insSeg = (id, k) => { state.insNode = k; document.querySelectorAll("#modal .ins-seg button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); document.querySelectorAll("#modal .ins-pane").forEach(p => p.classList.toggle("hidden", p.dataset.k !== k)); };
+const INS_LABEL = {marzban_node: "Marzban node", pasarguard_node: "PasarGuard node", os_update: "system update"};
+window.srvPgCert = async id => {      // the public certificate the PasarGuard node made: shown to copy into the PasarGuard panel
+  try { const r = await api(`/api/servers/${id}/pasarguard-cert`); const ta = $(`#ins-key-${id}`); const box = ta && ta.closest(".ins-pane"); if (!box) return;
+    let out = box.querySelector(".ins-cert"); if (!out) { out = document.createElement("textarea"); out.className = "ins-cert"; out.readOnly = true; out.rows = 5; box.querySelector(".ins-act").before(out); }
+    out.value = r.cert; out.select(); try { navigator.clipboard.writeText(r.cert); } catch (e) { /* the box is selected: copy it by hand */ } toast("✓ Certificate copied: set it in the PasarGuard panel", "ok");
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.srvInstall = async (id, item) => {
+  const s = (state.serversCache || []).find(x => x.id === id); if (!s) return;
+  let cert = ""; if (item === "marzban_node") { cert = ($(`#ins-cert-${id}`) || {}).value || ""; if (!/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first", "bad"); return; } }
+  if (item === "pasarguard_node") { cert = (($(`#ins-key-${id}`) || {}).value || "").trim(); if (cert.length < 8) { toast("✕ Paste the API key from the PasarGuard panel first", "bad"); return; } }      // the key goes to the installer and is not kept
+  if (!await gconfirm(`Install: ${INS_LABEL[item]} on ${s.name}? It runs on the server for a few minutes.`)) return;
+  try { const r = await api(`/api/servers/${id}/install`, {method: "POST", body: JSON.stringify({items: [item], cert})}); showModal(`<b>⬇ ${INS_LABEL[item]} on ${esc(s.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.id, $("#ap-story"), 400).then(() => refresh()); }
+  catch (e) { toast("✕ " + e.message, "bad"); }
+};window.srvConsole = id => { state.con = id; if (state.open === id && $("#modal .modal-body")) { wtab("console"); return; } state.open = id; state.wtab = "console"; refresh(); };
 window.srvRun = async id => { const cmd = $(`#con-cmd-${id}`).value.trim(); if (!cmd) return; const out = $(`#con-out-${id}`); out.textContent = "running…"; try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: cmd})}); state.conOut[id] = `$ ${cmd}\n${r.output}${r.code ? "\n[exit " + r.code + "]" : ""}\n(${r.ms} ms)`; } catch (e) { state.conOut[id] = "✕ " + e.message; } out.textContent = state.conOut[id]; };
 window.srvConnect = async (id, name) => { const pw = await gprompt(`SSH password of ${name} (used once to install the panel's key, not stored):`); if (!pw) return; toast("Connecting…"); try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Servers → 'Download my SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
@@ -728,7 +788,11 @@ function resBox(s) {
   return `<div class="wgroup"><h4>Last results</h4><div class="ibox res-box">${row("GRE", "gre", g ? greTxt(g) : '<span class="mut">not tested yet</span>')}
     ${s.role === "foreign" ? row("Filtering in Iran", "flt", f ? fltTxt(f) : '<span class="mut">not checked yet</span>') + row("Abuse-Defender", "abuse", abuseOn ? `<b class="gw-ok">✓ Installed</b> · ${rules} ranges blocked${ab.updated_at ? " · list " + ago(ab.updated_at) + " ago" : ""}` : '<span class="mut">not installed</span>') : ""}
     ${row("Last sample", "sample", s.last_seen_at ? `${ago(s.last_seen_at)} ago${fc.uptime ? " · up " + esc(String(fc.uptime)) : ""}` : '<span class="mut">never</span>')}</div></div>`;
-}window.greCheck = async id => { setRes("gre", '<span class="mut">⏳ checking… (up to 30 s)</span>'); toast("Checking GRE… (up to 30 s)"); try { const r = await api(`/api/servers/${id}/gre-check`, {method: "POST"}); if (!r.links) toast("This server has no GRE link, so there is nothing to test (a tunnel creates one)", "info"); else toast((r.ok ? "✓ " : "✕ ") + r.detail, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+}window.greCheck = async id => {      // Does GRE work to this server? An Iran server of the nodes builds a temporary GRE link to it, pings the inner address and removes the link
+  toast("Testing GRE from an Iran server… (up to a minute)");
+  try { const r = await api(`/api/servers/${id}/gre-probe`, {method: "POST"}); toast((r.ok ? "✓ GRE works: " : "✕ GRE does not work: ") + r.detail, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  refresh();
+};
 window.srvFilter = async id => { setRes("flt", '<span class="mut">⏳ pinging from your Iran servers… (about 30 s)</span>'); toast("Pinging from Iran… (about 30 s)"); try { const r = await api(`/api/servers/${id}/filter-check`, {method: "POST"}); toast((r.level === "clean" ? "✓ " : "⚠ ") + r.verdict, r.level === "clean" ? "ok" : "bad"); state.flt = id; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvReboot = async (id, name) => { if (!await gconfirm(`Reboot ${name}? Its tunnels are down until it is back (usually under a minute).`)) return; try { await api(`/api/servers/${id}/reboot`, {method: "POST"}); toast("✓ Reboot requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.greCheckAll = async () => { toast("Checking GRE on every server… (up to a minute)"); try { const r = await api("/api/servers/gre-check-all?role=" + encodeURIComponent(state.tab), {method: "POST"}); toast(`GRE: ${r.ok} ok · ${r.no_gre} without GRE · ${r.bad.length} not OK` + (r.bad.length ? " — " + r.bad.slice(0, 3).join("; ") : ""), r.bad.length ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
@@ -822,16 +886,23 @@ function applyQ() {
 const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
 window.setQ = v => { holdBoxes(); state.q = v.trim().toLowerCase(); applyQ(); };
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.srvToggle = id => { const s = (state.serversCache || []).find(x => x.id === id); if (s) srvSet(id, s.enabled === false); };      // the on / off button of the server window
-/* enable / disable a server: enabled = the panel checks it (and looks at once), disabled = it is not checked and gives no alerts; nothing changes on the server itself. The status bar offers Undo. */
+window.srvToggle = id => {      // the switch of the server window: it flips at once (smoothly), the work follows in the background, and it cannot be pressed twice meanwhile
+  const s = (state.serversCache || []).find(x => x.id === id), sw = document.querySelector("#modal .srv-sw"); if (!s) return;
+  if (sw && sw.dataset.busy) { const i = sw.querySelector("input"); if (i) i.checked = !i.checked; return; }
+  const on = s.enabled === false;
+  if (sw) { sw.dataset.busy = "1"; sw.classList.toggle("on", on); const t = sw.querySelector("b"); if (t) t.textContent = on ? "Enabled" : "Disabled"; const i = sw.querySelector("input"); if (i) i.checked = on; }
+  srvSet(id, on);
+};
+/* enable / disable a server: enabled = the panel checks it (the look at the server runs in the background: the switch never waits for it), disabled = it is not checked and gives no alerts; nothing changes on the server itself. The status bar offers Undo. */
 window.srvSet = async (id, on, undoing) => {
   const s = (state.serversCache || []).find(x => x.id === id); if (!s) return;
   const undo = () => srvSet(id, !on, true);
   try {
     await api(`/api/servers/${id}`, {method: "PUT", body: JSON.stringify({name: s.name, host: s.host, role: s.role, ssh_user: s.ssh_user, ssh_port: s.ssh_port, provider: s.provider || "", enabled: on})});
-    if (!on) { toast(undoing ? `${s.name} is disabled again.` : `${s.name} is disabled. It is no longer checked.`, "ok", undoing ? null : undo); refresh(); return; }
-    let seen = null; try { seen = await api(`/api/servers/${id}/check`, {method: "POST"}); } catch (e) { seen = {error: e.message}; }
-    toast(undoing ? `${s.name} is enabled again.` : seen && seen.error ? `${s.name} is enabled, but it does not answer yet: ${String(seen.error).slice(0, 90)}` : `${s.name} is enabled and online. It is checked again from now.`, seen && seen.error ? "bad" : "ok", undoing ? null : undo); refresh();
+    s.enabled = on;
+    toast(on ? (undoing ? `${s.name} is enabled again.` : `${s.name} is enabled. Looking at it now…`) : (undoing ? `${s.name} is disabled again.` : `${s.name} is disabled. It is no longer checked.`), "ok", undoing ? null : undo);
+    refresh();
+    if (on) api(`/api/servers/${id}/check`, {method: "POST"}).then(() => { if (!undoing) toast(`${s.name} is enabled and online.`, "ok"); }).catch(e => toast(`${s.name} is enabled, but it does not answer yet: ${String(e.message).slice(0, 90)}`, "bad")).finally(() => refresh());
   } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };

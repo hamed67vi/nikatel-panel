@@ -72,12 +72,23 @@ def nodes_put(body: NodesIn):
 
 class InstallIn(BaseModel):
     items: list[str] = Field(min_length=1, max_length=4)
-    cert: str = Field("", max_length=8000)
+    cert: str = Field("", max_length=8000)      # the Marzban panel's certificate, or - for a PasarGuard node - the API key the PasarGuard panel gives
+
+
+@router.get("/servers/{server_id}/pasarguard-cert")
+def pasarguard_cert(server_id: int):
+    """The public certificate of the PasarGuard node installed on this server (to set it in the PasarGuard panel)."""
+    from ..services import extras
+
+    try:
+        return {"ok": True, **extras.pasarguard_cert(server_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/servers/{server_id}/install")
 def install_extras(server_id: int, body: InstallIn):
-    """Install the torrent block and/or a Marzban node on a server (Add server → Install after adding)."""
+    """Install on a server: the torrent block, a Marzban node, a PasarGuard node (with its API key) or the update of the system packages."""
     from ..services import extras
 
     try:
@@ -168,6 +179,12 @@ def gre_check_all(role: str = ""):
 def gre_check(server_id: int):
     """Check the GRE links of one server now."""
     return {"ok": True, **_wrap(nodes.gre_check, server_id)}
+
+
+@router.post("/servers/{server_id}/gre-probe")
+def gre_probe(server_id: int):
+    """Does GRE work to this server: an Iran server builds a temporary GRE link to it, pings the inner address and removes the link (up to a minute)."""
+    return {"ok": True, **_wrap(nodes.gre_probe, server_id)}
 
 
 @router.post("/servers/{server_id}/filter-check")

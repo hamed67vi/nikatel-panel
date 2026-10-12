@@ -28,7 +28,10 @@ PRESETS = {
     "failed": ("Failed services", "systemctl --failed --no-legend --plain; echo; systemctl list-units --no-legend --plain 'backhaul-*' 'nikatel-*' 'backpack-*' 'chisel-*' 'paqet-*' | cut -c1-160"),
     "top": ("Busiest processes", "ps -eo pid,comm,pcpu,pmem,etime --sort=-pcpu | head -15"),
     "disk": ("Disk", "df -h / /var /opt 2>/dev/null | awk '!a[$1]++'; echo; du -xsh /var/log /root 2>/dev/null"),
-    "net": ("Network", "ip -br addr; echo; ip route; echo; ss -s"),
+    "net": ("Network and ports", "ip -br addr; echo; ip route; echo; ss -s; echo; echo 'Listening ports:'; ss -ltnp | awk 'NR>1 && /LISTEN/' | cut -c1-160"),
+    "health": ("Health", "uptime; echo; free -h; echo; df -h / | tail -2"),
+    "who": ("Who is logged in", "who; echo; last -n 8 -a | head -10"),
+    "time": ("Clock", "date; echo; timedatectl 2>/dev/null | head -6"),
     "tunnels": ("Tunnel units", "systemctl list-units --all --no-legend --plain 'backhaul-*' 'nikatel-gre-*' 'backpack-*' 'chisel-*' 'paqet-*' | cut -c1-160; echo; ip -br link show type gre 2>/dev/null"),
 }
 
@@ -686,6 +689,81 @@ def gre_check(server_id: int) -> dict:
             d["gre"] = res
             s.extra = d
             emit(db, "ok" if res["ok"] else "warn", "servers", f"GRE check of {name}: {res['detail']}.", name)
+
+    return res
+
+
+def _probe_pair(tester: dict, target: dict) -> dict:
+    """One GRE reach test between two servers: a temporary GRE link (a small private network from 10.253.x.x) is made on BOTH, the tester pings the target's inner address,
+    and the link is removed again - always, also when something fails in between. Nothing stays on either server."""
+    import ipaddress
+    import random
+
+    rnd = random.SystemRandom()
+    name, key = f"nkgp{rnd.randint(0, 99)}", rnd.randint(100000, 999999)
+    net = ipaddress.ip_network(f"10.253.{rnd.randint(0, 255)}.{rnd.randrange(0, 256, 4)}/30")
+    ip_t, ip_s = (str(h) for h in list(net.hosts())[:2])
+    nt, ns = Node(tester["host"], tester["user"], tester["port"]), Node(target["host"], target["user"], target["port"])
+    res = {"tester": tester["name"], "ok": False, "received": 0, "detail": ""}
+
+    try:
+        run_action(nt, "gre_probe_up", {"NAME": name, "LOCAL": tester["host"], "REMOTE": target["host"], "KEY": str(key), "ADDR": f"{ip_t}/30"}, timeout=40)
+        run_action(ns, "gre_probe_up", {"NAME": name, "LOCAL": target["host"], "REMOTE": tester["host"], "KEY": str(key), "ADDR": f"{ip_s}/30"}, timeout=40)
+        got = re.search(r"(\d+) received", run_script(nt, "gre_verify", {"IFACE": name, "PEER": ip_s}, timeout=40))
+        res["received"] = int(got.group(1)) if got else 0
+        res["ok"] = res["received"] >= 8
+        res["detail"] = (f"{res['received']} of 10 pings came back through a temporary GRE link from {tester['name']}" if res["received"]
+                         else f"no ping came back through a temporary GRE link from {tester['name']}: GRE (protocol 47) does not pass between the two, or a firewall in front of one of them drops it")
+    except (SSHError, ValueError) as e:
+        res["detail"] = f"the test could not run from {tester['name']}: {str(e)[:120]}"
+    finally:
+        for node in (nt, ns):        # a half-made link is removed as well: the removal does nothing where nothing was made
+            try:
+                run_action(node, "gre_probe_down", {"NAME": name}, timeout=30)
+            except (SSHError, ValueError):
+                log.warning("gre probe: could not remove %s on %s", name, node.host)
+
+    return res
+
+
+def gre_probe(server_id: int) -> dict:
+    """Does GRE work to this server? Not 'does it have a GRE link': an Iran server of the nodes (another one when this IS an Iran server) builds a temporary GRE link
+    to it, pings the inner address and removes the link. The first Iran server that gets through is enough; when it fails, a second one is tried to tell a route problem
+    from a problem of one server. The answer is kept in the server's extra data so the list can show a mark."""
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        target = {"id": s.id, "name": s.name, "host": s.host, "user": s.ssh_user, "port": s.ssh_port}
+        testers = [{"id": x.id, "name": x.name, "host": x.host, "user": x.ssh_user, "port": x.ssh_port}
+                   for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.id != server_id).order_by(Server.name)) if x.online is not False]
+
+    if not testers:
+        raise ValueError("no other Iran server is online to test from: add or enable one in Servers → Iran")
+
+    tried = []
+
+    for t in testers[:2]:
+        r = _probe_pair(t, target)
+        tried.append(r)
+
+        if r["ok"]:
+            break
+
+    ok = any(r["ok"] for r in tried)
+    detail = tried[-1]["detail"] if ok else " ; ".join(r["detail"] for r in tried)
+    res = {"ok": ok, "links": len(tried), "bad": [] if ok else [r["tester"] for r in tried], "at": int(time.time()), "detail": detail, "via": tried[-1]["tester"], "mode": "probe", "tried": tried}
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is not None:
+            d = dict(s.extra or {})
+            d["gre"] = res
+            s.extra = d
+            emit(db, "ok" if ok else "warn", "servers", f"GRE test of {target['name']}: {detail}.", target["name"])
 
     return res
 

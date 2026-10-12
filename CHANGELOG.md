@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.31.0
+
+**Servers: disabled looks disabled, a new Install view, a console for anyone.**
+
+- **Install view** (the Install button of the server window, in place of the Abuse-Defender button): one block for the two panel nodes (a switch between *Marzban node*, which takes the panel's certificate, and *PasarGuard node*, which takes the API key the PasarGuard panel gives; it is installed with PasarGuard's own installer, the key is kept only while the installer runs, and *Show certificate* copies the node's public certificate to set in the PasarGuard panel), then one row per tool: Abuse-Defender (Install / Remove, with its state) and Update the server (apt update and upgrade, no reboot). Detached installs with the same story window as before; new reviewed actions `install_pasarguard_node` and `install_os_update` and a read-only `pgnode_cert` (`GET /api/servers/{id}/pasarguard-cert`). **The PasarGuard installer was written from its documentation and has not been run on a real server yet.**
+- **Console:** six plain questions to click (Is it healthy? / Is anything broken? / What happened lately? / What is slow? / Is the disk full? / Network and open ports) with the answer under them; the command line is folded away under *Advanced*.
+- **Disabled servers:** the Status column says *disabled*, the Issues column is empty, and the row is slate and striped (never red or yellow). The enable / disable switch flips at once and smoothly (the look at the server runs in the background and cannot be pressed twice), has no frame, and is 48 x 28 like the design.
+- **Log box:** a click on the status bar opens a log box of one fixed size with two tabs, *This session* and *History* (the events kept on the server; *All* / *Problems*).
+- Every view of the server window (details, console, install, edit) has the same size; the hover arrow of a card is softer.
+
+## 1.30.9
+
+**The GRE test tests GRE, not the list of GRE links.** `POST /api/servers/{id}/gre-probe`: an Iran server of the nodes (another one when the tested server is Iran) builds a temporary GRE link to the server, pings the inner address 10 times and removes the link - on both ends, always, also when something fails in between (two new reviewed actions, `gre_probe_up` / `gre_probe_down`: their own interface `nkgpN`, a network from 10.253.x.x, their own tagged firewall rules, nothing on disk, every value validated). It passes with 8 of 10 pings; when it fails a second Iran server is asked, to tell a route problem from one server. The answer feeds the GRE mark in the list and the GRE row of the window (`via <server>`). The window's GRE test button and the mark in the list use it.
+
+**Server window:** the strip for messages sits under the header (above the buttons) and is always there, the window has no empty space below the charts and keeps one size from the first moment (the chart area has its final height before the charts arrive). The pings-from-Iran box is not shown after the Filtering test any more: the places are the tooltip of the Filtering row.
+
 ## 1.30.8
 
 **The server window, after the operator's design.** One fixed size from the first moment (the whole height the screen allows; the body scrolls inside), so nothing jumps when the charts arrive or Console / Edit / Back are pressed. The header is in three groups: the name with its address, role and host underneath; the Enabled switch; Console / Edit / Delete; then minimise and close. The three boxes (System, Resources, Access & status) are tighter, with title-case headings, coloured icons, coloured bars with the used / total beside them, a copy button on the SSH address, the provider as a link, the site check with an icon, and a dot for status and GRE (`swap_used_mb` / `swap_total_mb` are new in the facts). The outcome of an action is a small message on the top edge of the window (a notch over the border), never over a button and never changing the size; a click on it shows the whole text.
