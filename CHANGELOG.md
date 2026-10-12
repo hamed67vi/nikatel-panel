@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.13
+
+- DNS · IP switch: the server tag next to an address no longer wraps onto two lines.
+
 ## 1.19.12
 
 - DNS · IP switch made compact: the four steps are one row of small cards (two rows below 1300 px), the records sit in a box of their own (36 px rows, fixed columns, scrolls inside) with a search box, the cards are smaller.

@@ -3105,3 +3105,4 @@ body #page .dns-act select { height: 28px; max-width: 230px; font-size: 12.5px; 
 body #page .dns-recs + .empty, body #page .card:has(> .dns-recs) > h3 { gap: 10px; } body #page .card:has(> .dns-recs) > h3 .tb-search input { height: 28px; width: 190px; font-size: 12.5px; }
 body #page .card:has(> .dns-recs) { padding: 8px 12px 10px; }
 @media (max-width: 760px) { body #page .dns-rec { grid-template-columns: 1fr; } body #page .dns-recs { max-height: none; } }
+body #page .dns-ip { white-space: nowrap; } body #page .dns-ip .pill { white-space: nowrap; } body #page .dns-rec > b { overflow: hidden; text-overflow: ellipsis; }
