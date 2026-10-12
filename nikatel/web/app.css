@@ -3250,3 +3250,40 @@ body #page .bal-row .ap-why.good { color: #32d74b; } body #page .bal-row .ap-why
 .tok-row code { font-family: var(--mono); font-size: 11.5px; opacity: .85; } .tok-row small { flex: 1; }
 .tok-show { display: flex; align-items: center; gap: 10px; margin: 10px 0; padding: 10px 12px; border-radius: 11px; box-shadow: var(--edge); }
 .tok-show code { font-family: var(--mono); font-size: 13px; word-break: break-all; flex: 1; }
+
+/* ---- UI round 2026-10-13: messages inside the open window, text boxes brighter, one search box everywhere, the install colour, the add-server window */
+:root { --text-in: #ffffff; }
+html[data-mode="light"] { --text-in: #0b0f1e; }
+input, select, textarea { color: var(--text-in); }
+input::placeholder, textarea::placeholder { color: var(--mut); opacity: .85; }
+textarea { line-height: 1.45; }
+
+/* a window shows the outcome of what was done in it, at its top; the status bar at the back only keeps the history */
+.modal-msg { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 13px; line-height: 1.4; border: 1px solid var(--line); background: rgba(255,255,255,.06); animation: rise .2s var(--ease) both; }
+.modal-msg.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.modal-msg.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.modal-msg time { margin-left: auto; font: 11px var(--mono); opacity: .6; }
+
+/* the search box: the magnifier at 12 px, the text at 36 px, a soft ring when focused - the same everywhere */
+.tb-search, .searchbar, .dsearch { position: relative; }
+html body #page .tb-search::before, html body #page .searchbar::before, html body #page .dsearch::before { content: ""; position: absolute; left: 12px; top: 50%; width: 15px; height: 15px; transform: translateY(-50%); pointer-events: none; opacity: .8; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b4bad0' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E") center / contain no-repeat; z-index: 1; }
+html body #page .toolbar .tb-search::before { left: 24px; }          /* this one has a 12 px separator on its left */
+html body #page input[type=search] { padding: 0 10px 0 36px; height: 32px; border-radius: 12px; font-size: 13px; border: 1px solid rgba(255,255,255,.10); background: rgba(0,0,0,.18); color: var(--text-in); }
+html body #page .toolbar .tb-search input { width: 220px; height: 32px; padding-left: 36px; }
+html body #page .pn-bars .searchbar input, html body #page .dsearch input { padding-left: 36px; }
+html body #page input[type=search]:focus { border-color: rgba(124,131,255,.65); box-shadow: 0 0 0 3px rgba(124,131,255,.18); background: rgba(0,0,0,.26); }
+html body #page .sb-psearch i { left: 12px; } html body #page .sb-psearch input { padding-left: 36px; border-radius: 12px; }
+html[data-mode="light"] body #page input[type=search] { background: rgba(255,255,255,.9); border-color: rgba(17,21,39,.14); }
+
+/* a server the panel is connecting to or installing on: its own colour, not the green / yellow / red of health */
+.tbl tr.sev-blue td { background: rgba(124,131,255,.10); } .tbl tr.sev-blue:hover td { background: rgba(124,131,255,.18); }
+.tbl tr.sev-blue td:first-child { border-left-color: var(--acc); }
+tr.sev-blue .srv-ic { color: var(--acc); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--acc) 55%, transparent)); }
+.tbl tr.sev-blue .st { color: var(--acc); }
+
+/* the add-server window: the certificate box only when Marzban node is ticked; the "remember" switch on one line; where the server is */
+.srv-after .x-cert.off { display: none; }
+.srv-after .x-cert-save { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; cursor: pointer; } .srv-after .x-cert-save.off { display: none; }
+.srv-where { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-height: 32px; font-size: 12.5px; }
+.srv-where .pill { font-weight: 700; } .srv-where a { font-size: 11.5px; color: var(--mut); cursor: pointer; text-decoration: underline dotted; } .srv-where a:hover { color: var(--text); }
+.gre-none { color: var(--mut); font-size: 11.5px; cursor: pointer; } .gre-none:hover { color: var(--text); }

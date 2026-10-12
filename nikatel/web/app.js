@@ -47,6 +47,8 @@ function toast(text, cls) {
   bar.className = "statusbar live " + (cls || "");
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
   clearTimeout(toastT); toastT = setTimeout(() => bar.classList.remove("live"), 7000);
+  const mb = $("#modal .modal-body");          // a window that is open shows the outcome at its top: nobody can read the bar behind it
+  if (mb) { let m = mb.querySelector(".modal-msg"); if (!m) { m = document.createElement("div"); mb.prepend(m); } m.className = "modal-msg " + (cls || "info"); m.dataset.t = Date.now(); m.innerHTML = `<span>${esc(String(text))}</span><time>${new Date().toLocaleTimeString(undefined, {hour12: false})}</time>`; }
 }
 window.sbHistory = () => showModal("<b>Messages</b>", MSGS.length ? MSGS.map(m => `<div class="msg-row ${m.cls === "bad" ? "bad" : m.cls === "ok" ? "ok" : "info"}"><time>${new Date(m.t).toLocaleTimeString(undefined, {hour12: false})}</time><i></i><span>${esc(m.text)}</span></div>`).join("") : '<div class="empty">No message yet.</div>');
 
@@ -296,8 +298,9 @@ function showModal(title, body, cls = "", acts = "") {
   const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button>`;
   const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
   if (cur && mb && cur.className.trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
-    const keep = mb.scrollTop; cur.style.minHeight = cur.offsetHeight + "px";
+    const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg"); cur.style.minHeight = cur.offsetHeight + "px";
     cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;
+    if (msg && Date.now() - (+msg.dataset.t || 0) < 20000) mb.prepend(msg);      // the outcome of what was just done stays readable after the redraw
     return;
   }
   const still = cur ? " style=\"animation:none\"" : "";      // another window in place of this one (details ↔ edit form): it is already on screen, so it does not fly in again
@@ -474,8 +477,8 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
     <div class="sgrid two srv-two">
       <div class="sbox"><h5><i>🖥</i>Server</h5>
         ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value="${esc(s ? s.name : "")}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)">`)}
-        ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10">`)}
-        ${fl("Role", `<select name="role">${["iran", "foreign"].map(r => `<option ${(s ? s.role : role) === r ? "selected" : ""}>${r}</option>`).join("")}</select>`)}
+        ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
+        <label class="kv2 kf bf"><span>Where</span><input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></label>
         <label class="kv2 kf bf"><span>Checked</span><span class="chkline"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> by the panel</span></label></div>
       <div class="sbox"><h5><i>🔑</i>SSH access</h5>
         ${fl("User", `<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}">`)}
@@ -487,9 +490,9 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
     <div class="sbox srv-after"><h5><i>⚙</i>${s ? "Install after saving" : "Install after adding"}<small>optional · needs root · the server is ${s ? "saved" : "added"} first</small></h5>
       <div class="srv-opts">
         <label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>
-        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="this.closest('.srv-after').querySelectorAll('.x-cert').forEach(e => { e.classList.toggle('off', !this.checked); e.querySelectorAll('textarea, input').forEach(i => { i.disabled = !this.checked; }); })"> Marzban node</label></div>
+        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="this.closest('.srv-after').querySelectorAll('.x-cert, .x-cert-save').forEach(e => { e.classList.toggle('off', !this.checked); e.querySelectorAll('textarea, input').forEach(i => { i.disabled = !this.checked; }); })"> Marzban node</label></div>
       <label class="x-cert off">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" disabled spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
-      <label class="chk x-cert off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>
+      <label class="x-cert-save off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>
     <div class="sbar bld-foot"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<span class="sp"></span>
       <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install acts on the server itself." : "Without a password the panel's key must already be in the server's authorized_keys (Settings shows the key)."}</small></div>
   </form>`;
@@ -497,7 +500,7 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
 
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
 /* severity colours of the rows: red = fully down (or a server that cannot be reached / is critical), yellow = everything else that is wrong - packet loss of any size, degraded, slow, loaded */
-const srvSev = s => { if (!s.enabled) return ""; const f = s.facts || {}; if (s.online === false) return "sev-red"; return noLogin(s) || /^SSH does not answer/.test(s.last_error || "") || (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };      // red = the server is cut (off); a server that is on but has a problem (a full disk, a high CPU, no login, SSH failing) is yellow
+const srvSev = s => { if (!s.enabled) return ""; if (srvBusy(s)) return "sev-blue"; const f = s.facts || {}; if (s.online === false) return "sev-red"; return noLogin(s) || /^SSH does not answer/.test(s.last_error || "") || (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };      // red = the server is cut (off); a server that is on but has a problem (a full disk, a high CPU, no login, SSH failing) is yellow
 const SHOW_LOSS = 20;   // packet loss under this is normal for the Iran-abroad paths: not shown, not coloured
 const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.state === "down") return "sev-red"; return t.state === "unknown" || t.state === "starting" || loss >= SHOW_LOSS ? "sev-yellow" : ""; };
 /* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
@@ -520,7 +523,7 @@ PAGES.servers = async () => {
     const ts = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre"));
     if (!ts.length) {   // no GRE tunnel of the panel on this server: a check button, then the answer
       const g = (s.extra || {}).gre;
-      if (!g) return `<button class="sm" onclick="event.stopPropagation();greCheck(${s.id})" title="Look for GRE links on this server and ping their other end">check</button>`;
+      if (!g) return `<span class="gre-none" onclick="event.stopPropagation();greCheck(${s.id})" title="Checked by itself when a server is added; click to look now">not checked</span>`;
       const tip = `${g.detail} · checked ${ago(g.at)} ago - click to check again`;
       return g.ok ? `<b class="gw-ok" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✓</b> <small class="mut">${g.links}</small>` : g.links ? `<b class="err" style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})">GRE ✕</b>` : `<span style="cursor:pointer" title="${esc(tip)}" onclick="event.stopPropagation();greCheck(${s.id})"><b class="gw-ok">GRE ✓</b> <small class="mut">0</small></span>`;
     }
@@ -594,7 +597,7 @@ function serverBar(s) {
     [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
     s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`),
       b("🛡", abuseOn ? "Remove Abuse-Defender" : "Abuse-Defender", abuseOn ? "Stop dropping traffic to abused ranges" : "Drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)] : [],
-    [b("🔐", "SSH password", "Set a new login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`),
+    [b("🔐", "Change password", "Set a new SSH login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`),
      `<select class="sm abtn abtn-open" title="Open this server in a program on your computer" onchange="if(this.value){srvOpen(${s.id}, this.value);this.selectedIndex=0}"><option value="">🖥 Open in…</option><option value="ssh">Windows ssh</option><option value="putty">PuTTY</option><option value="mobaxterm">MobaXterm</option></select>`,
      ...(hostKeyChanged ? [b("↺", "Trust the new server", "The server was reinstalled and its SSH identity changed: forget the old one so the panel can connect again", `forgetKey(${s.id}, '${nm}')`, "", true)] : [])],
     [b("⏻", "Reboot", "Its tunnels are down until it is back", `srvReboot(${s.id}, '${nm}')`, "danger")],
@@ -702,7 +705,7 @@ window.srvMany = () => { state.edit = "many"; state.open = null; refresh(); };
 window.addTab = k => { state.edit = k; addModal(); };
 function addModal() {   // one window for adding: a tab for one server, a tab for several at once
   const one = state.edit === "new";
-  showModal(`<b>+ Add ${esc(state.tab)} server</b>`, `<div class="tabs" style="margin-bottom:12px"><button class="${one ? "on" : ""}" onclick="addTab('new')">One server</button><button class="${one ? "" : "on"}" onclick="addTab('many')">Several at once</button></div>${one ? SERVER_FORM(null, state.tab) : MANY_FORM()}`);
+  showModal(`<b>+ Add server</b>`, `<div class="tabs" style="margin-bottom:12px"><button class="${one ? "on" : ""}" onclick="addTab('new')">One server</button><button class="${one ? "" : "on"}" onclick="addTab('many')">Several at once</button></div>${one ? SERVER_FORM(null, state.tab) : MANY_FORM()}`);
 }
 window.srvManyGo = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Adding… (a few seconds per server)"); try { const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: state.tab, lines: f.get("lines"), password: f.get("password"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22})}); state.manyRes = r.items; const ok = r.items.filter(i => i.ok).length; toast(`${ok ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, ok === r.items.length ? "ok" : "bad"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 const MANY_FORM = () => `<form class="frm" onsubmit="return srvManyGo(event)"><label style="grid-column:1/-1">Servers, one per line: <small>name host [user] [port] — e.g. <code>de4 203.0.113.9</code></small><textarea name="lines" class="ob-raw" required placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
@@ -804,7 +807,10 @@ window.serverPassword = (id, name, why) => connectWithPrompt(id, name, why || "e
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  const body = {name: f.get("name").trim(), host: f.get("host").trim(), role: f.get("role"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
+  let role = f.get("role") || "";
+  if (!role) { role = await srvWhere(e.target, true); if (!role) { await srvFlip(e.target); role = (e.target.querySelector("[name=role]") || {}).value || ""; } }
+  if (!role) { toast("✕ Say where the server is (Iran or foreign) first", "bad"); return false; }
+  const body = {name: f.get("name").trim(), host: f.get("host").trim(), role, ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
   const items = [f.get("x_bt") === "on" ? "btblock" : "", f.get("x_node") === "on" ? "marzban_node" : ""].filter(Boolean), cert = f.get("x_cert") || "";
   if (items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
   if (items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
@@ -816,10 +822,10 @@ window.saveServer = async (e, id) => {
     if (id && !pw) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
       toast("Server added — connecting with the password…");
-      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname, "ok"); }
+      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname, "ok"); api(`/api/servers/${saved.id}/gre-check`, {method: "POST"}).catch(() => {}).then(() => refresh()); }
       catch (err) { connected = await connectWithPrompt(saved.id, body.name, err.message); }
     } else {          // no password: the panel's key must already be on the server - try it
-      try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
+      try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); api(`/api/servers/${saved.id}/gre-check`, {method: "POST"}).catch(() => {}).then(() => refresh()); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
     refresh();
     if (items.length && connected) {   // the extras run in one story the operator can follow (and minimise)
@@ -3959,4 +3965,24 @@ window.licSave = async (e, remove) => {
   if (remove && !await gconfirm("Remove the license? The panel falls back to the free tier (Backhaul TCP Mux only).", {danger: true})) return false;
   try { await api("/api/license", {method: "PUT", body: JSON.stringify({token: tok})}); toast(remove ? "✓ License removed" : "✓ License saved", "ok"); licLoad(); } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
+};
+
+/* where a server is: asked from the geo services once the address is typed; the role follows (Iran or foreign) and can be flipped by hand */
+window.srvWhere = async (form, force) => {
+  const host = (form.querySelector("[name=host]") || {}).value || "", box = form.querySelector(".srv-where"), roleIn = form.querySelector("[name=role]");
+  if (!box || !roleIn || !host.trim() || (!force && box.dataset.host === host.trim())) return roleIn ? roleIn.value : "";
+  box.dataset.host = host.trim(); box.innerHTML = '<span class="mut">⏳ looking up where it is…</span>';
+  try {
+    const w = await api("/api/servers/where?host=" + encodeURIComponent(host.trim()));
+    roleIn.value = w.role || "";
+    const place = [w.country, w.city].filter(Boolean).join(", ");
+    box.innerHTML = w.role ? `<span class="pill ${w.role === "iran" ? "ok" : "info"}">${w.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><span class="mut">${esc(place || w.country_code)}</span><a onclick="srvFlip(this.closest('form'))">not right?</a>` : `<span class="pill warn">unknown</span><span class="mut">no geo service answered</span><a onclick="srvFlip(this.closest('form'))">choose</a>`;
+  } catch (e) { roleIn.value = ""; box.innerHTML = `<span class="pill warn">unknown</span><span class="mut">${esc(e.message)}</span><a onclick="srvFlip(this.closest('form'))">choose</a>`; }
+  return roleIn.value;
+};
+window.srvFlip = async form => {
+  const roleIn = form.querySelector("[name=role]"), box = form.querySelector(".srv-where");
+  const v = await glassChoice("Where is this server?", [{label: "🇮🇷 Iran", v: "iran"}, {label: "🌍 Foreign", v: "foreign"}]);
+  if (!v) return;
+  roleIn.value = v; box.innerHTML = `<span class="pill ${v === "iran" ? "ok" : "info"}">${v === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><span class="mut">chosen by you</span><a onclick="srvFlip(this.closest('form'))">change</a>`;
 };

@@ -1,7 +1,7 @@
 import subprocess
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -42,7 +42,7 @@ class ServerOut(BaseModel):
 class ServerIn(BaseModel):
     name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     host: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]*$")
-    role: str = Field(pattern=r"^(iran|foreign)$")
+    role: str = Field("", pattern=r"^(iran|foreign)?$")        # empty = found from the address (Iran or foreign) when the server is added; an edit keeps the role
     ssh_user: str = Field("root", min_length=1, max_length=32, pattern=r"^[a-z_][a-z0-9_-]*$")
     ssh_port: int = Field(22, ge=1, le=65535)
     enabled: bool = True
@@ -59,6 +59,14 @@ def list_servers(role: str | None = None):
             q = q.where(Server.role == role)
 
         return [ServerOut.model_validate(s) for s in db.scalars(q)]
+
+
+@router.get("/servers/where")
+def server_where(host: str = Query(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]*$")):
+    """Where a server is before it is added: its country by the geo services, and the role that follows (iran / foreign); empty when no service answers."""
+    from ..services import nodes
+
+    return {"ok": True, **nodes.where(host)}
 
 
 @router.get("/servers/{server_id}", response_model=ServerOut)
@@ -92,7 +100,22 @@ def add_server(body: ServerIn):
         if why:
             raise HTTPException(409, why[0].upper() + why[1:])
 
-        s = Server(**body.model_dump())
+        data = body.model_dump()
+
+        if not data["role"]:
+            from ..services import nodes
+
+            w = nodes.where(body.host)
+
+            if not w["role"]:
+                raise HTTPException(400, "could not tell where this server is (no geo service answered): choose Iran or foreign and add it again")
+
+            data["role"] = w["role"]
+
+            if w["country_code"]:
+                data["country"] = w["country_code"]
+
+        s = Server(**data)
         db.add(s)
         db.flush()
         emit(db, "info", "servers", f"Server {s.name} ({s.role}) added.", s.name)
@@ -115,7 +138,12 @@ def update_server(server_id: int, body: ServerIn):
 
         was_enabled, old_name, old_host = s.enabled, s.name, s.host
 
-        for k, v in body.model_dump().items():
+        data = body.model_dump()
+
+        if not data["role"]:
+            data["role"] = s.role                    # an edit without a role keeps the one the server has
+
+        for k, v in data.items():
             setattr(s, k, v)
 
         if s.name != old_name:                       # the tunnels that carry the name the panel made for them follow the new server name

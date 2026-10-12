@@ -15,7 +15,7 @@ Everything the panel does, by area. Where a feature has its own page in the UI t
 * **Iran / Foreign lists** with the monitoring view inside: CPU, RAM, swap, disk, load, traffic, connections, busiest process, Abuse-Defender rules; sampled every 2 minutes over SSH; 24 h charts.
 * **Server window** (More): Overview (system, resources, access, *Provider* with its website link and a site check, location and security, tunnels on it) · Charts 24 h · Tools · Console.
 * **Tools**: GRE test, console with presets, connect with the password once (installs the panel's key), forget host key, "filtered in Iran?" check (your Iran servers + check-host.net), Abuse-Defender install / remove, open in Windows ssh / PuTTY / MobaXterm with your own key, reboot.
-* Add one server or many at once; edit, disable, delete (nothing changes on the server); country of foreign servers by majority vote of four services; hosting provider (name, website, AS) from registry data.
+* Add one server or many at once (where it is - Iran or foreign - is found from its address; its GRE links are checked by themselves once it answers); edit, disable, delete (nothing changes on the server); country of foreign servers by majority vote of four services; hosting provider (name, website, AS) from registry data.
 * **Gateway & outbounds**: a plain Xray pushed to an Iran server over SSH (ports forwarded to foreign nodes, borrowed vless / vmess / trojan / ss configs as the way out during internet cuts, modes auto / borrowed / direct, exit test per config) and the Xray outbounds of every panel with backup, validation and automatic rollback.
 
 ## 3. Tunnels

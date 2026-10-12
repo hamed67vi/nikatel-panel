@@ -750,3 +750,16 @@ def filter_daily_job() -> None:
             log.warning("filter check %s failed: %s", sid, e)
 
         time.sleep(5)
+
+
+def where(host: str) -> dict:
+    """The role of a server from where it is: Iran -> `iran`, any other country -> `foreign`, no answer -> '' (the operator is asked)."""
+    try:
+        g = lookup(host, want_provider=False)
+    except Exception as e:  # noqa: BLE001  the geo services are outside: no answer is an answer
+        log.warning("where %s: %s", host, str(e)[:100])
+        return {"country_code": "", "country": "", "city": "", "role": "", "sources": 0}
+
+    code = (g.get("country_code") or "").upper()
+    return {"country_code": code, "country": g.get("country") or "", "city": g.get("city") or "", "role": "iran" if code == "IR" else ("foreign" if code else ""), "sources": g.get("sources", 0)}
+

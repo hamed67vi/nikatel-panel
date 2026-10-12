@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.28.1
+
+**The UI round the operator asked for** (every point verified in the browser on the test copy).
+
+- **A window shows its own outcome.** Whatever was done in an open window (added, saved, failed, "a server named X already exists") is now written at the top of that window, in green or red, and stays there after a redraw. The status bar at the back only keeps the history. Before, the answer landed behind the window where nobody could read it.
+- **Add server without a Role box:** where the server is (Iran or foreign) is found from its address through the geo services as soon as it is typed, shown with the country, and can be flipped by hand ("not right?"); the API takes `role` optionally and detects it too. A French server was added as Iranian by hand once.
+- **GRE links are checked by themselves** after a server is added and answers; the "check" button in the GRE column is gone (the muted "not checked" text still looks on click).
+- **A server being connected to or installed on has its own colour** (blue), not the green / yellow / red of health.
+- **The add-server window is complete and compact:** the certificate box shows only when Marzban node is ticked, and the "remember this certificate" switch sits on one line (it floated next to the box).
+- **Text in text boxes is white** (and dark on the day theme); placeholders stay grey.
+- **One search box everywhere:** the magnifier at 12 px, the text at 36 px, the same height, radius and focus ring on every search box of the panel (servers, tunnels, configs, panels, DNS, the bot, the dashboard).
+- The server tool "SSH password" is called **Change password**.
+
 ## 1.28.0
 
 **M10 #62 - the OpenAPI document is the manual.** Every one of the 284 routes now has a one-sentence description (232 were written today; 52 existed), so `/api/docs` and `/api/openapi.json` explain what each route does, for people and for programs that drive the panel. `tests/test_openapi.py` fails on a route without a description, so it stays that way. Typed response models for every route are not done yet (most answers are plain dicts with `ok` first); they come with #65 when the page becomes a pure client.
