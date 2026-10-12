@@ -378,8 +378,8 @@ def _wait(aid: int, limit: int = 900) -> tuple[bool, list[str]]:
     return False, ["timed out"]
 
 
-def _start(label: str, fn, *args, action: str = "autopilot") -> int:
-    """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id."""
+def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manual") -> int:
+    """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id. `source` says who started it (manual / auto)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server")
 
@@ -388,7 +388,7 @@ def _start(label: str, fn, *args, action: str = "autopilot") -> int:
             raise ValueError("a smart repair of this tunnel is already running")
 
         with session() as db:
-            entry = ActionLog(ref=label, action=action, source="manual", story=["Starting…"])
+            entry = ActionLog(ref=label, action=action, source=source, story=["Starting…"])
             db.add(entry)
             db.flush()
             aid = entry.id
@@ -712,7 +712,7 @@ def smart_fix_start(tunnel_id: int, level: str = "switch", source: str = "manual
         raise ValueError("level must be restart, rebuild or switch")
 
     snap = _snapshot(tunnel_id)
-    return _start(snap["name"], smart_fix, tunnel_id, level, source)
+    return _start(snap["name"], smart_fix, tunnel_id, level, source, source=source)
 
 
 def broken_tunnels() -> list[dict]:
@@ -1012,8 +1012,9 @@ def auto_escalate() -> None:
         if len(_BUSY) >= MAX_AUTO_REPAIRS:                # a few at a time: one repair cannot starve the servers of the others
             break
 
-        # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb)
-        if name in muted or name in _BUSY or now - since < (int(conf.get("after_seconds", 180)) + 120 if st_ == "down" else 600) or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
+        # only after the plain restarts were used up since it went down (not just in the last hour: a long outage must still climb), and never
+        # while a plain repair is still restarting things on this tunnel (seen in a live test: the two ran on the same tunnel at once)
+        if name in muted or name in _BUSY or name in actions._RUNNING or now - since < (int(conf.get("after_seconds", 180)) + 120 if st_ == "down" else 600) or (st_ == "down" and actions.recent_fixes(name, max(3600, now - since + 60)) < actions.MAX_PER_HOUR):
             continue
 
         with session() as db:

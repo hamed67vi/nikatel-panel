@@ -90,3 +90,19 @@ Tuned for many users (channel size, connection pool, keepalive, heartbeat, TCP n
 | The foreign server cannot be dialled | BackPack Direct (the Iran side dials) |
 
 When unsure, run *Tunnel test* on the pair: it tries the engines you tick and says which one works best today.
+
+## What the repair does when things break (tested for real, 2026-10-12)
+
+Three faults were caused on purpose on a Backhaul · TCP Mux tunnel between a pair of servers without users, with the
+panel's defaults (check every minute, plain repair after 3 minutes down, 2 plain repairs per tunnel per hour, smart
+repair level *switch*). What the panel did, by itself:
+
+| Fault | Seen as | What happened | Users had no service for |
+|---|---|---|---|
+| the tunnel service stopped on the foreign server | *down* after 108 s: "backhaul-kharej… is inactive" | plain repair restarted the stopped service → up. (Found and fixed here: the check right after the restart still used the external probe's answer from before it and called the tunnel "still down"; the repair now asks again, up to four times over 40 s. A stopped service is now restarted at the next minute, without the 3-minute grace.) | ~6 min then, ~2 min now |
+| the GRE interface deleted on the Iran server | *down* after 44 s: "the GRE interface … is missing" | the on-server watchdog timer (`nikatel-gre-check-<name>.timer`, every minute, installed with the tunnel) put the link back after 87 s; the panel logged "works again" and did nothing else (a missing interface is now also restarted at the next minute should the watchdog not be there) | ~1.5 min |
+| GRE (protocol 47) filtered on the route (a DROP in the foreign server's raw table, where the watchdog cannot open it again) | *down* after 65 s: "no answer from the foreign end over the GRE link"; the Doctor's look said "GRE is filtered on this route" | plain repair restarted the GRE link and both services (no effect) → smart repair: a new GRE link with a new inner network and key was tested **beside** the tunnel (it did not pass either: "nothing was removed, the tunnel stays as it is") → four other kinds were tested → the tunnel was replaced by BackPack · TCP Mux on the same ports (score 79) | ~9.5 min |
+
+Two things the tests also showed: a GRE filter inside the server's own firewall is undone by the watchdog within a
+minute (it re-inserts its ACCEPT rules above anything else), and a repair never deletes a tunnel unless the
+replacement already carries data.

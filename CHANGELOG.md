@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.19.3
+
+- Phone layout of the shop bot lists, continued: every cell carries the name of its column as a small label (the header row is hidden on a phone), so a bare number still says what it is; the Payments and Orders rows fold the same way as the other lists.
+- Chaos tests of the Tunnel Doctor on the pair without users, recorded in docs/tunnels.md: a stopped service, a deleted GRE link (the on-server watchdog timer puts it back within a minute, the panel only watches), GRE filtered on the route (classified as such, restarts tried, a new link tested beside the tunnel, then the switch to BackPack · TCP Mux on the same ports - 9.5 minutes from the cut to the new tunnel carrying data).
+- Seen in that test and fixed: the smart repair could start while the plain repair was still restarting the same tunnel's services (now it waits for it); a smart repair started by the panel itself was logged as "manual".
+
 ## 1.19.2
 
 - A GRE interface that is missing is restarted at the next minute too (no grace): it is as deterministic as a stopped service.

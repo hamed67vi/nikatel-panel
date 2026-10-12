@@ -2267,6 +2267,22 @@ function sbListDraw() {
   $("#ls-pager").innerHTML = r.total ? `<small class="mut">${r.total > L.ps ? `${from + 1}–${from + r.items.length} of ${fmt(r.total)}` : `${fmt(r.total)} rows`}</small>${r.total > L.ps ? pnPager(r.total, L.ps, from, "sbListPage") : ""}` : "";
 }
 window.sbListPage = p => sbListLoad(p);
+/* a phone: every cell of a list row gets the column name of its header as a small label (the header row itself is hidden there), so a
+   bare number still says what it is. Runs on any redraw inside the shop bot page; does nothing on a wide screen. */
+function sbPhoneLabels() {
+  if (innerWidth > 760) return;
+  document.querySelectorAll("#page .sb-ptable").forEach(tbl => {
+    const heads = [...tbl.querySelectorAll(":scope > .sb-lh > span, :scope > .sb-phead > span")].map(s => s.textContent.trim());
+    if (!heads.length) return;
+    tbl.querySelectorAll(".sb-lr, .sb-prow2").forEach(row => [...row.children].forEach((c, i) => {
+      if (c.dataset.h !== undefined) return;
+      const h = heads[i] || "";
+      c.dataset.h = c.querySelector("button, .sb-tog") || c.classList.contains("sb-pask") || c.classList.contains("sb-pu") || h === "#" ? "" : h;
+    }));
+  });
+}
+new MutationObserver(() => { clearTimeout(sbPhoneLabels.t); sbPhoneLabels.t = setTimeout(sbPhoneLabels, 60); }).observe(document.body, {childList: true, subtree: true});
+addEventListener("resize", () => { clearTimeout(sbPhoneLabels.r); sbPhoneLabels.r = setTimeout(sbPhoneLabels, 250); });
 window.sbAsk = id => { const L = sbLR.cur; if (L) { L.ask = id; sbListDraw(); } };
 
 /* ---- users ---- */

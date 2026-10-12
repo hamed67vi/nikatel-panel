@@ -3015,3 +3015,16 @@ html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,8
   body #page .srv-tbl, body #page .tn-list, body #page .cfg-grid { min-width: 0; }
   body .modal.plan-add, body .modal.plan-edit, body .modal.cat-add, body .modal.dc-edit, body .modal.cr-box, body .modal.user-box { width: 100%; }
 }
+
+/* ---- a phone, continued: the Payments / Orders rows (sb-prow2) fold the same way, and every cell carries the name of its column ---- */
+@media (max-width: 760px) {
+  body #page .sb-phead { display: none; }
+  body #page .sb-prows, body #page .sb-prow2 { min-width: 0; }
+  body #page .sb-prow2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; height: auto; min-height: 0; padding: 9px 12px; row-gap: 5px; column-gap: 10px; align-items: start; }
+  body #page .sb-prow2 > .sb-pact, body #page .sb-prow2 > .sb-pask { grid-column: 1 / -1 !important; }
+  body #page .sb-lr > [data-h]:not([data-h=""])::before, body #page .sb-prow2 > [data-h]:not([data-h=""])::before { content: attr(data-h); display: block; font-size: 10px; line-height: 1.2; letter-spacing: .06em; text-transform: uppercase; color: #8791a8; margin-bottom: 1px; white-space: nowrap; }
+  body #page .sb-lr > span, body #page .sb-prow2 > span { align-self: start; }
+  body #page .sb-lr > .sb-pact, body #page .sb-prow2 > .sb-pact { padding-top: 2px; }
+  body #page .sb-lr > .mono { font-size: 12.5px; }
+  html[data-mode="light"] body #page .sb-lr > [data-h]::before, html[data-mode="light"] body #page .sb-prow2 > [data-h]::before { color: #5b667c; }
+}
