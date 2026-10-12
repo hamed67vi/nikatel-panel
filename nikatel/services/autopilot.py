@@ -399,6 +399,9 @@ def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manu
     def run() -> None:
         try:
             fn(aid, *args)
+        except (RuntimeError, ValueError) as e:
+            log.warning("autopilot #%s: Stopped: %s", aid, str(e)[:200])    # a refusal the code raises on purpose (busy, read-only): no traceback, it is not a bug
+            _say(aid, f"Stopped: {str(e)[:200]}", done=True, ok=False)
         except Exception as e:
             log.exception("autopilot #%s crashed", aid)
             _say(aid, f"Stopped: {str(e)[:200]}", done=True, ok=False)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.1
+
+Logs page, after looking at it in the browser: refused requests (401 / 404 / 422) are normal answers and no longer count as problems in the 24 h summary or get an origin; a 5xx answer is the panel's bug; the log line grid has a column for the origin and the domain no longer overlaps the text. A smart repair stopped on purpose (another test running, read-only) is logged as one warning, not as a traceback that looked like a bug.
+
 ## 1.30.0
 
 **M10 #64 - reading a problem.** Every warning and error the panel writes is now classified as the panel's own, a service on your server, or outside the panel (the route, the other side, a provider), with one plain sentence on what to do (`services/diagnosis.py`, pure rules, tested with the sentences the panel really writes).

@@ -49,6 +49,14 @@ def test_a_repair_story_reads_in_four_parts():
     assert solved["problem"].startswith("units are not running") and solved["origin"] == "server" and solved["tried"][0].startswith("restarted")
 
 
+def test_a_refused_request_is_a_plain_answer_and_a_5xx_is_a_bug():
+    assert dg.is_plain_answer("GET /api/servers -> 401 in 11ms") and dg.is_plain_answer("POST /api/x -> 422 in 3ms")
+    assert not dg.is_plain_answer("GET /api/servers -> 500 in 11ms")
+    assert dg.classify("GET /api/servers -> 500 in 11ms")["kind"] == "bug"
+    g = dg.group_findings([{"level": "WARNING", "domain": "http", "text": "GET /api/servers -> 401 in 11ms", "ts": "x"}])
+    assert g["total"] == 0 and g["groups"] == []
+
+
 def test_shape_groups_the_same_sentence_with_other_numbers_and_addresses():
     a = dg.shape("ssh 203.0.113.5 exit 255: connect to host 203.0.113.5 port 22: Connection timed out")
     b = dg.shape("ssh 198.51.100.9 exit 255: connect to host 198.51.100.9 port 2222: Connection timed out")

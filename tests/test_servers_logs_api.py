@@ -69,6 +69,7 @@ def test_logs_endpoint_filters_and_masks(client):
 def test_logs_say_where_a_problem_is_and_summarise_the_day(client):
     s = get_settings()
     setup("INFO", s.log_dir)
+    before = client.get("/api/logs/summary?hours=24").json()["by_origin"]      # the log file is shared with the tests that ran before
     logging.getLogger("ssh").warning("ssh 203.0.113.5 exit 255: ssh: connect to host 203.0.113.5 port 22: Connection timed out")
     logging.getLogger("ssh").warning("ssh 198.51.100.9 exit 255: ssh: connect to host 198.51.100.9 port 22: Connection timed out")
     logging.getLogger("jobs").error("job alerts failed: database is locked")
@@ -80,14 +81,15 @@ def test_logs_say_where_a_problem_is_and_summarise_the_day(client):
     rows = client.get("/api/logs?lines=50").json()["lines"]
     assert {r["origin"] for r in rows if r["level"] == "INFO"} == {""}
 
-    outside = client.get("/api/logs?origin=outside").json()["lines"]
-    assert len(outside) == 2 and all(r["origin"] == "outside" for r in outside)
-    assert [r["origin"] for r in client.get("/api/logs?origin=panel").json()["lines"]] == ["panel"]
+    outside = client.get("/api/logs?origin=outside&lines=2000").json()["lines"]
+    assert len(outside) >= 2 and all(r["origin"] == "outside" for r in outside) and "203.0.113.5" in outside[1]["text"] + outside[0]["text"]
+    panel = client.get("/api/logs?origin=panel&lines=2000").json()["lines"]
+    assert panel and panel[0]["text"].startswith("job alerts failed") and all(r["origin"] == "panel" for r in panel)
     assert client.get("/api/logs?origin=nonsense").status_code == 422
 
     sm = client.get("/api/logs/summary?hours=24").json()
-    assert sm["by_origin"]["outside"] == 2 and sm["by_origin"]["panel"] == 1 and sm["total"] == sum(sm["by_origin"].values()) >= 3     # (the 422 just above is a warning too)
-    assert sm["groups"][0]["origin"] == "panel" and all(g["hint"] for g in sm["groups"])
+    assert sm["by_origin"]["outside"] - before["outside"] == 2 and sm["by_origin"]["panel"] - before["panel"] == 1      # the 422 just above is a plain answer, not a finding
+    assert sm["total"] == sum(sm["by_origin"].values()) and sm["groups"][0]["origin"] == "panel" and all(g["hint"] for g in sm["groups"])
     assert client.get("/api/logs/summary?hours=0").status_code == 422
 
 

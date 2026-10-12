@@ -18,7 +18,7 @@ LABELS = {"outside": "Outside the panel", "server": "A service on your server", 
 
 # (origin, kind, pattern, what it means / what to do) - the first match wins, so the specific rules come before the general ones
 RULES: list[tuple[str, str, str, str]] = [
-    ("panel", "bug", r"internal error|traceback|keyerror|typeerror|attributeerror|nameerror|assertionerror", "The panel hit a bug. The request id on the answer finds the line in the log; this is the one kind that is a fault of the code."),
+    ("panel", "bug", r"internal error|-> 5\d\d in|traceback|keyerror|typeerror|attributeerror|nameerror|assertionerror", "The panel hit a bug. The request id on the answer finds the line in the log; this is the one kind that is a fault of the code."),
     ("panel", "database", r"database is locked|operationalerror|integrityerror|sqlite|no such table|no such column", "The panel's own database was busy or its schema is wrong. A restart clears a lock; a schema error is a bug."),
     ("panel", "read_only", r"panel is read-only|read-only mode|nikatel_read_only|needs read-only off", "Nothing is wrong: the panel is set to read-only and refuses to change servers. Turn it off in the service settings when repairs should run."),
     ("panel", "busy", r"another (tunnel test|smart repair|repair|build|update|check) (is )?(still )?(already )?running|already running|is already being|a smart repair of this tunnel", "Nothing is wrong with the server: the panel was already busy with another job of the same kind and did not start a second."),
@@ -35,6 +35,14 @@ RULES: list[tuple[str, str, str, str]] = [
 ]
 _COMPILED = [(o, k, re.compile(p, re.IGNORECASE), h) for o, k, p, h in RULES]
 _HINT_UNKNOWN = "No rule recognises this text. Read the full story and the log line; if it keeps happening, report it with the request id."
+
+
+_ANSWER = re.compile(r"^(GET|POST|PUT|PATCH|DELETE|HEAD) \S+ -> 4\d\d\b")
+
+
+def is_plain_answer(text: str) -> bool:
+    """True for the access-log line of a request the panel refused on purpose (not signed in, bad input, not found): a normal answer, not a problem."""
+    return bool(_ANSWER.match(str(text or "")))
 
 
 def classify(text: str) -> dict:
@@ -96,6 +104,10 @@ def group_findings(lines: list[dict]) -> dict:
             continue
 
         text = ln.get("text", "")
+
+        if is_plain_answer(text):
+            continue
+
         c = classify(text)
         by_origin[c["origin"]] += 1
         g = groups.setdefault(shape(text), {"shape": shape(text), "count": 0, "origin": c["origin"], "kind": c["kind"], "hint": c["hint"], "sample": text[:240], "domain": ln.get("domain", ""), "last": ln.get("ts", ""), "level": ln.get("level")})

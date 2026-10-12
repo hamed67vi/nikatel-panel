@@ -142,12 +142,12 @@ def logs(lines: int = Query(300, ge=1, le=2000), level: str = "", domain: str = 
 
             out.append({"ts": ts, "level": lvl, "domain": dom, "text": text, "rid": rid or ""})
 
-    from ..services.diagnosis import classify
+    from ..services.diagnosis import classify, is_plain_answer
 
     rows = list(reversed(out))
 
     for r in rows:
-        r["origin"] = classify(r["text"])["origin"] if r["level"] in ("WARNING", "ERROR") else ""
+        r["origin"] = classify(r["text"])["origin"] if r["level"] in ("WARNING", "ERROR") and not is_plain_answer(r["text"]) else ""
 
     if origin:
         rows = [r for r in rows if r["origin"] == origin]

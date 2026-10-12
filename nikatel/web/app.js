@@ -3271,7 +3271,7 @@ PAGES.logs = async () => {
       <select onchange="setLog('domain', this.value)">${domains.map(x => `<option value="${x}" ${L.domain === x ? "selected" : ""}>${x || "all domains"}</option>`).join("")}</select>
       <select onchange="setLog('origin', this.value)" title="Where the problem is">${[["", "everywhere"], ["panel", "the panel itself"], ["server", "a service on your server"], ["outside", "outside the panel"], ["unknown", "not determined"]].map(([v, l]) => `<option value="${v}" ${(L.origin || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>
       <input type="search" id="lq" placeholder="text or request id…" value="${esc(L.q)}" oninput="setLogQ(this.value)"><span class="sp"></span><span class="mut">${d.lines.length} lines</span></div>
-    <div class="card log">${d.lines.map(l => `<div class="ll ${l.level}"><time>${esc(l.ts.slice(11, 19))}</time><b>${esc(l.level)}</b><i>${esc(l.domain)}</i><span>${esc(l.text)}</span>${orChip(l.origin)}<small>${esc(l.rid)}</small></div>`).join("") || '<div class="empty">No matching log line.</div>'}</div>`;
+    <div class="card log">${d.lines.map(l => `<div class="ll ${l.level}"><time>${esc(l.ts.slice(11, 19))}</time><b>${esc(l.level)}</b><i>${esc(l.domain)}</i><span>${esc(l.text)}</span>${orChip(l.origin) || "<em></em>"}<small>${esc(l.rid)}</small></div>`).join("") || '<div class="empty">No matching log line.</div>'}</div>`;
   const q = $("#lq"); if (q && L.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 };
 window.setLog = (k, v) => { state.logs[k] = v; refresh(); };
