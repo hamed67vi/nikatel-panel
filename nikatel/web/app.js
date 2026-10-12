@@ -72,6 +72,8 @@ function demoBanner() {
   d.id = "demo-pill";
   d.innerHTML = "<b>Demo</b> · نسخه نمایشی · داده‌ها ساختگی و فقط‌خواندنی است";
   document.body.appendChild(d);
+  if (window.I18N && I18N.lang !== "en") I18N.set("en");      // the Persian text is not ready for the demo yet: English only, and no switch
+  document.querySelectorAll(".lang-btn").forEach(b => b.remove());
   document.querySelectorAll("#nav a[data-page=bot]").forEach(a => a.remove());      // the shop bot needs a real bot server: nothing to show in the demo
   document.querySelectorAll("#logout, .signout, [onclick*=logout]").forEach(b => b.remove());      // there is no sign-in to sign out of
 }

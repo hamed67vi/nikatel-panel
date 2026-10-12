@@ -45,3 +45,22 @@ def test_the_seed_does_not_touch_a_database_that_has_servers(client):
 
 def test_a_normal_install_is_not_a_demo(client):
     assert client.get("/api/auth/me").json().get("demo") is False
+
+def test_demo_does_not_serve_the_key_pair_the_logs_or_the_api_description(demo_client):
+    for path in ("/api/nodes/user-key", "/api/nodes/user-key?part=public", "/api/logs", "/api/system/update", "/api/openapi.json", "/api/docs", "/api/servers/1/launcher", "/api/radar", "/api/arvan/records"):
+        r = demo_client.get(path)
+        assert r.status_code == 403, (path, r.status_code)
+
+    from nikatel.services import nodes
+
+    assert not nodes.user_key_path().exists()           # nothing made a key: the route was refused before it ran
+
+
+def test_demo_slows_down_a_client_that_asks_too_often(demo_client, monkeypatch):
+    from nikatel import main
+
+    main._DEMO_HITS.clear()
+    monkeypatch.setattr(main, "_DEMO_LIMIT", 20)
+    codes = [demo_client.get("/api/health").status_code for _ in range(30)]
+    assert codes[:20] == [200] * 20 and set(codes[20:]) == {429}
+    main._DEMO_HITS.clear()

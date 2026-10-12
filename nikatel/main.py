@@ -57,6 +57,42 @@ def _index_html() -> str:
     return html
 
 
+# the public demo: what it never serves (a key pair is made on the first read, the API description and the log are for the operator, the rest reach out of the machine)
+_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher")
+_DEMO_HITS: dict[str, list[float]] = {}
+_DEMO_LIMIT, _DEMO_WINDOW = 300, 60.0         # requests per client address per minute: a page load is a few dozen, a group of people looking is fine, a script hammering is not
+
+
+def _demo_refuse(request: Request) -> JSONResponse | None:
+    """The three things the demo refuses: a change, a route that is not for visitors, a client that asks too often. None = let it through."""
+    p = request.url.path
+
+    if not p.startswith("/api/"):
+        return None
+
+    msg = "This is a read-only demo with invented data - nothing can be changed here."
+
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        return JSONResponse({"ok": False, "error": msg, "detail": msg}, status_code=403)
+
+    if any(b in p for b in _DEMO_BLOCK):
+        return JSONResponse({"ok": False, "error": "Not available in the demo.", "detail": "Not available in the demo."}, status_code=403)
+
+    ip, now = auth.client_ip(request), time.time()
+    hits = [t for t in _DEMO_HITS.get(ip, []) if now - t < _DEMO_WINDOW]
+    hits.append(now)
+    _DEMO_HITS[ip] = hits
+
+    if len(_DEMO_HITS) > 5000:
+        for k in [k for k, v in _DEMO_HITS.items() if not v or now - v[-1] > _DEMO_WINDOW]:
+            _DEMO_HITS.pop(k, None)
+
+    if len(hits) > _DEMO_LIMIT:
+        return JSONResponse({"ok": False, "error": "Too many requests - slow down a little.", "detail": "Too many requests - slow down a little."}, status_code=429, headers={"Retry-After": "30"})
+
+    return None
+
+
 def _harden(resp) -> None:
     """Browser-side protection on every answer: no framing, no type sniffing, no referrer leaks, no powerful features."""
     h = resp.headers
@@ -161,8 +197,13 @@ def create_app(run_jobs: bool = True) -> FastAPI:
                 _harden(resp)
                 return resp
 
-            if get_settings().demo and p.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
-                return JSONResponse({"ok": False, "error": "This is a read-only demo with invented data - nothing can be changed here.", "detail": "This is a read-only demo with invented data - nothing can be changed here."}, status_code=403, headers={"X-Request-Id": rid})
+            if get_settings().demo:
+                refused = _demo_refuse(request)
+
+                if refused is not None:
+                    refused.headers["X-Request-Id"] = rid
+                    _harden(refused)
+                    return refused
 
             if not gate.allowed(request):
                 return JSONResponse({"detail": "Not Found"}, status_code=404, headers={"X-Request-Id": rid})   # looks exactly like a missing page
