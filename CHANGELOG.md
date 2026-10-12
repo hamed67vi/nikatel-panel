@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.5
+
+- Tunnel Doctor page tidied into one bar: the switch (repair a down tunnel by itself), the delay, how far it may go, Save, Fix all / Explain with AI and the count are one row; under it the list of tunnels and the history side by side; the six steps are a drawer that is closed until clicked. The duplicate switch and the separate settings card are gone.
+
 ## 1.20.4
 
 - Mini App 3.0.1: the quick-access buttons of the home page sit in one tidy row (up to 4 buttons) or two rows of three (5-6 buttons) or four (7-8) - no lone button on the last line.

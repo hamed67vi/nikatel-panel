@@ -3142,3 +3142,21 @@ body #page .dns-pane .frm { display: grid; gap: 8px; } body #page .dns-pane .frm
 html[data-mode="light"] body #page .dns-tbl tr.dr-dom td { background: linear-gradient(180deg, rgba(10,98,201,.10), rgba(10,98,201,.04)); } html[data-mode="light"] body #page .dns-tbl tr.dr-dom b { color: #0a62c9; }
 @media (max-width: 760px) { body #page .dns-tbl { min-width: 0; } }
 body #page .dns-tbl tr.dr-dom td { text-align: left !important; justify-content: flex-start; } body #page .dns-tbl tbody + tbody tr.dr-dom td { border-top: 1px solid rgba(77,163,255,.22); }
+
+/* ---- Tunnel Doctor: ONE bar (the switch, the delay, how far, Save, the AI buttons, the count) and under it the list and the history side by side; the six steps are a closed drawer ---- */
+body #page .ap-bar { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; padding: 8px 14px; margin: 0 0 10px; }
+body #page .ap-bar label.chk { display: inline-flex; align-items: center; gap: 8px; height: 34px; font-size: 13.5px; color: var(--text); white-space: nowrap; }
+body #page .ap-bar .ap-f { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mut); white-space: nowrap; }
+body #page .ap-bar select { height: 34px; min-width: 250px; max-width: 330px; font-size: 13px; border-radius: 12px; } body #page .ap-bar input[type=number] { height: 34px; width: 74px; border-radius: 12px; font-size: 13px; }
+body #page .ap-bar .ap-sec { display: inline-flex; align-items: center; gap: 6px; } body #page .ap-bar .ap-sec em { font-style: normal; font-size: 12px; }
+body #page .ap-bar button { height: 34px; } body #page .ap-bar button.sm { height: 30px; } body #page .ap-bar .sp { flex: 1; }
+body #page .ap-pair2 { display: grid !important; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px; align-items: stretch; margin-bottom: 8px; }
+body #page .ap-pair2 > .card { margin: 0; display: flex; flex-direction: column; min-width: 0; }
+body #page .ap-pair2 .ap-att, body #page .ap-pair2 .ap-hist { flex: 1; min-height: 240px; max-height: calc(100vh - 370px); overflow-y: auto; }
+@media (max-width: 1100px) { body #page .ap-pair2 { grid-template-columns: 1fr; } body #page .ap-bar select { min-width: 0; width: 100%; max-width: none; } }
+body #page details.ap-intro { padding: 8px 14px; margin: 0 0 10px; } body #page details.ap-intro > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; letter-spacing: .5px; color: var(--mut); list-style-position: inside; }
+body #page details.ap-intro[open] > summary { margin-bottom: 8px; }
+body #page details.ap-intro .ap-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+body #page details.ap-intro .ap-steps > div { grid-template-columns: 26px minmax(0, 1fr); padding: 8px 10px; column-gap: 9px; border-radius: 12px; }
+body #page details.ap-intro .ap-steps > div::before { width: 26px; height: 26px; border-radius: 8px; background-size: 15px; }
+body #page details.ap-intro .ap-steps > div > b { font-size: 12.5px; } body #page details.ap-intro .ap-steps > div > span { font-size: 11.5px; line-height: 1.35; }
