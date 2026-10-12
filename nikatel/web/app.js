@@ -1369,6 +1369,8 @@ const ARVAN_UI = true;    // the ArvanCloud DNS failover and IP switch live unde
 
 const AP_LABEL = {tcpmux: "Backhaul · TCP Mux (GRE)", "bp:tcpmux": "BackPack · TCP Mux", "bp:wssmux": "BackPack · WebSocket TLS Mux", "chisel:tls": "Chisel · TLS WebSocket", "bpd:udp": "BackPack Direct · UDP", tcp: "Backhaul · TCP", wsmux: "Backhaul · WS Mux", wssmux: "Backhaul · WSS Mux", paqet: "Paqet · KCP", chisel: "Chisel · WebSocket", "bp:stealth": "BackPack · Stealth", "bp:tcp": "BackPack · TCP"};
 const apName = k => AP_LABEL[k] || k;
+/* the history lists only PROBLEMS and how they ended: a look that found nothing, a dry run and a tunnel that needed nothing are not shown */
+const histRows = list => list.filter(a => !a.dry_run && ["fix", "autopilot", "balance", "underuse"].includes(a.action) && !/nothing to do|nothing to repair|is healthy|only watching|looks fine|nothing to look/i.test((a.story || []).slice(-2).join(" ")));
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
@@ -1408,10 +1410,12 @@ PAGES.actions = async () => {
       ${n ? "" : '<div class="mut" style="padding:6px 0">Every tunnel is up and none loses packets. When one fails it shows here: Diagnose finds the cause (servers, services, the route, GRE, the control port, the data path) and Fix with AI runs the repair ladder - restart, rebuild, another tunnel type - and tells you when only a move to another Iran server can help. Configs and servers are watched on the dashboard, under Panels and under Servers.</div>'}
       </div>
       <small class="mut ap-note">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto}. At most ${rp.max_per_hour || "a few"} restarts per tunnel per hour; never while a server is unreachable.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
-    <div class="card ap-histcard"><h3>🗒 History <span class="sp"></span><small class="mut">every repair, test and build with its full story</small></h3><div class="ap-hist">${d.actions.map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small>${esc(a.source)}${a.dry_run ? " · dry" : ""}</small>
-      <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No repair yet.</div>'}</div></div></div>
+    <div class="card ap-histcard"><h3>🗒 History <span class="sp"></span><small class="mut">only the problems, and whether they were solved</small></h3><div class="ap-hist">${histRows(d.actions).map(a => `<div class="ev ${a.ok === true ? "ok" : a.ok === false ? "bad" : "warn"}"><time title="${when(a.ts)}">${ago(a.ts)} ago</time><i></i><small class="hist-res ${a.ok === true ? "ok" : a.ok === false ? "bad" : "run"}">${a.ok === true ? "solved" : a.ok === false ? "not solved" : "working"}</small>
+      <span><b>${esc(a.ref)}</b> — ${esc(a.story[a.story.length - 1] || "")} <a class="mut" onclick="this.nextElementSibling.classList.toggle('hidden')">details</a><div class="fix hidden">${a.story.map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></span></div>`).join("") || '<div class="empty">No problem so far: nothing needed repairing.</div>'}</div></div></div>
     `;
-  pageTabs("actions", [["att", "🔧 Working now"]], "att", {att: n});
+  $("#page").insertAdjacentHTML("beforeend", '<div data-tab="ana" class="ana" id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div>');
+  const tab = pageTabs("actions", [["att", "🔧 Working now"], ["ana", "📊 Analyst"]], "att", {att: n});
+  if (tab === "ana") anaLoad();
   apFit(fo);
 };
 /* the Tunnel Doctor page fits the window: its height is what is left under the top, the log and the history scroll inside their own boxes */
@@ -3539,7 +3543,7 @@ const balCard = (bl, srvs) => {
   if (!bl) return "";
   const rows = Object.entries(bl.servers || {}).filter(([, v]) => v && v.name).sort((a, b) => (b[1].skewed - a[1].skewed) || (b[1].at - a[1].at));
   const row = ([id, v]) => `<div class="ap-row bal-row"><b>${esc(v.name)}</b><span class="mut">${v.cores} cores</span><span class="bal-bars" title="${esc((v.busy || []).map((b, i) => "core " + i + ": " + b + " %").join(", "))}">${(v.busy || []).map(b => `<i style="height:${Math.max(6, b)}%" class="${b >= 85 ? "bad" : b >= 60 ? "warn" : ""}"></i>`).join("")}</span>
-      <span class="pill ${v.rps_on ? "ok" : v.skewed ? "err" : ""}">${v.rps_on ? "spread (RPS on)" : v.skewed ? "ONE core" : "balanced"}</span><span class="ap-why" title="${esc(v.why || "")}">${esc(v.why || "")}</span><small class="mut">${v.at ? ago(v.at) + " ago" : ""}</small>
+      <span class="pill ${v.rps_on ? "ok" : v.skewed ? "err" : ""}">${v.rps_on ? "spread (RPS on)" : v.skewed ? "ONE core" : "balanced"}</span><span class="ap-why ${v.rps_on ? "good" : v.skewed ? "" : "calm"}" title="${esc(v.why || "")}">${esc(v.why || "")}</span><small class="mut">${v.at ? ago(v.at) + " ago" : ""}</small>
       ${v.skewed && !v.rps_on ? `<button class="sm pri" onclick="balApply(${id}, true)" title="Steer the network packets to all cores (RPS): at once, no connection is dropped, undone with Undo">⚖ Spread now</button>` : v.rps_on ? `<button class="sm" onclick="balApply(${id}, false)" title="Put the packet steering back as it was">Undo</button>` : ""}<button class="sm" onclick="balScan(${id})" title="Look at this server again (read only)">↻</button></div>`;
   const ir = (srvs || []).filter(s => s.enabled && s.online !== false);
   return `<div class="card ap-bal" data-tab="att"><h3>⚖ CPU on the cores <span class="sp"></span><label class="chk" title="On: a busy server whose network work sits on one core gets RPS from the Tunnel Doctor by itself (every 10 minutes, one server at a time, kept only when it helped). Off: only you do it."><input type="checkbox" ${bl.auto ? "checked" : ""} ${bl.read_only ? "disabled" : ""} onchange="balAuto(this)"> The Doctor spreads it by itself</label>

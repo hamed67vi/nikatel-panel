@@ -176,6 +176,25 @@ class ActionLog(Base):
     finished_at: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class RepairCase(Base):
+    """One run of the smart repair, kept as DATA (not only as a story): what was wrong, which steps were tried in which order, which one healed it.
+    The analyst learns from these rows (services/analyst.py)."""
+    __tablename__ = "repair_cases"
+    __table_args__ = (Index("ix_repair_cases_tunnel_ts", "tunnel", "ts"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[int] = mapped_column(Integer, default=now)
+    tunnel: Mapped[str] = mapped_column(String(64))
+    iran: Mapped[str] = mapped_column(String(64), default="")
+    foreign: Mapped[str] = mapped_column(String(64), default="")
+    kind: Mapped[str] = mapped_column(String(24), default="")           # tcpmux, bp:tcpmux, paqet ...
+    cause: Mapped[str] = mapped_column(String(24), default="")          # units_down, route_cut, gre_blocked, lossy_route, port_blocked, unknown
+    steps: Mapped[list] = mapped_column(JSON, default=list)             # [{"step": "restart", "ok": false, "secs": 31}, ...] in the order they were tried
+    healed: Mapped[bool] = mapped_column(Boolean, default=False)
+    secs: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(16), default="")         # manual | auto
+
+
 class Gateway(Base):
     """The Xray gateway of one Iran server: ports -> foreign nodes, borrowed configs, mode."""
     __tablename__ = "gateways"

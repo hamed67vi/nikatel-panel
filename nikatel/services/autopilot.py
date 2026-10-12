@@ -417,7 +417,7 @@ def _snapshot(tunnel_id: int) -> dict:
             raise ValueError("tunnel not found")
 
         rec = dict(t.record or {})
-        return {"id": t.id, "name": t.name, "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id, "type": t.type, "transport": t.transport, "record": rec,
+        return {"id": t.id, "name": t.name, "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id, "iran_name": t.iran.name, "foreign_name": t.foreign.name, "type": t.type, "transport": t.transport, "record": rec,
                 "ports": rec.get("port_mapping") or ",".join(str(p) for p in (t.forwarded_ports or [])), "label": f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"}
 
 
@@ -573,12 +573,24 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         _say(aid, f"{snap['name']}: no step at level “{level}” applies to this cause.{hint}", done=finish, ok=False)
         return False
 
+    from . import (
+        analyst,  # what the history says about this tunnel and this cause: a step that failed again and again is skipped, and the story says why
+    )
+
+    steps, notes = analyst.hints_for(snap["name"], d["cause"], steps)
+
+    for note in notes:
+        _say(aid, note)
+
     with session() as db:
         emit(db, "warn", "actions", f"Smart repair of {snap['label']} ({source}): {d['summary']}.", snap["name"])
 
     healed = False
+    tried: list[dict] = []          # the steps in the order they were tried, kept as data for the analyst
+    t_run = time.time()
 
     for step in steps:
+        t_step = time.time()
         if step in ("rebuild", "relink", "switch") and storm_now():
             _say(aid, "Mass disruption right now (several servers offline or many tunnels down): this tunnel is not deleted or rebuilt. The repair waits until the servers answer, then looks again.")
             break
@@ -598,6 +610,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
             if not any(r.get("ok") for r in res):
                 _say(aid, "A new GRE link does not pass either: GRE is filtered on this route, so rebuilding the same kind would only remove the tunnel. Nothing was removed; the tunnel stays as it is.")
+                tried.append({"step": step, "ok": False, "secs": int(time.time() - t_step)})
                 continue
 
             _say(aid, "The new link works: removing the old link and building it again.")
@@ -611,6 +624,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
             if lossy and d.get("where") in ("iran_side", "foreign_side", "both"):
                 _say(aid, "The loss is not on this pair's route but on one server's own network (see above): another tunnel type or a new link would suffer the same, so nothing is built or swapped. The tunnel stays and is watched; the repair looks again later.")
+                tried.append({"step": step, "ok": False, "secs": int(time.time() - t_step)})
                 continue
 
             if lossy:
@@ -630,16 +644,22 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
             else:
                 healed = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], best["kind"], f"Best type today: {best['kind']} (score {best.get('score')}).")
 
+        tried.append({"step": step, "ok": bool(healed), "secs": int(time.time() - t_step)})
+
         if healed:
             break
 
     if not healed and d["cause"] in ("gre_blocked", "route_cut", "lossy_route", "port_blocked"):
         from . import failover  # imported here: failover builds on this module
 
+        t_move = time.time()
         healed = failover.after_ladder(aid, tunnel_id, d["cause"])     # the move to another Iran server, with the DNS: asks first unless the failover is automatic
+        tried.append({"step": "move", "ok": bool(healed), "secs": int(time.time() - t_move)})
 
         if not healed and not storm_now():
             probe_other_iran(aid, snap, d["kind"])                     # only a test from one other Iran server (nothing is moved, nothing shows in the cards)
+    analyst.record_case(snap["name"], snap.get("iran_name", ""), snap.get("foreign_name", ""), d["kind"], d["cause"], tried, bool(healed), int(time.time() - t_run), source)
+
     with session() as db:
         emit(db, "ok" if healed else "bad", "actions", f"Smart repair of {snap['label']} " + ("succeeded." if healed else "did not heal it."), snap["name"])
 

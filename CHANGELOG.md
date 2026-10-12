@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.0
+
+- **The analyst (Tunnel Doctor -> Analyst).** A read-only view of what the history says: a profile of every tunnel (availability, outages and how long they last, normal latency and whether it is rising, weak hours, verdict stable / watch / chronic), the tunnels that are at risk, outages that happen together on tunnels that share a server, what fixes what (how often each repair step healed which cause, and how fast), and how the servers are used in the peak hours (idle, redundant, busy). **It helps the smart repair:** every smart repair is now kept step by step (new table, migration 11); before the ladder is climbed the repair asks the analyst, and a restart or a rebuild that failed again and again on a tunnel, or almost never works for a cause, is skipped (the story says why; a move or a switch is never skipped, a dead service is always restarted first, the ladder is never empty). See docs/analyst.md.
+- **Tunnel Doctor history shows only problems and how they ended** (solved / not solved / working): looks that found nothing, dry runs, builds and removals are not listed.
+- The message of the CPU card that says the cores are balanced is no longer red.
+
 ## 1.23.4
 
 - **Reverse proxy on another machine.** NIKATEL_TRUSTED_PROXIES (comma separated addresses): a request from one of them is believed about the client address (X-Forwarded-For) and about HTTPS (X-Forwarded-Proto), like a request from the local machine. The demo uses it behind a TLS proxy so every visitor has their own rate limit.

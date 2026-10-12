@@ -3221,3 +3221,22 @@ html[data-mode="light"] body #page .dns-tbl .tybadge { background: rgba(60,80,13
 .pn-win { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .pn-win .chk, .pn-win .frm-act { grid-column: 1 / -1; }
 @media (max-width: 560px) { .pn-win { grid-template-columns: 1fr; } }
+/* the analyst tab of the Tunnel Doctor: one box, its own tabs, the list scrolls inside */
+.ana-card { padding: 10px 12px; }
+.ana-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.ana-head select { height: 30px; }
+.ana-body { max-height: calc(100vh - 330px); min-height: 220px; overflow: auto; }
+.ana-tbl { width: 100%; font-size: 12.5px; } .ana-tbl th { position: sticky; top: 0; z-index: 1; background: var(--card, rgba(20,24,36,.96)); }
+.ana-tbl td { padding: 5px 8px; } .ana-tbl small { font-size: 11px; } .ana-note { max-width: 340px; font-size: 11.5px; }
+.ana-sub { margin: 12px 0 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; opacity: .65; }
+.ana-v { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(255,255,255,.07); }
+.ana-v.stable, .ana-v.light { color: #32d74b; } .ana-v.watch, .ana-v.ok { color: #ffd60a; } .ana-v.chronic, .ana-v.busy { color: #ff6b6b; }
+.ana-v.idle, .ana-v.redundant { color: #64d2ff; background: rgba(100,210,255,.12); }
+.ana-list { display: grid; gap: 4px; }
+.ana-line { display: grid; grid-template-columns: minmax(110px, 170px) minmax(130px, 220px) 1fr; gap: 10px; align-items: center; padding: 6px 12px; border-radius: 11px; box-shadow: var(--edge); font-size: 12.5px; }
+.ana-line.high { border-left: 3px solid #ff6b6b; } .ana-line.watch { border-left: 3px solid #ffd60a; }
+.bad-t { color: #ff6b6b; }
+/* the history: the result of each problem in one word; the CPU card: a message that says "fine" is not red */
+.hist-res { font-weight: 700; text-transform: none; letter-spacing: 0; }
+.hist-res.ok { color: #32d74b; } .hist-res.bad { color: #ff6b6b; } .hist-res.run { color: #ffd60a; }
+body #page .bal-row .ap-why.good { color: #32d74b; } body #page .bal-row .ap-why.calm { color: var(--mut, #8b93a7); }
