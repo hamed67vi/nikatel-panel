@@ -299,13 +299,16 @@ function glassAsk(text, {input = false, value = "", danger, password = false} = 
     const el = document.createElement("div"); el.id = "ask";
     const verb = (String(text).match(ASK_VERB) || [""])[0], bad = danger != null ? danger : /^(Remove|Delete|Reboot|Forget|Rebuild|Clear|Import)\b/i.test(text) || /cannot be undone|type [A-Z]+ to confirm/i.test(text);
     const label = input ? "OK" : verb ? verb[0].toUpperCase() + verb.slice(1).toLowerCase() : "OK";
-    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${input ? `<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "new-password" : "off"}" data-lpignore="true" data-1p-ignore spellcheck="false">` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
+    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${input ? `<div class="ask-field ${password ? "pw" : ""}">${password ? `<i class="ask-lk">${SI.lock(false)}</i>` : ""}<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "new-password" : "off"}" data-lpignore="true" data-1p-ignore spellcheck="false">${password ? `<button type="button" class="ask-eye" title="Show the password" aria-label="Show or hide the password"><svg viewBox="0 0 24 24"><path class="eye-o" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-o" cx="12" cy="12" r="3"/><path class="eye-x" d="M3 3l18 18"/></svg></button><button type="button" class="ask-gen" title="Make a strong password and show it">Generate</button>` : ""}</div>${password ? `<small class="ask-hint">At least 8 characters. Empty = the panel makes a strong one and shows it once.</small>` : ""}` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
     document.body.appendChild(el);
     const inp = $(".ask-in", el), done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
     const yes = () => done(input ? inp.value : true), no = () => done(input ? null : false);
     function key(e) { if (e.key === "Escape") { e.stopPropagation(); no(); } else if (e.key === "Enter" && (input || e.target.tagName !== "BUTTON")) { e.preventDefault(); e.stopPropagation(); yes(); } }
     document.addEventListener("keydown", key, true);
     $(".ask-yes", el).onclick = yes; $(".ask-no", el).onclick = no;
+    const eye = $(".ask-eye", el), gen = $(".ask-gen", el), fld = $(".ask-field", el);
+    if (eye) eye.onclick = () => { const show = inp.type === "password"; inp.type = show ? "text" : "password"; fld.classList.toggle("shown", show); eye.title = show ? "Hide the password" : "Show the password"; inp.focus(); };
+    if (gen) gen.onclick = () => { const a = new Uint32Array(20), cs = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"; crypto.getRandomValues(a); inp.value = [...a].map(x => cs[x % cs.length]).join(""); inp.type = "text"; fld.classList.add("shown"); if (eye) eye.title = "Hide the password"; inp.focus(); inp.select(); };
     $(".ask-ov", el).onmousedown = e => { if (e.target.classList.contains("ask-ov")) no(); };
     setTimeout(() => { if (inp) { inp.focus(); inp.select(); } else $(".ask-yes", el).focus(); }, 30);
   });
@@ -748,8 +751,8 @@ async function loadServerCharts(id) {
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT;
 /* the search box of Nodes and Tunnels sits in its own bar and hides rows at once: nothing is redrawn, so nothing around it moves */
-const searchSeg = () => `<span class="tb-search"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></span>`;
-const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></div>`;
+const searchSeg = () => `<span class="tb-search"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="if(document.activeElement===this)setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></span>`;
+const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="if(document.activeElement===this)setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></div>`;
 function applyQ() {
   const q = ((state.page === "configs" ? cf.q : state.q) || "").trim(); let shown = 0, total = 0;
   document.querySelectorAll("#page [data-q]").forEach(tr => { const hit = !q || tr.dataset.q.includes(q); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });

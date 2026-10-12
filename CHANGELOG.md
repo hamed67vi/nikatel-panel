@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.9
+
+- The question box (SSH password and every other prompt) redone: a dark field with a lock, an eye to show / hide the password, a Generate button that makes a strong password and shows it, a hint line, buttons at the right; no browser autofill colour. A value the browser puts into a search box by itself never filters the list now (the box must have the focus).
+
 ## 1.19.8
 
 - **The real cause of the vanishing server list:** when a password box appeared (SSH password, the Edit form), the browser's password manager filled the saved user name ("admin") into the nearest text box - the search box of the page - and the search hid every row. The list was empty because it was filtered by "admin". The question box's password field is now "new-password" (never filled), and the search boxes of Nodes and Tunnels are read-only until you click them, which the password manager does not touch.
