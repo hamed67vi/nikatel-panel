@@ -566,6 +566,7 @@ PAGES.servers = async () => {
     const cls = (!s.enabled ? "srv-off" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls} clk" data-id="${s.id}" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
       <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</td>
+      <td>${!s.enabled ? '<span class="st">—</span>' : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td>
       <td class="iss-cell">${issues(s)}</td>
@@ -578,9 +579,9 @@ PAGES.servers = async () => {
       
       <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}">Online <b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span>
       <span class="sp"></span><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div>${searchSeg()}</div>
-    <table class="tbl lift srv-tbl joined"><colgroup><col style="width:16%"><col style="width:9%"><col style="width:12%"><col style="width:18%"><col style="width:13%"><col style="width:13%"><col style="width:13%"><col style="width:6%"></colgroup>
-      <thead><tr><th>Server</th><th>Panel</th><th>IPv4</th><th>Issues</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || `<tr><td colspan="8" class="empty">No server.</td></tr>`}</tbody></table>`;
+    <table class="tbl lift srv-tbl joined"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:11%"><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:5%"></colgroup>
+      <thead><tr><th>Server</th><th>Status</th><th>Panel</th><th>IPv4</th><th>Issues</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join("") || `<tr><td colspan="9" class="empty">No server.</td></tr>`}</tbody></table>`;
   showWin();
   applyQ();
   if (state.open && state.edit !== state.open) loadServerCharts(state.open);

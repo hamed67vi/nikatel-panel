@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.7
+
+Servers list: the **Status** column (online / offline) is back next to the server name, beside the new **Issues** column.
+
 ## 1.30.6
 
 Servers list: the **Status** and **Filtered** columns are gone (the dot on the server's icon still says online / offline). One new **Issues** column shows whatever is wrong with a server as small tags, and a dash when nothing is: Disabled, No login, Offline, SSH ✕, Not checked yet, GRE ✕, Filtered, Bad route, Network cut / ⚠, duplicate name or address, or the work the panel is doing on it. Same columns on the Iran and the Foreign tab.
