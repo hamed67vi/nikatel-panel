@@ -90,7 +90,7 @@ always installable; a milestone ends with a tag.
 - [x] #60 API contract: one error shape (`ok`, `error`, `code`) from one handler on every route, one long-work pattern (202 + action id + /api/actions/{id}) on every slow route, versioning policy written down (`/api` stays v1), `docs/api.md`
 - [x] #61 Machine access: API tokens with scopes (read / act / admin) made in Settings, shown once, hashed at rest, revocable, every use logged; the browser keeps the session cookie, every bot or AI uses a token
 - [x] #62 The OpenAPI document as the manual: a one-sentence description and typed request / response models on all 281 routes; a CI check that fails on a route without a description
-- [ ] #63 Test depth: coverage measured and shown in CI, the pure helpers of every service covered, the SSH layer behind one fake; install on a clean container in CI; upgrade from the previous tag with data intact
+- [x] #63 Test depth: coverage measured and shown in CI, the pure helpers of every service covered, the SSH layer behind one fake; install on a clean container in CI; upgrade from the previous tag with data intact
 - [ ] #64 Operations: `/api/health` that says what is wrong (database, late job, SSH key, disk, probe), self-check on start, structured logs with the request id everywhere, backup-restore and release-rollback rehearsed and documented with timings
 - [ ] #65 Front end as a pure client: split one file per page (#57), every JS file syntax-checked in CI, an audit of every `api()` call against the documented routes, no logic in the UI the API does not offer
 - [ ] #66 Pilot with ten operators: install from the GitHub release by the README alone, a "Report a problem" page (version, last log lines without secrets, health), one month of fixes only, exit when a week passes without a new bug
@@ -107,6 +107,7 @@ always installable; a milestone ends with a tag.
 - [ ] #75 Server cost view: a price per server entered once; the Analyst says what each idle or redundant server costs per month
 - [ ] #76 Verified self-update: release archives with checksums, the update checks the checksum and rolls the binary back by itself
 - [ ] #77 Metrics endpoint for operators who run Grafana (servers, tunnels, configs, jobs as gauges)
+- [ ] #78 Central Abuse-Defender: one rule list kept on the panel server, pushed to the nodes as an atomic ipset / nftables set, with every tunnel (any engine: its peers and ports) and every Iran server excluded by construction, and a check of the tunnels before and after each push; the per-node install that took minutes becomes a push of seconds
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

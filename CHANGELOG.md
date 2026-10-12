@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.0
+
+**M10 #63 - test depth.** CI measures the coverage and shows it in the job summary; `tests/test_upgrade.py` makes the database of the previous release (`git archive <tag>`) and opens it with the current code, so a migration that only works on a fresh database fails in CI, not on the panel server; a new CI job installs the panel on a clean runner with `install.sh` from the checkout, waits for `/api/health`, and runs the installer again as an upgrade. The two small leftovers of the UI round: the "Where" hint wraps instead of being cut, and the install story keeps one height so the window does not jump while lines arrive.
+
 ## 1.28.1
 
 **The UI round the operator asked for** (every point verified in the browser on the test copy).

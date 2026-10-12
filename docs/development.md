@@ -39,6 +39,11 @@ panel server. Small PRs; one issue each.
 SSH is never real: test `parse_*` / `judge` with captured output strings, test the API with
 imported fixtures. A bug fix adds the failing case first.
 
+CI measures the coverage (`pytest --cov=nikatel`, the total in the job summary), runs `tests/test_upgrade.py` (a database
+made by the previous tag opens with the current code and every migration runs: `git archive <tag>` in a temp dir), and installs
+the panel on a clean runner with `install.sh` from the checkout, then runs the installer again as an upgrade. `scripts/deploy.sh`
+runs the migrations against a copy of the live database before every restart.
+
 ## Alignment
 
 `tests/test_alignment.py` fails when the docs and the code drift apart: every service and API module must be named in

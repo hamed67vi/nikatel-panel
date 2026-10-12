@@ -27,12 +27,36 @@ jobs:
           pip install -q -e ".[dev]" ruff
       - name: lint
         run: ruff check nikatel tests
-      - name: tests
-        run: pytest -q
+      - name: tests (with coverage)
+        run: |
+          pytest -q --cov=nikatel --cov-report=term | tee /tmp/cov.txt
+          { echo "### Coverage (python ${{ matrix.python }})"; echo; echo '```'; grep -E "^(TOTAL|Name)" /tmp/cov.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: front-end syntax
         run: for f in nikatel/web/*.js; do node --check "$f"; done
       - name: installer syntax
         run: bash -n install.sh scripts/*.sh
+
+  install-on-a-clean-machine:
+    # the installer, as a new operator runs it, from this checkout: a fresh install answers /api/health, and running it again upgrades in place
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: install
+        run: |
+          git checkout -q -B ci-install
+          sudo git config --global --add safe.directory "*"
+          sudo NIKATEL_REPO="$GITHUB_WORKSPACE" bash install.sh --yes --branch ci-install --port 9443 --password "ci-test-password-1"
+      - name: the panel answers
+        run: |
+          for i in $(seq 1 45); do curl -sk https://127.0.0.1:9443/api/health | grep -q '"ok":true' && { curl -sk https://127.0.0.1:9443/api/health; exit 0; }; sleep 2; done
+          sudo journalctl -u nikatel -n 60 --no-pager; exit 1
+      - name: upgrade in place
+        run: |
+          sudo NIKATEL_REPO="$GITHUB_WORKSPACE" bash install.sh --yes --branch ci-install --port 9443
+          for i in $(seq 1 45); do curl -sk https://127.0.0.1:9443/api/health | grep -q '"ok":true' && exit 0; sleep 2; done
+          sudo journalctl -u nikatel -n 60 --no-pager; exit 1
 
   secrets-scan:
     runs-on: ubuntu-latest
