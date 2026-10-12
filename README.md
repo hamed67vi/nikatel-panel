@@ -9,7 +9,7 @@ client configs tested from inside Iran, Marzban / PasarGuard panels, a Telegram 
 
 [![ci](https://github.com/hamed67vi/nikatel-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/hamed67vi/nikatel-panel/actions)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue)
-![version](https://img.shields.io/badge/version-1.5-informational)
+![version](https://img.shields.io/badge/version-1.19-informational)
 ![stack](https://img.shields.io/badge/FastAPI%20%2B%20SQLite%20%2B%20plain%20JS-no%20build%20step-success)
 
 [Features](docs/features.md) · [Tunnels](docs/tunnels.md) · [Shop bot](docs/shop-bot.md) · [Operations](docs/operations.md) · [Security](SECURITY.md) · [Architecture](ARCHITECTURE.md) · [Changelog](CHANGELOG.md)
@@ -82,8 +82,9 @@ What happens to each tunnel:
 
 * **Build** — preflight of both servers, port and network allocation, engine install (verified download), configs and units on both sides, two-way and data-path proof, **rollback of everything on failure**.
 * **Monitor** — every minute: units on both sides, carrier interface, 20 pings, forwarded ports, one real HTTP request through the tunnel; state changes need two agreeing checks so a single lost packet never flaps.
-* **Repair** — *Smart repair* diagnoses both ends, restarts only what is broken (Iran first), rebuilds, tries another transport and tells you when only a move to another Iran server helps. *Fix with AI*, *Fix all*, *Explain*, a network advisor that ranks every type on today's network, auto-repair with limits (2 per tunnel per hour, never when a server is down). *Failover · CDN*: an Iran server that stays down - or whose route is useless while it still answers and no other tunnel type works - gets its tunnels moved to another Iran server and its ArvanCloud DNS records pointed at the new one - with your approval first, every change listed, and a *Restore* per record.
-* **Test** — builds a temporary tunnel per chosen transport (22 kinds in 5 groups), measures latency, jitter, loss and download speed, scores 0–100, removes it and compares them in one table.
+* **Repair** — the *Tunnel Doctor* diagnoses both ends, restarts only what is broken (Iran first), rebuilds (safely: the old tunnel comes back when the new build fails), tests a fresh GRE link *beside* the tunnel before it replaces anything, tries another transport and tells you when only a move to another Iran server helps. *Fix with AI*, *Fix all*, *Explain*, a network advisor that ranks every type on today's network, auto-repair with limits (2 plain restarts per tunnel per hour, a smart repair every half hour, never when a server is off, never in a storm).
+* **DNS · IP switch** — the A records of your ArvanCloud account with the panel server each one points at; point a record at another Iran server with one click (users follow within the record's TTL), every change listed with a *Restore*. The failover of a dead Iran server - or one whose route is useless while it still answers and no other tunnel type works - moves its tunnels and records to another Iran server, with your approval first or by itself. Changing a server's address in Servers rebuilds its tunnels and moves its records too.
+* **Test** — builds a temporary tunnel per chosen transport (22 kinds in 5 groups), measures latency, jitter, loss and download speed, scores 0–100, removes it and compares them in one table. All 14 kinds of the default catalogue were built and measured for real on one pair of servers (2026-10-12, see the changelog of 1.19.0).
 * **Change** — edit forwarded ports, rebuild, remove, adopt tunnels already running on the servers, update Backhaul / Xray on every server.
 
 ## Configs and panels
@@ -139,12 +140,20 @@ parsing and judging are pure functions with tests, every network call has a time
 
 ## Security
 
-One admin, scrypt password hash, signed cookie, optional TOTP two-step sign-in with recovery codes, an optional secret
-entry path, a Content-Security-Policy, session-only API docs. SSH only through named read-only **scripts** and
-reviewed **actions** with regex-validated parameters; actions are refused in read-only mode. The shop bot's token
-and database password never leave the bot server; the Mini App verifies Telegram's signature on every request.
-The repository contains **no addresses, names or credentials of any real infrastructure** — a scanner blocks them on
-every commit and in CI. Details and what to do when something is wrong: [`SECURITY.md`](SECURITY.md).
+One admin, scrypt password hash, signed Secure cookie (also behind a TLS proxy), optional TOTP two-step sign-in with
+recovery codes, an optional secret entry path, a Content-Security-Policy, session-only API docs. SSH only through named
+read-only **scripts** and reviewed **actions** with regex-validated parameters; actions are refused in read-only mode.
+The shop bot's token and database password never leave the bot server; the Mini App verifies Telegram's signature on
+every request. The repository contains **no addresses, names or credentials of any real infrastructure** — a scanner
+blocks them on every commit and in CI. Details and what to do when something is wrong: [`SECURITY.md`](SECURITY.md).
+
+## License tiers
+
+The panel runs in one of three modes (Settings → About → License): **owner** (`NIKATEL_LICENSE=owner`, everything),
+**licensed** (a signed `NK1.` token, Ed25519, bound to an install or floating) and the **free tier** (Backhaul TCP Mux
+tunnels and every read-only page). The features a token switches on: `tunnels` (every engine), `ai`, `failover`
+(ArvanCloud DNS), `shopbot`. What the check in the panel does and does not protect, and the license server that
+carries the real weight (metered AI, releases): [`docs/licensing.md`](docs/licensing.md).
 
 ## Documentation
 
@@ -152,11 +161,12 @@ every commit and in CI. Details and what to do when something is wrong: [`SECURI
 |---|---|
 | **Use it** | [`docs/features.md`](docs/features.md) page-by-page features · [`docs/tunnels.md`](docs/tunnels.md) every tunnel engine and transport · [`docs/operations.md`](docs/operations.md) install, upgrade, back up, alerts, logs, the bot server · [`docs/shop-bot.md`](docs/shop-bot.md) · [`bot/miniapp/README.md`](bot/miniapp/README.md) |
 | **Trust it** | [`SECURITY.md`](SECURITY.md) |
-| **Change it** | [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`docs/development.md`](docs/development.md) · [`docs/logging.md`](docs/logging.md) · [`docs/adr/`](docs/adr/) |
+| **Change it** | [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`docs/development.md`](docs/development.md) · [`docs/logging.md`](docs/logging.md) · [`docs/licensing.md`](docs/licensing.md) · [`docs/adr/`](docs/adr/) |
 | **Follow it** | [`CHANGELOG.md`](CHANGELOG.md) · [`docs/roadmap.md`](docs/roadmap.md) · index [`docs/README.md`](docs/README.md) |
 
 ## Status
 
-**1.5 — milestones M0–M7 done, M8 mostly done.** Everything the old panel did, in the new structure, plus the shop bot
-run entirely from the panel and a Telegram Mini App. Open: a real-life run of every tunnel engine on a spare pair,
-a language switch (English / Persian) and importing the real bot database.
+**1.19 — milestones M0–M8 done, M9 in progress.** Everything the old panel did, in the new structure, plus the shop bot
+run entirely from the panel (rebuilt page by page from its designs), a Telegram Mini App in the panel's glass look, the
+DNS · IP switch, the license tiers and a real run of every tunnel kind. Open in M9: the license server and AI proxy, the
+language switch of the remaining strings, a split of `app.js` into one file per page.

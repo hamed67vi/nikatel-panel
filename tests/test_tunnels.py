@@ -1,5 +1,23 @@
 from nikatel.models import Tunnel
-from nikatel.services.tunnels import Plan, Side, judge, parse_side, plan_for, settle
+from nikatel.services.tunnels import (
+    Plan,
+    Side,
+    ext_for,
+    judge,
+    parse_side,
+    plan_for,
+    settle,
+)
+
+
+def test_the_external_answer_after_a_repair_wins_over_the_cycles_older_one():
+    key = ("203.0.113.5", 8072)
+    cycle = {key: ("000", None, "ir2")}                                   # the cycle probed while the tunnel was down
+    assert ext_for(key, 1000, 900, cycle, {}) == ("000", None, "ir2")
+    assert ext_for(key, 1000, 900, cycle, {key: (950, "404", 98.0, "ir2")}) == ("404", 98.0, "ir2")      # asked again after the restart: newer, it wins
+    assert ext_for(key, 1000, 990, cycle, {key: (950, "404", 98.0, "ir2")}) == ("000", None, "ir2")      # a newer cycle answer wins back
+    assert ext_for(key, 1000, 500, cycle, {key: (600, "404", 98.0, "ir2")}) is None                     # both stale: nothing
+    assert ext_for(key, 1000, 500, cycle, {key: (900, "404", 98.0, "ir2")}) == ("404", 98.0, "ir2")      # only the single one is fresh
 
 IRAN_OK = """UNIT backhaul-iran-tcpmux-9443.service active
 UNIT nikatel-gre-x.service active

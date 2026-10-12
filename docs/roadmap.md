@@ -66,13 +66,25 @@ always installable; a milestone ends with a tag.
 ## M8 · The other tunnel engines and the last details
 - [x] #41 Create tunnel: BackPack (reverse, all transports), BackPack Direct (udp / quic / pck / sni / xdi), Paqet, Chisel - ported from the old panel, bugs fixed, remove / rebuild per type
 - [x] #42 Tunnel test over every engine, grouped (Backhaul / BackPack / BackPack Direct / Paqet / Chisel), with cleanup
-- [ ] #43 Real test of every tunnel type on a pair without users; fix what breaks
+- [x] #43 Real test of every tunnel type on a pair without users; fix what breaks (2026-10-12: all 14 kinds built, measured and removed on one pair; the scores are in the changelog of 1.19.0)
 - [x] #44 Shop bot: the panel's own bot pages, fully customised (payments, orders, users, plans, categories, servers, discounts, gifts, broadcast, tickets, texts, settings, tools)
 - [ ] #45 Language switch (English / Persian)
 - [x] #46 Telegram Mini App for the bot's customers (`bot/miniapp/`): services, buying from the wallet, top-up with receipt, renew / extra volume / days, tickets, referral, apps, wheel; installed from the panel
 - [x] #47 Smart repair rewritten: one attention list, Fix all with AI, Explain; the dashboard's Problems box
 - [x] #48 UI robustness: page switches never show the old page, automatic retry, status bar, fixed log boxes, hover fade, phone layout; CSP and session-only API docs
-- [ ] #49 Import the real bot database (the operator provides it) and run the bot pages + Mini App against it
+- [x] #49 Import the real bot database (the operator provides it) and run the bot pages + Mini App against it (2026-10-12: imported into a test copy of the bot; its scheduled jobs stay off until the operator starts them from the cron window)
+
+## M9 · Selling it and keeping it light
+- [x] #50 Shop bot pages rebuilt from their designs: one list engine (whole rows, numbered pagers, no scroll, no jump), windows in one style, settings on one page, the cron window, inbound picking with "apply to the accounts already bought"
+- [x] #51 Tunnel Doctor hardening: a rebuild that puts the old tunnel back when the new build fails, a new GRE link tested beside the tunnel before a relink, no crash on a tunnel removed meanwhile; chaos tests on the pair without users (unit stopped, GRE link deleted, GRE filtered)
+- [x] #52 DNS · IP switch under Tunnels: ArvanCloud records with Point and Restore, the failover on again (only with a key), a server's new address followed by its tunnels and records
+- [x] #53 License tiers (owner / licensed / free) with signed tokens and the gates in the code; `docs/licensing.md`
+- [ ] #54 License server and AI proxy on the vendor's side (token issue, metered AI credits, releases, revocation)
+- [x] #55 Mini App in the panel's glass look (pill buttons, glass cards, floating tab bar, hero balance)
+- [x] #56 Phone layout of the shop bot lists: rows become cards, no sideways scroll
+- [ ] #57 Split `app.js` / `app.css` into one file per page (same order, no build step)
+- [ ] #58 Language switch for the strings still in English only (#45 continued)
+- [ ] #59 "Mark receipts handled" and an AI desk for the shop bot
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

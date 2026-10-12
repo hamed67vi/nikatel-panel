@@ -2995,3 +2995,23 @@ html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,8
 .dns-act { display: inline-flex; align-items: center; gap: 6px; } .dns-act select { max-width: 220px; }
 .lic-top { display: flex; flex-direction: column; gap: 8px; width: 100%; } .lic-feats { display: flex; flex-wrap: wrap; gap: 6px; } .lic-form { width: 100%; margin-top: 10px; } .lic-form textarea { width: 100%; min-height: 56px; }
 @media (max-width: 1100px) { .dns-intro .ap-steps { grid-template-columns: 1fr 1fr; } .dns-rec { grid-template-columns: 1fr; } }
+
+/* ---- a phone: every shop bot list row is a card of two columns (no header row, no sideways scroll); the fixed box is already off below 760 px ---- */
+@media (max-width: 760px) {
+  body #page .sb-lh { display: none; }
+  body #page .sb-lrows, body #page .sb-ptable .sb-pfoot, body #page .sb-lh, body #page .sb-lr { min-width: 0; }
+  body #page .sb-lr { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; height: auto; min-height: 0; padding: 9px 12px; row-gap: 5px; column-gap: 10px; }
+  body #page .sb-lr > span, body #page .sb-lr > .mono, body #page .sb-lr > b { overflow: hidden; text-overflow: ellipsis; }
+  body #page .sb-lr > .sb-pact, body #page .sb-lr > .sb-pask, body #page .sb-lr > .sb-pu, body #page .sb-lr > .sb-pt { grid-column: 1 / -1 !important; }
+  body #page .sb-lr > span.r { text-align: left; }
+  body #page .sb-lr .sb-pact { justify-content: flex-end; flex-wrap: wrap; }
+  body #page .sb-ptool { flex-wrap: wrap; } body #page .sb-ptool .sb-psearch { flex: 1 1 100%; }
+  body #page .sb-ptool .sb-psearch input { width: 100%; }
+  body #page .sb-card.sb-ptable { overflow: hidden; }
+  body #page .sb-pfoot { height: auto; min-height: 44px; flex-wrap: wrap; row-gap: 6px; padding: 6px 10px; }
+  body #page .sb-sgrid, body #page .sb-sgrid.cols { columns: 1 !important; grid-template-columns: 1fr !important; }
+  body #page .sb-stat4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  body #page .sb-nav { overflow-x: auto; scrollbar-width: none; } body #page .sb-nav::-webkit-scrollbar { display: none; }
+  body #page .srv-tbl, body #page .tn-list, body #page .cfg-grid { min-width: 0; }
+  body .modal.plan-add, body .modal.plan-edit, body .modal.cat-add, body .modal.dc-edit, body .modal.cr-box, body .modal.user-box { width: 100%; }
+}

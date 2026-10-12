@@ -263,7 +263,44 @@ def flap(raw: str, recent_ok: list[bool]) -> tuple[str, str]:
 
 
 EXT_FRESH = 240              # seconds an answer from the other Iran server is used for; older ones are ignored
-_EXT: dict = {"at": 0, "res": {}, "from": []}
+_EXT: dict = {"at": 0, "res": {}, "from": [], "one": {}}      # one: single answers asked right after a repair, (host, port) -> (ts, code, ms, vantage)
+
+
+def ext_for(key: tuple, now: float, cycle_at: float, cycle: dict, one: dict) -> tuple | None:
+    """Pure: the external answer a check uses for one tunnel - the single probe made right after a repair when it is newer than the
+    cycle's answer (which may be from before the repair and would call a healed tunnel still down), else the cycle's; None when stale."""
+    a = cycle.get(key) if now - cycle_at < EXT_FRESH else None
+    b = one.get(key)
+
+    if b and now - b[0] < EXT_FRESH and (a is None or b[0] >= cycle_at):
+        return tuple(b[1:])
+
+    return a
+
+
+def external_probe_one(iran_host: str, port: int, owner_id: int) -> tuple | None:
+    """Right after a repair: the same request as external_probe_all for ONE tunnel, from the first other Iran server that answers; the
+    answer stands in for the cycle's (older) one in the next checks of this tunnel. None when no vantage could be asked."""
+    for sid, name, node in _vantages():
+        if sid == owner_id:
+            continue
+
+        try:
+            out = run_script(node, "reach_many", {"TARGETS": f"{iran_host}:{int(port)}"}, timeout=20)
+        except (SSHError, ValueError) as e:
+            log.warning("external probe of %s:%s from %s failed: %s", iran_host, port, name, str(e)[:120])
+            continue
+
+        got = parse_reach(out).get((iran_host, int(port)))
+
+        if got is None:
+            continue
+
+        res = (got[0], got[1], name)
+        _EXT.setdefault("one", {})[(iran_host, int(port))] = (int(time.time()), *res)
+        return res
+
+    return None
 
 
 def parse_reach(out: str) -> dict[tuple[str, int], tuple[str, float | None]]:
@@ -392,7 +429,7 @@ def check_tunnel(tunnel_id: int) -> None:
     data_seen = bool(prev.get("data_seen")) or iran.data_code not in ("", "000")
     data_fails = int(prev.get("data_fails", 0)) + 1 if iran.data_code == "000" else 0
     # the same request from another Iran server (this cycle's external probe), when there is a fresh one for this port
-    ext = _EXT["res"].get((iran_host, iran.data_port or (plan.ports[0] if plan.ports else 0))) if time.time() - _EXT["at"] < EXT_FRESH else None
+    ext = ext_for((iran_host, iran.data_port or (plan.ports[0] if plan.ports else 0)), time.time(), _EXT["at"], _EXT["res"], _EXT.get("one") or {})
     ext_seen = bool(prev.get("ext_seen")) or (ext is not None and ext[0] != "000")
     ext_fails = (int(prev.get("ext_fails", 0)) + 1 if ext[0] == "000" else 0) if ext is not None else int(prev.get("ext_fails", 0))
     state, reason = judge(plan, iran, foreign, data_seen, data_fails, ext, ext_seen, ext_fails)

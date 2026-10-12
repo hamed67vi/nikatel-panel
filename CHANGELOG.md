@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.19.1
+
+- Found in a live test (the tunnel service stopped on the foreign server): the automatic restart healed the tunnel, but the check right after it still read the external probe's answer from BEFORE the restart, called the tunnel "still down", restarted the Iran side for nothing and closed the repair as failed. After a restart the repair now asks another Iran server about the users' port again and checks up to four times over about 40 s (a tunnel service needs a few seconds to dial in again); the manual Restart does the same.
+- A tunnel whose service is not running (inactive, failed, dead) is restarted at the next minute instead of after the 3-minute grace: a stopped service is no network blip. In the test the outage lasted 6 minutes for a stopped unit; now about 2.
+- Mini App of the shop bot in the panel's glass look (3.0.0): pill buttons with a specular edge, glass cards over soft colour fields, a floating glass tab bar, a hero card with the balance and the two things people do most, plan prices as gradient badges, a light scheme that follows Telegram. The structure and the API are unchanged.
+- Phone layout of the shop bot lists: a row becomes a card of two columns, eight to a page, no header row and no sideways scroll; search boxes take the whole width; the settings columns and status tiles fold to one or two columns.
+- Docs: README (version, DNS · IP switch, license tiers), ARCHITECTURE (the services that were missing from the map, the license), roadmap M9.
+
 ## 1.19.0
 
 - Tunnels → DNS · IP switch (new tab): the A records of the ArvanCloud account with the panel server each one points at, a Point button that moves a record to another Iran server (asks first, live story, listed below with Restore), the failover plans and settings, the DNS change log. The Failover tab of the Tunnel Doctor moved here. The failover is on again (it stayed off since 1.8.x), but only when an ArvanCloud key is saved; a plan in mode "ask me first" waits here and sends a Telegram notice.

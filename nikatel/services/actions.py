@@ -12,6 +12,7 @@ Every fix, dry or real, is written to action_log with the full story. Limits:
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,12 +27,55 @@ from ..ssh import Node, SSHError, render_action, run_action
 from . import ai
 from . import settings as st
 from .events import emit
-from .tunnels import Plan, _query, check_tunnel, judge, plan_for, servers_off
+from .tunnels import (
+    Plan,
+    _query,
+    check_tunnel,
+    external_probe_one,
+    judge,
+    plan_for,
+    servers_off,
+)
 
 log = get_logger("actions")
 MAX_PER_HOUR = 2
 _RUNNING: dict[str, int] = {}
 _LOCK = threading.Lock()
+
+
+def grace_for(last_error: str, after_seconds: int) -> int:
+    """Pure: how long a down tunnel waits before its plain restart. A tunnel service that is not running (inactive, failed, dead) is no
+    network blip - it is restarted at the next minute; anything else waits `after_seconds` so a short cut is not answered with a restart."""
+    return 0 if re.search(r" is (inactive|failed|dead)\b", last_error or "") else int(after_seconds)
+
+
+def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: int = 4) -> tuple[str, str]:
+    """After a restart: wait, ask another Iran server about the users' port again (the cycle's answer is from BEFORE the restart and
+    would call a healed tunnel still down), check the tunnel; up to `tries` times, about 40 s in all - a tunnel service needs a few
+    seconds to dial in again. Returns (state, reason) of the last check."""
+    port = int(plan.ports[0]) if plan.ports and str(plan.ports[0]).isdigit() else 0
+    state, why = "unknown", ""
+
+    for i in range(tries):
+        time.sleep(8 if i == 0 else 10)
+
+        if port:
+            external_probe_one(iran_host, port, owner_id)
+
+        check_tunnel(tunnel_id)
+
+        with session() as db:
+            t = db.get(Tunnel, tunnel_id)
+
+            if t is None:
+                return "removed", "the tunnel was removed meanwhile"
+
+            state, why = t.state, t.last_error or ""
+
+        if state == "up":
+            return state, ""
+
+    return state, why
 
 
 def _plan_steps(plan: Plan, iran, foreign) -> list[dict]:
@@ -150,6 +194,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         prev = dict(t.detail or {})
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
+        iran_host, owner_id = t.iran.host, t.iran_server_id
 
     if not dry_run and s.read_only:
         _say(aid, "The panel is read-only: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server to allow repairs. Showing the plan as a dry run instead.")
@@ -232,12 +277,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
             _say(aid, f"{st_['side']}: restart of {', '.join(st_['units'])} failed: {e}")
             continue
 
-        time.sleep(8)
-        check_tunnel(tunnel_id)
-
-        with session() as db:
-            t = db.get(Tunnel, tunnel_id)
-            now_state, now_reason = (t.state, t.last_error) if t is not None else ("removed", "the tunnel was removed meanwhile")
+        now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id)
 
         if now_state == "up":
             _say(aid, "Checked again: the tunnel works.", done=True, ok=True)
@@ -286,17 +326,17 @@ def auto_repair() -> None:
     muted = set(st.get("alerts").get("muted") or [])
 
     with session() as db:
-        down = [(t.id, t.name, t.state_since) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down")) if not servers_off(t)]      # a server that is off: nothing to restart until it is back
+        down = [(t.id, t.name, t.state_since, t.last_error or "") for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down")) if not servers_off(t)]      # a server that is off: nothing to restart until it is back
 
     now = int(time.time())
 
     down.sort(key=lambda r: r[2])
 
-    for tid, name, since in down:
+    for tid, name, since, why in down:
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 
-        if name in muted or now - since < int(conf.get("after_seconds", 180)) or name in _RUNNING or recent_fixes(name) >= MAX_PER_HOUR:
+        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 180))) or name in _RUNNING or recent_fixes(name) >= MAX_PER_HOUR:
             continue
 
         log.info("auto repair of %s (down for %ss)", name, now - since)
@@ -317,6 +357,7 @@ def restart_now(tunnel_id: int, source: str = "manual") -> dict:
 
         plan, name = plan_for(t), t.name
         iran_node, foreign_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
+        iran_host, owner_id = t.iran.host, t.iran_server_id
 
     def main(units):
         return [u for u in units if not u.startswith("nikatel-gre-")] or list(units)
@@ -331,12 +372,9 @@ def restart_now(tunnel_id: int, source: str = "manual") -> dict:
         except (SSHError, ValueError) as e:
             done.append(f"{side}: {str(e)[:80]}")
 
-    time.sleep(6)
-    check_tunnel(tunnel_id)
+    state, why = _recheck(tunnel_id, plan, iran_host, owner_id, tries=3)
 
     with session() as db:
-        t = db.get(Tunnel, tunnel_id)
-        state, why = (t.state, t.last_error or "") if t is not None else ("removed", "the tunnel was removed meanwhile")
         emit(db, "ok" if state == "up" else "warn", "actions", f"Restart of {name} ({source}): {state}" + (f" - {why}" if why else ""), name)
 
     return {"id": tunnel_id, "name": name, "state": state, "why": why, "steps": done}

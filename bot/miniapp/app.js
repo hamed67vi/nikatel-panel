@@ -18,12 +18,12 @@ try { S.topup = JSON.parse(localStorage.getItem("nk.topup") || "null"); if (S.to
 /* ---- Telegram glue */
 if (tg) {
   tg.ready(); tg.expand();
-  try { tg.setHeaderColor(tg.themeParams.bg_color || "#0f1222"); tg.setBackgroundColor(tg.themeParams.bg_color || "#0f1222"); } catch (e) {}
+  try { const dark = tg.colorScheme !== "light"; tg.setHeaderColor(dark ? "#070a17" : "#eef1f8"); tg.setBackgroundColor(dark ? "#070a17" : "#eef1f8"); } catch (e) {}      // the glass look has its own deep background
   tg.onEvent("themeChanged", applyTheme);
   tg.BackButton.onClick(back);
   try { tg.enableClosingConfirmation(); } catch (e) {}
 }
-function applyTheme() { document.documentElement.dataset.light = (tg && tg.colorScheme === "light") ? "1" : ""; }
+function applyTheme() { const light = !!(tg && tg.colorScheme === "light"); document.documentElement.dataset.light = light ? "1" : ""; try { if (tg) { tg.setHeaderColor(light ? "#eef1f8" : "#070a17"); tg.setBackgroundColor(light ? "#eef1f8" : "#070a17"); } } catch (e) {} }
 applyTheme();
 const hap = kind => { try { if (!tg || !tg.HapticFeedback) return; if (kind === "ok" || kind === "bad") tg.HapticFeedback.notificationOccurred(kind === "ok" ? "success" : "error"); else tg.HapticFeedback.impactOccurred(kind || "light"); } catch (e) {} };
 function toast(t, kind) { const e = $("toast"); e.textContent = t; e.className = "toast show " + (kind || ""); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove("show"), 2800); if (kind) hap(kind); }
@@ -108,7 +108,9 @@ VIEWS.home = async () => {
     ["👥", "دعوت دوستان", "go('referral')"],
     F.apps && ["📱", "اپلیکیشن‌ها", "go('apps')"],
   ].filter(Boolean);
-  return `
+  const hero = F.wallet ? `<div class="card hero"><small>موجودی کیف پول</small><div class="bal">${T(S.me ? S.me.wallet : 0)}<small>تومان</small></div>${S.me && S.me.pending_topups ? `<span class="pill warn">${T(S.me.pending_topups)} رسید در انتظار تأیید</span>` : `<span class="pill ok">آماده‌ی خرید</span>`}
+      <div class="hbtns">${F.card ? `<button class="btn pri" onclick="setTab('wallet')">💳 شارژ کیف پول</button>` : ""}${F.sell ? `<button class="btn" onclick="setTab('buy')">🛍 خرید سرویس</button>` : ""}</div></div>` : "";
+  return `${hero}
     <div class="card"><h3>سرویس‌های من <span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></h3><div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
     <div class="card"><h3>دسترسی سریع</h3><div class="qa">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
     ${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">@${esc(S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;

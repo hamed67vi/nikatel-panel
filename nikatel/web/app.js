@@ -2179,6 +2179,7 @@ async function sbPays() {
 const sbPayRowH = 46;
 function sbFitBox(id, base = 46, foot = 44, pad = 24) {      // whole rows, a little taller if needed, so the list box ends at the bottom of the page and never scrolls
   const box = $("#" + id); if (!box) return 5;
+  if (innerWidth <= 760) { box.style.height = ""; box.style.removeProperty("--prh"); return 8; }      // a phone: rows are cards of their own height, eight to a page, the page scrolls
   const avail = Math.floor(mainBottom() - box.getBoundingClientRect().top - foot - pad), ps = Math.max(5, Math.floor(avail / base)), rh = Math.floor(avail / ps * 10) / 10;
   box.style.height = ps * rh + "px"; box.style.setProperty("--prh", rh + "px"); return ps;
 }

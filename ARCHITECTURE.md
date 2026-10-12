@@ -31,15 +31,28 @@ nikatel/
   services/        the logic, importable without HTTP
     facts.py         server resources (parse_facts is pure)
     tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
-    builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports
+    builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports; pending rebuilds that survive a
+                     restart of the panel; follow_server_rename / follow_server_host (a server's new name or address)
+    build_other.py   the other engines: BackPack (reverse and direct), Paqet, Chisel - plan, install, units, proof, rollback
+    create.py        the Create story: precheck of ports and conflicts, Smart choice of the Iran side, replace, DNS follow
     detect.py        find tunnels already running on the servers and adopt them; auto choice of the Iran side
+    trash.py         removed tunnels kept for a while with everything needed to put them back
+    retune.py        apply newer tunnel defaults one tunnel at a time, checked, put back when worse
+    pulse.py         a 10 s heartbeat that marks a switched-off server off quickly
+    netwatch.py      the network disturbances of a server (its own route is poor: repair only watches)
     tunnel_test.py   quality of one / all tunnels; pair test over several transports with comparison
     gateway.py       Iran Xray gateway: ports → node, borrowed configs, exit test
     engines.py       check / update backhaul and Xray on every server (GitHub releases, cached binaries)
     nodes.py         node tools: console presets, connect, add many, launchers, Abuse-Defender, reboot, geo, Iran filter check
     actions.py       repair framework: named, logged, dry-run, rate-limited; Fix with a story
-    autopilot.py     Smart repair: the situation (tunnels down / lossy, servers offline, configs down), smart_fix,
+    autopilot.py     the Tunnel Doctor: classify (pure) → ladder restart / rebuild / relink / switch / move, limited by the
+                     repair level; _rebuild_safe (the old tunnel comes back when the new build fails); relink probes a new
+                     GRE link beside the tunnel first; storm detection; observe (lossy tunnels); repair_cycle (one job);
                      fix_all, explain (the AI reads the whole situation), config diagnosis (SNI, reachability)
+    failover.py      the move of a dead or cut-off Iran server: plans (approve / auto), route_plan after a failed ladder,
+                     replace_plan after Create, follow_ip_change after a new address, dns_log with restore, Telegram notices
+    arvan.py         ArvanCloud CDN API client: records of every domain, swap_ip (pure), apply with read-back, test
+    license.py       owner / licensed / free: a signed NK1 token (Ed25519), features, the gates the rest of the panel asks
     ai.py            Anthropic advice inside Fix (key in settings, never in the repo)
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
     configs.py       configs on the probe, subscriptions, group sync; probe.py probe API client; probe_install.py
@@ -78,13 +91,25 @@ docs/              operations, development, logging, roadmap, adr/
 * **Nodes** - Iran / Foreign / Gateway & outbounds. More / Edit / Delete on every row; the More window
   has overview, charts, tunnels, filtering, tools (console, connect, reboot, Abuse-Defender, geo, launchers).
 * **Tunnels** - List (More window with quality and ports, Health / Restart / Rebuild), Create, Test (pair
-  test over several engines and transports, Advanced for the transports), Core update, Smart repair.
+  test over several engines and transports, Advanced for the transports), Core update, Tunnel Doctor
+  (attention list, live repair stories, history), DNS · IP switch (ArvanCloud records, Point, failover plans,
+  the DNS change log with Restore).
 * **Panels** - Configs (group bar, grid / compact / list, inline tunnel and CDN port, subscriptions,
   GRE / filter checks) and Panels (Marzban / PasarGuard: nodes, users, hosts; a test config per panel).
 * **Shop bot** - Overview · Payments · Orders · Users · Plans · Categories · Servers · Discounts ·
   Gift codes · Broadcast · Tickets · Texts · Settings · Tools (Mini App, backups, apps, top-ups, tables,
   SQL, stats, webhook, commands, restart, dump, logs, import).
-* **Settings** - Account · Alerts · Backups · Probe · Repairs & AI · Shop bot · Appearance · Update.
+* **Settings** - Account · Alerts · Backups · Probe · Repairs & AI · Shop bot · Appearance · About & update
+  (version, update, license, tunnel cores).
+
+## 2d. The license
+
+`services/license.py` answers one question for the rest of the panel: *is this feature on?* The modes are
+owner (`NIKATEL_LICENSE=owner`), licensed (a token under Settings → About, checked with the vendor's Ed25519
+public key, cached a minute) and free (no token: Backhaul TCP Mux only). The gates: `builder.start_build`,
+`build_other.start_build`, `tunnel_test.compare_start`, `autopilot._recommend_now`, `ai.ask`,
+`failover.has_key` and the `/api/shopbot` router (402). The check is honest about its limits -
+`docs/licensing.md` explains why the valuable parts (metered AI, releases) belong on the license server.
 
 ## 2c. The shop bot and its Mini App
 
