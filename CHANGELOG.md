@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.23.3
+
+- **The demo is hardened for the public** (the 1.23.2 tag holds the same code but still reported 1.23.1). It no longer serves the operator's key pair (the first read made one), the log, the update check, the API description or the launcher; a client that asks more than 300 times a minute gets a 429; the Persian language is switched off in the demo for now (English only, no language switch).
+
 ## 1.23.1
 
 - The demo hides the Shop bot page and the Sign out button (neither has anything to show there).
