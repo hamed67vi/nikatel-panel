@@ -302,7 +302,7 @@ function showModal(title, body, cls = "", acts = "") {
   let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); }
   const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button>`;
   const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
-  if (cur && mb && cur.className.trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
+  if (cur && mb && cur.className.replace(/\s*\bediting\b/, "").trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
     const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg-wrap"); cur.style.minHeight = cur.offsetHeight + "px";
     cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;
     if (msg && Date.now() - (+msg.dataset.t || 0) < 20000) mb.prepend(msg);      // the outcome of what was just done stays readable after the redraw
@@ -556,7 +556,7 @@ PAGES.servers = async () => {
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td><td>${greCell(s)}</td>
       <td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>
-      <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}</div></td></tr>`;
+      <td><div class="td-act">${!s.enabled ? `<button class="sm" onclick="event.stopPropagation();srvToggle(${s.id})" title="The panel does not check this server: turn it on">Turn on</button>` : ""}${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}</div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
   $("#page").innerHTML = `<div class="toolbar joined">
@@ -575,8 +575,10 @@ PAGES.servers = async () => {
 function srvModal(s) {   // while the edit form is open the header keeps only the name: the form has Save and Back
   const f = s.facts || {}, editing = state.edit === s.id;
   showModal(`${flagImg(s.role === "iran" ? "IR" : s.country)}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span><b>${esc(s.name)}</b> <span class="mono mut ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span> <span class="pill">${esc(s.role)}</span>${f.hostname ? `<span class="pill">${esc(f.hostname)}</span>` : ""}`,
-    `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide" + (editing ? " editing" : ""),
+    `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide",
     editing ? "" : `<button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}><i class="bi">${SI.term}</i>Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port"><i class="bi">${SI.edit}</i>Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)"><i class="bi">${SI.trash}</i>Delete</button>`);
+  const mdl = $("#modal .modal");      // details and edit form are ONE window: it keeps the biggest height it has had, so Edit / Back never make it jump
+  if (mdl) { mdl.classList.toggle("editing", editing); const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }
 }
 function tunModal(t) {
   showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide",
@@ -598,7 +600,9 @@ function serverBar(s) {
   const off = s.online === false && s.enabled !== false;      // a server that is off: what needs it is shown off
   const b = (icon, title, tip, click, cls = "", always = false) => `<button class="sm abtn ${cls}" ${off && !always ? `disabled title="${esc("The server is off or does not answer: " + title + " works when it is back")}"` : `onclick="${click}" title="${esc(tip)}"`}><i class="bi">${{"⇄": SI.swap, "🛰": SI.probe, "🛡": SI.shield(false), "🔐": SI.lock(false), "↺": SI.restore, "⏻": SI.power}[icon] || icon}</i>${title}</button>`;
   const hostKeyChanged = /host key/i.test(s.last_error || "");        // only when the panel refuses the server because it was reinstalled: then its old identity must be forgotten
+  const on = s.enabled !== false, onoff = `<button class="sm abtn onoff ${on ? "on" : "off"}" onclick="srvToggle(${s.id})" title="${on ? "The panel checks this server every round. Click to turn it off: it is not checked any more (nothing changes on the server)." : "The panel does not check this server. Click to turn it on."}"><i class="bi">${SI.power}</i>${on ? "On" : "Off"}</button>`;
   const groups = [
+    [onoff],
     [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
     s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`),
       b("🛡", abuseOn ? "Remove Abuse-Defender" : "Abuse-Defender", abuseOn ? "Stop dropping traffic to abused ranges" : "Drop traffic to abused ranges", `srvAbuse(${s.id}, '${abuseOn ? "remove" : "install"}')`)] : [],
@@ -796,6 +800,12 @@ function applyQ() {
 const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
 window.setQ = v => { holdBoxes(); state.q = v.trim().toLowerCase(); applyQ(); };
 window.checkServer = async id => { toast("Checking…"); try { await api(`/api/servers/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvToggle = async id => {      // on / off: the panel checks the server or leaves it alone (nothing changes on the server itself)
+  const s = (state.serversCache || []).find(x => x.id === id); if (!s) return;
+  const on = s.enabled === false;
+  try { await api(`/api/servers/${id}`, {method: "PUT", body: JSON.stringify({name: s.name, host: s.host, role: s.role, ssh_user: s.ssh_user, ssh_port: s.ssh_port, provider: s.provider || "", enabled: on})}); toast(on ? `✓ ${s.name} is on: the panel checks it again` : `✓ ${s.name} is off: the panel does not check it`, "ok"); refresh(); }
+  catch (e) { toast("✕ " + e.message, "bad"); }
+};
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; refresh(); };
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
@@ -1403,15 +1413,15 @@ const TK_ORIGIN = {outside: "Outside the panel", server: "A service on your serv
 const tkSimple = a => { const s = a.summary || {}, ok = a.ok === true, stale = a.ok == null && !a.done && Date.now() / 1000 - a.ts > 3600, run = a.ok == null && !stale;
   const did = (s.tried || []).length ? s.tried.map(esc).join(" → ") : (ok ? "The Doctor fixed it by itself." : "Nothing more could be done from the panel.");
   const why = stale ? `<div class="tk-line tk-why"><span class="tk-or o-panel">The panel was restarted</span><span>This job was cut short when the panel restarted, so it never finished. Look at the tunnel again: if it is still down the Doctor starts a new repair by itself.</span></div>` : !ok && !run && s.hint ? `<div class="tk-line tk-why">${s.origin && s.origin !== "unknown" ? `<span class="tk-or o-${esc(s.origin)}">${esc(TK_ORIGIN[s.origin])}</span>` : ""}<span>${esc(s.hint)}</span></div>` : "";
-  return `<div class="tk ${ok ? "ok" : run ? "run" : "bad"}"><div class="tk-head"><span class="tk-res">${ok ? "✓ Fixed" : run ? "… Working on it" : stale ? "✕ Stopped early" : "✕ Could not fix"}</span><b>${esc(a.ref)}</b><time title="${when(a.ts)}">${ago(a.ts)} ago</time></div>
+  return `<div class="tk ${ok ? "ok" : run ? "run" : "bad"}"><div class="tk-head"><span class="tk-res">${ok ? "✓ Fixed" : run ? "… Working on it" : stale ? "✕ Stopped early" : "✕ Could not fix"}</span><b>${esc(a.ref)}</b><time title="${when(a.ts)}">${ago(a.ts)} ago</time><a class="mut tk-more" onclick="this.closest('.tk').querySelector('.fix').classList.toggle('hidden')">story</a></div>
     ${s.problem ? `<div class="tk-line"><em>Problem</em><span>${esc(s.problem)}</span></div>` : ""}<div class="tk-line"><em>What was done</em><span>${did}</span></div>${why}
-    <a class="mut tk-more" onclick="this.nextElementSibling.classList.toggle('hidden')">full story</a><div class="fix hidden">${(a.story || []).map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></div>`; };
+    <div class="fix hidden">${(a.story || []).map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></div>`; };
 const tkWorking = w => `<div class="tk run"><div class="tk-head"><span class="tk-res">… Fixing it now</span><b>${esc(w.name)}</b></div><div class="tk-line"><em>Right now</em><span>${esc(w.line || (w.mode === "look" ? "looking at it" : "repairing"))}</span></div></div>`;
 window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "ana"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); if (k === "ana") anaLoad(); };
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
-  const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=60"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), null, {}, []]);
+  const [d, tl, srvs, rp, fo, av, irn] = await Promise.all([api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), null, {}, []]);
   const bl = await api("/api/balance").catch(() => null);
   state.tunnelsCache = tl;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
@@ -1531,7 +1541,7 @@ window.apLive = async (id, name) => {
   /* the live log of what the Tunnel Doctor does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
   showModal(`<b>📡 ${esc(name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Looking for the repair of this tunnel…</div></div><div class="frm-act" style="margin-top:8px"><button class="sm" onclick="apDiagnose('+id+')">🩺 Check the tunnel now</button></div>', "wide");
   try {
-    const list = (await api("/api/actions?limit=60")).actions.filter(a => a.ref === name && ["autopilot", "observe", "fix", "build", "create"].includes(a.action));
+    const list = (await api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse")).actions.filter(a => a.ref === name && ["autopilot", "observe", "fix", "build", "create"].includes(a.action));
     const box = $("#ap-story"), a = list.find(x => !x.done) || list[0];
     if (!a) { box.innerHTML = '<div class="mut" style="padding:8px">Nothing to show yet. As soon as this tunnel shows packet loss (5 % or more) the Tunnel Doctor looks at it and writes what it sees here; it acts by itself only when the loss is high enough for users to feel (15 %) or the tunnel is down.</div>'; return; }
     box.innerHTML = storyHtml(a);

@@ -38,9 +38,9 @@ def action_status(aid: int):
 
 
 @router.get("/actions")
-def action_history(ref: str | None = None, limit: int = 50):
-    """The history of actions (repairs, builds, tests, checks), newest first; `ref` filters by tunnel or server."""
-    return {"ok": True, "actions": actions.history(ref, min(limit, 200)), "read_only": get_settings().read_only}
+def action_history(ref: str | None = None, limit: int = 50, kinds: str = ""):
+    """The history of actions (repairs, builds, tests, checks), newest first; `ref` filters by tunnel or server, `kinds` (comma list: fix, autopilot, build, ...) by what was done."""
+    return {"ok": True, "actions": actions.history(ref, min(limit, 200), [k for k in kinds.split(",") if k]), "read_only": get_settings().read_only}
 
 
 @router.get("/settings/repair")

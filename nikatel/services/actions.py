@@ -310,12 +310,15 @@ def status(aid: int) -> dict | None:
                 "summary": summarize(list(e.story or []), e.ok, e.action, e.ref)}
 
 
-def history(ref: str | None = None, limit: int = 50) -> list[dict]:
+def history(ref: str | None = None, limit: int = 50, kinds: list[str] | None = None) -> list[dict]:
     with session() as db:
         q = select(ActionLog).order_by(ActionLog.id.desc()).limit(limit)
 
         if ref:
             q = q.where(ActionLog.ref == ref)
+
+        if kinds:
+            q = q.where(ActionLog.action.in_(kinds))      # the dozens of "look" runs would otherwise push the repairs out of the newest 80
 
         return [status(e.id) for e in db.scalars(q)]
 

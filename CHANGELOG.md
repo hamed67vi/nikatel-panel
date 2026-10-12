@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.30.2
+
+The Tunnel Doctor lists show the repairs that worked too (the newest 60 actions were mostly "look" runs, so older successful repairs never reached the list: the API takes `kinds=` now), and the cards are smaller: tighter text and spacing, the story link sits in the card's header.
+
+**Servers:** an **On / Off** button in the server window (green when the panel checks the server, grey when it does not), and a **Turn on** button in the row of a disabled server; the server window keeps ONE size for details and the Edit form (Edit / Back no longer make the box jump).
+
 ## 1.30.1
 
 Logs page, after looking at it in the browser: refused requests (401 / 404 / 422) are normal answers and no longer count as problems in the 24 h summary or get an origin; a 5xx answer is the panel's bug; the log line grid has a column for the origin and the domain no longer overlaps the text. A smart repair stopped on purpose (another test running, read-only) is logged as one warning, not as a traceback that looked like a bug.

@@ -160,3 +160,19 @@ def test_the_action_status_carries_a_plain_summary(client):
     s = actions.status(aid)["summary"]
     assert s["origin"] == "outside" and s["kind"] == "route" and s["problem"].startswith("the two servers") and s["ok"] is False
     assert client.get(f"/api/actions/{aid}").json()["summary"]["hint"]
+
+
+def test_the_history_can_be_asked_for_the_kinds_that_matter(client):
+    from nikatel.db import session
+    from nikatel.models import ActionLog
+
+    with session() as db:
+        db.add(ActionLog(ref="kk-fixed", action="autopilot", source="auto", ok=True, finished_at=2, story=["Starting…", "kk-fixed: works again."]))
+
+        for i in range(15):
+            db.add(ActionLog(ref=f"kk-look{i}", action="observe", source="manual", ok=True, finished_at=2, story=["looked"]))
+
+    newest = client.get("/api/actions?limit=10").json()["actions"]
+    assert all(a["action"] == "observe" for a in newest)       # the looks push the repair out of a plain newest-10
+    got = client.get("/api/actions?limit=10&kinds=fix,autopilot").json()["actions"]
+    assert any(a["ref"] == "kk-fixed" and a["ok"] is True for a in got) and all(a["action"] in ("fix", "autopilot") for a in got)

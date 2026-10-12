@@ -3354,3 +3354,15 @@ html[data-mode="light"] .modal-msg-wrap .modal-msg { background: #fff; }
 
 .ll i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ll em { display: block; }
+
+/* the Doctor lists: small cards, one tight block each (a success is shown like a failure, only green) */
+.ap-tasks .tk { padding: 5px 12px 6px; border-radius: 11px; }
+.ap-tasks .tk-head { gap: 8px; margin-bottom: 1px; } .ap-tasks .tk-head b { font-size: 13px; } .ap-tasks .tk-res { font-size: 12px; } .ap-tasks .tk-head time { font-size: 11px; }
+.ap-tasks .tk-head .tk-more { margin: 0 0 0 4px; font-size: 11px; text-decoration: underline; text-underline-offset: 2px; }
+.ap-tasks .tk-line { grid-template-columns: 84px 1fr; gap: 8px; padding: 0; font-size: 12px; line-height: 1.35; } .ap-tasks .tk-line em { font-size: 11px; }
+.ap-tasks .tk-why { grid-template-columns: auto 1fr; margin-top: 3px; padding: 3px 8px; font-size: 11.5px; } .ap-tasks .tk-or { padding: 0 7px; font-size: 10px; }
+.ap-tasks .tk .fix { margin-top: 4px; }
+
+/* the on / off of a server: green when the panel checks it, grey when it does not */
+.sbar .abtn.onoff.on { color: var(--ok); border-color: rgba(48,209,88,.45); } .sbar .abtn.onoff.on i { color: var(--ok); }
+.sbar .abtn.onoff.off { color: var(--mut); background: rgba(255,255,255,.04); } .sbar .abtn.onoff.off i { color: var(--mut); }
