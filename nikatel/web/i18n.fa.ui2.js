@@ -152,4 +152,5 @@ I18N.add({
 "The staging copy on the bot server holds {} users, the live bot has {}. The live database is dumped first; broadcast queues are not copied.": "نسخه‌ی آزمایشی روی سرور ربات {} کاربر دارد و ربات زنده {} کاربر. اول از دیتابیس زنده نسخه‌ی پشتیبان گرفته می‌شود؛ صف پیام‌های همگانی کپی نمی‌شود.",
 "Quick actions": "کارهای سریع", "Confirm payments": "تأیید پرداخت‌ها", "approve or decline receipts": "تأیید یا رد رسیدها", "New plan": "پلن جدید", "prices and volumes you sell": "قیمت و حجم‌هایی که می‌فروشید", "Send a broadcast": "ارسال پیام همگانی", "a message to all or some users": "پیام به همه یا بعضی کاربران", "make or review gift codes": "ساخت یا بررسی کد هدیه", "Find a user": "پیدا کردن کاربر", "wallet, services, orders": "کیف پول، سرویس‌ها، سفارش‌ها", "backup, import, Mini App, SQL": "پشتیبان، ایمپورت، Mini App، SQL",
 "Bot log": "لاگ ربات", "no errors logged": "خطایی ثبت نشده",
+"+{} today": "+{} امروز", "{} orders": "{} سفارش", "7 days": "۷ روز", "30 days": "۳۰ روز", "Today": "امروز", "Users": "کاربران",
 });

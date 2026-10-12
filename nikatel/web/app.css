@@ -2663,3 +2663,13 @@ html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-log > summary:
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-log > pre { margin: 0 14px 14px; max-height: 260px; overflow: auto; }
 @media (max-width: 1100px) { html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-qa { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-qa { grid-template-columns: 1fr; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-ar { grid-template-columns: 40px minmax(0, 1fr); } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-ar .si-a { grid-column: 1 / -1; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g + .sb-g { border-left: 0; padding-left: 0; } }
+
+/* the four numbers sit in the status strip as one joined piece */
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-top { flex-wrap: wrap; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-stats { display: inline-flex; align-items: stretch; height: 34px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 17px; overflow: hidden; margin-left: 8px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 13px; white-space: nowrap; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st + .sb-st { border-left: 1px solid rgba(255,255,255,.10); }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st small { color: #5aa9ff; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st b { font-weight: 700; font-variant-numeric: tabular-nums; color: #f2f5fb; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st.ok b { color: #5ee07f; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-st i { font-style: normal; color: #8791a8; font-size: 11.5px; }
+html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs { gap: 6px 10px; flex-wrap: wrap; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g { gap: 4px; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g + .sb-g { padding-left: 10px; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs button { height: 36px; padding: 0 10px; gap: 6px; font-size: 13px; } html[data-theme="aurora"]:not([data-mode="light"]) body #page .sb-tabs .sb-g em { font-size: 10.5px; margin-right: 2px; }
