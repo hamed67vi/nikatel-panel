@@ -299,7 +299,7 @@ function glassAsk(text, {input = false, value = "", danger, password = false} = 
     const el = document.createElement("div"); el.id = "ask";
     const verb = (String(text).match(ASK_VERB) || [""])[0], bad = danger != null ? danger : /^(Remove|Delete|Reboot|Forget|Rebuild|Clear|Import)\b/i.test(text) || /cannot be undone|type [A-Z]+ to confirm/i.test(text);
     const label = input ? "OK" : verb ? verb[0].toUpperCase() + verb.slice(1).toLowerCase() : "OK";
-    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${input ? `<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "current-password" : "off"}" spellcheck="false">` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
+    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${input ? `<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "new-password" : "off"}" data-lpignore="true" data-1p-ignore spellcheck="false">` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
     document.body.appendChild(el);
     const inp = $(".ask-in", el), done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
     const yes = () => done(input ? inp.value : true), no = () => done(input ? null : false);
@@ -748,8 +748,8 @@ async function loadServerCharts(id) {
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
 let qT;
 /* the search box of Nodes and Tunnels sits in its own bar and hides rows at once: nothing is redrawn, so nothing around it moves */
-const searchSeg = () => `<span class="tb-search"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" spellcheck="false"></span>`;
-const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" spellcheck="false"></div>`;
+const searchSeg = () => `<span class="tb-search"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></span>`;
+const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></div>`;
 function applyQ() {
   const q = ((state.page === "configs" ? cf.q : state.q) || "").trim(); let shown = 0, total = 0;
   document.querySelectorAll("#page [data-q]").forEach(tr => { const hit = !q || tr.dataset.q.includes(q); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });

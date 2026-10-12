@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.8
+
+- **The real cause of the vanishing server list:** when a password box appeared (SSH password, the Edit form), the browser's password manager filled the saved user name ("admin") into the nearest text box - the search box of the page - and the search hid every row. The list was empty because it was filtered by "admin". The question box's password field is now "new-password" (never filled), and the search boxes of Nodes and Tunnels are read-only until you click them, which the password manager does not touch.
+
 ## 1.19.7
 
 - Windows and question boxes no longer blur what is behind them: the list behind a window could disappear from the picture while a window or a question (SSH password...) was open - on the operator's browser; it could not be reproduced here (the page's data and layout stay intact), so the blur - the one thing that stacks layers the browser may drop - is removed. The dim layer stays; the window is solid.
