@@ -24,6 +24,7 @@ from .services import (
     balance,
     builder,
     configs,
+    demo,
     extras,
     facts,
     failover,
@@ -110,10 +111,16 @@ async def _lifespan(app: FastAPI):
         (s.data_dir / "initial-admin-password.txt").chmod(0o600)
         log.info("first start: the admin password is in %s", s.data_dir / "initial-admin-password.txt")
 
-    probe.bootstrap()
-    panels.bootstrap()
+    if s.demo:
+        s.read_only = True
+        demo.seed()                          # only into an empty database
+        jobs.register("demo", 30, demo.tick)
+        jobs.start_all()
+    else:
+        probe.bootstrap()
+        panels.bootstrap()
 
-    if app.state.run_jobs:
+    if app.state.run_jobs and not s.demo:
         _register_jobs()
         jobs.start_all()
 
@@ -153,6 +160,9 @@ def create_app(run_jobs: bool = True) -> FastAPI:
                 resp.headers["X-Request-Id"] = rid
                 _harden(resp)
                 return resp
+
+            if get_settings().demo and p.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
+                return JSONResponse({"ok": False, "error": "This is a read-only demo with invented data - nothing can be changed here.", "detail": "This is a read-only demo with invented data - nothing can be changed here."}, status_code=403, headers={"X-Request-Id": rid})
 
             if not gate.allowed(request):
                 return JSONResponse({"detail": "Not Found"}, status_code=404, headers={"X-Request-Id": rid})   # looks exactly like a missing page
@@ -228,6 +238,7 @@ def cli(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="nikatel")
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("serve", help="run the panel")
+    sub.add_parser("demo-seed", help="fill an empty database with invented demo data")
     imp = sub.add_parser("import", help="import the old panel's JSON files")
     imp.add_argument("seed_dir")
     pw = sub.add_parser("set-password", help="set the admin password")
@@ -251,6 +262,11 @@ def cli(argv: list[str] | None = None) -> int:
 
         init_db()
         print(import_seed_dir(Path(a.seed_dir)))
+        return 0
+
+    if a.cmd == "demo-seed":
+        init_db()
+        print(demo.seed())
         return 0
 
     if a.cmd == "set-password":
@@ -303,7 +319,7 @@ def cli(argv: list[str] | None = None) -> int:
 
     kw = {}
 
-    if s.tls_cert and s.tls_key and s.tls_cert.exists() and s.tls_key.exists():
+    if not s.demo and s.tls_cert and s.tls_key and s.tls_cert.exists() and s.tls_key.exists():      # the demo is plain HTTP (a self-signed certificate would only scare the people who look)
         kw = {"ssl_certfile": str(s.tls_cert), "ssl_keyfile": str(s.tls_key)}
 
     uvicorn.run(create_app(), host=s.listen_host, port=s.listen_port, log_config=None, access_log=False, timeout_graceful_shutdown=4, server_header=False, **kw)      # a restart waits 4 s for open connections, not 16 s of 502s

@@ -99,7 +99,9 @@ def logout(response: Response):
 
 @router.get("/auth/me")
 def me(user: str = Depends(auth.current_user)):
-    return {"ok": True, "user": user}
+    from ..config import get_settings
+
+    return {"ok": True, "user": user, "demo": bool(get_settings().demo)}
 
 
 @router.post("/auth/password")

@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # the license mode: "owner" on the vendor's own installs (every feature on, no token); empty = a token from Settings → About → License or the free tier
     license: str = ""
+    # the public demo: invented data, no sign-in, every change refused (see services/demo.py); never on a real install
+    demo: bool = False
 
     @property
     def db_url(self) -> str:

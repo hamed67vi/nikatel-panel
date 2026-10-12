@@ -122,6 +122,9 @@ def make_session(user: str) -> str:
 
 def current_user(request: Request, nikatel_session: str | None = Cookie(default=None)) -> str:
     """FastAPI dependency: the logged-in user, or 401."""
+    if get_settings().demo:
+        return "demo"           # the public demo shows itself without a sign-in (it holds invented data and refuses every change)
+
     if not nikatel_session:
         raise HTTPException(401, "not logged in")
 

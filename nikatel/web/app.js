@@ -65,6 +65,14 @@ function strip(flags) {   /* up/down history as a strip of small blocks */
 
 /* ---- auth */
 function showLogin() { $("#login").classList.remove("hidden"); $("#app").classList.add("hidden"); }
+/* the public demo (NIKATEL_DEMO): a small pill that says the data is invented and nothing can be changed */
+function demoBanner() {
+  if (document.getElementById("demo-pill")) return;
+  const d = document.createElement("div");
+  d.id = "demo-pill";
+  d.innerHTML = "<b>Demo</b> · نسخه نمایشی · داده‌ها ساختگی و فقط‌خواندنی است";
+  document.body.appendChild(d);
+}
 function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); api("/api/settings/nodes").then(r => { window.NODE_CERT = r.marzban_cert || ""; }).catch(() => {}); }
 
 /* sign-in has three steps: password -> (authenticator code) ; or "forgot the password" */
@@ -1850,22 +1858,13 @@ PAGES.panels = async () => {
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
   const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">● up · ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
-  const addForm = `<div class="card"><h3>Add a panel</h3><form class="frm" onsubmit="return pnAdd(event)">
-      <label>Name<input name="name" required placeholder="shop"></label><label>Type<select name="type"><option value="marzban">Marzban</option><option value="pasarguard">PasarGuard</option></select></label><label>Address<input name="url" required placeholder="https://panel.example:8000"></label>
-      <label>Admin user<input name="username" required autocomplete="off"></label><label>Password<input name="password" type="password" required autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" checked> verify the TLS certificate</label>
-      <div class="frm-act"><button class="pri" type="submit">Log in and add</button><button type="button" onclick="pn.add=false;refresh()">Cancel</button></div></form></div>`;
-  if (!list.length) { $("#page").innerHTML = pn.add ? addForm : '<div class="empty">No panel yet. <button onclick="pn.add=true;refresh()">+ Add a panel</button></div>'; return; }
+  if (!list.length) { $("#page").innerHTML = '<div class="empty">No panel yet. <button onclick="pnAddWin()">+ Add a panel</button></div>'; return; }
   const p = sel, s = p.stats || {};
-  const editForm = `<div class="card"><h3>Edit ${esc(p.name)}</h3><form class="frm" onsubmit="return pnEdit(event, ${p.id})">
-      <label>Name<input name="name" value="${esc(p.name)}"></label><label>Address<input name="url" value="${esc(p.url)}"></label><label>Admin user<input name="username" value="${esc(p.username)}" autocomplete="off"></label>
-      <label>New password <small>(empty keeps the saved one)</small><input name="password" type="password" autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" ${p.verify_tls ? "checked" : ""}> verify the TLS certificate</label><label class="chk"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> enabled (checked every 2 min)</label>
-      <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="pn.edit=false;refresh()">Cancel</button><span class="sp"></span><button type="button" class="danger" onclick="pnDel(${p.id}, '${esc(p.name)}')">Remove from the list</button></div></form></div>`;
   $("#page").innerHTML = `<div class="toolbar pn-top"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
       
       <span class="tcount pstat"><span class="tc info" title="${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now">Users <b>${(+s.users_total || 0).toLocaleString()}</b></span><span class="tc click ${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length === (p.nodes || []).length ? "ok" : "bad"}" onclick="pnNodesWin()" title="Open the nodes of this panel (green: all connected)">Nodes <b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b></span><span class="tc info" title="↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}">Traffic <b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b></span></span><span class="sp"></span>
-      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pn.edit=!pn.edit;pn.add=false;refresh()">Edit</button><button onclick="pn.add=!pn.add;pn.edit=false;refresh()">+ Add panel</button></div>
+      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnEditWin()">Edit</button><button onclick="pnAddWin()">+ Add panel</button></div>
     ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
-    ${pn.add ? addForm : ""}${pn.edit ? editForm : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
@@ -1891,9 +1890,22 @@ window.pnTab = t => { pn.tab = t; pn.user = null; pn.hostEdit = null; refresh();
 window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (p) showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };
 window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added — making its test config on the probe…", "ok"); pn.add = false; pn.id = String(r.panel.id); refresh(); pnTestConfig(r.panel.id, r.panel.name, true); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnAddWin = () => {
+  showModal("<b>Add a panel</b>", `<form class="frm pn-win" onsubmit="return pnAdd(event)">
+      <label>Name<input name="name" required placeholder="shop" autocomplete="off"></label><label>Type<select name="type"><option value="marzban">Marzban</option><option value="pasarguard">PasarGuard</option></select></label><label>Address<input name="url" required placeholder="https://panel.example:8000" autocomplete="off"></label>
+      <label>Admin user<input name="username" required autocomplete="off"></label><label>Password<input name="password" type="password" required autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" checked> verify the TLS certificate</label>
+      <div class="frm-act"><button class="pri" type="submit">Log in and add</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "narrow");
+  setTimeout(() => { const i = document.querySelector("#modal .pn-win input[name=name]"); if (i) i.focus(); }, 40);
+};
+window.pnEditWin = () => {
+  const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (!p) return;
+  showModal(`<b>Edit ${esc(p.name)}</b>`, `<form class="frm pn-win" onsubmit="return pnEdit(event, ${p.id})">
+      <label>Name<input name="name" value="${esc(p.name)}" autocomplete="off"></label><label>Address<input name="url" value="${esc(p.url)}" autocomplete="off"></label><label>Admin user<input name="username" value="${esc(p.username)}" autocomplete="off"></label>
+      <label>New password <small>(empty keeps the saved one)</small><input name="password" type="password" autocomplete="new-password"></label><label class="chk"><input name="verify_tls" type="checkbox" ${p.verify_tls ? "checked" : ""}> verify the TLS certificate</label><label class="chk"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> enabled (checked every 2 min)</label>
+      <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button><span class="sp"></span><button type="button" class="danger" onclick="closeModal();pnDel(${p.id}, '${esc(p.name)}')">Remove from the list</button></div></form>`, "narrow");
+};window.pnAdd = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Logging in…"); try { const r = await api("/api/panels", {method: "POST", body: JSON.stringify({name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), username: f.get("username").trim(), password: f.get("password"), verify_tls: !!f.get("verify_tls")})}); toast("✓ " + r.panel.name + " added — making its test config on the probe…", "ok"); closeModal(); pn.id = String(r.panel.id); refresh(); pnTestConfig(r.panel.id, r.panel.name, true); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnTestConfig = async (id, name, quiet) => { if (!quiet) toast("Creating the test user and importing its subscription… (up to a minute)"); try { const r = await api(`/api/panels/${id}/test-config`, {method: "POST"}); if (r.existing) { toast(`✓ ${name}: its subscription is already in Configs (group ${r.existing}, ${r.existing_count} configs) — nothing added`, "ok"); return refresh(); } toast(`✓ ${name}: ${r.added.length} configs added to the probe${r.skipped.length ? ", " + r.skipped.length + " already there" : ""} (user ${r.username})`, "ok"); refresh(); } catch (e) { toast("✕ test config of " + name + ": " + e.message, "bad"); } };
-window.pnEdit = async (e, id) => { e.preventDefault(); const f = new FormData(e.target); const body = {name: f.get("name").trim(), url: f.get("url").trim(), username: f.get("username").trim(), verify_tls: !!f.get("verify_tls"), enabled: !!f.get("enabled")}; if (f.get("password")) body.password = f.get("password"); try { await api(`/api/panels/${id}`, {method: "PATCH", body: JSON.stringify(body)}); toast("✓ Saved", "ok"); pn.edit = false; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnEdit = async (e, id) => { e.preventDefault(); const f = new FormData(e.target); const body = {name: f.get("name").trim(), url: f.get("url").trim(), username: f.get("username").trim(), verify_tls: !!f.get("verify_tls"), enabled: !!f.get("enabled")}; if (f.get("password")) body.password = f.get("password"); try { await api(`/api/panels/${id}`, {method: "PATCH", body: JSON.stringify(body)}); toast("✓ Saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnDel = async (id, name) => { if (!await gconfirm(`Remove ${name} from this list? Nothing on the panel itself changes.`)) return; await api(`/api/panels/${id}`, {method: "DELETE"}); pn.id = ""; pn.edit = false; refresh(); };
 window.pnNodeReconnect = async (id, nid) => { try { await api(`/api/panels/${id}/nodes/${nid}/reconnect`, {method: "POST"}); toast("✓ Reconnect requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (await api(`/api/panels/${id}/nodes/${nid}/logs`)).log}; } catch (e) { pn.logs = {name, text: "✕ " + e.message}; } refresh(); };
@@ -2065,15 +2077,15 @@ async function pnCoreLoad(id) {
   const box = $("#pn-body"); if (!box) return;
   try { pn.core = await api(`/api/panels/${id}/core`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   const c = pn.core, s = c.summary;
-  box.innerHTML = `<div class="gw-out">Every change is validated, the previous config is saved below, written, read back — and put back automatically when the panel did not keep it. The <b>default</b> outbound (first in the list) carries all traffic that no rule sends elsewhere.</div>
-    <div class="card"><h3>Outbounds <span class="pill">${esc(c.kind)} · ${esc(c.name || "core")}</span><span class="sp"></span><button class="sm" onclick="pn.raw=!pn.raw;refresh()">${pn.raw ? "Hide" : "Raw JSON"}</button></h3>
-      ${s.outbounds.map(o => `<div class="gw-row"><span><b>${esc(o.tag)}</b> ${o.tag === s.default ? '<span class="pill ok">default</span>' : ""} <small class="mut">${esc(o.protocol)}${o.target ? " → " + esc(o.target) : ""}${o.network ? " · " + esc(o.network) : ""}</small></span><span></span>
-        <span class="ob-act">${o.tag !== s.default ? `<button class="sm" onclick="pnObDefault(${id}, '${esc(o.tag)}')">Make default</button>` : ""}${["freedom", "blackhole"].includes(o.protocol) ? "" : `<button class="sm danger" onclick="pnObDel(${id}, '${esc(o.tag)}')">Remove</button>`}</span></div>`).join("")}
-      <textarea id="pn-ob-uri" class="ob-raw" placeholder="Add an outbound from a link: vless://…  vmess://…  trojan://…  ss://…" spellcheck="false"></textarea>
-      <div class="frm-act"><input id="pn-ob-tag" placeholder="tag, e.g. fi-node" style="width:180px"><label class="chk"><input id="pn-ob-def" type="checkbox"> make it the default</label><button class="pri" onclick="pnObAdd(${id})">Add outbound</button></div></div>
-    <div class="card"><h3>Routing rules</h3>${s.rules.map(r => `<div class="gw-row"><span><b>→ ${esc(r.to)}</b></span><span class="mut">${esc(r.when)}</span><span></span></div>`).join("") || '<div class="mut">no rules: everything goes to the default outbound</div>'}${s.balancers.length ? `<div class="mut">balancers: ${esc(s.balancers.join(", "))}</div>` : ""}</div>
-    ${pn.raw ? `<div class="card"><h3>Raw core config <small class="mut">— for experts; saved only when valid</small></h3><textarea id="pn-core-raw" class="ob-raw" style="min-height:320px;font-family:var(--mono)" spellcheck="false">${esc(JSON.stringify(c.config, null, 2))}</textarea><div class="frm-act"><button class="pri" onclick="pnCoreRaw(${id})">Validate &amp; save</button></div></div>` : ""}
-    <div class="card"><h3>Backups <small class="mut">— the config as it was before each change</small></h3>${c.backups.map(b => `<div class="gw-row"><span><b>${new Date(b.at * 1000).toLocaleString()}</b> <small class="mut">${esc(b.note)}</small></span><span class="mut">${esc(b.outbounds.join(", "))}</span><span class="ob-act"><button class="sm" onclick="pnCoreRestore(${id}, '${esc(b.file)}')">Restore</button></span></div>`).join("") || '<div class="mut">no backup yet</div>'}</div>`;
+  const rule = r => `<div class="ob-line"><b>→ ${esc(r.to)}</b><span class="mut">${esc(r.when)}</span></div>`;
+  box.innerHTML = `<div class="card ob-one"><h3>Outbounds <span class="pill">${esc(c.kind)} · ${esc(c.name || "core")}</span><small class="mut ob-note">Every change is validated, backed up, written, read back and put back if the panel did not keep it. The <b>default</b> outbound carries all traffic that no rule sends elsewhere.</small><span class="sp"></span><button class="sm" onclick="pn.raw=!pn.raw;refresh()">${pn.raw ? "Hide" : "Raw JSON"}</button></h3>
+      <div class="ob-grid">${s.outbounds.map(o => `<div class="ob-it"><b>${esc(o.tag)}</b>${o.tag === s.default ? '<span class="pill ok">default</span>' : ""}<small class="mut">${esc(o.protocol)}${o.target ? " → " + esc(o.target) : ""}${o.network ? " · " + esc(o.network) : ""}</small><span class="sp"></span>${o.tag !== s.default ? `<button class="sm" onclick="pnObDefault(${id}, '${esc(o.tag)}')">Make default</button>` : ""}${["freedom", "blackhole"].includes(o.protocol) ? "" : `<button class="sm danger" onclick="pnObDel(${id}, '${esc(o.tag)}')">Remove</button>`}</div>`).join("")}</div>
+      <div class="ob-add"><input id="pn-ob-uri" placeholder="Add an outbound from a link: vless://…  vmess://…  trojan://…  ss://…" spellcheck="false" autocomplete="off"><input id="pn-ob-tag" placeholder="tag, e.g. fi-node" autocomplete="off"><label class="chk"><input id="pn-ob-def" type="checkbox"> default</label><button class="pri" onclick="pnObAdd(${id})">Add outbound</button></div>
+      <div class="ob-more">
+        <details><summary>Routing rules <i class="cnt">${s.rules.length}</i></summary>${s.rules.map(rule).join("") || '<div class="mut ob-line">no rules: everything goes to the default outbound</div>'}${s.balancers.length ? `<div class="mut ob-line">balancers: ${esc(s.balancers.join(", "))}</div>` : ""}</details>
+        <details><summary>Backups <i class="cnt">${c.backups.length}</i> <small class="mut">the config as it was before each change</small></summary>${c.backups.map(bk => `<div class="ob-line"><b>${new Date(bk.at * 1000).toLocaleString()}</b> <small class="mut">${esc(bk.note)}</small><span class="mut ob-bo">${esc(bk.outbounds.join(", "))}</span><button class="sm" onclick="pnCoreRestore(${id}, '${esc(bk.file)}')">Restore</button></div>`).join("") || '<div class="mut ob-line">no backup yet</div>'}</details>
+      </div>
+      ${pn.raw ? `<h3 class="ob-h">Raw core config <small class="mut">for experts; saved only when valid</small></h3><textarea id="pn-core-raw" class="ob-raw" style="min-height:240px;font-family:var(--mono)" spellcheck="false">${esc(JSON.stringify(c.config, null, 2))}</textarea><div class="frm-act"><button class="pri" onclick="pnCoreRaw(${id})">Validate &amp; save</button></div>` : ""}</div>`;
 }
 const pnCoreDo = async (id, fn) => { toast("Writing to the panel… (it restarts its core)"); try { const r = await fn(); toast("✓ Applied · outbounds: " + r.outbounds.join(", "), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnObAdd = id => { const uri = $("#pn-ob-uri").value.trim(), tag = $("#pn-ob-tag").value.trim(), def = $("#pn-ob-def").checked; if (!uri || !tag) { toast("A link and a tag are needed", "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds`, {method: "POST", body: JSON.stringify({uri, tag, make_default: def})})); };
@@ -3616,7 +3628,7 @@ window.changePassword = async e => {
 
 /* ---- boot */
 (() => {
-  const me = api("/api/auth/me").then(() => showApp(), () => showLogin());
+  const me = api("/api/auth/me").then(r => { showApp(); if (r && r.demo) demoBanner(); }, () => showLogin());
   Promise.resolve().then(() => go(state.page));      // the page asks for its data at once, beside the sign-in check (a 401 answer shows the sign-in page): one round trip less before the first paint; it starts when the whole file has been read
   return me;
 })();
@@ -3747,7 +3759,7 @@ PAGES.dns = async () => {
   const fresh = state.dnsFresh ? "?fresh=true" : ""; state.dnsFresh = false;
   const [rr, accs, fo, all] = await Promise.all([api("/api/dns/records" + fresh).catch(e => ({err: e.message, records: [], accounts: []})), api("/api/dns/accounts").catch(() => ({accounts: [], providers: {}})), api("/api/failover").catch(() => null), api("/api/servers").catch(() => [])]);
   const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
-  const recs = rr.records || [], log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];
+  const recs = (rr.records || []).filter(r => !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];
   const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
   const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;

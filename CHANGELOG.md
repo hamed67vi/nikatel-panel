@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.23.0
+
+- **A read-only demo with invented data (`NIKATEL_DEMO=true`).** For showing the panel to other people: no sign-in, fourteen invented servers, twelve tunnels (one degraded, one down), configs, a panel, events and repair stories, all from the documentation address ranges; every change (POST, PUT, DELETE) is refused with a clear message, no SSH key is used, no job reaches a machine, and one small job keeps the numbers moving. `nikatel demo-seed` fills an empty database (it never touches one that has servers). A small "Demo" pill shows at the top. See docs/demo.md.
+- **Panels: Add panel and Edit open in their own window**, like the other boxes (the form no longer pushes the page down).
+- **Panel outbounds fit in one box:** the outbounds in two columns, the add row in one line, routing rules and backups folded; no page scroll.
+- **DNS:** the domain's own name-server records ("@" NS) are no longer listed (they cannot be changed here and only filled the table).
+- **CPU reading is steadier:** the server facts take three one-second windows and use their median (one burst no longer reads as a full server); the probe from the vantage server asks six addresses at a time; every background job has its own start second.
 ## 1.22.0
 
 - **DNS · IP switch like ArvanCloud's own DNS page, with several accounts and Cloudflare.** The Records tab is the table of the account: Type · Name · Value (the address, the server of this panel it is, the port) · TTL · Cloud (the orange-cloud switch, turns the CDN on or off at once) · edit and delete; all record types are listed (A can be changed, the others are read only). Add record / Edit: account, domain, name, address (or the address of one of your servers), TTL, cloud - with a live preview. Every record made, changed or deleted by hand is kept under Changes with a Restore (delete -> make it again, change -> the old values back, made -> delete it). **Accounts tab:** add as many ArvanCloud accounts and Cloudflare accounts (an API token with Zone Read and DNS Edit) as you want; the key is tried before it is saved, stays on the server and never comes back to the browser; the domains of all accounts are in one chooser (grouped by account). A Cloudflare record holds one address (one record per address). The main ArvanCloud key is account "arvan" (the failover uses it). The Point button is gone: the address select in Edit does it, with a Restore.
