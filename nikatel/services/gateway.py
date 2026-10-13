@@ -1,5 +1,8 @@
 """Iran gateway: a plain Xray on an Iran server.
 
+When the exits cannot be trusted with the traffic (a third-party server may read the Host / SNI of what passes through it and dial that NAME instead of the node), a RELAY on a
+foreign server is added: the gateway wraps the traffic in Shadowsocks, sends THAT through an exit, and the relay unwraps it and dials the node (`hubs`).
+
     users -> Iran server (port P, dokodemo-door) -> [direct | a borrowed config that still has internet] -> foreign node IP:port
 
 Borrowed configs are ordinary vless/vmess/trojan/ss links from any provider; the users keep their own
@@ -29,6 +32,7 @@ TEST_BASE = 21080          # local SOCKS doors: 21079 direct, 21080 the gateway 
 # how the exits are used: auto = direct while it works, else the configs (fastest); borrowed / fast = only the configs, the fastest alive one;
 # spread = only the configs, every new connection to the next alive one (the load is shared); direct = no config
 MODES = ("auto", "borrowed", "fast", "spread", "direct")
+RELAY_METHODS = ("chacha20-ietf-poly1305", "aes-256-gcm")
 STRATEGY = {"auto": {"type": "leastPing"}, "borrowed": {"type": "leastPing"}, "fast": {"type": "leastPing"}, "spread": {"type": "roundRobin"}}
 
 
@@ -181,14 +185,32 @@ def validate_state(raw: dict, old_borrowed: list | None = None) -> dict:
         outbound_from_uri(uri, "b-" + bid)
         borrowed.append({"id": bid, "uri": uri, "note": str(b.get("note", ""))[:60], "enabled": b.get("enabled", True) is not False})
 
+    hubs = []
+
+    for h in raw.get("hubs") or []:
+        hid = re.sub(r"[^a-z0-9]", "", str(h.get("id") or ""))[:12]
+        host, port, pw, method = str(h.get("host", "")).strip(), int(h.get("port", 0)), str(h.get("password", "")), str(h.get("method", RELAY_METHODS[0]))
+
+        if not hid or not re.match(r"^[A-Za-z0-9.\-]{1,120}$", host) or not 1024 <= port <= 65535 or len(pw) < 12 or method not in RELAY_METHODS:
+            raise ValueError("a relay needs an id, an address, a port 1024-65535, a method and a password of at least 12 characters")
+
+        hubs.append({"id": hid, "host": host, "port": port, "password": pw, "method": method})
+
     mode = str(raw.get("mode", "auto"))
-    return {"ports": ports, "borrowed": borrowed, "mode": mode if mode in MODES else "auto"}
+    return {"ports": ports, "borrowed": borrowed, "mode": mode if mode in MODES else "auto", "hubs": hubs}
 
 
 def build_config(st: dict) -> dict:
     on = [b for b in st["borrowed"] if b.get("enabled", True)]
     outbounds = [{"tag": "direct", "protocol": "freedom", "settings": {}}, {"tag": "block", "protocol": "blackhole", "settings": {}}]
     outbounds += [outbound_from_uri(b["uri"], "b-" + b["id"]) for b in on]
+    hubs = st.get("hubs") or []
+
+    for b in on:                                  # through a relay: the exit carries Shadowsocks ciphertext and can read nothing of it
+        for h in hubs:
+            outbounds.append({"tag": f"ss-{b['id']}-{h['id']}", "protocol": "shadowsocks", "settings": {"servers": [{"address": h["host"], "port": h["port"], "method": h["method"], "password": h["password"], "level": 0}]},
+                              "streamSettings": {"network": "tcp", "sockopt": {"dialerProxy": "b-" + b["id"]}}})
+
     inbounds, rules, tags = [], [], []
 
     for p in st["ports"]:
@@ -204,14 +226,15 @@ def build_config(st: dict) -> dict:
     door("gw-t-direct", TEST_BASE - 1, "direct")
 
     for i, b in enumerate(on):
-        door("gw-t-" + b["id"], TEST_BASE + 1 + i, "b-" + b["id"])
+        door("gw-t-" + b["id"], TEST_BASE + 1 + i, f"ss-{b['id']}-{hubs[0]['id']}" if hubs else "b-" + b["id"])      # the test door goes the way the users go: exit + relay
 
     inbounds.append({"tag": "gw-test", "listen": "127.0.0.1", "port": TEST_BASE, "protocol": "socks", "settings": {"udp": False}})
     cfg = {"log": {"loglevel": "warning", "error": XGW_DIR + "/error.log"}, "inbounds": inbounds, "outbounds": outbounds, "routing": {"domainStrategy": "AsIs", "rules": rules}}
     mode = st.get("mode", "auto")
 
     if on and mode in ("auto", "borrowed", "fast", "spread"):
-        sel = ["direct", "b-"] if mode == "auto" else ["b-"]
+        pre = "ss-" if hubs else "b-"
+        sel = ["direct", pre] if mode == "auto" else [pre]
         # auto: when no borrowed config is alive, go direct. the others: never leak to direct - block instead
         # (Xray would otherwise use the first outbound, which is direct, before the observatory has measured anything)
         bal = {"tag": "gw-bal", "selector": sel, "strategy": STRATEGY[mode], "fallbackTag": "direct" if mode == "auto" else "block"}
@@ -301,7 +324,8 @@ def install(server_id: int) -> dict:
     return {"version": ver}
 
 
-def apply(server_id: int) -> dict:
+def apply(server_id: int, hubs: list[dict] | None = None) -> dict:
+    """Write the gateway config to the server. `hubs`: the relays (id, host, port, method, password) the traffic goes through behind the exits."""
     _need_rw()
 
     with session() as db:
@@ -314,7 +338,7 @@ def apply(server_id: int) -> dict:
         name = gw.server.name
         st = {"mode": gw.mode, "ports": list(gw.ports or []), "borrowed": list(gw.borrowed or [])}
 
-    cfg = build_config(st)
+    cfg = build_config({**st, "hubs": validate_state({"hubs": hubs or []})["hubs"]})
     ports = [str(p["port"]) for p in st["ports"] if p.get("enabled", True)]
     out = run_action(node, "xgw_apply", {"B64": base64.b64encode(json.dumps(cfg).encode()).decode(), "PORTS": " ".join(ports)}, timeout=120)
 

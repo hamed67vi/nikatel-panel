@@ -80,7 +80,8 @@ nikatel/
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)
     outbound.py      the Outbound section: a pool of exit configs (vless / vmess / trojan / ss) and forwards to the foreign nodes, put on the
-                     chosen Iran servers through gateway.py (spread / fast / auto), the pool measured from each Iran server; exit links never listed
+                     chosen Iran servers through gateway.py (spread / fast / auto), a Shadowsocks relay on a foreign server behind the exits, the ArvanCloud
+                     records of the tunnels pointed at the forwards (manual or automatic, put back through the DNS log), the pool measured from each Iran server; exit links never listed
     core.py          Xray core outbounds of a panel with backup / rollback
     radar.py         Arvan Radar (state of the Iranian data centres), cached, refreshed in the background (API only)
     dcs.py           the hosting providers our servers sit in (from the geo lookup's provider / domain), servers and

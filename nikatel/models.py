@@ -293,6 +293,22 @@ class OutboundConfig(Base):
     created_at: Mapped[int] = mapped_column(Integer, default=now)
 
 
+class OutboundHub(Base):
+    """A foreign server that runs the relay of the outbound (services/outbound.py): the Iran gateway wraps the traffic in Shadowsocks, sends it through an exit, and the relay unwraps it
+    and dials the node. Without it an exit that sniffs the Host / SNI of the inner traffic dials that NAME instead of the node. The password is a secret: never listed."""
+    __tablename__ = "outbound_hubs"
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
+    port: Mapped[int] = mapped_column(Integer)
+    method: Mapped[str] = mapped_column(String(32), default="chacha20-ietf-poly1305")
+    password: Mapped[str] = mapped_column(String(64))
+    installed: Mapped[bool] = mapped_column(Boolean, default=False)
+    applied_at: Mapped[int] = mapped_column(Integer, default=0)
+    version: Mapped[str] = mapped_column(String(64), default="")
+
+    server: Mapped[Server] = relationship()
+
+
 class ApiToken(Base):
     """The sign-in of a machine (docs/api.md section 3): only the hash of the token is kept; the token itself is shown once when it is made."""
     __tablename__ = "api_tokens"

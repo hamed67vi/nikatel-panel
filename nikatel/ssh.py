@@ -1197,6 +1197,45 @@ echo '@B64@' | base64 -d | chpasswd && echo PASSWORD_SET
     "xgw_mkdir": (r"""mkdir -p /opt/nikatel-xgw && chmod 755 /opt/nikatel-xgw && echo OK
 """, {}),
 
+    # the relay of the outbound (a foreign server): its directory, the binary that was copied there, a config applied with a test and a roll-back, its state, its removal
+    "xrelay_mkdir": (r"""mkdir -p /opt/nikatel-xrelay && chmod 755 /opt/nikatel-xrelay && echo OK
+""", {}),
+
+    "xrelay_install_bin": (r"""set -e; cd /opt/nikatel-xrelay; chmod 755 xray.new; ./xray.new version >/dev/null 2>&1; mv -f xray.new xray; echo "VER $(./xray version | head -1)"
+""", {}),
+
+    "xrelay_apply": (r"""set -e; cd /opt/nikatel-xrelay
+echo '@B64@' | base64 -d > config.new.json
+if ! ./xray run -test -c config.new.json >/tmp/xrelay-test.out 2>&1; then echo "REFUSED $(tail -n 2 /tmp/xrelay-test.out | tr '\n' ' ')"; exit 0; fi
+cat > /etc/systemd/system/nikatel-xrelay.service <<'EOF'
+[Unit]
+Description=Nikatel outbound relay
+After=network-online.target
+
+[Service]
+ExecStart=/opt/nikatel-xrelay/xray run -c /opt/nikatel-xrelay/config.json
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+[ -f config.json ] && cp -f config.json config.prev.json; mv -f config.new.json config.json
+p='@PORT@'; if iptables -S INPUT 2>/dev/null | head -1 | grep -q DROP; then iptables -C INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport $p -j ACCEPT; fi
+systemctl daemon-reload; systemctl enable nikatel-xrelay >/dev/null 2>&1; systemctl restart nikatel-xrelay; sleep 2
+if systemctl is-active --quiet nikatel-xrelay; then echo "ACTIVE"; else [ -f config.prev.json ] && cp -f config.prev.json config.json && systemctl restart nikatel-xrelay; echo "FAILED $(tail -n 3 error.log 2>/dev/null | tr '\n' ' ')"; fi
+""", {"B64": _B64, "PORT": r"^\d{4,5}$"}),
+
+    "xrelay_status": (r"""echo "ACTIVE $(systemctl is-active nikatel-xrelay 2>/dev/null || echo none)"
+echo "VER $(/opt/nikatel-xrelay/xray version 2>/dev/null | head -1)"
+echo "LISTEN @PORT@ $(ss -ltnH 2>/dev/null | grep -c ":@PORT@ ")"
+echo LOG; tail -n 4 /opt/nikatel-xrelay/error.log 2>/dev/null | cut -c1-200
+""", {"PORT": r"^\d{4,5}$"}),
+
+    "xrelay_remove": (r"""systemctl disable --now nikatel-xrelay >/dev/null 2>&1 || true; rm -f /etc/systemd/system/nikatel-xrelay.service; systemctl daemon-reload; rm -rf /opt/nikatel-xrelay; echo REMOVED
+""", {}),
+
     # remove the gateway completely (the list in the panel stays)
     "xgw_remove": (r"""systemctl disable --now nikatel-xgw >/dev/null 2>&1 || true; rm -f /etc/systemd/system/nikatel-xgw.service; systemctl daemon-reload; rm -rf /opt/nikatel-xgw; echo REMOVED
 """, {}),

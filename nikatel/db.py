@@ -42,6 +42,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (12, "jobs.last_failure / last_failure_at columns", lambda db: [_add_column(db, "jobs", "last_failure", "VARCHAR(300) DEFAULT ''"), _add_column(db, "jobs", "last_failure_at", "INTEGER DEFAULT 0")]),
     (13, "api_tokens table (created by create_all)", []),
     (14, "outbound_configs table (created by create_all)", []),
+    (15, "outbound_hubs table (created by create_all)", []),
 ]
 
 

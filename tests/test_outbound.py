@@ -140,7 +140,7 @@ def _fake_gateway(monkeypatch, results):
         return {"version": "Xray 26.0.0 test"}
 
     monkeypatch.setattr(gateway, "install", install)
-    monkeypatch.setattr(gateway, "apply", lambda sid: calls.append(("apply", sid)) or {"active": True, "ports": [str(p["port"]) for p in gateway.get_state(sid)["ports"]]})
+    monkeypatch.setattr(gateway, "apply", lambda sid, hubs=None: calls.append(("apply", sid, hubs)) or {"active": True, "ports": [str(p["port"]) for p in gateway.get_state(sid)["ports"]]})
     monkeypatch.setattr(gateway, "test", lambda sid: results)
     monkeypatch.setattr(gateway, "remove", lambda sid: calls.append(("remove", sid)))
     monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: calls.append(("say", line)))
@@ -158,7 +158,7 @@ def test_apply_installs_sets_the_state_and_checks(monkeypatch):
                {"key": ids[1], "ok": True, "ms": 700, "ip": "192.0.2.2", "country": "FI"}, {"key": "gateway", "ok": True, "ms": 500, "ip": "192.0.2.1", "country": "DE"}]
     calls = _fake_gateway(monkeypatch, results)
     outbound._apply_story(1)
-    assert ("install", sid) in calls and ("apply", sid) in calls and any(c[0] == "say" and "2 exit(s), 1 forward(s), mode spread" in c[1] for c in calls)
+    assert ("install", sid) in calls and ("apply", sid, []) in calls and any(c[0] == "say" and "2 exit(s), 1 forward(s), mode spread. NO relay" in c[1] for c in calls)
     assert any(c[0] == "say" and c[1].startswith("Done: 1 of 1") for c in calls)
     with session() as db:
         g = db.get(Gateway, sid)
@@ -240,3 +240,335 @@ def test_the_api(client, monkeypatch):
     assert client.post("/api/outbound/apply").status_code == 202
     assert client.post(f"/api/outbound/servers/{sid}/remove").json()["ok"] is True and ("remove", sid) in calls
     assert client.delete(f"/api/outbound/configs/{cid}").json()["ok"] is True
+
+
+# ------------------------------------------------------------------ the tunnels' forwards and connecting the users
+class FakeArvan:
+    """One ArvanCloud account: a record cank.example.test on the Iran server's address, origin port 8075, proxied; and a record that is not ours to touch."""
+
+    def __init__(self, ip):
+        self.rows = {"r1": {"account": "arvan", "domain": "example.test", "id": "r1", "type": "A", "name": "cank", "fqdn": "cank.example.test", "ips": [ip], "port": 8075, "upstream": "http", "ttl": 120, "cloud": True},
+                     "r2": {"account": "arvan", "domain": "example.test", "id": "r2", "type": "A", "name": "other", "fqdn": "other.example.test", "ips": ["198.51.100.250"], "port": 8075, "upstream": "http", "ttl": 120, "cloud": True},
+                     "r3": {"account": "arvan", "domain": "example.test", "id": "r3", "type": "A", "name": "dns-only", "fqdn": "dns-only.example.test", "ips": [ip], "port": 8075, "upstream": "http", "ttl": 120, "cloud": False}}
+        self.calls = []
+
+    def domains(self):
+        return ["example.test"]
+
+    def records(self, domain):
+        return [dict(r) for r in self.rows.values()]
+
+    def get(self, domain, rid):
+        return dict(self.rows[rid])
+
+    def update(self, domain, rid, name, ips, ttl, cloud, port=None, upstream=None):
+        self.calls.append(("update", rid, port))
+        before = dict(self.rows[rid])
+        self.rows[rid]["port"] = port
+        return {"before": {"id": rid, "port": before["port"]}, "after": dict(self.rows[rid]), "before_row": before}
+
+    def put_back(self, domain, rid, before):
+        self.calls.append(("put_back", rid, before["port"]))
+        self.rows[rid]["port"] = before["port"]
+
+
+def _tunnel(db, name, iran, foreign, mapping, typ="backhaul", transport="tcpmux", direction="reverse"):
+    from nikatel.models import Tunnel
+
+    t = Tunnel(name=name, type=typ, transport=transport, iran_server_id=iran, foreign_server_id=foreign, state="up", enabled=True, forwarded_ports=[int(mapping.split(":")[0].split(",")[0])], record={"port_mapping": mapping, "direction": direction})
+    db.add(t)
+    return t
+
+
+def _world():
+    with session() as db:
+        i1, i2, f1, f2 = (Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="ir2", host="203.0.113.6", role="iran", online=True),
+                          Server(name="fo1", host="198.51.100.30", role="foreign", online=True), Server(name="fo2", host="198.51.100.31", role="foreign", online=True))
+        db.add_all([i1, i2, f1, f2])
+        db.flush()
+        _tunnel(db, "fo1-ir1", i1.id, f1.id, "8075")
+        _tunnel(db, "fo2-ir1", i1.id, f2.id, "443:2096, 80")
+        _tunnel(db, "fo2-ir2", i2.id, f2.id, "8072")
+        _tunnel(db, "udp-ir2", i2.id, f1.id, "9000", typ="paqet", transport="kcp", direction="direct")
+        _tunnel(db, "l3-ir2", i2.id, f1.id, "9001", transport="l3:udp")
+        return {"i1": i1.id, "i2": i2.id}
+
+
+def test_forwards_from_the_tunnels_follow_the_tunnels():
+    ids = _world()
+    assert [(x["tunnel"], x["iran_port"], x["target_host"], x["target_port"]) for x in outbound.tunnel_ports() if x["server_id"] == ids["i1"]] == [("fo1-ir1", 8075, "198.51.100.30", 8075), ("fo2-ir1", 443, "198.51.100.31", 2096), ("fo2-ir1", 80, "198.51.100.31", 80)]
+    assert not [x for x in outbound.tunnel_ports() if x["tunnel"] in ("udp-ir2", "l3-ir2")]                 # a UDP or raw tunnel cannot go through a TCP forward
+    assert outbound.from_tunnels() == {"added": 4, "updated": 0}
+    routes = outbound.state()["routes"]
+    assert [r["listen"] for r in routes] == [30000, 30001, 30002, 30003] and {r["source"] for r in routes} == {"tunnel"} and routes[1]["target_port"] == 2096
+    assert outbound.from_tunnels() == {"added": 0, "updated": 0}                                                # again: nothing new, nothing moves
+    with session() as db:
+        from nikatel.models import Tunnel
+
+        db.scalar(__import__("sqlalchemy").select(Tunnel).where(Tunnel.name == "fo1-ir1")).record = {"port_mapping": "8075:9999", "direction": "reverse"}
+
+    assert outbound.from_tunnels() == {"added": 0, "updated": 1} and next(r for r in outbound.state()["routes"] if r["tunnel"] == "fo1-ir1")["target_port"] == 9999 and outbound.state()["routes"][0]["listen"] == 30000
+    d1, d2 = outbound.desired(ids["i1"]), outbound.desired(ids["i2"])
+    assert [p["port"] for p in d1["ports"]] == [30000, 30001, 30002] and [p["port"] for p in d2["ports"]] == [30003]                   # each Iran server gets only its own tunnels' forwards
+    outbound.add_routes([{"target_host": "198.51.100.77", "target_port": 1}])                                  # a forward for every server is in both
+    assert len(outbound.desired(ids["i1"])["ports"]) == 4 and len(outbound.desired(ids["i2"])["ports"]) == 2
+
+
+def test_classify():
+    assert outbound.classify(8075, 8075, 30000) == "normal" and outbound.classify(30000, 8075, 30000) == "bridged" and outbound.classify(443, 8075, 30000) == "" and outbound.classify(None, 8075, 30000) == ""
+
+
+def _dns(monkeypatch, fake):
+    from types import SimpleNamespace
+
+    acc = SimpleNamespace(id="arvan", provider="arvan", name="ArvanCloud")
+    monkeypatch.setattr(outbound.dnsprov, "accounts", lambda: [acc])
+    monkeypatch.setattr(outbound.dnsprov, "provider_of", lambda a: fake)
+    monkeypatch.setattr(outbound.dnsprov, "provider", lambda aid: fake)
+    monkeypatch.setattr(outbound.failover, "_notice", lambda text: None)
+
+
+def test_connect_plan_lists_only_the_records_a_forward_shadows(monkeypatch):
+    ids = _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    assert outbound.connect_plan()["records"] == []                                                             # no forward yet: nothing to connect
+    outbound.from_tunnels()
+    plan = outbound.connect_plan()
+    assert [(x["fqdn"], x["state"], x["port"], x["listen"], x["tunnel"], x["target"]) for x in plan["records"]] == [("cank.example.test", "normal", 8075, 30000, "fo1-ir1", "198.51.100.30:8075")]      # the other server's record and the DNS-only one are left alone
+    assert plan["records"][0]["server_id"] == ids["i1"] and plan["records"][0]["ready"] is False and plan["forwards"] == 4 and plan["bridged"] == 0
+
+
+def test_connect_changes_the_port_only_when_the_forward_listens_and_can_be_put_back(monkeypatch):
+    _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    outbound.from_tunnels()
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    key = outbound.connect_plan()["records"][0]["key"]
+    monkeypatch.setattr(gateway, "status", lambda sid: {"active": "none", "listen": {}})
+    outbound._connect_story(1, [key])
+    assert fake.rows["r1"]["port"] == 8075 and any("NOT changed" in x and "not listening" in x for x in said)     # the forward is not up: the record is not touched
+    monkeypatch.setattr(gateway, "status", lambda sid: {"active": "active", "listen": {"30000": True}})
+    said.clear()
+    outbound._connect_story(2, [key])
+    assert fake.rows["r1"]["port"] == 30000 and fake.calls == [("update", "r1", 30000)] and any("203.0.113.5:8075 → 203.0.113.5:30000" in x for x in said)
+    assert outbound.connect_plan()["records"][0]["state"] == "bridged" and outbound.connect_plan()["bridged"] == 1
+    log = [e for e in outbound.failover._state()["dns_log"] if e.get("op") == "bridge"]
+    assert len(log) == 1 and log[0]["fqdn"] == "cank.example.test" and log[0]["old"] == "203.0.113.5:8075" and log[0]["before"]["port"] == 8075 and log[0]["server"] == "ir1"
+    said.clear()
+    outbound._connect_story(3, [key])                                                                            # again: already there, nothing is written
+    assert fake.calls == [("update", "r1", 30000)] and any("already on the forward" in x for x in said)
+    outbound._disconnect_story(4, [key])                                                                         # back through the DNS log: the record as it was
+    assert fake.rows["r1"]["port"] == 8075 and ("put_back", "r1", 8075) in fake.calls and outbound.connect_plan()["records"][0]["state"] == "normal"
+    assert outbound.failover._state()["dns_log"][-1]["restored"] is True
+
+
+def test_connect_refuses_a_record_that_changed_since_the_plan(monkeypatch):
+    _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    outbound.from_tunnels()
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(gateway, "status", lambda sid: {"active": "active", "listen": {"30000": True}})
+    key = outbound.connect_plan()["records"][0]["key"]
+    fake.rows["r1"]["ips"] = ["203.0.113.99"]                                                                    # someone moved it to another server meanwhile
+    outbound._connect_story(1, [key])
+    assert fake.calls == [] and any("not in the plan" in x for x in said)
+
+
+def test_connect_api(client, monkeypatch):
+    _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    assert client.post("/api/outbound/routes/tunnels").json() == {"ok": True, "added": 4, "updated": 0}
+    j = client.get("/api/outbound/connect").json()
+    assert j["ok"] and len(j["records"]) == 1 and j["records"][0]["state"] == "normal"
+    started = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **kw: started.append((label, a[0] if a else None)) or 7)
+    assert client.post("/api/outbound/connect", json={"keys": [j["records"][0]["key"]]}).status_code == 202 and started[0][0] == "outbound connect"
+    assert client.post("/api/outbound/connect/undo", json={"keys": ["x"]}).status_code == 202 and started[1][0] == "outbound disconnect"
+    assert client.post("/api/outbound/connect", json={"keys": []}).status_code == 422
+
+
+# ------------------------------------------------------------------ the relay behind the exits, and the users' modes
+HUB = {"id": "h7", "host": "198.51.100.90", "port": 44123, "method": "chacha20-ietf-poly1305", "password": "relay-secret-0123456789"}
+
+
+def test_the_gateway_wraps_the_traffic_for_the_relay_behind_every_exit():
+    outbound.add_configs(f"{VLESS_A}\n{VLESS_B}")
+    outbound.add_routes([{"target_host": "198.51.100.40", "target_port": 443}])
+    d = {**outbound.desired(), "hubs": [HUB]}
+    st_ = gateway.validate_state(d)
+    assert st_["hubs"] == [HUB]
+    cfg = gateway.build_config(st_)
+    ss = [o for o in cfg["outbounds"] if o["tag"].startswith("ss-")]
+    assert len(ss) == 2 and all(o["protocol"] == "shadowsocks" and o["streamSettings"]["sockopt"]["dialerProxy"].startswith("b-") for o in ss) and {o["tag"].split("-")[2] for o in ss} == {"h7"}
+    assert ss[0]["settings"]["servers"][0]["address"] == "198.51.100.90" and ss[0]["settings"]["servers"][0]["port"] == 44123
+    bal = cfg["routing"]["balancers"][0]
+    assert bal["selector"] == ["ss-"] and cfg["observatory"]["subjectSelector"] == ["ss-"]                      # the users go the way the test goes: exit + relay
+    doors = [r for r in cfg["routing"]["rules"] if r.get("inboundTag") and r["inboundTag"][0].startswith("gw-t-") and r["inboundTag"][0] != "gw-t-direct"]
+    assert doors and all(r["outboundTag"].startswith("ss-") for r in doors)
+    auto = gateway.build_config({**st_, "mode": "auto"})["routing"]["balancers"][0]
+    assert auto["selector"] == ["direct", "ss-"] and auto["fallbackTag"] == "direct"
+    plain = gateway.build_config(gateway.validate_state(outbound.desired()))                                  # no relay: as before
+    assert not [o for o in plain["outbounds"] if o["tag"].startswith("ss-")] and plain["routing"]["balancers"][0]["selector"] == ["b-"]
+    for bad in ({**HUB, "password": "short"}, {**HUB, "port": 80}, {**HUB, "method": "rot13"}, {**HUB, "host": "bad host!"}):
+        with pytest.raises(ValueError):
+            gateway.validate_state({**d, "hubs": [bad]})
+
+
+def test_relay_config_has_no_sniffing_and_blocks_the_private_ranges():
+    c = outbound.relay_config(44123, "chacha20-ietf-poly1305", "relay-secret-0123456789")
+    inb = c["inbounds"][0]
+    assert inb["protocol"] == "shadowsocks" and inb["port"] == 44123 and "sniffing" not in inb and inb["settings"]["network"] == "tcp"
+    assert c["routing"]["rules"][0]["outboundTag"] == "block" and "127.0.0.0/8" in c["routing"]["rules"][0]["ip"] and "10.0.0.0/8" in c["routing"]["rules"][0]["ip"]
+
+
+def test_relays_are_chosen_installed_and_handed_to_the_gateway(monkeypatch):
+    with session() as db:
+        f1, f2 = Server(name="fo1", host="203.0.113.60", role="foreign", online=True), Server(name="fo2", host="203.0.113.61", role="foreign", online=True)
+        ir = Server(name="ir1", host="203.0.113.5", role="iran", online=True)
+        db.add_all([f1, f2, ir])
+        db.flush()
+        fid, f2id, iid = f1.id, f2.id, ir.id
+
+    with pytest.raises(ValueError):
+        outbound.set_hubs([iid])                                                                              # an Iran server is not a relay
+    outbound.set_hubs([fid, f2id])
+    hubs = outbound.state()["hubs"]
+    assert len(hubs) == 2 and all(44000 <= h["port"] <= 44999 and "password" not in h for h in hubs) and "relay" not in str(outbound.state()).lower().replace("hubs", "")[:0]
+    assert outbound.relays() == []                                                                            # chosen but not applied: the gateways do not use it yet
+    with session() as db:
+        h = db.get(outbound.OutboundHub, fid)
+        h.installed, h.applied_at = True, 5
+        pw = h.password
+
+    assert outbound.relays() == [{"id": f"h{fid}", "host": "203.0.113.60", "port": hubs[0]["port"] if hubs[0]["server_id"] == fid else hubs[1]["port"], "method": "chacha20-ietf-poly1305", "password": pw}]
+    assert pw not in str(outbound.state())
+    with pytest.raises(ValueError, match="remove it from there first"):
+        outbound.set_hubs([f2id])                                                                             # an installed relay holds files: remove it first
+    removed = []
+    monkeypatch.setattr(outbound, "run_action", lambda node, name, params=None, timeout=90: removed.append(name) or "REMOVED")
+    outbound.remove_hub(fid)
+    assert removed == ["xrelay_remove"] and [h["server_id"] for h in outbound.state()["hubs"]] == [f2id]
+    outbound.set_hubs([])                                                                                     # one that was never installed goes without a trip to its server
+    assert outbound.state()["hubs"] == []
+
+
+def test_the_story_installs_the_relay_first_and_the_gateway_goes_through_it(monkeypatch):
+    sid = _iran()
+    with session() as db:
+        f = Server(name="fo1", host="203.0.113.60", role="foreign", online=True)
+        db.add(f)
+        db.flush()
+        fid = f.id
+
+    outbound.add_configs(VLESS_A)
+    outbound.add_routes([{"target_host": "198.51.100.50", "target_port": 443}])
+    outbound.set_gateways([sid])
+    outbound.set_hubs([fid])
+    calls = _fake_gateway(monkeypatch, [{"key": "gateway", "ok": True, "ms": 100, "ip": "", "country": ""}])
+
+    def apply_hub(aid, server_id):
+        with session() as db:
+            h = db.get(outbound.OutboundHub, server_id)
+            h.installed, h.applied_at = True, 9
+
+        calls.append(("hub", server_id))
+        return True
+
+    monkeypatch.setattr(outbound, "apply_hub", apply_hub)
+    monkeypatch.setattr(outbound, "_check_hubs", lambda s, now: None)
+    outbound._apply_story(1)
+    assert [c[0] for c in calls if c[0] in ("hub", "install", "apply")] == ["hub", "install", "apply"]       # the relay first, then the gateway
+    applied = next(c for c in calls if c[0] == "apply")
+    assert applied[2][0]["id"] == f"h{fid}" and applied[2][0]["host"] == "203.0.113.60"
+    assert any("through 1 relay(s)" in c[1] for c in calls if c[0] == "say")
+
+
+def test_due_decides_which_tunnels_are_connected_and_which_come_back():
+    now = 100_000
+    tunnels = {"a": {"state": "down", "since": now - 400}, "b": {"state": "down", "since": now - 100}, "c": {"state": "up", "since": now - 3600}, "d": {"state": "up", "since": now - 3600}, "e": {"state": "down", "since": now - 9000}}
+    auto = {"c": now - 7200, "d": now - 100}                                                                  # the panel connected c long ago and d a moment ago
+    go, home = outbound.due(tunnels, auto, 5, 30, now)
+    assert go == ["a", "e"] and home == ["c"]                                                                  # b is down for 100 s only; d is in its cooldown; e is down: connect
+    assert outbound.due({"x": {"state": "up", "since": now - 3600}}, {}, 5, 30, now) == ([], [])             # a healthy tunnel nobody touched is left alone
+
+
+def test_users_mode_needs_the_license_and_is_limited(monkeypatch):
+    outbound.set_users("auto", 7, 40)
+    u = outbound.state()["users"]
+    assert u["mode"] == "auto" and u["after_minutes"] == 7 and u["back_minutes"] == 40
+    outbound.set_users("manual", 9999, 1)
+    assert outbound.state()["users"]["after_minutes"] == 120 and outbound.state()["users"]["back_minutes"] == 5
+    with pytest.raises(ValueError):
+        outbound.set_users("sometimes")
+    monkeypatch.setattr(outbound.license, "has", lambda f: False)
+    with pytest.raises(ValueError, match="license"):
+        outbound.set_users("auto")
+    assert outbound.state()["users"]["licensed"] is False
+
+
+def test_auto_users_connects_a_tunnel_that_stays_down_and_puts_it_back(monkeypatch):
+    ids = _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    outbound.from_tunnels()
+    started, told = [], []
+    monkeypatch.setattr(outbound, "connect", lambda keys: started.append(("connect", keys)) or 1)
+    monkeypatch.setattr(outbound, "disconnect", lambda keys: started.append(("disconnect", keys)) or 1)
+    monkeypatch.setattr(outbound, "_tell", lambda text: told.append(text))
+    sid = ids["i1"]
+    with session() as db:
+        db.add(Gateway(server_id=sid, installed=True, applied_at=5))
+
+    s = outbound._state()
+    s["health"][str(sid)] = {"at": 1, "summary": {"alive": 2, "total": 2, "exits": {}, "gateway_ok": True, "ms": 100}}
+    outbound._save(s)
+    outbound.set_users("manual")
+    outbound.auto_users()
+    assert started == []                                                                                       # manual: nothing by itself
+    outbound.set_users("auto", 5, 30)
+    outbound.auto_users()
+    assert started == []                                                                                       # the tunnel is up: nothing
+    from nikatel.models import Tunnel
+
+    with session() as db:
+        t = db.scalar(__import__("sqlalchemy").select(Tunnel).where(Tunnel.name == "fo1-ir1"))
+        t.state, t.state_since = "down", int(__import__("time").time()) - 600
+
+    outbound.auto_users()
+    assert started == [("connect", [outbound.connect_plan()["records"][0]["key"]])] and "fo1-ir1" in outbound.state()["users"]["auto"] and told and "fo1-ir1" in told[0]
+    fake.rows["r1"]["port"] = 30000                                                                            # (the connect story did that)
+    started.clear()
+    with session() as db:
+        t = db.scalar(__import__("sqlalchemy").select(Tunnel).where(Tunnel.name == "fo1-ir1"))
+        t.state, t.state_since = "up", int(__import__("time").time()) - 3600
+
+    s = outbound._state()
+    s["users"]["auto"]["fo1-ir1"] = int(__import__("time").time()) - 7200
+    outbound._save(s)
+    outbound.auto_users()
+    assert [k for k, _ in started] == ["disconnect"] and "fo1-ir1" not in outbound.state()["users"]["auto"]
+    monkeypatch.setattr(outbound.license, "has", lambda f: False)                                              # without the licence the job does nothing
+    started.clear()
+    outbound.auto_users()
+    assert started == []
+
+
+def test_hubs_and_users_api(client, monkeypatch):
+    with session() as db:
+        f = Server(name="fo1", host="203.0.113.60", role="foreign", online=True)
+        db.add(f)
+        db.flush()
+        fid = f.id
+
+    assert client.put("/api/outbound/hubs", json={"server_ids": [fid]}).status_code == 200 and client.put("/api/outbound/hubs", json={"server_ids": [9999]}).status_code == 400
+    assert client.get("/api/outbound").json()["hubs"][0]["name"] == "fo1" and client.get("/api/outbound").json()["foreign"][0]["id"] == fid
+    assert client.post(f"/api/outbound/hubs/{fid}/remove").json()["ok"] is True and client.post(f"/api/outbound/hubs/{fid}/remove").status_code == 400
+    assert client.put("/api/outbound/users", json={"mode": "auto", "after_minutes": 3, "back_minutes": 20}).status_code == 200
+    assert client.get("/api/outbound").json()["users"] == {"mode": "auto", "after_minutes": 3, "back_minutes": 20, "licensed": True, "auto": []}
+    assert client.put("/api/outbound/users", json={"mode": "later"}).status_code == 422 and client.put("/api/outbound/users", json={"mode": "auto", "after_minutes": 0}).status_code == 422

@@ -783,6 +783,17 @@ def log_manual(op: str, domain: str, fqdn: str, record_id: str, old: str, new: s
     return e
 
 
+def log_bridge(account: str, domain: str, fqdn: str, record_id: str, old: str, new: str, before: dict | None, server: str) -> dict:
+    """The origin port of a record was switched to a forward of the outbound (services/outbound.py): kept with everything needed to put it back (op: bridge). No Telegram notice: the story says it."""
+    s = _state()
+    now = int(time.time())
+    e = {"id": f"b-{now}-{len(s['dns_log'])}:{record_id}", "at": now, "plan_id": f"b-{now}", "op": "bridge", "server": server, "target": "outbound forward", "account": account, "domain": domain, "record_id": str(record_id), "fqdn": fqdn,
+         "old": old, "new": new, "before": before, "configs": [], "restored": False, "restored_at": None}
+    s["dns_log"].append(e)
+    _save(s)
+    return e
+
+
 def restore(log_id: str) -> dict:
     """Put ONE DNS change back: a re-pointed record at the address it had (the tunnels stay where they are); a record made by hand is deleted again, a deleted one is made again,
     a changed one gets its old values back."""
@@ -817,9 +828,9 @@ def restore(log_id: str) -> dict:
         _save(s)
 
         with session() as db:
-            emit(db, "warn", "actions", f"DNS {e['fqdn']}: the change by hand ({op}) was put back.", e["fqdn"])
+            emit(db, "warn", "actions", f"DNS {e['fqdn']}: " + ("the switch to the outbound forward" if op == "bridge" else f"the change by hand ({op})") + " was put back.", e["fqdn"])
 
-        _notice(f"↩ DNS {e['fqdn']}: the change by hand ({op}) was put back.")
+        _notice(f"↩ DNS {e['fqdn']}: " + ("the switch to the outbound forward" if op == "bridge" else f"the change by hand ({op})") + " was put back.")
         return dict(e)
 
     if not any(x["plan_id"] == e["plan_id"] and not x.get("restored") for x in s["dns_log"]):

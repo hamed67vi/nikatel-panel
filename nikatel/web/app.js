@@ -2310,27 +2310,7 @@ window.pnHostsToggle = async (id, disable) => { const keys = [...document.queryS
 window.pnHostClone = async (id, key) => { try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}/clone`, {method: "POST"}); toast("✓ Cloned", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnHostDel = async (id, key, name) => { if (!await gconfirm(`Delete host ${name} from the panel? Users lose that address in their links.`)) return; try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
-/* outbounds (core config) */
-async function pnCoreLoad(id) {
-  const box = $("#pn-body"); if (!box) return;
-  try { pn.core = await api(`/api/panels/${id}/core`); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  const c = pn.core, s = c.summary;
-  const rule = r => `<div class="ob-line"><b>→ ${esc(r.to)}</b><span class="mut">${esc(r.when)}</span></div>`;
-  box.innerHTML = `<div class="card ob-one"><h3>Outbounds <span class="pill">${esc(c.kind)} · ${esc(c.name || "core")}</span><small class="mut ob-note">Every change is validated, backed up, written, read back and put back if the panel did not keep it. The <b>default</b> outbound carries all traffic that no rule sends elsewhere.</small><span class="sp"></span><button class="sm" onclick="pn.raw=!pn.raw;refresh()">${pn.raw ? "Hide" : "Raw JSON"}</button></h3>
-      <div class="ob-grid">${s.outbounds.map(o => `<div class="ob-it"><b>${esc(o.tag)}</b>${o.tag === s.default ? '<span class="pill ok">default</span>' : ""}<small class="mut">${esc(o.protocol)}${o.target ? " → " + esc(o.target) : ""}${o.network ? " · " + esc(o.network) : ""}</small><span class="sp"></span>${o.tag !== s.default ? `<button class="sm" onclick="pnObDefault(${id}, '${esc(o.tag)}')">Make default</button>` : ""}${["freedom", "blackhole"].includes(o.protocol) ? "" : `<button class="sm danger" onclick="pnObDel(${id}, '${esc(o.tag)}')">Remove</button>`}</div>`).join("")}</div>
-      <div class="ob-add"><input id="pn-ob-uri" placeholder="Add an outbound from a link: vless://…  vmess://…  trojan://…  ss://…" spellcheck="false" autocomplete="off"><input id="pn-ob-tag" placeholder="tag, e.g. fi-node" autocomplete="off"><label class="chk"><input id="pn-ob-def" type="checkbox"> default</label><button class="pri" onclick="pnObAdd(${id})">Add outbound</button></div>
-      <div class="ob-more">
-        <details><summary>Routing rules <i class="cnt">${s.rules.length}</i></summary>${s.rules.map(rule).join("") || '<div class="mut ob-line">no rules: everything goes to the default outbound</div>'}${s.balancers.length ? `<div class="mut ob-line">balancers: ${esc(s.balancers.join(", "))}</div>` : ""}</details>
-        <details><summary>Backups <i class="cnt">${c.backups.length}</i> <small class="mut">the config as it was before each change</small></summary>${c.backups.map(bk => `<div class="ob-line"><b>${new Date(bk.at * 1000).toLocaleString()}</b> <small class="mut">${esc(bk.note)}</small><span class="mut ob-bo">${esc(bk.outbounds.join(", "))}</span><button class="sm" onclick="pnCoreRestore(${id}, '${esc(bk.file)}')">Restore</button></div>`).join("") || '<div class="mut ob-line">no backup yet</div>'}</details>
-      </div>
-      ${pn.raw ? `<h3 class="ob-h">Raw core config <small class="mut">for experts; saved only when valid</small></h3><textarea id="pn-core-raw" class="ob-raw" style="min-height:240px;font-family:var(--mono)" spellcheck="false">${esc(JSON.stringify(c.config, null, 2))}</textarea><div class="frm-act"><button class="pri" onclick="pnCoreRaw(${id})">Validate &amp; save</button></div>` : ""}</div>`;
-}
-const pnCoreDo = async (id, fn) => { toast("Writing to the panel… (it restarts its core)"); try { const r = await fn(); toast("✓ Applied · outbounds: " + r.outbounds.join(", "), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnObAdd = id => { const uri = $("#pn-ob-uri").value.trim(), tag = $("#pn-ob-tag").value.trim(), def = $("#pn-ob-def").checked; if (!uri || !tag) { toast("A link and a tag are needed", "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds`, {method: "POST", body: JSON.stringify({uri, tag, make_default: def})})); };
-window.pnObDel = async (id, tag) => { if (!await gconfirm(`Remove outbound ${tag}? Rules that use it are removed too.`)) return; pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds/${encodeURIComponent(tag)}`, {method: "DELETE"})); };
-window.pnObDefault = (id, tag) => pnCoreDo(id, () => api(`/api/panels/${id}/core/outbounds/${encodeURIComponent(tag)}/default`, {method: "POST"}));
-window.pnCoreRestore = async (id, file) => { if (!await gconfirm("Put this backup in place of the current core config?")) return; pnCoreDo(id, () => api(`/api/panels/${id}/core/restore/${file}`, {method: "POST"})); };
-window.pnCoreRaw = id => { let cfg; try { cfg = JSON.parse($("#pn-core-raw").value); } catch (e) { toast("✕ not valid JSON: " + e.message, "bad"); return; } pnCoreDo(id, () => api(`/api/panels/${id}/core`, {method: "PUT", body: JSON.stringify({config: cfg, note: "manual edit"})})); };
+/* (the Xray outbounds of a panel's core are no longer edited here: the Outbound page is the one place; the API /api/panels/{id}/core stays) */
 
 /* ---- shop bot (PHP bot on its own server, over SSH) */
 INFO.bot = ["Shop bot", "Your sales bot, run from here: payments to confirm, orders, users, plans and prices, the panels it sells from, discounts and gift codes, broadcasts, tickets, every text and switch."];
@@ -3372,15 +3352,10 @@ window.sbCommands = async () => { const m = $("#tool-menu"); if (m) m.open = fal
 window.sbImport = async () => { if (!await gconfirm("Import the real database over the live one?\n\nThe live database is dumped first. Users, orders, payments, plans, panels and settings are replaced; broadcast queues are not copied. The bot then serves the real customers.")) return; toast("Dumping and importing… (1–3 minutes)"); try { const r = await api("/api/shopbot/import-stage", {method: "POST"}); toast(`✓ Imported: ${r.tables.users} users, ${r.tables.orders_list} orders · backup ${r.backup.split("/").pop()}`, "ok"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
-const gw = {tab: ""};
 INFO.gateway = ["Outbound", INFO_GW];
 PAGES.gateway = async () => {
-  gw.tab = gw.tab || localStorage.getItem("nk.gwtab") || "outbound"; if (gw.tab === "gateway") gw.tab = "outbound";
-  const gwHead = `<div class="fstrip"><div class="tabs"><button class="${gw.tab === "outbound" ? "on" : ""}" onclick="gw.tab='outbound';localStorage.setItem('nk.gwtab','outbound');refresh()">🌉 Outbound</button><button class="${gw.tab === "outbounds" ? "on" : ""}" onclick="gw.tab='outbounds';localStorage.setItem('nk.gwtab','outbounds');refresh()">🧩 Panel outbounds</button></div></div>`;
-  if (gw.tab !== "outbounds") return obRender(gwHead);        // outbound.js: the pool of exits, the Iran servers that carry it, the forwards
-  const pnl = await api("/api/panels").catch(() => ({panels: []})), panelsList = pnl.panels || [], pnSel = panelsList.find(x => String(x.id) === pn.id) || panelsList[0] || {};
-  $("#page").innerHTML = `${gwHead}${panelsList.length ? `<div class="toolbar"><select onchange="pn.id=this.value;localStorage.setItem('nk.pn',this.value);refresh()">${panelsList.map(x => `<option value="${x.id}" ${String(x.id) === String(pnSel.id) ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select><span class="mut">the Xray outbounds of this panel's core: where its users' traffic leaves</span></div><div id="pn-body"><div class="mut">loading…</div></div>` : '<div class="empty">No panel yet — add one under Panels.</div>'}`;
-  if (panelsList.length) pnCoreLoad(pnSel.id);
+  for (let i = 0; i < 100 && typeof obRender !== "function"; i++) await new Promise(r => setTimeout(r, 40));       // outbound.js is the last script of the page: on a hard reload the first render can come before it has run
+  return obRender("");       // outbound.js: the pool of exits, the relay, the Iran servers that carry it, the forwards, the users
 };
 
 /* ---- events */
