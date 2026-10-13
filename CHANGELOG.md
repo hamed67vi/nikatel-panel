@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.28
+
+- CDN forms (Add account, make / edit a record): an error shows in full inside the form, in a red box above the button, instead of a clipped note on the edge of the window.
+
 ## 1.35.27
 
 - The ArvanCloud mark is straight and centred (a dot and a thick bar of the same weight); a two-tone Cloudflare cloud mark beside it; both are used in the domain chooser, the account chips and in **Add account**, where the provider is chosen with two logo cards.

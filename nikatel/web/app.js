@@ -4084,9 +4084,9 @@ window.dnsSave = async (e, k) => {
   const po = f.elements.port, up = f.elements.upstream;      // only what was changed is sent: a record with several ports keeps them when you leave the port alone
   if (po && !po.disabled && po.value !== (po.dataset.orig || "")) body.port = po.value === "" ? 0 : +po.value;
   if (up && up.value !== (up.dataset.orig || "default")) body.upstream = up.value;
-  const btn = f.querySelector(".qp-pri"); btn.disabled = true;
+  const btn = f.querySelector(".qp-pri"); btn.disabled = true; formErr(f, "");
   try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); state.dnsFresh = true; refresh(); }
-  catch (err) { btn.disabled = false; toast("✕ " + err.message, "bad"); }
+  catch (err) { btn.disabled = false; formErr(f, err.message); }
   return false;
 };
 window.dnsDel = async k => {
@@ -4125,13 +4125,15 @@ window.dnsAccForm = id => {
   setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f && f.elements.provider) dnsAccHint(f); }, 60);
 };
 window.dnsAccHint = f => { const cf = f.elements.provider.value === "cloudflare"; $("#dns-keylab").textContent = cf ? "Cloudflare API token" : "ArvanCloud API key"; $("#dns-keyhint").innerHTML = cf ? "Cloudflare dashboard → My Profile → <b>API Tokens</b> → Create Token → <b>Edit zone DNS</b> template (permissions: Zone · DNS · Edit, Zone · Zone · Read) for the zones you want." : "panel.arvancloud.ir → profile → <b>Machine Users</b> → give it the <b>CDN</b> service with a manager role → create an access key and paste it (shown once)."; };
+/* an error of a form shows INSIDE the form, in full, in a box above the button (not as a clipped note on the edge of the window) */
+window.formErr = (f, msg) => { let b = f.querySelector(".qp-err"); if (!msg) { if (b) b.remove(); return; } if (!b) { b = document.createElement("div"); b.className = "qp-err"; b.setAttribute("role", "alert"); const anchor = f.querySelector(".qp2-foot, .qp-act"); if (anchor) anchor.before(b); else f.append(b); } b.innerHTML = `<i>!</i><span>${esc(String(msg))}</span>`; };
 window.dnsAccSave = async (e, id) => {
-  e.preventDefault(); const f = e.target, btn = f.querySelector(".qp-pri"); btn.disabled = true;
+  e.preventDefault(); const f = e.target, btn = f.querySelector(".qp-pri"); btn.disabled = true; formErr(f, "");
   try {
     if (id) await api("/api/dns/accounts/" + encodeURIComponent(id), {method: "PUT", body: JSON.stringify({name: f.elements.name.value, key: f.elements.key.value})});
     else await api("/api/dns/accounts", {method: "POST", body: JSON.stringify({provider: f.elements.provider.value, name: f.elements.name.value, key: f.elements.key.value})});
     closeModal(); toast(id ? "✓ Account saved" : "✓ Account added - its domains are listed", "ok"); state.dnsFresh = true; refresh();
-  } catch (err) { btn.disabled = false; toast("✕ " + err.message, "bad"); }
+  } catch (err) { btn.disabled = false; formErr(f, err.message); }
   return false;
 };
 window.dnsAccTest = async id => { toast("Asking the provider (read only)…"); try { const r = await api(`/api/dns/accounts/${encodeURIComponent(id)}/test`, {method: "POST"}); toast(`✓ Connected: ${r.domains.length} domain(s), ${r.records} record(s)`, "ok"); state.dnsFresh = true; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };

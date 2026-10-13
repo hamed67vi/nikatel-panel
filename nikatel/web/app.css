@@ -4410,3 +4410,9 @@ html[data-mode="light"] body .pan-anim .win { fill: rgba(47,111,224,.08); stroke
 html[data-mode="light"] body .bot-anim .hd { fill: rgba(47,111,224,.08); stroke: #3a5aa0; stroke-width: 1.6; } html[data-mode="light"] body .bot-anim .ant, html[data-mode="light"] body .bot-anim .mo { stroke: #3a5aa0; } html[data-mode="light"] body .bot-anim .ap { fill: #d58b00; } html[data-mode="light"] body .bot-anim .eye { fill: #2f6fe0; }
 html[data-mode="light"] body .gear-anim .gear { fill: rgba(47,111,224,.12); stroke: #3a5aa0; stroke-width: 1.6; }
 html[data-mode="light"] body .head h1 .t-anim, html[data-mode="light"] body #title .t-anim { opacity: 1; }html body #page .dns-tbl .port-pill { height: 22px; min-width: 46px; padding: 0 10px; font-size: 12.5px; font-weight: 700; letter-spacing: .01em; }
+/* the error box of a form */
+html body #modal .qp-err { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,90,100,.1); border: 1px solid rgba(255,90,100,.4); color: #ffb3bd; font-size: 13px; line-height: 1.45; animation: qpErrIn .18s ease-out; }
+html body #modal .qp-err > i { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; background: rgba(255,90,100,.3); color: #fff; margin-top: 1px; }
+html body #modal .qp-err > span { min-width: 0; overflow-wrap: anywhere; }
+@keyframes qpErrIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+html[data-mode="light"] body #modal .qp-err { background: #fdecee; border-color: rgba(200,40,60,.4); color: #9b1c2a; } html[data-mode="light"] body #modal .qp-err > i { background: #d4304a; color: #fff; }
