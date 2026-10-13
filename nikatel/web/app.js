@@ -4049,7 +4049,7 @@ window.dnsForm = k => {
       ${fld("c4", `<span id="dns-addrlab">Address</span> <small id="dns-ipnote"></small>`, `<input class="qp-in" name="ips" value="${esc(r ? (r.type === "A" ? r.ips.join(", ") : r.value) : "")}" required placeholder="203.0.113.10  (several: separate with commas)" autocomplete="off" dir="ltr" oninput="dnsPrev(this.form)">`, "Several addresses of an A record, separated by commas, share the traffic.")}
       ${fld("c2 dns-arv", "Port", `<input class="qp-in" name="port" type="number" min="1" max="65535" value="${r && r.port ? esc(r.port) : ""}" data-orig="${r && r.port ? esc(r.port) : ""}" placeholder="none" autocomplete="off" dir="ltr">`, "The port of the address. Empty = none.")}
       ${fld("c3 dns-ip", "Or a server of the panel", sw(`<select class="qp-sel" onchange="if(this.value){this.form.elements.ips.value=this.value;dnsPrev(this.form);this.selectedIndex=0}"><option value="">choose a server…</option>${servers.map(s => `<option value="${esc(s.host)}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select>`))}
-      ${fld("c3 dns-arv", "Protocol to the origin", sw(`<select class="qp-sel" name="upstream" data-orig="${esc((r && r.upstream) || "default")}">${[["default", "Default"], ["auto", "Auto"], ["http", "HTTP"], ["https", "HTTPS"]].map(([v, l]) => `<option value="${v}" ${((r && r.upstream) || "default") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`), "How ArvanCloud talks to your server when the cloud is on.")}
+      ${fld("c3 dns-arv", "Protocol to the origin", sw(`<select class="qp-sel" name="upstream" onchange="dnsFormSync(this.form)" data-orig="${esc((r && r.upstream) || "default")}">${[["default", "Default"], ["auto", "Auto"], ["http", "HTTP"], ["https", "HTTPS"]].map(([v, l]) => `<option value="${v}" ${((r && r.upstream) || "default") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`), "How ArvanCloud talks to your server when the cloud is on.")}
     </div>
     <div class="qp2-foot"><div class="qp-prev" id="dns-prev"></div><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add");
   setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f) { dnsFormAcc(f, true); dnsFormSync(f); dnsPrev(f); f.elements.name.focus(); } }, 60);
@@ -4071,6 +4071,8 @@ window.dnsFormSync = f => {      // which fields a record needs depends on its t
   const prov = (state.dnsAccounts || []).find(x => x.id === f.elements.account.value) || {}, t = f.elements.rtype ? f.elements.rtype.value : "A";
   const show = (sel, on) => f.querySelectorAll(sel).forEach(e => { e.style.display = on ? "" : "none"; });
   show(".dns-arv", prov.provider !== "cloudflare" && t === "A"); show(".dns-ip", t === "A"); show(".dns-cloudf", t !== "TXT");
+  const po = f.elements.port, up = f.elements.upstream, web = !!up && /^https?$/.test(up.value);      // a port is only for a record that talks HTTP or HTTPS to the origin
+  if (po) { po.disabled = !web; po.placeholder = web ? "none" : "HTTP / HTTPS only"; po.title = web ? "" : "The port is used only when the protocol to the origin is HTTP or HTTPS"; }
   const lab = $("#dns-addrlab"); if (lab) lab.textContent = {A: "Address", AAAA: "IPv6 address", CNAME: "Points to (host name)", TXT: "Text"}[t];
   f.elements.ips.placeholder = {A: "203.0.113.10  (several: separate with commas)", AAAA: "2001:db8::1", CNAME: "target.example.com", TXT: "the text of the record"}[t];
 };
@@ -4079,7 +4081,7 @@ window.dnsSave = async (e, k) => {
   e.preventDefault(); const f = e.target, r = k ? (state.dnsRecs || {})[k] : null, body = {account: r ? r.account : f.elements.account.value, domain: r ? r.domain : f.elements.domain.value, name: f.elements.name.value.trim(), ips: f.elements.ips.value.split(/[,\s]+/).filter(Boolean), ttl: +f.elements.ttl.value, cloud: f.elements.cloud.checked};
   const rt = f.elements.rtype ? f.elements.rtype.value : "A"; body.type = rt; if (rt === "CNAME" || rt === "TXT") { body.value = f.elements.ips.value.trim(); body.ips = []; if (rt === "TXT") body.cloud = false; }
   const po = f.elements.port, up = f.elements.upstream;      // only what was changed is sent: a record with several ports keeps them when you leave the port alone
-  if (po && po.value !== (po.dataset.orig || "")) body.port = po.value === "" ? 0 : +po.value;
+  if (po && !po.disabled && po.value !== (po.dataset.orig || "")) body.port = po.value === "" ? 0 : +po.value;
   if (up && up.value !== (up.dataset.orig || "default")) body.upstream = up.value;
   const btn = f.querySelector(".qp-pri"); btn.disabled = true;
   try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); state.dnsFresh = true; refresh(); }

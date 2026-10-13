@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.35.25
+
+- CDN record form: the **Port** field is active only when the protocol to the origin is HTTP or HTTPS.
+- The ArvanCloud mark is drawn in a dark teal tile with a soft green gradient (the domain chooser and the account chips).
+
 ## 1.35.24
 
 - CDN account chips redone: the provider mark (the ArvanCloud mark, the Cloudflare cloud), the name, the number of domains in a small pill, a status light on the right, a glow for the chosen one.
