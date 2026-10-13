@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.35.6
+
+- Server window: the three boxes are tighter (all rows the same height side by side, nothing spills out); the range tabs and the five number cards sit in ONE row.
+- Install view is quiet: neutral tiles, flat buttons without glow, a soft chip for Installed.
+
+## 1.35.5
+
+- Server and tunnel window boxes after the reference: a title with one soft-blue tile; in Resources long bars, the percent and the detail in two columns with a thin line, and traffic with a green down and a pink up arrow.
+
 ## 1.35.4
 
 - Server window, Resources box: the percent and the detail (cores, GB) of CPU, RAM, Swap and Disk each have their own column, so the numbers stand exactly above each other.

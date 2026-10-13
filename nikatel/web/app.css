@@ -3843,3 +3843,68 @@ html body #modal .sbox[data-b="resources"] .rrow { grid-template-columns: 52px m
 html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em { display: grid !important; grid-template-columns: 50px 110px; column-gap: 8px; justify-content: end; align-items: baseline; justify-items: start; }
 html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > b { text-align: right; justify-self: end; }
 html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > small { text-align: left; white-space: nowrap; }
+
+/* the boxes of the server and tunnel windows after the reference: a title with ONE soft-blue tile, long bars, the percent and the detail in two columns with a thin line between, traffic with a green down and a pink up arrow */
+html body #modal .sbox[data-b] > h5 { font-size: 15px !important; font-weight: 600 !important; letter-spacing: 0 !important; text-transform: none !important; color: #cfdcf5 !important; gap: 12px !important; padding-bottom: 12px !important; }
+html body #modal .sbox[data-b] > h5 > i, html body #modal .sbox[data-b="system"] > h5 > i, html body #modal .sbox[data-b="resources"] > h5 > i, html body #modal .sbox[data-b="access"] > h5 > i { width: 28px !important; height: 28px !important; border-radius: 8px !important; display: inline-flex !important; align-items: center; justify-content: center; background: #a9c3f2 !important; color: #17233d !important; filter: none; opacity: 1; }
+html body #modal .sbox[data-b] > h5 > i svg { width: 16px !important; height: 16px !important; }
+html body #modal .sbox[data-b="resources"] .rrow { grid-template-columns: 56px minmax(60px, 1fr) 190px; gap: 14px; min-height: 40px; }
+html body #modal .sbox[data-b="resources"] .rrow > .rbar { height: 10px; border-radius: 999px; } html body #modal .sbox[data-b="resources"] .rrow > .rbar > u { border-radius: 999px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em { grid-template-columns: 62px 1fr; column-gap: 0; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > b { font-size: 16px; font-weight: 700; color: #fff; padding-right: 12px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > small { align-self: stretch; display: flex; align-items: center; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.14); font-size: 12px; }
+html body #modal .sbox[data-b="resources"] .rrow > em:has(.trf) { gap: 0; } html body #modal .sbox[data-b="resources"] .rrow > em .trf { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #fff; }
+html body #modal .sbox[data-b="resources"] .rrow > em .trf + .trf { margin-left: 0; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.14); } html body #modal .sbox[data-b="resources"] .rrow > em .trf:first-child { padding-right: 14px; }
+html body #modal .sbox[data-b="resources"] .ta { font-style: normal; font-size: 16px; font-weight: 700; } html body #modal .sbox[data-b="resources"] .ta.d { color: #4fd98a; } html body #modal .sbox[data-b="resources"] .ta.u { color: #ff7a8c; }
+
+/* the three boxes of the server window, tidy: every row has the same height in all three boxes (the rows stand side by side), nothing spills out of a box, the bars take the room that is left */
+html body #modal .sbox[data-b="system"] .kv2, html body #modal .sbox[data-b="access"] .kv2, html body #modal .sbox[data-b="resources"] .rrow { height: 38px !important; min-height: 38px !important; max-height: 38px; padding: 0 !important; box-sizing: border-box; font-size: 13px; }
+html body #modal .sbox[data-b="system"] .kv2 > span:first-child, html body #modal .sbox[data-b="access"] .kv2 > span:first-child, html body #modal .sbox[data-b="resources"] .rrow > span:first-child { width: 88px; flex: none; font-size: 13px; color: #98a3ba; }
+html body #modal .sbox[data-b="resources"] .rrow { grid-template-columns: 40px minmax(36px, 1fr) 150px; gap: 10px; }
+html body #modal .sbox[data-b="resources"] .rrow > span:first-child { width: auto; }
+html body #modal .sbox[data-b="resources"] .rrow > .rbar { height: 8px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em { grid-template-columns: 46px 104px; justify-content: end; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > b { font-size: 14.5px; padding-right: 8px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > small { padding-left: 10px; font-size: 11px; height: 20px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html body #modal .sbox[data-b="resources"] .rrow:not([class*=" r-"]) > i { display: none; }
+html body #modal .sbox[data-b="resources"] .rrow:not([class*=" r-"]) { grid-template-columns: 100px 1fr; } html body #modal .sbox[data-b="resources"] .rrow > span:first-child { white-space: nowrap; }
+html body #modal .sbox[data-b="resources"] .rrow:not([class*=" r-"]) > em { justify-self: end; min-width: 0; }
+html body #modal .sbox[data-b="resources"] .rrow > em .trf { font-size: 13.5px; } html body #modal .sbox[data-b="resources"] .ta { font-size: 14px; }
+html body #modal .sbox[data-b="resources"] .rrow > em:has(.trf) > b, html body #modal .sbox[data-b="resources"] .rrow:not([class*=" r-"]) > em > b { display: inline-flex; align-items: center; font-size: 13.5px; }
+
+/* tighter: the three boxes of the server window, and the range tabs + the five number cards in ONE row */
+html body #modal .sbox[data-b="system"], html body #modal .sbox[data-b="resources"], html body #modal .sbox[data-b="access"] { padding: 9px 14px 4px !important; }
+html body #modal .sbox[data-b] > h5 { font-size: 14px !important; padding-bottom: 8px !important; gap: 10px !important; }
+html body #modal .sbox[data-b] > h5 > i, html body #modal .sbox[data-b="system"] > h5 > i, html body #modal .sbox[data-b="resources"] > h5 > i, html body #modal .sbox[data-b="access"] > h5 > i { width: 24px !important; height: 24px !important; border-radius: 7px !important; }
+html body #modal .sbox[data-b] > h5 > i svg { width: 14px !important; height: 14px !important; }
+html body #modal .sbox[data-b="system"] .kv2, html body #modal .sbox[data-b="access"] .kv2, html body #modal .sbox[data-b="resources"] .rrow { height: 31px !important; min-height: 31px !important; max-height: 31px; font-size: 12.5px; }
+html body #modal .sbox[data-b="system"] .kv2 > span:first-child, html body #modal .sbox[data-b="access"] .kv2 > span:first-child, html body #modal .sbox[data-b="resources"] .rrow > span:first-child { font-size: 12.5px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > b { font-size: 13.5px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > small { font-size: 10.5px; }
+html body #modal .sbox[data-b="resources"] .rrow > em .trf { font-size: 12.5px; } html body #modal .sbox[data-b="resources"] .ta { font-size: 13px; }
+html body #modal .sbox[data-b="resources"] .rrow > em:has(.trf) > b, html body #modal .sbox[data-b="resources"] .rrow:not([class*=" r-"]) > em > b { font-size: 12.5px; }
+html body #modal .srvwin .mon { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: center; }
+html body #modal .srvwin .mon > .mhead { grid-column: 1; grid-row: 1; margin: 0; } html body #modal .srvwin .mon > .mhead > small { display: none; }
+html body #modal .srvwin .mon > .mtiles { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; }
+html body #modal .srvwin .mon > .mgrid { grid-column: 1 / -1; grid-row: 2; }
+html body #modal .srvwin .mtiles > * { padding: 5px 10px !important; min-width: 0; border-radius: 12px; } html body #modal .srvwin .mtiles > * b, html body #modal .srvwin .mtiles > * strong { font-size: 15px; }
+html body #modal .modal.srvwin .wsec { min-height: 300px; }
+
+/* the five number cards in one row: they must fit */
+html body #modal .srvwin .mtile { column-gap: 4px; padding: 5px 8px !important; } html body #modal .srvwin .mtile small { font-size: 10px; letter-spacing: .2px; } html body #modal .srvwin .mtile span { font-size: 10.5px; } html body #modal .srvwin .mtile b { font-size: 15px; }
+/* the Install view, quiet like the rest: neutral tiles, flat buttons, no glow, no gloss, no colour but one soft blue on the main button */
+html body .ins-sq { width: 28px; height: 28px; border-radius: 8px; display: inline-grid; place-items: center; background: rgba(255,255,255,.07) !important; border: 1px solid rgba(255,255,255,.1); box-shadow: none !important; }
+html body .ins-sq.mz::before { content: "M"; } html body .ins-sq.pg::before { content: "P"; } html body .ins-sq::before { font-size: 12px; font-weight: 700; color: #9fb0cf; }
+html body .ins-h { gap: 10px; } html body .ins-h > b, html body .ins-row > b { font-size: 14px; font-weight: 600; color: #cfdcf5; }
+html body .ins-node { display: flex; flex-direction: column; } html body .ins-node .ins-act { margin-top: auto; }
+html body .ins-btn { height: 34px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; gap: 8px; background: rgba(255,255,255,.06) !important; border: 1px solid rgba(255,255,255,.12) !important; color: #d5deef !important; box-shadow: none !important; text-shadow: none !important; }
+html body .ins-btn::before, html body .ins-btn::after { display: none !important; }
+html body .ins-btn:hover:not(:disabled) { background: rgba(255,255,255,.1) !important; border-color: rgba(255,255,255,.2) !important; }
+html body .ins-btn.pri { background: rgba(122,176,255,.14) !important; border-color: rgba(122,176,255,.38) !important; color: #d6e5ff !important; }
+html body .ins-btn.pri:hover:not(:disabled) { background: rgba(122,176,255,.22) !important; }
+html body .ins-btn.danger { color: #e6b0b0 !important; border-color: rgba(255,130,130,.26) !important; background: rgba(255,255,255,.05) !important; }
+html body .ins-btn:disabled { opacity: .4; }
+html body .ins-mini { box-shadow: none !important; background: rgba(255,255,255,.06) !important; border: 1px solid rgba(255,255,255,.12) !important; }
+html body .ins-chip.ok, html body .ins-chip.off { background: rgba(255,255,255,.05) !important; border: 1px solid rgba(255,255,255,.12) !important; color: #b9c6dc !important; box-shadow: none !important; font-weight: 600; }
+html body .ins-chip.ok i { background: #4fd98a; box-shadow: none; }
+html body .ins-row, html body .ins-node { box-shadow: none !important; }
