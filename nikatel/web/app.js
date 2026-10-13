@@ -323,13 +323,29 @@ async function refresh() {
 let lastTick = Date.now();
 setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
+/* a window that is drawn again changes only what is different, in place: a value that changed is rewritten where it stands, everything else is not touched - so nothing blinks or jumps when Health, Quality, a check ... end */
+function morphNode(a, b) {
+  if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) return false;
+  if (a.nodeType === 3 || a.nodeType === 8) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return true; }
+  if (a.nodeType !== 1) return true;
+  if (a === document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;      // what is being typed is never touched
+  for (const at of [...a.attributes]) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
+  for (const at of [...b.attributes]) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+  if (a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.tagName === "INPUT") { if (a.tagName !== "INPUT" || a.type !== "checkbox") return true; a.checked = b.checked; return true; }
+  const ak = [...a.childNodes], bk = [...b.childNodes], n = Math.min(ak.length, bk.length);
+  for (let i = 0; i < n; i++) if (!morphNode(ak[i], bk[i])) a.replaceChild(bk[i].cloneNode(true), ak[i]);
+  for (let i = n; i < bk.length; i++) a.appendChild(bk[i].cloneNode(true));
+  while (a.childNodes.length > bk.length) a.removeChild(a.lastChild);
+  return true;
+}
+function morphHtml(el, html) { const t = document.createElement("div"); t.innerHTML = html; if (!el.firstChild) { el.innerHTML = html; return; } const ak = [...el.childNodes], bk = [...t.childNodes], n = Math.min(ak.length, bk.length); for (let i = 0; i < n; i++) if (!morphNode(ak[i], bk[i])) el.replaceChild(bk[i].cloneNode(true), ak[i]); for (let i = n; i < bk.length; i++) el.appendChild(bk[i].cloneNode(true)); while (el.childNodes.length > bk.length) el.removeChild(el.lastChild); }
 function showModal(title, body, cls = "", acts = "") {
   let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); }
   const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()">✕ Close</button>`;
   const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
   if (cur && mb && cur.className.replace(/\s*\bediting\b/, "").trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
     const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg-wrap"); cur.style.minHeight = cur.offsetHeight + "px";
-    cur.querySelector(".modal-head").innerHTML = head; mb.innerHTML = body; mb.scrollTop = keep;      // (the message on the top edge lives outside the header and the body: a redraw leaves it as it is)
+    morphHtml(cur.querySelector(".modal-head"), head); morphHtml(mb, body); mb.scrollTop = keep;      // (the message on the top edge lives outside the header and the body: a redraw leaves it as it is)
     if (msg && Date.now() - (+msg.dataset.t || 0) < 20000) mb.prepend(msg);      // the outcome of what was just done stays readable after the redraw
     return;
   }
@@ -898,7 +914,7 @@ async function loadServerCharts(id) {
   if (!box) return;
   state.chartCache = state.chartCache || {};
   const cached = state.chartCache[id + ":" + state.mrange];
-  if (cached) { box.className = "mon"; box.innerHTML = cached; }          // what was drawn last time is back at once, so the window keeps its height; the fresh data replaces it in place
+  if (cached && !box.firstElementChild) { box.className = "mon"; box.innerHTML = cached; }          // what was drawn last time is back at once, so the window keeps its height; the fresh data replaces it in place
   const d = await api(`/api/servers/${id}/samples?hours=${state.mrange}`);
   const pk = document.getElementById("srv-peaks-" + id); if (pk) pk.remove();
   const ts = d.samples.map(r => r[0]), col = n => d.samples.map(r => r[d.columns.indexOf(n)]), series = n => ts.map((t, i) => [t, col(n)[i]]);
@@ -906,9 +922,10 @@ async function loadServerCharts(id) {
   const cpu = nums(col("cpu")), ram = nums(col("ram")), disk = nums(col("disk")), rx = nums(col("rx_mbps")), tx = nums(col("tx_mbps")), conn = nums(col("conn"));
   const f1 = v => v == null ? "—" : (Math.round(v * 10) / 10), pc = v => f1(v) + "%";
   box.className = "mon";
-  box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${d.samples.length} samples · one every 2 minutes · hover a chart for exact values</small></div>
+  const chartsHtml = `<div class="mhead">${rangeTabs()}<small class="mut">${d.samples.length} samples · one every 2 minutes · hover a chart for exact values</small></div>
     <div class="mtiles">${mtile("CPU", pc(avgOf(cpu)), "peak " + pc(cpu.length ? Math.max(...cpu) : null), avgOf(cpu) > 85 ? "bad" : "")}${mtile("RAM", pc(avgOf(ram)), "peak " + pc(ram.length ? Math.max(...ram) : null), avgOf(ram) > 90 ? "bad" : "")}${mtile("Disk", pc(disk.length ? disk[disk.length - 1] : null), "now", disk.length && disk[disk.length - 1] > 85 ? "bad" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}${mtile("Connections", conn.length ? Math.round(avgOf(conn)) : "—", "peak " + (conn.length ? Math.max(...conn) : "—"))}</div>
     <div class="mgrid">${chartCard("CPU", series("cpu"), {col: "blue", ic: SI.cpu, max: 100, unit: "%", warn: 70, bad: 85, fmt: v => Math.round(v)})}${chartCard("RAM", series("ram"), {col: "purple", ic: SI.ram, max: 100, unit: "%", warn: 80, bad: 90, fmt: v => Math.round(v)})}${chartCard("Load (1 min)", series("load1"), {col: "blue", ic: SI.pulse, fmt: v => (Math.round(v * 100) / 100)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}${chartCard("Connections", series("conn"), {col: "cyan", ic: SI.users, fmt: v => Math.round(v)})}</div>`;
+  morphHtml(box, chartsHtml);      // in place: only the numbers that changed are rewritten
   state.chartCache[id + ":" + state.mrange] = box.innerHTML;
 }
 function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
@@ -1041,6 +1058,10 @@ window.renameTunnel = async (id, cur) => {
   try { const r = await api(`/api/tunnels/${id}/name`, {method: "PUT", body: JSON.stringify({name: v.trim()})}); toast("✓ Renamed to " + r.name, "ok"); closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.editPorts = async (id, cur) => { const v = await gprompt("Forwarded ports of this tunnel (Iran → foreign), e.g. 443, 443=2096, 10000-10009:", cur); if (v == null || !v.trim()) return; toast("Changing the ports… (the tunnel service restarts)"); try { const r = await api(`/api/tunnels/${id}/ports`, {method: "PUT", body: JSON.stringify({ports: v})}); toast("✓ Ports: " + r.mapping, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.healthTunnel = async id => {      // ONE button: the check (up / down, data passes) and the quality measure (latency, jitter, loss, score) together, one message
+  toast("Checking and measuring… (about 10 s)");
+  try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
+};
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.checkAll = async () => {      // Check all: it works right there on the button (no window); the answer is one line in the status bar and the list is drawn again
   if (state.tunChecking) return; state.tunChecking = true;
@@ -1059,7 +1080,7 @@ async function followAction(id, every = 2000, limitSeconds = 900) {
 }
 const lastLine = s => (s.story || []).slice(-1)[0] || "";
 window.healthAll = async () => { toast("Checking every tunnel… (up to a minute)"); try { const r = await api("/api/tunnels/health-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.restartTunnel = async (id, name) => { if (!await gconfirm(`Restart ${name} on both servers? It is down for a few seconds.`)) return; toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.restartTunnel = async (id, name) => { toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 async function enginesLoad() {
@@ -1140,13 +1161,13 @@ const TIC = {"🛠": '<svg viewBox="0 0 16 16"><path d="M10.5 2.5a3 3 0 00-2.8 4
 function tunBar(t) {
   const up = t.state === "up", nm = esc(t.name), muted = (state.mutedSet || new Set()).has(t.name);
   const offs = ["iran", "foreign"].map(r => (state.serversCache || []).find(x => x.name === t[r + "_name"])).filter(x => x && x.enabled !== false && x.online === false).map(x => x.name).join(", ");   // the servers of this tunnel that are off
-  const needsSrv = ["Fix", "Dry run", "Health", "Restart", "Quality", "Rebuild"];
+  const needsSrv = ["Fix", "Dry run", "Health", "Restart", "Rebuild"];
   const b = (icon, title, tip, click, cls = "") => offs && needsSrv.includes(title) ? `<button class="sm abtn" data-t="${title}" disabled title="${esc("A server of this tunnel is off (" + offs + "): " + title + " works when it is back")}"><i class="bi">${TIC[icon] || icon}</i>${title}</button>` : `<button class="sm abtn ${cls}" data-t="${title}" ${click ? `onclick="${click}"` : "disabled"} title="${esc(tip)}"><i class="bi">${TIC[icon] || icon}</i>${title}</button>`;
   const groups = [
     [b("🛠", "Fix", up ? "Nothing to fix: the tunnel is healthy" : "Diagnose and repair step by step: restarts only what is not working", up ? "" : `fixTunnel(${t.id}, false)`),
      b("👁", "Dry run", up ? "Nothing to fix: the tunnel is healthy" : "Show what Fix would do, change nothing", up ? "" : `fixTunnel(${t.id}, true)`)],
-    [b("🩺", "Health", "Check the tunnel now: up or down, does data pass, loss and latency", `checkTunnel(${t.id})`), b("↻", "Restart", "Restart the tunnel service on both servers (the GRE link stays)", `restartTunnel(${t.id}, '${nm}')`)],
-    [b("📊", "Quality", "Latency, jitter, loss, speed and a score", `qualityOne(${t.id})`), b("🔔", "Mute alerts", muted ? "Muted: no Telegram alerts about this tunnel. Click to unmute" : "No Telegram alerts about this tunnel until unmuted", `muteRef('${nm}', ${!muted})`, muted ? "is-muted" : "")],
+    [b("🩺", "Health", "Check the tunnel now and measure it: up or down, does data pass, loss, latency, jitter and a score (about 10 s)", `healthTunnel(${t.id})`), b("↻", "Restart", "Restart the tunnel service on both servers (the GRE link stays)", `restartTunnel(${t.id}, '${nm}')`)],
+    [b("🔔", "Mute alerts", muted ? "Muted: no Telegram alerts about this tunnel. Click to unmute" : "No Telegram alerts about this tunnel until unmuted", `muteRef('${nm}', ${!muted})`, muted ? "is-muted" : "")],
     [b("♻", "Rebuild", "Remove it and build it again: same name, same ports", `rebuildTunnel(${t.id}, '${nm}')`), b("📜", "History", "Every repair of this tunnel", `tunHistory(${t.id}, '${nm}')`)],
   ];
   return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
@@ -1189,6 +1210,10 @@ function tunPartHtml(t, tab) {
   ].join("");
   return tabs + `<div class="iboxes">${boxes}</div>`;
 }
+/* the "times the tunnel was down" box, in plain words: when, how long, and why (the technical message stays in the tooltip) */
+const outWhen = ts => { const d = new Date(ts * 1000); return d.toLocaleDateString(undefined, {month: "short", day: "numeric"}) + ", " + d.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit", hour12: false}); };
+const OUT_WHY = [[/both servers do not answer/i, "Both servers did not answer"], [/foreign server does not answer/i, "The foreign server did not answer"], [/iran server does not answer/i, "The Iran server did not answer"], [/GRE/i, "The link between the servers was cut"], [/loss/i, "Many packets were lost"], [/not active|inactive|failed/i, "The tunnel service had stopped"], [/no data passes|no answer|timeout|timed out/i, "No data passed through the tunnel"]];
+const outWhy = e => { e = String(e || ""); for (const [re, s] of OUT_WHY) if (re.test(e)) return s; return e ? e.slice(0, 60) : "No answer from the tunnel"; };
 async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
   if (!box) return;
@@ -1202,11 +1227,12 @@ async function loadTunnelCharts(id) {
   if (cur) { cur.open = true; cur.to = Date.now() / 1000; out.push(cur); }
   const down = out.reduce((a, o) => a + (o.to - o.from), 0), f1 = v => v == null ? "—" : (Math.round(v * 10) / 10);
   box.className = "mon";
-  box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
+  const chartsHtml = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
     <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length}`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) : "none", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}</div>
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
     <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {col: "blue", ic: SI.pulse, unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}
-      <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
+      <div class="mcard mout"><h6>Times the tunnel was down <span class="mval">${out.length === 1 ? "1 time" : out.length + " times"}</span></h6>${out.length ? `<div class="mout-h"><span>When</span><span>How long</span><span>Why</span></div>` + out.slice(-6).reverse().map(o => `<div class="mout-r${o.open ? " now" : ""}" title="${esc(o.err || "")}"><time>${outWhen(o.from)}</time><b>${o.open ? "still down" : durText(o.to - o.from)}</b><span>${esc(outWhy(o.err))}</span></div>`).join("") : '<div class="mut chart-empty">The tunnel did not go down in this time range.</div>'}</div></div>`;
+  morphHtml(box, chartsHtml);
   state.chartCache = state.chartCache || {}; state.chartCache["t" + id + ":" + state.mrange] = box.innerHTML;
 }/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};

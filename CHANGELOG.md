@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.35.14
+
+- A window that is drawn again (after Health, Quality, a check ...) rewrites only the numbers that changed, in place, so the values in the boxes no longer blink or jump; the charts are updated the same way.
+- DNS records: every second card is a little lighter.
+- The Outages box of a tunnel is a plain small table: `Times the tunnel was down` - when, how long, and why in plain words (the technical message stays in the tooltip).
+- The tunnel window has one Health button (the check and the quality measure together, one message); the separate Quality button is gone.
+- Restart of one tunnel no longer asks for a confirmation (Restart all still does).
+
 ## 1.35.13
 
 - The Shop bot entry stays in the menu but is switched off (grey, not clickable) until the other sections are finished; roadmap #79.

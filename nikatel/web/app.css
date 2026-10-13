@@ -4062,3 +4062,24 @@ html body #page .srv-tbl td:nth-child(4):hover, html body #page .ip-copy:hover {
 /* the Shop bot entry: its name stays in the menu, switched off until the other sections are finished */
 html body nav a.nav-off { opacity: .38; filter: grayscale(1); pointer-events: none; cursor: default; }
 html body nav a.nav-off::before, html body nav a.nav-off::after { display: none !important; }
+
+/* the three boxes of a tunnel window: every value fits on its line (the GRE pair, the long names) - tighter label column, smaller figures, fixed-width numbers */
+html body #modal .tunwin .sbox[data-b] .kv2 { gap: 8px; }
+html body #modal .tunwin .sbox[data-b] .kv2 > span:first-child { width: auto !important; flex: none; font-size: 11.5px; }
+html body #modal .tunwin .sbox[data-b] .kv2 > div { flex: 1 1 auto; min-width: 0; justify-content: flex-end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; letter-spacing: -.005em; }
+html body #modal .tunwin .sbox[data-b="link"] .kv2 > div, html body #modal .tunwin .sbox[data-b="link"] .kv2 > div * { font-size: 11px !important; }
+html body #modal .tunwin .sbox[data-b="servers"] .kv2 > div small.mono { font-size: 10.5px !important; }
+
+/* the box "Times the tunnel was down": a small table - when, how long, why */
+html body #modal .mout h6 { margin-bottom: 4px; }
+html body #modal .mout-h, html body #modal .mout-r { display: grid; grid-template-columns: 120px 96px minmax(0, 1fr); gap: 12px; align-items: center; padding: 0 4px; }
+html body #modal .mout-h { height: 24px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #7f8aa6; border-bottom: 1px solid rgba(255,255,255,.07); }
+html body #modal .mout-r { height: 29px; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,.05); }
+html body #modal .mout-r > time { font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; color: #aeb7ca; white-space: nowrap; }
+html body #modal .mout-r > b { font-size: 12px; font-weight: 600; color: #e6ecf8; } html body #modal .mout-r.now > b { color: #ff8a98; }
+html body #modal .mout-r > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c9a3a9; }
+
+/* DNS records: every second card a little lighter, so the rows are easy to follow */
+html body #page .dns-tbl tbody tr.dr-rec:nth-child(odd) td { background: rgba(255,255,255,.026) !important; }
+html body #page .dns-tbl tbody tr.dr-rec:nth-child(even) td { background: rgba(120,150,210,.075) !important; }
+html body #page .dns-tbl tbody tr.dr-rec:hover td { background: rgba(255,255,255,.1) !important; }
