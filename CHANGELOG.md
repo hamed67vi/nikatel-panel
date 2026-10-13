@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.36.4 - the study of the unified core (docs only)
+
+- docs/unified-core.md: can this panel replace Marzban and PasarGuard (its own users, subscriptions and nodes)? Yes: the PasarGuard node is a standalone agent with a documented gRPC / REST API, both databases were read, the work is listed honestly (data, node driver, lifecycle, subscription server with golden tests, compatible API for the bot, importers), a strangler plan in six phases, imonitor looked at (ideas only). Roadmap: milestone M12 with #81-#85. Nothing is built yet.
+
 ## 1.36.3 - the side menu's icons in the day theme
 
 - Day theme: the icons of the side menu are slate at full strength, the open page's icon is blue (they were pale and the open one nearly invisible on its highlight).
