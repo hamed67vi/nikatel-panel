@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.35.2
+
+- Server window header: a round flag badge with the status light on its corner, the address as a small chip, the role and host name as quiet tags.
+- Access & status box: no flag in the Country row, smaller values so the SSH address, provider and country fit on one line.
+
 ## 1.35.1
 
 - Tunnels: one table for every tunnel; a type no longer gets its own header and table. Each type has its own soft tag colour (Backhaul, Backpack, Paqet, Chisel, GRE).
