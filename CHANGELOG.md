@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.23
+
+- Roadmap #80: other DNS record types (a type chooser beside the name) written down as an issue; every DNS path of the panel is built for A records today.
+
 ## 1.35.22
 
 - Tunnel window: the *Times the tunnel was down* box has one fixed size (the last three, the rest is in History) and the charts are a little lower, so the window does not need to scroll.
