@@ -1,5 +1,26 @@
 # One panel instead of Marzban + PasarGuard: can it be done? (study, 2026-10-13)
 
+> **Decision, 2026-10-13: API-driven. Sections 1-6 below are the study of the bigger option and are kept as reference
+> only.** The unification stays on the REST API that the panel already speaks with Marzban and PasarGuard (the Panels
+> page): Marzban / PasarGuard remain the engines and keep their databases, nodes and subscription servers. Dropped: the
+> gRPC node driver, importing their databases, our own subscription server, the "shadow node" and the cut-over.
+> What is built instead (small, no risk for a user's connection; roughly 1-2 weeks):
+>
+> 1. **One account, many panels.** An account of this panel = a name plus the list of its users on each panel
+>    (Marzban user X, PasarGuard user Y). Linked automatically by username, or by hand. A Users page searches every panel at once.
+> 2. **One action, every panel.** Create, extend, change the limit, reset, revoke the link, disable / delete an account
+>    -> the same call to each linked panel (the single-panel versions exist already in `services/panels.py`; the bulk
+>    version only fans them out and reports per panel).
+> 3. **One link.** `/sub/<token>` of this panel collects the subscription of the account from each panel and merges
+>    them (v2ray base64 first; Clash later), so a user holds one link that has everything - WireGuard included, as long as
+>    the PasarGuard group of the account has a WireGuard inbound (the panel only assigns the group).
+> 4. **One API for the shop bot and the Mini App.** They talk to this panel (one base URL, one login) instead of to a
+>    panel each; the panel forwards to the right panel by the plan.
+> 5. Usage and expiry shown together (sum of the panels), the reminders the panels already send stay theirs.
+>
+> The 6 phases of §4 and the node API of §1 are not needed for this. If one day the engines themselves are to be
+> replaced, the study below is the starting point.
+
 The question: make this panel the VPN panel itself - its own users, subscriptions and nodes - import the Marzban and
 PasarGuard databases into it, drive the nodes it already adds, and retire the other panels. Later: every account
 carries everything, WireGuard included. This is the study that was asked for before any code.

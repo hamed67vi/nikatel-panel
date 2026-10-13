@@ -111,14 +111,13 @@ always installable; a milestone ends with a tag.
 - [ ] #79 Shop bot section of the panel: its name stays in the menu but it is switched off until the other sections are finished; then switch it on again and finish it (its pages and the Mini App links are untouched in the code)
 - [ ] #80 CDN: more record types and editing them (AAAA, CNAME and TXT can be made and deleted since 1.35.24; still open: edit them in place, ANAME, NS, MX, SRV, and a test against the real APIs) - a type chooser beside the name in the record form, and make / edit / delete / restore for each type on ArvanCloud and Cloudflare (today every DNS path of the panel - edit, delete, restore, the failover - is built for A records only; each type needs its own body format and a test against the real API)
 
-## M12 · Unified core (one panel instead of Marzban + PasarGuard; decided 2026-10-13, see docs/unified-core.md - not started)
+## M12 · One account, many panels (API-driven; decided 2026-10-13, see docs/unified-core.md - not started)
 
-- [ ] #81 Unified core, phase 1 - the read model: import the Marzban and PasarGuard databases (users, identities, groups / inbounds, hosts, core configs, nodes, usage, admins, templates, the JWT secret) into the panel's tables read-only, a Users page over them, a sync job that keeps pulling from the live panels; nothing a user holds changes (docs/unified-core.md §2, §4)
-- [ ] #82 Unified core, phase 2 - the node driver: the panel speaks the PasarGuard node's gRPC API (Start / SyncUsers / GetStats / GetUserOnlineStats / GetSystemStats / GetLogs) and runs one shadow node with the same core config and the imported users (docs/unified-core.md §1, §3.2)
-- [ ] #83 Unified core, phase 3 - the subscription server: /sub/<token> in every format with the old secret, byte-for-byte golden tests against PasarGuard's output for real users; the go / no-go of the cut-over (docs/unified-core.md §3.4)
-- [ ] #84 Unified core, phases 4-5 - lifecycle (limits, expiry, resets, on hold, HWID, reminders), the compatible /api/pg/... routes for the shop bot and the Mini App, the cut-over node by node with the old panels read-only for 30 days (docs/unified-core.md §3.3, §3.5, §4)
-- [ ] #85 Unified core, phase 6 - WireGuard: the node's WireGuard backend, a key pair per user, a subnet per node, the .conf in the subscription; needs a UDP-capable Iran-side tunnel (docs/unified-core.md §4)
-
+- [ ] #81 One account over many panels: an account = its users on each Marzban / PasarGuard panel, linked by username or by hand, a Users page that searches every panel at once (read through the panels' REST API, nothing is copied out of their databases)
+- [ ] #82 One action for every panel: create, extend, limit, reset, revoke the link, disable, delete on all linked panels at once, with a result per panel
+- [ ] #83 One subscription link: /sub/<token> of this panel merges the subscriptions of the account's panels (v2ray base64 first, Clash later); WireGuard comes through a PasarGuard group that has a WireGuard inbound
+- [ ] #84 One API for the shop bot and the Mini App: they talk to this panel (one base URL) and it forwards to the right panel by the plan
+- [ ] #85 Usage and expiry of an account summed over its panels, in the Users page and the account window
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).
 * Nothing identifying the real infrastructure in the repository - ever. `scripts/check_no_secrets.sh`.

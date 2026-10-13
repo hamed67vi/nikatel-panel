@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.36.5 - the unified core is API-driven (docs only)
+
+- Decision: the unification stays on the REST API the panel already speaks with Marzban and PasarGuard; the node driver (gRPC), importing their databases and our own subscription server are dropped. M12 is now: one account over many panels, one action for every panel, one merged subscription link, one API for the bot and the Mini App, summed usage. Nothing is built yet.
+
 ## 1.36.4 - the study of the unified core (docs only)
 
 - docs/unified-core.md: can this panel replace Marzban and PasarGuard (its own users, subscriptions and nodes)? Yes: the PasarGuard node is a standalone agent with a documented gRPC / REST API, both databases were read, the work is listed honestly (data, node driver, lifecycle, subscription server with golden tests, compatible API for the bot, importers), a strangler plan in six phases, imonitor looked at (ideas only). Roadmap: milestone M12 with #81-#85. Nothing is built yet.
