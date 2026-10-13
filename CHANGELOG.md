@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.35.22
+
+- Tunnel window: the *Times the tunnel was down* box has one fixed size (the last three, the rest is in History) and the charts are a little lower, so the window does not need to scroll.
+- The foot of the side menu is rebuilt: a status light, *Powered by* over the name, and the version in a chip of its own; a longer version number never mixes with the text.
+
 ## 1.35.21
 
 - Adding a Cloudflare account: a token pasted with a space, a line break or a quote is cleaned; a key that Cloudflare does not take as an API token (the Global API Key, a half copy) gets a plain answer with the steps to make a real token instead of *400 Invalid request headers*.
