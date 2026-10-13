@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.33.2
+
+**Best today is a tab of the Tunnel Doctor's box** (In progress / Finished / Best today / CPU cores / Analyst), not a page of its own; the score bars show (they were hidden by a clashing class name).
+
 ## 1.33.1
 
 **Less colour.** The tabs of a page are the quiet kind (the chosen one is underlined, no coloured pill; their icons are in one grey tone, the Iran / Foreign flags too); the emoji of buttons, tabs and headings are drawn as plain one-tone glyphs where the font has them (`font-variant-emoji`); the AI button is the plain button; box title chips are slate, bars one soft blue, charts one blue, numbers white. **Calm slate is the default look** of a browser that has not chosen one yet, and once in each browser this version switches to it (Settings → Look has the other themes). The tunnel list has its earlier look back.

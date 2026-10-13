@@ -3696,3 +3696,8 @@ html body #modal .rrow.r-cpu u, html body #modal .rrow.r-ram u, html body #modal
 html body .mcard .ll, html body .mcard[data-c] .ll { stroke: #7aa7f0; } html body .mcard .la, html body .mcard[data-c] .la { fill: rgba(122,167,240,.12); }
 html body .mtile b, html body .mtile.ok b, html body .mtile.warn b { color: #f2f5fb; } html body .mtile.bad b { color: #ff8a82; }
 html body .strip i.ok { background: #5b88d8; }
+
+/* Best today inside the Doctor's box: the bar of its own, the bar of a score is a ".bt-track" (not the old toolbar class) */
+.bt-top { display: flex; align-items: center; gap: 12px; } .bt-top .sp { flex: 1; }
+.bt-sc .bt-track { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; display: block; font-style: normal; } .bt-sc .bt-track u { display: block; height: 100%; border-radius: 4px; text-decoration: none; } .bt-sc .bt-track u.ok { background: #5b9cf0; } .bt-sc .bt-track u.mid { background: #f0b94a; } .bt-sc .bt-track u.low { background: #ff5a52; }
+.bt-s.ok { color: #f2f5fb; } .bt-list { padding: 0; }
