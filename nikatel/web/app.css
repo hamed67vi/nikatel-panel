@@ -3837,3 +3837,9 @@ html body .sbox > h5 > i, html body #modal .sbox[data-b] > h5 > i, html body #mo
 html body #modal .sbox[data-b] > h5 > i svg { width: 14px !important; height: 14px !important; }
 html body .con-tile i, html body .abtn .bi, html body .wtools i, html body .tool i { filter: grayscale(1) brightness(1.15); opacity: .85; }
 html body .con-tile.on { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.28); } html body .con-tile:hover { border-color: rgba(255,255,255,.22); }
+
+/* Resources box: the percent and the detail of CPU, RAM, Swap and Disk each sit in their own column, so the numbers stand exactly above each other */
+html body #modal .sbox[data-b="resources"] .rrow { grid-template-columns: 52px minmax(30px, 1fr) 168px; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em { display: grid !important; grid-template-columns: 50px 110px; column-gap: 8px; justify-content: end; align-items: baseline; justify-items: start; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > b { text-align: right; justify-self: end; }
+html body #modal .sbox[data-b="resources"] .rrow[class*=" r-"] > em > small { text-align: left; white-space: nowrap; }

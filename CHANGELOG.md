@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.4
+
+- Server window, Resources box: the percent and the detail (cores, GB) of CPU, RAM, Swap and Disk each have their own column, so the numbers stand exactly above each other.
+
 ## 1.35.3
 
 - Every box looks like the boxes of the dashboard: a small quiet title, no coloured icon tile; the icons and emoji of the boxes, the console questions and the action buttons are one grey tone.
