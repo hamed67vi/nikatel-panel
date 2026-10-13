@@ -47,6 +47,17 @@ Routes that read one thing from one server and answer within about ten seconds s
 sample, a panel's status); their description says so. Anything that touches every server, or several, is an action. An answer slower
 than three seconds is written to the log as `slow …`, so the list of what should become an action is measured, not guessed.
 
+The long routes added in 1.30 - 1.35 follow the same rule:
+
+| Route | What it does |
+|---|---|
+| `POST /api/checkall` · `GET /api/checkall` · `POST /api/checkall/stop` | check every enabled server (answers, GRE through a temporary link, filtering in Iran); one action on the panel, so a reload of the page does not stop it; the status says `running`, `done`, `total` |
+| `POST /api/servers/{id}/gre-probe` | does GRE work to this server: an Iran server builds a temporary GRE link, pings the inner address, removes the link (up to a minute, synchronous) |
+| `POST /api/servers/{id}/install` | install on a server (Marzban node with the panel's certificate, PasarGuard node with its API key, the torrent block, the update of the system packages); an action; `GET /api/servers/{id}/pasarguard-cert` shows the node's public certificate |
+| `POST /api/tunnels/builds/{action_id}/stop` | stop a build that runs: it rolls back what it made |
+| `GET /api/besttoday?hours=24` | the tunnels ranked by how they behaved (availability, latency, jitter, loss, breaks); a job measures every tunnel again every half hour |
+| `GET /api/logs?origin=panel\|server\|outside` · `GET /api/logs/summary?hours=24` | the log, with where each problem is; the last hours grouped |
+| `GET /api/health/detail` | what is wrong with the panel itself: database, jobs, SSH key, free disk, last backup, errors of the last hour (`/api/health` stays the open liveness check) |
 ## 3. Authentication
 
 The browser signs in once and carries the `nikatel_session` cookie (24 h, two-step sign-in and a secret entry path when enabled).

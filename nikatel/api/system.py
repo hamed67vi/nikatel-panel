@@ -25,6 +25,71 @@ def health():
     return {"ok": True, "version": __version__, "uptime": int(time.time()) - _STARTED}
 
 
+@router.get("/health/detail", dependencies=[Depends(current_user)])
+def health_detail():
+    """What is wrong with the panel itself, in plain words: the database, the jobs that are late or failing, the SSH key, the free disk, the last backup, the errors of the last hour.
+    `/api/health` only says that the panel answers; this one says what to look at when it does not run well."""
+    import os
+    import shutil
+
+    from ..services import backup
+
+    s = get_settings()
+    now = int(time.time())
+    problems: list[dict] = []
+    checks: dict[str, dict] = {}
+
+    def note(name: str, ok: bool, text: str, hint: str = "") -> None:
+        checks[name] = {"ok": ok, "text": text}
+
+        if not ok:
+            problems.append({"what": name, "text": text, "hint": hint})
+
+    try:
+        with session() as db:
+            n = db.scalar(select(func.count(Server.id))) or 0
+            jobs_ = list(db.scalars(select(Job)))
+
+        size = os.path.getsize(s.data_dir / "nikatel.db") // (1024 * 1024) if (s.data_dir / "nikatel.db").exists() else 0
+        note("database", True, f"answers, {n} servers, {size} MB")
+    except Exception as e:  # noqa: BLE001  a broken database must be reported, not raised
+        jobs_ = []
+        note("database", False, "does not answer: " + str(e)[:100], "Restore the last backup (docs/operations.md) or look at the log of the panel.")
+
+    late = [j.name for j in jobs_ if j.enabled and j.last_ok and now - j.last_ok > j.interval * 3]
+    failing = [j.name for j in jobs_ if j.last_error]
+    note("jobs", not late and not failing, f"{len(jobs_)} background jobs" + (f", late: {', '.join(late)}" if late else "") + (f", failing: {', '.join(failing)}" if failing else ""),
+         "A late or failing job shows its last error in Settings → About; a restart of the panel starts every job again.")
+    key = s.ssh_key
+    note("ssh_key", key.exists() and os.access(key, os.R_OK), "the panel's SSH key is there" if key.exists() else "the panel's SSH key is missing", "Without it the panel cannot log in to any server: Settings shows how to make a new one.")
+
+    try:
+        du = shutil.disk_usage(s.data_dir if s.data_dir.exists() else "/")
+        free = round(100.0 * du.free / du.total, 1)
+        note("disk", free >= 10, f"{free} % free ({du.free // (1024 ** 3)} GB)", "Less than 10 % is free where the database lives: clear old backups and logs.")
+    except OSError as e:
+        note("disk", False, "cannot be read: " + str(e)[:80])
+
+    last = int(backup._marker("backup_last_run").get("at", 0))      # when the daily backup last ran (0 = never)
+
+    note("backup", last == 0 or now - last < 3 * 86400, "no backup has run yet" if not last else f"last backup {round((now - last) / 3600)} h ago", "The last backup is older than three days: Settings → Backups.")
+    errors = 0
+    path = s.log_dir / "nikatel.log"
+
+    if path.exists():
+        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 3600))
+
+        with path.open("r", encoding="utf-8", errors="replace") as f:
+            for raw in f:
+                m = _LOG_LINE.match(raw.rstrip("\n"))
+
+                if m and m.group(2) == "ERROR" and m.group(1) >= since:
+                    errors += 1
+
+    note("errors", errors < 20, f"{errors} errors in the log in the last hour", "Many errors: Logs → What went wrong shows where they come from (the panel itself, a server, or outside).")
+    return {"ok": not problems, "version": __version__, "uptime": now - _STARTED, "problems": problems, "checks": checks}
+
+
 @router.get("/overview", dependencies=[Depends(current_user)])
 def overview():
     """The dashboard's numbers: servers online and offline, tunnels by state, jobs stale or failing."""

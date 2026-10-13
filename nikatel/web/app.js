@@ -284,6 +284,8 @@ const scrollRestore = snap => snap.forEach(([sel, top, atEnd]) => { const el = $
 let navSeq = 0, retryT = null, retries = 0;
 const loadingBox = page => `<div class="loading"><i class="spin"></i><span>Loading ${esc((INFO[page] || ["…"])[0])}…</span></div>`;
 const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "The panel does not answer right now" : "This page could not be loaded"}</b><span>${esc(msg)}</span><small class="mut">${transient ? "It is probably restarting after an update; trying again by itself…" : ""}</small><button class="sm" onclick="retries=0;refresh()">Try again</button></div>`;
+/* every tab, sub-tab and range switch of the panel: the content that follows comes in softly (see .soft-in, and the animation of a tab panel in app.css) instead of jumping */
+document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".tabs button, #subnav button, .set-tabs button, .tf-tabs button, .srv-tabs button, .act-cats button, .ap-ttabs button")) state.softSwap = true; }, true);
 async function refresh() {
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
@@ -298,6 +300,8 @@ async function refresh() {
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
     if (pg0 && pg0.classList.contains("busy")) { pg0.classList.remove("busy"); void pg0.offsetWidth; pg0.classList.add("enter"); }      // a new page: it fades in over the old one's place
+    if (state.softSwap && pg0 && !pg0.classList.contains("enter")) { pg0.classList.remove("soft-in"); void pg0.offsetWidth; pg0.classList.add("soft-in"); }      // a tab was pressed: the new content comes in softly
+    state.softSwap = false;
     scrollRestore(snap); pendScroll = snap.length ? snap : null; setTimeout(() => { pendScroll = null; }, 500);
     document.body.classList.toggle("tabbed", !!SUB[state.page] && ((c) => !!c && c.matches(".toolbar, .fstrip, .tiles, .ap-pair, .ap-alert, .ap-intro, .tt-frame, .dr-head, .set-top"))([...$("#page").children].find(c => getComputedStyle(c).display !== "none")));   // the sub tabs stick to the box under them
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
@@ -421,6 +425,7 @@ PAGES.dashboard = async () => {
  
   const cUp = cfg.configs.filter(c => c.status === "up").length, foreign = srv.filter(s => s.role === "foreign"), checked = foreign.filter(s => (s.extra || {}).iran_filter);
   const clean = checked.filter(s => s.extra.iran_filter.level === "clean"), bad = checked.filter(s => ["filtered", "blocked"].includes(s.extra.iran_filter.level));
+  const hd = await api("/api/health/detail").catch(() => null);      // the panel itself: what to look at when it does not run well (database, jobs, SSH key, disk, backup, errors)
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
   const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   $("#page").innerHTML = `
@@ -431,7 +436,8 @@ PAGES.dashboard = async () => {
       ${hrow("VLESS / VMess connectivity", cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
       ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
-      ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}</div></div>
+      ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}
+       ${hd ? hrow("The panel itself", hd.problems.length ? esc(hd.problems.map(p => p.text).join(" · ")) : "database, jobs, SSH key, disk, backup and log are fine", hd.ok ? "ok" : hd.problems.length + " to look at", hd.ok ? "green" : "yellow") : ""}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
     <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Back to the three boxes" : "The activity alone, the whole width"}">${state.actBig ? "⤡ Collapse" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div>${actFoot(ev)}</div></div>
     ${state.actBig ? "" : dashFree()}`;
@@ -1023,97 +1029,7 @@ PAGES.tunnels = async () => {
   return PAGES.tunnelsList();
 };
 PAGES.configs = async () => { renderSub(); const s = sub("configs"); return s === "gateway" ? PAGES.gateway() : s === "panels" ? PAGES.panels() : PAGES.configsList(); };
-const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || "", foreign: localStorage.getItem("nk.tt.foreign") || ""};
-/* Tunnel test + Network advisor in ONE view: a bar (pair, quick test, start), the engines, then the results (with "Use for this tunnel") beside the live log */
-const TT_QUICK = ["tcpmux", "bp:tcpmux", "bp:wssmux", "chisel:tls", "bpd:udp"];
-const ttSrv = id => (tt.servers || []).find(s => String(s.id) === String(id));
-const ttTunnel = () => { const i = ttSrv(tt.iran), f = ttSrv(tt.foreign); return i && f ? (tt.tl || []).find(t => t.iran_name === i.name && t.foreign_name === f.name) : null; };
-PAGES.tunnelTest = async () => {
-  const [servers, kd, tl] = await Promise.all([api("/api/servers"), tt.kinds ? Promise.resolve({kinds: tt.kinds}) : api("/api/tunnel-test/kinds"), api("/api/tunnels").catch(() => [])]);
-  tt.kinds = kd.kinds; tt.servers = servers; tt.tl = tl;
-  const usable = role => servers.filter(s => s.role === role && s.enabled);
-  for (const [k, role] of [["iran", "iran"], ["foreign", "foreign"]]) if (!usable(role).some(s => String(s.id) === String(tt[k]))) tt[k] = usable(role)[0] ? String(usable(role)[0].id) : "";
-  const opt = (role, cur) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" title="${esc(s.host)}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(cur) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""}${!s.enabled ? " (disabled)" : s.online === false ? " (offline)" : ""}</option>`).join("");
-  const j = tt.job, running = j && !j.done, dis = running ? "disabled" : "";
-  const groups = [...new Set(tt.kinds.map(k => k.group))];
-  const pairs = tl.filter(t => servers.some(s => s.name === t.iran_name) && servers.some(s => s.name === t.foreign_name));
-  $("#page").innerHTML = `<div class="toolbar tt-bar tt-frame">
-      <span class="sg"><select class="sm" id="tt-iran" ${dis} title="Iran server" onchange="ttPair('iran', this.value)">${opt("iran", tt.iran)}</select><b class="mut">⇄</b><select class="sm" id="tt-foreign" ${dis} title="Foreign server" onchange="ttPair('foreign', this.value)">${opt("foreign", tt.foreign)}</select>
-        <select class="sm" ${dis} title="Take the two servers of one of your tunnels" onchange="if(this.value){ttTake(this.value);this.selectedIndex=0}"><option value="">↳ pair of a tunnel…</option>${pairs.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></span>
-      <i class="sep"></i>
-      <span class="sg">${running ? `<button class="sm abtn danger" onclick="ttStop()" ${j.stopping ? "disabled" : ""} title="Stops at the next step of the current transport and removes everything temporary it made"><i>■</i>${j.stopping ? "Stopping…" : "Stop"}</button>` : `<button class="sm abtn" onclick="ttStart(TT_QUICK)" title="Five types that matter (TCP Mux over GRE, BackPack TCP Mux, BackPack WS TLS Mux, Chisel TLS, BackPack Direct UDP): which one is best today"><i>⚡</i>Quick: best today</button><button class="sm abtn pri" onclick="ttStart()" title="Each ticked transport is built as a temporary tunnel, measured and removed again, one after the other (about 2 minutes each). Nothing is added to your list; the story of each run stays in Repairs."><i>▶</i>Start test <span id="tt-count"></span></button>`}</span>
-      <span class="sp"></span><span id="tt-run">${ttRunPill()}</span></div>
-    <div class="sbox tt-sel" id="tt-kinds"><h5><i>🧪</i>What to try<span class="sp"></span><a class="adv-btn" onclick="ttAdv()" title="Open every transport, so single ones can be unticked">Advanced ${tt.adv ? "▴" : "▾"}</a><a class="adv-btn" onclick="ttGuide()" title="Which tunnel for which situation">Which one? ${tt.guide ? "▴" : "▾"}</a></h5>
-      <div class="tteng row">${groups.map((g, i) => `<label class="tte"><input type="checkbox" data-eng="${esc(g)}" ${dis} onchange="ttGroup('${esc(g)}', this.checked)"><b>${esc(g)}</b><small class="mut" id="tte-n-${i}"></small></label>`).join("")}</div>
-      <div class="tta ${tt.adv ? "" : "hidden"}" id="tt-adv">${groups.map(g => `<div class="tta-row"><span class="tta-g">${esc(g)}</span><div class="tta-chips">${tt.kinds.filter(k => k.group === g).map(k => `<label data-g="${esc(g)}" class="ttk" title="${esc(k.note)}"><input type="checkbox" value="${k.key}" ${dis} onchange="ttSyncEng()" ${(j ? j.kinds.includes(k.key) : k.default) ? "checked" : ""}> ${esc(k.label.replace(/^[^·]+· /, ""))}</label>`).join("")}</div></div>`).join("")}</div>
-      <div class="bguide ${tt.guide ? "" : "hidden"}" id="tt-guide">${BK_GUIDE.map(([when, what, k, t, why]) => `<a class="bg-row" title="${esc(why)}" onclick="bkPick('${k}', '${t}');state.sub.tunnels='list';state.build=true;refresh()"><b>${esc(when)}</b><span>${esc(what)}</span></a>`).join("")}</div></div>
-    <div class="tt-two"><div class="sbox"><h5><i>📊</i>Results<span class="sp"></span><span id="tt-best">${ttBestHtml()}</span></h5><div class="tt-res" id="tt-results">${ttResultsHtml()}</div></div>
-      <div class="sbox"><h5><i>📜</i>Live log</h5><div class="tt-log" id="tt-log">${ttLogHtml()}</div></div></div>`;
-  const lg = $("#tt-log"); if (lg) lg.scrollTop = lg.scrollHeight;
-  ttSyncEng();
-  if (running) { clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000); }
-};
-const ttRunPill = () => { const j = tt.job; return j && !j.done ? `<span class="pill ${j.stopping ? "" : "ok"}">${j.stopping ? "stopping" : "running"}: ${esc(j.current || "…")} · ${j.results.length} / ${j.kinds.length} done</span>` : ""; };
-const ttLogHtml = () => { const j = tt.job; return j && j.story && j.story.length ? j.story.map(l => `<div class="fx-line"><b>·</b><span>${esc(l)}</span></div>`).join("") : `<div class="mut" style="padding:8px 2px">${j && !j.done ? "starting…" : "Start a test and its story shows up here."}</div>`; };
-const ttLabel = k => (tt.kinds.find(x => x.key === k) || {}).label || apName(k);
-const ttBest = () => { const j = tt.job; return j ? j.results.filter(r => r.ok && r.score != null).sort((a, b) => b.score - a.score)[0] : null; };
-const ttBestHtml = () => { const b = ttBest(); return b ? `<span class="pill ok">best: ${esc(ttLabel(b.kind))} · ${b.score} / 100</span>` : ""; };
-function ttResultsHtml() {
-  const j = tt.job;
-  if (!j) return '<div class="mut tt-empty">Press <b>Quick</b> for the five types that matter, or tick engines and press <b>Start test</b>.</div>';
-  const run = !j.done, best = ttBest(), tun = ttTunnel();
-  const row = r => { const sc = r.score; return `<tr class="${r === best ? "up" : r.ok ? "" : "down"}"><td class="name" title="${esc(r.error || r.verdict || "")}"><i class="st ${r.ok ? "up" : "down"}"></i>${esc(ttLabel(r.kind))}</td>
-      <td class="num">${r.latency_ms != null ? r.latency_ms + " ms" : "—"}</td><td class="num">${r.loss_pct != null ? r.loss_pct + "%" : "—"}</td><td class="num">${r.down_mbps != null ? "↓" + r.down_mbps + (r.up_mbps != null ? " ↑" + r.up_mbps : "") : "—"}</td>
-      <td><b class="${sc == null ? "mut" : sc >= 75 ? "gw-ok" : sc >= 50 ? "" : "err"}">${sc == null ? "—" : sc}</b></td>
-      <td class="tt-use">${r.ok && tun && !run ? `<button class="sm ${r === best ? "pri" : ""}" title="Replace ${esc(tun.name)} with this type: same name, same ports; if the new one fails the old type is built again" onclick="apUse('${esc(r.kind)}', ${tun.id})">Use for ${esc(tun.name)}</button>` : `<span class="mut" title="${esc(r.error || r.verdict || "")}">${esc((r.error || r.verdict || "").slice(0, 34))}</span>`}</td></tr>`; };
-  return `<table class="tbl"><thead><tr><th>Transport</th><th>Latency</th><th>Loss</th><th>Speed Mb/s</th><th>Score</th><th></th></tr></thead>
-      <tbody>${[...j.results].sort((a, b) => (b.score || 0) - (a.score || 0)).map(row).join("")}${run ? `<tr><td class="name">${esc(ttLabel(j.current))}</td><td colspan="5" class="mut">measuring…</td></tr>` : ""}</tbody></table>`;
-}/* a poll repaints only the pill, the results and the log box: the page itself is not rebuilt, so nothing jumps */
-function ttPaint() {
-  const r = $("#tt-run"), res = $("#tt-results"), lg = $("#tt-log"); if (!r || !res || !lg) return false;
-  const atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 12, keep = lg.scrollTop;
-  r.innerHTML = ttRunPill(); res.innerHTML = ttResultsHtml(); lg.innerHTML = ttLogHtml(); const bb = $("#tt-best"); if (bb) bb.innerHTML = ttBestHtml();
-  lg.scrollTop = atEnd ? lg.scrollHeight : keep;
-  return true;
-}
-window.ttGroup = (g, on) => { document.querySelectorAll(`#tt-kinds label[data-g="${g}"] input`).forEach(x => { if (!x.disabled) x.checked = on; }); ttSyncEng(); };
-window.ttAdv = () => { tt.adv = !tt.adv; const el = $("#tt-adv"); if (el) el.classList.toggle("hidden", !tt.adv); const b = document.querySelector("#tt-kinds .adv-btn"); if (b) b.textContent = "Advanced " + (tt.adv ? "▴" : "▾"); };
-window.ttGuide = () => { tt.guide = !tt.guide; const el = $("#tt-guide"); if (el) el.classList.toggle("hidden", !tt.guide); const b = document.querySelectorAll("#tt-kinds .adv-btn")[1]; if (b) b.textContent = "Which one? " + (tt.guide ? "▴" : "▾"); };
-window.ttPair = (role, v) => { tt[role] = v; localStorage.setItem("nk.tt." + role, v); const r = $("#tt-results"); if (r) r.innerHTML = ttResultsHtml(); };
-window.ttTake = id => { const t = (tt.tl || []).find(x => String(x.id) === String(id)), i = t && (tt.servers || []).find(s => s.name === t.iran_name), f = t && (tt.servers || []).find(s => s.name === t.foreign_name); if (!i || !f) return; tt.iran = String(i.id); tt.foreign = String(f.id); localStorage.setItem("nk.tt.iran", tt.iran); localStorage.setItem("nk.tt.foreign", tt.foreign); refresh(); };
-window.ttSyncEng = () => document.querySelectorAll("#tt-kinds .tte input").forEach((e, i) => {   // an engine is ticked when all its transports are, half-ticked when some are
-  const all = [...document.querySelectorAll(`#tt-kinds label[data-g="${e.dataset.eng}"] input`)], on = all.filter(x => x.checked).length;
-  e.checked = on === all.length; e.indeterminate = on > 0 && on < all.length;
-  const n = $("#tte-n-" + i); if (n) n.textContent = `${on} / ${all.length}`;
-  const c = $("#tt-count"); if (c) c.textContent = "(" + document.querySelectorAll("#tt-kinds .ttk input:checked").length + ")";
-});
-window.ttStart = async quick => {
-  const kinds = Array.isArray(quick) ? quick.filter(k => tt.kinds.some(x => x.key === k)) : [...document.querySelectorAll("#tt-kinds .ttk input:checked")].map(x => x.value);
-  if (!kinds.length) { toast("Tick at least one transport", "bad"); return; }
-  try { const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: +$("#tt-iran").value, foreign_id: +$("#tt-foreign").value, kinds})}); tt.job = {id: r.id, kinds, results: [], current: kinds[0], done: false}; toast("Test started — about 2 minutes per transport"); refresh(); }
-  catch (e) { toast("✕ " + e.message, "bad"); }
-};
-window.ttPoll = async () => {
-  if (!tt.job || tt.job.done) return;
-  try { tt.job = await api(`/api/tunnel-test/compare/${tt.job.id}`); } catch (e) { tt.job.done = true; }
-  if (state.page !== "tunnels" || sub("tunnels") !== "test") return;
-  if (tt.job.done) { refresh(); return; }          // finished: rebuild once so the controls come back
-  if (!ttPaint()) { refresh(); return; }
-  clearTimeout(tt.timer); tt.timer = setTimeout(ttPoll, 3000);
-};
-window.ttStop = async () => { if (!tt.job) return; try { await api(`/api/tunnel-test/compare/${tt.job.id}/stop`, {method: "POST"}); tt.job.stopping = true; toast("Stopping: what the test built is being removed…"); const b = document.querySelector(".tt-bar .danger"); if (b) { b.disabled = true; b.lastChild.textContent = "Stopping…"; } const rp = $("#tt-run"); if (rp) rp.innerHTML = ttRunPill(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-PAGES.tunnelQuality = async () => {
-  const list = await api("/api/tunnels");
-  const q = t => t.quality || {};
-  const cls = v => v == null ? "" : v >= 70 ? "gw-ok" : v >= 40 ? "" : "err";
-  $("#page").innerHTML = `<div class="toolbar"><span class="mut">Latency, jitter and loss over the GRE link of each tunnel (30 pings from the Iran side); speed is measured by the pair test.</span><span class="sp"></span><button class="pri" onclick="qualityAll()">Test all & compare</button></div>
-    <table class="tbl lift"><colgroup><col style="width:24%"><col style="width:10%"><col style="width:20%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col><col style="width:110px"></colgroup>
-      <thead><tr><th>Tunnel</th><th>State</th><th>Iran ⇄ Foreign</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Score</th><th></th></tr></thead>
-      <tbody>${list.sort((a, b) => (q(b).score || 0) - (q(a).score || 0)).map(t => `<tr class="${t.state}"><td class="name">${esc(t.name)}</td><td><span class="st ${t.state}">${esc(stName(t.state))}</span></td><td>${esc(t.iran_name)} <span class="mut">⇄</span> ${esc(t.foreign_name)}</td>
-        <td class="num">${q(t).latency_ms != null ? q(t).latency_ms + " ms" : "—"}</td><td class="num">${q(t).jitter_ms != null ? q(t).jitter_ms + " ms" : "—"}</td><td class="num ${(q(t).loss_pct || 0) >= 15 ? "err" : ""}">${q(t).loss_pct != null ? q(t).loss_pct + "%" : "—"}</td>
-        <td><b class="${cls(q(t).score)}">${q(t).score != null ? q(t).score + " / 100" : "not measured"}</b> <small class="mut">${q(t).at ? ago(q(t).at) + " ago" : ""}</small></td>
-        <td><button class="sm" onclick="qualityOne(${t.id})">Measure</button></td></tr>`).join("") || '<tr><td colspan="8" class="empty">No tunnel.</td></tr>'}</tbody></table>`;
-};
+const tt = {job: null};      // the id of the temporary tunnel test of the Create tunnel window (the page of the tunnel test is gone)
 window.renameTunnel = async (id, cur) => {
   const v = await gprompt("New name of this tunnel (lowercase letters, digits and -, up to 15). Only the name in the panel changes; on the servers nothing is touched:", cur); if (v == null || !v.trim() || v.trim() === cur) return;
   try { const r = await api(`/api/tunnels/${id}/name`, {method: "PUT", body: JSON.stringify({name: v.trim()})}); toast("✓ Renamed to " + r.name, "ok"); closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
@@ -1778,11 +1694,7 @@ window.apDiagnose = async (id, opts = {}) => {
 async function apStart(id, level) {
   try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
 }
-window.apTune = async id => {   // "Network advisor" of the diagnosis window: the Tunnel test page with this tunnel's two servers picked
-  const t = (state.tunnelsCache || []).find(x => x.id === id), sv = await api("/api/servers"), i = t && sv.find(s => s.name === t.iran_name), f = t && sv.find(s => s.name === t.foreign_name);
-  if (i) { tt.iran = String(i.id); localStorage.setItem("nk.tt.iran", tt.iran); } if (f) { tt.foreign = String(f.id); localStorage.setItem("nk.tt.foreign", tt.foreign); }
-  go("tunnels"); state.sub.tunnels = "repairs"; refresh();
-};
+window.apTune = id => { go("tunnels"); state.sub.tunnels = "repairs"; refresh(); };      // (the Network advisor of the diagnosis window: the Tunnel test page is gone, the Doctor is the place)
 window.apRun = async (id, level) => {
   try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
@@ -1860,7 +1772,7 @@ PAGES.configsList = async () => {
     ${list.length ? groups.map(() => `${cf.view === "grid" ? `<div class="cf-grid">${list.map(card).join("")}</div>`
       : cf.view === "compact" ? `<table class="tbl lift compact"><colgroup>${inAll ? '<col style="width:22%"><col style="width:14%">' : '<col style="width:30%">'}<col style="width:9%"><col style="width:8%"><col style="width:12%"><col><col style="width:150px"></colgroup>
       <thead><tr><th>Config</th>${inAll ? "<th>Subs group</th>" : ""}<th>Status</th><th>Ping</th><th>Speed</th><th>Note</th><th></th></tr></thead><tbody>${list.map(rowC).join("")}</tbody></table>`
-      : `<table class="tbl lift cf-list srv-tbl">${inAll ? '<colgroup><col style="width:5%"><col style="width:17%"><col style="width:13%"><col style="width:18%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:150px"></colgroup>' : '<colgroup><col style="width:6%"><col style="width:22%"><col style="width:22%"><col style="width:6%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:12%"><col style="width:150px"></colgroup>'}
+      : `<table class="tbl lift cf-list srv-tbl">${inAll ? '<colgroup><col style="width:70px"><col style="width:17%"><col style="width:12%"><col style="width:18%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:7%"><col style="width:10%"><col style="width:150px"></colgroup>' : '<colgroup><col style="width:6%"><col style="width:22%"><col style="width:22%"><col style="width:6%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:12%"><col style="width:150px"></colgroup>'}
       <thead><tr><th>Type</th><th>Remarks</th>${inAll ? "<th>Subs group</th>" : ""}<th>Address</th><th>Port</th><th>Transport</th><th>TLS</th><th>Delay (ms)</th><th>Speed (MB/s)</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>${list.map(row).join("")}</tbody></table>`}`).join("") : `<div class="empty">${d.configs.length ? "No configs in this view" : "No config yet. Add a link or import a subscription."}</div>`}
     ${subs.subscriptions.length && cf.group === "__all" ? `<div class="card" style="margin-top:14px"><h3>Subscriptions</h3>${subs.subscriptions.map(s => `<div class="ev info"><time>${s.last_import ? ago(s.last_import) + " ago" : "—"}</time><i></i><small>${s.nodes.length} nodes</small><span><b>${esc(s.name)}</b> <span class="mut">${esc(s.url_host)}</span> <a class="mut" onclick="cfSubRefresh(${s.id}, '${esc(s.name)}')">import new nodes</a> · <a class="mut" onclick="cfSubDel(${s.id})">forget</a></span></div>`).join("")}</div>` : ""}`;
@@ -4017,7 +3929,7 @@ PAGES.dns = async () => {
   const fresh = state.dnsFresh ? "?fresh=true" : ""; state.dnsFresh = false;
   const [rr, accs, fo, all] = await Promise.all([api("/api/dns/records" + fresh).catch(e => ({err: e.message, records: [], accounts: []})), api("/api/dns/accounts").catch(() => ({accounts: [], providers: {}})), api("/api/failover").catch(() => null), api("/api/servers").catch(() => [])]);
   const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
-  const recs = (rr.records || []).filter(r => r.editable !== false && !(r.type === "NS" && (r.name === "@" || r.name === "")))      // the records that cannot be changed (MX, NS ...) are not listed, log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];
+  const recs = (rr.records || []).filter(r => r.editable !== false && !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];      // the records that cannot be changed (MX, NS ...) are not listed
   const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
   const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.35.0
+
+- **Fix (urgent):** the DNS page did not open in 1.34.1 (a comment ate the rest of a statement); every page of the panel was opened again in the test copy after the fix.
+- **Soft switching everywhere:** a tab, a sub-tab or a range switch brings the new content in over a fraction of a second (no jump); tab panels, boxes, buttons, tiles and windows change colour and state smoothly; nothing moves for those who ask for less motion.
+- **The quiet look in every part:** the icons of the side menu, the shop bot menu and the settings tabs are one blue-grey tone; the tabs of the Settings are underlined like the other tabs; the list of configs is one flat table after the design.
+- **Switches** (the check boxes of the forms) after the design: a dark track, a light knob, blue with a glow when on.
+- **Operations (M10 #64, a part):** `GET /api/health/detail` says what is wrong with the panel itself (database, late or failing jobs, the SSH key, free disk, the last backup, the errors of the last hour); the dashboard shows it as one row.
+- Persian for the new tabs, buttons and headings; the page code of the removed Tunnel test is deleted (about ninety lines); `docs/api.md` lists the new routes.
+
 ## 1.34.1
 
 - **Fix:** changing the address of an ArvanCloud A record no longer loses its port (the port, weight and country of the record are kept; `a_body`).

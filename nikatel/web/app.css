@@ -3751,15 +3751,51 @@ html body #page .srv-bar .sb-r2 .srv-tabs { flex: none; }
 .sg-i:hover, .sg-i.on { background: rgba(10,132,255,.16); } .sg-none { padding: 10px 12px; color: var(--mut); font-size: 13px; }
 #modal .dns-point .sugg-wrap { flex: 1; }
 
-/* the check boxes of the forms are small switches (a grey track, a white knob; blue when on) - the check boxes that SELECT rows of a list stay boxes */
-html body label.chk input[type="checkbox"], html body .chkline input[type="checkbox"], html body .bdns input[type="checkbox"], html body .x-cert-save input[type="checkbox"], html body .srv-opts input[type="checkbox"], html body .srv-form2 input[type="checkbox"] {
-  -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px !important; height: 22px !important; min-height: 0; padding: 0; margin: 0 8px 0 0; border-radius: 11px !important; border: 0 !important; background: #4b5468 !important; background-image: none !important; cursor: pointer; vertical-align: middle; box-shadow: none; transition: background .2s ease; }
-html body label.chk input[type="checkbox"]::after, html body .chkline input[type="checkbox"]::after, html body .bdns input[type="checkbox"]::after, html body .x-cert-save input[type="checkbox"]::after, html body .srv-opts input[type="checkbox"]::after, html body .srv-form2 input[type="checkbox"]::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform .2s cubic-bezier(.3, 1.2, .5, 1); }
-html body label.chk input[type="checkbox"]:checked, html body .chkline input[type="checkbox"]:checked, html body .bdns input[type="checkbox"]:checked, html body .x-cert-save input[type="checkbox"]:checked, html body .srv-opts input[type="checkbox"]:checked, html body .srv-form2 input[type="checkbox"]:checked { background: #3d8bf0 !important; }
-html body label.chk input[type="checkbox"]:checked::after, html body .chkline input[type="checkbox"]:checked::after, html body .bdns input[type="checkbox"]:checked::after, html body .x-cert-save input[type="checkbox"]:checked::after, html body .srv-opts input[type="checkbox"]:checked::after, html body .srv-form2 input[type="checkbox"]:checked::after { transform: translateX(16px); }
-html body label.chk input[type="checkbox"]:disabled, html body .srv-form2 input[type="checkbox"]:disabled { opacity: .45; cursor: default; }
-html body label.chk input[type="checkbox"]:focus-visible, html body .srv-form2 input[type="checkbox"]:focus-visible { outline: 2px solid #5aa9ff; outline-offset: 2px; }
+/* the check boxes of the forms are switches after the design: a dark track with a light knob, blue with a soft glow when on (the check boxes that SELECT rows of a list stay boxes) */
+html body label.chk input[type="checkbox"]:not(#nk-x), html body .chkline input[type="checkbox"]:not(#nk-x), html body .bdns input[type="checkbox"]:not(#nk-x), html body .x-cert-save input[type="checkbox"]:not(#nk-x), html body .srv-opts input[type="checkbox"]:not(#nk-x), html body .srv-form2 input[type="checkbox"]:not(#nk-x) {
+  -webkit-appearance: none !important; appearance: none !important; flex: none; position: relative; box-sizing: border-box; width: 40px !important; min-width: 40px !important; max-width: 40px !important; height: 24px !important; min-height: 24px !important; padding: 0 !important; margin: 0 12px 0 0 !important;
+  border-radius: 12px !important; border: 1px solid rgba(255,255,255,.14) !important; background: linear-gradient(180deg, #2b3246, #353d53) !important; background-image: linear-gradient(180deg, #2b3246, #353d53) !important; cursor: pointer; vertical-align: middle; box-shadow: inset 0 1px 2px rgba(0,0,0,.35) !important; transition: background .2s ease, box-shadow .2s ease, border-color .2s ease; }
+html body label.chk input[type="checkbox"]:not(#nk-x)::after, html body .chkline input[type="checkbox"]:not(#nk-x)::after, html body .bdns input[type="checkbox"]:not(#nk-x)::after, html body .x-cert-save input[type="checkbox"]:not(#nk-x)::after, html body .srv-opts input[type="checkbox"]:not(#nk-x)::after, html body .srv-form2 input[type="checkbox"]:not(#nk-x)::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(180deg, #ffffff, #cdd5ea); box-shadow: 0 1px 3px rgba(0,0,0,.45); transition: transform .22s cubic-bezier(.3, 1.2, .5, 1); }
+html body label.chk input[type="checkbox"]:not(#nk-x):checked, html body .chkline input[type="checkbox"]:not(#nk-x):checked, html body .bdns input[type="checkbox"]:not(#nk-x):checked, html body .x-cert-save input[type="checkbox"]:not(#nk-x):checked, html body .srv-opts input[type="checkbox"]:not(#nk-x):checked, html body .srv-form2 input[type="checkbox"]:not(#nk-x):checked { background: linear-gradient(180deg, #2f8dff, #0a74f4) !important; background-image: linear-gradient(180deg, #2f8dff, #0a74f4) !important; border-color: rgba(120,185,255,.7) !important; box-shadow: 0 0 10px rgba(10,132,255,.5), inset 0 1px 1px rgba(255,255,255,.25) !important; }
+html body label.chk input[type="checkbox"]:not(#nk-x):checked::after, html body .chkline input[type="checkbox"]:not(#nk-x):checked::after, html body .bdns input[type="checkbox"]:not(#nk-x):checked::after, html body .x-cert-save input[type="checkbox"]:not(#nk-x):checked::after, html body .srv-opts input[type="checkbox"]:not(#nk-x):checked::after, html body .srv-form2 input[type="checkbox"]:not(#nk-x):checked::after { transform: translateX(16px); }
+html body label.chk input[type="checkbox"]:not(#nk-x):disabled, html body .srv-form2 input[type="checkbox"]:not(#nk-x):disabled { opacity: .45; cursor: default; }
+html body label.chk input[type="checkbox"]:not(#nk-x):focus-visible, html body .srv-form2 input[type="checkbox"]:not(#nk-x):focus-visible { outline: 2px solid #5aa9ff; outline-offset: 2px; }
 html body label.chk, html body .chkline { display: inline-flex; align-items: center; gap: 4px; }
 
 html body label.chk input[type="checkbox"], html body .chkline input[type="checkbox"], html body .bdns input[type="checkbox"] { margin-right: 12px !important; }
+
+/* ================= SOFT SWITCHING =================
+   a page, a tab, a box or a header that changes comes in over a fraction of a second (no jump, nothing flashes); everything is switched off for those who ask for less motion */
+@keyframes softIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes softFade { from { opacity: 0; } to { opacity: 1; } }
+#page.soft-in { animation: softIn .24s cubic-bezier(.22, .8, .3, 1) both; }
+.ap-tbody:not(.hidden), .ana-body, .bt-wrap, .set-pane, .ins-node, .con-res, .cf-grid, .dr-pair, .tbl.fx-in { animation: softFade .22s ease both; }
+html body .tabs button, html body #subnav button, html body .srv-tabs button, html body .tf-tabs button, html body button.sm, html body .abtn, html body .con-tile, html body .ins-btn, html body .pill, html body .cnt { transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease, transform .18s ease; }
+html body .card, html body .sbox, html body .mcard, html body .mtile, html body .ins-row, html body .ins-node, html body .tk, html body .bt-pod, html body .bt-row { transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease, opacity .2s ease; }
+html body #subnav .tabs.sub-tabs button { transition: color .18s ease, background-color .18s ease, border-color .22s ease; }
+html body #modal .modal-body > *, html body #modal .modal-head { animation: softFade .18s ease both; }
+@media (prefers-reduced-motion: reduce) { #page.soft-in, .ap-tbody:not(.hidden), .ana-body, .bt-wrap, .set-pane, .ins-node, .con-res, .cf-grid, .dr-pair, #modal .modal-body > *, #modal .modal-head { animation: none; } html body * { transition-duration: .01ms !important; } }
+
+/* the list of configs after the design: ONE flat table, a thin line between the rows (the tunnel list keeps its cards) */
+html body #page .cf-list { border-collapse: collapse; border-spacing: 0; }
+html body #page .cf-list thead th { background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8791a8; }
+html body #page .cf-list tbody tr, html body #page .lbox .cf-list tbody tr:hover { background: transparent; box-shadow: none; transform: none !important; border-radius: 0; }
+html body #page .cf-list tbody tr td, html body #page .cf-list tbody tr.clk td { background: transparent !important; border: 0 !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; border-radius: 0 !important; }
+html body #page .cf-list tbody tr:hover td { background: rgba(255,255,255,.035) !important; }
+html body #page .cf-list .td-type { display: inline-flex; padding: 2px 10px; border-radius: 8px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1); font-size: 11.5px; font-weight: 700; letter-spacing: .03em; }
+
+/* ================= ONE TONE FOR THE ICONS =================
+   the icons of the side menu, of the shop bot menu and of the settings tabs are one soft blue-grey (the chosen one is brighter); colour is kept only where it says a state */
+html body #nav a .ic svg, html body #nav a .ic svg * { stroke: #8f9fc0 !important; color: #8f9fc0 !important; }
+html body #nav a:hover .ic svg, html body #nav a:hover .ic svg *, html body #nav a.on .ic svg, html body #nav a.on .ic svg *, html body #nav a.active .ic svg, html body #nav a.active .ic svg * { stroke: #d6e3ff !important; color: #d6e3ff !important; }
+html body .sb-nt .ti, html body .sb-nt .ti svg, html body .sb-nt .ti svg * { color: #93a3c4 !important; stroke: #93a3c4 !important; }
+html body .sb-nt.on .ti, html body .sb-nt.on .ti svg, html body .sb-nt.on .ti svg *, html body .sb-nt:hover .ti { color: #dbe6ff !important; stroke: #dbe6ff !important; }
+html body .set-tabs button i, html body .set-tabs button svg, html body .set-tabs button svg * { color: #93a3c4; stroke: #93a3c4; }
+html body .sb-gbox .sb-nt { background: rgba(255,255,255,.035); }
+
+/* the tabs of the Settings are the quiet kind too (an underline under the chosen one) */
+html body #page .set-tabs:not(.tf-tabs):not(#nk-x) { background: transparent !important; border: 0 !important; border-bottom: 1px solid rgba(255,255,255,.1) !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; gap: 4px; }
+html body #page .set-tabs:not(.tf-tabs):not(#nk-x) button { background: transparent !important; border: 0 !important; border-bottom: 2px solid transparent !important; border-radius: 0 !important; box-shadow: none !important; padding: 11px 16px 10px !important; margin-bottom: -1px; font-weight: 600; color: #98a3ba; }
+html body #page .set-tabs:not(.tf-tabs):not(#nk-x) button:hover { color: #d7deee; background: rgba(255,255,255,.03); }
+html body #page .set-tabs:not(.tf-tabs):not(#nk-x) button.on { color: #f2f5fb; border-bottom: 2px solid #4a8bf0 !important; background: rgba(74,139,240,.07) !important; }
