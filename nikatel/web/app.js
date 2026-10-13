@@ -3962,6 +3962,7 @@ window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dock
    Records: all types are listed, the A records can be made, changed, deleted and put back; the cloud switch is the orange cloud. Changes: every record changed by hand (or by the failover) with its Restore.
    Accounts: the API keys. Failover: the preview of a plan and the earlier failovers (the automatic part is paused while it is tested). ---- */
 state.dnsTab = localStorage.getItem("nk.dns.tab") || "records";
+window.dnsProvPick = btn => { const f = btn.closest("form"), sel = f.elements.provider; sel.value = btn.dataset.v; btn.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === btn)); dnsAccHint(f); };
 window.dnsPickAcc = id => { try { localStorage.setItem("nk.dns.acc", id); localStorage.setItem("nk.dns.sel", "*"); } catch (e) { /* private window */ } refresh(); };      // switch between the accounts (ArvanCloud, another ArvanCloud, Cloudflare ...)
 window.dnsSetTab = t => { state.dnsTab = t; try { localStorage.setItem("nk.dns.tab", t); } catch (e) { /* private window */ } refresh(); };
 const dnsKey = r => `${r.account}|${r.domain}|${r.id}`;
@@ -4116,7 +4117,7 @@ window.dnsAccForm = id => {
   showModal(`<b>${a ? "✎ Edit account" : "＋ Add account"}</b>`, `<form class="qp" onsubmit="return dnsAccSave(event, '${esc(id || "")}')">
     <p class="qp-sub">${a ? "Change the name, or paste a new key (it is tried first)." : "The key is tried before it is saved (the domains are listed - read only). It stays on this server and never comes back to the browser."}</p>
     <div class="qp-grid">
-      ${a ? "" : `<div class="qp-f"><label>Provider</label><div class="qp-sw"><select class="qp-sel" name="provider" onchange="dnsAccHint(this.form)"><option value="arvan">ArvanCloud</option><option value="cloudflare">Cloudflare</option></select>${chev}</div></div>`}
+      ${a ? "" : `<div class="qp-f"><label>Provider</label><select class="hidden" name="provider" onchange="dnsAccHint(this.form)"><option value="arvan">ArvanCloud</option><option value="cloudflare">Cloudflare</option></select><div class="prov-pick"><button type="button" class="on" data-v="arvan" onclick="dnsProvPick(this)"><i class="pv pv-arvan"></i>ArvanCloud</button><button type="button" data-v="cloudflare" onclick="dnsProvPick(this)"><i class="pv pv-cloudflare"></i>Cloudflare</button></div></div>`}
       <div class="qp-f" ${a ? 'style="grid-column:1/-1"' : ""}><label>Name <small>(to tell the accounts apart)</small></label><input class="qp-in" name="name" value="${esc(a ? a.name : "")}" maxlength="40" placeholder="${a ? "" : "e.g. My second account"}" autocomplete="off"></div>
       <div class="qp-f" style="grid-column:1/-1"><label id="dns-keylab">API key</label><input class="qp-in" name="key" type="password" ${a ? "" : "required"} placeholder="${a ? "empty keeps the saved key" : "paste the key here"}" autocomplete="new-password" data-lpignore="true" dir="ltr"></div></div>
     <div class="qp-prev" id="dns-keyhint"></div>

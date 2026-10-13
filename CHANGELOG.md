@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.35.27
+
+- The ArvanCloud mark is straight and centred (a dot and a thick bar of the same weight); a two-tone Cloudflare cloud mark beside it; both are used in the domain chooser, the account chips and in **Add account**, where the provider is chosen with two logo cards.
+- Day mode: the small animated icons beside the page titles (servers, tunnels, panels, settings, shop bot) are drawn in dark slate and soft blue, so they are seen on the white header.
+- CDN records: smaller cards, smaller names and smaller port pills, in proportion to the rest of the card.
+
 ## 1.35.26
 
 - Create tunnel: *point these DNS names at the new Iran server* works with every DNS account (ArvanCloud, another ArvanCloud, Cloudflare): the account whose domain matches the name is used, the names to pick come from all accounts, and Restore puts the old record back.
