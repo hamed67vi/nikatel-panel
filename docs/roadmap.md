@@ -108,6 +108,7 @@ always installable; a milestone ends with a tag.
 - [ ] #76 Verified self-update: release archives with checksums, the update checks the checksum and rolls the binary back by itself
 - [ ] #77 Metrics endpoint for operators who run Grafana (servers, tunnels, configs, jobs as gauges)
 - [ ] #78 Central Abuse-Defender: one rule list kept on the panel server, pushed to the nodes as an atomic ipset / nftables set, with every tunnel (any engine: its peers and ports) and every Iran server excluded by construction, and a check of the tunnels before and after each push; the per-node install that took minutes becomes a push of seconds
+- [ ] #79 Shop bot section of the panel: its name stays in the menu but it is switched off until the other sections are finished; then switch it on again and finish it (its pages and the Mini App links are untouched in the code)
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

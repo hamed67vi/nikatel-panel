@@ -197,7 +197,7 @@ const TITLE_ANIM = {
     if ((SUB[target] || []).some(x => x[0] === page)) state.sub[target] = page;
     page = target;
   }
-  if (!PAGES[page]) page = "dashboard";
+  if (!PAGES[page] || page === "bot") page = "dashboard";      // the Shop bot section is switched off for now (roadmap #79)
   if (state.page !== page && !aliased) { delete state.sub[page]; TOP_TABS(); }   // a tab you come back to always opens on its first sub-tab (callers that want another one set it right after go())
   if (state.page !== page) {   // leaving a page: drop what it still waits for, start the new one at the top and show at once that it is loading (the old page never stays on screen)
     navCtl.abort(); navCtl = new AbortController(); navSeq++; retries = 0; clearTimeout(retryT); state.resetScroll = true;
@@ -256,7 +256,7 @@ PAGES.serverDoctor = async () => {
   state.tab = s;
   return PAGES.servers(false);
 };
-document.querySelectorAll("#nav a").forEach(a => a.onclick = () => go(a.dataset.page));
+document.querySelectorAll("#nav a").forEach(a => a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page); });
 
 
 /* every list (a table or the config cards) sits in a box of a fixed height with its own scrollbar and a header that stays on top; done once for whatever a page draws, also what loads later */
@@ -376,9 +376,12 @@ function glassChoice(text, choices) {
 }
 window.gconfirm = (text, o) => glassAsk(text, o);
 window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({input: true, value}, o));
+/* a window of a server or a tunnel is open: the page behind it is NOT drawn again while an operation runs (nothing behind the window moves); it is brought up to date once, when the window closes */
+const pageTarget = () => { if (state.open != null && !state.build && document.querySelector("#modal .modal")) { state.pageStale = true; return document.createElement("div"); } return $("#page"); };
 window.closeModal = () => {
   state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
   hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
+  if (state.pageStale) { state.pageStale = false; setTimeout(() => { if (state.open == null && !state.build) refresh(); }, 280); }      // what was held back while the window was open
 };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
 
@@ -387,7 +390,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 state.dq = ""; let dqSel = 0;
 function dqSections() {   // every section of the panel by its name: the pages, their tabs, the tabs of Settings and of the shop bot
   const strip = s => String(s).replace(/<[^>]*>/g, "").replace(/^[^A-Za-z0-9]+/, "").trim(), out = [], pages = {};
-  document.querySelectorAll("#nav a").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });
+  document.querySelectorAll("#nav a:not(.nav-off)").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });
   Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label]) => out.push({page, subKey: k, name: strip(label), sub: pages[page] || page})));
   Object.entries(SET_TABS).forEach(([k, v]) => out.push({page: "settings", setTab: k, name: strip(v[0]), sub: "Settings"}));
   SB_TABS.forEach(([k, l]) => out.push({page: "bot", sbTab: k, name: l, sub: "Shop bot"}));
@@ -608,7 +611,7 @@ PAGES.servers = async () => {
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
   const ca = state.ca || {running: false};
   const caBtn = ca.running ? `<span class="ca-run"><button class="sm" disabled><i class="spin"></i>Checking ${ca.done || 0}/${ca.total || "…"}</button><a class="ca-stop" onclick="caStop()" title="Stop: the servers being checked now finish, no new one starts">${ca.stopping ? "stopping…" : "Stop"}</a></span>` : `<button onclick="caStart()" title="Checks every server: does it answer, does GRE work to it, is it filtered in Iran. It runs on the panel: reloading the page does not stop it.">✓ Check all</button>`;
-  $("#page").innerHTML = `<div class="toolbar joined srv-bar"><div class="sb-r1">
+  pageTarget().innerHTML = `<div class="toolbar joined srv-bar"><div class="sb-r1">
       <button class="cta cta-server" onclick="newServer()" title="Add one server, or several at once with one password"><i class="cta-ic">＋</i>Add server</button><i class="sep"></i>${caBtn}<i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 Download my SSH key</a>
       
       <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}">Online <b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span></div>
@@ -702,7 +705,7 @@ function serverPartHtml(s, tab) {
     <div class="wgroup"><h4>Open on my computer</h4><div class="wtools uni">${tool("🖥", "Windows ssh", "a .bat with your own key", `srvOpen(${s.id}, 'ssh')`)}${tool("🐱", "PuTTY", "launcher", `srvOpen(${s.id}, 'putty')`)}${tool("🧰", "MobaXterm", "launcher", `srvOpen(${s.id}, 'mobaxterm')`)}</div></div>
     <div class="wgroup"><h4>Danger</h4><div class="wtools uni">${tool("⏻", "Reboot", "its tunnels are down until it is back", `srvReboot(${s.id}, '${esc(s.name)}')`, "danger")}</div></div>`;
   if (tab === "console") { if (state.con !== s.id) state.con = s.id; return tabs + conHtml(s); }
-  if (tab === "charts") return tabs + `<div class="charts" id="srv-charts-${s.id}"><div class="mut">loading 24 h…</div></div><div class="kv" id="srv-peaks-${s.id}"></div>`;
+  if (tab === "charts") { const c = (state.chartCache || {})[s.id + ":" + state.mrange]; return tabs + `<div class="${c ? "mon" : "charts"}" id="srv-charts-${s.id}">${c || '<div class="mut">loading 24 h…</div>'}</div><div class="kv" id="srv-peaks-${s.id}"></div>`; }      // a window that is drawn again shows the charts it had at once: nothing flashes to "loading" and nothing jumps
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name);
   const boxes = [
     ibox(SI.server, "System", [irow("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), irow("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), irow("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"), irow("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), irow("Connections", f.conn != null ? f.conn : "—"), irow("Busiest process", esc(f.top || "—"))]),
@@ -1088,6 +1091,7 @@ PAGES.tunnelsList = async () => {
   const [list, trashRes, outageRes, srvAll] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []})), api("/api/autopilot/outage").catch(() => null), api("/api/servers").catch(() => null)]);
   if (srvAll) state.serversCache = srvAll;
   state.tunnelsCache = list; state.trashCache = trashRes.items || [];
+  try { const al = await api("/api/settings/alerts"); state.mutedSet = new Set(al.muted || []); } catch (e) { /* the bell then shows unmuted */ }
   const tmode = localStorage.getItem("nk.tf") === "problems" ? "problems" : "all", nProblems = list.filter(tunSev).length;
   const workList = (outageRes || {}).working || [], fixing = new Set(workList.filter(w => w.mode !== "look").map(w => w.name)), workMap = new Map(workList.map(w => [w.name, w]));
   if (workList.length) { clearTimeout(window.__workT); window.__workT = setTimeout(() => { if (state.page === "tunnels" && !state.open && !state.build) refresh(); }, 4000); }
@@ -1114,7 +1118,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
       <td class="num hide-sm" title="${esc(q.latency_ms != null ? "quality test: " + q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "% · score " + q.score : "")}">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td><div class="td-act">${t.id < 0 ? `<span class="busy-chip"><i class="spin"></i>rebuilding…</span>` : ""}</div></td></tr>`; };
   const creating = false;
-  $("#page").innerHTML = `<div class="toolbar joined"><button class="cta cta-tunnel" onclick="openBuild()" title="Build a tunnel between an Iran and a foreign server"><i class="cta-ic">＋</i>Create tunnel</button><button onclick="checkAll()" ${state.tunChecking ? "disabled" : ""} title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">${state.tunChecking ? '<i class="spin"></i>Checking…' : "🔍 Check all"}</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><span class="tcount"><span class="tc up"><i></i><b>${list.filter(t => t.state === "up").length}</b> up</span><span class="tc down"><i></i><b>${list.filter(t => t.state === "down").length}</b> down</span><span class="tc unstable"><i></i><b>${list.filter(t => t.state === "degraded").length}</b> unstable</span></span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
+  pageTarget().innerHTML = `<div class="toolbar joined"><button class="cta cta-tunnel" onclick="openBuild()" title="Build a tunnel between an Iran and a foreign server"><i class="cta-ic">＋</i>Create tunnel</button><button onclick="checkAll()" ${state.tunChecking ? "disabled" : ""} title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">${state.tunChecking ? '<i class="spin"></i>Checking…' : "🔍 Check all"}</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time">Restart all</button><span class="tcount"><span class="tc up"><i></i><b>${list.filter(t => t.state === "up").length}</b> up</span><span class="tc down"><i></i><b>${list.filter(t => t.state === "down").length}</b> down</span><span class="tc unstable"><i></i><b>${list.filter(t => t.state === "degraded").length}</b> unstable</span></span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
     <div class="lbox">${trashBox()}
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${rows.length ? `<table class="tbl lift tun-tbl"><colgroup><col style="width:14%"><col style="width:17%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:9%"><col style="width:12%"><col style="width:90px"></colgroup>
@@ -1134,7 +1138,7 @@ function detailRow(t) {
 }
 const TIC = {"🛠": '<svg viewBox="0 0 16 16"><path d="M10.5 2.5a3 3 0 00-2.8 4L2.8 11.4a1.4 1.4 0 002 2L9.7 8.5a3 3 0 004-2.8l-1.8 1.8-1.7-.5-.5-1.7z"/></svg>', "👁": '<svg viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 9.8a1.8 1.8 0 100-3.6 1.8 1.8 0 000 3.6z"/></svg>', "🩺": '<svg viewBox="0 0 16 16"><path d="M1.5 8h3l1.5-3.5 3 7L11 8h3.5"/></svg>', "↻": '<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.6-3.7M13 2.5v3h-3"/></svg>', "📊": '<svg viewBox="0 0 16 16"><path d="M4 12.5V8.5M8 12.5V3.5M12 12.5V6.5" stroke-width="1.8"/></svg>', "🔔": '<svg viewBox="0 0 16 16"><path d="M4 11.5V7a4 4 0 118 0v4.5l1 1H3zM6.5 14h3"/></svg>', "♻": '<svg viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 019.5-3.8M13.5 2.5v3.2h-3.2M13.5 8a5.5 5.5 0 01-9.5 3.8M2.5 13.5v-3.2h3.2"/></svg>', "📜": '<svg viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5M2 8a6 6 0 101.8-4.3M2 2.5v3h3"/></svg>'};      // the action row of a link window: line icons (colours in the CSS)
 function tunBar(t) {
-  const up = t.state === "up", nm = esc(t.name);
+  const up = t.state === "up", nm = esc(t.name), muted = (state.mutedSet || new Set()).has(t.name);
   const offs = ["iran", "foreign"].map(r => (state.serversCache || []).find(x => x.name === t[r + "_name"])).filter(x => x && x.enabled !== false && x.online === false).map(x => x.name).join(", ");   // the servers of this tunnel that are off
   const needsSrv = ["Fix", "Dry run", "Health", "Restart", "Quality", "Rebuild"];
   const b = (icon, title, tip, click, cls = "") => offs && needsSrv.includes(title) ? `<button class="sm abtn" data-t="${title}" disabled title="${esc("A server of this tunnel is off (" + offs + "): " + title + " works when it is back")}"><i class="bi">${TIC[icon] || icon}</i>${title}</button>` : `<button class="sm abtn ${cls}" data-t="${title}" ${click ? `onclick="${click}"` : "disabled"} title="${esc(tip)}"><i class="bi">${TIC[icon] || icon}</i>${title}</button>`;
@@ -1142,7 +1146,7 @@ function tunBar(t) {
     [b("🛠", "Fix", up ? "Nothing to fix: the tunnel is healthy" : "Diagnose and repair step by step: restarts only what is not working", up ? "" : `fixTunnel(${t.id}, false)`),
      b("👁", "Dry run", up ? "Nothing to fix: the tunnel is healthy" : "Show what Fix would do, change nothing", up ? "" : `fixTunnel(${t.id}, true)`)],
     [b("🩺", "Health", "Check the tunnel now: up or down, does data pass, loss and latency", `checkTunnel(${t.id})`), b("↻", "Restart", "Restart the tunnel service on both servers (the GRE link stays)", `restartTunnel(${t.id}, '${nm}')`)],
-    [b("📊", "Quality", "Latency, jitter, loss, speed and a score", `qualityOne(${t.id})`), b("🔔", "Mute alerts", "No Telegram alerts about this tunnel until unmuted in Settings", `muteRef('${nm}', true)`)],
+    [b("📊", "Quality", "Latency, jitter, loss, speed and a score", `qualityOne(${t.id})`), b("🔔", "Mute alerts", muted ? "Muted: no Telegram alerts about this tunnel. Click to unmute" : "No Telegram alerts about this tunnel until unmuted", `muteRef('${nm}', ${!muted})`, muted ? "is-muted" : "")],
     [b("♻", "Rebuild", "Remove it and build it again: same name, same ports", `rebuildTunnel(${t.id}, '${nm}')`), b("📜", "History", "Every repair of this tunnel", `tunHistory(${t.id}, '${nm}')`)],
   ];
   return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
@@ -1170,7 +1174,7 @@ function tunPartHtml(t, tab) {
   const unit = (side, name) => `<div><span>${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b></div>`;
   const tabs = "";
   const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}" title="${esc(sub)}"><i>${icon}</i><b>${title}</b></a>`;   // the note is a tooltip: the tiles stay small
-  if (tab === "charts") return tabs + `<div class="charts" id="tun-charts-${t.id}"><div class="mut">loading 24 h…</div></div>`;
+  if (tab === "charts") { const c = (state.chartCache || {})["t" + t.id + ":" + state.mrange]; return tabs + `<div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading 24 h…</div>'}</div>`; }
   if (tab === "actions") return tabs + `<div class="wgroup"><h4>Repair</h4><div class="wtools">${t.state === "up" ? tool("🛠", "Fix", "nothing to fix: the tunnel is healthy", "", "disabled") + tool("👁", "Dry run", "nothing to fix: the tunnel is healthy", "", "disabled") : tool("🛠", "Fix", "diagnose and repair step by step: restarts only what is not working", `fixTunnel(${t.id}, false)`) + tool("👁", "Dry run", "show what Fix would do, change nothing", `fixTunnel(${t.id}, true)`)}${tool("📊", "Quality", "latency, jitter, loss, speed, score", `qualityOne(${t.id})`)}${tool("🔔", "Mute alerts", "no Telegram alerts until unmuted in Settings", `muteRef('${esc(t.name)}', true)`)}</div></div>
     <div class="wgroup"><h4>Change</h4><div class="wtools">${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
     <div id="fix-${t.id}" class="fix hidden"></div>`;
@@ -1203,6 +1207,7 @@ async function loadTunnelCharts(id) {
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
     <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {col: "blue", ic: SI.pulse, unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}
       <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
+  state.chartCache = state.chartCache || {}; state.chartCache["t" + id + ":" + state.mrange] = box.innerHTML;
 }/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
 const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
@@ -3626,6 +3631,7 @@ window.testArvan = async () => { toast("Asking ArvanCloud (read only)…"); try 
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } toast("Updating… the page reloads in 40 s"); setTimeout(() => location.reload(), 40000); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview
+  ["calm", "Pro slate", "the new look: slate boxes, soft blue tiles, flat quiet buttons, compact and aligned", "#0c1222", "#7aa7f0", "#33405c"],
   ["aurora", "Aurora", "frosted glass, soft aurora", "#0b1030", "rgba(124,131,255,.95)", "rgba(56,217,245,.8)"],
   ["mono", "Mono glass", "black and white, frosted", "#101010", "rgba(255,255,255,.9)", "rgba(161,161,170,.7)"],
   ["ocean", "Ocean", "deep water, slow waves", "#062b3d", "rgba(45,212,191,.95)", "rgba(56,189,248,.8)"],
@@ -3635,7 +3641,6 @@ const THEMES = [   // key, name, note, page colour, accent, second accent, flat 
   ["gold", "Gold luxury", "dark with gold shimmer", "#1c1608", "rgba(230,184,92,.95)", "rgba(246,217,138,.75)"],
   ["neon", "Cyber neon", "magenta, cyan, grid floor", "#0a0620", "rgba(255,43,214,.9)", "rgba(25,245,255,.8)"],
   ["graphite", "Graphite", "quiet pro dark, blue", "#1a1e26", "rgba(96,165,250,.8)", "rgba(148,163,184,.55)"],
-  ["calm", "Calm slate", "flat and quiet: slate boxes, one soft blue", "#0c1222", "#7aa7f0", "#33405c"],
   ["classic", "Classic", "plain admin, flat blue", "#1c2638", "#2563eb", "#33415a", true],
   ["minimal", "Minimal", "almost no decoration", "#1a1c21", "rgba(156,163,175,.6)", "rgba(203,213,225,.4)"],
   ["soft", "Soft", "clean white, raised glossy buttons", "#e8edf7", "#0a7cff", "#9cc7ff"],
@@ -3643,7 +3648,7 @@ const THEMES = [   // key, name, note, page colour, accent, second accent, flat 
 const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "calm"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
 if (!localStorage.getItem("nk.calm.v1")) { try { localStorage.setItem("nk.calm.v1", "1"); LOOK.theme = "calm"; localStorage.setItem("nk.look", JSON.stringify(LOOK)); } catch (e) { /* private window */ } }      // once: the quiet "Calm slate" look; Settings → Look has the others
 if (!["calm", "rich", "off"].includes(LOOK.anim)) LOOK.anim = "calm";      // the old "on" is the calm default now: nothing moves by itself, only what you touch
-function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; const lg = document.querySelector(".logo-orb svg"); if (lg && lg.pauseAnimations) { if (LOOK.anim !== "rich") lg.pauseAnimations(); else lg.unpauseAnimations(); } }
+function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; const lg = document.querySelector(".logo-orb svg"); if (lg && lg.unpauseAnimations) lg.unpauseAnimations(); }      // the logo moves in every animation mode
 window.lookSet = (k, v) => { LOOK[k] = v; localStorage.setItem("nk.look", JSON.stringify(LOOK)); lookApply(); };
 window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOOK, {theme: "aurora", mode: "dark", size: "normal", anim: "calm"}); lookApply(); refresh(); };
 window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
@@ -3703,7 +3708,7 @@ const put = async (e, path, body, okText) => { e.preventDefault(); try { await a
 window.saveTelegram = e => put(e, "/api/settings/telegram", formJson(e, [], ["enabled"]), "✓ Telegram saved");
 window.testTelegram = async () => { toast("Sending…"); try { await api("/api/settings/telegram/test", {method: "POST"}); toast("✓ Test message sent", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["tunnel_fails", "server_fails", "config_fails", "min_down_minutes", "up_stable_seconds", "remind_hours", "flap_max", "flap_quiet_hours"]), "✓ Rules saved");
-window.muteRef = async (ref, on) => { try { await api(`/api/settings/alerts/mute?ref=${encodeURIComponent(ref)}&muted=${on}`, {method: "POST"}); toast(on ? "✓ Muted " + ref : "✓ Unmuted " + ref, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.muteRef = async (ref, on) => { try { const r = await api(`/api/settings/alerts/mute?ref=${encodeURIComponent(ref)}&muted=${on}`, {method: "POST"}); state.mutedSet = new Set(r.muted || []); toast(on ? "✓ Muted " + ref : "✓ Unmuted " + ref, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.addWindow = async e => { e.preventDefault(); const f = new FormData(e.target); const b = {start: Math.floor(new Date(f.get("start") + "Z").getTime() / 1000), end: Math.floor(new Date(f.get("end") + "Z").getTime() / 1000), note: f.get("note")}; try { await api("/api/maintenance", {method: "POST", body: JSON.stringify(b)}); toast("✓ Window added", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.delWindow = async id => { try { await api(`/api/maintenance/${id}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.saveProbe = e => { const f = new FormData(e.target); const standby = f.get("standby").split("\n").map(l => l.trim()).filter(Boolean).map(l => { const [name, api_url, api_token] = l.split(",").map(x => (x || "").trim()); return {name, api_url, api_token: api_token || ""}; }); return put(e, "/api/settings/probe", {api_url: f.get("api_url").trim(), api_token: f.get("api_token"), server_id: +f.get("server_id") || 0, standby}, "✓ Probe settings saved"); };

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.35.13
+
+- The Shop bot entry stays in the menu but is switched off (grey, not clickable) until the other sections are finished; roadmap #79.
+- Addresses in the lists use a fixed-width engineering face with tabular figures and a calm weight.
+- The story of Fix / Rebuild floats over the bottom of the tunnel window instead of pushing the content down.
+- While a server or tunnel window is open the page behind it is not drawn again after an operation (it was the cause of the page jumping behind the window); it is brought up to date once, when the window closes.
+- The look made in these days is a theme of its own, **Pro slate** (first card in Settings → Appearance); the theme cards sit in two tidy rows.
+- The logo is bigger and sharper (a glossy tile, soft highlight, ringed nodes) and its ring and glow stand still, the four nodes are glowing orbs, and three soft lights drift slowly along the N (in every animation mode).
+- The Mute alerts button keeps its size when a tunnel is muted (only the bell gets the line).
+- Settings, every tab: flat quiet buttons like the Install view (no glow, no gloss, one soft blue for the main button), blue switches, neutral icon tiles, tighter buttons and fields. Only colours and sizes changed; the layout of the cards is the same.
+- The bar above the Servers and Tunnels lists is rebuilt: quiet buttons, a soft blue Create button, a counter capsule, segmented filter tabs and a search that stays inside the bar; the DNS bar has two clean groups that wrap under each other instead of overlapping.
+- Settings status tags: red when a protection is off (two-step, secret path, recovery codes), green when it is on.
+- The header bar of the lists is a soft glass strip with rounded ends and fine column dividers; it is a little lighter and stays at the top while the rows scroll.
+
+## 1.35.12
+
+- A window that is drawn again after an operation (Filtering, GRE test, ...) shows the charts it already had at once, so it no longer flashes to *loading* and jumps (server and tunnel windows).
+- *Copied* is small and faint.
+- A muted tunnel shows a line across the bell (the button reads *Muted*; a click unmutes).
+
 ## 1.35.11
 
 - The history of a tunnel in its window: one compact line per entry (time, light, kind, text) with aligned columns; the full text is in the tooltip.

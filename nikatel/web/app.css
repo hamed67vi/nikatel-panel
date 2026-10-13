@@ -3959,3 +3959,106 @@ html body #modal .th-row > b { font-size: 11px; font-weight: 600; letter-spacing
 html body #modal .th-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d5deef; }
 html body #modal .th-row.bad > span { color: #ffb4bd; }
 html body #modal .wback { display: flex; align-items: center; gap: 10px; } html body #modal .wback > b { font-size: 13.5px; font-weight: 600; color: #cfdcf5; margin-left: 0 !important; }
+
+/* "Copied": small and faint, on the address (a row) or in a corner of the box */
+html body .ip-copy::after { padding: 0 7px !important; font-size: 9.5px !important; font-weight: 500 !important; letter-spacing: .02em; color: rgba(190,235,215,.8) !important; background: rgba(61,220,151,.1) !important; box-shadow: 0 0 0 1px rgba(61,220,151,.2) inset !important; line-height: 16px; backdrop-filter: none; }
+html body .copied { padding: 0 8px !important; font-size: 9.5px !important; font-weight: 500 !important; line-height: 16px; letter-spacing: .02em; top: 8px; right: 12px; color: rgba(190,235,215,.8) !important; background: rgba(61,220,151,.1) !important; box-shadow: 0 0 0 1px rgba(61,220,151,.2) inset !important; opacity: .85; }
+/* a muted tunnel: a line across the bell */
+html body .abtn.is-muted .bi { position: relative; opacity: .8; }
+html body .abtn.is-muted .bi::after { content: ""; position: absolute; left: -2px; right: -2px; top: 50%; height: 1.6px; border-radius: 1px; background: #ff7a8c; transform: rotate(-42deg); box-shadow: 0 0 0 1px rgba(17,24,40,.8); }
+html body .abtn.is-muted { color: #c8d2e6; }
+
+/* Settings like the Install view: flat quiet buttons (no glow, no gloss), one soft blue for the main one, blue switches, neutral icon tiles, tighter controls; only colours and sizes change, the layout of every card stays */
+html body #page .sf button:not(.eye):not(.mini) { height: 32px !important; min-height: 32px; padding: 0 14px !important; border-radius: 10px !important; font-size: 12.5px !important; font-weight: 600 !important; gap: 7px; background: rgba(255,255,255,.06) !important; border: 1px solid rgba(255,255,255,.12) !important; color: #d5deef !important; box-shadow: none !important; text-shadow: none !important; }
+html body #page .sf button:not(.eye):not(.mini)::before, html body #page .sf button:not(.eye):not(.mini)::after { display: none !important; }
+html body #page .sf button:not(.eye):not(.mini):hover:not(:disabled) { background: rgba(255,255,255,.1) !important; border-color: rgba(255,255,255,.2) !important; }
+html body #page .sf button.pri:not(.eye) { background: rgba(122,176,255,.14) !important; border-color: rgba(122,176,255,.38) !important; color: #d6e5ff !important; }
+html body #page .sf button.pri:not(.eye):hover:not(:disabled) { background: rgba(122,176,255,.22) !important; }
+html body #page .sf button.danger:not(.eye), html body #page .sf button.bad:not(.eye) { color: #e6b0b0 !important; border-color: rgba(255,130,130,.26) !important; }
+html body #page .sf button:disabled { opacity: .45; }
+html body #page .sf button.eye { box-shadow: none !important; background: rgba(255,255,255,.05) !important; border: 0 !important; }
+html body #page .sf input:not([type=checkbox]):not([type=radio]), html body #page .sf select, html body #page .sf textarea { font-size: 13px !important; border-radius: 10px !important; }
+html body #page .sf input:not([type=checkbox]):not([type=radio]):not(.sw), html body #page .sf select { height: 34px !important; min-height: 34px; }
+html body #page .sf label, html body #page .sf .sr > span { font-size: 12.5px; }
+html body #page .sf input[type=checkbox].sw:checked::before { background: #4c8dff !important; }
+html body #page .sf .ss-ic, html body #page .sf .ss-ic[class] { background: rgba(255,255,255,.07) !important; color: #9fb0cf !important; box-shadow: none !important; border: 1px solid rgba(255,255,255,.08); }
+html body #page .sf .ss-ht > b { font-size: 14.5px; } html body #page .sf .ss-ht > small { font-size: 12px; }
+html body #page .sf .pill.ok, html body #page .sf .pill.err, html body #page .sf .pill.warn { background: rgba(255,255,255,.05) !important; border-color: rgba(255,255,255,.14) !important; color: #b9c6dc !important; box-shadow: none !important; }
+
+/* the header bar of the lists (Servers, Tunnels, DNS, Configs): a soft glass strip with rounded ends, fine column dividers, quiet capitals */
+html body #page .tbl.lift thead th { height: 34px; padding-top: 0; padding-bottom: 0; font-size: 10.5px !important; font-weight: 700 !important; letter-spacing: .11em !important; text-transform: uppercase; color: #9aa6bf !important; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.028)) !important; border: 0 !important; border-top: 1px solid rgba(255,255,255,.09) !important; border-bottom: 1px solid rgba(255,255,255,.05) !important; position: relative; white-space: nowrap; }
+html body #page .tbl.lift thead th:first-child { border-radius: 12px 0 0 12px; padding-left: 16px; border-left: 1px solid rgba(255,255,255,.08) !important; }
+html body #page .tbl.lift thead th:last-child { border-radius: 0 12px 12px 0; border-right: 1px solid rgba(255,255,255,.08) !important; }
+html body #page .tbl.lift thead th + th::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: rgba(255,255,255,.07); }
+
+
+/* the bar above the Servers / Tunnels lists, rebuilt: actions on the left, the counters, then the filter tabs and the search on the right - the search never leaves the bar */
+html body #page .toolbar.joined { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 16px 16px 0 0; background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025)); border: 1px solid rgba(255,255,255,.08); border-bottom: 0; }
+html body #page .toolbar.joined > button { height: 34px; padding: 0 14px; border-radius: 10px; font-size: 12.5px; font-weight: 600; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: #d5deef; box-shadow: none; text-shadow: none; }
+html body #page .toolbar.joined > button::before, html body #page .toolbar.joined > button::after { display: none; }
+html body #page .toolbar.joined > button:hover:not(:disabled) { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); }
+html body #page .toolbar.joined > button.cta { background: rgba(122,176,255,.16); border-color: rgba(122,176,255,.42); color: #d9e7ff; gap: 8px; }
+html body #page .toolbar.joined > button.cta:hover:not(:disabled) { background: rgba(122,176,255,.26); }
+html body #page .toolbar.joined > button.cta .cta-ic { width: 18px; height: 18px; border-radius: 50%; background: rgba(122,176,255,.3); color: #fff; font-size: 14px; line-height: 18px; display: inline-grid; place-items: center; box-shadow: none; }
+html body #page .toolbar.joined .tcount { display: inline-flex; align-items: center; gap: 0; height: 34px; padding: 0 4px; border-radius: 10px; background: rgba(0,0,0,.16); border: 1px solid rgba(255,255,255,.07); }
+html body #page .toolbar.joined .tcount .tc { padding: 0 10px; font-size: 12px; background: transparent; border: 0; box-shadow: none; } html body #page .toolbar.joined .tcount .tc + .tc { border-left: 1px solid rgba(255,255,255,.08); border-radius: 0; }
+html body #page .toolbar.joined .tabs { height: 34px; padding: 2px; border-radius: 11px; background: rgba(0,0,0,.16); border: 1px solid rgba(255,255,255,.07); flex: none; }
+html body #page .toolbar.joined .tabs button { height: 28px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; }
+html body #page .toolbar.joined .tb-search { flex: 0 1 200px; min-width: 96px; max-width: 220px; margin: 0; padding: 0; border: 0; position: relative; }
+html body #page .toolbar.joined .tb-search::before { left: 12px; width: 14px; height: 14px; }
+html body #page .toolbar.joined .tb-search input { width: 100%; min-width: 0; height: 34px; box-sizing: border-box; padding: 0 12px 0 34px; border-radius: 10px; font-size: 12.5px; background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.1); }
+
+/* the DNS bar: two clean groups - (Add record + the numbers) and (domain, tabs, search) - side by side when there is room, the second under the first when there is not; nothing overlaps */
+html body #page .toolbar.joined.srv-bar { flex-wrap: wrap; row-gap: 8px; column-gap: 10px; }
+html body #page .srv-bar .sb-r1 { flex: 0 0 auto; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; }
+html body #page .srv-bar .sb-r1 .tcount { flex: 0 0 auto; flex-wrap: nowrap; overflow: visible; }
+html body #page .srv-bar .sb-r1 .tcount .tc { white-space: nowrap; flex: none; }
+html body #page .srv-bar .sb-r2 { flex: 1 1 auto; display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; margin-left: auto; }
+html body #page .srv-bar .sb-r2 > .tabs { flex: none; } html body #page .srv-bar .sb-r2 > .tb-search { flex: 0 1 200px; }
+html body #page .srv-bar .sb-r2 > .dns-dsel { flex: 0 1 220px; min-width: 130px; } html body #page .srv-bar .dns-dsel select { width: 100%; height: 34px; border-radius: 10px; font-size: 12.5px; }
+html body #page .srv-bar .dns-renew { flex: none; white-space: nowrap; font-size: 11px; }
+
+/* the header of a list stays at the top while the rows scroll under it; it is a little lighter and solid, so the rows never show through */
+html body #page .tbl.lift thead th { position: sticky !important; top: 0; z-index: 8; background: linear-gradient(180deg, #27314a, #1e273c) !important; box-shadow: 0 8px 14px -8px rgba(0,0,0,.7); }
+
+/* the status tags of Settings: red when an important protection is off, green when it is on, amber for a warning */
+html body #page .sf .pill.err { color: #ff8a98 !important; background: rgba(255,90,100,.12) !important; border-color: rgba(255,90,100,.45) !important; }
+html body #page .sf .pill.ok { color: #6fe3a0 !important; background: rgba(52,211,130,.12) !important; border-color: rgba(52,211,130,.4) !important; }
+html body #page .sf .pill.warn { color: #f4c06a !important; background: rgba(240,167,58,.12) !important; border-color: rgba(240,167,58,.4) !important; }
+html body #page .sf > h3 > .pill.err, html body #page .card.sf h3 span.pill.err { color: #ff8a98 !important; background: rgba(255,90,100,.12) !important; border-color: rgba(255,90,100,.45) !important; }
+html body #page .sf > h3 > .pill.ok, html body #page .card.sf h3 span.pill.ok { color: #6fe3a0 !important; background: rgba(52,211,130,.12) !important; border-color: rgba(52,211,130,.4) !important; }
+
+/* the logo: bigger and sharper, and it moves in EVERY animation mode (calm, off, rich; also when the system asks for less motion - it is small and slow) */
+html body aside.side .logo-orb { width: 50px; height: 50px; }
+html body aside.side .logo-orb svg { width: 44px; height: 44px; image-rendering: -webkit-optimize-contrast; filter: drop-shadow(0 3px 10px rgba(100,130,255,.45)); animation: lgFloat 7s ease-in-out infinite !important; }
+html body aside.side .logo-orb::before { inset: 0; border-radius: 16px; animation: lgSpin 14s linear infinite !important; }
+html body aside.side .logo-orb::after { inset: -6px; border-radius: 20px; animation: lgBreath 6s ease-in-out infinite !important; }
+html body aside.side .logo-orb .lg-n { animation: lgNode 4.8s ease-in-out infinite !important; } html body aside.side .logo-orb .lg-n:nth-child(3) { animation-delay: 1.2s !important; } html body aside.side .logo-orb .lg-n:nth-child(5) { animation-delay: 2.4s !important; } html body aside.side .logo-orb .lg-n:nth-child(7) { animation-delay: 3.6s !important; }
+html body aside.side .logo-orb .lg-run { animation: lgRun 5.5s linear infinite !important; } html body aside.side .logo-orb .lg-halo { animation: lgBreath 6s ease-in-out infinite !important; }
+html[data-anim="off"] aside.side .logo-orb::before { --lg-a: 0deg; }
+
+/* the theme cards in two tidy rows (7 + 6), the names never cut */
+html body #page .theme-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+html body #page .theme-grid .tsw { min-width: 0; width: auto; height: auto; min-height: 66px; padding: 10px 6px 8px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 7px; }
+html body #page .theme-grid .tsw b { max-width: 100%; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* the logo, calmer: the ring and the glow around it stand still; inside, the dots drift slowly */
+html body aside.side .logo-orb svg { animation: none !important; }
+html body aside.side .logo-orb::before { animation: none !important; --lg-a: 215deg; opacity: .85; }
+html body aside.side .logo-orb::after { animation: none !important; opacity: .7; }
+html body aside.side .logo-orb .lg-halo { animation: none !important; opacity: .9; }
+html body aside.side .logo-orb .lg-n { transform-box: fill-box; transform-origin: center; animation: lgNode 7s ease-in-out infinite !important; }
+html body aside.side .logo-orb .lg-n:nth-child(2) { animation-delay: 1.7s !important; } html body aside.side .logo-orb .lg-n:nth-child(3) { animation-delay: 3.5s !important; } html body aside.side .logo-orb .lg-n:nth-child(4) { animation-delay: 5.2s !important; }
+html body aside.side .logo-orb .lg-run { animation: lgRun 10s linear infinite !important; }
+
+/* the story of Fix / Rebuild in a tunnel window floats over the bottom of the window instead of pushing the content down: nothing moves when it opens or grows */
+html body #modal .tunwin .modal-body { position: relative; }
+html body #modal .tunwin .fix[id^="fix-"]:not(.hidden) { position: absolute; left: 18px; right: 18px; bottom: 16px; max-height: 230px; overflow: auto; z-index: 6; padding: 10px 14px; border-radius: 12px; background: #131b2e; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 14px 34px rgba(0,0,0,.55); }
+/* addresses: an engineering look - a fixed-width face, tabular figures, calm weight and colour, nothing bold */
+html body #page .srv-tbl td:nth-child(4), html body #page .ip-copy, html body #page .tun-tbl .ip-copy { font-family: "JetBrains Mono", "SF Mono", "Cascadia Mono", "Roboto Mono", ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums slashed-zero; font-feature-settings: "zero", "tnum"; font-size: 12.5px; font-weight: 500; letter-spacing: .01em; color: #c3cde2; }
+html body #page .srv-tbl td:nth-child(4) .mono, html body #page .srv-tbl td:nth-child(4) span { font: inherit; color: inherit; }
+html body #page .srv-tbl td:nth-child(4):hover, html body #page .ip-copy:hover { color: #e6eeff; }
+
+/* the Shop bot entry: its name stays in the menu, switched off until the other sections are finished */
+html body nav a.nav-off { opacity: .38; filter: grayscale(1); pointer-events: none; cursor: default; }
+html body nav a.nav-off::before, html body nav a.nav-off::after { display: none !important; }
