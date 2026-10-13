@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.21
+
+- Adding a Cloudflare account: a token pasted with a space, a line break or a quote is cleaned; a key that Cloudflare does not take as an API token (the Global API Key, a half copy) gets a plain answer with the steps to make a real token instead of *400 Invalid request headers*.
+
 ## 1.35.20
 
 - CDN bar: the domain chooser is a clear labelled pill beside **Add record**; the numbers are three quiet figures without coloured lights (Domains, A records, On the panel); the *Accounts connected* and *Automatic switching* chips are gone (the account chips above already show the state); Add record never wraps.

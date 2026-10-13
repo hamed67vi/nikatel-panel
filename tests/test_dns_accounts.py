@@ -169,3 +169,32 @@ def test_the_record_list_is_served_from_the_cache_and_renewed_in_the_background(
     _t.sleep(0.3)
     assert seen == [1] and client.get("/api/dns/records").json()["refreshing"] is False
     assert client.get("/api/dns/records?fresh=true").json()["ok"] and seen == [1, 1]           # fresh waits for a real read
+
+
+def test_a_cloudflare_key_that_is_not_a_token_gets_a_plain_answer(monkeypatch):
+    import httpx
+
+    from nikatel.services import cloudflare
+
+    class Reply:
+        status_code = 400
+        text = '{"success":false,"errors":[{"message":"Invalid request headers"}]}'
+
+        def json(self):
+            return {"success": False, "errors": [{"message": "Invalid request headers"}]}
+
+    monkeypatch.setattr(httpx, "request", lambda *a, **k: Reply())
+
+    try:
+        cloudflare.req("0123456789abcdef0123456789abcdef01234", "GET", "/zones")
+    except RuntimeError as e:
+        assert "API Tokens" in str(e) and "37 characters" in str(e)
+    else:
+        raise AssertionError("a wrong key should be refused in plain words")
+
+    try:
+        cloudflare.req("tok\u0646en", "GET", "/zones")
+    except RuntimeError as e:
+        assert "copy it again" in str(e)
+    else:
+        raise AssertionError("a non-ASCII token should be refused before it is sent")

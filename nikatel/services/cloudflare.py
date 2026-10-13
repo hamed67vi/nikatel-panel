@@ -5,6 +5,8 @@ addresses = several records); `ttl` 1 means automatic; `proxied` is the orange c
 in the panel's settings and never comes back through the API."""
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from ..log import get_logger
@@ -14,10 +16,13 @@ BASE = "https://api.cloudflare.com/client/v4"
 
 
 def req(token: str, method: str, path: str, body: dict | None = None, params: dict | None = None) -> dict:
-    t = str(token or "").strip().removeprefix("Bearer ").strip()
+    t = re.sub(r"[\s\u200b\u200c\u200d\ufeff]+", "", str(token or "").strip().removeprefix("Bearer ")).strip("\"'")      # a pasted token may carry a line break, a space or a quote
 
     if not t:
         raise RuntimeError("no Cloudflare API token saved")
+
+    if not t.isascii() or not re.fullmatch(r"[A-Za-z0-9_\-]+", t):
+        raise RuntimeError("the token has a character that is not a letter, a digit, - or _ (a Persian letter or a symbol from the copy?): copy it again from Cloudflare")
 
     try:
         r = httpx.request(method, BASE + path, params=params, json=body, timeout=20, headers={"Authorization": "Bearer " + t, "Accept": "application/json"})
@@ -28,6 +33,9 @@ def req(token: str, method: str, path: str, body: dict | None = None, params: di
         j = r.json()
     except ValueError:
         j = {}
+
+    if r.status_code == 400 and "header" in r.text.lower():      # what Cloudflare says to something that is not an API token (the Global API Key, an email, a half copy)
+        raise RuntimeError(f"Cloudflare did not accept this as an API token ({len(t)} characters; a token has 40). Make one: Cloudflare dashboard → My Profile → API Tokens → Create Token → the Edit zone DNS template. The Global API Key does not work here.")
 
     if r.status_code in (401, 403):
         raise RuntimeError("Cloudflare refused the token (" + str(r.status_code) + "): it needs Zone: Read and DNS: Edit")
