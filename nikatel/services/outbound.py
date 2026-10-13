@@ -158,7 +158,7 @@ def state() -> dict:
         rows = list(db.scalars(select(OutboundConfig).order_by(OutboundConfig.created_at, OutboundConfig.id)))
         gws = {g.server_id: g for g in db.scalars(select(Gateway))}
         iran = list(db.scalars(select(Server).where(Server.role == "iran").order_by(Server.name)))
-        foreign = [{"id": x.id, "name": x.name, "host": x.host, "chosen": x.id in s["foreign"]} for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)).order_by(Server.name))]
+        foreign = [{"id": x.id, "name": x.name, "host": x.host, "online": x.online, "chosen": x.id in s["foreign"]} for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)).order_by(Server.name))]
 
     ids = [c.id for c in rows if c.enabled]
     servers = []

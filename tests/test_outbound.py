@@ -679,6 +679,7 @@ def test_targets_are_checked_and_shown(monkeypatch):
     outbound.set_targets([fo["fo2"]], [443])
     s = outbound.state()
     assert s["ports"] == [443] and {f["name"]: f["chosen"] for f in s["foreign"]} == {"fo1": False, "fo2": True} and s["default_ports"] == [80, 443, 8075]
+    assert all(f["online"] is True for f in s["foreign"])                                                          # the list shows a green or grey dot for every foreign server
 
 
 def test_the_one_button_with_a_choice_makes_the_paths_not_the_tunnel_forwards(monkeypatch):

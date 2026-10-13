@@ -1,8 +1,78 @@
 /* The Outbound page (Tunnels -> Outbound), one page, three steps: 1 your configs, 2 tunnels (Iran servers x foreign servers x ports, made through the configs), 3 the addresses to put behind the CDN (by hand).
    Everything else is under "Advanced". Loaded after app.js and uses its helpers ($, api, esc, state, refresh, toast, showModal, closeModal, gconfirm, followStory, ago). */
-const ob = {d: null, paste: "", res: null, busy: "", adv: false, rec: false, plan: null};
+const ob = {d: null, paste: "", res: null, busy: "", adv: false, rec: false, plan: null, q: {iran: "", foreign: ""}, only: {iran: false, foreign: false}, sort: {iran: ["name", 1], foreign: ["name", 1]}};
 const OB_MODES = [["spread", "Spread", "Every new connection goes through the next alive exit: the load is shared by all of them, a dead exit is skipped by itself."],
   ["fast", "Fastest", "Everything goes through the quickest alive exit."], ["auto", "Direct first", "Direct while the Iran server can reach abroad; the pool only when it cannot."]];
+
+/* line icons of the page */
+const OBI = {
+  server: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="7" rx="2"/><rect x="3.5" y="13.5" width="17" height="7" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg>',
+  globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.9 5.2 3.9 8.5s-1.3 6.1-3.9 8.5c-2.6-2.4-3.9-5.2-3.9-8.5S9.4 5.9 12 3.5z"/></svg>',
+  search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
+  filter: '<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  play: '<svg viewBox="0 0 24 24" class="fill"><path d="M7 4.5v15l12-7.5z"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M6 18l1.6-1.6M16.4 7.6L18 6"/></svg>',
+  stack: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="2.8"/><path d="M4.5 6v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V6M4.5 12v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-6"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8h.01"/></svg>',
+  chev: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path d="M15.5 8.5V6.7a2.2 2.2 0 0 0-2.2-2.2H6.7a2.2 2.2 0 0 0-2.2 2.2v6.6a2.2 2.2 0 0 0 2.2 2.2h1.8"/></svg>',
+  dots: '<svg viewBox="0 0 24 24" class="fill"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
+  up: '<svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>', down: '<svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>', both: '<svg viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>',
+  split: '<svg viewBox="0 0 24 24"><path d="M3.5 12h17M7 8.5L3.5 12 7 15.5M17 8.5l3.5 3.5-3.5 3.5"/></svg>',
+};
+const obIp = h => String(h).split(".").map(x => String(+x || 0).padStart(5, "0")).join(".");       // every part is padded to five digits, so an address with a short first part sorts before a longer one
+/* the servers of one list as the search, the filter and the sort of its header show them */
+function obList(kind) {
+  const d = ob.d, q = (ob.q[kind] || "").trim().toLowerCase(), [key, dir] = ob.sort[kind];
+  return (kind === "iran" ? d.servers : d.foreign).filter(s => (!q || (s.name + " " + s.host).toLowerCase().includes(q)) && (!ob.only[kind] || s.chosen))
+    .sort((a, b) => dir * (key === "host" ? obIp(a.host).localeCompare(obIp(b.host)) : a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: "base"})));
+}
+function obRowsHtml(kind) {
+  const d = ob.d, ro = d.read_only, rows = obList(kind), hubs = new Set(d.hubs.map(h => h.server_id));
+  const row = s => `<tr class="${s.chosen ? "sel" : ""} clk" onclick="obTick(event, this)"><td>${kind === "iran" ? `<input type="checkbox" class="ob5-cb" ${s.chosen ? "checked" : ""} ${ro ? "disabled" : ""} onchange="obSet('iran', [${s.id}], this.checked)">`
+      : `<label class="srv-sw ob2-sw ${s.chosen ? "on" : ""}"><input type="checkbox" ${s.chosen ? "checked" : ""} ${ro ? "disabled" : ""} onchange="obSet('foreign', [${s.id}], this.checked)"><i></i></label>`}</td>
+      <td class="name"><i class="ob2-dot ${s.online === false ? "bad" : s.online ? "ok" : "unk"}" title="${s.online === false ? "offline" : s.online ? "online" : "not checked yet"}"></i><b>${esc(s.name)}</b>${hubs.has(s.id) ? '<span class="pill ok">relay</span>' : s.installed ? '<span class="pill" title="Xray is installed on this server">Xray</span>' : ""}</td>
+      <td class="mono mut">${esc(s.host)}</td><td class="ob5-dots"><button class="ob5-more" onclick="obMenu(event, '${kind}', ${s.id})" title="More">${OBI.dots}</button></td></tr>`;
+  return rows.map(row).join("") || `<tr><td colspan="4" class="mut ob5-none">${(ob.q[kind] || ob.only[kind]) ? "No server matches." : kind === "iran" ? "No Iran server." : "No foreign server."}</td></tr>`;
+}
+const obSortIc = (kind, key) => { const [k, dir] = ob.sort[kind]; return k === key ? (dir > 0 ? OBI.up : OBI.down) : OBI.both; };
+function obPane(kind) {
+  const d = ob.d, ro = d.read_only, list = kind === "iran" ? d.servers : d.foreign, vis = obList(kind), all = vis.length && vis.every(s => s.chosen);
+  return `<div class="ob5-pane"><div class="ob5-ph"><i class="ob5-pi">${kind === "iran" ? OBI.server : OBI.globe}</i><b>${kind === "iran" ? "From" : "To"}</b><span class="mut">${kind === "iran" ? "Iran servers" : "foreign servers"}</span></div>
+    <div class="ob5-search"><i>${OBI.search}</i><input type="search" placeholder="Search server or address..." value="${esc(ob.q[kind])}" oninput="obFind('${kind}', this.value)" autocomplete="off" spellcheck="false"><button class="${ob.only[kind] ? "on" : ""}" onclick="obOnly('${kind}')" title="${ob.only[kind] ? "Showing only the ticked servers: click to show all" : "Show only the ticked servers"}">${OBI.filter}</button></div>
+    <div class="lbox full ob4-box"><table class="tbl lift"><colgroup><col style="width:40px"><col><col style="width:118px"><col style="width:32px"></colgroup>
+      <thead><tr><th><input type="checkbox" class="ob5-cb" ${all ? "checked" : ""} ${ro || !vis.length ? "disabled" : ""} onchange="obAll('${kind}', this.checked)" title="Tick every server shown"></th><th class="srt" onclick="obSort('${kind}', 'name')">Server<i>${obSortIc(kind, "name")}</i></th><th class="srt" onclick="obSort('${kind}', 'host')">Address<i>${obSortIc(kind, "host")}</i></th><th></th></tr></thead>
+      <tbody id="ob-tb-${kind}">${obRowsHtml(kind)}</tbody></table></div></div>`;
+}
+window.obFind = (kind, v) => { ob.q[kind] = v; const tb = $("#ob-tb-" + kind); if (tb) tb.innerHTML = obRowsHtml(kind); };
+window.obOnly = kind => { ob.only[kind] = !ob.only[kind]; const p = $("#ob-pane-" + kind); if (p) p.innerHTML = obPane(kind); };
+window.obSort = (kind, key) => { const [k, dir] = ob.sort[kind]; ob.sort[kind] = [key, k === key ? -dir : 1]; const p = $("#ob-pane-" + kind); if (p) p.innerHTML = obPane(kind); };
+window.obAll = (kind, on) => obSet(kind, obList(kind).map(s => s.id), on);
+/* the ticked Iran servers / foreign servers are kept as a list of ids: a search that hides a ticked server never unticks it */
+window.obSet = (kind, ids, on) => {
+  const d = ob.d, cur = new Set((kind === "iran" ? d.servers : d.foreign).filter(s => s.chosen).map(s => s.id));
+  ids.forEach(i => { if (on) cur.add(i); else cur.delete(i); });
+  const call = kind === "iran" ? ["/api/outbound/gateways", {server_ids: [...cur]}] : ["/api/outbound/targets", {foreign_ids: [...cur], ports: ($("#ob-ports") || {}).value || ""}];
+  obDo(() => api(call[0], {method: "PUT", body: JSON.stringify(call[1])}), "✓ Saved - press Start");
+};
+window.obTargets = () => obSet("foreign", [], true);
+window.obPick = () => obSet("iran", [], true);
+/* the "..." menu of a row */
+window.obMenuClose = () => { document.querySelectorAll(".ob5-menu").forEach(m => m.remove()); document.removeEventListener("click", obMenuClose, true); };
+window.obMenu = (ev, kind, id) => {
+  ev.stopPropagation(); obMenuClose();
+  const d = ob.d, s = (kind === "iran" ? d.servers : d.foreign).find(x => x.id === id); if (!s) return;
+  const items = [["Copy the address", `obCopy('${esc(s.host)}')`]];
+  if (kind === "iran" && s.installed) items.push(["Take the outbound off this server", `obRemoveSrv(${s.id}, '${esc(s.name)}')`, "danger"]);
+  if (kind === "foreign" && !d.hubs.some(h => h.server_id === id) && !d.read_only) items.push(["Use as the relay", `obHubUse(${id})`]);
+  const b = ev.currentTarget.getBoundingClientRect(), m = document.createElement("div");
+  m.className = "ob5-menu"; m.innerHTML = items.map(([l, fn, cls]) => `<button class="${cls || ""}" onclick="obMenuClose();${fn}">${l}</button>`).join("");
+  m.style.top = Math.min(innerHeight - 20 - items.length * 34, b.bottom + 4) + "px"; m.style.left = Math.max(8, b.right - 210) + "px";
+  document.body.appendChild(m); setTimeout(() => document.addEventListener("click", obMenuClose, true), 0);
+};
+window.obHubUse = id => obDo(() => api("/api/outbound/hubs", {method: "PUT", body: JSON.stringify({server_ids: [...ob.d.hubs.map(h => h.server_id), id]})}), "✓ Relay chosen - press Start to install it");
 
 async function obRender(head) {
   const d = await api("/api/outbound"); ob.d = d;
@@ -15,12 +85,6 @@ async function obRender(head) {
   const top = VERDICT[chosen.length ? worst : "off"], ro = d.read_only, fchosen = d.foreign.filter(f => f.chosen);
   const res = ob.res ? `<div class="ob2-res">${ob.res.added.length ? `<span class="gw-ok">✓ ${ob.res.added.length} added</span>` : ""}${ob.res.skipped.map(x => `<span class="err" title="${esc(x.link)}">${esc(x.link)} — ${esc(x.why)}</span>`).join("")}</div>` : "";
   const step = (cls, n, title, sub, body, right = "") => `<section class="card ob3-step ${cls}"><h3><i class="ob3-n">${n}</i><b>${title}</b><small class="mut">${sub}</small><span class="sp"></span>${right}</h3>${body}</section>`;
-  /* the two lists look like the Servers page: one box, a sticky header, a row for each server; a click on the row ticks it */
-  const srvRow = (s, kind) => { const v = VERDICT[s.verdict] || VERDICT.unknown;
-    return `<tr class="${s.chosen ? "sel" : ""} clk" onclick="obTick(event, this)" title="${esc(s.host)}${s.installed ? " · Xray installed" : ""}"><td><label class="srv-sw ob2-sw ${s.chosen ? "on" : ""}"><input type="checkbox" class="${kind === "iran" ? "ob3-pick" : "ob3-fpick"}" ${s.chosen ? "checked" : ""} ${ro ? "disabled" : ""} onchange="${kind === "iran" ? "obPick()" : "obTargets()"}" value="${s.id}"><i></i></label></td>
-      <td class="name"><b>${esc(s.name)}</b>${kind === "iran" ? (s.chosen ? `<i class="ob2-dot ${v[0] || "unk"}" title="${esc(v[1] + (s.summary && s.summary.error ? ": " + s.summary.error : s.summary ? " (" + s.summary.alive + " of " + s.summary.total + ")" : ""))}"></i>` : "") : (d.hubs.some(h => h.server_id === s.id) ? '<span class="pill ok">relay</span>' : "")}</td><td class="mono mut">${esc(s.host)}</td></tr>`; };
-  const srvBox = (list, kind, empty) => `<div class="lbox full ob4-box"><table class="tbl lift"><colgroup><col style="width:46px"><col><col style="width:40%"></colgroup><thead><tr><th></th><th>Server</th><th>Address</th></tr></thead>
-      <tbody>${list.map(s => srvRow(s, kind)).join("") || `<tr><td colspan="3" class="mut">${empty}</td></tr>`}</tbody></table></div>`;
   const hub = d.hubs[0], sug = d.suggested_relay;
   const relayBody = hub ? `<div class="ob3-relay">${obRelayChip(d, hub)}<span class="mut">The traffic is wrapped on its way out of the exits, so an exit cannot read it or send it somewhere else.</span></div>`
     : `<div class="ob3-relay"><span class="pill ok">${sug ? "relay chosen for you: " + esc(sug.name) : "no relay available"}</span>
@@ -30,25 +94,24 @@ async function obRender(head) {
   const sv = id => d.servers.find(s => s.id === id), fname = host => (d.foreign.find(f => f.host === host) || {}).name || host;
   const paths = d.routes.filter(r => r.source === "path" && r.enabled);
   const path = r => { const s = sv(r.server_id) || {name: "?", host: "", installed: false}, addr = s.host + ":" + r.listen;
-    return `<tr><td><span class="ob3-addr"><i class="ob2-dot ${s.installed ? "ok" : "unk"}" title="${s.installed ? "on the server" : "press Start"}"></i><b class="mono">${esc(addr)}</b><button class="sm" onclick="obCopy('${esc(addr)}')" title="Copy the address">Copy</button></span></td><td class="name" title="${esc(s.host)} port ${r.listen} reaches ${esc(r.target_host)}:${r.target_port} through your configs"><b>${esc(s.name)} → ${esc(fname(r.target_host))}</b> <span class="mono mut">:${r.target_port}</span></td></tr>`; };
+    return `<tr><td><span class="ob3-addr"><i class="ob2-dot ${s.installed ? "ok" : "unk"}" title="${s.installed ? "on the server" : "press Start"}"></i><b class="mono">${esc(addr)}</b><button class="ob5-copy" onclick="obCopy('${esc(addr)}')" title="Copy the address">${OBI.copy}</button></span></td><td class="name" title="${esc(s.host)} port ${r.listen} reaches ${esc(r.target_host)}:${r.target_port} through your configs"><b>${esc(s.name)} → ${esc(fname(r.target_host))}</b> <span class="mono mut">:${r.target_port}</span></td></tr>`; };
   const ports = (d.ports || []).join(", "), sugP = (d.default_ports || []).join(", ");
   const n = chosen.length * fchosen.length * (d.ports || []).length;
-  const s1 = step("ob4-s1", 1, "Your configs", "the ones that still have internet", `<div class="ob2-list ob3-list">${d.configs.map(cfg).join("") || '<div class="mut ob3-empty">Nothing yet: paste them below, one per line.</div>'}</div>
-      <div class="ob2-add"><textarea id="ob-paste" rows="2" placeholder="${esc(I18N.tr("vless://…  vmess://…  trojan://…  ss://…   (one per line)"))}" spellcheck="false" ${ro ? "disabled" : ""} oninput="ob.paste = this.value">${esc(ob.paste)}</textarea><button class="pri sm" ${ro ? "disabled" : ""} onclick="obAddCfg()">Add</button></div>${res}`, `<span class="pill">${d.configs.filter(c => c.enabled).length} of ${d.configs.length}</span>`);
-  const s2 = step("ob4-s2", 2, "Tunnels", "from which Iran server to which foreign server, on which ports", `<div class="ob4-two"><div><div class="ob3-lbl"><b>From</b><span class="mut">Iran servers</span></div>${srvBox(d.servers, "iran", "No Iran server.")}</div>
-      <div><div class="ob3-lbl"><b>To</b><span class="mut">foreign servers</span></div>${srvBox(d.foreign, "foreign", "No foreign server.")}</div></div>
-      <div class="ob4-foot"><div class="ob4-ports"><div class="ob3-lbl"><b>Ports</b><span class="mut">the ports of the foreign servers your users connect to</span></div><div class="ob2-add one ob3-ports"><input id="ob-ports" value="${esc(ports)}" placeholder="${esc(sugP || "8075, 80")}" autocomplete="off" ${ro ? "disabled" : ""} onchange="obTargets()">${sugP && sugP !== ports ? `<button class="sm" ${ro ? "disabled" : ""} onclick="obUsePorts('${esc(sugP)}')" title="The ports the tunnels of the chosen Iran servers serve today">Use ${esc(sugP)}</button>` : ""}</div></div>
-        <div class="ob4-go"><button class="pri ob3-start" onclick="obApply()" ${ro || ob.busy ? "disabled" : ""} title="The tunnels, the relay and Xray on the servers: everything is made and checked">▶ Start</button><button onclick="obCheck()" ${ob.busy ? "disabled" : ""} title="Look at every exit from the chosen Iran servers now">⚡ Check now</button></div></div>
-      <small class="mut ob3-hint">${chosen.length && fchosen.length && ports ? `Start makes ${n} tunnel(s): ${chosen.length} Iran × ${fchosen.length} foreign × ${(d.ports || []).length} port(s).` : chosen.length ? "Choose the foreign servers and the ports. With none chosen, Start uses the foreign servers and ports of the Iran servers' own tunnels." : "Tick at least one Iran server."} ${d.binary ? "" : "The panel has no Xray binary cached: run scripts/fetch-xray.sh on the panel server first."} No CDN record is touched.</small>${relayBody}`, `<span class="pill ${top[0]}">${chosen.length ? top[1] : "not started"}</span><span class="pill">${chosen.length} → ${fchosen.length}</span>`);
-  const s3 = step("ob4-s3", 3, "Behind the CDN", "put these addresses there by hand", `${paths.length ? `<div class="lbox full ob4-pbox"><table class="tbl lift"><colgroup><col style="width:56%"><col></colgroup><thead><tr><th>Address</th><th>Tunnel</th></tr></thead><tbody>${paths.map(path).join("")}</tbody></table></div>` : '<div class="mut ob3-empty">The addresses appear here after Start: an Iran server address and a port for every tunnel.</div>'}
+  const s1 = step("ob4-s1", 1, "Your configs", "the ones that still have internet", `${d.configs.length ? `<div class="ob2-list ob3-list">${d.configs.map(cfg).join("")}</div>` : ""}
+      <div class="ob5-paste"><textarea id="ob-paste" rows="4" placeholder="Paste your configs here, one per line.&#10;vless://…  vmess://…  trojan://…  ss://…   (one per line)" spellcheck="false" ${ro ? "disabled" : ""} oninput="ob.paste = this.value">${esc(ob.paste)}</textarea><button class="pri" ${ro ? "disabled" : ""} onclick="obAddCfg()">＋ Add</button></div>${res}`, `<span class="pill">${d.configs.filter(c => c.enabled).length} of ${d.configs.length}</span>`);
+  const s2 = step("ob4-s2", 2, "Tunnels", "from which Iran server to which foreign server, on which ports", `<div class="ob5-two"><div id="ob-pane-iran">${obPane("iran")}</div><div class="ob5-div"><span></span><i>${OBI.split}</i><span></span></div><div id="ob-pane-foreign">${obPane("foreign")}</div></div>
+      <div class="ob4-foot ob5-foot"><div class="ob4-ports"><div class="ob5-lbl"><i>${OBI.link}</i><b>Ports</b><span class="mut">the ports of the foreign servers your users connect to</span></div><div class="ob5-ports"><input id="ob-ports" value="${esc(ports)}" placeholder="${esc(sugP || "8075, 80")}" autocomplete="off" ${ro ? "disabled" : ""} onchange="obTargets()">${sugP && sugP !== ports ? `<button ${ro ? "disabled" : ""} onclick="obUsePorts('${esc(sugP)}')" title="The ports the tunnels of the chosen Iran servers serve today">Use ${esc(sugP)}</button>` : ""}</div></div>
+        <div class="ob4-go"><button class="pri ob3-start" onclick="obApply()" ${ro || ob.busy ? "disabled" : ""} title="The tunnels, the relay and Xray on the servers: everything is made and checked"><i class="ob5-bi">${OBI.play}</i>Start</button><button onclick="obCheck()" ${ob.busy ? "disabled" : ""} title="Look at every exit from the chosen Iran servers now"><i class="ob5-bi">${OBI.bolt}</i>Check now</button></div></div>
+      <small class="mut ob3-hint">${chosen.length && fchosen.length && ports ? `Start makes ${n} tunnel(s): ${chosen.length} Iran × ${fchosen.length} foreign × ${(d.ports || []).length} port(s).` : chosen.length ? "Choose the foreign servers and the ports. With none chosen, Start uses the foreign servers and ports of the Iran servers' own tunnels." : "Tick at least one Iran server."} ${d.binary ? "" : "The panel has no Xray binary cached: run scripts/fetch-xray.sh on the panel server first."} No CDN record is touched.</small>${relayBody}`, `<span class="pill ${top[0]}">${chosen.length ? top[1] : "not started"}</span><span class="pill">${chosen.length} – ${fchosen.length}</span>`);
+  const s3 = step("ob4-s3", 3, "Behind the CDN", "put these addresses there by hand", `${paths.length ? `<div class="lbox full ob4-pbox"><table class="tbl lift"><colgroup><col style="width:62%"><col></colgroup><thead><tr><th>Address</th><th>Tunnel</th></tr></thead><tbody>${paths.map(path).join("")}</tbody></table></div>` : `<div class="ob5-note"><i>${OBI.info}</i><span>The addresses appear here after Start: an Iran server address and a port for every tunnel.</span></div>`}
       <small class="mut ob3-hint">In your CDN record (Tunnels → CDN) the address is the Iran server and the origin port is the number after the colon. The panel does not change a record by itself.</small>`, `<span class="pill">${paths.length}</span>`);
-  const adv = `<details class="card ob3-adv" ${ob.adv ? "open" : ""} ontoggle="ob.adv = this.open"><summary>Advanced</summary>
-      <div class="ob3-advrow"><b>How the exits are used</b><div class="tabs ob2-modes">${OB_MODES.map(([k, l, tip]) => `<button class="${d.mode === k ? "on" : ""}" ${ro ? "disabled" : ""} onclick="obMode('${k}')" title="${esc(tip)}">${l}</button>`).join("")}</div></div>
+  const adv = `<details class="card ob5-bar" ${ob.adv ? "open" : ""} ontoggle="ob.adv = this.open"><summary><i class="ob5-chev">${OBI.chev}</i><i class="ob5-bi">${OBI.gear}</i><b>Advanced</b><small class="mut">how the exits are used, every forward</small></summary>
+      <div class="ob5-bbody"><div class="ob3-advrow"><b>How the exits are used</b><div class="tabs ob2-modes">${OB_MODES.map(([k, l, tip]) => `<button class="${d.mode === k ? "on" : ""}" ${ro ? "disabled" : ""} onclick="obMode('${k}')" title="${esc(tip)}">${l}</button>`).join("")}</div></div>
       <div class="ob3-advrow"><b>All forwards</b><span class="pill">${d.routes.filter(r => r.enabled).length} of ${d.routes.length}</span><span class="sp"></span><button class="sm" ${ro ? "disabled" : ""} onclick="obFromTunnels()" title="Forwards for every port of every tunnel of every Iran server">＋ From the tunnels</button><button class="sm" ${ro ? "disabled" : ""} onclick="obSuggest()" title="Forwards for the nodes and ports of your Marzban / PasarGuard panels">＋ From the panels</button></div>
       <div class="ob2-list ob3-list">${d.routes.map(rt).join("") || '<div class="mut ob3-empty">No forward yet.</div>'}</div>
       <div class="ob2-add one"><input id="ob-h" placeholder="node address" autocomplete="off" ${ro ? "disabled" : ""}><input id="ob-p" type="number" min="1" max="65535" placeholder="port" ${ro ? "disabled" : ""}><button class="sm" ${ro ? "disabled" : ""} onclick="obAddRoute()">Add a forward by hand</button></div>
-      ${d.servers.filter(s => s.installed).map(s => `<div class="ob3-advrow"><b>${esc(s.name)}</b><span class="mut">Xray installed</span><span class="sp"></span><button class="sm danger" onclick="obRemoveSrv(${s.id}, '${esc(s.name)}')">Take the outbound off</button></div>`).join("")}</details>
-    <details id="ob-rec" class="card ob3-adv" ${ob.rec ? "open" : ""} ontoggle="obRecToggle(this)"><summary>CDN records that go through a tunnel <small class="mut">(move them to the pool by hand)</small></summary><div id="ob-rec-body"></div></details>`;
+      ${d.servers.filter(s => s.installed).map(s => `<div class="ob3-advrow"><b>${esc(s.name)}</b><span class="mut">Xray installed</span><span class="sp"></span><button class="sm danger" onclick="obRemoveSrv(${s.id}, '${esc(s.name)}')">Take the outbound off</button></div>`).join("")}</div></details>
+    <details id="ob-rec" class="card ob5-bar" ${ob.rec ? "open" : ""} ontoggle="obRecToggle(this)"><summary><i class="ob5-chev">${OBI.chev}</i><i class="ob5-bi">${OBI.stack}</i><b>CDN records that go through a tunnel</b><small class="mut">move them to the pool by hand</small></summary><div id="ob-rec-body" class="ob5-bbody"></div></details>`;
   $("#page").innerHTML = `${head}${ro ? '<div class="gw-out bad">The panel is read-only: you can look, not change. Set NIKATEL_READ_ONLY=false on the panel server to change the outbound.</div>' : ""}<div class="ob4"><div class="ob4-col ob4-left">${s1}${s3}</div><div class="ob4-col ob4-right">${s2}</div><div class="ob4-wide">${adv}</div></div>`;
   if (ob.rec) { const el = $("#ob-rec"); if (el) { el.dataset.loaded = "1"; obRecords(false); } }
 }
@@ -56,7 +119,6 @@ async function obRender(head) {
 /* a click anywhere on a server's row ticks it */
 window.obTick = (ev, tr) => { if (ev.target.closest("input, .srv-sw, button, a")) return; const c = tr.querySelector("input[type=checkbox]"); if (c && !c.disabled) { c.checked = !c.checked; c.dispatchEvent(new Event("change", {bubbles: true})); } };
 window.obCopy = t => { const done = () => toast("✓ Copied " + t, "ok"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => toast("✕ The browser did not allow the copy", "bad")); else toast("✕ The browser did not allow the copy", "bad"); };
-window.obTargets = () => { const ids = [...document.querySelectorAll(".ob3-fpick:checked")].map(x => +x.value), ports = ($("#ob-ports") || {}).value || ""; obDo(() => api("/api/outbound/targets", {method: "PUT", body: JSON.stringify({foreign_ids: ids, ports})}), "✓ Saved - press Start"); };
 window.obUsePorts = p => { const i = $("#ob-ports"); if (i) { i.value = p; obTargets(); } };
 const obRelayChip = (d, h) => `<span class="ob2-hub ${h.installed && h.active !== false ? "ok" : h.installed ? "bad" : ""}" title="${esc(h.host + ":" + h.port)}${h.installed ? (h.active === false ? " - not running" : " - running") : " - applied with the next Start"}"><i class="ob2-dot ${h.installed ? (h.active === false ? "bad" : "ok") : "unk"}"></i><b>${esc(h.name)}</b><small class="mono">:${h.port}</small><button class="sm danger" ${d.read_only ? "disabled" : ""} onclick="obHubDel(${h.server_id}, '${esc(h.name)}')" title="Change the relay: take it off this server">✕</button></span>`;
 /* the relay: a foreign server behind the exits (Shadowsocks), so that an exit cannot read the Host / SNI of the traffic and dial that name instead of the node */
@@ -68,7 +130,6 @@ window.obCfg = (id, body) => obDo(() => api("/api/outbound/configs/" + id, {meth
 window.obCfgDel = async id => { if (!await gconfirm("Remove this exit from the pool?")) return; obDo(() => api("/api/outbound/configs/" + id, {method: "DELETE"})); };
 window.obAddCfg = async () => { const text = ($("#ob-paste") || {}).value || ""; if (!text.trim()) { toast("Paste at least one link first", "bad"); return; }
   try { ob.res = await api("/api/outbound/configs", {method: "POST", body: JSON.stringify({text})}); ob.paste = ob.res.skipped.length ? text : ""; if (ob.res.added.length && !ob.res.skipped.length) ob.res = null; toast(ob.res ? "Some links were skipped" : "✓ Added", ob.res ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.obPick = () => { const ids = [...document.querySelectorAll(".ob3-pick:checked")].map(x => +x.value); obDo(() => api("/api/outbound/gateways", {method: "PUT", body: JSON.stringify({server_ids: ids})}), "✓ Saved - press Start"); };
 window.obRoute = (id, on) => obDo(() => api("/api/outbound/routes/" + id, {method: "PATCH", body: JSON.stringify({enabled: on})}));
 window.obRouteDel = async id => { if (!await gconfirm("Remove this forward? Users whose link goes through its port lose it once the change is applied.", {danger: true})) return; obDo(() => api("/api/outbound/routes/drop", {method: "POST", body: JSON.stringify({ids: [id]})})); };
 window.obAddRoute = () => { const h = $("#ob-h").value.trim(), p = +$("#ob-p").value; if (!h || !(p >= 1)) { toast("Fill the node address and the port", "bad"); return; } obDo(() => api("/api/outbound/routes", {method: "POST", body: JSON.stringify({routes: [{target_host: h, target_port: p}]})}), "✓ Forward added - press Start"); };

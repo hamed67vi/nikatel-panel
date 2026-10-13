@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.40.2 - Outbound rebuilt after the reference picture
+
+- **Each server list is a pane**: a header with its icon (From: Iran servers, To: foreign servers), a search box ("Search server or address...") with a filter button (show only the ticked ones), a list with a select-all box, columns you can sort (Server, Address), an online dot, an Xray / relay mark and a "..." menu on every row (copy the address, take the outbound off a server, use a foreign server as the relay). A small divider with a handle sits between the two panes. A server that the search hides stays ticked.
+- **The ports row** has its icon, the "Use 80, 8072, 8075" suggestion, and Start and Check now beside it. The paste box for the configs is one box with the Add button inside it; the step 3 note is a callout; the addresses for the CDN have a copy icon on every row.
+- **Advanced and the CDN records are bars** with a chevron, an icon, a bold title and a quiet hint, instead of the bare "▶ Advanced" lines. On laptop widths the right column is wider so the addresses are not cut.
+
 ## 1.40.1 - Outbound moved to Tunnels, wide layout
 
 - **Outbound is now Tunnels → Outbound** (next to the Tunnel manager, the CDN and the Tunnel Doctor), because it makes tunnels; the old address of the page (#gateway) still opens it. The Panels page keeps Configs and Panels.
