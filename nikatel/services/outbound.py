@@ -1,0 +1,451 @@
+"""The Outbound section: how the Iran servers reach the foreign nodes when Iran is cut off from the world.
+
+    users -> Iran server (a forward port) -> one of the POOL's configs (shared out, a dead one skipped by itself) -> foreign node IP:port
+
+The pool is a list of ordinary vless / vmess / trojan / ss links that still have internet (any provider, as many as the operator has).
+The panel runs a plain Xray (services/gateway.py) on each chosen Iran server: every route is a port on that server that forwards to a node's
+address and port, and the exit of every connection is one of the pool's configs (mode spread: the next alive one in turn; fast: the fastest;
+auto: direct while it works, the pool when it does not). Which exits are alive is measured from the Iran servers themselves, every few minutes.
+The exit links are secrets: they live in their own table and are never listed (only what they point at)."""
+from __future__ import annotations
+
+import re
+import time
+import uuid
+
+from sqlalchemy import select
+
+from ..config import get_settings
+from ..db import session
+from ..log import get_logger
+from ..models import Gateway, OutboundConfig, Panel, Server
+from . import autopilot, gateway, panels, telegram
+from . import settings as st
+from .events import emit
+
+log = get_logger("outbound")
+
+MODES = ("spread", "fast", "auto")
+MAX_CONFIGS = 30
+MAX_ROUTES = 600
+PORT_BASE = 30000
+
+
+# ------------------------------------------------------------------ pure
+def norm(uri: str) -> str:
+    """The link without its #name: the same exit pasted twice is one exit."""
+    return str(uri or "").strip().split("#")[0]
+
+
+def split_links(text: str) -> list[str]:
+    """Pure: the links in a pasted text, one per line (blank lines and a '#' comment line are ignored)."""
+    out = []
+
+    for line in str(text or "").replace("\r", "").split("\n"):
+        line = line.strip()
+
+        if line and not line.startswith("#"):
+            out.append(line)
+
+    return out
+
+
+def next_port(taken: set[int], start: int = PORT_BASE) -> int:
+    """Pure: the first listen port at or above `start` that is not taken (the forwards keep their port for good, so a user's link never moves)."""
+    p = start
+
+    while p in taken or gateway.TEST_BASE - 2 <= p <= gateway.TEST_BASE + 60:
+        p += 1
+
+    if p > 65535:
+        raise ValueError("no free forward port is left")
+
+    return p
+
+
+def ports_of(routes: list[dict]) -> list[dict]:
+    """Pure: the forwards in the shape the gateway wants."""
+    return [{"port": r["listen"], "target_host": r["target_host"], "target_port": r["target_port"], "udp": False, "enabled": r.get("enabled", True) is not False,
+             "note": str(r.get("name") or "")[:60]} for r in routes]
+
+
+def summarize(results: list[dict], ids: list[str]) -> dict:
+    """Pure: from a gateway test (rows with key / ok / ms / ip / country) what the pool looks like from that Iran server."""
+    by = {r["key"]: r for r in results}
+    exits = {i: {"ok": bool(by[i]["ok"]), "ms": by[i]["ms"], "ip": by[i].get("ip", ""), "country": by[i].get("country", "")} for i in ids if i in by}
+    gw = by.get("gateway") or {}
+    return {"alive": sum(1 for e in exits.values() if e["ok"]), "total": len(ids), "exits": exits, "gateway_ok": bool(gw.get("ok")), "ms": gw.get("ms")}
+
+
+def verdict(sm: dict | None) -> str:
+    """Pure: 'ok' (every exit answers), 'degraded' (some do), 'down' (the gateway as users see it does not), 'unknown' (not measured yet)."""
+    if not sm:
+        return "unknown"
+
+    if not sm["gateway_ok"] or sm["alive"] == 0:
+        return "down"
+
+    return "ok" if sm["alive"] == sm["total"] else "degraded"
+
+
+# ------------------------------------------------------------------ the state
+def _state() -> dict:
+    s = st.get("outbound")
+    s.setdefault("routes", [])
+    s.setdefault("gateways", [])
+    s.setdefault("health", {})
+    return s
+
+
+def _save(s: dict) -> None:
+    st.put("outbound", {"mode": s["mode"], "gateways": s["gateways"], "routes": s["routes"][:MAX_ROUTES], "health": s["health"]})
+
+
+def _need_rw() -> None:
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to change the outbound")
+
+
+def state() -> dict:
+    """Everything the page shows. The exit links are never in it."""
+    s = _state()
+
+    with session() as db:
+        rows = list(db.scalars(select(OutboundConfig).order_by(OutboundConfig.created_at, OutboundConfig.id)))
+        gws = {g.server_id: g for g in db.scalars(select(Gateway))}
+        iran = list(db.scalars(select(Server).where(Server.role == "iran").order_by(Server.name)))
+
+    ids = [c.id for c in rows if c.enabled]
+    servers = []
+
+    for sv in iran:
+        g = gws.get(sv.id)
+        h = s["health"].get(str(sv.id)) or {}
+        sm = h.get("summary")
+        servers.append({"id": sv.id, "name": sv.name, "host": sv.host, "online": sv.online, "enabled": sv.enabled, "chosen": sv.id in s["gateways"], "installed": bool(g and g.installed),
+                        "applied_at": g.applied_at if g else 0, "checked_at": h.get("at", 0), "summary": sm, "verdict": verdict(sm) if sv.id in s["gateways"] else "off"})
+
+    configs = []
+
+    for c in rows:
+        per = {sid: (s["health"].get(sid, {}).get("summary") or {}).get("exits", {}).get(c.id) for sid in s["health"] if int(sid) in s["gateways"]}
+        seen = [x for x in per.values() if x]
+        configs.append({"id": c.id, "note": c.note, "enabled": c.enabled, "info": gateway.describe(c.uri), "added": c.created_at // 1000,
+                        "alive": sum(1 for x in seen if x["ok"]), "measured": len(seen), "ms": min((x["ms"] for x in seen if x["ok"] and x["ms"] is not None), default=None),
+                        "exit": next(({"ip": x["ip"], "country": x["country"]} for x in seen if x["ok"]), None)})
+
+    return {"mode": s["mode"], "modes": list(MODES), "configs": configs, "servers": servers, "routes": s["routes"], "enabled_configs": len(ids), "read_only": get_settings().read_only,
+            "binary": (get_settings().data_dir.parent / "engines" / "xray").exists(), "limits": {"configs": MAX_CONFIGS, "routes": MAX_ROUTES}}
+
+
+# ------------------------------------------------------------------ the pool
+def add_configs(text: str) -> dict:
+    """Add the links of a pasted text. Each is read like Xray reads it; a link that cannot be read, or is already in the pool, is skipped with the reason."""
+    _need_rw()
+    links = split_links(text)
+
+    if not links:
+        raise ValueError("paste at least one link (vless://, vmess://, trojan:// or ss://), one per line")
+
+    added, skipped = [], []
+    stamp = int(time.time() * 1000)             # milliseconds: the pool keeps the order in which links were pasted
+
+    with session() as db:
+        have = {norm(c.uri): c for c in db.scalars(select(OutboundConfig))}
+
+        for ln in links:
+            try:
+                gateway.outbound_from_uri(ln, "x")
+            except ValueError as e:
+                skipped.append({"link": ln[:40] + ("…" if len(ln) > 40 else ""), "why": str(e)})
+                continue
+
+            if norm(ln) in have:
+                skipped.append({"link": ln[:40] + ("…" if len(ln) > 40 else ""), "why": "already in the pool"})
+                continue
+
+            if len(have) >= MAX_CONFIGS:
+                skipped.append({"link": ln[:40] + "…", "why": f"the pool holds at most {MAX_CONFIGS} configs"})
+                continue
+
+            note = re.sub(r"[^\w .\-]", "", urlnote(ln))[:60]
+            c = OutboundConfig(id=uuid.uuid4().hex[:10], uri=ln, note=note or "", created_at=stamp + len(added))
+            db.add(c)
+            have[norm(ln)] = c
+            added.append({"id": c.id, "info": gateway.describe(ln)})
+
+        if added:
+            emit(db, "info", "outbound", f"{len(added)} config(s) added to the outbound pool.", "outbound")
+
+    return {"added": added, "skipped": skipped}
+
+
+def urlnote(link: str) -> str:
+    """Pure: the name after the # of a link, as far as it is plain text (an emoji-only name gives '')."""
+    import urllib.parse
+
+    return urllib.parse.unquote(link.split("#", 1)[1]) if "#" in link else ""
+
+
+def set_config(config_id: str, enabled: bool | None = None, note: str | None = None) -> None:
+    _need_rw()
+
+    with session() as db:
+        c = db.get(OutboundConfig, config_id)
+
+        if c is None:
+            raise ValueError("this config is not in the pool")
+
+        if enabled is not None:
+            c.enabled = bool(enabled)
+
+        if note is not None:
+            c.note = re.sub(r"[^\w .\-]", "", str(note))[:60]
+
+
+def drop_config(config_id: str) -> None:
+    _need_rw()
+
+    with session() as db:
+        c = db.get(OutboundConfig, config_id)
+
+        if c is None:
+            raise ValueError("this config is not in the pool")
+
+        db.delete(c)
+        emit(db, "info", "outbound", "A config was removed from the outbound pool.", "outbound")
+
+
+def set_mode(mode: str) -> None:
+    _need_rw()
+
+    if mode not in MODES:
+        raise ValueError("the mode is spread, fast or auto")
+
+    s = _state()
+    s["mode"] = mode
+    _save(s)
+
+
+def set_gateways(server_ids: list[int]) -> None:
+    """The Iran servers that carry the outbound (each gets the whole pool and every forward)."""
+    _need_rw()
+
+    with session() as db:
+        ok = {x.id for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)))}
+
+    bad = [i for i in server_ids if i not in ok]
+
+    if bad:
+        raise ValueError("choose enabled Iran servers")
+
+    s = _state()
+    s["gateways"] = sorted({int(i) for i in server_ids})
+    _save(s)
+
+
+# ------------------------------------------------------------------ the forwards
+def add_routes(items: list[dict], source: str = "manual") -> dict:
+    """Add forwards: each {target_host, target_port, name}. The listen port is given once and kept; the same target twice is one forward."""
+    _need_rw()
+    s = _state()
+    taken = {r["listen"] for r in s["routes"]}
+    have = {(r["target_host"].lower(), r["target_port"]) for r in s["routes"]}
+    added, skipped = 0, 0
+
+    for it in items:
+        host, port = str(it.get("target_host", "")).strip(), int(it.get("target_port", 0) or 0)
+
+        if not re.match(r"^[A-Za-z0-9.\-]{1,120}$", host) or not 1 <= port <= 65535:
+            raise ValueError("a forward needs a node address (an IP or a host name) and a port 1-65535")
+
+        if (host.lower(), port) in have:
+            skipped += 1
+            continue
+
+        if len(s["routes"]) >= MAX_ROUTES:
+            raise ValueError(f"at most {MAX_ROUTES} forwards")
+
+        listen = next_port(taken)
+        taken.add(listen)
+        have.add((host.lower(), port))
+        s["routes"].append({"id": uuid.uuid4().hex[:8], "name": str(it.get("name") or f"{host}:{port}")[:60], "target_host": host, "target_port": port, "listen": listen, "enabled": True, "source": source})
+        added += 1
+
+    _save(s)
+    return {"added": added, "skipped": skipped}
+
+
+def set_route(route_id: str, enabled: bool) -> None:
+    _need_rw()
+    s = _state()
+    r = next((x for x in s["routes"] if x["id"] == route_id), None)
+
+    if r is None:
+        raise ValueError("this forward does not exist")
+
+    r["enabled"] = bool(enabled)
+    _save(s)
+
+
+def drop_routes(route_ids: list[str]) -> int:
+    _need_rw()
+    s = _state()
+    n = len(s["routes"])
+    s["routes"] = [r for r in s["routes"] if r["id"] not in set(route_ids)]
+    _save(s)
+    return n - len(s["routes"])
+
+
+def suggest() -> dict:
+    """What the panels offer to forward to: each node (name, address, status) and each inbound (tag, protocol, port), and which of them already have a forward."""
+    s = _state()
+    have = {(r["target_host"].lower(), r["target_port"]) for r in s["routes"]}
+
+    with session() as db:
+        plist = [(p.id, p.name, p.type, panels._cred(p), p.nodes or []) for p in db.scalars(select(Panel).where(Panel.enabled.is_(True)).order_by(Panel.name))]
+
+    out = []
+
+    for pid, name, typ, cred, nodes in plist:
+        try:
+            opts = panels.options(cred)
+        except (panels.PanelError, ValueError) as e:
+            out.append({"panel_id": pid, "panel": name, "type": typ, "error": str(e)[:100], "nodes": [], "inbounds": []})
+            continue
+
+        ports = sorted({int(i["port"]) for i in opts.get("inbounds", []) if str(i.get("port") or "").isdigit()})
+        out.append({"panel_id": pid, "panel": name, "type": typ, "error": "", "ports": ports,
+                    "inbounds": [{"tag": i.get("tag"), "protocol": i.get("protocol", ""), "port": i.get("port")} for i in opts.get("inbounds", [])],
+                    "nodes": [{"name": n.get("name"), "address": n.get("address"), "status": n.get("status"), "routed": sum(1 for p in ports if (str(n.get("address", "")).lower(), p) in have)} for n in nodes if n.get("address")]})
+
+    return {"panels": out}
+
+
+def auto_routes(addresses: list[str], ports: list[int]) -> dict:
+    """The forwards for every chosen node address on every chosen port (what a node's users connect to)."""
+    items = [{"target_host": a, "target_port": p, "name": f"{a}:{p}"} for a in addresses for p in ports]
+
+    if len(items) > MAX_ROUTES:
+        raise ValueError(f"{len(items)} forwards are too many (at most {MAX_ROUTES}): choose fewer nodes or ports")
+
+    return add_routes(items, "auto")
+
+
+# ------------------------------------------------------------------ putting it on the Iran servers
+def desired() -> dict:
+    """The gateway state every chosen Iran server should have: the mode, the forwards, the enabled configs of the pool."""
+    s = _state()
+
+    with session() as db:
+        configs = [{"id": c.id, "uri": c.uri, "note": c.note or gateway.describe(c.uri), "enabled": True} for c in db.scalars(select(OutboundConfig).where(OutboundConfig.enabled.is_(True)).order_by(OutboundConfig.created_at))]
+
+    return {"mode": s["mode"], "ports": ports_of([r for r in s["routes"] if r.get("enabled", True)]), "borrowed": configs}
+
+
+def apply_one(aid: int, server_id: int) -> bool:
+    with session() as db:
+        sv = db.get(Server, server_id)
+        gw = db.get(Gateway, server_id)
+        name, installed = (sv.name if sv else str(server_id)), bool(gw and gw.installed)
+
+    d = desired()
+
+    if not d["borrowed"] and d["mode"] != "auto":
+        autopilot._say(aid, f"{name}: the pool has no enabled config - nothing to carry the traffic. Add a config first.")
+        return False
+
+    if not installed:
+        autopilot._say(aid, f"{name}: installing Xray (about 35 MB over SSH)…")
+        autopilot._say(aid, f"{name}: installed {gateway.install(server_id)['version'][:24]}")
+
+    gateway.set_state(server_id, d)
+    res = gateway.apply(server_id)
+    autopilot._say(aid, f"{name}: running with {len(d['borrowed'])} exit(s), {len(res['ports'])} forward(s), mode {d['mode']}.")
+    return True
+
+
+def _apply_story(aid: int) -> None:
+    s = _state()
+
+    if not s["gateways"]:
+        autopilot._say(aid, "No Iran server is chosen for the outbound.", done=True, ok=False)
+        return
+
+    ok = 0
+
+    for sid in s["gateways"]:
+        try:
+            ok += 1 if apply_one(aid, sid) else 0
+        except Exception as e:  # noqa: BLE001  one server must not stop the others
+            autopilot._say(aid, f"Server {sid}: failed: {str(e)[:160]}")
+
+    check()
+    autopilot._say(aid, f"Done: {ok} of {len(s['gateways'])} Iran server(s) carry the outbound now.", done=True, ok=ok == len(s["gateways"]))
+
+
+def apply_all() -> int:
+    """Start the story that puts the pool and the forwards on every chosen Iran server (installs Xray where it is missing). Returns the action id."""
+    _need_rw()
+    return autopilot._start("outbound apply", _apply_story, action="outbound", source="manual")
+
+
+def remove_from(server_id: int) -> None:
+    _need_rw()
+    gateway.remove(server_id)
+    s = _state()
+    s["health"].pop(str(server_id), None)
+    _save(s)
+
+
+# ------------------------------------------------------------------ the job: what the pool looks like from each Iran server
+def check() -> None:
+    """Every few minutes: from each chosen, installed Iran server test every exit and the gateway as users see it; keep the numbers; say so when the picture changes."""
+    s = _state()
+
+    if not s["gateways"]:
+        return
+
+    with session() as db:
+        ids = [c.id for c in db.scalars(select(OutboundConfig).where(OutboundConfig.enabled.is_(True)).order_by(OutboundConfig.created_at))]
+        gws = {g.server_id: g for g in db.scalars(select(Gateway))}
+        names = {x.id: x.name for x in db.scalars(select(Server))}
+
+    now = int(time.time())
+    changed = False
+
+    for sid in s["gateways"]:
+        g = gws.get(sid)
+
+        if g is None or not g.installed:
+            continue
+
+        try:
+            sm = summarize(gateway.test(sid), ids)
+        except Exception as e:  # noqa: BLE001  an unreachable server is a result, not a crash
+            log.warning("outbound check of %s failed: %s", names.get(sid), e)
+            sm = {"alive": 0, "total": len(ids), "exits": {}, "gateway_ok": False, "ms": None, "error": str(e)[:120]}
+
+        old = verdict((s["health"].get(str(sid)) or {}).get("summary"))
+        new = verdict(sm)
+        s["health"][str(sid)] = {"at": now, "summary": sm}
+        changed = True
+
+        if new != old and (old != "unknown" or new == "down"):          # a first look says something only when it is bad
+            _say_change(names.get(sid, str(sid)), old, new, sm)
+
+    if changed:
+        _save(s)
+
+
+def _say_change(name: str, old: str, new: str, sm: dict) -> None:
+    say = {"ok": f"every exit answers again ({sm['alive']}/{sm['total']}).", "degraded": f"{sm['alive']} of {sm['total']} exits answer; the load goes through those.",
+           "down": "no exit answers - the users that go through it have no way out."}[new]
+
+    with session() as db:
+        emit(db, {"ok": "ok", "degraded": "warn", "down": "bad"}[new], "outbound", f"Outbound on {name}: {say}", name)
+
+    try:
+        telegram.send_text({"ok": "✅ ", "degraded": "⚠ ", "down": "🔴 "}[new] + f"Outbound on {name}: {say}")
+    except Exception:  # a Telegram problem must never stop the check
+        log.warning("outbound notice not sent", exc_info=True)

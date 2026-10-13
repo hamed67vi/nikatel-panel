@@ -79,6 +79,8 @@ nikatel/
     panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)
+    outbound.py      the Outbound section: a pool of exit configs (vless / vmess / trojan / ss) and forwards to the foreign nodes, put on the
+                     chosen Iran servers through gateway.py (spread / fast / auto), the pool measured from each Iran server; exit links never listed
     core.py          Xray core outbounds of a panel with backup / rollback
     radar.py         Arvan Radar (state of the Iranian data centres), cached, refreshed in the background (API only)
     dcs.py           the hosting providers our servers sit in (from the geo lookup's provider / domain), servers and
@@ -91,7 +93,7 @@ nikatel/
     settings.py      typed settings in the database (secrets masked in responses)
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
-                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, radar, shopbot,
+                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot,
                     alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, system = health, logs, update of the panel itself)
   web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
                    glass modal windows (showModal), themes (LOOK), a loading box on every page change

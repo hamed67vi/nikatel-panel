@@ -282,6 +282,17 @@ class Panel(Base):
     created_at: Mapped[int] = mapped_column(Integer, default=now)
 
 
+class OutboundConfig(Base):
+    """An exit of the outbound pool (services/outbound.py): a vless / vmess / trojan / ss link that still has internet. The link is a secret: never listed."""
+    __tablename__ = "outbound_configs"
+
+    id: Mapped[str] = mapped_column(String(12), primary_key=True)
+    uri: Mapped[str] = mapped_column(String(3000))
+    note: Mapped[str] = mapped_column(String(60), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[int] = mapped_column(Integer, default=now)
+
+
 class ApiToken(Base):
     """The sign-in of a machine (docs/api.md section 3): only the hash of the token is kept; the token itself is shown once when it is made."""
     __tablename__ = "api_tokens"

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.38.0 - Outbound, from scratch
+
+- **Panels → Outbound** is a new page (the old per-server gateway page is gone; the old `/api/gateway/...` routes still answer). Three boxes: **Exits** (the pool), **Iran servers** (the ones that carry it) and **Forwards** (a port on the Iran server for a node's address and port).
+- **The pool**: paste the configs that still have internet - vless / vmess / trojan / ss links, one per line, up to 30; each is read like Xray reads it, a link that cannot be read or is already there is skipped with the reason. The links are secrets: they have their own table and are never in an answer (only what they point at). Each exit has a switch, and shows what it looks like from the Iran servers (answers or not, how fast, which country it leaves from).
+- **The mode**: **Spread** (every new connection goes through the next alive exit: the load is shared, a dead exit is skipped by itself - tested: 15 / 15 over two exits, and with one dead all 30 went through the other without a failure), **Fastest** (the quickest alive exit), **Direct first** (direct while the Iran server can reach abroad, the pool when it cannot).
+- **Forwards** are made by hand or for chosen nodes × chosen ports of the Marzban / PasarGuard panels (one click shows each panel's nodes and inbound ports); the listen port on the Iran server is given once and never moves.
+- **Apply** puts the pool and the forwards on every chosen Iran server (Xray is installed where it is missing); the story says what happened on each server. **Check now** and a job every 3 minutes look at every exit from the Iran servers themselves, and Telegram + the events say so when the picture changes (every exit answers / some do not / none does).
+- Tested end to end on a real Iran server with two real exits: apply, check, the spread, an exit switched off, the mode fast, removal.
+- API: `GET /api/outbound`, `POST /api/outbound/configs`, `PATCH` / `DELETE /api/outbound/configs/{id}`, `PUT /api/outbound/mode`, `PUT /api/outbound/gateways`, `GET /api/outbound/suggest`, `POST /api/outbound/routes` · `/routes/auto` · `/routes/drop`, `PATCH /api/outbound/routes/{id}`, `POST /api/outbound/apply` · `/check`, `POST /api/outbound/servers/{id}/remove`. The gateway modes `fast` and `spread` are new.
+- Not in this release: the host entries that make the users' links go through the forwards, and the bridge for the tunnels (roadmap #87, #88).
 ## 1.37.0 - one account over many panels (M12 #81)
 
 - **Panels -> ★ All panels**: one list of accounts over every Marzban / PasarGuard panel. An account is the same person on several panels: the same username (found by itself, case-insensitive) or a link made by hand between users with different names. Each row shows the panels the account is on (a dot per panel: active / disabled / other), the total used and the earliest end; a click opens the account with each user's status, usage and expiry, an **Open** button into the panel's own user window, **Link a user with another name** and **Unlink**.

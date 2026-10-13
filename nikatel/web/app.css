@@ -4539,3 +4539,36 @@ html body #modal .pa-add { display: flex; align-items: center; flex-wrap: wrap; 
 html[data-mode="light"] body #page .pa-chip { background: #fff; border-color: #c2cce0; color: #24304d; } html[data-mode="light"] body #page .pa-dot { background: #a4acc2; } html[data-mode="light"] body #page .pa-dot.ok { background: #1f9d4a; } html[data-mode="light"] body #page .pa-dot.bad { background: #e0485a; }
 html body #modal form.pa-add { display: flex !important; flex-wrap: nowrap; align-items: center; gap: 10px; } html body #modal form.pa-add > span { flex: none; white-space: nowrap; } html body #modal form.pa-add select { flex: 0 0 170px; width: 170px; min-width: 0; } html body #modal form.pa-add input { flex: 1 1 auto; width: auto; min-width: 0; } html body #modal form.pa-add button { flex: none; width: auto; }
 html body #modal form.pa-add { flex-wrap: wrap; } html body #modal form.pa-add input { flex: 1 1 180px; min-width: 150px; }
+
+/* ---- 1.38: Panels -> Outbound (the pool of exits, the Iran servers that carry it, the forwards) ---- */
+html body #page .ob2-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 10px; padding: 8px 12px; }
+html body #page .ob2-top .sp { flex: 1; } html body #page .ob2-top button { height: 32px; } html body #page .ob2-top .pill { height: 26px; display: inline-flex; align-items: center; }
+html body #page .ob2-modes button { min-width: 96px; }
+html body #page .ob2-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1.1fr); gap: 12px; align-items: stretch; }
+html body #page .ob2-card { display: flex; flex-direction: column; height: calc(100vh - 290px); min-height: 380px; margin: 0; padding: 10px 12px 12px; }
+html body #page .ob2-card > h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; } html body #page .ob2-card > h3 .sp { flex: 1; } html body #page .ob2-card > h3 .sm { text-transform: none; letter-spacing: 0; }
+html body #page .ob2-list { flex: 1 1 0; min-height: 0; overflow: auto; display: grid; gap: 4px; align-content: start; padding-right: 2px; }
+html body #page .ob2-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 10px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 12.5px; }
+html body #page .ob2-row:nth-child(even) { background: rgba(255,255,255,.055); } html body #page .ob2-row.off { opacity: .55; }
+html body #page .ob2-row > button.sm { flex: none; height: 24px; padding: 0 9px; font-size: 11.5px; }
+html body #page .ob2-nm { flex: 1 1 0; min-width: 0; display: grid; gap: 1px; } html body #page .ob2-nm b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } html body #page .ob2-nm small { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body #page .ob2-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #8a93ad; } html body #page .ob2-dot.ok { background: #30d158; } html body #page .ob2-dot.warn { background: #ffcf3a; } html body #page .ob2-dot.bad { background: #ff5a52; }
+html body #page .ob2-ex { flex: none; width: 110px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } html body #page .ob2-ms { flex: none; width: 58px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+html body #page .ob2-sw { margin: 0; flex: none; padding: 0; width: 38px; height: 22px; background: transparent; border: 0; }
+html body #page .ob2-pick { flex: none; display: inline-flex; align-items: center; gap: 8px; min-width: 96px; } html body #page .ob2-pick b { font-size: 13px; }
+html body #page .ob2-ago { flex: none; width: 64px; font-size: 11px; white-space: nowrap; }
+html body #page .ob2-port { flex: none; width: 62px; color: #7cbcff; font-size: 12.5px; font-weight: 600; }
+html body #page .ob2-add { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; } html body #page .ob2-add textarea { flex: 1; min-height: 56px; max-height: 96px; resize: vertical; font-size: 12px; border-radius: 10px; }
+html body #page .ob2-add.one { align-items: center; } html body #page .ob2-add.one input { height: 30px; font-size: 12.5px; border-radius: 9px; flex: 1; min-width: 0; } html body #page .ob2-add.one input[type=number] { flex: 0 0 84px; } html body #page .ob2-add button { height: 30px; }
+html body #page .ob2-res { display: grid; gap: 2px; margin-top: 6px; font-size: 11.5px; max-height: 70px; overflow: auto; } html body #page .ob2-res span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body #page .ob2-note { display: block; margin-top: 8px; line-height: 1.4; }
+html body #modal .ob2-sgs { display: grid; gap: 10px; max-height: 52vh; overflow: auto; margin: 0 0 8px; } html body #modal .ob2-sg { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+html body #modal .ob2-sg h5 { margin: 0 0 6px; font-size: 13px; } html body #modal .ob2-sgl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 4px 0; } html body #modal .ob2-sgl > b { flex: none; width: 52px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--mut); }
+html body #modal .ob2-sgl .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; } html body #modal .ob2-sgl .chk small { font-size: 11px; }
+@media (max-width: 1250px) { html body #page .ob2-grid { grid-template-columns: 1fr; } html body #page .ob2-card { height: auto; min-height: 0; } html body #page .ob2-list { max-height: 320px; } }
+html[data-mode="light"] body #page .ob2-row { background: #f6f8fc; } html[data-mode="light"] body #page .ob2-row:nth-child(even) { background: #eef2f8; }
+html[data-mode="light"] body #page .ob2-dot { background: #a4acc2; } html[data-mode="light"] body #page .ob2-dot.ok { background: #1f9d4a; } html[data-mode="light"] body #page .ob2-dot.warn { background: #d99a00; } html[data-mode="light"] body #page .ob2-dot.bad { background: #e0485a; }
+html[data-mode="light"] body #page .ob2-port { color: #1456c8; } html[data-mode="light"] body #modal .ob2-sg { background: #f6f8fc; border-color: #d7deea; }
+html body #page .ob2-srv { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "n p" "h a"; align-items: center; gap: 2px 10px; min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+html body #page .ob2-srv .ob2-pick { grid-area: n; min-width: 0; } html body #page .ob2-srv .pill { grid-area: p; justify-self: end; white-space: nowrap; font-size: 11px; height: 22px; display: inline-flex; align-items: center; }
+html body #page .ob2-srv .ob2-h { grid-area: h; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; } html body #page .ob2-srv > button.sm, html body #page .ob2-srv > span:last-child { grid-area: a; justify-self: end; }

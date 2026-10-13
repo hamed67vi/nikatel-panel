@@ -34,6 +34,7 @@ from .services import (
     housekeeping,
     netwatch,
     nodes,
+    outbound,
     panels,
     probe,
     pulse,
@@ -61,7 +62,7 @@ def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for name in ("app.js", "analyst.js", "app.css", "mobile.css", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
+    for name in ("app.js", "analyst.js", "outbound.js", "app.css", "mobile.css", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
         try:
             stamp = int((WEB / name).stat().st_mtime)
         except OSError:
@@ -144,7 +145,8 @@ def _register_jobs() -> None:
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
-    jobs.register("doctor", 60, doctor.run)                     # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
+    jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen
+    jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
 
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 30, panels.check_all)          # a node that drops off a Marzban / PasarGuard panel shows within half a minute

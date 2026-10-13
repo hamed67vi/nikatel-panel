@@ -26,6 +26,10 @@ from .events import emit
 log = get_logger("gateway")
 XGW_DIR = "/opt/nikatel-xgw"
 TEST_BASE = 21080          # local SOCKS doors: 21079 direct, 21080 the gateway route, 21081+ one per borrowed config
+# how the exits are used: auto = direct while it works, else the configs (fastest); borrowed / fast = only the configs, the fastest alive one;
+# spread = only the configs, every new connection to the next alive one (the load is shared); direct = no config
+MODES = ("auto", "borrowed", "fast", "spread", "direct")
+STRATEGY = {"auto": {"type": "leastPing"}, "borrowed": {"type": "leastPing"}, "fast": {"type": "leastPing"}, "spread": {"type": "roundRobin"}}
 
 
 # ------------------------------------------------------------------ link -> outbound (pure)
@@ -178,7 +182,7 @@ def validate_state(raw: dict, old_borrowed: list | None = None) -> dict:
         borrowed.append({"id": bid, "uri": uri, "note": str(b.get("note", ""))[:60], "enabled": b.get("enabled", True) is not False})
 
     mode = str(raw.get("mode", "auto"))
-    return {"ports": ports, "borrowed": borrowed, "mode": mode if mode in ("auto", "borrowed", "direct") else "auto"}
+    return {"ports": ports, "borrowed": borrowed, "mode": mode if mode in MODES else "auto"}
 
 
 def build_config(st: dict) -> dict:
@@ -206,11 +210,11 @@ def build_config(st: dict) -> dict:
     cfg = {"log": {"loglevel": "warning", "error": XGW_DIR + "/error.log"}, "inbounds": inbounds, "outbounds": outbounds, "routing": {"domainStrategy": "AsIs", "rules": rules}}
     mode = st.get("mode", "auto")
 
-    if on and mode in ("auto", "borrowed"):
-        sel = ["b-"] if mode == "borrowed" else ["direct", "b-"]
-        # auto: when no borrowed config is alive, go direct. borrowed: never leak to direct - block instead
+    if on and mode in ("auto", "borrowed", "fast", "spread"):
+        sel = ["direct", "b-"] if mode == "auto" else ["b-"]
+        # auto: when no borrowed config is alive, go direct. the others: never leak to direct - block instead
         # (Xray would otherwise use the first outbound, which is direct, before the observatory has measured anything)
-        bal = {"tag": "gw-bal", "selector": sel, "strategy": {"type": "leastPing"}, "fallbackTag": "direct" if mode == "auto" else "block"}
+        bal = {"tag": "gw-bal", "selector": sel, "strategy": STRATEGY[mode], "fallbackTag": "direct" if mode == "auto" else "block"}
         cfg["routing"]["balancers"] = [bal]
         cfg["observatory"] = {"subjectSelector": sel, "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "30s", "enableConcurrency": True}
         rules.append({"type": "field", "inboundTag": tags + ["gw-test"], "balancerTag": "gw-bal"})

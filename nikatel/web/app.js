@@ -149,7 +149,7 @@ $("#logout").onclick = async () => {
 /* ---- router */
 const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: "", origin: ""}};
 const PAGES = {};
-const INFO_GW = "A plain Xray on an Iran server: users reach a port there, the traffic goes on to your foreign node — directly while that works, through a borrowed config when Iran is cut off.";
+const INFO_GW = "How your Iran servers reach the foreign nodes when Iran is cut off from the world: a pool of exit configs (the load is shared by the ones that are alive), and a port on each chosen Iran server for every node and port.";
 const INFO = {
   dashboard: ["Dashboard", "What needs attention right now, and what happened."],
   nodes: ["Servers", "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs."],
@@ -168,7 +168,7 @@ const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched o
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."]],
-  configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
+  configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌉 Outbound", INFO_GW]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
@@ -3372,58 +3372,16 @@ window.sbCommands = async () => { const m = $("#tool-menu"); if (m) m.open = fal
 window.sbImport = async () => { if (!await gconfirm("Import the real database over the live one?\n\nThe live database is dumped first. Users, orders, payments, plans, panels and settings are replaced; broadcast queues are not copied. The bot then serves the real customers.")) return; toast("Dumping and importing… (1–3 minutes)"); try { const r = await api("/api/shopbot/import-stage", {method: "POST"}); toast(`✓ Imported: ${r.tables.users} users, ${r.tables.orders_list} orders · backup ${r.backup.split("/").pop()}`, "ok"); sb.infoAt = 0; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- gateway (Xray on an Iran server, borrowed configs for internet cuts) */
-const gw = {host: localStorage.getItem("nk.gw") || "", st: null, status: null, test: null, note: "", noteCls: "", dirty: false};
-INFO.gateway = ["Gateway", INFO_GW];
+const gw = {tab: ""};
+INFO.gateway = ["Outbound", INFO_GW];
 PAGES.gateway = async () => {
-  const [srvAll, pnl] = await Promise.all([api("/api/servers?role=iran"), api("/api/panels").catch(() => ({panels: []}))]);
-  const servers = srvAll.filter(s => s.enabled), panelsList = pnl.panels || [], pnSel = panelsList.find(x => String(x.id) === pn.id) || panelsList[0] || {};
-  if (!servers.length) { $("#page").innerHTML = '<div class="empty">No enabled Iran server.</div>'; return; }
-  if (!servers.some(s => String(s.id) === gw.host)) { gw.host = String(servers[0].id); gw.st = null; }
-  if (!gw.st || gw.st.server_id !== +gw.host) { gw.st = await api(`/api/gateway/${gw.host}`); gw.status = null; gw.test = null; gw.dirty = false; }
-  const st = gw.st, t = gw.test || [], tr = k => t.find(x => x.key === k);
-  const cell = k => { const r = tr(k); return r ? (r.ok ? `<span class="gw-ok">✓ ${r.ms} ms</span> <small class="mut">${esc(r.ip || "")} ${esc(r.country || "")}</small>` : '<span class="err">✗ no answer</span>') : ""; };
-  const chip = !st.installed ? '<span class="pill">not installed</span>' : !gw.status ? '<span class="pill">status unknown</span>' : gw.status.error ? `<span class="pill err">✗ ${esc(gw.status.error).slice(0, 60)}</span>` : gw.status.active === "active" ? `<span class="pill ok">● running · ${esc((gw.status.version || "").split("(")[0])}</span>` : `<span class="pill err">● ${esc(gw.status.active || "stopped")}</span>`;
-  gw.tab = gw.tab || localStorage.getItem("nk.gwtab") || "gateway";
-  const gwHead = `<div class="fstrip"><div class="tabs"><button class="${gw.tab === "gateway" ? "on" : ""}" onclick="gw.tab='gateway';localStorage.setItem('nk.gwtab','gateway');refresh()">🌐 Iran gateway</button><button class="${gw.tab === "outbounds" ? "on" : ""}" onclick="gw.tab='outbounds';localStorage.setItem('nk.gwtab','outbounds');refresh()">🧩 Panel outbounds</button></div></div>`;
-  if (gw.tab === "outbounds") {
-    $("#page").innerHTML = `${gwHead}${panelsList.length ? `<div class="toolbar"><select onchange="pn.id=this.value;localStorage.setItem('nk.pn',this.value);refresh()">${panelsList.map(x => `<option value="${x.id}" ${String(x.id) === String(pnSel.id) ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select><span class="mut">the Xray outbounds of this panel's core: where its users' traffic leaves</span></div><div id="pn-body"><div class="mut">loading…</div></div>` : '<div class="empty">No panel yet — add one under Panels.</div>'}`;
-    if (panelsList.length) pnCoreLoad(pnSel.id);
-    return;
-  }
-  const listen = p => gw.status && gw.status.listen && gw.status.listen[p.port] != null ? (gw.status.listen[p.port] ? '<span class="gw-ok">listening</span>' : '<span class="err">not listening</span>') : "";
-  $("#page").innerHTML = `${gwHead}
-    <div class="card gw-card"><h3>Iran gateway <small class="mut gw-sub">Xray on an Iran server: when the internet is cut, users go out through borrowed configs.</small><span class="sp"></span>${chip}${st.read_only ? '<span class="badge">read-only</span>' : ""}</h3>
-      <div class="frm gw-top">
-        <label>Iran server<select onchange="gwPick(this.value)">${servers.map(s => `<option value="${s.id}" ${String(s.id) === gw.host ? "selected" : ""}>${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select></label>
-        <label>When to use the borrowed configs<select onchange="gwField('mode', this.value)"><option value="auto" ${st.mode === "auto" ? "selected" : ""}>Automatic — direct while it works, borrowed when it does not</option><option value="borrowed" ${st.mode === "borrowed" ? "selected" : ""}>Always through the borrowed configs</option><option value="direct" ${st.mode === "direct" ? "selected" : ""}>Direct only</option></select></label>
-        <div class="frm-act">${st.installed ? `<button class="pri" onclick="gwApply()">Save &amp; apply</button><button onclick="gwStatus()">↻ Status</button><button onclick="gwTest()">⚡ Test exits</button><button class="danger sm" onclick="gwRemove()">Remove</button>` : `<button class="pri" onclick="gwInstall()" ${st.binary ? "" : "disabled"} title="${st.binary ? "" : "run scripts/fetch-xray.sh on the panel server first"}">Install Xray on this server</button>`}</div></div>
-      ${gw.note ? `<div class="gw-out ${gw.noteCls}" style="margin-top:8px">${esc(gw.note)}</div>` : ""}${gw.dirty ? '<div class="gw-dirty">Unsaved changes — press “Save &amp; apply”.</div>' : ""}</div>
-    <div class="grid2 gw-two">
-      <div class="card gw-card"><h3>Ports <small class="mut gw-sub">an Iran port that forwards to a foreign node</small></h3>
-        ${st.ports.map((p, i) => `<div class="gw-row"><span><b>:${p.port}</b> → ${esc(p.target_host)}:${p.target_port} <small class="mut">${p.udp ? "tcp+udp" : "tcp"} ${esc(p.note || "")}</small></span><span>${listen(p)}</span><span class="ob-act"><label class="chk"><input type="checkbox" ${p.enabled !== false ? "checked" : ""} onchange="gwToggle('ports', ${i}, this.checked)"> on</label><button class="sm danger" onclick="gwDel('ports', ${i})">✕</button></span></div>`).join("") || '<div class="gw-empty">No port yet.</div>'}
-        <div class="frm gw-add"><label>Listen port<input id="gw-p" type="number" min="1024" max="65535" placeholder="28080"></label><label>Node address<input id="gw-h" placeholder="ip or host"></label><label>Node port<input id="gw-tp" type="number" min="1" max="65535" placeholder="443"></label><label>Note<input id="gw-n" placeholder="optional"></label><label class="chk"><input id="gw-udp" type="checkbox"> udp too</label><div class="frm-act"><button class="pri" onclick="gwAddPort()">Add port</button></div></div></div>
-      <div class="card gw-card"><h3>Borrowed configs <small class="mut gw-sub">the fastest alive one is used during cuts</small></h3>
-        ${st.borrowed.map((b, i) => `<div class="gw-row"><span><b>${esc(b.note || "config " + (i + 1))}</b> <small class="mut">${esc(b.info || "new")}</small></span><span>${b.id ? cell(b.id) : ""}</span><span class="ob-act"><label class="chk"><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="gwToggle('borrowed', ${i}, this.checked)"> on</label><button class="sm danger" onclick="gwDel('borrowed', ${i})">✕</button></span></div>`).join("") || '<div class="gw-empty">No borrowed config yet.</div>'}
-        <textarea id="gw-uri" class="ob-raw" rows="2" placeholder="vless://…  vmess://…  trojan://…  ss://…" spellcheck="false"></textarea>
-        <div class="frm-act gw-note-row"><input id="gw-note" placeholder="note (optional)"><button class="pri" onclick="gwAddBorrowed()">Add this config</button></div></div></div>
-    ${gw.test ? `<div class="card"><h3>Exit test <small class="mut">— from the Iran server, through every exit</small></h3>${t.map(r => `<div class="gw-row"><span><b>${esc(r.key === "direct" ? "Direct (no borrowed config)" : r.key === "gateway" ? "The gateway as users see it (current mode)" : r.name)}</b></span><span>${cell(r.key)}</span><span></span></div>`).join("")}</div>` : ""}
-    ${gw.status && gw.status.log && gw.status.log.length ? `<div class="card"><h3>Latest log lines</h3><pre class="gl-out">${esc(gw.status.log.join("\n"))}</pre></div>` : ""}`;
-};window.gwPick = v => { gw.host = v; localStorage.setItem("nk.gw", v); gw.st = null; gw.note = ""; refresh(); };
-window.gwField = (k, v) => { gw.st[k] = v; gw.dirty = true; refresh(); };
-window.gwToggle = (k, i, on) => { gw.st[k][i].enabled = on; gw.dirty = true; refresh(); };
-window.gwDel = (k, i) => { gw.st[k].splice(i, 1); gw.dirty = true; refresh(); };
-window.gwAddBorrowed = () => { const uri = $("#gw-uri").value.trim(), note = $("#gw-note").value.trim(); if (!uri) return; gw.st.borrowed.push({id: "", uri, note, enabled: true, info: "new"}); gw.dirty = true; refresh(); };
-window.gwAddPort = () => {
-  const port = +$("#gw-p").value, host = $("#gw-h").value.trim(), tp = +$("#gw-tp").value;
-  if (!(port >= 1024) || !host || !(tp >= 1)) { gw.note = "✗ Fill the listen port (1024–65535), the node address and the node port."; gw.noteCls = "bad"; refresh(); return; }
-  gw.st.ports.push({port, target_host: host, target_port: tp, udp: $("#gw-udp").checked, enabled: true, note: $("#gw-n").value.trim()}); gw.dirty = true; gw.note = ""; refresh();
+  gw.tab = gw.tab || localStorage.getItem("nk.gwtab") || "outbound"; if (gw.tab === "gateway") gw.tab = "outbound";
+  const gwHead = `<div class="fstrip"><div class="tabs"><button class="${gw.tab === "outbound" ? "on" : ""}" onclick="gw.tab='outbound';localStorage.setItem('nk.gwtab','outbound');refresh()">🌉 Outbound</button><button class="${gw.tab === "outbounds" ? "on" : ""}" onclick="gw.tab='outbounds';localStorage.setItem('nk.gwtab','outbounds');refresh()">🧩 Panel outbounds</button></div></div>`;
+  if (gw.tab !== "outbounds") return obRender(gwHead);        // outbound.js: the pool of exits, the Iran servers that carry it, the forwards
+  const pnl = await api("/api/panels").catch(() => ({panels: []})), panelsList = pnl.panels || [], pnSel = panelsList.find(x => String(x.id) === pn.id) || panelsList[0] || {};
+  $("#page").innerHTML = `${gwHead}${panelsList.length ? `<div class="toolbar"><select onchange="pn.id=this.value;localStorage.setItem('nk.pn',this.value);refresh()">${panelsList.map(x => `<option value="${x.id}" ${String(x.id) === String(pnSel.id) ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select><span class="mut">the Xray outbounds of this panel's core: where its users' traffic leaves</span></div><div id="pn-body"><div class="mut">loading…</div></div>` : '<div class="empty">No panel yet — add one under Panels.</div>'}`;
+  if (panelsList.length) pnCoreLoad(pnSel.id);
 };
-async function gwSave() { const r = await api(`/api/gateway/${gw.host}`, {method: "PUT", body: JSON.stringify({mode: gw.st.mode, ports: gw.st.ports, borrowed: gw.st.borrowed.map(b => ({id: b.id, uri: b.uri || "", note: b.note, enabled: b.enabled}))})}); gw.st = Object.assign(gw.st, r); gw.dirty = false; }
-window.gwInstall = async () => { if (!await gconfirm("Copy Xray to this Iran server (about 35 MB over SSH) and install it as the service nikatel-xgw? Nothing else on the server is touched.")) return; gw.note = "Installing… this can take a minute"; gw.noteCls = ""; refresh(); try { await gwSave(); const r = await api(`/api/gateway/${gw.host}/install`, {method: "POST"}); gw.note = "✓ Installed: " + r.version; gw.noteCls = "ok"; gw.st = null; } catch (e) { gw.note = "✕ " + e.message; gw.noteCls = "bad"; } refresh(); };
-window.gwApply = async () => { gw.note = "Saving and applying…"; gw.noteCls = ""; refresh(); try { await gwSave(); const r = await api(`/api/gateway/${gw.host}/apply`, {method: "POST"}); gw.note = "✓ Gateway running" + (r.ports.length ? " on port " + r.ports.join(", ") : ""); gw.noteCls = "ok"; } catch (e) { gw.note = "✕ " + e.message; gw.noteCls = "bad"; } await gwStatus(); };
-window.gwStatus = async () => { try { gw.status = await api(`/api/gateway/${gw.host}/status`, {method: "POST"}); } catch (e) { gw.status = {error: e.message}; } refresh(); };
-window.gwTest = async () => { gw.note = "Testing every exit from the Iran server…"; gw.noteCls = ""; refresh(); try { gw.test = (await api(`/api/gateway/${gw.host}/test`, {method: "POST"})).results; gw.note = ""; } catch (e) { gw.note = "✕ " + e.message; gw.noteCls = "bad"; } refresh(); };
-window.gwRemove = async () => { if (!await gconfirm("Remove the gateway from this server? Your list of ports and borrowed configs stays in the panel.")) return; try { await api(`/api/gateway/${gw.host}/remove`, {method: "POST"}); gw.note = "✓ Removed"; gw.noteCls = "ok"; gw.st = null; } catch (e) { gw.note = "✕ " + e.message; gw.noteCls = "bad"; } refresh(); };
 
 /* ---- events */
 PAGES.events = async () => {

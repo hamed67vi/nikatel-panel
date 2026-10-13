@@ -65,6 +65,11 @@ The long routes added in 1.30 - 1.35 follow the same rule:
 | `POST /api/doctor/suggestions/{id}/apply` · `/dismiss` | do a suggested move (an action) · drop it |
 | `GET /api/accounts?search=&limit=` | the accounts that match a search on any Marzban / PasarGuard panel: the same person on every panel (same username, or a hand-made link), with the status of each panel; every panel is asked at that moment through its REST API |
 | `GET /api/accounts/links` · `POST /api/accounts/links` · `DELETE /api/accounts/links/{id}` | the links made by hand between users with different names: list, make (each member must exist on its panel), undo (nothing changes on the panels) |
+| `GET /api/outbound` | the outbound: the pool of exit configs (never their links) with how many Iran servers see each alive, the mode, the Iran servers that carry it with what the last check found, the forwards |
+| `POST /api/outbound/configs` · `PATCH` / `DELETE /api/outbound/configs/{id}` | add exit configs (paste links, one per line; answers added / skipped with the reason), switch one on or off, remove one |
+| `PUT /api/outbound/mode` · `PUT /api/outbound/gateways` | how the exits are used (spread / fast / auto) · the Iran servers that carry the outbound |
+| `GET /api/outbound/suggest` · `POST /api/outbound/routes` · `/routes/auto` · `/routes/drop` · `PATCH /routes/{id}` | what the panels offer to forward to (nodes and inbound ports) · add forwards by hand or for chosen nodes x ports · remove · switch one on or off |
+| `POST /api/outbound/apply` · `POST /api/outbound/check` · `POST /api/outbound/servers/{id}/remove` | put the pool and the forwards on every chosen Iran server (an action) · look at the pool from the Iran servers now · take it off one server |
 | `POST /api/autopilot/move` | move one tunnel to an Iran server: built there first, the DNS records that serve only it follow (every account), the old one goes after the TTL |
 
 ## 3. Authentication

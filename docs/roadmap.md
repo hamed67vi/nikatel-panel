@@ -118,6 +118,12 @@ always installable; a milestone ends with a tag.
 - [ ] #83 One subscription link: /sub/<token> of this panel merges the subscriptions of the account's panels (v2ray base64 first, Clash later); WireGuard comes through a PasarGuard group that has a WireGuard inbound
 - [ ] #84 One API for the shop bot and the Mini App: they talk to this panel (one base URL) and it forwards to the right panel by the plan
 - [ ] #85 Usage and expiry of an account summed over its panels, in the Users page and the account window
+## M13 · Outbound (when Iran is cut off from the world; decided 2026-10-13)
+
+- [x] #86 The Outbound section from scratch (1.38.0): a pool of exit configs (vless / vmess / trojan / ss, up to 30, pasted many at once), the mode (spread = the load is shared by every alive exit, fast, auto = direct first), the Iran servers that carry it, forwards to the foreign nodes (made by hand or for chosen nodes x ports of the panels), applied to the servers through the Xray gateway, the pool measured from each Iran server every 3 minutes with a Telegram notice when it degrades or goes down. Tested end to end on a real Iran server with two real exits (spread 15 / 15, a dead exit skipped, no connection lost)
+- [ ] #87 Connect the users: for the chosen forwards make the host entries in the Marzban / PasarGuard panels (a clone of the host with the Iran server's address and the forward port), with a preview and one-click undo; the Iran address behind an ArvanCloud DNS-only name on a .ir domain
+- [ ] #88 Bridge for the tunnels: an Iran server that cannot reach abroad directly builds its tunnels (the engines where the Iran side dials) through the pool; a check of which direction works per foreign server
+- [ ] #89 Outbound alerts and history: how much each exit carried, when it died and came back, a warning before an exit's data runs out
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).
 * Nothing identifying the real infrastructure in the repository - ever. `scripts/check_no_secrets.sh`.
