@@ -58,6 +58,13 @@ The long routes added in 1.30 - 1.35 follow the same rule:
 | `GET /api/besttoday?hours=24` | the tunnels ranked by how they behaved (availability, latency, jitter, loss, breaks); a job measures every tunnel again every half hour |
 | `GET /api/logs?origin=panel\|server\|outside` · `GET /api/logs/summary?hours=24` | the log, with where each problem is; the last hours grouped |
 | `GET /api/health/detail` | what is wrong with the panel itself: database, jobs, SSH key, free disk, last backup, errors of the last hour (`/api/health` stays the open liveness check) |
+| `GET /api/settings/repair` · `PUT` | the Tunnel Doctor: `mode` off \| fix \| move, `after_seconds` (a tunnel down this long is repaired), `server_minutes` (an Iran server off this long is replaced, mode move) |
+| `GET /api/doctor` | the Doctor's state: mode, the ledger of moves (what can be returned), the suggestions, which servers are back since when, the rails |
+| `GET /api/doctor/plan/{server_id}` | what would happen if this Iran server went off: tunnels, target, the DNS records of every account (nothing changes) |
+| `POST /api/doctor/moves/{id}/return` · `POST /api/doctor/moves/{id}/undo-dns` | bring the tunnels of a move back now (an action) · point only its DNS records back |
+| `POST /api/doctor/suggestions/{id}/apply` · `/dismiss` | do a suggested move (an action) · drop it |
+| `POST /api/autopilot/move` | move one tunnel to an Iran server: built there first, the DNS records that serve only it follow (every account), the old one goes after the TTL |
+
 ## 3. Authentication
 
 The browser signs in once and carries the `nikatel_session` cookie (24 h, two-step sign-in and a secret entry path when enabled).

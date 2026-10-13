@@ -4422,3 +4422,52 @@ html body .sugg .sg-i .pv { width: 18px; height: 18px; flex: none; }
 html body .sugg .sg-i > b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body .sugg .sg-i > small.mono { flex: none; opacity: .75; }
 html body .sugg .sg-i > .sg-acc { margin-left: auto; flex: none; font-size: 11px; opacity: .6; }
+/* ---- 1.36: the Tunnel Doctor in three modes - the mode cards, the two settings, the suggestions, the ledger of moves ---- */
+html body #page .ap-modes { padding: 10px 12px 10px; margin: 0 0 10px; }
+html body #page .ap-mgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+html body #page .ap-mode { display: grid; grid-template-columns: 34px minmax(0, 1fr) 20px; align-items: center; gap: 10px; min-height: 60px; height: auto; padding: 8px 10px 8px 9px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); box-shadow: none; text-align: left; text-transform: none; letter-spacing: 0; color: var(--text); font-weight: 500; cursor: pointer; overflow: visible; }
+html body #page .ap-mode:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.18); transform: none; }
+html body #page .ap-mode.on { border-color: #4da3ff; background: rgba(77,163,255,.09); box-shadow: 0 0 0 1px rgba(77,163,255,.45) inset; }
+html body #page .ap-mode.locked { opacity: .55; cursor: default; } html body #page .ap-mode:disabled { cursor: default; }
+html body #page .ap-mode .ap-mi { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 17px; font-style: normal; filter: grayscale(1); opacity: .8; }
+html body #page .ap-mode.on .ap-mi { filter: none; opacity: 1; background: rgba(77,163,255,.16); }
+html body #page .ap-mode .ap-mt { display: grid; gap: 2px; min-width: 0; }
+html body #page .ap-mode .ap-mt b { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } html body #page .ap-mode.on .ap-mt b { color: #7cbcff; }
+html body #page .ap-mode .ap-mt small { font-size: 11.5px; line-height: 1.35; color: var(--mut); white-space: normal; font-weight: 500; }
+html body #page .ap-mode .ap-mchk { font-style: normal; font-weight: 800; color: #4da3ff; font-size: 14px; text-align: center; }
+html body #page .ap-cfg { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); }
+html body #page .ap-cfg .ap-f { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--mut); white-space: nowrap; }
+html body #page .ap-cfg input[type=number] { width: 62px; height: 28px; border-radius: 9px; font-size: 12.5px; text-align: center; }
+html body #page .ap-cfg button { height: 28px; } html body #page .ap-cfg .sp { flex: 1; } html body #page .ap-cfg .pill { height: 24px; display: inline-flex; align-items: center; }
+@media (max-width: 1000px) { html body #page .ap-mgrid { grid-template-columns: 1fr; } }
+/* the suggestions: a yellow box at the top of "In progress" */
+html body #page .sug-box { margin: 0 0 10px; } html body #page .sug-box .ap-row { margin: 0; background: rgba(0,0,0,.14); border-color: rgba(255,255,255,.07); }
+html body #page .sug-box .nw-title small { font-weight: 500; text-transform: none; letter-spacing: 0; }
+html body #page .ap-sug .ap-ft { white-space: nowrap; color: var(--mut); } html body #page .ap-sug .ap-ft em { font-style: normal; color: var(--text); font-weight: 600; }
+html body #page .ap-sug .ap-why { color: var(--mut); } html body #page .ap-sug time { font-size: 11px; color: var(--mut); white-space: nowrap; }
+/* the ledger of moves: one line each, zebra, the way back at the right */
+html body #page .mv-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 8px; padding: 6px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); font-size: 12.5px; }
+html body #page .mv-bar .mv-plan { display: inline-flex; align-items: center; gap: 8px; } html body #page .mv-bar select { height: 28px; font-size: 12.5px; border-radius: 9px; min-width: 120px; } html body #page .mv-bar button { height: 28px; }
+html body #page .mv-bar .sp { flex: 1; } html body #page .mv-bar > small { font-size: 11.5px; }
+html body #page .mv-list { display: grid; gap: 4px; max-height: calc(100vh - 420px); min-height: 160px; overflow: auto; }
+html body #page .mv-row { display: grid; grid-template-columns: 64px 78px minmax(90px, .8fr) minmax(130px, auto) minmax(0, 1.5fr) 52px 70px auto; align-items: center; gap: 10px; min-height: 36px; padding: 4px 10px; border-radius: 10px; border: 1px solid transparent; background: rgba(255,255,255,.025); font-size: 12.5px; }
+html body #page .mv-row:nth-child(even) { background: rgba(255,255,255,.05); }
+html body #page .mv-row.bad { border-color: rgba(255,107,139,.35); } html body #page .mv-row.back { opacity: .7; }
+html body #page .mv-row time { font-size: 11px; color: var(--mut); white-space: nowrap; }
+html body #page .mv-row .mv-k { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--mut); white-space: nowrap; }
+html body #page .mv-row .mv-k.k-down { color: #ff8da1; } html body #page .mv-row .mv-k.k-resources { color: #ffcf3a; } html body #page .mv-row .mv-k.k-return { color: #5ee07f; }
+html body #page .mv-row .mv-t { display: flex; flex-wrap: wrap; gap: 4px 8px; min-width: 0; } html body #page .mv-row .mv-t .tchip { font-weight: 600; font-size: 12px; }
+html body #page .mv-row .mv-ft { white-space: nowrap; color: var(--mut); } html body #page .mv-row .mv-ft em { font-style: normal; color: var(--text); font-weight: 600; }
+html body #page .mv-row .mv-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+html body #page .mv-row .mv-dns { font-size: 11.5px; white-space: nowrap; text-align: right; } html body #page .mv-row .pill { justify-self: start; }
+html body #page .mv-row .mv-act { display: inline-flex; gap: 6px; justify-content: flex-end; } html body #page .mv-row .mv-act button { height: 24px; padding: 0 9px; font-size: 11.5px; white-space: nowrap; }
+@media (max-width: 1100px) { html body #page .mv-row { grid-template-columns: 64px 78px minmax(90px, 1fr) auto; } html body #page .mv-row .mv-why, html body #page .mv-row .mv-dns { display: none; } html body #page .mv-row .pill { grid-column: 1 / span 2; } html body #page .mv-row .mv-act { grid-column: 3 / span 2; } }
+/* the CPU cores live under the Analyst now */
+html body #page .ap-tasks #ap-t-ana > .card.ap-bal { margin: 12px 0 0; padding: 10px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
+/* day mode */
+html[data-mode="light"] body #page .ap-mode { background: #fff; border-color: #d7deea; } html[data-mode="light"] body #page .ap-mode:hover { background: #f6f8fc; border-color: #c2cce0; }
+html[data-mode="light"] body #page .ap-mode.on { background: #e3edff; border-color: #9bbcf3; box-shadow: none; } html[data-mode="light"] body #page .ap-mode.on .ap-mt b { color: #1456c8; } html[data-mode="light"] body #page .ap-mode .ap-mchk { color: #1456c8; }
+html[data-mode="light"] body #page .ap-mode .ap-mi { background: #eef2f8; } html[data-mode="light"] body #page .ap-mode.on .ap-mi { background: #cfe0fc; }
+html[data-mode="light"] body #page .mv-bar, html[data-mode="light"] body #page .mv-row { background: #f6f8fc; } html[data-mode="light"] body #page .mv-row:nth-child(even) { background: #eef2f8; }
+html[data-mode="light"] body #page .sug-box .ap-row { background: #fff; border-color: #e3d9b8; }
+html[data-mode="light"] body #page .mv-row .mv-k.k-down { color: #c0304f; } html[data-mode="light"] body #page .mv-row .mv-k.k-resources { color: #9a6b00; } html[data-mode="light"] body #page .mv-row .mv-k.k-return { color: #1f8a3c; }

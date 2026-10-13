@@ -826,8 +826,9 @@ def _build(b: Build) -> None:
 
 
 # ------------------------------------------------------------------ delete / rebuild
-def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False) -> list[str]:
-    """Remove the tunnel from both servers (and the row). Returns per-side results. `trash`: keep a copy first, so that it can be restored."""
+def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False, skip_offline: bool = False) -> list[str]:
+    """Remove the tunnel from both servers (and the row). Returns per-side results. `trash`: keep a copy first, so that it can be restored.
+    `skip_offline`: a server that is off is not asked over SSH (a 90 s timeout per tunnel would make a failover of ten tunnels wait a quarter of an hour)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to delete tunnels")
 
@@ -839,6 +840,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
 
         name, port, tr, label = t.name, int(t.port or 0), (t.transport or "tcpmux"), f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
         on_server = sname(t)           # what the servers know it as
+        off = {side for side, s in (("Iran", t.iran), ("foreign", t.foreign)) if skip_offline and s is not None and s.online is False}
         nodes = [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
         other = (t.type or "").lower() in ("backpack", "paqet", "chisel")
         snap = trash_snapshot(t) if trash and not keep_record else None
@@ -851,10 +853,14 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
         if other:
             from . import build_other
 
-            results = build_other.remove(t)
+            results = build_other.remove(t, skip=off)
 
     if not other:
         for side, node in nodes:
+            if side in off:
+                results.append(f"{side}: skipped (the server is off; its files are purged when it is back)")
+                continue
+
             try:
                 run_action(node, "remove_tunnel_files", {"NAME": on_server, "PORT": str(port), "TRANSPORT": tr if tr in ("tcp", "tcpmux", "wsmux", "wssmux") else "tcpmux"}, timeout=90)
                 results.append(f"{side}: removed")

@@ -323,11 +323,22 @@ def history(ref: str | None = None, limit: int = 50, kinds: list[str] | None = N
         return [status(e.id) for e in db.scalars(q)]
 
 
+def doctor_mode() -> str:
+    """The Tunnel Doctor's mode: off | fix | move (an old setting without a mode: "fix" when the automatic repair was on, else "off")."""
+    conf = st.get("repair")
+    m = conf.get("mode")
+
+    if m in ("off", "fix", "move"):
+        return m
+
+    return "fix" if conf.get("auto", True) else "off"
+
+
 def auto_repair() -> None:
-    """Job hook: when the operator enabled it, start a fix for tunnels that are down and not muted."""
+    """Job hook: when the Doctor is not off, start a fix for tunnels that are down and not muted."""
     conf = st.get("repair")
 
-    if not conf.get("auto") or get_settings().read_only:
+    if doctor_mode() == "off" or get_settings().read_only:
         return
 
     muted = set(st.get("alerts").get("muted") or [])

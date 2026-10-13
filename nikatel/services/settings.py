@@ -15,7 +15,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True, "every_minutes": 0, "tg_every": "all", "parts": {"panel": {"enabled": True, "topic": 0, "topic_name": ""}, "bot": {"enabled": True, "topic": 0, "topic_name": ""}}},
     # the smart repair is on by default (restart, rebuild, a new GRE link, another tunnel type - by itself); it can be switched off on Smart repair to work by hand
-    "repair": {"auto": True, "after_seconds": 60, "level": "switch"},   # level: restart | rebuild | switch (how far the automatic repair may go)
+    "repair": {"auto": True, "after_seconds": 60, "level": "switch", "mode": "", "server_minutes": 10},   # mode: off | fix | move (the Doctor; "" = not chosen yet: derived from the old `auto` switch, so an install that had it off stays off); server_minutes: an Iran server off this long is replaced (mode move)
+    "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}},                     # the Doctor's ledger of moves, its suggestions, who came back when
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
@@ -29,7 +30,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "dns": {"accounts": []},
     "balance": {"auto": True, "servers": {}},
     "underuse": {"auto": True},       # the Doctor fixes what the kernel settings can fix on a server that carries little (services/underuse.py)
-    "failover": {"seen": {}, "pending": [], "history": [], "dns_log": []},   # dns_log: every record the failover re-pointed, so each one can be put back
+    "failover": {"seen": {}, "pending": [], "history": [], "dns_log": [], "tried": {}},   # dns_log: every record the failover re-pointed, so each one can be put back; tried: dead servers looked at without a target
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
     # tunnels removed on request: a copy of each so that it can be restored (30 days)

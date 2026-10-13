@@ -1,22 +1,20 @@
-"""Failover of an Iran server: its tunnels move to another Iran server and the ArvanCloud DNS records that pointed at it are
-pointed at the new one.
+"""Failover of an Iran server: its tunnels move to another Iran server and the DNS records that pointed at it - in whichever
+account they live (ArvanCloud, another ArvanCloud, Cloudflare) - are pointed at the new one.
 
-Two triggers:
-  * the server is DEAD (no SSH answer for `confirm_minutes`): `check()` (the job, every minute) plans the move of ALL its tunnels
-    and of every record that carries its address;
-  * the server answers but its ROUTE is useless (GRE filtered, route cut, lossy, port blocked) and the smart repair found no other
-    tunnel type that works: `after_ladder()` plans the move of the broken tunnels, plus the records that serve only them. A record
-    that also serves a tunnel that stays would break it, so such tunnels are moved too (the plan says so).
-
-  plan_for(server_id)      the dead-server plan  ·  route_plan(tunnel_id)  the route plan  ·  both: target, tunnels, DNS, problems
-  approve / dismiss        mode "approve" waits for a click on Tunnels → DNS · IP switch (a Telegram notice says so); mode "auto"
-                           runs clean plans by itself
+The Doctor (services/doctor.py) decides WHEN (its mode "move": a server off for `server_minutes`, an exhausted server, the return
+after a server came back); this module knows HOW:
+  plan_for(server_id)      the dead-server plan  ·  route_plan(tunnel_id)  the plan for a route problem (only suggested, never run
+                           by itself: a poor route or packet loss never moves a server)  ·  both: target, tunnels, DNS, problems
+  _work(aid, plan)         the move: when the source server is ON the new tunnels are built and checked first, then the DNS, and
+                           the old tunnels live on for the TTL + 5 minutes (make before break); when it is OFF the old tunnels are
+                           dropped (their files are purged when the server is back) and the new ones built at once
   restore(log_id)          point ONE changed record back at the address it had before (the tunnels are left where they are)
   undo(plan_id)            the same for every record of one failover
 
 The target is the Iran server that ranks best for every moved tunnel (ping to the foreign server, free resources, how many tunnels
-it already carries, free ports). The DNS is touched only after every tunnel moved. Every record the failover re-points is written to
-`dns_log` (old and new address, which server, when), so the panel can list the changes and put any of them back with one click."""
+it already carries, free ports). A record that serves a moved tunnel and a staying one would break the staying one, so such tunnels
+are moved too (closure). The DNS is touched only after every tunnel moved. Every record re-pointed is written to `dns_log` (account,
+old and new address, which server, when), so the panel can list the changes and put any of them back with one click."""
 from __future__ import annotations
 
 import time
@@ -32,10 +30,14 @@ from . import settings as st
 from .events import emit
 
 log = get_logger("failover")
-AUTOMATIC = False     # PAUSED by the operator until the tests are done: the panel never plans, moves or re-points anything by itself (no dead-server plan, no route plan, no follow of a changed address). Pointing a record by hand (Point, Restore) works.
-ENABLED = True       # the kill switch of the whole ArvanCloud / Iran-server failover (tests flip it); what really decides is `enabled()`: a key and a mode
+ENABLED = True       # the kill switch of the whole DNS failover (tests flip it); what really decides is the Doctor's mode (services/doctor.py)
+TTL_GRACE = 300      # seconds the old tunnel lives on after the DNS changed, on top of the record's TTL (clients that still hold the old address)
+TTL_WAIT_MAX = 900
 ROUTE_CAUSES = ("gre_blocked", "route_cut", "lossy_route", "port_blocked")
 REASONS = {"down": "the server does not answer",
+           "resources": "the server's resources are exhausted",
+           "return": "the server is back and healthy",
+           "manual": "moved by you",
            "gre_blocked": "GRE is filtered on its route and no other tunnel type works",
            "route_cut": "the route to the foreign server is cut",
            "lossy_route": "the route loses too many packets and no other tunnel type does better",
@@ -47,32 +49,44 @@ def conf() -> dict:
 
 
 def has_key() -> bool:
-    """The DNS can be touched at all: the kill switch is on, the feature is licensed and an ArvanCloud key is saved."""
+    """The DNS can be touched at all: the kill switch is on, the feature is licensed and at least one DNS account is saved."""
     from . import license
 
-    return ENABLED and license.has("failover") and bool(conf().get("api_key"))
+    return ENABLED and license.has("failover") and bool(dnsprov.accounts())
 
 
 def enabled() -> bool:
-    """The automatic failover may plan and move: a key, and a mode other than off (approve = ask first, auto = do it)."""
-    return AUTOMATIC and has_key() and conf().get("mode", "off") in ("approve", "auto")
+    """The failover may move tunnels and re-point records by itself: the Doctor is in mode "move"."""
+    from . import doctor
+
+    return doctor.can_move()
+
+
+def _sleep(seconds: float) -> None:      # tests replace it
+    time.sleep(seconds)
+
+
+def _apply_record(r: dict, old_ip: str, new_ip: str) -> dict:
+    """Point one record (of any account) at `new_ip` where it pointed at `old_ip`; returns what the provider gave back (`before` for the restore)."""
+    prov = dnsprov.provider(r["account"])
+    ips = [new_ip if ip == old_ip else ip for ip in (r.get("ips") or [old_ip])]
+
+    if new_ip not in ips:
+        ips = [new_ip]
+
+    return prov.update(r["domain"], str(r["id"]), r.get("name") or "@", ips, int(r.get("ttl") or 120), bool(r.get("cloud")))
 
 
 def follow_ip_change(aid: int, old_ip: str, new_ip: str, server_name: str) -> list[dict]:
-    """An Iran server got a new address: every A record that pointed at the old one follows (written to dns_log, so each can be put back)."""
-    if not AUTOMATIC:
-        autopilot._say(aid, f"DNS: automatic DNS changes are paused while they are tested - the records that pointed at {old_ip} are NOT changed; point them by hand (Tunnels → DNS · IP switch).")
+    """An Iran server got a new address: every A record that pointed at the old one follows (written to dns_log, so each can be put back). Only in the Doctor's mode "move"."""
+    if not enabled():
+        autopilot._say(aid, f"DNS: the Doctor is not in the mode that moves servers - the records that pointed at {old_ip} are NOT changed; point them by hand (Tunnels → CDN).")
         return []
 
-    if not has_key():
-        autopilot._say(aid, "DNS: no ArvanCloud key is saved, the records that pointed at the old address are not changed.")
-        return []
+    recs, err = _fetch_records(old_ip)
 
-    try:
-        recs = arvan.find_by_ip(old_ip, conf().get("domains") or None)
-    except RuntimeError as e:
-        autopilot._say(aid, f"DNS: ArvanCloud did not answer: {str(e)[:140]}")
-        return []
+    if err:
+        autopilot._say(aid, f"DNS: {err}")
 
     if not recs:
         autopilot._say(aid, f"DNS: no record pointed at {old_ip}.")
@@ -83,11 +97,12 @@ def follow_ip_change(aid: int, old_ip: str, new_ip: str, server_name: str) -> li
 
     for r in recs:
         try:
-            done.append(arvan.apply(r["domain"], r["id"], old_ip, new_ip))
-            s_["dns_log"].append({"id": f"ip-{aid}:{r['id']}", "at": now, "plan_id": f"ip-{aid}", "server": server_name, "target": server_name, "domain": r["domain"], "record_id": str(r["id"]),
-                                  "fqdn": r["fqdn"], "old": old_ip, "new": new_ip, "configs": [], "restored": False, "restored_at": None})
-            autopilot._say(aid, f"DNS {r['fqdn']}: {old_ip} → {new_ip}")
-        except RuntimeError as e:
+            res = _apply_record(r, old_ip, new_ip)
+            done.append(res)
+            s_["dns_log"].append({"id": f"ip-{aid}:{r['id']}", "at": now, "plan_id": f"ip-{aid}", "server": server_name, "target": server_name, "account": r["account"], "domain": r["domain"], "record_id": str(r["id"]),
+                                  "fqdn": r["fqdn"], "old": old_ip, "new": new_ip, "before": res.get("before"), "configs": [], "restored": False, "restored_at": None})
+            autopilot._say(aid, f"DNS {r['fqdn']} ({r['account_name']}): {old_ip} → {new_ip}")
+        except (RuntimeError, ValueError) as e:
             autopilot._say(aid, f"DNS {r['fqdn']}: not changed: {str(e)[:140]}")
 
     if done:
@@ -144,29 +159,47 @@ def _tunnels_of(server_id: int) -> list[dict]:
                 for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == server_id, Tunnel.enabled.is_(True)))]
 
 
+def _fetch_records(ip: str) -> tuple[list[dict], str]:
+    """The A records of EVERY DNS account (ArvanCloud, other ArvanCloud accounts, Cloudflare) that carry `ip`, each with the account it lives in
+    (each record is later changed in its own account). Tests replace this."""
+    recs, errors = [], []
+
+    for a in dnsprov.accounts():
+        prov = dnsprov.provider_of(a)
+
+        try:
+            for d in prov.domains():
+                for r in prov.records(d):
+                    if r.get("type") == "A" and ip in (r.get("ips") or []):
+                        recs.append({"account": a.id, "account_name": a.name, "provider": a.provider, "domain": d, "id": str(r["id"]), "name": r.get("name") or "@", "fqdn": r["fqdn"], "ip": ip,
+                                     "ips": list(r.get("ips") or []), "ttl": r.get("ttl"), "cloud": bool(r.get("cloud"))})
+        except (RuntimeError, ValueError) as e:
+            errors.append(f"{a.name}: {str(e)[:120]}")
+
+    return recs, "; ".join(errors)
+
+
 def _records(ip: str, tunnels: list[dict]) -> tuple[list[dict], str]:
-    """The CDN A records that carry `ip`, each with the configs that use its name and the tunnels (of this server) those configs go through."""
-    if not conf().get("api_key"):
+    """The records that carry `ip`, each with the configs that use its name and the tunnels (of this server) those configs go through."""
+    if not dnsprov.accounts():
         return [], ""
 
     with session() as db:
         configs = [(c.name, str((c.meta or {}).get("address", "")).lower(), int((c.meta or {}).get("port") or 0)) for c in db.scalars(select(Config))]
 
-    try:
-        recs = arvan.find_by_ip(ip, conf().get("domains") or None)
-    except RuntimeError as e:
-        return [], str(e)
+    recs, err = _fetch_records(ip)
 
     for r in recs:
         mine = [(n, p) for n, a, p in configs if a == r["fqdn"].lower()]
         r["configs"] = [n for n, _ in mine]
         r["tunnels"] = sorted({t["id"] for t in tunnels if any(p in t["ports"] for _, p in mine)})
 
-    return recs, ""
+    return recs, err
 
 
-def _make_plan(server_id: int, move: set[int] | None, reason: str) -> dict:
-    """move=None: every tunnel of the server (it is dead). Otherwise the given broken tunnels, widened so that the DNS stays consistent."""
+def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: int | None = None) -> dict:
+    """move=None: every tunnel of the server (it is dead). Otherwise the given tunnels, widened so that the DNS stays consistent.
+    `target_id`: the Iran server the operator (or the return) chose; else the one that ranks best for every moved tunnel."""
     with session() as db:
         s = db.get(Server, server_id)
 
@@ -186,13 +219,22 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str) -> dict:
     left = [] if whole else [{"fqdn": r["fqdn"], "configs": r["configs"]} for r in recs if r not in dns]
     rankings, problems = {}, []
 
-    for t in moving:
-        try:
-            rankings[t["id"]] = [r for r in autopilot.ranking(t["id"]) if r.get("online", True) is not False]
-        except (ValueError, RuntimeError) as e:
-            problems.append(f"{t['name']}: {str(e)[:120]}")
+    if target_id:
+        with session() as db:
+            ts = db.get(Server, target_id)
 
-    target = pick_target(rankings) if rankings else None
+            if ts is None or ts.role != "iran" or not ts.enabled or ts.online is False:
+                raise ValueError("the target must be an Iran server that is on")
+
+            target = {"id": ts.id, "name": ts.name}
+    else:
+        for t in moving:
+            try:
+                rankings[t["id"]] = [r for r in autopilot.ranking(t["id"]) if r.get("online", True) is not False and r.get("score", 0) > 0]
+            except (ValueError, RuntimeError) as e:
+                problems.append(f"{t['name']}: {str(e)[:120]}")
+
+        target = pick_target(rankings) if rankings else None
 
     if moving and not target:
         problems.append("no other Iran server can carry all of these tunnels")
@@ -242,16 +284,19 @@ def _state() -> dict:
     s.setdefault("pending", [])
     s.setdefault("history", [])
     s.setdefault("dns_log", [])
+    s.setdefault("tried", {})
     return s
 
 
 def _save(s: dict) -> None:
-    st.put("failover", {"seen": s["seen"], "pending": s["pending"], "history": s["history"][-30:], "dns_log": s["dns_log"][-100:]})
+    st.put("failover", {"seen": s["seen"], "pending": s["pending"], "history": s["history"][-30:], "dns_log": s["dns_log"][-100:], "tried": s.get("tried") or {}})
 
 
 def state() -> dict:
+    from . import doctor
+
     s = _state()
-    return {"automatic": AUTOMATIC, "mode": conf().get("mode", "off") if AUTOMATIC else "off", "confirm_minutes": conf().get("confirm_minutes", 5), "pending": s["pending"], "history": list(reversed(s["history"]))[:15],
+    return {"mode": doctor.mode(), "can_move": doctor.can_move(), "confirm_minutes": int(st.get("repair").get("server_minutes", 10)), "pending": s["pending"], "history": list(reversed(s["history"]))[:15],
             "dns_log": list(reversed(s["dns_log"]))[:50]}
 
 
@@ -271,47 +316,48 @@ def _describe(p: dict) -> str:
 
 def _notify_plan(p: dict, headline: str) -> None:
     _notice(f"🔶 {headline}\nPlan: {_describe(p)}." + (f"\nAlso moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else "")
-            + (f"\nProblems: {'; '.join(p['problems'])}" if p.get("problems") else "") + "\nOpen the panel → Tunnels → Tunnels → DNS · IP switch to approve or dismiss.")
+            + (f"\nProblems: {'; '.join(p['problems'])}" if p.get("problems") else ""))
 
 
 def _busy(s: dict, sid: int, now: int) -> bool:
-    """A plan for this server is waiting, or one was handled in the last 6 hours."""
-    return any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]) or any(h["server_id"] == sid and h.get("reason") != "replace" and now - h["at"] < 6 * 3600 for h in s["history"])
+    """A failover of this server ran in the last 6 hours (or a plan still waits)."""
+    return any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]) or any(h["server_id"] == sid and h.get("reason") == "down" and now - h["at"] < 6 * 3600 for h in s["history"])
 
 
-# ------------------------------------------------------------------ the job: dead servers
+RETRY_NO_TARGET = 600     # a dead server whose tunnels found no target is looked at again after this long
+
+
+# ------------------------------------------------------------------ the job: dead servers (run by the Doctor in mode "move")
 def check() -> None:
-    c = conf()
-    mode = c.get("mode", "off")
-
+    """Every Iran server that has been off for `server_minutes` gets its tunnels moved - one server per tick, the one with the most tunnels first.
+    Several servers off at once (a provider-wide outage) are handled one after the other, as long as a healthy Iran server is left to carry them."""
     if not enabled() or get_settings().read_only:
-        if not AUTOMATIC:
-            s0 = _state()
-
-            if s0["pending"] or s0["seen"]:             # plans prepared before the pause are withdrawn: nothing waits for an Approve that must not happen
-                s0["pending"], s0["seen"] = [], {}
-                _save(s0)
-
         return
 
     now = int(time.time())
     s = _state()
+    wait = int(st.get("repair").get("server_minutes", 10)) * 60
 
     with session() as db:
         down = {x.id: x.name for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(False)))}
+        load = {}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
+            load[t.iran_server_id] = load.get(t.iran_server_id, 0) + 1
 
     stale = [sid for sid in s["seen"] if int(sid) not in down]
 
     for sid in stale:
         s["seen"].pop(sid)                     # it answered again: the clock starts over
+        s.setdefault("tried", {}).pop(sid, None)
 
     changed = bool(stale)                      # a forgotten entry must be saved too, or the next outage would skip the waiting time
 
-    for sid, name in down.items():
+    for sid, name in sorted(down.items(), key=lambda kv: -load.get(kv[0], 0)):
         since = s["seen"].setdefault(str(sid), now)
         changed = changed or since == now
 
-        if now - since < int(c.get("confirm_minutes", 5)) * 60 or _busy(s, sid, now):
+        if now - since < wait or _busy(s, sid, now) or not load.get(sid) or now - int(s.setdefault("tried", {}).get(str(sid), 0)) < RETRY_NO_TARGET:
             continue
 
         try:
@@ -320,38 +366,100 @@ def check() -> None:
             log.warning("failover plan for %s failed", name, exc_info=True)
             continue
 
-        if not p["tunnels"] and not p["dns"]:
-            continue
-
         p["id"] = f"{sid}-{now}"
         p["down_since"] = since
-
-        if mode == "auto" and p["target"] and not p["problems"]:
-            _save(s)
-            run_plan(p)                        # one server per tick; the story writes the state itself when it is done
-            return
-
-        s["pending"].append(p)
+        s["tried"][str(sid)] = now
         changed = True
-        _notify_plan(p, f"Iran server {name} has been down for {(now - since) // 60} min.")
+
+        if not p["target"]:
+            _notice(f"⚠ Iran server {name} has been off for {(now - since) // 60} min, but no healthy Iran server can carry its {len(p['tunnels'])} tunnel(s) right now" + (f" ({'; '.join(p['problems'])})" if p["problems"] else "") + ". The Doctor tries again in 10 minutes.")
+
+            with session() as db:
+                emit(db, "bad", "actions", f"Doctor: {name} is off, no Iran server can take its tunnels yet; trying again in 10 minutes.", name)
+
+            continue
+
+        _save(s)
+        _notice(f"🔶 Iran server {name} has been off for {(now - since) // 60} min: " + _describe(p) + "." + (f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else ""))
+        run_plan(p)                            # one server per tick; the story writes the state itself when it is done
+        return
 
     if changed:
         _save(s)
 
 
 # ------------------------------------------------------------------ doing it
+def _temp_name(name: str) -> str:
+    """The name the new tunnel is built under while the old one still runs (same shape a tunnel name always has)."""
+    return (name[:11] if len(name) > 11 else name) + "-mv"
+
+
+def _leftover(snap: dict, server_id: int) -> dict:
+    """What a tunnel left on an Iran server that was off when the tunnel was moved away: enough to purge it when the server is back."""
+    rec = snap.get("record") or {}
+    other = (snap.get("type") or "").lower() in ("backpack", "paqet", "chisel")
+    return {"server_id": server_id, "name": snap["name"], "slug": str(rec.get("slug") or snap["name"]), "port": int(rec.get("port") or snap.get("port") or 0), "transport": (snap.get("transport") or "tcpmux"),
+            "other": other, "type": snap.get("type") or "", "proto": "udp" if rec.get("udp_carrier") else "tcp"}
+
+
+def _apply_dns(aid: int, p: dict) -> tuple[list[dict], list[str], list[dict]]:
+    done, errors, logged = [], [], []
+
+    for d in p["dns"]:
+        try:
+            res = _apply_record(d, p["ip"], p["target"]["ip"])
+            done.append({"fqdn": d["fqdn"], "account": d.get("account")})
+            logged.append({"id": f"{p['id']}:{d['id']}", "at": int(time.time()), "plan_id": p["id"], "server": p["server"], "target": p["target"]["name"], "account": d.get("account") or "arvan", "domain": d["domain"],
+                           "record_id": str(d["id"]), "fqdn": d["fqdn"], "old": p["ip"], "new": p["target"]["ip"], "before": res.get("before"), "configs": d.get("configs", []), "restored": False, "restored_at": None})
+            autopilot._say(aid, f"DNS {d['fqdn']} ({d.get('account_name') or d.get('account') or 'ArvanCloud'}): {p['ip']} → {p['target']['ip']}")
+        except (RuntimeError, ValueError) as e:
+            errors.append(f"{d['fqdn']}: {str(e)[:140]}")
+            autopilot._say(aid, f"DNS {d['fqdn']}: not changed: {str(e)[:160]}")
+
+    return done, errors, logged
+
+
 def _work(aid: int, p: dict, finish: bool = True) -> bool:
-    """Inside story `aid`: move the tunnels, then - only when all moved - the DNS. Returns True when everything was done."""
-    autopilot._say(aid, f"Failover of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}")
-    moved = 0
+    """Inside story `aid`: move the tunnels, then - only when all moved - the DNS. When the source server is on, the new tunnels are
+    built and checked FIRST, the DNS changed, the old tunnels kept for the TTL + 5 minutes, and only then removed (nobody is cut).
+    When it is off, the old tunnels are dropped at once (their files are purged when it is back). Returns True when everything was done."""
+    from . import builder, doctor
+
+    with session() as db:
+        src = db.get(Server, p["server_id"])
+        src_on = src is not None and src.online is True
+
+    autopilot._say(aid, f"{'Move' if src_on else 'Failover'} of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}"
+                   + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
+    moved, moved_names, leftover = 0, [], []
+    built: list[tuple[int, str, dict]] = []          # (old tunnel id, temp name, snapshot) while both run
 
     for t in p["tunnels"]:
         try:
             snap = autopilot._snapshot(t["id"])
             kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
 
-            if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}."):
+            if src_on:
+                temp = _temp_name(snap["name"])
+                autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
+                ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts")))
+
+                if not ok:
+                    autopilot._say(aid, f"{snap['name']}: the new tunnel did not come up ({story[-1][:120] if story else '?'}); the old one stays.")
+                    break
+
+                built.append((t["id"], temp, snap))
                 moved += 1
+            else:
+                with session() as db:
+                    row = db.get(Tunnel, t["id"])
+
+                    if row is not None and row.iran is not None and row.iran.online is False:
+                        leftover.append(_leftover({**snap, "port": row.port}, p["server_id"]))
+
+                if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True):
+                    moved += 1
+                    moved_names.append(snap["name"])
         except (ValueError, RuntimeError) as e:
             autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
 
@@ -359,16 +467,47 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     if moved < len(p["tunnels"]):
         autopilot._say(aid, f"{moved} of {len(p['tunnels'])} tunnels moved: the DNS is NOT changed (records must not point at a server that does not carry all of their tunnels).")
+
+        for _, temp, _ in built:                      # make before break: nothing was broken, so the new halves go again
+            with session() as db:
+                row = db.scalar(select(Tunnel).where(Tunnel.name == temp))
+
+            if row is not None:
+                try:
+                    builder.delete_tunnel(row.id)
+                    autopilot._say(aid, f"{temp} removed again.")
+                except (ValueError, RuntimeError) as e:
+                    autopilot._say(aid, f"{temp}: not removed: {str(e)[:120]}")
+
+        moved = 0
+        built = []
     else:
-        for d in p["dns"]:
-            try:
-                done_dns.append(arvan.apply(d["domain"], d["id"], p["ip"], p["target"]["ip"]))
-                logged.append({"id": f"{p['id']}:{d['id']}", "at": int(time.time()), "plan_id": p["id"], "server": p["server"], "target": p["target"]["name"], "domain": d["domain"],
-                               "record_id": str(d["id"]), "fqdn": d["fqdn"], "old": p["ip"], "new": p["target"]["ip"], "configs": d.get("configs", []), "restored": False, "restored_at": None})
-                autopilot._say(aid, f"DNS {d['fqdn']}: {p['ip']} → {p['target']['ip']}")
-            except RuntimeError as e:
-                errors.append(str(e)[:160])
-                autopilot._say(aid, f"DNS {d['fqdn']}: not changed: {str(e)[:160]}")
+        done_dns, errors, logged = _apply_dns(aid, p)
+
+        if built:
+            if done_dns:
+                ttl = max((int(d.get("ttl") or 0) if int(d.get("ttl") or 0) > 1 else 300) for d in p["dns"])
+                grace = min(TTL_WAIT_MAX, ttl + TTL_GRACE)
+                autopilot._say(aid, f"The old tunnels stay for {grace // 60} more minutes (the records' TTL + 5), so that nobody who still holds the old address is cut…")
+                _sleep(grace)
+
+            for old_id, temp, snap in built:
+                try:
+                    res = builder.delete_tunnel(old_id, trash=True)
+                    autopilot._say(aid, f"{snap['name']}: the old tunnel on {p['server']} removed: " + "; ".join(res))
+                except (ValueError, RuntimeError) as e:
+                    autopilot._say(aid, f"{snap['name']}: the old tunnel could not be removed ({str(e)[:120]}); it is still in the list.")
+
+                with session() as db:
+                    row = db.scalar(select(Tunnel).where(Tunnel.name == temp))
+
+                if row is not None:
+                    try:
+                        builder.rename_tunnel(row.id, snap["name"])
+                    except ValueError as e:
+                        autopilot._say(aid, f"{temp}: keeps its name ({str(e)[:100]})")
+
+                moved_names.append(snap["name"])
 
     ok = moved == len(p["tunnels"]) and not errors
     s = _state()
@@ -378,10 +517,13 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                          "moved": moved, "tunnels": len(p["tunnels"]), "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
     _save(s)
 
-    with session() as db:
-        emit(db, "ok" if ok else "warn", "actions", f"Failover of {p['server']}: {moved}/{len(p['tunnels'])} tunnels moved to {p['target']['name']}, {len(done_dns)} DNS record(s) changed" + (f", {len(errors)} failed" if errors else "") + ".", p["server"])
+    if p["tunnels"]:
+        doctor.record_move(p, moved_names, leftover, ok)
 
-    _notice(f"{'✅' if ok else '⚠'} Failover of {p['server']}: {moved}/{len(p['tunnels'])} tunnels moved to {p['target']['name']}, {len(done_dns)} DNS record(s) now point at {p['target']['ip']}." + (f" Errors: {'; '.join(errors)}" if errors else ""))
+    with session() as db:
+        emit(db, "ok" if ok else "warn", "actions", f"Doctor: {p['server']} → {p['target']['name']} ({p['why']}): {moved}/{len(p['tunnels'])} tunnels moved, {len(done_dns)} DNS record(s) changed" + (f", {len(errors)} failed" if errors else "") + ".", p["server"])
+
+    _notice(f"{'✅' if ok else '⚠'} Doctor: {p['server']} → {p['target']['name']} ({p['why']}): {moved}/{len(p['tunnels'])} tunnels moved, {len(done_dns)} DNS record(s) now point at {p['target']['ip']}." + (f" Errors: {'; '.join(errors)}" if errors else "") + " Undo: Tunnels → Tunnel Doctor → Moves.")
 
     if finish:
         autopilot._say(aid, "Done." if ok else "Done with problems: look at the lines above.", done=True, ok=ok)
@@ -398,42 +540,30 @@ def run_plan(p: dict) -> int:
 
 
 def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
-    """Called by the smart repair when a route problem survived every step: the move to another Iran server, with the DNS.
-    Mode "approve": the plan waits on Tunnels → DNS · IP switch (a Telegram notice says so). Mode "auto": done now, inside this story.
-    Returns True when the tunnel was moved."""
-    mode = conf().get("mode", "off")
+    """Called by the smart repair when a route problem survived every step. A poor route or packet loss NEVER moves a server by itself
+    (the operator's rule): the move is written down as a suggestion (Tunnel Doctor → one click), with the best Iran server for it. Returns False."""
+    from . import doctor
 
-    if not enabled():
-        autopilot._say(aid, "Moving the tunnel to another Iran server is switched off (Tunnels → DNS · IP switch: a key and the mode “ask me” or “automatic” switch it on): the tunnel stays where it is.")
+    if not ENABLED:
+        autopilot._say(aid, "The move to another Iran server is switched off: the tunnel stays where it is.")
         return False
 
     try:
         p = route_plan(tunnel_id, cause)
     except (ValueError, RuntimeError) as e:
-        autopilot._say(aid, f"No failover plan: {str(e)[:160]}")
+        autopilot._say(aid, f"No plan for a move: {str(e)[:160]}")
         return False
 
-    s = _state()
+    extra = (f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p["pulled"] else "") + (f" Problems: {'; '.join(p['problems'])}." if p["problems"] else "")
+    tgt = p.get("target") or {}
+    doctor.suggest("route", tunnel_id, next((t["name"] for t in p["tunnels"] if t["id"] == tunnel_id), p.get("old_tunnel") or str(tunnel_id)), p["server_id"], p["server"], tgt.get("id"), tgt.get("name") or "",
+                   f"{p['why']}; no tunnel type works on this route" + (f" - {tgt['name']} ranks best for it" if tgt else " - no other Iran server could carry it right now"))
 
-    if any(x["server_id"] == p["server_id"] and x.get("reason") != "replace" for x in s["pending"]):
-        autopilot._say(aid, f"A failover plan for {p['server']} is already waiting for approval on Tunnels → DNS · IP switch.")
-        return False
+    if tgt:
+        autopilot._say(aid, f"A route problem never moves the server by itself. Suggested: {_describe(p)}.{extra} Tunnel Doctor → Suggestions does it with one click.")
+    else:
+        autopilot._say(aid, "No other Iran server can carry " + (", ".join(t["name"] for t in p["tunnels"]) or "this tunnel") + " right now." + extra)
 
-    p["id"] = f"{p['server_id']}-{int(time.time())}"
-    extra = (f". Also moved to keep the DNS consistent: {', '.join(p['pulled'])}" if p["pulled"] else "") + (f". Problems: {'; '.join(p['problems'])}" if p["problems"] else "")
-
-    if not p["target"]:
-        autopilot._say(aid, "No other Iran server can carry " + (", ".join(t["name"] for t in p["tunnels"]) or "this tunnel") + extra)
-        return False
-
-    if mode == "auto" and not p["problems"]:
-        autopilot._say(aid, "Failover (automatic): " + _describe(p) + extra)
-        return _work(aid, p, finish=False)
-
-    s["pending"].append(p)
-    _save(s)
-    autopilot._say(aid, "Failover plan prepared, waiting for your approval on Tunnels → DNS · IP switch: " + _describe(p) + extra)
-    _notify_plan(p, f"{p['server']}: {p['why']}.")
     return False
 
 
@@ -464,10 +594,8 @@ def replace_plan(old_tunnel_id: int, new_iran_id: int) -> dict:
 
 
 def after_replace(aid: int, p: dict, immediate: bool = False) -> None:
-    """After a manual replacement built fine: the DNS plan is applied now (mode auto, or `immediate` = the operator ticked it in the
-    Create form), kept for approval (approve) or only told (off)."""
-    mode = conf().get("mode", "off") if AUTOMATIC else "off"          # paused: only what the operator ticked in the Create form (immediate) is applied
-
+    """After a manual replacement built fine: the DNS plan is applied now when the operator ticked it in the Create form (`immediate`)
+    or the Doctor is in mode "move"; otherwise it is only told."""
     if not p["dns"]:
         autopilot._say(aid, f"DNS: no CDN record served only {p['old_tunnel']}" + (f" (left alone, they also serve tunnels that stay: {', '.join(d['fqdn'] for d in p['left_alone'])})" if p["left_alone"] else "")
                        + (f"; {p['dns_error']}" if p.get("dns_error") else "") + ".")
@@ -475,18 +603,11 @@ def after_replace(aid: int, p: dict, immediate: bool = False) -> None:
 
     names = ", ".join(d["fqdn"] for d in p["dns"])
 
-    if mode == "auto" or (immediate and conf().get("api_key")):
+    if immediate or enabled():
         autopilot._say(aid, f"DNS ({'as ticked' if immediate else 'automatic'}): {names} → {p['target']['ip']}")
         _work(aid, p, finish=False)
-    elif mode == "approve":
-        s = _state()
-        s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
-        s["pending"].append(p)
-        _save(s)
-        autopilot._say(aid, f"DNS: {names} still point at {p['ip']}; the plan to point them at {p['target']['ip']} waits for your approval on Tunnels → DNS · IP switch.")
-        _notify_plan(p, f"{p['old_tunnel']} was replaced by a tunnel on {p['target']['name']}.")
     else:
-        autopilot._say(aid, f"DNS: {names} still point at {p['ip']} (the failover is off: change them yourself, or switch it on under Tunnels → DNS · IP switch).")
+        autopilot._say(aid, f"DNS: {names} still point at {p['ip']} (change them under Tunnels → CDN, or put the Doctor in the mode that moves servers).")
 
 
 def _domain_of(fqdn: str, domains: list[str]) -> str:
@@ -675,7 +796,7 @@ def restore(log_id: str) -> dict:
         raise ValueError(f"{e['fqdn']} is already back as it was")
 
     op = e.get("op")
-    prov = dnsprov.provider(e.get("account") or "arvan") if op else None
+    prov = dnsprov.provider(e.get("account") or "arvan") if (op or e.get("before")) else None     # an entry from before 1.36 has neither: the plain ArvanCloud call below
 
     if op == "create":
         prov.delete(e["domain"], e["record_id"])
@@ -685,7 +806,7 @@ def restore(log_id: str) -> dict:
         for x in s["dns_log"]:                      # the record has a new id now: the older changes of it that are still open follow it
             if x["domain"] == e["domain"] and x["record_id"] == old_id and not x.get("restored"):
                 x["record_id"] = new_id
-    elif op == "edit":
+    elif op == "edit" or e.get("before"):
         prov.put_back(e["domain"], e["record_id"], e.get("before") or {})
     else:
         arvan.apply(e["domain"], e["record_id"], e["new"], e["old"])

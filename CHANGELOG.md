@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.36.0 - the Tunnel Doctor in three modes
+
+- **Three modes**, one choice at the top of the Doctor: **Off** (watch and report), **Fix tunnels** (the ladder: restart, rebuild, a new GRE link, another tunnel type), **Fix + move the Iran server** (the ladder, and - by itself, without asking - the move of tunnels to another Iran server).
+- **When a server is moved** (mode 3 only): an Iran server that is off / does not answer for 10 minutes (settable) - all of its tunnels go to the best healthy Iran server; a provider-wide outage (several Iran servers off at once) is handled server by server, the one with the most tunnels first, as long as one healthy Iran server is left; an exhausted server (CPU or RAM >= 90 % for 15 minutes) gives its busiest tunnel to a server with room, one per hour. **Never for packet loss or a poor route**: those climb the ladder, and when no tunnel type works the move is only suggested (one click).
+- **DNS follows in every account**: the records that carried the old address are found in ArvanCloud, every other ArvanCloud account and Cloudflare, and each is changed in its own account; every change is in Changes with Restore. A record that serves a moved tunnel and a staying one pulls the staying one along, so the DNS stays consistent.
+- **Make before break**: when the source server is on, the new tunnel is built and checked first, then the DNS, and the old tunnel lives on for the record's TTL + 5 minutes before it is removed, so nobody who still holds the old address is cut. When the server is off, its tunnels are rebuilt at once and its leftover files are purged when it is back.
+- **Return**: a server that came back and stayed healthy for 3 hours gets back the tunnels that left it because it was off (resource moves do not come back by themselves). The Moves tab has **Return now** and **Undo DNS** for every move.
+- **Rails**: a tunnel moves at most 3 times a day with 2 hours between two moves; one move at a time; nothing while the panel is read-only; the mode "move" needs the failover license; Telegram tells before and after every move.
+- The Doctor page is rebuilt: three mode cards, two settings (how long a tunnel stays down, how long a server stays off), a **Suggestions** box, the tabs In progress · Finished · **Moves** · Analyst (the CPU-cores work is now inside the Analyst's server list), and **What if … went off?** for every Iran server. The failover settings of the CDN tab are gone (the Doctor's mode decides); its history stays.
+- API: `PUT /api/settings/repair` takes `mode` and `server_minutes`; `GET /api/doctor`, `/api/doctor/plan/{server}`, `/api/doctor/moves/{id}/return`, `/undo-dns`, `/api/doctor/suggestions/{id}/apply`, `/dismiss`; `/api/autopilot/move` goes through the same make-before-break path.
+- The provider-wide outage, the exhausted server, the return, the TTL wait and the record of each move are tested with fakes; a real move was done on the pair without users (see the notes of this release).
 ## 1.35.29
 
 - CDN: the *All accounts* chip is gone; the list shows one account at a time (the first one until you choose another).

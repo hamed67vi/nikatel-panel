@@ -28,9 +28,9 @@ from .services import (
     builder,
     configs,
     demo,
+    doctor,
     extras,
     facts,
-    failover,
     housekeeping,
     netwatch,
     nodes,
@@ -144,7 +144,7 @@ def _register_jobs() -> None:
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
-    jobs.register("failover", 60, failover.check)              # does nothing until a key and a mode are set (Tunnels → DNS · IP switch)
+    jobs.register("doctor", 60, doctor.run)                     # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
 
     jobs.register("configs", 120, configs.sync)
     jobs.register("panels", 30, panels.check_all)          # a node that drops off a Marzban / PasarGuard panel shows within half a minute

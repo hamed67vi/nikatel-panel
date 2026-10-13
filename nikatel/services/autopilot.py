@@ -434,13 +434,14 @@ def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict
     return build_other.start_build(iran_id, foreign_id, snap["ports"], k, tr, opts or {}, forced_name=snap["name"])
 
 
-def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str, why: str) -> bool:
+def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str, why: str, skip_offline: bool = False) -> bool:
     """Remove the tunnel and build it again as `kind` between iran_id and foreign_id (same name, same ports).
-    When the new build fails the old kind is built again, so the operator is never left with nothing."""
+    When the new build fails the old kind is built again, so the operator is never left with nothing.
+    `skip_offline`: a side whose server is off is not asked over SSH (its files are purged later, by the Doctor, when it is back)."""
     snap = _snapshot(tunnel_id)
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
     _say(aid, f"{why} Replacing {snap['label']}: {old_kind} → {kind}")
-    res = builder.delete_tunnel(tunnel_id)
+    res = builder.delete_tunnel(tunnel_id, skip_offline=skip_offline)
     _say(aid, "Old tunnel removed: " + "; ".join(res))
     ok, story = _wait(_build_kind(snap, iran_id, foreign_id, kind))
 
@@ -964,7 +965,7 @@ def observe(aid: int, tunnel_id: int) -> None:
 
 def observe_all() -> None:
     """Job hook (every 5 minutes): a tunnel that shows packet loss gets looked at at once, at most every 30 minutes."""
-    if not st.get("repair").get("auto") or get_settings().read_only:
+    if actions.doctor_mode() == "off" or get_settings().read_only:
         return
 
     now = int(time.time())
@@ -1012,9 +1013,9 @@ def repair_cycle() -> None:
 def auto_escalate() -> None:
     """Job hook: a tunnel that plain restarts could not heal gets a smart repair, once per 6 hours, never `move`."""
     conf = st.get("repair")
-    level = conf.get("level", "restart")
+    level = "switch"                                    # the Doctor's modes "fix" and "move" climb the whole ladder (the old per-level setting is gone)
 
-    if not conf.get("auto") or level not in ("rebuild", "switch") or get_settings().read_only:
+    if actions.doctor_mode() == "off" or get_settings().read_only:
         return
 
     muted = set(st.get("alerts").get("muted") or [])

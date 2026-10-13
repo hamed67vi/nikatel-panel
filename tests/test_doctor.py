@@ -1,0 +1,243 @@
+"""The Tunnel Doctor's modes and moves: the pure decisions, a provider-wide outage handled server by server, an exhausted server
+(a suggestion in mode fix, a move in mode move), the return after three healthy hours, and make before break."""
+import time
+
+from sqlalchemy import select
+from test_failover import FakeProv, _dns_world, _servers_and_tunnels
+
+from nikatel.db import session
+from nikatel.models import Server, Tunnel
+from nikatel.services import autopilot, doctor, failover
+from nikatel.services import settings as st
+
+
+def test_pure_decisions():
+    assert doctor.is_saturated([(95, 10)] * 5).startswith("CPU") and doctor.is_saturated([(10, 95)] * 5).startswith("RAM")
+    assert doctor.is_saturated([(95, 10)] * 4) == "" and doctor.is_saturated([(95, 10)] * 4 + [(50, 10)]) == ""     # too few samples / one calm sample
+    now = 1_000_000
+    moves = [{"at": now - 3600, "tunnels": ["a"], "ok": True}, {"at": now - 7200 * 3, "tunnels": ["a"], "ok": True}, {"at": now - 10, "tunnels": ["b"], "ok": False}]
+    assert "hours" in doctor.may_move("a", moves, now)                                       # the cooldown
+    assert doctor.may_move("b", moves, now) == ""                                            # a move that failed does not count
+    assert "limit" in doctor.may_move("c", [{"at": now - 3600 * i, "tunnels": ["c"], "ok": True} for i in (3, 6, 9)], now)
+    assert doctor.pick_busiest([{"name": "x", "state": "up", "rx": 1, "tx": 1}, {"name": "y", "state": "up", "rx": 5, "tx": 0}, {"name": "z", "state": "down", "rx": 99, "tx": 99}])["name"] == "y"
+    assert doctor.pick_busiest([]) is None
+    e = {"reason": "down", "returned": False, "ok": True}
+    assert doctor.ready_to_return(e, None, now, "ok") == "the server is still off"
+    assert "minutes" in doctor.ready_to_return(e, now - 600, now, "ok")
+    assert "disturbed" in doctor.ready_to_return(e, now - 4 * 3600, now, "bad")
+    assert doctor.ready_to_return(e, now - 4 * 3600, now, "ok") == ""
+    assert doctor.ready_to_return({**e, "reason": "resources"}, now - 4 * 3600, now, "ok") != ""     # a resource move does not come back by itself
+    assert failover._temp_name("a-very-long-tunnel") == "a-very-long-mv" and len(failover._temp_name("x" * 15)) <= 15
+
+
+def test_mode_and_the_settings_api(client, monkeypatch):
+    from nikatel.config import get_settings
+
+    assert doctor.mode() == "fix"                                                            # the default
+    st.put("repair", {"auto": False})
+    assert doctor.mode() == "off"                                                            # an old setting without a mode
+    assert client.put("/api/settings/repair", json={"mode": "move", "after_seconds": 60, "server_minutes": 10}).status_code == 400       # read-only
+    assert client.put("/api/settings/repair", json={"mode": "off", "after_seconds": 90, "server_minutes": 15}).json()["server_minutes"] == 15
+    assert client.put("/api/settings/repair", json={"mode": "nuke"}).status_code == 422
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    j = client.put("/api/settings/repair", json={"mode": "move", "after_seconds": 60, "server_minutes": 10}).json()
+    assert j["mode"] == "move" and j["auto"] is True and doctor.can_move() is True
+    j = client.get("/api/doctor").json()
+    assert j["mode"] == "move" and j["moves"] == [] and j["rails"]["max_per_day"] == 3 and j["server_minutes"] == 10
+    assert client.post("/api/doctor/moves/nope/return").status_code == 400 and client.post("/api/doctor/suggestions/nope/apply").status_code == 400
+
+
+def _outage_world():
+    with session() as db:
+        p1, p2, ok_, f = (Server(name="prov-a1", host="203.0.113.1", role="iran", online=False), Server(name="prov-a2", host="203.0.113.2", role="iran", online=False),
+                          Server(name="other", host="203.0.113.3", role="iran", online=True), Server(name="fx", host="203.0.113.50", role="foreign", online=True))
+        db.add_all([p1, p2, ok_, f])
+        db.flush()
+
+        for n, s in (("a", p1), ("b", p1), ("c", p2)):
+            db.add(Tunnel(name=n, type="backhaul", transport="tcpmux", iran_server_id=s.id, foreign_server_id=f.id, state="down", forwarded_ports=[80]))
+
+        return {"p1": p1.id, "p2": p2.id, "ok": ok_.id}
+
+
+def _fake_plan(ids, target=True):
+    def plan_for(sid):
+        with session() as db:
+            s = db.get(Server, sid)
+            tunnels = [{"id": t.id, "name": t.name} for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == sid))]
+
+        return {"server_id": sid, "server": s.name, "ip": s.host, "reason": "down", "why": "off", "tunnels": tunnels, "dns": [], "pulled": [],
+                "target": {"id": ids["ok"], "name": "other", "ip": "203.0.113.3"} if target else None, "problems": [] if target else ["no other Iran server can carry all of these tunnels"]}
+
+    return plan_for
+
+
+def test_a_provider_wide_outage_is_handled_server_by_server_without_asking(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import netwatch
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(netwatch, "report", lambda: {"items": [], "iran": []})
+    told, ran = [], []
+    monkeypatch.setattr(failover, "_notice", lambda text: told.append(text))
+    st.put("repair", {"mode": "move", "server_minutes": 10})
+    ids = _outage_world()
+    monkeypatch.setattr(failover, "plan_for", _fake_plan(ids))
+    monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p["server"]) or 1)
+    st.put("failover", {"seen": {str(ids["p1"]): 1, str(ids["p2"]): 1}})
+    doctor.run()                                                      # the job: both servers have been off for long
+    failover.check()
+    assert ran == ["prov-a1", "prov-a2"]                                # the one with more tunnels first, one per tick, nobody asked
+    failover.check()
+    assert ran == ["prov-a1", "prov-a2"]                                # tried a moment ago: not again
+    assert any("prov-a1" in t and "move 2 tunnel" in t for t in told)
+    assert doctor.state()["back"] == {str(ids["ok"]): doctor.state()["back"][str(ids["ok"])]}      # the clock of the server that is on
+
+
+def test_without_a_healthy_server_the_doctor_tells_and_tries_again_later(monkeypatch):
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    told, ran = [], []
+    monkeypatch.setattr(failover, "_notice", lambda text: told.append(text))
+    st.put("repair", {"mode": "move", "server_minutes": 10})
+    ids = _outage_world()
+    monkeypatch.setattr(failover, "plan_for", _fake_plan(ids, target=False))
+    monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p["server"]) or 1)
+    st.put("failover", {"seen": {str(ids["p1"]): 1}})
+    failover.check()
+    assert ran == [] and any("no healthy Iran server" in t and "10 minutes" in t for t in told) and str(ids["p1"]) in st.get("failover")["tried"]
+
+
+def test_an_exhausted_server_is_a_suggestion_in_mode_fix_and_a_move_in_mode_move(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import detect
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(doctor, "saturated_servers", lambda now=None: [{"id": 1, "name": "ir1", "why": "CPU at or above 90 % for 15 minutes"}])
+    monkeypatch.setattr(doctor, "_tunnels_on", lambda sid: [{"id": 11, "name": "t-busy", "state": "up", "rx": 50, "tx": 5, "foreign_id": 9, "ports": "80"}, {"id": 12, "name": "t-idle", "state": "up", "rx": 1, "tx": 1, "foreign_id": 9, "ports": "81"}])
+    monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": 1, "name": "ir1", "score": 50, "resources": 5, "quality": 90}, {"id": 2, "name": "ir2", "score": 80, "resources": 80, "quality": 85, "reason": "40 ms"}])
+    st.put("repair", {"mode": "fix"})
+    doctor.resources()
+    sug = doctor.state()["suggestions"]
+    assert len(sug) == 1 and sug[0]["tunnel"] == "t-busy" and sug[0]["to"] == "ir2" and sug[0]["kind"] == "resources" and "busiest" in sug[0]["why"]
+    st.put("repair", {"mode": "move"})
+    st.put("doctor", {"res_at": {}, "suggestions": []})
+    moved = []
+    monkeypatch.setattr(doctor, "move_now", lambda tid, iran_id, reason="manual", why="": moved.append((tid, iran_id, reason)) or 1)
+    doctor.resources()
+    assert moved == [(11, 2, "resources")]
+    doctor.resources()
+    assert moved == [(11, 2, "resources")]                                 # one per hour per server
+
+
+def test_the_tunnels_go_back_after_the_server_has_been_healthy_for_three_hours(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import netwatch
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    st.put("repair", {"mode": "move"})
+    now = int(time.time())
+
+    with session() as db:
+        ir1, ir2, f = Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="ir2", host="203.0.113.9", role="iran", online=True), Server(name="fi1", host="203.0.113.50", role="foreign", online=True)
+        db.add_all([ir1, ir2, f])
+        db.flush()
+        t = Tunnel(name="t1", type="backhaul", transport="tcpmux", iran_server_id=ir2.id, foreign_server_id=f.id, state="up", forwarded_ports=[80])
+        db.add(t)
+        db.flush()
+        ids = {"ir1": ir1.id, "ir2": ir2.id, "t1": t.id}
+
+    entry = {"id": "m1", "at": now - 5 * 3600, "reason": "down", "why": "off", "tunnels": ["t1"], "from_id": ids["ir1"], "from": "ir1", "from_ip": "203.0.113.5", "to_id": ids["ir2"], "to": "ir2", "to_ip": "203.0.113.9", "dns": 1, "ok": True, "returned": False, "returned_at": None, "leftover": []}
+    st.put("doctor", {"moves": [entry], "back": {str(ids["ir1"]): now - 600}})
+    monkeypatch.setattr(netwatch, "report", lambda: {"items": [], "iran": [{"name": "ir1", "level": "ok"}]})
+    moved = []
+    monkeypatch.setattr(doctor, "move_now", lambda tid, iran_id, reason="manual", why="": moved.append((tid, iran_id, reason)) or 1)
+    doctor.returns()
+    assert moved == []                                                    # back for 10 minutes only
+    st.put("doctor", {"back": {str(ids["ir1"]): now - 4 * 3600}})
+    doctor.returns()
+    assert moved == [(ids["t1"], ids["ir1"], "return")]
+    plan = {"id": "r1", "server_id": ids["ir2"], "server": "ir2", "ip": "203.0.113.9", "reason": "return", "why": "back", "tunnels": [{"id": ids["t1"], "name": "t1"}], "target": {"id": ids["ir1"], "name": "ir1", "ip": "203.0.113.5"}, "dns": []}
+    doctor.record_move(plan, ["t1"], [], True)
+    moves = doctor.state()["moves"]
+    assert moves[0]["reason"] == "return" and next(m for m in moves if m["id"] == "m1")["returned"] is True
+
+
+def _finished(ok: bool):
+    def wait(aid, limit=900):
+        return ok, ["Built." if ok else "the build failed: boom"]
+
+    return wait
+
+
+def test_a_move_from_a_server_that_is_on_builds_first_then_the_dns_waits_the_ttl_and_removes_the_old(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import builder
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    st.put("repair", {"mode": "move"})
+    events, said = [], []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+
+    def build(snap, iran_id, foreign_id, kind, opts=None):
+        events.append(("build", snap["name"], iran_id))
+
+        with session() as db:
+            db.add(Tunnel(name=snap["name"], type="backhaul", transport="tcpmux", iran_server_id=iran_id, foreign_server_id=foreign_id, state="up", forwarded_ports=[8075]))
+
+        return 0
+
+    def delete(tid, keep_record=False, trash=False, skip_offline=False):
+        with session() as db:
+            t = db.get(Tunnel, tid)
+            events.append(("delete", t.name, trash))
+            db.delete(t)
+
+        return ["Iran: removed", "foreign: removed"]
+
+    monkeypatch.setattr(autopilot, "_build_kind", build)
+    monkeypatch.setattr(autopilot, "_wait", _finished(True))
+    monkeypatch.setattr(builder, "delete_tunnel", delete)
+    monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
+    p = failover._make_plan(ids["ir1"], {ids["t2"]}, "manual", target_id=ids["ir2"])
+    p["id"] = "m-1"
+    assert failover._work(7, p) is True
+    assert events == [("build", "t2-mv", ids["ir2"]), ("sleep", 420), ("delete", "t2", True)]           # new first, the DNS (TTL 120 + 300 s), then the old
+    assert FakeProv.calls == [("update", "arvan", "example.test", "r-b", ["203.0.113.9"], 120, True)]
+
+    with session() as db:
+        t = db.scalar(select(Tunnel).where(Tunnel.name == "t2"))
+        assert t is not None and t.iran_server_id == ids["ir2"] and db.scalar(select(Tunnel).where(Tunnel.name == "t2-mv")) is None      # the new one carries the old name
+
+    m = doctor.state()["moves"][0]
+    assert m["tunnels"] == ["t2"] and m["from"] == "ir1" and m["to"] == "ir2" and m["dns"] == 1 and m["ok"] is True
+    log = st.get("failover")["dns_log"][-1]
+    assert log["account"] == "arvan" and log["fqdn"] == "b.example.test" and log["before"] == {"id": "r-b", "was": "old"}
+    assert any("old tunnels stay for 7 more minutes" in x for x in said)
+
+
+def test_when_the_new_tunnel_does_not_come_up_the_old_one_stays_and_the_dns_is_not_touched(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import builder
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    said, events = [], []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(autopilot, "_build_kind", lambda snap, iran_id, foreign_id, kind, opts=None: events.append(("build", snap["name"])) or 0)
+    monkeypatch.setattr(autopilot, "_wait", _finished(False))
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tid, **kw: events.append(("delete", tid)) or [])
+    monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
+    p = failover._make_plan(ids["ir1"], {ids["t2"]}, "manual", target_id=ids["ir2"])
+    p["id"] = "m-2"
+    assert failover._work(7, p) is False
+    assert events == [("build", "t2-mv")] and FakeProv.calls == [] and any("the old one stays" in x for x in said)
+
+    with session() as db:
+        assert db.get(Tunnel, ids["t2"]).iran_server_id == ids["ir1"]
+
+    assert doctor.state()["moves"][0]["ok"] is False

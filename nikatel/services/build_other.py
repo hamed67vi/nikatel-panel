@@ -819,13 +819,17 @@ def _build(b: Build) -> None:
 
 
 # ------------------------------------------------------------------ remove / quality of an existing tunnel
-def remove(t: Tunnel) -> list[str]:
-    """Remove a BackPack / Paqet / Chisel tunnel from both servers. Returns per-side results."""
+def remove(t: Tunnel, skip: set[str] | None = None) -> list[str]:
+    """Remove a BackPack / Paqet / Chisel tunnel from both servers. Returns per-side results. `skip`: sides whose server is off (not asked)."""
     rec = t.record or {}
     params = {"NAME": sname(t), "KIND": t.type, "PORT": str(int(t.port or 0)), "PROTO": "udp" if rec.get("udp_carrier") else "tcp"}
     results = []
 
     for side, node in (("Iran", _node(t.iran)), ("foreign", _node(t.foreign))):
+        if side in (skip or set()):
+            results.append(f"{side}: skipped (the server is off; its files are purged when it is back)")
+            continue
+
         try:
             run_action(node, "other_remove", params, timeout=90)
             results.append(f"{side}: removed")

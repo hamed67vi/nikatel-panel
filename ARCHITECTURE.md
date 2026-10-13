@@ -51,8 +51,12 @@ nikatel/
                      repair level; _rebuild_safe (the old tunnel comes back when the new build fails); relink probes a new
                      GRE link beside the tunnel first; storm detection; observe (lossy tunnels); repair_cycle (one job);
                      fix_all, explain (the AI reads the whole situation), config diagnosis (SNI, reachability)
-    failover.py      the move of a dead or cut-off Iran server: plans (approve / auto), route_plan after a failed ladder,
-                     replace_plan after Create, follow_ip_change after a new address, dns_log with restore, Telegram notices
+    doctor.py        the Tunnel Doctor's three modes (off / fix / move) and its moves: a dead Iran server (server by server in a
+                     provider-wide outage), an exhausted server (one tunnel), never for packet loss (suggested instead), the return
+                     after three healthy hours; the ledger of moves, the suggestions, the rails (pure: is_saturated, may_move, ready_to_return)
+    failover.py      HOW a move is done: plans (the dead-server plan, the route plan that is only suggested, replace_plan after Create),
+                     _work = make before break when the source is on (new tunnel first, DNS, TTL wait, old tunnel last), the DNS
+                     records of EVERY account re-pointed in their own account, dns_log with restore / undo, Telegram notices
     arvan.py         ArvanCloud CDN API client: records of every domain, swap_ip (pure), apply with read-back, test; create / edit / delete A records
     cloudflare.py    Cloudflare DNS API client (one address per record, proxied flag); dnsprov.py: the DNS accounts (several ArvanCloud, Cloudflare) under one list
     gate.py          the secret entry path: the panel answers 404 to everyone who does not know it (a live API token passes it)
@@ -86,7 +90,7 @@ nikatel/
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
                    (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, radar, shopbot,
-                    alerts, events, jobs, failover, dns, license, balance, analyst, checkall, best, system = health, logs, update of the panel itself)
+                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, system = health, logs, update of the panel itself)
   web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
                    glass modal windows (showModal), themes (LOOK), a loading box on every page change
                    and automatic retry when a load fails, a status bar for messages, phone layout

@@ -47,9 +47,9 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
 
     monkeypatch.setattr(get_settings(), "read_only", False)
     w = _world()
-    st.put("arvan", {"api_key": "k", "mode": "approve"})
-    monkeypatch.setattr(arvan, "find_by_ip", lambda ip, only=None: [{"domain": "example.test", "id": "ra", "name": "a", "fqdn": "a.example.test", "ip": ip, "ttl": 120, "cloud": True},
-                                                                     {"domain": "example.test", "id": "rb", "name": "b", "fqdn": "b.example.test", "ip": ip, "ttl": 120, "cloud": True}])
+    st.put("arvan", {"api_key": "k"})
+    monkeypatch.setattr(failover, "_fetch_records", lambda ip: ([{"account": "arvan", "account_name": "ArvanCloud", "provider": "arvan", "domain": "example.test", "id": "ra", "name": "a", "fqdn": "a.example.test", "ip": ip, "ips": [ip], "ttl": 120, "cloud": True},
+                                                                  {"account": "arvan", "account_name": "ArvanCloud", "provider": "arvan", "domain": "example.test", "id": "rb", "name": "b", "fqdn": "b.example.test", "ip": ip, "ips": [ip], "ttl": 120, "cloud": True}], ""))
     monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": w["ir1"], "name": "ir1", "score": 0, "reason": "port 8075 already used here"},
                                                                            {"id": w["ir2"], "name": "ir2", "score": 81, "reason": "60 ms, 0% loss, 1 tunnels, cpu 5%"}])
     gone, built = [], []
@@ -68,7 +68,13 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
     monkeypatch.setattr(failover, "_notice", lambda text: None)
     monkeypatch.setattr(create, "_POLL", 0.05)
     applied = []
-    monkeypatch.setattr(arvan, "apply", lambda domain, rid, old, new: applied.append((domain, rid, old, new)) or {"domain": domain, "id": rid, "name": rid, "old": old, "new": new})
+
+    class Prov:
+        def update(self, domain, rid, name, ips, ttl, cloud):
+            applied.append((domain, rid, list(ips)))
+            return {"before": {"id": rid}}
+
+    monkeypatch.setattr(failover.dnsprov, "provider", lambda acc: Prov())
     r = client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": w["fi1"], "ports": "8075", "kind": "backhaul", "transport": "tcpmux", "replace_ids": [w["old"]], "dns_follow": True})
     assert r.status_code == 202, r.text
     aid = r.json()["id"]
@@ -82,7 +88,7 @@ def test_create_with_smart_choice_replaces_the_dead_tunnel_and_queues_the_dns(cl
     text = "\n".join(s["story"])
     assert s["done"] and s["ok"] is True and s["action"] == "create", text
     assert "Order (GRE not OK last; quality first" in text and "ir2" in text and gone == [w["old"]] and built == [(w["ir2"], w["fi1"], "8075", "tcpmux")] and "Built." in text
-    assert applied == [("example.test", "ra", "203.0.113.5", "203.0.113.9")] and "DNS (as ticked)" in text        # the tick is the approval: applied at once
+    assert applied == [("example.test", "ra", ["203.0.113.9"])] and "DNS (as ticked)" in text        # the tick is the approval: applied at once, in the record's own account
     hist, log = st.get("failover")["history"], st.get("failover")["dns_log"]
     assert hist[-1]["reason"] == "replace" and hist[-1]["ok"] is True and hist[-1]["target"]["id"] == w["ir2"] and st.get("failover")["pending"] == []
     assert log[-1]["fqdn"] == "a.example.test" and log[-1]["new"] == "203.0.113.9" and log[-1]["restored"] is False

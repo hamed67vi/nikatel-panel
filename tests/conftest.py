@@ -56,7 +56,4 @@ def client():
         yield c
 
 
-# the automatic failover is paused in the product (failover.AUTOMATIC = False); its logic is still tested, so the suite runs with it on - tests of the pause switch it off themselves
-from nikatel.services import failover as _failover
-
-_failover.AUTOMATIC = True
+# the Doctor's mode decides whether the failover moves anything (services/doctor.py); the tests set the mode they need

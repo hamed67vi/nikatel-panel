@@ -99,7 +99,7 @@ always installable; a milestone ends with a tag.
 ## M11 · Parked ideas (written down so the design leaves room; not built until M10 is done)
 - [ ] #68 Telegram command bot and AI desk that drive the panel over its API with a token ("check this tunnel", "repair", "report"): depends on #61
 - [ ] #69 Outbound events: signed webhooks and an event stream, so external tools react to what the panel sees
-- [ ] #70 Tunnel-move load balancing in the Tunnel Doctor: advice first; automatic moves only when the IP switch is allowed
+- [x] #70 Tunnel-move load balancing in the Tunnel Doctor: a suggestion in mode fix, an automatic move of the busiest tunnel of an exhausted server in mode move (1.36.0)
 - [ ] #71 Move or copy users between the two panel types with a dry-run plan, node pause during bulk writes, the subscription token kept, a result report; designed from a migration tool studied on 2026-10-12 and written from scratch (its licence does not allow copying)
 - [ ] #72 PasarGuard API details the panel does not use yet (subscription URL only with `load_sub`, named cores, `proxy_settings`, ISO dates, 403 for a non-sudo admin, pages of 500)
 - [ ] #73 Shop bot admin menu redesign: grouped menus (users, sales, support, settings), a pending-receipts list, quick user search

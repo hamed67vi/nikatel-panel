@@ -110,8 +110,10 @@ class MoveIn(BaseModel):
 
 @router.post("/autopilot/move", status_code=202)
 def move(body: MoveIn):
-    """Move a tunnel to another Iran server, as an action (its DNS records follow through the IP switch)."""
-    return {"ok": True, "id": _wrap(autopilot.move_start, body.tunnel_id, body.iran_id)}
+    """Move a tunnel to another Iran server, as an action: the new tunnel is built first, the DNS records that serve only it follow (every account), the old tunnel goes after the TTL."""
+    from ..services import doctor
+
+    return {"ok": True, "id": _wrap(doctor.move_now, body.tunnel_id, body.iran_id)}
 
 
 @router.get("/autopilot/ranking/{tunnel_id}")
