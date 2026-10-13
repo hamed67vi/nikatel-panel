@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.35.7
+
+- Country flags are grey and turn to colour only under the pointer (server rows, cards, the window header).
+- The Enabled switch is blue like every other switch.
+- Access & status: every value is one small size on one line; a long provider or site text ends with an ellipsis instead of being cut.
+
 ## 1.35.6
 
 - Server window: the three boxes are tighter (all rows the same height side by side, nothing spills out); the range tabs and the five number cards sit in ONE row.

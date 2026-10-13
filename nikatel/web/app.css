@@ -3908,3 +3908,20 @@ html body .ins-mini { box-shadow: none !important; background: rgba(255,255,255,
 html body .ins-chip.ok, html body .ins-chip.off { background: rgba(255,255,255,.05) !important; border: 1px solid rgba(255,255,255,.12) !important; color: #b9c6dc !important; box-shadow: none !important; font-weight: 600; }
 html body .ins-chip.ok i { background: #4fd98a; box-shadow: none; }
 html body .ins-row, html body .ins-node { box-shadow: none !important; }
+
+/* flags in grey, in colour only under the pointer (a row, a card, the window header) */
+html body .srv-tbl td.name.has-flag::before { filter: grayscale(1) !important; opacity: .3 !important; transition: opacity .3s, filter .3s; }
+html body .srv-tbl tr:hover td.name.has-flag::before { filter: none !important; opacity: .72 !important; }
+html body .srv-tbl tr.srv-off td.name.has-flag::before { filter: grayscale(1) !important; opacity: .2 !important; }
+html body .flg { filter: grayscale(1); transition: filter .25s ease; }
+html body tr:hover .flg, html body .mh-who:hover .flg, html body .sbox:hover .flg, html body [class*="card"]:hover .flg, html body .ip-row:hover .flg, html body li:hover .flg, html body .kv2:hover .flg { filter: none; }
+/* the on / off switch: blue like every other switch */
+html body .srv-sw.on i { background: #4c8dff !important; } html body .srv-sw.on, html body .srv-sw.on b { color: #9cc4ff !important; } html body .srv-sw.on { border-color: rgba(76,141,255,.4); }
+/* Access & status: every value is one small size, one line, and a long one ends with ... instead of being cut */
+html body #modal .sbox[data-b="access"] .kv2 > div { display: flex !important; align-items: center; justify-content: flex-end; gap: 6px; max-width: 80%; min-width: 0; overflow: hidden; font-size: 11.5px !important; }
+html body #modal .sbox[data-b="access"] .kv2 > div * { font-size: 11.5px !important; }
+html body #modal .sbox[data-b="access"] .kv2 > div > b, html body #modal .sbox[data-b="access"] .kv2 > div > span, html body #modal .sbox[data-b="access"] .kv2 > div > small, html body #modal .sbox[data-b="access"] .kv2 > div > a.ext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #modal .sbox[data-b="access"] .kv2 > div > a.ext { display: block; flex: 0 1 auto; } html body #modal .sbox[data-b="access"] .kv2 .prov-site { gap: 6px; min-width: 0; } html body #modal .sbox[data-b="access"] .kv2 .prov-site .two { min-width: 0; }
+html body #modal .sbox[data-b="access"] .kv2 .ic-ext { width: 12px; height: 12px; flex: none; } html body #modal .sbox[data-b="access"] .kv2 .chk { width: 15px; height: 15px; flex: none; font-size: 9px !important; }
+html body #modal .sbox[data-b="access"] .kv2 > div > .cp, html body #modal .sbox[data-b="access"] .kv2 > div > a.cp { flex: none; }
+html body #modal .sbox[data-b="access"] .kv2 .prov-site { max-width: 100%; overflow: hidden; } html body #modal .sbox[data-b="access"] .kv2 .prov-site .two { display: flex; gap: 6px; align-items: baseline; overflow: hidden; } html body #modal .sbox[data-b="access"] .kv2 .prov-site .two > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
