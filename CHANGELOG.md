@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.33.0
+
+- **Tunnel test is gone; Tunnels → Best today is new.** The tunnels are tested all the time (a health check each minute, and a job, `quality`, measures the latency, jitter and packet loss of every tunnel again every half hour, read-only) and ranked by how they behaved in the last 6 h / 24 h / 7 days: how often they answered, how fast, how steady, how often they broke. A podium for the first three, then the whole list with a score bar, and a mark on the best of the tunnels that lead to the same foreign server. A tunnel with fewer than 20 checks has no score yet. `GET /api/besttoday?hours=` (`services/besttoday.py`, the score is a pure function with tests).
+- **New theme: Calm slate** (Settings → Look): the look of the tunnel window design - flat boxes, slate icon chips, one soft blue for bars, charts and the timeline, white numbers, flat buttons with a small corner, no glow; only a real problem is red or amber.
+- **The tunnel list** is one flat table with a thin line between rows (after the design); the arrows between the two servers stay as they were. The hover arrow is on the tunnel cards too.
+- **CPU cores** is the name of the Doctor's CPU tab (what it is for is its tooltip).
+
 ## 1.32.0
 
 - **Check all** replaces *Check GRE links* in the servers bar: one action on the panel server that checks every enabled server (does it answer, does GRE work to it through the new GRE test, is a foreign one filtered in Iran) four at a time. The button shows `Checking 3/14` and stays disabled until it ends unless you press **Stop**; reloading the page does not stop it (`POST/GET /api/checkall`, `POST /api/checkall/stop`; the progress comes from the action log).

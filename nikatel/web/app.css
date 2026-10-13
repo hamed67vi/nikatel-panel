@@ -3625,3 +3625,61 @@ html:not([data-mode="light"]) body button.danger { color: #ffb3bd; background: r
 .tun-tbl td:last-child { position: relative; overflow: visible; padding-right: 52px; }
 .tun-tbl td:last-child::after { content: "›"; position: absolute; right: 12px; top: 50%; width: 24px; height: 24px; margin-top: -12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 18px; line-height: 1; padding-bottom: 2px; color: rgba(200,218,255,.8); background: rgba(120,160,230,.16); border: 1px solid rgba(140,175,240,.22); opacity: 0; transform: translateX(-6px); transition: opacity .15s ease, transform .15s ease; pointer-events: none; }
 .tun-tbl tr.clk:hover td:last-child::after { opacity: .85; transform: none; }
+
+/* ================= THEME "Calm slate" (Settings → Look) =================
+   the look of the tunnel window design: flat boxes, slate icon chips, ONE soft blue for bars, charts and the timeline, white numbers, flat buttons with a small corner, no glow.
+   Only what is red or amber because it is a problem keeps its colour. */
+html[data-theme="calm"] { --bg: #0b1020; --bg-2: #0f1628; --acc: #7aa7f0; --acc-2: #a9c4f5; --grad: linear-gradient(135deg, #4a78c9 0%, #7aa7f0 100%); --line: rgba(255,255,255,.09); --line-hi: rgba(122,167,240,.55); --r: 14px; --r-s: 10px; --shadow: 0 8px 22px rgba(0,0,0,.45); --glow: 122,167,240; }
+html[data-theme="calm"] body::before { background: radial-gradient(38% 30% at 12% 6%, rgba(122,167,240,.08), transparent 70%); }
+html[data-theme="calm"] body #modal .modal { background: #0d1322; border-color: rgba(255,255,255,.1); box-shadow: 0 26px 70px rgba(0,0,0,.55); border-radius: 22px; }
+/* buttons: flat, a small corner, a thin line */
+html[data-theme="calm"] body #modal button.sm, html[data-theme="calm"] body #modal .abtn, html[data-theme="calm"] body #modal .wtool, html[data-theme="calm"] body #modal .sbar button, html[data-theme="calm"] body #page .toolbar button:not(.cta):not(.pri), html[data-theme="calm"] body #page .toolbar .tbtn { border-radius: 10px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.1); box-shadow: none; color: #e6ebf7; font-weight: 600; }
+html[data-theme="calm"] body #modal button.sm:hover:not(:disabled), html[data-theme="calm"] body #modal .abtn:hover:not(:disabled) { background: rgba(255,255,255,.085); }
+html[data-theme="calm"] body #modal .abtn:disabled, html[data-theme="calm"] body #modal button.sm:disabled { opacity: .38; }
+html[data-theme="calm"] body button.pri, html[data-theme="calm"] body #modal button.pri, html[data-theme="calm"] body .card button.pri { border-radius: 10px; background: #3d78e0; border-color: #3d78e0; box-shadow: none; color: #fff; }
+html[data-theme="calm"] body button.danger, html[data-theme="calm"] body #modal button.danger { border-radius: 10px; color: #ffb3bd; background: rgba(255,69,58,.14); border: 1px solid rgba(255,69,58,.4); box-shadow: none; }
+html[data-theme="calm"] body .cta { border-radius: 10px; background: #3d78e0; box-shadow: none; }
+html[data-theme="calm"] body #modal .modal-head .sm { border-radius: 10px; }
+/* the boxes and their headings: a slate chip for the icon, the title in the soft blue */
+html[data-theme="calm"] body .sbox, html[data-theme="calm"] body #page .card, html[data-theme="calm"] body #modal .card, html[data-theme="calm"] body .mcard, html[data-theme="calm"] body .mtile { background: #111a2d; border-color: rgba(255,255,255,.08); border-radius: 14px; }
+html[data-theme="calm"] body .sbox[data-b] > h5, html[data-theme="calm"] body .sbox > h5 { color: #8fb4f5; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; }
+html[data-theme="calm"] body .sbox[data-b] > h5 > i, html[data-theme="calm"] body .sbox > h5 > i { background: #2c3855 !important; color: #b9c8e8 !important; border-radius: 8px; }
+html[data-theme="calm"] body .kv2 > span:first-child, html[data-theme="calm"] body .rrow > span:first-child { color: #93a0ba; }
+/* bars, charts, the timeline: one soft blue */
+html[data-theme="calm"] body #modal .rrow.r-cpu u, html[data-theme="calm"] body #modal .rrow.r-ram u, html[data-theme="calm"] body #modal .rrow.r-swap u, html[data-theme="calm"] body #modal .rrow.r-disk u, html[data-theme="calm"] body .pbar .bar i { background: #7ab0ff; }
+html[data-theme="calm"] body #modal .rrow u.warn, html[data-theme="calm"] body .pbar .bar i.warn { background: #f0a73a !important; } html[data-theme="calm"] body #modal .rrow u.bad, html[data-theme="calm"] body .pbar .bar i.bad { background: #ff5a52 !important; }
+html[data-theme="calm"] body .mcard .ll, html[data-theme="calm"] body .mcard[data-c] .ll { stroke: #7aa7f0; } html[data-theme="calm"] body .mcard .la, html[data-theme="calm"] body .mcard[data-c] .la { fill: rgba(122,167,240,.12); }
+html[data-theme="calm"] body .mcard h6, html[data-theme="calm"] body .mcard h6 .mc-ic { color: #8fb4f5; }
+html[data-theme="calm"] body .mtile b, html[data-theme="calm"] body .mtile.ok b, html[data-theme="calm"] body .mtile.warn b { color: #f2f5fb; } html[data-theme="calm"] body .mtile.bad b { color: #ff8a82; }
+html[data-theme="calm"] body .mtile small { color: #8fb4f5; }
+html[data-theme="calm"] body .strip i.ok { background: #5b88d8; } html[data-theme="calm"] body .strip i { background: rgba(255,255,255,.16); } html[data-theme="calm"] body .strip i.bad { background: #ff5a52; }
+/* the range tabs: the selected one is slate, not a bright button; the labels are quiet */
+html[data-theme="calm"] body #modal .tabs { background: rgba(255,255,255,.035); border-color: rgba(255,255,255,.08); box-shadow: none; }
+html[data-theme="calm"] body #modal .tabs button.on, html[data-theme="calm"] body .srv-tabs button.on, html[data-theme="calm"] body .tf-tabs button.on { background: #44547a; color: #fff; box-shadow: none; border-color: transparent; }
+html[data-theme="calm"] body .wsec > h4 { color: #8fa0c0; }
+/* a list of outages: the time and the length in the normal colour, the reason muted */
+html[data-theme="calm"] body #modal .wsec .err, html[data-theme="calm"] body #modal .mcard .err { color: #98a3ba; }
+html[data-theme="calm"] body #modal .switch i, html[data-theme="calm"] body .srv-sw.on i { background: #4f86e8; }
+
+/* Tunnels → Best today */
+.bt-wrap { display: grid; gap: 12px; } .bt-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; } .bt-bar .sp { flex: 1; } .bt-up { font-size: 12.5px; }
+.bt-pods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.bt-pod { display: grid; justify-items: start; gap: 4px; padding: 16px 18px; border-radius: 16px; background: var(--u-card, #131b2d); border: 1px solid rgba(255,255,255,.1); } .bt-pod.p1 { border-color: rgba(240,190,70,.45); background: linear-gradient(160deg, rgba(240,190,70,.09), transparent 60%), var(--u-card, #131b2d); }
+.bt-m { font-size: 26px; line-height: 1; } .bt-pod b { font-size: 16px; } .bt-pod small { color: var(--mut); font-size: 12.5px; }
+.bt-s { font-size: 34px; font-weight: 800; line-height: 1.1; margin-top: 4px; } .bt-s em { font-style: normal; font-size: 13px; font-weight: 600; color: var(--mut); margin-left: 6px; } .bt-s.ok { color: #5ee07f; } .bt-s.mid { color: #f0b94a; } .bt-s.low { color: #ff8a82; }
+.bt-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; } .bt-chips span { padding: 3px 10px; border-radius: 10px; font-size: 11.5px; font-weight: 600; background: rgba(255,255,255,.07); color: #d3dbee; }
+.bt-list { padding: 8px 10px 10px; display: grid; gap: 4px; }
+.bt-row { display: grid; grid-template-columns: 34px minmax(220px, 2.2fr) minmax(150px, 1.4fr) 0.8fr 0.8fr 0.8fr 0.7fr 0.7fr; gap: 12px; align-items: center; min-height: 46px; padding: 4px 12px; border-radius: 12px; font-size: 13px; background: rgba(255,255,255,.03); font-variant-numeric: tabular-nums; }
+.bt-row.dim { opacity: .6; } .bt-head { min-height: 30px; background: transparent; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
+.bt-pl { font-weight: 800; color: var(--mut); text-align: center; } .bt-nm { display: flex; align-items: center; gap: 8px; min-width: 0; } .bt-nm b { font-size: 14px; } .bt-nm small { color: var(--mut); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bt-bf { font-size: 10.5px; }
+.bt-sc { display: flex; align-items: center; gap: 10px; } .bt-bar { } .bt-sc .bt-bar { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; display: block; } .bt-sc .bt-bar u { display: block; height: 100%; border-radius: 4px; text-decoration: none; } .bt-sc .bt-bar u.ok { background: #30d158; } .bt-sc .bt-bar u.mid { background: #f0b94a; } .bt-sc .bt-bar u.low { background: #ff5a52; } .bt-sc b { width: 28px; text-align: right; }
+@media (max-width: 1000px) { .bt-pods { grid-template-columns: 1fr; } }
+
+/* the tunnel list after the operator's design: ONE flat table (a thin line between the rows, no card per row); the arrows between the two servers stay as they were */
+html body #page .tun-tbl { border-collapse: collapse; border-spacing: 0; }
+html body #page .tun-tbl thead th { background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8791a8; padding: 10px 12px; }
+html body #page .tun-tbl tbody tr, html body #page .lbox .tun-tbl tbody tr:hover { background: transparent; box-shadow: none; transform: none !important; border-radius: 0; }
+html body #page .tun-tbl tbody tr td, html body #page .tun-tbl tbody tr.clk td { background: transparent !important; border: 0 !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; border-radius: 0 !important; padding-top: 9px; padding-bottom: 9px; }
+html body #page .tun-tbl tbody tr:hover td { background: rgba(255,255,255,.035) !important; }
+html body #page .tun-tbl tbody tr:last-child td { border-bottom: 0 !important; }
+html body #page .nk-ghead { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #aeb7ca; }

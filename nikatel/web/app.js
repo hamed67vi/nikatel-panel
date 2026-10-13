@@ -164,7 +164,7 @@ if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains and which server each one points at; point one at another Iran server by hand. The automatic switching is paused while it is tested."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["best", "🏆 Best today", "The tunnels ranked by how they behave: how often they answer, how fast and how steady. Measured all the time."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains and which server each one points at; point one at another Iran server by hand. The automatic switching is paused while it is tested."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -1018,11 +1018,28 @@ PAGES.tunnels = async () => {
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
   if (s === "dns") return PAGES.dns();
-  if (s === "test") return PAGES.tunnelTest();
+  if (s === "best") return PAGES.best();
   if (s === "create") { state.sub.tunnels = "list"; state.build = true; }
   return PAGES.tunnelsList();
 };
 PAGES.configs = async () => { renderSub(); const s = sub("configs"); return s === "gateway" ? PAGES.gateway() : s === "panels" ? PAGES.panels() : PAGES.configsList(); };
+/* ---- Tunnels → Best today: the tunnels ranked by how they behaved (a check every minute, the latency / jitter / loss measured again every half hour) ---- */
+state.bestHours = +localStorage.getItem("nk.best.h") || 24;
+window.bestRange = h => { state.bestHours = h; try { localStorage.setItem("nk.best.h", h); } catch (e) { /* private window */ } refresh(); };
+PAGES.best = async () => {
+  renderSub();
+  const d = await api(`/api/besttoday?hours=${state.bestHours}`), rows = d.rows, ranked = rows.filter(r => r.score != null), top = ranked.slice(0, 3), medal = ["🥇", "🥈", "🥉"];
+  const tone = s => s >= 80 ? "ok" : s >= 55 ? "mid" : "low", dot = r => `<i class="st ${r.state === "up" ? "up" : r.state === "down" ? "down" : "degraded"}" title="${esc(r.state)}"></i>`;
+  const num = (v, u) => v == null ? "—" : v + u;
+  const pods = top.map((r, i) => `<div class="bt-pod p${i + 1}"><div class="bt-m">${medal[i]}</div><b>${esc(r.name)}</b><small>${esc(r.iran)} ⇄ ${esc(r.foreign)}</small><div class="bt-s ${tone(r.score)}">${r.score}<em>/ 100</em></div><div class="bt-chips"><span>${r.avail}% up</span><span>${num(r.rtt_ms, " ms")}</span><span>${r.outages} break${r.outages === 1 ? "" : "s"}</span></div></div>`).join("");
+  const row = r => `<div class="bt-row ${r.score == null ? "dim" : ""}"><span class="bt-pl">${r.place || "·"}</span><span class="bt-nm">${dot(r)}<b>${esc(r.name)}</b>${r.best_for ? `<span class="pill ok bt-bf" title="The best of the tunnels that lead to ${esc(r.foreign)}">best to ${esc(r.foreign)}</span>` : ""}<small>${esc(r.iran)} ⇄ ${esc(r.foreign)}</small></span>
+    <span class="bt-sc">${r.score == null ? '<small class="mut">collecting data…</small>' : `<i class="bt-bar"><u class="${tone(r.score)}" style="width:${r.score}%"></u></i><b>${r.score}</b>`}</span>
+    <span>${r.score == null ? "—" : r.avail + " %"}</span><span>${num(r.rtt_ms, " ms")}</span><span>${num(r.jitter_ms, " ms")}</span><span>${r.loss_pct == null ? "—" : r.loss_pct + " %"}</span><span>${r.score == null ? "—" : r.outages}</span></div>`;
+  $("#page").innerHTML = `<div class="bt-wrap"><div class="toolbar joined bt-bar"><div class="tabs">${[[6, "6 hours"], [24, "24 hours"], [168, "7 days"]].map(([h, l]) => `<button class="${state.bestHours === h ? "on" : ""}" onclick="bestRange(${h})">${l}</button>`).join("")}</div><span class="sp"></span><span class="mut bt-up">${ranked.length} of ${rows.length} tunnels ranked · updated ${new Date(d.at * 1000).toLocaleTimeString(undefined, {hour12: false})}</span></div>
+    ${top.length ? `<div class="bt-pods">${pods}</div>` : '<div class="tk-empty"><b>Collecting data… the ranking appears after about 20 checks of each tunnel.</b></div>'}
+    <div class="card bt-list"><div class="bt-row bt-head"><span>#</span><span>Tunnel</span><span>Score</span><span>Up</span><span>Latency</span><span>Jitter</span><span>Loss</span><span>Breaks</span></div>${rows.map(row).join("") || '<div class="empty">No tunnel.</div>'}</div></div>`;
+  clearTimeout(window.__btT); window.__btT = setTimeout(() => { if (state.page === "tunnels" && sub("tunnels") === "best") refresh(); }, 60000);
+};
 const tt = {job: null, kinds: null, iran: localStorage.getItem("nk.tt.iran") || "", foreign: localStorage.getItem("nk.tt.foreign") || ""};
 /* Tunnel test + Network advisor in ONE view: a bar (pair, quick test, start), the engines, then the results (with "Use for this tunnel") beside the live log */
 const TT_QUICK = ["tcpmux", "bp:tcpmux", "bp:wssmux", "chisel:tls", "bpd:udp"];
@@ -1731,7 +1748,7 @@ async function apStart(id, level) {
 window.apTune = async id => {   // "Network advisor" of the diagnosis window: the Tunnel test page with this tunnel's two servers picked
   const t = (state.tunnelsCache || []).find(x => x.id === id), sv = await api("/api/servers"), i = t && sv.find(s => s.name === t.iran_name), f = t && sv.find(s => s.name === t.foreign_name);
   if (i) { tt.iran = String(i.id); localStorage.setItem("nk.tt.iran", tt.iran); } if (f) { tt.foreign = String(f.id); localStorage.setItem("nk.tt.foreign", tt.foreign); }
-  go("tunnels"); state.sub.tunnels = "test"; refresh();
+  go("tunnels"); state.sub.tunnels = "best"; refresh();
 };
 window.apRun = async (id, level) => {
   try { const r = await api("/api/autopilot/smart-fix", {method: "POST", body: JSON.stringify({tunnel_id: id, level})}); const box = $("#ap-story"); box.classList.remove("hidden"); box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>'; followStory(r.id, box, 700); } catch (e) { toast("✕ " + e.message, "bad"); }
@@ -3662,6 +3679,7 @@ const THEMES = [   // key, name, note, page colour, accent, second accent, flat 
   ["gold", "Gold luxury", "dark with gold shimmer", "#1c1608", "rgba(230,184,92,.95)", "rgba(246,217,138,.75)"],
   ["neon", "Cyber neon", "magenta, cyan, grid floor", "#0a0620", "rgba(255,43,214,.9)", "rgba(25,245,255,.8)"],
   ["graphite", "Graphite", "quiet pro dark, blue", "#1a1e26", "rgba(96,165,250,.8)", "rgba(148,163,184,.55)"],
+  ["calm", "Calm slate", "flat and quiet: slate boxes, one soft blue", "#0c1222", "#7aa7f0", "#33405c"],
   ["classic", "Classic", "plain admin, flat blue", "#1c2638", "#2563eb", "#33415a", true],
   ["minimal", "Minimal", "almost no decoration", "#1a1c21", "rgba(156,163,175,.6)", "rgba(203,213,225,.4)"],
   ["soft", "Soft", "clean white, raised glossy buttons", "#e8edf7", "#0a7cff", "#9cc7ff"],

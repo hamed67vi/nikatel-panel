@@ -24,6 +24,7 @@ from .services import (
     autopilot,
     backup,
     balance,
+    besttoday,
     builder,
     configs,
     demo,
@@ -140,6 +141,7 @@ def _register_jobs() -> None:
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("cpu-balance", 600, balance.run)              # a busy server whose network work sits on one core gets RPS (the Doctor does it by itself; no tunnel is touched)
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed
+    jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
     jobs.register("failover", 60, failover.check)              # does nothing until a key and a mode are set (Tunnels → DNS · IP switch)
