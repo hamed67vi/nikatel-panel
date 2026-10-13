@@ -77,6 +77,8 @@ nikatel/
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
     configs.py       configs on the probe, subscriptions, group sync; probe.py probe API client; probe_install.py
     panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
+    accounts.py      one account over many panels: the users of every panel asked through their API and put side by side
+                     (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)
     core.py          Xray core outbounds of a panel with backup / rollback
     radar.py         Arvan Radar (state of the Iranian data centres), cached, refreshed in the background (API only)
     dcs.py           the hosting providers our servers sit in (from the geo lookup's provider / domain), servers and
@@ -89,7 +91,7 @@ nikatel/
     settings.py      typed settings in the database (secrets masked in responses)
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
-                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, radar, shopbot,
+                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, radar, shopbot,
                     alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, system = health, logs, update of the panel itself)
   web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
                    glass modal windows (showModal), themes (LOOK), a loading box on every page change

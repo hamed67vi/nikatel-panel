@@ -262,7 +262,12 @@ I18N.add({
 "Is it healthy?": "سالم است؟", "Is anything broken?": "چیزی خراب است؟", "What happened lately?": "اخیراً چه شد؟", "What is slow?": "چه چیزی کند است؟", "Is the disk full?": "دیسک پر است؟", "Network and open ports": "شبکه و پورت‌های باز", "The answer shows here.": "جواب اینجا نشان داده می‌شود.", "Advanced: type your own command": "پیشرفته: دستور خودتان را بنویسید",
 "What went wrong in the last 24 hours": "در ۲۴ ساعت گذشته چه مشکلی پیش آمد", "The panel itself": "خود پنل", "A service on your server": "سرویسی روی سرور شما", "Outside the panel": "خارج از پنل", "Not determined": "نامشخص", "This session": "این نشست", "No record of this name": "رکوردی با این نام نیست",
 "Stopping: what was made so far is removed again": "در حال توقف: آنچه تا الان ساخته شده دوباره پاک می‌شود", "The panel itself ": "خود پنل ",
-/* ---- 1.36.2: the Analyst, shorter */
+/* ---- 1.37: All panels (accounts over every panel) */
+"★ All panels": "★ همهٔ پنل‌ها", "Search a user on every panel…": "جستجوی کاربر در همهٔ پنل‌ها…", "Asking every panel…": "در حال پرسیدن از همهٔ پنل‌ها…", "Account": "اکانت", "On panels": "روی پنل‌ها", "Used": "مصرف", "Open this account": "باز کردن این اکانت",
+"linked by hand": "دستی وصل شده", "same username": "همان نام کاربری", "nobody matches": "کسی پیدا نشد", "no user": "کاربری نیست", "Panels": "پنل‌ها",
+"{} accounts · up to {} users from each panel (the newest first) — type a name to search all of them.": "{} اکانت · تا {} کاربر از هر پنل (تازه‌ترین‌ها اول) — برای جستجوی همه یک نام بنویسید.", "1 account · up to {} users from each panel (the newest first) — type a name to search all of them.": "۱ اکانت · تا {} کاربر از هر پنل (تازه‌ترین‌ها اول) — برای جستجوی همه یک نام بنویسید.",
+"Open this user in its panel": "باز کردن این کاربر در پنل خودش", "Link a user with another name:": "وصل کردن کاربری با نام دیگر:", "username on that panel": "نام کاربری روی آن پنل", "Link": "وصل کن", "Unlink": "جدا کن", "Undo the link: nothing changes on the panels": "لغو اتصال: روی پنل‌ها چیزی تغییر نمی‌کند",
+"✓ Linked": "✓ وصل شد", "✓ Unlinked": "✓ جدا شد", "{} panels": "{} پنل", "1 panel": "۱ پنل", "unlimited": "نامحدود",/* ---- 1.36.2: the Analyst, shorter */
 "Traffic at the peak": "ترافیک در اوج", "The Doctor fixes the underused servers by itself": "دکتر سرورهای کم‌استفاده را خودش درست می‌کند", "Reading the cores…": "در حال خواندن هسته‌ها…", "Nothing stands out right now.": "فعلاً چیزی جلب توجه نمی‌کند.",
 "No busy server yet. A server whose network packets all sit on one core shows here; the Doctor spreads them.": "هنوز سرور پرمشغله‌ای نیست. سروری که بسته‌های شبکه‌اش همه روی یک هسته باشد اینجا می‌آید؛ دکتر پخششان می‌کند.",
 /* ---- 1.36: the Tunnel Doctor in three modes, the suggestions, the moves */

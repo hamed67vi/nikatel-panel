@@ -63,6 +63,8 @@ The long routes added in 1.30 - 1.35 follow the same rule:
 | `GET /api/doctor/plan/{server_id}` | what would happen if this Iran server went off: tunnels, target, the DNS records of every account (nothing changes) |
 | `POST /api/doctor/moves/{id}/return` · `POST /api/doctor/moves/{id}/undo-dns` | bring the tunnels of a move back now (an action) · point only its DNS records back |
 | `POST /api/doctor/suggestions/{id}/apply` · `/dismiss` | do a suggested move (an action) · drop it |
+| `GET /api/accounts?search=&limit=` | the accounts that match a search on any Marzban / PasarGuard panel: the same person on every panel (same username, or a hand-made link), with the status of each panel; every panel is asked at that moment through its REST API |
+| `GET /api/accounts/links` · `POST /api/accounts/links` · `DELETE /api/accounts/links/{id}` | the links made by hand between users with different names: list, make (each member must exist on its panel), undo (nothing changes on the panels) |
 | `POST /api/autopilot/move` | move one tunnel to an Iran server: built there first, the DNS records that serve only it follow (every account), the old one goes after the TTL |
 
 ## 3. Authentication

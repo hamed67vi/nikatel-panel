@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from . import accounts as accounts_api
 from . import (
     actions,
     ai,
@@ -31,5 +32,5 @@ from . import tokens as tokens_api
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license, balance, dns, analyst_api, tokens_api, checkall_api, best_api, doctor_api):
+for mod in (auth, system, servers, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license, balance, dns, analyst_api, tokens_api, checkall_api, best_api, doctor_api, accounts_api):
     router.include_router(mod.router)

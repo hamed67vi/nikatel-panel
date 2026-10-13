@@ -111,9 +111,9 @@ always installable; a milestone ends with a tag.
 - [ ] #79 Shop bot section of the panel: its name stays in the menu but it is switched off until the other sections are finished; then switch it on again and finish it (its pages and the Mini App links are untouched in the code)
 - [ ] #80 CDN: more record types and editing them (AAAA, CNAME and TXT can be made and deleted since 1.35.24; still open: edit them in place, ANAME, NS, MX, SRV, and a test against the real APIs) - a type chooser beside the name in the record form, and make / edit / delete / restore for each type on ArvanCloud and Cloudflare (today every DNS path of the panel - edit, delete, restore, the failover - is built for A records only; each type needs its own body format and a test against the real API)
 
-## M12 · One account, many panels (API-driven; decided 2026-10-13, see docs/unified-core.md - not started)
+## M12 · One account, many panels (API-driven; decided 2026-10-13, see docs/unified-core.md; the goal: this panel is the most complete management panel on top of the panels' APIs)
 
-- [ ] #81 One account over many panels: an account = its users on each Marzban / PasarGuard panel, linked by username or by hand, a Users page that searches every panel at once (read through the panels' REST API, nothing is copied out of their databases)
+- [x] #81 One account over many panels (1.37.0): an account = its users on each Marzban / PasarGuard panel, linked by username or by hand, a Users page that searches every panel at once (read through the panels' REST API, nothing is copied out of their databases)
 - [ ] #82 One action for every panel: create, extend, limit, reset, revoke the link, disable, delete on all linked panels at once, with a result per panel
 - [ ] #83 One subscription link: /sub/<token> of this panel merges the subscriptions of the account's panels (v2ray base64 first, Clash later); WireGuard comes through a PasarGuard group that has a WireGuard inbound
 - [ ] #84 One API for the shop bot and the Mini App: they talk to this panel (one base URL) and it forwards to the right panel by the plan

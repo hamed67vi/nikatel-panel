@@ -16,7 +16,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True, "every_minutes": 0, "tg_every": "all", "parts": {"panel": {"enabled": True, "topic": 0, "topic_name": ""}, "bot": {"enabled": True, "topic": 0, "topic_name": ""}}},
     # the smart repair is on by default (restart, rebuild, a new GRE link, another tunnel type - by itself); it can be switched off on Smart repair to work by hand
     "repair": {"auto": True, "after_seconds": 60, "level": "switch", "mode": "", "server_minutes": 10},   # mode: off | fix | move (the Doctor; "" = not chosen yet: derived from the old `auto` switch, so an install that had it off stays off); server_minutes: an Iran server off this long is replaced (mode move)
-    "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}},                     # the Doctor's ledger of moves, its suggestions, who came back when
+    "accounts": {"links": []},                                                                          # hand-made links between users with different names on different panels (services/accounts.py)
+    "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}},                    # the Doctor's ledger of moves, its suggestions, who came back when
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL

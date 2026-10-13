@@ -2046,12 +2046,14 @@ INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are t
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
   const list = (await api("/api/panels")).panels; state.panelsCache = list;
+  if (pn.id === "*" && list.length > 1) return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
+  if (pn.id === "*") pn.id = "";
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
   const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">● up · ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
   if (!list.length) { $("#page").innerHTML = '<div class="empty">No panel yet. <button onclick="pnAddWin()">+ Add a panel</button></div>'; return; }
   const p = sel, s = p.stats || {};
-  $("#page").innerHTML = `<div class="toolbar pn-top"><select onchange="pnPick(this.value)">${list.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>${chip(p)}
+  $("#page").innerHTML = `<div class="toolbar pn-top">${pnSelect(list, p.id)}${chip(p)}
       
       <span class="tcount pstat"><span class="tc info" title="${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now">Users <b>${(+s.users_total || 0).toLocaleString()}</b></span><span class="tc click ${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length === (p.nodes || []).length ? "ok" : "bad"}" onclick="pnNodesWin()" title="Open the nodes of this panel (green: all connected)">Nodes <b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b></span><span class="tc info" title="↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}">Traffic <b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b></span></span><span class="sp"></span>
       <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnEditWin()">Edit</button><button onclick="pnAddWin()">+ Add panel</button></div>
@@ -2100,6 +2102,51 @@ window.pnEdit = async (e, id) => { e.preventDefault(); const f = new FormData(e.
 window.pnDel = async (id, name) => { if (!await gconfirm(`Remove ${name} from this list? Nothing on the panel itself changes.`)) return; await api(`/api/panels/${id}`, {method: "DELETE"}); pn.id = ""; pn.edit = false; refresh(); };
 window.pnNodeReconnect = async (id, nid) => { try { await api(`/api/panels/${id}/nodes/${nid}/reconnect`, {method: "POST"}); toast("✓ Reconnect requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (await api(`/api/panels/${id}/nodes/${nid}/logs`)).log}; } catch (e) { pn.logs = {name, text: "✕ " + e.message}; } refresh(); };
+
+/* ---- All panels: one account = the same person on every panel (same username, or a link made by hand); every panel is asked through its API when you look */
+const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
+const pa = {q: "", data: null, seq: 0};
+function pnAllRender(list) {
+  $("#page").innerHTML = `<div class="toolbar pn-top">${pnSelect(list, "*")}<span class="tcount pstat"><span class="tc info">Panels <b>${list.length}</b></span></span><span class="sp"></span><div class="toolbar pn-sb"><input id="pa-q" type="search" placeholder="Search a user on every panel…" value="${esc(pa.q)}" oninput="paQ(this.value)" autocomplete="off" spellcheck="false"></div></div>
+    <div id="pa-body"><div class="loading"><i class="spin"></i><span>Asking every panel…</span></div></div>`;
+  paLoad();
+}
+window.paQ = v => { pa.q = v.trim(); clearTimeout(qT); qT = setTimeout(paLoad, 350); };
+async function paLoad() {
+  const my = ++pa.seq, box = $("#pa-body"); if (!box) return;
+  let d; try { d = await api("/api/accounts?search=" + encodeURIComponent(pa.q)); } catch (e) { if (my === pa.seq && $("#pa-body")) $("#pa-body").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (my !== pa.seq || !$("#pa-body")) return;      // a newer question is on its way
+  pa.data = d;
+  const dot = s => s === "active" ? "ok" : s === "disabled" ? "" : "bad";
+  const chip = m => `<span class="pa-chip" title="${esc(m.panel + " · " + m.username + " · " + m.status)}"><i class="pa-dot ${dot(m.status)}"></i>${esc(m.panel)}</span>`;
+  const row = a => `<tr class="clk" onclick="paOpen('${esc(a.key)}')" title="Open this account"><td class="name"><div class="usr-wrap"><i class="usr-av ${a.members.every(m => m.status === "active") ? "active" : "disabled"}">${SI.user}</i><div class="usr-nm"><b>${esc(a.name)}</b>${a.link ? '<small class="mut">linked by hand</small>' : a.panels > 1 ? '<small class="mut">same username</small>' : ""}</div></div></td><td class="pa-ch">${a.members.map(chip).join("")}</td><td>${fmtB(a.used)}</td><td>${expPill({expire_date: a.expire_date})}</td></tr>`;
+  const bad = d.panels.filter(p => !p.ok);
+  box.innerHTML = `${bad.length ? `<div class="gw-out bad">${bad.map(p => `✕ ${esc(p.name)}: ${esc(p.error)}`).join(" · ")}</div>` : ""}
+    <div class="pa-box"><table class="tbl lift pa-tbl"><colgroup><col style="width:26%"><col><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Account</th><th>On panels</th><th>Used</th><th>Expires</th></tr></thead>
+      <tbody>${d.accounts.map(row).join("") || `<tr><td colspan="4" class="mut">${pa.q ? "nobody matches" : "no user"}</td></tr>`}</tbody></table></div>
+    <small class="mut pa-foot">${d.accounts.length} account${d.accounts.length === 1 ? "" : "s"} · up to ${d.per_panel} users from each panel (the newest first) — type a name to search all of them.</small>`;
+}
+const paFind = key => ((pa.data || {}).accounts || []).find(a => a.key === key);
+window.paOpen = key => {
+  const a = paFind(key); if (!a) return;
+  const mrow = m => { const left = m.limit ? Math.max(0, m.limit - (m.used || 0)) : null;
+    return `<div class="ap-row pa-m"><span class="spill ${m.status}">${esc(String(m.status).replace("_", " "))}</span><b>${esc(m.panel)}</b><span class="mut">${esc(m.type)}</span><span class="mono">${esc(m.username)}</span><span class="sp"></span><span class="mut">${fmtB(m.used || 0)}${m.limit ? " of " + gb(m.limit) : " · unlimited"}</span>${expPill(m)}<button class="sm" onclick="closeModal();pnPick('${m.panel_id}');setTimeout(() => pnUserOpen(${m.panel_id}, '${esc(m.username)}'), 400)" title="Open this user in its panel">Open</button></div>`; };
+  const have = new Set(a.members.map(m => m.panel_id)), free = (state.panelsCache || []).filter(p => !have.has(p.id));
+  const add = free.length ? `<form class="frm pa-add" onsubmit="return paAdd(event, '${esc(a.key)}')"><span class="mut">Link a user with another name:</span><select name="panel">${free.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select><input name="username" required placeholder="username on that panel" autocomplete="off"><button class="sm pri" type="submit">Link</button></form>` : "";
+  showModal(`<b>${esc(a.name)}</b> <span class="pill">${a.panels} panel${a.panels === 1 ? "" : "s"}</span>`, `<div class="pa-ms">${a.members.map(mrow).join("")}</div>${add}${a.link ? `<div class="frm-act"><button class="sm danger" onclick="paUnlink('${esc(a.link)}')" title="Undo the link: nothing changes on the panels">Unlink</button></div>` : ""}<small class="mut">${fmtB(a.used)} used in total · the earliest end is ${a.expire_date ? esc(a.expire_date) : "never"}.</small>`, "wide");
+};
+window.paAdd = async (e, key) => {
+  e.preventDefault(); const a = paFind(key), f = new FormData(e.target); if (!a) return false;
+  const members = a.members.map(m => ({panel_id: m.panel_id, username: m.username})).concat([{panel_id: +f.get("panel"), username: f.get("username").trim()}]), old = a.link ? ((await api("/api/accounts/links")).links.find(x => x.id === a.link)) : null;
+  try {
+    if (old) await api("/api/accounts/links/" + encodeURIComponent(old.id), {method: "DELETE"});
+    try { await api("/api/accounts/links", {method: "POST", body: JSON.stringify({members, name: a.link ? a.name : ""})}); }
+    catch (err) { if (old) await api("/api/accounts/links", {method: "POST", body: JSON.stringify({members: old.members, name: old.name})}).catch(() => {}); throw err; }
+    toast("✓ Linked", "ok"); closeModal(); paLoad();
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};
+window.paUnlink = async id => { try { await api("/api/accounts/links/" + encodeURIComponent(id), {method: "DELETE"}); toast("✓ Unlinked", "ok"); closeModal(); paLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* users */
 async function pnUsersLoad(id) {

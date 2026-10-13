@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.37.0 - one account over many panels (M12 #81)
+
+- **Panels -> ★ All panels**: one list of accounts over every Marzban / PasarGuard panel. An account is the same person on several panels: the same username (found by itself, case-insensitive) or a link made by hand between users with different names. Each row shows the panels the account is on (a dot per panel: active / disabled / other), the total used and the earliest end; a click opens the account with each user's status, usage and expiry, an **Open** button into the panel's own user window, **Link a user with another name** and **Unlink**.
+- Every panel is asked through its REST API when you look (a search asks all of them at once; no search = the newest 40 of each panel). Nothing is copied out of the panels; only the hand-made links are kept here. A panel that is down or does not answer is shown, the rest still answer.
+- API: `GET /api/accounts?search=`, `GET / POST /api/accounts/links`, `DELETE /api/accounts/links/{id}`. Tests: grouping, links, a down panel, the API. The goal of M12 in one sentence (from the owner): this panel is the most complete management panel, built on the panels' APIs.
+
 ## 1.36.5 - the unified core is API-driven (docs only)
 
 - Decision: the unification stays on the REST API the panel already speaks with Marzban and PasarGuard; the node driver (gRPC), importing their databases and our own subscription server are dropped. M12 is now: one account over many panels, one action for every panel, one merged subscription link, one API for the bot and the Mini App, summed usage. Nothing is built yet.
