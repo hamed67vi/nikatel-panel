@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.35.10
+
+- While a window is open, a message (Filtering, GRE test, ...) shows in the window only and no longer in the status bar behind it: the page behind does not jump when an operation ends. The log still keeps every message.
+
+## 1.35.9
+
+- Tunnels: `Recently removed` shows only the newest removed tunnel (a new one takes its place, nothing stacks under it) and leaves by itself after 10 minutes; Forget no longer asks.
+- Tunnel window: History opens inside the window (Back returns) instead of closing it; the range tabs and the four number cards sit in one row with shorter notes; smaller type in the boxes.
+
 ## 1.35.8
 
 - Server window: smaller type for the three boxes, the number cards (they all fit in the row now) and the chart numbers, so it looks less crowded.

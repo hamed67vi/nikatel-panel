@@ -3937,3 +3937,14 @@ html body #modal .sbox[data-b="resources"] .rrow > em .trf, html body #modal .sb
 html body #modal .srvwin .mtile small { font-size: 9.5px; } html body #modal .srvwin .mtile span { font-size: 10px; } html body #modal .srvwin .mtile b { font-size: 14px; } html body #modal .srvwin .mtile { overflow: hidden; }
 html body #modal .srvwin .mcard h6 { font-size: 11px; } html body #modal .srvwin .mcard .mval { font-size: 15px; } html body #modal .srvwin .mstat { font-size: 11px; } html body #modal .srvwin .mstat b { font-size: 11.5px; }
 html body #modal .srvwin .mhead .tabs button, html body #modal .srvwin .mhead button { font-size: 12.5px; }
+
+/* the tunnel window like the server window: the range tabs and the number cards in ONE row, smaller type */
+html body #modal .tunwin .mon { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: center; }
+html body #modal .tunwin .mon > .mhead { grid-column: 1; grid-row: 1; margin: 0; } html body #modal .tunwin .mon > .mhead > small { display: none; }
+html body #modal .tunwin .mon > .mtiles { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+html body #modal .tunwin .mon > .mcard.mwide, html body #modal .tunwin .mon > .mgrid { grid-column: 1 / -1; }
+html body #modal .tunwin .mtile { column-gap: 4px; padding: 5px 9px !important; min-width: 0; overflow: hidden; } html body #modal .tunwin .mtile small { font-size: 9.5px; letter-spacing: .2px; } html body #modal .tunwin .mtile span { font-size: 10px; } html body #modal .tunwin .mtile b { font-size: 14px; }
+html body #modal .tunwin .mcard h6 { font-size: 11px; } html body #modal .tunwin .mcard .mval { font-size: 15px; } html body #modal .tunwin .mstat { font-size: 11px; } html body #modal .tunwin .mstat b { font-size: 11.5px; }
+html body #modal .tunwin .sbox[data-b] .kv2 { height: 29px; min-height: 29px; padding: 0; box-sizing: border-box; font-size: 12px; }
+html body #modal .tunwin .sbox[data-b] .kv2 > span:first-child { font-size: 12px; } html body #modal .tunwin .sbox[data-b] .kv2 > div, html body #modal .tunwin .sbox[data-b] .kv2 > div * { font-size: 11.5px !important; font-weight: 600; }
+html body #modal .tunwin .sbox[data-b] { padding: 9px 14px 4px; } html body #modal .tunwin .sbox[data-b] > h5 { font-size: 13.5px !important; }

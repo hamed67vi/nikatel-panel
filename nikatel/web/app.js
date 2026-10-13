@@ -43,13 +43,16 @@ let toastT;
 const MSGS = [];
 function toast(text, cls, undo) {      // undo: a function; the status bar then shows an Undo button for as long as the message is bright
   const bar = $("#statusbar"); if (!bar) return;
+  MSGS.unshift({t: Date.now(), text: String(text), cls: cls || ""}); MSGS.length = Math.min(MSGS.length, 40);      // the log keeps every message
+  const hm0 = $("#modal .modal > .hmsg");      // a window is open: the message shows in the window ONLY; the status bar behind it stays still (a message there changed its height and made the page behind jump)
+  if (!hm0 || undo) {
   bar.querySelectorAll(".sb-undo").forEach(b => b.remove());
-  MSGS.unshift({t: Date.now(), text: String(text), cls: cls || ""}); MSGS.length = Math.min(MSGS.length, 40);
   bar.className = "statusbar live " + (cls || "");
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
   if (undo) { const b = document.createElement("button"); b.type = "button"; b.className = "sb-undo"; b.textContent = "Undo"; b.onclick = e => { e.stopPropagation(); b.remove(); undo(); }; $(".sb-text", bar).after(b); }
   clearTimeout(toastT); toastT = setTimeout(() => { bar.classList.remove("live"); bar.querySelectorAll(".sb-undo").forEach(b => b.remove()); }, undo ? 9000 : 7000);
-  const hm = $("#modal .modal > .hmsg");      // a window that is open shows the outcome small, on its top edge (a notch over the border): it never covers a button and never changes the size of the window
+  }
+  const hm = hm0;      // a window that is open shows the outcome small, on its top edge (a notch over the border): it never covers a button and never changes the size of the window
   if (hm) {
     const stamp = String(Date.now()); hm.dataset.t = stamp; hm.className = "hmsg " + (cls || "info"); hm.title = String(text);
     hm.innerHTML = `<span onclick="this.parentElement.classList.toggle('open')">${esc(String(text))}</span><time>${new Date().toLocaleTimeString(undefined, {hour12: false})}</time><button type="button" class="mm-x" title="Dismiss" aria-label="Dismiss" onclick="this.parentElement.innerHTML = ''; this.parentElement.className = 'hmsg'">×</button>`;
@@ -1140,7 +1143,7 @@ function tunBar(t) {
      b("👁", "Dry run", up ? "Nothing to fix: the tunnel is healthy" : "Show what Fix would do, change nothing", up ? "" : `fixTunnel(${t.id}, true)`)],
     [b("🩺", "Health", "Check the tunnel now: up or down, does data pass, loss and latency", `checkTunnel(${t.id})`), b("↻", "Restart", "Restart the tunnel service on both servers (the GRE link stays)", `restartTunnel(${t.id}, '${nm}')`)],
     [b("📊", "Quality", "Latency, jitter, loss, speed and a score", `qualityOne(${t.id})`), b("🔔", "Mute alerts", "No Telegram alerts about this tunnel until unmuted in Settings", `muteRef('${nm}', true)`)],
-    [b("♻", "Rebuild", "Remove it and build it again: same name, same ports", `rebuildTunnel(${t.id}, '${nm}')`), b("📜", "History", "Every repair of this tunnel", "go('actions')")],
+    [b("♻", "Rebuild", "Remove it and build it again: same name, same ports", `rebuildTunnel(${t.id}, '${nm}')`), b("📜", "History", "Every repair of this tunnel", `tunHistory(${t.id}, '${nm}')`)],
   ];
   return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
 }
@@ -1196,7 +1199,7 @@ async function loadTunnelCharts(id) {
   const down = out.reduce((a, o) => a + (o.to - o.from), 0), f1 = v => v == null ? "—" : (Math.round(v * 10) / 10);
   box.className = "mon";
   box.innerHTML = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
-    <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length} checks up`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) + " in total" : "none in this range", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) + " · worst " + Math.round(Math.max(...rtt)) + " ms" : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}</div>
+    <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length}`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) : "none", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}</div>
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
     <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {col: "blue", ic: SI.pulse, unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}
       <div class="mcard"><h6>Outages <span class="mval">${out.length}</span></h6>${out.length ? out.slice(-4).reverse().map(o => `<div class="irow"><span>${fmtT(o.from, 1)} · ${durText(o.to - o.from)}${o.open ? " (still down)" : ""}</span><div class="err" title="${esc(o.err)}">${esc((o.err || "no answer").slice(0, 46))}</div></div>`).join("") : '<div class="mut chart-empty">no outage in this range</div>'}</div></div>`;
@@ -1423,7 +1426,16 @@ async function followStory(aid, box, maxPolls) {
   }
 }
 /* removed tunnels: a copy is kept for 30 days; Restore builds the tunnel again (same name, same servers, same ports) */
-const trashBox = () => { const it = state.trashCache || []; if (!it.length) return ""; return `<div class="trashbox"><h5><i>♻</i>Recently removed<small>a copy is kept for 30 days</small></h5>${it.map(x => `<div class="trow"><span class="tn"><b>${esc(x.title)}</b><small class="mut">${esc(x.sub)} · ports ${esc(x.ports || "—")}</small></span><span class="mut tw">removed ${esc(ago(x.at))} ago</span><span class="ta"><button class="sm pri" onclick="trashRestore('${esc(x.id)}')" title="Build it again: same name, same servers, same ports">Restore</button><button class="sm" onclick="trashForget('${esc(x.id)}')" title="Drop the copy; it can not be restored after that">Forget</button></span></div>`).join("")}</div>`; };
+const TRASH_SHOW = 600;      // the removed tunnel stays on the page for ten minutes, and only the newest one
+const trashBox = () => { const now = Date.now() / 1000, all = (state.trashCache || []).filter(x => now - x.at < TRASH_SHOW), it = all.length ? [all.reduce((a, b) => b.at > a.at ? b : a)] : []; clearTimeout(window.__trT); if (!it.length) return ""; window.__trT = setTimeout(() => { if (state.page === "tunnels" && !state.open && !state.build) refresh(); }, Math.max(1000, (TRASH_SHOW - (now - it[0].at)) * 1000 + 500)); return `<div class="trashbox"><h5><i>♻</i>Recently removed<small>shown for 10 minutes</small></h5>${it.map(x => `<div class="trow"><span class="tn"><b>${esc(x.title)}</b><small class="mut">${esc(x.sub)} · ports ${esc(x.ports || "—")}</small></span><span class="mut tw">removed ${esc(ago(x.at))} ago</span><span class="ta"><button class="sm pri" onclick="trashRestore('${esc(x.id)}')" title="Build it again: same name, same servers, same ports">Restore</button><button class="sm" onclick="trashForget('${esc(x.id)}')" title="Drop the copy; it can not be restored after that">Forget</button></span></div>`).join("")}</div>`; };
+window.tunHistory = async (id, name) => {      // the history opens INSIDE the tunnel window (Back returns), the window never closes
+  const body = $("#modal .modal-body"); if (!body) return;
+  body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button></div><div class="mut" style="padding:10px 4px">Loading…</div>`;
+  try { const d = await api(`/api/actions?ref=${encodeURIComponent(name)}&limit=40`), rows = (d.actions || []).filter(a => !(a.dry_run) );
+    body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button><b style="margin-left:10px">History of ${esc(name)}</b></div>` + (rows.length ? rows.map(a => `<div class="ev ${a.ok === false ? "bad" : "ok"}"><time>${when(a.ts)}</time><i></i><span><b>${esc(a.action)}</b> ${esc(((a.story || []).slice(-1)[0] || "").slice(0, 160))}</span></div>`).join("") : '<div class="empty">Nothing was done to this tunnel yet.</div>'); }
+  catch (e) { body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button></div><div class="err">${esc(e.message)}</div>`; }
+};
+window.tunBack = id => { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) tunModal(t); };
 window.trashRestore = async id => {
   const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
   if (!await gconfirm(`Restore the tunnel ${it.title}? It is built again between ${it.sub} with the ports ${it.ports} (a new GRE key; the services start by themselves; about a minute).`)) return;
@@ -1433,7 +1445,6 @@ window.trashRestore = async id => {
 };
 window.trashForget = async id => {
   const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
-  if (!await gconfirm(`Forget the copy of ${it.title}? It can not be restored after that.`)) return;
   try { await api(`/api/tunnel-trash/${encodeURIComponent(id)}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.deleteTunnel = async (id, name) => {
