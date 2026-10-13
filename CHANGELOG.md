@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.11
+
+- The history of a tunnel in its window: one compact line per entry (time, light, kind, text) with aligned columns; the full text is in the tooltip.
+
 ## 1.35.10
 
 - While a window is open, a message (Filtering, GRE test, ...) shows in the window only and no longer in the status bar behind it: the page behind does not jump when an operation ends. The log still keeps every message.
