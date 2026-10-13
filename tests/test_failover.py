@@ -222,7 +222,7 @@ def test_a_route_problem_never_moves_the_server_by_itself_it_is_suggested(monkey
     assert any("never moves the server by itself" in x and "ir2" in x for x in said)
     failover.after_ladder(1, ids["t1"], "gre_blocked")
     assert len(doctor.state()["suggestions"]) == 1                            # one per tunnel, the newest wins
-    doctor.dismiss_suggestion(sug[0]["id"])
+    doctor.dismiss_suggestion(doctor.state()["suggestions"][0]["id"])           # the id of the NEWEST one (it differs when the two calls straddle a second)
     assert doctor.state()["suggestions"] == []
 
 

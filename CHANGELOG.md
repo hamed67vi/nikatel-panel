@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.40.3 - Outbound: no empty corner, small switches
+
+- **The left column is full.** The Advanced and CDN-records bars moved up into the left column (under the configs, the CDN addresses and a new Relay card), the server lists are taller, and both columns end on the same line; nothing is left lying at the bottom of the page and no empty space is left at the top left.
+- **The switches have one small fixed size** (40 x 22) in every list of the page and look like the reference picture: a blue pill with a white knob when on, a dark slate pill when off.
+- **Step 3 is a box of a fixed size**; when there are many addresses the list scrolls inside it. **The paste box for the configs is one line high** (the Add button sits inside it) and grows when you paste several lines.
+- **Outbound is switched off in the menu for now.** Its tab is the last one of Tunnels, greyed out like the Shop bot, so the important work comes first (roadmap #92). The page, the API and the tests stay as they are; one mark in `SUB.tunnels` brings it back.
+- Fixed a test that failed by chance when two calls fell on different seconds (the Doctor's suggestion id carries the second).
+
 ## 1.40.2 - Outbound rebuilt after the reference picture
 
 - **Each server list is a pane**: a header with its icon (From: Iran servers, To: foreign servers), a search box ("Search server or address...") with a filter button (show only the ticked ones), a list with a select-all box, columns you can sort (Server, Address), an online dot, an Xray / relay mark and a "..." menu on every row (copy the address, take the outbound off a server, use a foreign server as the relay). A small divider with a handle sits between the two panes. A server that the search hides stays ticked.

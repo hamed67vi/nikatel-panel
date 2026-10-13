@@ -468,7 +468,7 @@ def lookup(host: str, want_provider: bool = True) -> dict:
     for s in src:
         votes.setdefault(s["code"], []).append(s)
 
-    first = lambda key: next((s[key] for s in src if s.get(key)), "")
+    first = lambda key: next((s[key] for s in src if s.get(key)), "")   # noqa: E731
     provider = {"provider": first("isp") or first("org"), "domain": first("domain"), "asn": first("asn")}
 
     if want_provider and src and not provider["domain"]:

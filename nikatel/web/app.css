@@ -4669,3 +4669,39 @@ html body #page .ob5-pane { padding: 10px; } html body #page .ob4 .lbox td, html
 html body #page .ob5-copy { flex: none; width: 28px; height: 26px; display: inline-grid; place-items: center; border: 0; border-radius: 8px; background: none; box-shadow: none; color: var(--mut); cursor: pointer; padding: 0; font-size: 15px; } html body #page .ob5-copy:hover { background: rgba(255,255,255,.08); color: var(--text); }
 html body #page .ob4 .ob3-step > h3 { flex-wrap: nowrap; min-width: 0; } html body #page .ob4 .ob3-step > h3 b { white-space: nowrap; } html body #page .ob4 .ob3-step > h3 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .ob4 .ob3-step > h3 .pill { flex: none; } html body #page .ob4 .ob3-addr b { font-size: 12.5px; }
+/* the switches: one small fixed size everywhere on the page (the global switch is 48 x 28, far too big for a list row) */
+html body #page .ob2-sw { margin: 0; flex: none; padding: 0; width: 34px; height: 20px; min-width: 34px; background: transparent; border: 0; box-shadow: none; }
+html body #page .ob2-sw i { width: 34px; height: 20px; border-radius: 10px; } html body #page .ob2-sw i::after { top: 2px; left: 2px; width: 16px; height: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.4); } html body #page .ob2-sw.on i::after { transform: translateX(14px); }
+html body #page .ob3-n svg { font-size: 14px; }
+/* the left column carries the steps 1 and 3, the relay and the two bars; below 1280 px the cards stack in the order of the steps */
+@media (max-width: 1280px) { html body #page .ob4-col { display: contents; } html body #page .ob4-s1 { order: 1; } html body #page .ob4-s2 { order: 2; } html body #page .ob4-s3 { order: 3; } html body #page .ob4-s4 { order: 4; } html body #page .ob4 .ob5-bar { order: 5; } }
+/* both columns end on the same line: the left one stretches its step 3 card to the height of the right one */
+@media (min-width: 1281px) { html body #page .ob4 { align-items: stretch; } html body #page .ob4-left { display: flex; flex-direction: column; } html body #page .ob4-left > .ob4-s3 { flex: 1 1 auto; } }
+html body #page .ob5-relay { margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; } html body #page .ob5-relay > b { font-size: 12.5px; color: var(--mut); font-weight: 600; }
+@media (max-width: 1280px) { html body #page .ob4-s4 { order: 4; } }
+html body #page .ob4-box.lbox { height: 400px; }
+/* the paste box: one line */
+html body #page .ob5-paste textarea { min-height: 44px; height: 44px; padding: 11px 104px 0 14px; line-height: 22px; border-radius: 12px; resize: none; overflow-y: auto; white-space: pre; overflow-x: hidden; }
+html body #page .ob5-paste button { bottom: auto; top: 6px; right: 6px; height: 32px; padding: 0 16px; border-radius: 16px; }
+/* step 3 is a box of a fixed size (the height the left column has left); a long list scrolls inside it */
+@media (min-width: 1281px) {
+  html body #page .ob4-left > .ob4-s3 { flex: 1 1 0; min-height: 150px; overflow: hidden; display: flex; flex-direction: column; }
+  html body #page .ob4-s3 > .ob4-pbox.lbox { flex: 1 1 0; min-height: 0; max-height: none; height: auto; margin: 0 0 8px; }
+  html body #page .ob4-s3 > .ob5-note { flex: none; } html body #page .ob4-s3 > .ob3-hint { flex: none; }
+}
+/* the switches as in the reference picture: a blue pill with a white knob when on, a dark slate pill when off */
+html body #page .ob2-sw { width: 40px; min-width: 40px; height: 22px; }
+html body #page .ob2-sw i { width: 40px; height: 22px; border-radius: 11px; background: #35405a !important; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); transition: background .18s, box-shadow .18s; }
+html body #page .ob2-sw i::after { top: 2px; left: 2px; width: 18px; height: 18px; background: linear-gradient(180deg, #fff, #dde5f6); box-shadow: 0 1px 3px rgba(0,0,0,.38); }
+html body #page .ob2-sw.on i { background: linear-gradient(180deg, #2f9dff, #0a7cf5) !important; box-shadow: 0 0 0 1px rgba(10,124,245,.55), 0 0 9px rgba(10,132,255,.42); }
+html body #page .ob2-sw.on i::after { transform: translateX(18px); }
+html[data-mode="light"] body #page .ob2-sw i { background: #c3cde0 !important; box-shadow: inset 0 0 0 1px rgba(30,40,80,.12); }
+/* a page with list boxes locks the scroll of the page (.main:has(.lbox)); this one has bars that open, so its page scrolls */
+@media (min-width: 761px) { html body .main:has(.ob4) { overflow-y: auto; } }
+/* the switch in the first cell sits clear of the row's rounded left edge, so it is never cut */
+html body #page .ob4 .lbox td:first-child, html body #page .ob4 .lbox th:first-child { padding-left: 16px; padding-right: 6px; overflow: visible; }
+html body #page .ob4 .lbox .ob2-sw { display: inline-flex; vertical-align: middle; }
+html body #page .ob5-line { display: flex; align-items: center; flex-wrap: nowrap; gap: 10px; padding: 8px 14px; min-height: 0; } html body #page .ob5-line > b { font-size: 14px; font-weight: 700; color: var(--text); flex: none; } html body #page .ob5-line > .ob3-n { flex: none; }
+html body #page .ob5-line select { flex: 1 1 100px; min-width: 0; max-width: none; height: 32px; border-radius: 10px; font-size: 12.5px; } html body #page .ob5-line .pill, html body #page .ob5-line .ob2-hub { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .ob5-line button { flex: none; }
+/* a tab that is switched off for now (the same look as the Shop bot in the menu) */
+html body .sub-tabs button.sub-off { opacity: .38; filter: grayscale(1); pointer-events: none; cursor: default; }

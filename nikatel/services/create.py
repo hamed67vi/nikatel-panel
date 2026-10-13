@@ -10,6 +10,7 @@
                                                 automatic). Everything is told in one story; returns its id."""
 from __future__ import annotations
 
+import base64
 import re
 import time
 

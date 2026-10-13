@@ -167,18 +167,18 @@ if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["gateway", "🌉 Outbound", INFO_GW], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
-function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
+function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur && x[3] !== "off") ? cur : list[0][0]; }       // a tab that is switched off is never the current one
 function renderSub() {
   const list = SUB[state.page], box = $("#subnav");
   box.classList.toggle("hidden", !list);
   if (!list) return;
   const cur = sub(state.page);
   const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
-  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label]) => `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
+  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
 window.setSub = (page, k) => { if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
@@ -407,7 +407,7 @@ state.dq = ""; let dqSel = 0;
 function dqSections() {   // every section of the panel by its name: the pages, their tabs, the tabs of Settings and of the shop bot
   const strip = s => String(s).replace(/<[^>]*>/g, "").replace(/^[^A-Za-z0-9]+/, "").trim(), out = [], pages = {};
   document.querySelectorAll("#nav a:not(.nav-off)").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });
-  Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label]) => out.push({page, subKey: k, name: strip(label), sub: pages[page] || page})));
+  Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label, , off]) => { if (off !== "off") out.push({page, subKey: k, name: strip(label), sub: pages[page] || page}); }));
   Object.entries(SET_TABS).forEach(([k, v]) => out.push({page: "settings", setTab: k, name: strip(v[0]), sub: "Settings"}));
   SB_TABS.forEach(([k, l]) => out.push({page: "bot", sbTab: k, name: l, sub: "Shop bot"}));
   return out;

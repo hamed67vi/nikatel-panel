@@ -83,7 +83,7 @@ def _stream(net: str, sec: str, g) -> dict:
 def outbound_from_uri(uri: str, tag: str) -> dict:
     """vless / vmess / trojan / ss link -> Xray outbound. ValueError with a sentence otherwise."""
     uri = str(uri or "").strip()
-    m = re.match(r"^([a-z0-9]+)://", uri, re.IGNORECASE)
+    m = re.match(r"^([a-z0-9]+)://", uri, re.I)
 
     if not m:
         raise ValueError("this is not a config link")
@@ -95,7 +95,7 @@ def outbound_from_uri(uri: str, tag: str) -> dict:
             j = json.loads(_b64d(uri[8:]))
             vals = {"address": j.get("add", ""), "sni": j.get("sni", ""), "host": j.get("host", ""), "path": j.get("path", ""), "fp": j.get("fp", ""), "alpn": j.get("alpn", ""),
                     "serviceName": j.get("path", "") if j.get("net") == "grpc" else "", "headerType": j.get("type", "")}
-            g = lambda k: str(vals.get(k, "") or "")
+            g = lambda k: str(vals.get(k, "") or "")  # noqa: E731
             return {"tag": tag, "protocol": "vmess", "settings": {"vnext": [{"address": j["add"], "port": int(j["port"]),
                     "users": [{"id": j["id"], "alterId": int(j.get("aid", 0) or 0), "security": j.get("scy") or "auto", "level": 0}]}]},
                     "streamSettings": _stream(j.get("net") or "tcp", "tls" if j.get("tls") == "tls" else "none", g)}
@@ -120,7 +120,7 @@ def outbound_from_uri(uri: str, tag: str) -> dict:
             u = urllib.parse.urlparse(uri)
             q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
             q["address"] = u.hostname or ""
-            g = lambda k: str(q.get(k, "") or "")
+            g = lambda k: str(q.get(k, "") or "")  # noqa: E731
             ident = urllib.parse.unquote(u.username or "")
 
             if not q["address"] or not ident or not u.port:

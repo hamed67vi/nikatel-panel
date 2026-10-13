@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import ipaddress
+import re
 import secrets
 from dataclasses import dataclass
 

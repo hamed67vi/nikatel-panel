@@ -33,7 +33,7 @@ RULES: list[tuple[str, str, str, str]] = [
     ("server", "interface", r"gre (interface|link) .*(down|missing|does not)|interface .* (down|missing)|carrier", "The GRE interface of a tunnel is down or missing on a server; a relink or rebuild recreates it."),
     ("server", "resources", r"out of memory|disk .*(full|\d{2,3} ?%)|no space left|cpu .*(9\d|100) ?%|swaps", "A server is short of memory, disk or CPU, so everything on it is slow."),
 ]
-_COMPILED = [(o, k, re.compile(p, re.IGNORECASE), h) for o, k, p, h in RULES]
+_COMPILED = [(o, k, re.compile(p, re.I), h) for o, k, p, h in RULES]
 _HINT_UNKNOWN = "No rule recognises this text. Read the full story and the log line; if it keeps happening, report it with the request id."
 
 
@@ -57,11 +57,11 @@ def classify(text: str) -> dict:
 
 
 _SKIP = ("starting", "looking at both servers", "queued")
-_TRIED = re.compile(r"^(restart|rebuild|new link|best type|plan:|kernel tuning|rps turned|testing|checked again|restarted|iran:|foreign:|after:|ai:|a new gre link|removing|move|switch|the new link|before the link)", re.IGNORECASE)
+_TRIED = re.compile(r"^(restart|rebuild|new link|best type|plan:|kernel tuning|rps turned|testing|checked again|restarted|iran:|foreign:|after:|ai:|a new gre link|removing|move|switch|the new link|before the link)", re.I)
 
 
 def _clean(line: str, ref: str = "") -> str:
-    t = re.sub(r"^(found:\s*)", "", str(line).strip(), flags=re.IGNORECASE)
+    t = re.sub(r"^(found:\s*)", "", str(line).strip(), flags=re.I)
 
     if ref and t.lower().startswith(ref.lower() + ":"):
         t = t[len(ref) + 1:].strip()
