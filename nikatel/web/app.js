@@ -163,7 +163,7 @@ const NAV_ALIAS = {servers: "nodes", gateway: "configs", monitor: "nodes", actio
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
-  nodes: [["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
+  nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["test", "🧪 Tunnel test", "Before you build: pick two servers; the panel builds a temporary tunnel, measures latency, jitter, loss and speed, then removes it."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains and which server each one points at; point one at another Iran server by hand. The automatic switching is paused while it is tested."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
@@ -177,7 +177,7 @@ function renderSub() {
   box.innerHTML = `<div class="tabs">${list.map(([k, label]) => `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${label}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
-window.setSub = (page, k) => { if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
+window.setSub = (page, k) => { if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
 const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
 /* a small animated drawing beside the title of the main pages: lights of a server, packets in a tunnel, bars of a panel, the blink of the shop bot */
 const TITLE_ANIM = {
@@ -532,13 +532,19 @@ const noLogin = s => s.enabled && s.online !== true && /permission denied|public
 const isNew = s => s && s.created_at && Date.now() / 1000 - s.created_at < 3600;
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 PAGES.servers = async () => {
-  const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
+  const fast = !!(state.fastRender && state.serversCache && state.tunnelsCache && state.panelsCache); state.fastRender = false;      // switching Iran / Foreign draws from what is already known at once (no waiting, no blank page), then looks again in the background
+  const [list, tl] = fast ? [state.serversCache, state.tunnelsCache] : await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
   state.tunnelsCache = tl; state.serversCache = list;
+  if (fast) setTimeout(() => { if (state.page === "nodes" && !state.open) refresh(); }, 400);
   const mine = list.filter(s => s.role === state.tab);
   const MT = {all: () => true, online: s => s.enabled && s.online === true, problems: srvProblem, disabled: s => !s.enabled}, mt = MT[state.mtab] ? state.mtab : "all";
   const rows = mine.filter(MT[mt]);
   const hostN = {}; list.forEach(s => { hostN[s.host] = (hostN[s.host] || 0) + 1; });   // the same address added as two servers
   const dupHost = s => hostN[s.host] > 1 ? `<span class="pill err" title="Another server in the list has the same address (${esc(s.host)}): a duplicate?">duplicate IP</span>` : "";
+  if (!fast || !state.ca) state.ca = await api("/api/checkall").catch(() => ({running: false}));
+  if (state.caWas && !state.ca.running) toast((state.ca.ok ? "✓ " : "") + (state.ca.line || "The check is finished"), state.ca.ok ? "ok" : "bad");
+  state.caWas = !!state.ca.running;
+  if (state.ca.running) { clearTimeout(window.__caT); window.__caT = setTimeout(() => { if (state.page === "nodes" && !state.open) refresh(); }, 2500); }
   const live = mine.filter(s => s.enabled), nProb = mine.filter(srvProblem).length, online = live.filter(s => s.online).length, nOff = mine.length - live.length;      // a turned-off server is not counted in the totals
   const avg = k => { const v = mine.filter(s => s.online && s.facts && s.facts[k] != null).map(s => s.facts[k]); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
   const sumNet = mine.reduce((a, s) => a + ((s.facts || {}).rx_mbps || 0) + ((s.facts || {}).tx_mbps || 0), 0);
@@ -548,7 +554,8 @@ PAGES.servers = async () => {
     const g = (s.extra || {}).gre; return g && !g.ok && g.links ? mk("GRE ✕", g.detail + " · checked " + ago(g.at) + " ago") : "";
   };
   // Marzban / PasarGuard nodes that sit on this server's address: "Panel ✓ name" chips next to the status
-  const pnl = await api("/api/panels").catch(() => ({panels: []}));
+  const pnl = fast ? state.panelsCache : await api("/api/panels").catch(() => ({panels: []}));
+  state.panelsCache = pnl;
   const byIp = {};
   (pnl.panels || []).forEach(p => (p.nodes || []).forEach(n => { const ip = String(n.address || "").trim(); if (ip) (byIp[ip] = byIp[ip] || []).push({panel: p.name, status: n.status, name: n.name}); }));
   const chips = s => (byIp[s.host] || []).map(x => { const ok = x.status === "connected"; return `<span class="mchip ${ok ? "ok" : "bad"}" title="Node ${esc(x.name)} in panel ${esc(x.panel)}: ${esc(x.status || "?")}">${esc(x.panel)}</span>`; }).join("");
@@ -589,12 +596,14 @@ PAGES.servers = async () => {
       <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}</div></td></tr>`;
   };  const openSrv = list.find(s => s.id === state.open);
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
-  $("#page").innerHTML = `<div class="toolbar joined">
-      <button class="cta cta-server" onclick="newServer()" title="Add one server, or several at once with one password"><i class="cta-ic">＋</i>Add server</button><i class="sep"></i><button onclick="greCheckAll()" title="Look for the GRE links on every server of this tab and ping their other end">⇄ Check GRE links</button><i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 Download my SSH key</a>
+  const ca = state.ca || {running: false};
+  const caBtn = ca.running ? `<span class="ca-run"><button class="sm" disabled><i class="spin"></i>Checking ${ca.done || 0}/${ca.total || "…"}</button><a class="ca-stop" onclick="caStop()" title="Stop: the servers being checked now finish, no new one starts">${ca.stopping ? "stopping…" : "Stop"}</a></span>` : `<button onclick="caStart()" title="Checks every server: does it answer, does GRE work to it, is it filtered in Iran. It runs on the panel: reloading the page does not stop it.">✓ Check all</button>`;
+  $("#page").innerHTML = `<div class="toolbar joined srv-bar"><div class="sb-r1">
+      <button class="cta cta-server" onclick="newServer()" title="Add one server, or several at once with one password"><i class="cta-ic">＋</i>Add server</button><i class="sep"></i>${caBtn}<i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user">🔑 Download my SSH key</a>
       
-      <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}">Online <b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span>
-      <span class="sp"></span><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div>${searchSeg()}</div>
-    <table class="tbl lift srv-tbl joined"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:11%"><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:5%"></colgroup>
+      <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}">Online <b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %">Problems <b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%">Load <b>${avg("cpu") ?? "—"}%</b> <small>cpu</small></span><span class="tc info" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span></div>
+      <div class="sb-r2"><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div><span class="sp"></span>${searchSeg()}</div></div>
+    <table class="tbl lift srv-tbl joined ${fast ? "fx-in" : ""}"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:11%"><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:5%"></colgroup>
       <thead><tr><th>Server</th><th>Status</th><th>Panel</th><th>IPv4</th><th>Issues</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
       <tbody>${rows.map(row).join("") || `<tr><td colspan="9" class="empty">No server.</td></tr>`}</tbody></table>`;
   showWin();
@@ -739,27 +748,37 @@ window.conAsk = async (id, key) => {
   if (state.wtab === "console") wtab("console");
 };
 /* ---- the Install view of a server window: what can be put on this server, each as a card in plain words */
+/* the Install view, after the operator's design: two node cards, then one row per tool; every button has its icon */
+const INS_IC = {
+  dl: '<path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 017.5 4H15"/>', doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', shield: '<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/>', trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+  refresh: '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>', up: '<path d="M12 20V5m0 0l-6 6m6-6l6 6"/>'
+};
+const insIc = k => `<svg class="ins-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${INS_IC[k]}</svg>`;
 function installHtml(s) {
-  const ab = ((s.extra || {}).abuse || {}), abuseOn = ab.installed || ((s.facts || {}).abuse_rules || 0) > 0, seg = state.insNode === "pasarguard" ? "pasarguard" : "marzban";
-  const row = (ic, title, chip, btns, tip) => `<div class="ins-row" title="${esc(tip)}"><i>${ic}</i><b>${title}</b>${chip}<span class="sp"></span>${btns}</div>`;
-  const btn = (label, click, cls = "", off = false) => `<button class="sm ${cls}" ${off ? "disabled" : `onclick="${click}"`}>${label}</button>`;
+  const ab = ((s.extra || {}).abuse || {}), abuseOn = ab.installed || ((s.facts || {}).abuse_rules || 0) > 0;
+  const btn = (ic, label, click, cls = "", off = false) => `<button type="button" class="ins-btn ${cls}" ${off ? "disabled" : `onclick="${click}"`}>${insIc(ic)}${label}</button>`;
+  const row = (ic, title, chip, btns, tip) => `<div class="ins-row" title="${esc(tip)}"><span class="ins-ico">${insIc(ic)}</span><b>${title}</b>${chip}<span class="sp"></span>${btns}</div>`;
   return `<div class="ins3">
-    <div class="ins-node">
-      <div class="tabs ins-seg"><button class="${seg === "marzban" ? "on" : ""}" data-k="marzban" onclick="insSeg(${s.id}, 'marzban')">Marzban node</button><button class="${seg === "pasarguard" ? "on" : ""}" data-k="pasarguard" onclick="insSeg(${s.id}, 'pasarguard')">PasarGuard node</button></div>
-      <div class="ins-pane ${seg === "marzban" ? "" : "hidden"}" data-k="marzban"><textarea id="ins-cert-${s.id}" rows="4" spellcheck="false" placeholder="Certificate from the Marzban panel (Nodes → Add node), from BEGIN to END">${esc(window.NODE_CERT || "")}</textarea>
-        <div class="ins-act"><span class="sp"></span>${btn("Install node", `srvInstall(${s.id}, 'marzban_node')`, "pri")}</div></div>
-      <div class="ins-pane ${seg === "pasarguard" ? "" : "hidden"}" data-k="pasarguard"><input id="ins-key-${s.id}" type="password" autocomplete="off" spellcheck="false" placeholder="API key from the PasarGuard panel">
-        <div class="ins-act"><span class="sp"></span>${btn("Show certificate", `srvPgCert(${s.id})`)}${btn("Install node", `srvInstall(${s.id}, 'pasarguard_node')`, "pri")}</div></div>
+    <div class="ins-two">
+      <div class="ins-node"><div class="ins-h"><span class="ins-sq mz"></span><b>Marzban node</b></div>
+        <div class="ins-field"><textarea id="ins-cert-${s.id}" rows="3" spellcheck="false" placeholder="Certificate from the Marzban panel (Nodes → Add node), from BEGIN to END">${esc(window.NODE_CERT || "")}</textarea><button type="button" class="ins-mini" title="Paste the certificate from the clipboard" onclick="insPaste(${s.id})">${insIc("doc")}</button></div>
+        <div class="ins-act">${btn("copy", "Copy", `insCopy(${s.id})`)}<span class="sp"></span>${btn("dl", "Install node", `srvInstall(${s.id}, 'marzban_node')`, "pri")}</div></div>
+      <div class="ins-node"><div class="ins-h"><span class="ins-sq pg"></span><b>PasarGuard node</b></div>
+        <div class="ins-field"><input id="ins-key-${s.id}" type="password" autocomplete="off" spellcheck="false" placeholder="API key from the PasarGuard panel"><button type="button" class="ins-mini" title="Show or hide the key" onclick="insEye(${s.id})">${insIc("eye")}</button></div>
+        <div class="ins-act">${btn("doc", "Show certificate", `srvPgCert(${s.id})`)}<span class="sp"></span>${btn("dl", "Install node", `srvInstall(${s.id}, 'pasarguard_node')`, "pri")}</div></div>
     </div>
     <div class="ins-rows">
-      ${s.role === "foreign" ? row("🛡", "Abuse-Defender", `<span class="pill ${abuseOn ? "ok" : "off"}">${abuseOn ? "Installed" : "Not installed"}</span>`, btn("Install", `srvAbuse(${s.id}, 'install')`, "pri", abuseOn) + btn("Remove", `srvAbuse(${s.id}, 'remove')`, "danger", !abuseOn), "Drops traffic to abused address ranges") : ""}
-      ${row("⬆", "Update the server", '<span class="pill off">apt</span>', btn("Update", `srvInstall(${s.id}, 'os_update')`, "pri"), "apt update and upgrade of the system packages; the server is not rebooted")}
+      ${s.role === "foreign" ? row("shield", "Abuse-Defender", `<span class="pill ins-chip ${abuseOn ? "ok" : "off"}"><i></i>${abuseOn ? "Installed" : "Not installed"}</span>`, btn("dl", "Install", `srvAbuse(${s.id}, 'install')`, "", abuseOn) + btn("trash", "Remove", `srvAbuse(${s.id}, 'remove')`, "danger", !abuseOn), "Drops traffic to abused address ranges") : ""}
+      ${row("up", "Update the server", '<span class="pill ins-chip off">apt</span>', btn("refresh", "Update", `srvInstall(${s.id}, 'os_update')`, "pri"), "apt update and upgrade of the system packages; the server is not rebooted")}
     </div></div>`;
 }
-window.insSeg = (id, k) => { state.insNode = k; document.querySelectorAll("#modal .ins-seg button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); document.querySelectorAll("#modal .ins-pane").forEach(p => p.classList.toggle("hidden", p.dataset.k !== k)); };
+window.insEye = id => { const i = $(`#ins-key-${id}`); if (i) i.type = i.type === "password" ? "text" : "password"; };
+window.insCopy = id => { const t = (($(`#ins-cert-${id}`) || {}).value || "").trim(); if (!t) { toast("Nothing to copy: paste the certificate first", "bad"); return; } try { navigator.clipboard.writeText(t); toast("✓ Copied", "ok"); } catch (e) { toast("✕ The browser did not allow the copy", "bad"); } };
+window.insPaste = async id => { try { const t = await navigator.clipboard.readText(); const a = $(`#ins-cert-${id}`); if (a && t) a.value = t.trim(); } catch (e) { toast("✕ The browser did not allow reading the clipboard: paste with Ctrl+V", "bad"); } };
 const INS_LABEL = {marzban_node: "Marzban node", pasarguard_node: "PasarGuard node", os_update: "system update"};
 window.srvPgCert = async id => {      // the public certificate the PasarGuard node made: shown to copy into the PasarGuard panel
-  try { const r = await api(`/api/servers/${id}/pasarguard-cert`); const ta = $(`#ins-key-${id}`); const box = ta && ta.closest(".ins-pane"); if (!box) return;
+  try { const r = await api(`/api/servers/${id}/pasarguard-cert`); const ta = $(`#ins-key-${id}`); const box = ta && ta.closest(".ins-node"); if (!box) return;
     let out = box.querySelector(".ins-cert"); if (!out) { out = document.createElement("textarea"); out.className = "ins-cert"; out.readOnly = true; out.rows = 5; box.querySelector(".ins-act").before(out); }
     out.value = r.cert; out.select(); try { navigator.clipboard.writeText(r.cert); } catch (e) { /* the box is selected: copy it by hand */ } toast("✓ Certificate copied: set it in the PasarGuard panel", "ok");
   } catch (e) { toast("✕ " + e.message, "bad"); }
@@ -804,10 +823,22 @@ function addModal() {   // one window for adding: a tab for one server, a tab fo
   showModal(`<b>+ Add server</b>`, `<div class="tabs" style="margin-bottom:12px"><button class="${one ? "on" : ""}" onclick="addTab('new')">One server</button><button class="${one ? "" : "on"}" onclick="addTab('many')">Several at once</button></div>${one ? SERVER_FORM(null, state.tab) : MANY_FORM()}`);
 }
 window.srvManyGo = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Adding… (a few seconds per server)"); try { const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: state.tab, lines: f.get("lines"), password: f.get("password"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22})}); state.manyRes = r.items; const ok = r.items.filter(i => i.ok).length; toast(`${ok ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, ok === r.items.length ? "ok" : "bad"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
-const MANY_FORM = () => `<form class="frm" onsubmit="return srvManyGo(event)"><label style="grid-column:1/-1">Servers, one per line: <small>name host [user] [port] — e.g. <code>de4 203.0.113.9</code></small><textarea name="lines" class="ob-raw" required placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
-    <label>SSH user<input name="ssh_user" value="root"></label><label>SSH port<input name="ssh_port" type="number" value="22"></label><label>SSH password <small>(the same for all; used once to install the panel's key — leave empty if the key is already there)</small><input name="password" type="password" autocomplete="new-password"></label>
-    <div class="frm-act"><button class="pri" type="submit">Add ${state.tab} servers</button></div>
-    ${state.manyRes ? `<div style="grid-column:1/-1">${state.manyRes.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> — ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div>` : ""}</form>`;
+const MANY_FORM = () => {   // the same design as the form for one server: two boxes (the servers, the SSH access) and a foot with the button and the one-line help
+  const fl = (l, inner) => `<label class="kv2 kf bf"><span>${l}</span>${inner}</label>`;
+  return `<form class="frm srv-form2" onsubmit="return srvManyGo(event)">
+    <div class="sgrid two srv-two">
+      <div class="sbox"><h5><i>🖥</i>Servers</h5>
+        <label class="kv2 kf bf kf-top"><span>One per line</span><textarea name="lines" class="ob-raw" required rows="7" spellcheck="false" placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
+        <div class="bf-note mut">name host [user] [port] — the user and the port are optional</div></div>
+      <div class="sbox"><h5><i>🔑</i>SSH access</h5>
+        ${fl("User", `<input name="ssh_user" value="root">`)}
+        ${fl("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="22">`)}
+        ${fl("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already there" title="The same for all. With a password the panel logs in once, installs its own key and forgets the password">`)}
+        <div class="bf-note mut">The same for all the servers of the list.</div></div>
+    </div>
+    <div class="sbar bld-foot"><button class="pri" type="submit">Add ${state.tab} servers</button><span class="sp"></span><small class="mut">With a password the panel logs in once, installs its key and forgets it.</small></div>
+    ${state.manyRes ? `<div class="sbox srv-after"><h5><i>📋</i>Result</h5>${state.manyRes.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> — ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div>` : ""}</form>`;
+};
 /* ---- monitoring: real charts with axes, a hover read-out, min / avg / max, a range switch (1 h / 6 h / 24 h / 7 d) ---- */
 const CH = {}; let chSeq = 0;
 const RANGES = [[1, "1 h"], [6, "6 h"], [24, "24 h"], [168, "7 days"]];
@@ -905,6 +936,8 @@ window.srvSet = async (id, on, undoing) => {
     if (on) api(`/api/servers/${id}/check`, {method: "POST"}).then(() => { if (!undoing) toast(`${s.name} is enabled and online.`, "ok"); }).catch(e => toast(`${s.name} is enabled, but it does not answer yet: ${String(e.message).slice(0, 90)}`, "bad")).finally(() => refresh());
   } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
+window.caStart = async () => { try { await api("/api/checkall", {method: "POST", body: JSON.stringify({role: ""})}); toast("Checking all servers… it goes on if you reload the page; Stop ends it", "info"); state.ca = {running: true, done: 0, total: 0}; } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.caStop = async () => { try { await api("/api/checkall/stop", {method: "POST"}); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; state.wtab = "overview"; refresh(); };      // Edit leaves the console: Back from the form returns to the main window, not to the console
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
@@ -1311,7 +1344,7 @@ async function buildFormHtml() {
     ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server (ArvanCloud) <small class="mut">(comma separated; pick from the list)</small></label><input name="dns_names" list="dns-names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off"><datalist id="dns-names"></datalist></div>` : ""}
     <div class="sbox badv"><h5 class="adv-h" onclick="bkAdv()"><i>⚙</i>Advanced settings<small>${bk.adv ? "change a value only when you measured a reason" : "keepalive, heartbeat, MTU, preset, UDP…"}</small><span class="sp"></span><em>${bk.adv ? "▾" : "▸"}</em></h5>${bk.adv ? `<div class="adv-grid">${options}</div>` : ""}</div>
     <div class="sbar bld-foot"><button class="pri" type="submit">Build</button><button type="button" onclick="startTest(event)" title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><span class="sp"></span><small class="mut">Every default is the many-users setting; a test builds a temporary tunnel, measures it and removes it.</small></div>
-  </form><div id="build-story" class="fix hidden"></div>`;
+  </form><div id="build-story" class="fix bld-log"></div>`;
 }
 /* the Create window redraws only its own body: no refresh of the page behind it, the typed values stay */
 async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) return refresh(); const form = $("#modal form.build"); if (form) bkKeep(form); const story = $("#build-story"), keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; body.innerHTML = await buildFormHtml(); { const fm = $("#modal form.build"); if (fm) bkCheck(fm, true); } if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
@@ -1511,12 +1544,13 @@ const histRows = list => list.filter(a => !a.dry_run && ["fix", "autopilot", "ba
 const TK_ORIGIN = {outside: "Outside the panel", server: "A service on your server", panel: "The panel itself", unknown: ""};
 const tkSimple = a => { const s = a.summary || {}, ok = a.ok === true, stale = a.ok == null && !a.done && Date.now() / 1000 - a.ts > 3600, run = a.ok == null && !stale;
   const did = (s.tried || []).length ? s.tried.map(esc).join(" → ") : (ok ? "The Doctor fixed it by itself." : "Nothing more could be done from the panel.");
-  const why = stale ? `<div class="tk-line tk-why"><span class="tk-or o-panel">The panel was restarted</span><span>This job was cut short when the panel restarted, so it never finished. Look at the tunnel again: if it is still down the Doctor starts a new repair by itself.</span></div>` : !ok && !run && s.hint ? `<div class="tk-line tk-why">${s.origin && s.origin !== "unknown" ? `<span class="tk-or o-${esc(s.origin)}">${esc(TK_ORIGIN[s.origin])}</span>` : ""}<span>${esc(s.hint)}</span></div>` : "";
-  return `<div class="tk ${ok ? "ok" : run ? "run" : "bad"}"><div class="tk-head"><span class="tk-res">${ok ? "✓ Fixed" : run ? "… Working on it" : stale ? "✕ Stopped early" : "✕ Could not fix"}</span><b>${esc(a.ref)}</b><time title="${when(a.ts)}">${ago(a.ts)} ago</time><a class="mut tk-more" onclick="this.closest('.tk').querySelector('.fix').classList.toggle('hidden')">story</a></div>
-    ${s.problem ? `<div class="tk-line"><em>Problem</em><span>${esc(s.problem)}</span></div>` : ""}<div class="tk-line"><em>What was done</em><span>${did}</span></div>${why}
-    <div class="fix hidden">${(a.story || []).map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></div>`; };
+  const org = stale ? ["panel", "The panel was restarted"] : !ok && !run && s.origin && s.origin !== "unknown" ? [s.origin, TK_ORIGIN[s.origin]] : null;      // ONE line says what matters; the rest is under "details"
+  const one = stale ? "This job was cut short when the panel restarted. If the tunnel is still down, the Doctor starts again by itself." : ok ? did : run ? "Working on it…" : (s.hint || s.problem || did);
+  return `<div class="tk ${ok ? "ok" : run ? "run" : "bad"}"><div class="tk-head"><span class="tk-res">${ok ? "✓ Fixed" : run ? "… Working" : stale ? "✕ Stopped" : "✕ Not fixed"}</span><b>${esc(a.ref)}</b>${org ? `<span class="tk-or o-${esc(org[0])}">${esc(org[1])}</span>` : ""}<time title="${when(a.ts)}">${ago(a.ts)} ago</time><a class="mut tk-more" onclick="this.closest('.tk').querySelector('.fix').classList.toggle('hidden')">details</a></div>
+    <div class="tk-one">${esc(one)}</div>
+    <div class="fix hidden">${s.problem ? `<div class="tk-line"><em>Problem</em><span>${esc(s.problem)}</span></div>` : ""}<div class="tk-line"><em>What was done</em><span>${did}</span></div>${(a.story || []).map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></div>`; };
 const tkWorking = w => `<div class="tk run"><div class="tk-head"><span class="tk-res">… Fixing it now</span><b>${esc(w.name)}</b></div><div class="tk-line"><em>Right now</em><span>${esc(w.line || (w.mode === "look" ? "looking at it" : "repairing"))}</span></div></div>`;
-window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "ana"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); if (k === "ana") anaLoad(); };
+window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "cpu", "ana"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); if (k === "ana") anaLoad(); };
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
@@ -1526,7 +1560,7 @@ PAGES.actions = async () => {
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(stName(t.state))}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : ((outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`); })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span>${(() => { const off = outage && outage.by_tunnel && outage.by_tunnel[t.name], loss = (t.detail || {}).loss_pct || 0, why = off ? `A server of this tunnel is off (${off.join(", ")}): nothing is done until it is back.` : kind === "lossy" ? `${Math.round(loss)} % of the data is lost on this link.` : t.state === "down" ? "The tunnel does not answer." : "Part of the link works, part does not."; return `<span class="ap-why ${off ? "mut" : ""}" title="${esc(why)}">${esc(why)}</span>` + (off || t.last_error || kind === "lossy" ? `<a class="ap-detail" onclick="apDetail(${t.id})" title="The full reason and the log">Detail</a>` : ""); })()}${rp.auto ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
-  let apTab = "now"; try { const v = localStorage.getItem("nk.aptab"); apTab = ["done", "ana"].includes(v) ? v : "now"; } catch (e) { /* private window */ }
+  let apTab = "now"; try { const v = localStorage.getItem("nk.aptab"); apTab = ["done", "cpu", "ana"].includes(v) ? v : "now"; } catch (e) { /* private window */ }
   const working = (outage && outage.working) || [], inList = w => bad.concat(lossy).some(t => t.name === w.name), workingRows = working.filter(w => !inList(w)).map(tkWorking).join(""), nowN = bad.length + lossy.length + working.filter(w => !inList(w)).length;
   const doneList = histRows(d.actions), doneN = doneList.length, doneRows = doneList.map(tkSimple).join("");
   const auto = rp.auto ? `automatic: level <b>${esc(rp.level || "restart")}</b> after ${esc(rp.after_seconds || 180)} s` : "automatic repair is <b>off</b>";
@@ -1540,26 +1574,19 @@ PAGES.actions = async () => {
       <div class="ap-do">${i.kind === "off" ? "Nothing is done to its tunnels until it is back on: nothing to restart or rebuild." : "The repair only watches: rebuilding would not help. It carries on by itself when the server answers well again."}</div></div>`;
   const disturb = issues.length ? `<div class="card ap-alert"><h3>⚠ Servers and network <span class="sp"></span><span class="pill err">${issues.length}</span></h3><div class="ap-issues">${issues.map(issueCard).join("")}</div></div>` : "";
   const storm = outage && outage.storm ? `<div class="storm-banner">⚠ <b>Mass disruption:</b> ${outage.servers_offline.length} server(s) offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down. While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.</div>` : "";
-  const intro = `<details class="card ap-intro" data-tab="att"><summary>🩺 What the Tunnel Doctor does <small class="mut">(click to read)</small></summary><div class="ap-steps">
-      <div><b>1 · Watches</b><span>Every tunnel is checked each minute: its services, the GRE link, the control port and whether data really passes - and the packet loss.</span></div>
-      <div><b>2 · Restarts</b><span>A tunnel that stays down for ${esc(rp.after_seconds || 180)} s gets its service restarted, one tunnel at a time.</span></div>
-      <div><b>3 · Repairs</b><span>If a restart is not enough it climbs, once per half hour per tunnel, up to the level you chose: rebuild, a new GRE link, another tunnel type. A move to another Iran server goes through <i>DNS · IP switch</i>: it asks you first, or runs by itself when you set it so.</span></div>
-      <div><b>4 · Looks at loss</b><span>From 5 % packet loss it only reads and writes what it sees (the live log); from 15 % - what users feel - it acts, after testing first.</span></div>
-      <div><b>5 · Waits</b><span>While a server of a tunnel is off, or during a mass disruption, it does nothing to the tunnel: there is nothing to repair until the server is back.</span></div>
-      <div><b>6 · Tells you</b><span>Every step, test and build is written in <i>History</i> with its full story. <i>Explain with AI</i> reads the situation and says what to do first.</span></div></div></details>`;
-  $("#page").innerHTML = `${intro}<div data-tab="att" class="ap-top">${storm}${disturb}</div><form class="card ap-bar" data-tab="att" onsubmit="return saveDoctor(event)">
-      <label class="chk" title="On: the Tunnel Doctor restarts, rebuilds, builds the link again and tries other tunnel types by itself. Off: you diagnose and fix by hand."><input name="auto" type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""}> Repair a down tunnel by itself</label>
-      <label class="ap-f">Start after it was down for <span class="ap-sec"><input name="after_seconds" type="number" min="30" max="3600" value="${rp.after_seconds || 60}"><em>s</em></span></label>
-      <label class="ap-f">How far it may go<select name="level">${[["restart", "Restart only (safe)"], ["rebuild", "+ rebuild the tunnel"], ["switch", "+ switch the tunnel type when the route blocks it"]].map(([k, l]) => `<option value="${k}" ${(rp.level || "switch") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <button class="pri" type="submit" ${d.read_only ? "disabled" : ""}>Save</button><span class="sp"></span>
-      ${bad.length && !rp.auto ? `<button type="button" class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all with AI (${bad.length})</button>` : ""}<button type="button" class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain with AI</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></form>
-    ${balCard(bl, srvs)}
+  const intro = "";
+  $("#page").innerHTML = `${intro}<div data-tab="att" class="ap-top">${storm}${disturb}</div><form class="card ap-bar ap-bar2" data-tab="att" onsubmit="return saveDoctor(event)">
+      <label class="srv-sw ap-sw ${rp.auto ? "on" : ""}" title="On: the Tunnel Doctor restarts, rebuilds and tries other tunnel types by itself. Off: you fix by hand."><input name="auto" type="checkbox" ${rp.auto ? "checked" : ""} ${d.read_only ? "disabled" : ""} onchange="this.closest('.srv-sw').classList.toggle('on', this.checked); this.form.requestSubmit()"><i></i><b>Fix tunnels by itself</b></label>
+      <button type="button" class="sm" onclick="this.closest('form').classList.toggle('open')">⚙ Settings</button>
+      <span class="ap-set"><label class="ap-f">after <span class="ap-sec"><input name="after_seconds" type="number" min="30" max="3600" value="${rp.after_seconds || 60}"><em>s</em></span></label><label class="ap-f">up to<select name="level">${[["restart", "restart"], ["rebuild", "rebuild"], ["switch", "switch type"]].map(([k, l]) => `<option value="${k}" ${(rp.level || "switch") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label><button class="pri sm" type="submit" ${d.read_only ? "disabled" : ""}>Save</button></span><span class="sp"></span>
+      ${bad.length && !rp.auto ? `<button type="button" class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all (${bad.length})</button>` : ""}<button type="button" class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></form>
     <div class="card ap-tasks" data-tab="att">
-      <div class="ap-ttabs"><button data-k="now" class="${apTab === "now" ? "on" : ""}" onclick="apTasksTab('now')">🔧 In progress${nowN ? ` <i class="cnt">${nowN}</i>` : ""}</button><button data-k="done" class="${apTab === "done" ? "on" : ""}" onclick="apTasksTab('done')">✔ Finished${doneN ? ` <i class="cnt">${doneN}</i>` : ""}</button><button data-k="ana" class="${apTab === "ana" ? "on" : ""}" onclick="apTasksTab('ana')" title="What the history says about the tunnels and the servers">📊 Analyst</button></div>
+      <div class="ap-ttabs"><button data-k="now" class="${apTab === "now" ? "on" : ""}" onclick="apTasksTab('now')">🔧 In progress${nowN ? ` <i class="cnt">${nowN}</i>` : ""}</button><button data-k="done" class="${apTab === "done" ? "on" : ""}" onclick="apTasksTab('done')">✔ Finished${doneN ? ` <i class="cnt">${doneN}</i>` : ""}</button><button data-k="cpu" class="${apTab === "cpu" ? "on" : ""}" onclick="apTasksTab('cpu')" title="A server whose network traffic sits on ONE processor core is slow even when its total CPU looks low. Here the Doctor spreads that work over all the cores (RPS), and you can undo it.">🖥 CPU cores</button><button data-k="ana" class="${apTab === "ana" ? "on" : ""}" onclick="apTasksTab('ana')" title="What the history says about the tunnels and the servers">📊 Analyst</button></div>
       <div class="ap-tbody ${apTab === "now" ? "" : "hidden"}" id="ap-t-now"><div class="ap-att">${workingRows}${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
-        ${nowN ? "" : '<div class="tk-empty"><b>✓ Nothing to fix right now.</b><span>Every tunnel works. When one stops working it appears here, and the Doctor starts fixing it by itself. What it did, and whether it worked, moves to “Finished”.</span></div>'}</div>
-        <small class="mut ap-note">${d.read_only ? "Read-only mode: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server." : `Repairs: ${auto}. At most ${rp.max_per_hour || "a few"} restarts per tunnel per hour; never while a server is unreachable.`}</small><div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
-      <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || '<div class="tk-empty"><b>Nothing to show yet.</b><span>Every problem the Doctor looked at shows here with the result: fixed, or could not be fixed and why.</span></div>'}</div></div>
+        ${nowN ? "" : '<div class="tk-empty"><b>✓ Nothing to fix right now</b></div>'}</div>
+        <div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
+      <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || '<div class="tk-empty"><b>Nothing yet</b></div>'}</div></div>
+      <div class="ap-tbody ${apTab === "cpu" ? "" : "hidden"}" id="ap-t-cpu">${balCard(bl, srvs)}</div>
       <div class="ap-tbody ${apTab === "ana" ? "" : "hidden"}" id="ap-t-ana"><div id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div></div>
     </div>
     `;
@@ -4036,7 +4063,7 @@ function dnsChanges(log, accounts) {
   const row = e => `<tr class="${e.restored ? "" : "up"}"><td class="mut" title="${when(e.at)}">${ago(e.at)} ago</td><td class="name" dir="ltr">${esc(e.fqdn)}</td><td class="mono">${e.op ? esc((e.old || "—") + " → " + (e.new || "—")) : esc(e.old) + " → " + esc(e.new)}</td><td>${e.op ? esc(an(e.account)) + " · by hand · " + opName[e.op] : esc(e.server) + (e.target && e.target !== e.server ? " → " + esc(e.target) : "")}</td>
     <td>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : '<span class="pill ok">active</span>'}</td>
     <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}')" title="Put this change back">↩ Restore</button>`}</td></tr>`;
-  return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:11%"><col style="width:24%"><col style="width:22%"><col style="width:23%"><col style="width:9%"><col style="width:11%"></colgroup>
+  return `<table class="tbl lift srv-tbl joined ${fast ? "fx-in" : ""}"><colgroup><col style="width:11%"><col style="width:24%"><col style="width:22%"><col style="width:23%"><col style="width:9%"><col style="width:11%"></colgroup>
     <thead><tr><th>When</th><th>Name</th><th>Address</th><th>Who</th><th>State</th><th></th></tr></thead>
     <tbody>${log.map(row).join("") || '<tr><td colspan="6" class="empty">No record has been changed yet. Every record you make, change or delete (or the failover re-points) is listed here and can be put back with one click.</td></tr>'}</tbody></table>`;
 }
@@ -4045,7 +4072,7 @@ function dnsAccounts(accounts, live) {
     return `<tr><td><span class="tybadge ${a.provider}">${esc(a.provider_name)}</span></td><td class="name">${esc(a.name)}${a.main ? ' <small class="mut">(main · the failover uses it)</small>' : ""}</td><td class="mono">${a.key_tail ? "•••• " + esc(a.key_tail) : "••••"}</td>
       <td>${ok ? (l.domains ? l.domains.length : s.domains || 0) + " domains" : ""}</td><td>${ok ? '<span class="pill ok">connected</span>' : `<span class="pill err" title="${esc(l.error || s.error || "")}">${l.error || s.error ? "not working" : "not tested"}</span>`}</td>
       <td class="dr-act"><button class="sm" onclick="dnsAccTest('${esc(a.id)}')" title="Try the key (read only)">Test</button><button class="ic" title="Change the name or the key" onclick="dnsAccForm('${esc(a.id)}')">✎</button><button class="ic danger" title="Remove this account from the panel (nothing changes at the provider)" onclick="dnsAccDel('${esc(a.id)}', '${esc(a.name)}')">🗑</button></td></tr>`; };
-  return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:13%"><col style="width:27%"><col style="width:12%"><col style="width:14%"><col style="width:14%"><col style="width:20%"></colgroup>
+  return `<table class="tbl lift srv-tbl joined ${fast ? "fx-in" : ""}"><colgroup><col style="width:13%"><col style="width:27%"><col style="width:12%"><col style="width:14%"><col style="width:14%"><col style="width:20%"></colgroup>
     <thead><tr><th>Provider</th><th>Name</th><th>Key</th><th>Domains</th><th>State</th><th></th></tr></thead>
     <tbody>${accounts.map(row).join("") || '<tr><td colspan="6" class="empty">No account yet. Add an ArvanCloud account or a Cloudflare token with “＋ Add account”.</td></tr>'}</tbody></table>`;
 }

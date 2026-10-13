@@ -65,6 +65,8 @@ nikatel/
     diagnosis.py     reads a failure: is it the panel, a service on your server, or outside it? (pure rules; a repair's plain summary and the log summary use it)
     underuse.py      a server that carries little is looked at (net_health probe): what the kernel settings can fix is fixed (sysctl_tune, measured,
                      rolled back when worse); a fault of the provider's network is reported once
+    checkall.py      check every server in one go (answers, GRE through a temporary link, filtering in Iran): ONE action on the panel server, progress from the
+                     action log, Stop ends it, a page reload does not
     housekeeping.py  the growing tables trimmed (events 60 days, finished stories 90 days), the write-ahead log folded back
     demo.py          the public demo: invented data, no sign-in, every change refused (NIKATEL_DEMO=true; docs/demo.md)
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
@@ -83,7 +85,7 @@ nikatel/
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
                    (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, radar, shopbot,
-                    alerts, events, jobs, failover, dns, license, balance, analyst, system = health, logs, update of the panel itself)
+                    alerts, events, jobs, failover, dns, license, balance, analyst, checkall, system = health, logs, update of the panel itself)
   web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
                    glass modal windows (showModal), themes (LOOK), a loading box on every page change
                    and automatic retry when a load fails, a status bar for messages, phone layout

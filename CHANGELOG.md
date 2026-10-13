@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.32.0
+
+- **Check all** replaces *Check GRE links* in the servers bar: one action on the panel server that checks every enabled server (does it answer, does GRE work to it through the new GRE test, is a foreign one filtered in Iran) four at a time. The button shows `Checking 3/14` and stays disabled until it ends unless you press **Stop**; reloading the page does not stop it (`POST/GET /api/checkall`, `POST /api/checkall/stop`; the progress comes from the action log).
+- **The bar above the servers list is ONE row** (buttons, numbers, tabs, search); the search box takes what is left and never sticks out. **Foreign** is the first tab. Switching Iran / Foreign draws at once from what is known and the rows come in softly (no jump). The count in the tunnel tabs uses the same chip as the servers.
+- **Add several servers** has the design of the one-server form (two boxes and a foot).
+- **Install view** after the operator's design: two node cards (Marzban: certificate with Paste / Copy; PasarGuard: API key with show / hide and Show certificate), one row per tool (Abuse-Defender with its state, Update the server), icons on every button.
+- **Tunnel Doctor, calmer:** the long explanation is gone; one slim bar (a switch *Fix tunnels by itself*, Settings folded away); ONE box with four tabs (In progress / Finished / CPU / Analyst); a card says one thing and keeps the rest under *details*.
+- **One design for every box:** windows, cards and boxes share the surface, line and corner; fields are dark with the label above; two kinds of button (blue pill with a glow, dark pill).
+- **Create tunnel:** a log box of a fixed size at the bottom of the window, always there.
+
 ## 1.31.0
 
 **Servers: disabled looks disabled, a new Install view, a console for anyone.**

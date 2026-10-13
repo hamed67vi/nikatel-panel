@@ -3536,3 +3536,92 @@ html body .srv-tbl tr.srv-off td.name.has-flag::before { filter: grayscale(1); o
 .ins-rows { display: grid; gap: 8px; }
 .ins-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 16px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); }
 .ins-row > i { font-style: normal; font-size: 20px; width: 26px; text-align: center; } .ins-row > b { font-size: 14px; } .ins-row .sp { flex: 1; } .ins-row .sm:disabled { opacity: .4; cursor: default; }
+
+.ins-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .ins-node .ins-h { margin-bottom: 2px; }
+.ins-node textarea, .ins-node input, .ins-node .ins-cert { width: 100%; box-sizing: border-box; border-radius: 10px; } .ins-node textarea, .ins-node .ins-cert { font: 11.5px/1.4 var(--mono); } .ins-node input { height: 36px; }
+@media (max-width: 900px) { .ins-two { grid-template-columns: 1fr; } }
+
+/* switching Iran / Foreign: the rows come in softly, the page does not jump */
+@keyframes rowSoft { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.srv-tbl.fx-in tbody tr { animation: rowSoft .22s ease both; } @media (prefers-reduced-motion: reduce) { .srv-tbl.fx-in tbody tr { animation: none; } }
+/* the count in the tabs of the tunnel list: the same chip as in the servers list */
+.tf-tabs button { display: inline-flex; align-items: center; gap: 8px; } .tf-tabs .cnt { font-style: normal; min-width: 18px; height: 18px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; font-size: 11px; font-weight: 700; background: rgba(255,255,255,.08); color: var(--mut); } .tf-tabs button.on .cnt { background: rgba(10,132,255,.25); color: #9cc8ff; }
+
+/* the bar above the servers list, rebuilt: two rows (the buttons and the numbers, then the tabs and the search) - nothing sticks out */
+.srv-bar { display: grid; gap: 10px; align-items: stretch; }
+.srv-bar .sb-r1, .srv-bar .sb-r2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.srv-bar .sb-r2 > .sp { flex: 1; } .srv-bar .sb-r2 > :last-child:not(.sp):not(.tabs) { flex: 0 1 320px; min-width: 180px; max-width: 100%; }
+.ca-run { display: inline-flex; align-items: center; gap: 10px; } .ca-run .sm { display: inline-flex; align-items: center; gap: 8px; } .ca-stop { cursor: pointer; font-size: 12.5px; font-weight: 700; color: #ff8a9b; text-decoration: underline; text-underline-offset: 3px; }
+
+/* the bar above the servers list: ONE row (buttons, numbers, tabs, search); the search box takes what is left and shrinks, it never sticks out. Only a narrow window wraps it. */
+html body #page .toolbar.srv-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; overflow: visible; }
+html body #page .srv-bar .sb-r1 { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; flex: 0 0 auto; }
+html body #page .srv-bar .sb-r2 { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; flex: 1 1 360px; min-width: 0; justify-content: flex-end; }
+html body #page .srv-bar .sb-r2 > .sp { display: none; }
+html body #page .srv-bar .srv-tabs { flex: none; }
+html body #page .srv-bar .tb-search { flex: 1 1 150px; min-width: 120px; max-width: 260px; margin: 0; padding-left: 0; border-left: 0; }
+html body #page .srv-bar .tb-search input { width: 100%; min-width: 0; box-sizing: border-box; height: 38px; padding-left: 38px; }
+html body #page .srv-bar .tb-search::before { left: 13px; }
+html body #page .srv-bar .nd-stats { flex: none; }
+
+/* the form for several servers: the textarea row stands on its own line, like a field of the one-server form */
+.srv-form2 .kv2.kf-top { flex-direction: column; align-items: stretch; gap: 6px; } .srv-form2 .kv2.kf-top > span { width: auto; }
+.srv-form2 .kf textarea { width: 100%; box-sizing: border-box; min-height: 150px; border-radius: 10px; font: 12.5px/1.5 var(--mono); resize: vertical; }
+
+/* ---- the Install view, after the design: bigger buttons with icons, outlined icon boxes, a dot in the state chip ---- */
+.ins3 { gap: 14px; } .ins-two { gap: 14px; }
+.ins-node { gap: 14px; padding: 18px 20px; border-radius: 18px; } .ins-h { display: flex; align-items: center; gap: 14px; } .ins-h b { font-size: 16px; }
+.ins-sq { width: 34px; height: 34px; border-radius: 9px; display: inline-block; } .ins-sq.mz { background: #2f6df0; } .ins-sq.pg { background: #8a52f0; }
+.ins-field { display: flex; align-items: stretch; gap: 8px; } .ins-field textarea, .ins-field input { flex: 1 1 auto; min-width: 0; margin: 0; border-radius: 12px; }
+.ins-field input { height: 46px; padding: 0 16px; } .ins-field textarea { min-height: 78px; padding: 10px 14px; }
+.ins-mini { flex: none; width: 46px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #c9d2e6; } .ins-mini:hover { background: rgba(255,255,255,.1); } .ins-field input + .ins-mini { height: 46px; }
+.ins-act { display: flex; align-items: center; gap: 10px; } .ins-act .sp { flex: 1; }
+.ins-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 44px; padding: 0 22px; border-radius: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; color: #e8edf8; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); box-shadow: none; }
+.ins-btn:hover:not(:disabled) { background: rgba(255,255,255,.12); } .ins-btn.pri { color: #fff; background: #1a7bff; border-color: #1a7bff; box-shadow: 0 6px 18px rgba(26,123,255,.28); } .ins-btn.pri:hover:not(:disabled) { background: #3b8cff; }
+.ins-btn.danger { color: #ffb3bd; background: rgba(255,69,58,.22); border-color: rgba(255,69,58,.5); } .ins-btn.danger:hover:not(:disabled) { background: rgba(255,69,58,.32); } .ins-btn:disabled { opacity: .42; cursor: default; box-shadow: none; }
+.ins-svg { flex: none; }
+.ins-rows { gap: 12px; } .ins-row { gap: 16px; min-height: 76px; padding: 12px 20px; border-radius: 18px; } .ins-row > b { font-size: 16px; }
+.ins-ico { flex: none; width: 52px; height: 52px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #dfe6f5; } .ins-ico .ins-svg { width: 24px; height: 24px; }
+.ins-chip { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 14px; border-radius: 15px; font-size: 14px; font-weight: 600; } .ins-chip i { width: 9px; height: 9px; border-radius: 50%; background: currentColor; display: inline-block; }
+.ins-chip.ok { color: #30d158; background: rgba(48,209,88,.12); border: 1px solid rgba(48,209,88,.35); } .ins-chip.off { color: #98a3ba; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); } .ins-chip.off i { display: none; }
+.ins-node .ins-cert { margin: 0; }
+
+/* the Tunnel Doctor, calmer: one slim bar (a switch, Settings folded away), ONE box with four tabs, a card says one thing and keeps the rest under "details" */
+.ap-bar2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; } .ap-bar2 .ap-sw { height: 36px; padding: 0 12px 0 2px; font-size: 14px; color: var(--fg); }
+.ap-bar2 .ap-sw.on b { color: #5ee07f; } .ap-bar2 .ap-sw:not(.on) b { color: var(--mut); }
+.ap-bar2 .ap-set { display: none; align-items: center; gap: 12px; } .ap-bar2.open .ap-set { display: flex; } .ap-bar2 .ap-f { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--mut); } .ap-bar2 .ap-sp { width: 84px; }
+.ap-bar2 .sp { flex: 1; }
+.ap-tasks .tk-one { padding: 2px 0 0; font-size: 12.5px; line-height: 1.4; color: #c9d2e6; } .ap-tasks .tk.ok .tk-one { color: #b5e8c4; }
+.ap-tasks .tk .fix { margin-top: 6px; } .ap-tasks .tk-head .tk-or { margin-left: 4px; }
+.ap-tasks .tk-empty { padding: 28px 18px; } .ap-tasks .tk-empty b { font-size: 14px; color: var(--mut); }
+.ap-tasks #ap-t-cpu > .card { margin: 0; border: 0; background: transparent; padding: 0; box-shadow: none; }
+
+/* ================= ONE DESIGN FOR EVERY BOX (after the "Add a plan to the bot" window) =================
+   the same surface, the same line, the same corner for a window, a card and a box; the same dark field with the label above it; the same two kinds of button.
+   It is the last layer of this file, so it wins over the older looks of the separate pages. The light mode keeps its own colours. */
+html:not([data-mode="light"]) { --u-modal: #0f1626; --u-card: #131b2d; --u-field: #0b1120; --u-line: rgba(255,255,255,.1); --u-line2: rgba(255,255,255,.07); --u-r: 18px; --u-blue: #0a84ff; }
+html:not([data-mode="light"]) body #modal .modal { background: var(--u-modal); border: 1px solid rgba(255,255,255,.12); border-radius: 26px; box-shadow: 0 30px 80px rgba(0,0,0,.55); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html:not([data-mode="light"]) body #modal .modal-head { background: transparent; border-bottom: 1px solid var(--u-line2); }
+html:not([data-mode="light"]) body #page .card, html:not([data-mode="light"]) body #modal .card, html:not([data-mode="light"]) body .sbox, html:not([data-mode="light"]) body .ibox, html:not([data-mode="light"]) body .wsec .mcard { background: var(--u-card); border: 1px solid var(--u-line); border-radius: var(--u-r); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+html:not([data-mode="light"]) body .card > h3, html:not([data-mode="light"]) body .sbox > h5 { border-color: var(--u-line2); }
+/* the fields: dark, a soft line, a big corner; the label stays above in the muted colour */
+html:not([data-mode="light"]) body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(.ask-in):not([type="search"]), html:not([data-mode="light"]) body select, html:not([data-mode="light"]) body textarea { background: var(--u-field); border: 1px solid var(--u-line2); border-radius: 14px; color: #f2f5fb; }
+html:not([data-mode="light"]) body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="search"]):not(.ins-field input), html:not([data-mode="light"]) body select { min-height: 38px; padding-left: 14px; padding-right: 14px; }
+html:not([data-mode="light"]) body textarea { padding: 10px 14px; }
+html:not([data-mode="light"]) body input:focus, html:not([data-mode="light"]) body select:focus, html:not([data-mode="light"]) body textarea:focus { outline: 0; border-color: var(--u-blue); box-shadow: 0 0 0 3px rgba(10,132,255,.2); }
+html:not([data-mode="light"]) body label > span:first-child, html:not([data-mode="light"]) body .frm > label { color: #9aa4b8; }
+/* the buttons of a window and of a card: a blue pill with a glow for the main thing, a dark pill for the rest, a red tint for a dangerous one */
+html:not([data-mode="light"]) body #modal button.pri, html:not([data-mode="light"]) body .card button.pri, html:not([data-mode="light"]) body button.pri { background: var(--u-blue); border: 1px solid var(--u-blue); color: #fff; font-weight: 700; border-radius: 999px; box-shadow: 0 8px 22px rgba(10,132,255,.32); }
+html:not([data-mode="light"]) body #modal button.pri:hover, html:not([data-mode="light"]) body button.pri:hover { filter: brightness(1.1); }
+html:not([data-mode="light"]) body #modal button:not(.pri):not(.danger):not(.sm):not(.min-btn):not(.mm-x), html:not([data-mode="light"]) body .frm-act button:not(.pri):not(.danger) { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13); color: #eef2fb; border-radius: 999px; font-weight: 600; }
+html:not([data-mode="light"]) body button.danger { color: #ffb3bd; background: rgba(255,69,58,.16); border: 1px solid rgba(255,69,58,.45); border-radius: 999px; }
+
+/* the log of the Create tunnel window: ONE box of a fixed size at the bottom of the window, always there (it says what it is for while empty); the build and the test write into it */
+#modal .bld-log { position: sticky; bottom: 0; z-index: 3; box-sizing: border-box; height: 150px; margin: 12px 0 0; padding: 10px 14px; overflow: auto; border-radius: 16px; background: #0b1120; border: 1px solid rgba(255,255,255,.1); }
+#modal .bld-log:empty::before { content: "Messages and the progress of the build and the test show here."; color: var(--mut); font-size: 13px; }
+#modal .bld-log.hidden { display: block; }
+
+/* the soft arrow at the end of a card under the pointer: the tunnel cards have it too (room is kept for it at the end of the row) */
+.tun-tbl td:last-child { position: relative; overflow: visible; padding-right: 52px; }
+.tun-tbl td:last-child::after { content: "›"; position: absolute; right: 12px; top: 50%; width: 24px; height: 24px; margin-top: -12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 18px; line-height: 1; padding-bottom: 2px; color: rgba(200,218,255,.8); background: rgba(120,160,230,.16); border: 1px solid rgba(140,175,240,.22); opacity: 0; transform: translateX(-6px); transition: opacity .15s ease, transform .15s ease; pointer-events: none; }
+.tun-tbl tr.clk:hover td:last-child::after { opacity: .85; transform: none; }
