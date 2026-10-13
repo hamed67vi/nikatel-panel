@@ -71,7 +71,7 @@ def test_forwards_get_a_port_once_and_keep_it():
     assert [x["listen"] for x in routes] == [30000, 30001] and routes[1]["name"] == "198.51.100.21:443"
     outbound.drop_routes([routes[0]["id"]])
     outbound.add_routes([{"target_host": "198.51.100.22", "target_port": 80}])
-    assert [x["listen"] for x in outbound.state()["routes"]] == [30001, 30000]                 # the freed port is reused, the other one never moved
+    assert [x["listen"] for x in outbound.state()["routes"]] == [30001, 30002]                 # the freed port is NOT given to another target (a CDN record may still point at it); the other one never moved
     outbound.set_route(outbound.state()["routes"][0]["id"], False)
     assert outbound.state()["routes"][0]["enabled"] is False
     with pytest.raises(ValueError):
@@ -252,6 +252,8 @@ class FakeArvan:
                      "r3": {"account": "arvan", "domain": "example.test", "id": "r3", "type": "A", "name": "dns-only", "fqdn": "dns-only.example.test", "ips": [ip], "port": 8075, "upstream": "http", "ttl": 120, "cloud": False}}
         self.calls = []
 
+    ttls = ()
+
     def domains(self):
         return ["example.test"]
 
@@ -321,6 +323,9 @@ def test_classify():
 def _dns(monkeypatch, fake):
     from types import SimpleNamespace
 
+    from nikatel.api import dns as dns_api
+
+    dns_api._CACHE.update(at=0.0, rows=[], accounts=[])                                                          # the DNS page keeps a copy of the records: every test starts without it
     acc = SimpleNamespace(id="arvan", provider="arvan", name="ArvanCloud")
     monkeypatch.setattr(outbound.dnsprov, "accounts", lambda: [acc])
     monkeypatch.setattr(outbound.dnsprov, "provider_of", lambda a: fake)
@@ -498,7 +503,22 @@ def test_due_decides_which_tunnels_are_connected_and_which_come_back():
     assert outbound.due({"x": {"state": "up", "since": now - 3600}}, {}, 5, 30, now) == ([], [])             # a healthy tunnel nobody touched is left alone
 
 
+def test_the_automatic_switch_is_off_for_now(monkeypatch):
+    assert outbound.AUTO_USERS is False                                                                        # the owner's decision: no CDN record is changed by the panel itself until the tests are finished
+    with pytest.raises(ValueError, match="off for now"):
+        outbound.set_users("auto", 5, 30)
+    s = outbound._state()
+    s["users"]["mode"] = "auto"                                                                                # even a mode left over from before does nothing
+    outbound._save(s)
+    started = []
+    monkeypatch.setattr(outbound, "connect", lambda keys: started.append(keys) or 1)
+    monkeypatch.setattr(outbound, "connect_plan", lambda fresh=False: started.append("plan") or {"records": []})
+    outbound.auto_users()
+    assert started == [] and outbound.state()["users"]["auto_available"] is False
+
+
 def test_users_mode_needs_the_license_and_is_limited(monkeypatch):
+    monkeypatch.setattr(outbound, "AUTO_USERS", True)
     outbound.set_users("auto", 7, 40)
     u = outbound.state()["users"]
     assert u["mode"] == "auto" and u["after_minutes"] == 7 and u["back_minutes"] == 40
@@ -513,6 +533,7 @@ def test_users_mode_needs_the_license_and_is_limited(monkeypatch):
 
 
 def test_auto_users_connects_a_tunnel_that_stays_down_and_puts_it_back(monkeypatch):
+    monkeypatch.setattr(outbound, "AUTO_USERS", True)
     ids = _world()
     fake = FakeArvan("203.0.113.5")
     _dns(monkeypatch, fake)
@@ -569,6 +590,160 @@ def test_hubs_and_users_api(client, monkeypatch):
     assert client.put("/api/outbound/hubs", json={"server_ids": [fid]}).status_code == 200 and client.put("/api/outbound/hubs", json={"server_ids": [9999]}).status_code == 400
     assert client.get("/api/outbound").json()["hubs"][0]["name"] == "fo1" and client.get("/api/outbound").json()["foreign"][0]["id"] == fid
     assert client.post(f"/api/outbound/hubs/{fid}/remove").json()["ok"] is True and client.post(f"/api/outbound/hubs/{fid}/remove").status_code == 400
-    assert client.put("/api/outbound/users", json={"mode": "auto", "after_minutes": 3, "back_minutes": 20}).status_code == 200
-    assert client.get("/api/outbound").json()["users"] == {"mode": "auto", "after_minutes": 3, "back_minutes": 20, "licensed": True, "auto": []}
+    assert client.put("/api/outbound/users", json={"mode": "auto", "after_minutes": 3, "back_minutes": 20}).status_code == 400          # off for now
+    assert client.put("/api/outbound/users", json={"mode": "manual", "after_minutes": 3, "back_minutes": 20}).status_code == 200
+    assert client.get("/api/outbound").json()["users"] == {"mode": "manual", "after_minutes": 3, "back_minutes": 20, "licensed": True, "auto_available": False, "auto": []}
     assert client.put("/api/outbound/users", json={"mode": "later"}).status_code == 422 and client.put("/api/outbound/users", json={"mode": "auto", "after_minutes": 0}).status_code == 422
+
+def test_pick_relay_takes_the_quietest_online_server():
+    cands = [{"id": 1, "online": True, "cpu": 40, "ram": 50, "tunnels": 3}, {"id": 2, "online": True, "cpu": 10, "ram": 20, "tunnels": 1}, {"id": 3, "online": False, "cpu": 1, "ram": 1, "tunnels": 0},
+             {"id": 4, "online": True, "cpu": 90, "ram": 10, "tunnels": 0}, {"id": 5, "online": True, "cpu": None, "ram": None, "tunnels": 0}]
+    assert outbound.pick_relay(cands) == 2                                                  # offline and busy ones are out; the most room, the fewest tunnels
+    assert outbound.pick_relay([{"id": 3, "online": False}, {"id": 4, "online": True, "cpu": 95, "ram": 10}]) is None
+    assert outbound.pick_relay([{"id": 7, "online": True, "cpu": 30, "ram": 30, "tunnels": 0}, {"id": 8, "online": True, "cpu": 30, "ram": 30, "tunnels": 0}]) == 7    # a tie: the older server
+
+
+def test_the_one_button_makes_the_forwards_and_the_relay_itself(monkeypatch):
+    ids = _world()
+    outbound.add_configs(f"{VLESS_A}\n{VLESS_B}")
+    outbound.set_gateways([ids["i1"]])                                                                  # only the first Iran server is chosen: only its tunnels get forwards
+    with session() as db:
+        f = db.scalars(__import__("sqlalchemy").select(Server).where(Server.role == "foreign").order_by(Server.name)).first()
+        fname = f.name
+
+    calls = _fake_gateway(monkeypatch, [{"key": "gateway", "ok": True, "ms": 100, "ip": "", "country": ""}])
+    applied_hubs = []
+    monkeypatch.setattr(outbound, "apply_hub", lambda aid, sid: applied_hubs.append(sid) or True)
+    monkeypatch.setattr(outbound, "_check_hubs", lambda s, now: None)
+    outbound._apply_story(1)
+    routes = outbound.state()["routes"]
+    assert {r["server_id"] for r in routes} == {ids["i1"]} and len(routes) == 3                          # fo1-ir1 (8075), fo2-ir1 (443:2096, 80); the other Iran server's tunnels are not touched
+    assert len(outbound.state()["hubs"]) == 1 and applied_hubs == [outbound.state()["hubs"][0]["server_id"]]
+    assert any(c[0] == "say" and "Relay:" in c[1] and fname in c[1] or c[0] == "say" and "chosen (the quietest" in c[1] for c in calls)
+    assert any(c[0] == "say" and "No foreign server and port chosen" in c[1] and "3 new" in c[1] for c in calls)
+    s = outbound.state()
+    assert s["tunnel_ports"] == 3 and s["suggested_relay"] is not None
+
+# ------------------------------------------------------------------ the tunnels through the configs: Iran servers x foreign servers x ports
+def test_ports_are_read_from_text_or_a_list():
+    assert outbound.parse_ports("8075, 80  443;80") == [8075, 80, 443] and outbound.parse_ports([8075, "80"]) == [8075, 80] and outbound.parse_ports("") == []
+    for bad in ("0", "70000", "80 http", "-1"):
+        with pytest.raises(ValueError, match="not a port"):
+            outbound.parse_ports(bad)
+    with pytest.raises(ValueError, match="at most"):
+        outbound.parse_ports(list(range(1, 30)))
+
+
+def test_wanted_paths_are_every_pair_on_every_port():
+    iran, foreign = [{"id": 1, "name": "ir1"}, {"id": 2, "name": "ir2"}], [{"id": 5, "name": "fo1", "host": "198.51.100.30"}]
+    w = outbound.wanted_paths(iran, foreign, [8075, 80])
+    assert [(x["server_id"], x["target_host"], x["target_port"]) for x in w] == [(1, "198.51.100.30", 8075), (1, "198.51.100.30", 80), (2, "198.51.100.30", 8075), (2, "198.51.100.30", 80)]
+    assert w[0]["name"] == "ir1 → fo1 :8075" and outbound.wanted_paths([], foreign, [80]) == []
+
+
+def test_start_makes_exactly_the_chosen_paths_and_keeps_their_ports(monkeypatch):
+    ids = _world()
+    with session() as db:
+        fo = {x.name: x.id for x in db.scalars(__import__("sqlalchemy").select(Server).where(Server.role == "foreign"))}
+
+    outbound.set_gateways([ids["i1"], ids["i2"]])
+    outbound.set_targets([fo["fo1"]], "8075, 80")
+    made = outbound.make_paths()
+    assert made == {"added": 4, "kept": 0, "removed": 0}
+    routes = outbound.state()["routes"]
+    assert [(r["server_id"], r["target_host"], r["target_port"], r["listen"], r["source"]) for r in routes] == [(ids["i1"], "198.51.100.30", 8075, 30000, "path"), (ids["i1"], "198.51.100.30", 80, 30001, "path"),
+                                                                                                           (ids["i2"], "198.51.100.30", 8075, 30002, "path"), (ids["i2"], "198.51.100.30", 80, 30003, "path")]
+    assert [p["port"] for p in outbound.desired(ids["i1"])["ports"]] == [30000, 30001]                              # each Iran server carries only its own forwards
+    assert outbound.make_paths() == {"added": 0, "kept": 4, "removed": 0}                                           # again: nothing new, nothing moves
+    outbound.set_targets([fo["fo1"], fo["fo2"]], "8075")                                                            # a foreign server added, port 80 dropped
+    made = outbound.make_paths()
+    assert made == {"added": 2, "kept": 2, "removed": 2}
+    by = {(r["server_id"], r["target_host"], r["target_port"]): r["listen"] for r in outbound.state()["routes"]}
+    assert by[(ids["i1"], "198.51.100.30", 8075)] == 30000 and by[(ids["i2"], "198.51.100.30", 8075)] == 30002      # what stayed kept its port
+    assert sorted(by.values()) == [30000, 30002, 30004, 30005]                                                       # the two removed ports (30001, 30003) were not handed out again
+    outbound.add_routes([{"target_host": "198.51.100.77", "target_port": 1}])                                       # a forward made by hand is never dropped by Start
+    outbound.set_targets([], "")
+    assert outbound.make_paths()["removed"] == 4 and [r["source"] for r in outbound.state()["routes"]] == ["manual"]
+
+
+def test_targets_are_checked_and_shown(monkeypatch):
+    ids = _world()
+    with session() as db:
+        fo = {x.name: x.id for x in db.scalars(__import__("sqlalchemy").select(Server).where(Server.role == "foreign"))}
+
+    with pytest.raises(ValueError, match="foreign"):
+        outbound.set_targets([ids["i1"]], "80")                                                                     # an Iran server is not a foreign target
+    with pytest.raises(ValueError, match="not a port"):
+        outbound.set_targets([fo["fo1"]], "eighty")
+    outbound.set_gateways([ids["i1"]])
+    outbound.set_targets([fo["fo2"]], [443])
+    s = outbound.state()
+    assert s["ports"] == [443] and {f["name"]: f["chosen"] for f in s["foreign"]} == {"fo1": False, "fo2": True} and s["default_ports"] == [80, 443, 8075]
+
+
+def test_the_one_button_with_a_choice_makes_the_paths_not_the_tunnel_forwards(monkeypatch):
+    ids = _world()
+    outbound.add_configs(f"{VLESS_A}\n{VLESS_B}")
+    outbound.set_gateways([ids["i1"]])
+    with session() as db:
+        f = db.scalars(__import__("sqlalchemy").select(Server).where(Server.role == "foreign").order_by(Server.name)).first()
+        fid = f.id
+
+    outbound.set_targets([fid], "2095")
+    calls = _fake_gateway(monkeypatch, [{"key": "gateway", "ok": True, "ms": 100, "ip": "", "country": ""}])
+    monkeypatch.setattr(outbound, "apply_hub", lambda aid, sid: True)
+    monkeypatch.setattr(outbound, "_check_hubs", lambda s, now: None)
+    outbound._apply_story(1)
+    routes = outbound.state()["routes"]
+    assert [(r["source"], r["target_port"]) for r in routes] == [("path", 2095)]                                    # one Iran server x one foreign server x one port; the tunnels' ports are not added
+    assert any(c[0] == "say" and "Tunnels through your configs" in c[1] and "1 new" in c[1] for c in calls)
+
+
+def test_the_targets_api(client, monkeypatch):
+    ids = _world()
+    with session() as db:
+        fid = db.scalars(__import__("sqlalchemy").select(Server).where(Server.role == "foreign")).first().id
+
+    assert client.put("/api/outbound/targets", json={"foreign_ids": [fid], "ports": "8075, 80"}).status_code == 200
+    j = client.get("/api/outbound").json()
+    assert j["ports"] == [8075, 80] and [f["chosen"] for f in j["foreign"]] == [True, False] and j["paths"] == 0
+    assert client.put("/api/outbound/targets", json={"foreign_ids": [fid], "ports": [443]}).status_code == 200 and client.get("/api/outbound").json()["ports"] == [443]
+    assert client.put("/api/outbound/targets", json={"foreign_ids": [ids["i1"]], "ports": []}).status_code == 400
+    assert client.put("/api/outbound/targets", json={"foreign_ids": [fid], "ports": "x"}).status_code == 400
+
+
+def test_the_records_come_from_the_dns_pages_copy_unless_fresh_is_asked(monkeypatch):
+    _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    outbound.from_tunnels()
+    asked = []
+    real = fake.records
+    fake.records = lambda d: asked.append(d) or real(d)
+    assert len(outbound.connect_plan()["records"]) == 1 and asked == ["example.test"]                               # the first look reads ArvanCloud
+    assert len(outbound.connect_plan()["records"]) == 1 and asked == ["example.test"]                               # the second one uses the copy: no new question
+    assert len(outbound.connect_plan(True)["records"]) == 1 and asked == ["example.test", "example.test"]           # fresh asks again
+    outbound._forget_records()
+    outbound.connect_plan()
+    assert len(asked) == 3                                                                                          # a change makes the copy out of date
+
+def test_an_old_copy_of_the_records_is_shown_at_once_and_renewed_in_the_background(monkeypatch):
+    import time
+
+    from nikatel.api import dns as dns_api
+
+    _world()
+    fake = FakeArvan("203.0.113.5")
+    _dns(monkeypatch, fake)
+    outbound.from_tunnels()
+    assert len(outbound.connect_plan()["records"]) == 1
+    dns_api._CACHE["at"] = time.time() - 5000                                                                       # the copy is old
+    renewed = []
+    monkeypatch.setattr(dns_api, "_refresh_in_background", lambda: renewed.append(1))
+    asked = []
+    real = fake.records
+    fake.records = lambda d: asked.append(d) or real(d)
+    plan = outbound.connect_plan()
+    assert len(plan["records"]) == 1 and asked == [] and renewed == [1]                                             # shown from the copy, ArvanCloud not asked, a renewal started
+    assert abs(plan["cached_at"] - dns_api._CACHE["at"]) < 2 and plan["cached_at"] < time.time() - 4000
+    assert len(outbound.connect_plan(True)["records"]) == 1 and asked == ["example.test"]                           # fresh still asks

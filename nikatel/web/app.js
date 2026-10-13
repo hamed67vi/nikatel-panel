@@ -2107,7 +2107,7 @@ window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (awa
 const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
 const pa = {q: "", data: null, seq: 0};
 function pnAllRender(list) {
-  $("#page").innerHTML = `<div class="toolbar pn-top">${pnSelect(list, "*")}<span class="tcount pstat"><span class="tc info">Panels <b>${list.length}</b></span></span><span class="sp"></span><div class="toolbar pn-sb"><input id="pa-q" type="search" placeholder="Search a user on every panel…" value="${esc(pa.q)}" oninput="paQ(this.value)" autocomplete="off" spellcheck="false"></div></div>
+  $("#page").innerHTML = `<div class="toolbar pn-top">${pnSelect(list, "*")}<span class="tcount pstat"><span class="tc info">Panels <b>${list.length}</b></span></span><span class="sp"></span><button class="sm pri" onclick="paNew()" title="Make the same new user on several panels at once">＋ New account</button><div class="toolbar pn-sb"><input id="pa-q" type="search" placeholder="Search a user on every panel…" value="${esc(pa.q)}" oninput="paQ(this.value)" autocomplete="off" spellcheck="false"></div></div>
     <div id="pa-body"><div class="loading"><i class="spin"></i><span>Asking every panel…</span></div></div>`;
   paLoad();
 }
@@ -2119,7 +2119,7 @@ async function paLoad() {
   pa.data = d;
   const dot = s => s === "active" ? "ok" : s === "disabled" ? "" : "bad";
   const chip = m => `<span class="pa-chip" title="${esc(m.panel + " · " + m.username + " · " + m.status)}"><i class="pa-dot ${dot(m.status)}"></i>${esc(m.panel)}</span>`;
-  const row = a => `<tr class="clk" onclick="paOpen('${esc(a.key)}')" title="Open this account"><td class="name"><div class="usr-wrap"><i class="usr-av ${a.members.every(m => m.status === "active") ? "active" : "disabled"}">${SI.user}</i><div class="usr-nm"><b>${esc(a.name)}</b>${a.link ? '<small class="mut">linked by hand</small>' : a.panels > 1 ? '<small class="mut">same username</small>' : ""}</div></div></td><td class="pa-ch">${a.members.map(chip).join("")}</td><td>${fmtB(a.used)}</td><td>${expPill({expire_date: a.expire_date})}</td></tr>`;
+  const row = a => `<tr class="clk" onclick="paOpen('${esc(a.key)}')" title="Open this account"><td class="name"><div class="usr-wrap"><i class="usr-av ${a.members.every(m => m.status === "active") ? "active" : "disabled"}">${SI.user}</i><div class="usr-nm"><b>${esc(a.name)}</b>${a.link ? '<small class="mut">linked by hand</small>' : a.panels > 1 ? '<small class="mut">same username</small>' : ""}</div></div></td><td class="pa-ch">${a.members.map(chip).join("")}</td><td title="${a.limit ? "used of the sum of the limits on all panels" : "at least one panel has no limit"}">${fmtB(a.used)}${a.limit ? `<small class="mut"> / ${gb(a.limit)}</small>` : ""}</td><td>${expPill({expire_date: a.expire_date})}</td></tr>`;
   const bad = d.panels.filter(p => !p.ok);
   box.innerHTML = `${bad.length ? `<div class="gw-out bad">${bad.map(p => `✕ ${esc(p.name)}: ${esc(p.error)}`).join(" · ")}</div>` : ""}
     <div class="pa-box"><table class="tbl lift pa-tbl"><colgroup><col style="width:26%"><col><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Account</th><th>On panels</th><th>Used</th><th>Expires</th></tr></thead>
@@ -2130,10 +2130,10 @@ const paFind = key => ((pa.data || {}).accounts || []).find(a => a.key === key);
 window.paOpen = key => {
   const a = paFind(key); if (!a) return;
   const mrow = m => { const left = m.limit ? Math.max(0, m.limit - (m.used || 0)) : null;
-    return `<div class="ap-row pa-m"><span class="spill ${m.status}">${esc(String(m.status).replace("_", " "))}</span><b>${esc(m.panel)}</b><span class="mut">${esc(m.type)}</span><span class="mono">${esc(m.username)}</span><span class="sp"></span><span class="mut">${fmtB(m.used || 0)}${m.limit ? " of " + gb(m.limit) : " · unlimited"}</span>${expPill(m)}<button class="sm" onclick="closeModal();pnPick('${m.panel_id}');setTimeout(() => pnUserOpen(${m.panel_id}, '${esc(m.username)}'), 400)" title="Open this user in its panel">Open</button></div>`; };
+    return `<div class="ap-row pa-m"><span class="spill ${m.status}">${esc(String(m.status).replace("_", " "))}</span><b>${esc(m.panel)}</b><span class="mut">${esc(m.type)}</span><span class="mono">${esc(m.username)}</span><span class="sp"></span><span class="mut">${fmtB(m.used || 0)}${m.limit ? " / " + gb(m.limit) : " · unlimited"}</span>${expPill(m)}<button class="sm" onclick="closeModal();pnPick('${m.panel_id}');setTimeout(() => pnUserOpen(${m.panel_id}, '${esc(m.username)}'), 400)" title="Open this user in its panel">Open</button></div>`; };
   const have = new Set(a.members.map(m => m.panel_id)), free = (state.panelsCache || []).filter(p => !have.has(p.id));
   const add = free.length ? `<form class="frm pa-add" onsubmit="return paAdd(event, '${esc(a.key)}')"><span class="mut">Link a user with another name:</span><select name="panel">${free.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select><input name="username" required placeholder="username on that panel" autocomplete="off"><button class="sm pri" type="submit">Link</button></form>` : "";
-  showModal(`<b>${esc(a.name)}</b> <span class="pill">${a.panels} panel${a.panels === 1 ? "" : "s"}</span>`, `<div class="pa-ms">${a.members.map(mrow).join("")}</div>${add}${a.link ? `<div class="frm-act"><button class="sm danger" onclick="paUnlink('${esc(a.link)}')" title="Undo the link: nothing changes on the panels">Unlink</button></div>` : ""}<small class="mut">${fmtB(a.used)} used in total · the earliest end is ${a.expire_date ? esc(a.expire_date) : "never"}.</small>`, "wide");
+  showModal(`<b>${esc(a.name)}</b> <span class="pill">${a.panels} panel${a.panels === 1 ? "" : "s"}</span>`, `<div class="pa-ms">${a.members.map(mrow).join("")}</div>${add}<div class="frm-act pa-act"><select class="sm" onchange="paAct('${esc(a.key)}', this)" title="The same action on the user of every panel of this account"><option value="">On every panel…</option><option value="enable">Enable</option><option value="disable">Disable</option><option value="renew">Add days…</option><option value="limit">Set the data limit…</option><option value="reset">Reset the usage</option><option value="revoke">Revoke the subscription link</option><option value="delete">Delete…</option></select><button class="sm" onclick="paLink('${esc(a.key)}')" title="One subscription link that holds the configs of every panel of this account">Merged link</button><span class="sp"></span>${a.link ? `<button class="sm danger" onclick="paUnlink('${esc(a.link)}')" title="Undo the link: nothing changes on the panels">Unlink</button>` : ""}</div><div id="pa-link"></div><small class="mut">${a.limit ? `${fmtB(a.used)} used of ${gb(a.limit)} in total` : `${fmtB(a.used)} used in total`} · the earliest end is ${a.expire_date ? esc(a.expire_date) : "never"}.</small>`, "wide");
 };
 window.paAdd = async (e, key) => {
   e.preventDefault(); const a = paFind(key), f = new FormData(e.target); if (!a) return false;
@@ -2146,6 +2146,51 @@ window.paAdd = async (e, key) => {
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
+window.paAct = async (key, sel) => {
+  const v = sel.value; sel.selectedIndex = 0; const a = paFind(key); if (!v || !a) return;
+  const members = a.members.map(m => ({panel_id: m.panel_id, username: m.username})), n = `${a.panels} panel${a.panels === 1 ? "" : "s"}`;
+  let value = null;
+  if (v === "renew") { const d = await gprompt(`Add how many days on ${n}?`, "30"); if (!d) return; value = +d; }
+  else if (v === "limit") { const g = await gprompt(`Data limit in GB on ${n} (0 = unlimited):`, "50"); if (g == null || g === false || g === "") return; value = +g; }
+  else if (v === "delete") { if (!await gconfirm(`Delete ${a.name} on ${n}? This cannot be undone.`)) return; }
+  else if (v === "revoke") { if (!await gconfirm(`Revoke the subscription link of ${a.name} on ${n}? The old links stop working.`)) return; }
+  try {
+    const r = await api("/api/accounts/action", {method: "POST", body: JSON.stringify({members, action: v, value, confirm: v === "delete"})});
+    toast(r.failed ? `✕ ${r.done} done, ${r.failed} failed: ` + r.results.filter(x => !x.ok).map(x => `${x.panel} (${x.error})`).join(", ") : `✓ Done on ${r.done} panel${r.done === 1 ? "" : "s"}`, r.failed ? "bad" : "ok");
+    closeModal(); paLoad();
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+const paLinkHtml = path => `<div class="tok-show"><input id="pa-url" class="mono" readonly value="${esc(location.origin + path)}" onclick="this.select()"><button class="sm pri" onclick="navigator.clipboard.writeText($('#pa-url').value).then(() => toast('✓ Link copied', 'ok'))">Copy</button></div><small class="mut">Give this to the person: it holds the configs of every panel, each once, and the traffic and end date of all of them added up. It works without a login. To cancel every link made so far, press <a onclick="paLinkReset()">reset all links</a>.</small>`;
+window.paLink = async key => {
+  const a = paFind(key), box = $("#pa-link"); if (!a || !box) return;
+  try {
+    const r = await api("/api/accounts/sub-link", {method: "POST", body: JSON.stringify({members: a.members.map(m => ({panel_id: m.panel_id, username: m.username}))})});
+    box.innerHTML = paLinkHtml(r.path); $("#pa-url").select();
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.paNew = async () => {
+  const ps = (state.panelsCache || []).filter(p => p.enabled);
+  if (!ps.length) { toast("Add a panel first", "bad"); return; }
+  const opts = {};
+  await Promise.all(ps.filter(p => p.type === "pasarguard").map(async p => { try { opts[p.id] = (await api(`/api/panels/${p.id}/options`)).groups || []; } catch (e) { opts[p.id] = []; } }));
+  const row = p => `<label class="chk pa-np"><input type="checkbox" name="p${p.id}" checked> <b>${esc(p.name)}</b> <small class="mut">${esc(p.type)}</small>${(opts[p.id] || []).length > 1 ? `<select name="g${p.id}" title="The group the user gets on this panel">${opts[p.id].map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select>` : ""}</label>`;
+  showModal("<b>New account</b>", `<form class="frm" onsubmit="return paCreate(event)"><label>Username<input name="username" required minlength="3" maxlength="32" autocomplete="off" placeholder="3-32 letters, digits or _"></label><label>Data limit in GB (0 = unlimited)<input name="gb" type="number" min="0" step="any" value="50"></label><label>Days (0 = no end)<input name="days" type="number" min="0" max="3650" value="30"></label><div class="pa-nps">${ps.map(row).join("")}</div><div class="frm-act"><button class="pri" type="submit">Create on the chosen panels</button><button type="button" onclick="closeModal()">Close</button></div></form><div id="pa-res"></div>`, "narrow");
+  setTimeout(() => { const i = document.querySelector("#modal input[name=username]"); if (i) i.focus(); }, 40);
+};
+window.paCreate = async e => {
+  e.preventDefault(); const f = new FormData(e.target), ps = (state.panelsCache || []).filter(p => f.get("p" + p.id));
+  if (!ps.length) { toast("Choose at least one panel", "bad"); return false; }
+  const body = {username: f.get("username").trim(), limit_gb: +f.get("gb") || 0, days: +f.get("days") || 0, panels: ps.map(p => ({panel_id: p.id, group_ids: f.get("g" + p.id) ? [+f.get("g" + p.id)] : null}))};
+  try {
+    const r = await api("/api/accounts/create", {method: "POST", body: JSON.stringify(body)});
+    $("#pa-res").innerHTML = `<div class="pa-ms">${r.results.map(x => `<div class="ap-row pa-m"><span class="spill ${x.ok ? "active" : "disabled"}">${x.ok ? "done" : "failed"}</span><b>${esc(x.panel)}</b><span class="mut">${esc(x.error)}</span></div>`).join("")}</div>${r.path ? paLinkHtml(r.path) : ""}`;
+    if (r.done) e.target.querySelector("button[type=submit]").disabled = true;
+    toast(r.failed ? `✕ ${r.done} done, ${r.failed} failed` : `✓ Done on ${r.done} panel${r.done === 1 ? "" : "s"}`, r.failed ? "bad" : "ok");
+    paLoad();
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};
+window.paLinkReset = async () => { if (!await gconfirm("Every merged link made so far stops working. Continue?")) return; try { await api("/api/accounts/sub-link/reset", {method: "POST"}); toast("✓ All merged links are cancelled", "ok"); const b = $("#pa-link"); if (b) b.innerHTML = ""; } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.paUnlink = async id => { try { await api("/api/accounts/links/" + encodeURIComponent(id), {method: "DELETE"}); toast("✓ Unlinked", "ok"); closeModal(); paLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* users */

@@ -34,6 +34,11 @@ class GatewaysIn(BaseModel):
     server_ids: list[int] = Field(max_length=40)
 
 
+class TargetsIn(BaseModel):
+    foreign_ids: list[int] = Field(max_length=40)
+    ports: list[int] | str = Field(default_factory=list)
+
+
 class RouteIn(BaseModel):
     target_host: str = Field(min_length=1, max_length=120)
     target_port: int = Field(ge=1, le=65535)
@@ -107,6 +112,13 @@ def put_gateways(body: GatewaysIn):
     return {"ok": True}
 
 
+@router.put("/outbound/targets")
+def put_targets(body: TargetsIn):
+    """The foreign servers and the ports the chosen Iran servers get a tunnel through the configs to (a list of ports, or text like "8075, 80"). Start makes one forward on every Iran server for every foreign server and port."""
+    _wrap(outbound.set_targets, body.foreign_ids, body.ports)
+    return {"ok": True}
+
+
 @router.put("/outbound/hubs")
 def put_hubs(body: GatewaysIn):
     """The foreign servers that run the relay behind the exits (each gets its own port and password; applied with the rest)."""
@@ -123,7 +135,7 @@ def remove_hub(server_id: int):
 
 @router.put("/outbound/users")
 def put_users(body: UsersIn):
-    """How the users are connected to the pool: manual (you choose the records and press Connect) or auto (the panel points the records of a tunnel that stays down at the pool, and puts them back when it has been healthy)."""
+    """How the records are connected to the pool: manual (you choose the records and press Connect). `auto` is refused while the automatic switch is off (it is still being tested)."""
     _wrap(outbound.set_users, body.mode, body.after_minutes, body.back_minutes)
     return {"ok": True}
 
@@ -153,9 +165,9 @@ def routes_from_tunnels():
 
 
 @router.get("/outbound/connect")
-def connect_plan():
-    """What connecting the users would change: the ArvanCloud records (proxied, one Iran server address) whose origin port is the port of a tunnel that has a forward, each with the port it would get and whether it is already on the forward. Every account is asked at that moment."""
-    return {"ok": True, **_wrap(outbound.connect_plan)}
+def connect_plan(fresh: bool = False):
+    """The ArvanCloud records whose origin port is the port of a tunnel that has a forward, each with the port it would get; from the copy the DNS page keeps, `fresh=true` asks ArvanCloud now."""
+    return {"ok": True, **_wrap(outbound.connect_plan, fresh)}
 
 
 @router.post("/outbound/connect", status_code=202)

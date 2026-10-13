@@ -17,6 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__, auth, jobs
 from . import log as logmod
 from .api import router as api_router
+from .api import sub as sub_api
 from .config import get_settings
 from .db import init_db
 from .services import (
@@ -146,7 +147,7 @@ def _register_jobs() -> None:
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
     jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen
-    jobs.register("outbound-users", 60, outbound.auto_users)    # mode auto of the Users tab: the records of a tunnel that stays down are pointed at the pool, and back when it is healthy (nothing in mode manual)
+    jobs.register("outbound-users", 60, outbound.auto_users)    # the automatic switch of CDN records: OFF for now (AUTO_USERS in services/outbound.py), the job returns at once; when it is on, the records of a tunnel that stays down are pointed at the pool, and back when it is healthy
     jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
 
     jobs.register("configs", 120, configs.sync)
@@ -209,6 +210,7 @@ def create_app(run_jobs: bool = True) -> FastAPI:
     app = FastAPI(title="Nikatel panel", version=__version__, lifespan=_lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.run_jobs = run_jobs
     app.include_router(api_router)
+    app.include_router(sub_api.router)                 # /sub/<token>: outside /api, public, signed
 
     @app.middleware("http")
     async def _request_id(request: Request, call_next):

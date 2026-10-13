@@ -73,6 +73,9 @@ def is_local_direct(request: Request) -> bool:
 
 def allowed(request: Request) -> bool:
     """True when the request may see the panel at all."""
+    if request.url.path.startswith("/sub/") and request.method in ("GET", "HEAD"):
+        return True                                   # a merged subscription link carries its own signature: a client app cannot hold the door cookie
+
     path = entry_path()
 
     if not path or is_local_direct(request):

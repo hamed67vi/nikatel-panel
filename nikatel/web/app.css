@@ -4580,3 +4580,39 @@ html body #page .ob2-hub { display: inline-flex; align-items: center; gap: 6px; 
 html body #page .ob2-um { margin: 0 0 10px; }
 html[data-mode="light"] body #page .ob2-hub { background: #fff; border-color: #c2cce0; }
 html body #page .ob2-card > h3 { flex-wrap: nowrap; white-space: nowrap; } html body #page .ob2-card > h3 .sm { flex: none; padding: 0 9px; font-size: 11.5px; } html body #page .ob2-card > h3 .pill { flex: none; }
+
+/* ---- 1.40: Outbound in four steps ---- */
+html body #page .ob3 { display: grid; gap: 10px; max-width: 1000px; margin: 0 auto; }
+html body #page .ob3-step { margin: 0; padding: 10px 14px 12px; }
+html body #page .ob3-step > h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; text-transform: none; letter-spacing: 0; font-size: 14px; } html body #page .ob3-step > h3 .sp { flex: 1; }
+html body #page .ob3-step > h3 b { font-size: 14px; font-weight: 700; color: var(--text); } html body #page .ob3-step > h3 small { font-size: 12px; }
+html body #page .ob3-n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: rgba(77,163,255,.18); color: #7cbcff; font-style: normal; font-weight: 800; font-size: 12.5px; flex: none; }
+html body #page .ob3-list { flex: none; max-height: 200px; min-height: 0; } html body #page .ob3-empty { padding: 10px 4px; font-size: 12.5px; }
+html body #page .ob3-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+html body #page .ob3-tile { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.03); cursor: pointer; font-size: 12.5px; }
+html body #page .ob3-tile.on { border-color: rgba(77,163,255,.55); background: rgba(77,163,255,.09); } html body #page .ob3-tile b { font-weight: 600; }
+html body #page .ob3-tile .pill, html body #page .ob3-tile small { margin-left: auto; font-size: 11px; white-space: nowrap; }
+html body #page .ob3-hint { display: block; margin-top: 8px; line-height: 1.4; }
+html body #page .ob3-relay { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: 12.5px; } html body #page .ob3-relay select { height: 28px; border-radius: 9px; font-size: 12.5px; max-width: 240px; } html body #page .ob3-relay button.sm { height: 28px; }
+html body #page .ob3-go { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 0; padding: 12px 14px; } html body #page .ob3-go .sp { flex: 1; }
+html body #page .ob3-start { height: 42px; padding: 0 34px; font-size: 15px; border-radius: 12px; } html body #page .ob3-gohint { font-size: 11.5px; max-width: 540px; line-height: 1.4; }
+html body #page .ob3-adv { margin: 0; padding: 8px 14px 10px; } html body #page .ob3-adv summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--mut); }
+html body #page .ob3-advrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0 6px; font-size: 12.5px; } html body #page .ob3-advrow .sp { flex: 1; }
+html[data-mode="light"] body #page .ob3-tile { background: #f6f8fc; } html[data-mode="light"] body #page .ob3-tile.on { background: #e3edff; border-color: #9bbcf3; } html[data-mode="light"] body #page .ob3-n { background: #dbe7fb; color: #1456c8; }
+/* ---- 1.41: one action on every panel of an account, the merged link */
+html body #modal .pa-act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 8px; }
+html body #modal .pa-act select.sm { height: 30px; font-size: 12.5px; border-radius: 9px; width: auto; min-width: 190px; }
+html body #modal #pa-link .tok-show { margin: 4px 0 6px; padding: 6px 8px; gap: 8px; }
+html body #modal #pa-link .tok-show input { flex: 1 1 auto; min-width: 0; height: 30px; font-size: 12px; border-radius: 9px; }
+html body #modal #pa-link a { cursor: pointer; text-decoration: underline; }
+html body #modal .pa-nps { display: grid; gap: 6px; margin: 4px 0 10px; }
+html body #modal .pa-np { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; box-shadow: var(--edge); } html body #modal .pa-np select { margin-left: auto; height: 28px; font-size: 12px; border-radius: 8px; width: auto; min-width: 120px; }
+html body #modal .pa-np { width: 100%; box-sizing: border-box; } html body #modal .pa-np b { flex: 1 1 auto; white-space: nowrap; }
+html body #modal .pa-np small { flex: none; }
+/* ---- 1.40: Outbound in one page: the labels of the choice, the ports box, the addresses for the CDN */
+html body #page .ob3-lbl { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 5px; font-size: 12.5px; } html body #page .ob3-lbl b { font-size: 12.5px; font-weight: 700; } html body #page .ob3-lbl:first-of-type { margin-top: 2px; }
+html body #page .ob3-ports { margin-bottom: 0; } html body #page .ob3-ports input { flex: 1 1 220px; max-width: 380px; }
+html body #page .ob3-relay { margin-top: 10px; }
+html body #page .ob3-path .ob3-addr { display: inline-flex; align-items: center; gap: 8px; min-width: 230px; } html body #page .ob3-path .ob3-addr b { font-size: 13px; }
+html body #page .ob3-adv + .ob3-adv { margin-top: -6px; } html body #page .ob3-adv summary small { font-weight: 400; margin-left: 6px; }
+html body #page .ob3-tiles { position: relative; max-height: 184px; overflow-y: auto; padding-right: 2px; } html body #page .ob3-tile { position: relative; }

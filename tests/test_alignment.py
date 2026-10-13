@@ -28,7 +28,8 @@ def test_every_setting_is_documented_as_an_environment_variable():
 
 
 def test_every_api_router_is_behind_the_sign_in():
-    open_by_design = {"auth": "sign-in, sign-out, recovery", "system": "/health for the deploy script; every other route guarded one by one"}
+    open_by_design = {"auth": "sign-in, sign-out, recovery", "system": "/health for the deploy script; every other route guarded one by one",
+                      "sub": "the merged subscription link /sub/<token>: signed, read-only, one route (tests/test_accounts.py checks that a wrong token sees the missing page)"}
     bad = []
 
     for p in sorted((ROOT / "nikatel" / "api").glob("*.py")):
@@ -45,6 +46,8 @@ def test_every_api_router_is_behind_the_sign_in():
     routes = re.findall(r'@router\.(?:get|post|put|delete)\("([^"]+)"([^)]*)\)', sysapi)
     unguarded = [path for path, rest in routes if "current_user" not in rest and path != "/health"]
     assert not unguarded, f"system routes without a guard: {unguarded}"
+    subapi = (ROOT / "nikatel" / "api" / "sub.py").read_text(encoding="utf-8")
+    assert re.findall(r"@router\.(\w+)\(", subapi) == ["get"], "the public subscription router must stay one read-only route"
 
 
 def test_every_ssh_script_and_action_is_used():

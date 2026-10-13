@@ -8,10 +8,10 @@ address and port, and the exit of every connection is one of the pool's configs 
 auto: direct while it works, the pool when it does not). Which exits are alive is measured from the Iran servers themselves, every few minutes.
 The exit links are secrets: they live in their own table and are never listed (only what they point at).
 
-Users do not change anything. They reach the Iran servers through ArvanCloud records whose origin is an Iran server and a port, and the tunnel on that port
-leads to the foreign node. A forward made FROM A TUNNEL has its own port on that Iran server and leads, through the pool, to the same node and port;
-"connecting the users" is then one change per record: the origin port of the record becomes the forward port (the tunnel stays untouched, the change is
-kept in the DNS log and can be put back). Nothing of this happens by itself: the operator previews and presses."""
+The operator chooses Iran servers, foreign servers and ports; for every such pair and port the panel makes a forward (a "tunnel through the configs") on the Iran server:
+its IP and listen port are what the operator then puts behind the CDN by hand. A forward can also be made FROM AN EXISTING TUNNEL (same node and port); "connecting the
+records" is then one change per ArvanCloud record: its origin port becomes the forward's port (the tunnel stays untouched, the change is kept in the DNS log and can be put
+back). While AUTO_USERS is off, nothing points a record at the pool by itself: the operator previews and presses."""
 from __future__ import annotations
 
 import base64
@@ -28,7 +28,15 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Gateway, OutboundConfig, OutboundHub, Panel, Server, Tunnel
+from ..models import (
+    Gateway,
+    OutboundConfig,
+    OutboundHub,
+    Panel,
+    Server,
+    ServerSample,
+    Tunnel,
+)
 from ..ssh import Node, SSHError, run_action, run_script
 from . import autopilot, builder, dnsprov, failover, gateway, license, panels, telegram
 from . import settings as st
@@ -38,6 +46,8 @@ log = get_logger("outbound")
 
 MODES = ("spread", "fast", "auto")
 USERS_MODES = ("manual", "auto")
+AUTO_USERS = False             # the automatic switch of CDN records is OFF until its tests are finished (the owner's decision, 2026-10-14): the code stays, nothing runs, no mode can be set
+MAX_PORTS = 20                 # ports the operator can name for the foreign servers
 RELAY_DIR = "/opt/nikatel-xrelay"
 RELAY_PORTS = (44000, 44999)
 MAX_CONFIGS = 30
@@ -77,6 +87,20 @@ def next_port(taken: set[int], start: int = PORT_BASE) -> int:
     return p
 
 
+def alloc_port(s: dict, taken: set[int]) -> int:
+    """The next listen port: above every port ever given (a forward that was removed never hands its port to another target, so a CDN record that still points at it never leads somewhere else
+    by surprise); only when the top is reached the gaps are used."""
+    mark = int(s.get("port_mark") or 0)
+
+    try:
+        p = next_port(taken, max(PORT_BASE, mark + 1))
+    except ValueError:
+        p = next_port(taken)
+
+    s["port_mark"] = max(mark, p)
+    return p
+
+
 def ports_of(routes: list[dict], server_id: int = 0) -> list[dict]:
     """Pure: the forwards of one Iran server (the ones for every server and the ones made for it) in the shape the gateway wants."""
     routes = [r for r in routes if not server_id or r.get("server_id", 0) in (0, server_id)]
@@ -108,6 +132,9 @@ def _state() -> dict:
     s = st.get("outbound")
     s.setdefault("routes", [])
     s.setdefault("gateways", [])
+    s.setdefault("foreign", [])
+    s.setdefault("ports", [])
+    s.setdefault("port_mark", 0)
     s.setdefault("health", {})
     s.setdefault("users", {"mode": "manual", "after_minutes": 5, "back_minutes": 30, "auto": {}})
     s["users"].setdefault("auto", {})
@@ -115,7 +142,7 @@ def _state() -> dict:
 
 
 def _save(s: dict) -> None:
-    st.put("outbound", {"mode": s["mode"], "gateways": s["gateways"], "routes": s["routes"][:MAX_ROUTES], "health": s["health"], "users": s["users"]})
+    st.put("outbound", {"mode": s["mode"], "gateways": s["gateways"], "foreign": s["foreign"], "ports": s["ports"], "port_mark": s["port_mark"], "routes": s["routes"][:MAX_ROUTES], "health": s["health"], "users": s["users"]})
 
 
 def _need_rw() -> None:
@@ -131,7 +158,7 @@ def state() -> dict:
         rows = list(db.scalars(select(OutboundConfig).order_by(OutboundConfig.created_at, OutboundConfig.id)))
         gws = {g.server_id: g for g in db.scalars(select(Gateway))}
         iran = list(db.scalars(select(Server).where(Server.role == "iran").order_by(Server.name)))
-        foreign = [{"id": x.id, "name": x.name, "host": x.host} for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)).order_by(Server.name))]
+        foreign = [{"id": x.id, "name": x.name, "host": x.host, "chosen": x.id in s["foreign"]} for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)).order_by(Server.name))]
 
     ids = [c.id for c in rows if c.enabled]
     servers = []
@@ -153,8 +180,8 @@ def state() -> dict:
                         "exit": next(({"ip": x["ip"], "country": x["country"]} for x in seen if x["ok"]), None)})
 
     u = s["users"]
-    return {"mode": s["mode"], "modes": list(MODES), "configs": configs, "servers": servers, "routes": s["routes"], "enabled_configs": len(ids), "read_only": get_settings().read_only, "hubs": hubs_state(s), "foreign": foreign,
-            "users": {"mode": u["mode"], "after_minutes": u["after_minutes"], "back_minutes": u["back_minutes"], "licensed": license.has("failover"), "auto": sorted(u["auto"])},
+    return {"mode": s["mode"], "modes": list(MODES), "configs": configs, "servers": servers, "routes": s["routes"], "enabled_configs": len(ids), "read_only": get_settings().read_only, "hubs": hubs_state(s), "foreign": foreign, "ports": s["ports"], "paths": sum(1 for r in s["routes"] if r.get("source") == "path"), "default_ports": default_ports(), "tunnel_ports": sum(1 for tp in tunnel_ports() if tp["server_id"] in s["gateways"]), "suggested_relay": suggest_relay(),
+            "users": {"mode": u["mode"], "after_minutes": u["after_minutes"], "back_minutes": u["back_minutes"], "licensed": license.has("failover"), "auto_available": AUTO_USERS, "auto": sorted(u["auto"])},
             "binary": (get_settings().data_dir.parent / "engines" / "xray").exists(), "limits": {"configs": MAX_CONFIGS, "routes": MAX_ROUTES}}
 
 
@@ -264,6 +291,79 @@ def set_gateways(server_ids: list[int]) -> None:
     _save(s)
 
 
+def parse_ports(text) -> list[int]:
+    """Pure: ports from "8075, 80 443" or a list; each 1-65535, once, in the order given (at most MAX_PORTS)."""
+    raw = text if isinstance(text, list) else re.split(r"[\s,;]+", str(text or ""))
+    out: list[int] = []
+
+    for x in raw:
+        if str(x).strip() == "":
+            continue
+
+        if not str(x).strip().isdigit() or not 1 <= int(x) <= 65535:
+            raise ValueError(f"'{str(x).strip()[:12]}' is not a port (1-65535)")
+
+        if int(x) not in out:
+            out.append(int(x))
+
+    if len(out) > MAX_PORTS:
+        raise ValueError(f"at most {MAX_PORTS} ports")
+
+    return out
+
+
+def wanted_paths(iran: list[dict], foreign: list[dict], ports: list[int]) -> list[dict]:
+    """Pure: the forward of every chosen Iran server to every chosen foreign server on every chosen port."""
+    return [{"server_id": i["id"], "target_host": f["host"], "target_port": p, "name": f"{i['name']} → {f['name']} :{p}", "foreign_id": f["id"]} for i in iran for f in foreign for p in ports]
+
+
+def default_ports() -> list[int]:
+    """The ports the tunnels of the chosen Iran servers serve (what the users connect to today): the suggestion for the ports box."""
+    s = _state()
+    return sorted({tp["iran_port"] for tp in tunnel_ports() if tp["server_id"] in s["gateways"]})[:MAX_PORTS]
+
+
+def set_targets(foreign_ids: list[int], ports) -> None:
+    """The foreign servers and the ports the chosen Iran servers get a way to (Start makes the forwards)."""
+    _need_rw()
+    ports = parse_ports(ports)
+
+    with session() as db:
+        ok = {x.id for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)))}
+
+    if any(int(i) not in ok for i in foreign_ids):
+        raise ValueError("choose enabled foreign servers")
+
+    s = _state()
+    s["foreign"] = sorted({int(i) for i in foreign_ids})
+    s["ports"] = ports
+    _save(s)
+
+
+def make_paths() -> dict:
+    """Make exactly the forwards the choice says - every chosen Iran server x every chosen foreign server x every chosen port - and drop the ones made this way that are not
+    chosen any more. A forward keeps its listen port for good (what the operator put behind the CDN does not move)."""
+    _need_rw()
+    s = _state()
+
+    with session() as db:
+        iran = [{"id": x.id, "name": x.name} for x in db.scalars(select(Server).where(Server.id.in_(s["gateways"] or [0])).order_by(Server.name))]
+        foreign = [{"id": x.id, "name": x.name, "host": x.host} for x in db.scalars(select(Server).where(Server.id.in_(s["foreign"] or [0])).order_by(Server.name))]
+
+    want = wanted_paths(iran, foreign, s["ports"])
+
+    if len(want) > MAX_ROUTES:
+        raise ValueError(f"{len(want)} forwards are too many (at most {MAX_ROUTES}): choose fewer servers or ports")
+
+    keys = {(w["server_id"], w["target_host"].lower(), w["target_port"]) for w in want}
+    kept = [r for r in s["routes"] if r.get("source") != "path" or (r.get("server_id", 0), r["target_host"].lower(), r["target_port"]) in keys]
+    removed = len(s["routes"]) - len(kept)
+    s["routes"] = kept
+    _save(s)
+    made = add_routes(want, "path") if want else {"added": 0, "skipped": 0}
+    return {"added": made["added"], "kept": made["skipped"], "removed": removed}
+
+
 # ------------------------------------------------------------------ the forwards
 def add_routes(items: list[dict], source: str = "manual") -> dict:
     """Add forwards: each {target_host, target_port, name}. The listen port is given once and kept; the same target twice is one forward."""
@@ -288,7 +388,7 @@ def add_routes(items: list[dict], source: str = "manual") -> dict:
         if len(s["routes"]) >= MAX_ROUTES:
             raise ValueError(f"at most {MAX_ROUTES} forwards")
 
-        listen = next_port(taken)
+        listen = alloc_port(s, taken)
         taken.add(listen)
         have.add((sid, host.lower(), port))
         s["routes"].append({"id": uuid.uuid4().hex[:8], "name": str(it.get("name") or f"{host}:{port}")[:60], "target_host": host, "target_port": port, "listen": listen, "enabled": True, "source": source,
@@ -354,6 +454,7 @@ def auto_routes(addresses: list[str], ports: list[int]) -> dict:
 
     return add_routes(items, "auto")
 
+
 # ------------------------------------------------------------------ the tunnels' forwards, and the users
 TCP_TYPES = ("backhaul", "backpack", "chisel")
 
@@ -380,9 +481,9 @@ def tunnel_ports() -> list[dict]:
     return out
 
 
-def from_tunnels() -> dict:
+def from_tunnels(server_ids: set[int] | None = None) -> dict:
     """A forward on each Iran server for every port its tunnels serve: its own listen port there, leading (through the pool) to the node and port the tunnel leads to.
-    Run again later, it follows the tunnels (a changed target is updated, the listen port stays)."""
+    `server_ids`: only the tunnels of these Iran servers (the chosen ones). Run again later, it follows the tunnels (a changed target is updated, the listen port stays)."""
     _need_rw()
     s = _state()
     taken = {r["listen"] for r in s["routes"]}
@@ -390,6 +491,9 @@ def from_tunnels() -> dict:
     added = updated = 0
 
     for tp in tunnel_ports():
+        if server_ids is not None and tp["server_id"] not in server_ids:
+            continue
+
         r = have.get((tp["server_id"], tp["iran_port"]))
 
         if r is not None:
@@ -403,7 +507,7 @@ def from_tunnels() -> dict:
         if len(s["routes"]) >= MAX_ROUTES:
             raise ValueError(f"at most {MAX_ROUTES} forwards")
 
-        listen = next_port(taken)
+        listen = alloc_port(s, taken)
         taken.add(listen)
         s["routes"].append({"id": uuid.uuid4().hex[:8], "name": f"{tp['tunnel']} :{tp['iran_port']}", "target_host": tp["target_host"], "target_port": tp["target_port"], "listen": listen, "enabled": True,
                             "source": "tunnel", "server_id": tp["server_id"], "tunnel": tp["tunnel"], "iran_port": tp["iran_port"]})
@@ -418,9 +522,37 @@ def classify(port, iran_port: int, listen: int) -> str:
     return "normal" if port == iran_port else "bridged" if port == listen else ""
 
 
-def connect_plan() -> dict:
-    """What 'connect the users' would change: the ArvanCloud records (proxied, one Iran server address) whose origin port is the port of a tunnel that has a forward -
-    each with the port it would get. A record already on a forward's port is 'bridged' and can be put back."""
+RECORDS_MAX_AGE = 600           # the page reads the records the DNS page already has: asking ArvanCloud again for every domain takes many seconds; a copy older than this is shown at once and renewed in the background
+
+
+def _arvan_rows(fresh: bool) -> tuple[list[dict], list[str]]:
+    """The records of every ArvanCloud account: from the DNS page's copy when it is recent (and `fresh` is not asked), else read now (which also renews that copy)."""
+    from ..api import dns as dns_api
+
+    accs = {a.id: a for a in dnsprov.accounts() if a.provider == "arvan"}
+
+    if not fresh and dns_api._CACHE["at"]:
+        if time.time() - dns_api._CACHE["at"] > RECORDS_MAX_AGE:
+            dns_api._refresh_in_background()                     # what is on the screen is the copy it has; the next look has the new one
+
+        bad = [f"{i['name']}: {i['error']}" for i in dns_api._CACHE["accounts"] if i["id"] in accs and not i["ok"]]
+        return [r for r in dns_api._CACHE["rows"] if r.get("account") in accs], bad
+
+    dns_api._read_all()
+    bad = [f"{i['name']}: {i['error']}" for i in dns_api._CACHE["accounts"] if i["id"] in accs and not i["ok"]]
+    return [r for r in dns_api._CACHE["rows"] if r.get("account") in accs], bad
+
+
+def _forget_records() -> None:
+    """A record was changed: the DNS page's copy is out of date."""
+    from ..api import dns as dns_api
+
+    dns_api._CACHE["at"] = 0.0
+
+
+def connect_plan(fresh: bool = False) -> dict:
+    """What 'connect the records' would change: the ArvanCloud records (proxied, one Iran server address) whose origin port is the port of a tunnel that has a forward -
+    each with the port it would get. A record already on a forward's port is 'bridged' and can be put back. `fresh`: ask ArvanCloud now instead of using the copy the DNS page has."""
     s = _state()
     routes = [r for r in s["routes"] if r.get("tunnel") and r.get("enabled", True)]
     by_iran = {(r["server_id"], r["iran_port"]): r for r in routes}
@@ -430,41 +562,34 @@ def connect_plan() -> dict:
         iran = {x.host: x for x in db.scalars(select(Server).where(Server.role == "iran"))}
         gws = {g.server_id: g for g in db.scalars(select(Gateway))}
 
-    rows, errors = [], []
+    rows = []
+    names = {a.id: a.name for a in dnsprov.accounts()}
+    got, errors = _arvan_rows(fresh) if routes else ([], [])             # no forward from a tunnel yet: there is nothing to look for, ArvanCloud is not asked
 
-    for a in dnsprov.accounts():
-        if a.provider != "arvan":
+    for r in got:
+        if r.get("type") != "A" or not r.get("cloud") or r.get("port") is None or len(r.get("ips") or []) != 1:
             continue
 
-        prov = dnsprov.provider_of(a)
+        sv = iran.get(r["ips"][0])
 
-        try:
-            for d in prov.domains():
-                for r in prov.records(d):
-                    if r.get("type") != "A" or not r.get("cloud") or r.get("port") is None or len(r.get("ips") or []) != 1:
-                        continue
+        if sv is None:
+            continue
 
-                    sv = iran.get(r["ips"][0])
+        port = int(r["port"])
+        route = by_iran.get((sv.id, port)) or by_listen.get((sv.id, port))
 
-                    if sv is None:
-                        continue
+        if route is None:
+            continue
 
-                    port = int(r["port"])
-                    route = by_iran.get((sv.id, port)) or by_listen.get((sv.id, port))
-
-                    if route is None:
-                        continue
-
-                    state_ = classify(port, route["iran_port"], route["listen"])
-                    g = gws.get(sv.id)
-                    rows.append({"key": f"{a.id}|{d}|{r['id']}", "account": a.id, "account_name": a.name, "domain": d, "id": r["id"], "name": r["name"], "fqdn": r["fqdn"], "ip": r["ips"][0], "server_id": sv.id,
-                                 "server": sv.name, "state": state_, "port": port, "iran_port": route["iran_port"], "listen": route["listen"], "tunnel": route["tunnel"], "target": f"{route['target_host']}:{route['target_port']}",
-                                 "ready": bool(g and g.installed and g.applied_at)})
-        except (RuntimeError, ValueError) as e:
-            errors.append(f"{a.name}: {str(e)[:120]}")
+        g = gws.get(sv.id)
+        rows.append({"key": f"{r['account']}|{r['domain']}|{r['id']}", "account": r["account"], "account_name": names.get(r["account"], ""), "domain": r["domain"], "id": r["id"], "name": r["name"], "fqdn": r["fqdn"], "ip": r["ips"][0],
+                     "server_id": sv.id, "server": sv.name, "state": classify(port, route["iran_port"], route["listen"]), "port": port, "iran_port": route["iran_port"], "listen": route["listen"], "tunnel": route["tunnel"],
+                     "target": f"{route['target_host']}:{route['target_port']}", "ready": bool(g and g.installed and g.applied_at)})
 
     rows.sort(key=lambda x: (x["server"], x["fqdn"]))
-    return {"records": rows, "errors": errors, "forwards": len(routes), "bridged": sum(1 for x in rows if x["state"] == "bridged")}
+    from ..api import dns as dns_api
+
+    return {"records": rows, "errors": errors, "forwards": len(routes), "bridged": sum(1 for x in rows if x["state"] == "bridged"), "cached_at": int(dns_api._CACHE["at"] or time.time())}
 
 
 def _set_port(row: dict, port: int, before_log: bool) -> dict:
@@ -476,6 +601,7 @@ def _set_port(row: dict, port: int, before_log: bool) -> dict:
         raise ValueError(f"{row['fqdn']} changed since the plan was made (its address is not {row['ip']} any more)")
 
     res = prov.update(row["domain"], row["id"], cur["name"], cur["ips"], int(cur["ttl"] or 120), bool(cur["cloud"]), port=port)
+    _forget_records()
 
     if before_log:
         failover.log_bridge(row["account"], row["domain"], row["fqdn"], row["id"], f"{row['ip']}:{row['port']}", f"{row['ip']}:{port}", res.get("before"), row["server"])
@@ -484,7 +610,7 @@ def _set_port(row: dict, port: int, before_log: bool) -> dict:
 
 
 def _connect_story(aid: int, keys: list[str]) -> None:
-    plan = {x["key"]: x for x in connect_plan()["records"]}
+    plan = {x["key"]: x for x in connect_plan(True)["records"]}
     done = bad = 0
     status: dict[int, dict] = {}
 
@@ -538,7 +664,7 @@ def connect(keys: list[str]) -> int:
 
 
 def _disconnect_story(aid: int, keys: list[str]) -> None:
-    plan = {x["key"]: x for x in connect_plan()["records"]}
+    plan = {x["key"]: x for x in connect_plan(True)["records"]}
     s = failover._state()
     done = bad = 0
 
@@ -563,6 +689,7 @@ def _disconnect_story(aid: int, keys: list[str]) -> None:
             autopilot._say(aid, f"{row['fqdn']}: NOT put back - {str(e)[:140]}")
             bad += 1
 
+    _forget_records()
     autopilot._say(aid, f"Done: {done} record(s) back on their tunnels" + (f", {bad} could not be changed." if bad else "."), done=True, ok=not bad)
 
 
@@ -575,6 +702,40 @@ def disconnect(keys: list[str]) -> int:
 
     return autopilot._start("outbound disconnect", _disconnect_story, list(keys)[:300], action="outbound", source="manual")
 # ------------------------------------------------------------------ the relay (a foreign server behind the exits)
+def pick_relay(cands: list[dict]) -> int | None:
+    """Pure: the foreign server that suits best as the relay: online, not busy (CPU / RAM under 85 %), then the most room and the fewest tunnels. None when no server qualifies."""
+    ok = [c for c in cands if c.get("online") is not False and max(c.get("cpu") or 0, c.get("ram") or 0) < 85]
+
+    if not ok:
+        return None
+
+    def room(c: dict) -> int:
+        return 100 - max(c.get("cpu") if c.get("cpu") is not None else 50, c.get("ram") if c.get("ram") is not None else 50) - 2 * int(c.get("tunnels") or 0)
+
+    return max(ok, key=lambda c: (room(c), -c["id"]))["id"]
+
+
+def suggest_relay() -> dict | None:
+    """The foreign server the panel would choose as the relay (the quietest one), or None."""
+    with session() as db:
+        fo = list(db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True))))
+        load = {}
+
+        for sv in fo:
+            smp = db.execute(select(ServerSample.cpu, ServerSample.ram).where(ServerSample.server_id == sv.id).order_by(ServerSample.ts.desc()).limit(1)).first()       # LIMIT 1 and two columns: a hundred thousand samples are not read to find the newest
+            load[sv.id] = (smp.cpu, smp.ram) if smp is not None else (None, None)
+
+        count = {}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
+            count[t.foreign_server_id] = count.get(t.foreign_server_id, 0) + 1
+
+        cands = [{"id": sv.id, "name": sv.name, "online": sv.online, "cpu": load[sv.id][0], "ram": load[sv.id][1], "tunnels": count.get(sv.id, 0)} for sv in fo]
+
+    pid = pick_relay(cands)
+    return next(({"id": c["id"], "name": c["name"]} for c in cands if c["id"] == pid), None)
+
+
 def relay_config(port: int, method: str, password: str) -> dict:
     """Pure: the Xray config of the relay: a Shadowsocks inbound (NO sniffing: it must dial exactly what the gateway asked), a direct exit, and a block of the server's own and private addresses."""
     return {"log": {"loglevel": "warning", "error": RELAY_DIR + "/error.log"},
@@ -716,6 +877,9 @@ def set_users(mode: str, after_minutes: int | None = None, back_minutes: int | N
     if mode not in USERS_MODES:
         raise ValueError("the mode is manual or auto")
 
+    if mode == "auto" and not AUTO_USERS:
+        raise ValueError("the automatic switch is off for now: it is still being tested. Connect the records by hand.")
+
     if mode == "auto" and not license.has("failover"):
         raise ValueError("the automatic switch needs the failover license (Settings → About → License)")
 
@@ -753,7 +917,7 @@ def auto_users() -> None:
     s = _state()
     u = s["users"]
 
-    if u["mode"] != "auto" or get_settings().read_only or not license.has("failover"):
+    if not AUTO_USERS or u["mode"] != "auto" or get_settings().read_only or not license.has("failover"):
         return
 
     now = int(time.time())
@@ -772,7 +936,7 @@ def auto_users() -> None:
         _save(s)
         return
 
-    rows = connect_plan()["records"]
+    rows = connect_plan(True)["records"]
 
     if home:
         keys = [r["key"] for r in rows if r["tunnel"] in home and r["state"] == "bridged"]
@@ -852,8 +1016,25 @@ def _apply_story(aid: int) -> None:
 
     ok = 0
 
+    if s["foreign"] and s["ports"]:
+        made = make_paths()
+        autopilot._say(aid, f"Tunnels through your configs (Iran x foreign x port): {made['added']} new, {made['kept']} already there" + (f", {made['removed']} no longer chosen and removed." if made["removed"] else "."))
+    else:
+        made = from_tunnels(set(s["gateways"]))
+        autopilot._say(aid, f"No foreign server and port chosen: forwards for the tunnels of the chosen Iran server(s) instead - {made['added']} new, {made['updated']} updated.")
+
     with session() as db:
         hubs = [h.server_id for h in db.scalars(select(OutboundHub))]
+
+    if not hubs:
+        pick = suggest_relay()
+
+        if pick is None:
+            autopilot._say(aid, "No foreign server qualifies as a relay right now (all are offline or busy): the traffic goes without one.")
+        else:
+            set_hubs([pick["id"]])
+            hubs = [pick["id"]]
+            autopilot._say(aid, f"Relay: {pick['name']} chosen (the quietest foreign server). You can change it on the page.")
 
     for hid in hubs:
         try:

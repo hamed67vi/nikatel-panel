@@ -53,3 +53,66 @@ def drop_link(link_id: str):
         raise HTTPException(404, str(e))
 
     return {"ok": True}
+
+class ActIn(BaseModel):
+    members: list[MemberIn] = Field(min_length=1, max_length=20)
+    action: str
+    value: float | int | str | None = None
+    confirm: bool = False
+
+
+@router.post("/accounts/action")
+def act(body: ActIn):
+    """The same action (enable, disable, reset, revoke, renew, limit, delete) on the user of every panel the account is on. Every panel is tried; the answer lists which did it and which did not. `delete` needs `confirm: true`."""
+    if body.action == "delete" and not body.confirm:
+        raise HTTPException(400, "deleting a user on every panel needs confirm: true")
+
+    try:
+        return {"ok": True, **accounts.act([m.model_dump() for m in body.members], body.action, body.value)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class TargetIn(BaseModel):
+    panel_id: int
+    inbounds: dict | None = None          # Marzban: {protocol: [tags]}; empty = every inbound
+    group_ids: list[int] | None = None    # PasarGuard: which groups; empty = the only one the panel has
+
+
+class CreateIn(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
+    panels: list[TargetIn] = Field(min_length=1, max_length=20)
+    limit_gb: float = Field(0, ge=0, le=100000)
+    days: int = Field(0, ge=0, le=3650)
+    note: str = Field("", max_length=500)
+
+
+@router.post("/accounts/create")
+def create(body: CreateIn):
+    """Make one new user - the same name, limit and end - on every chosen panel. Every panel is tried and the answer lists which did it and which refused (a name already taken there, no group chosen, down); `token` / `path` is the merged subscription link of the ones made."""
+    try:
+        return {"ok": True, **accounts.create(body.username, [t.model_dump() for t in body.panels], body.limit_gb, body.days, body.note)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class TokenIn(BaseModel):
+    members: list[MemberIn] = Field(min_length=1, max_length=12)
+
+
+@router.post("/accounts/sub-link")
+def sub_link(body: TokenIn):
+    """The token of one merged subscription link for the given users (one per panel). The public address is /sub/<token>; it is signed, so a changed token is refused."""
+    try:
+        t = accounts.make_token([m.model_dump() for m in body.members])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"ok": True, "token": t, "path": "/sub/" + t}
+
+
+@router.post("/accounts/sub-link/reset")
+def sub_reset():
+    """Make every merged link made so far stop working (the signing secret is replaced)."""
+    accounts.reset_secret()
+    return {"ok": True}

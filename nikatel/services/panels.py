@@ -643,6 +643,93 @@ def user_action(c: dict, username: str, action: str, value=None) -> None:
         raise ValueError("unknown action")
 
 
+_PROTOS = ("vless", "vmess", "trojan", "shadowsocks")
+
+
+def create_body(typ: str, username: str, limit_gb, days, note: str, avail_inbounds: list[dict], avail_groups: list[dict], inbounds=None, group_ids=None, now: float | None = None) -> dict:
+    """Pure: the POST body of a new user. Marzban: the protocols and inbounds (all of them unless `inbounds` {protocol: [tags]} says which); PasarGuard: the groups
+    (the only one the panel has, else `group_ids` must say which). `days` 0 = no end; `limit_gb` 0 = unlimited."""
+    name = str(username or "").strip()
+
+    if not 3 <= len(name) <= 32 or not _USERNAME.match(name):
+        raise ValueError("a username has 3 to 32 letters, digits or _ . @ -")
+
+    gb = float(limit_gb or 0)
+
+    if not 0 <= gb <= 100000:
+        raise ValueError("the limit must be between 0 and 100000 GB (0 = unlimited)")
+
+    days = int(days or 0)
+
+    if not 0 <= days <= 3650:
+        raise ValueError("days must be between 0 (no end) and 3650")
+
+    end = int(now or time.time()) + days * 86400 if days else 0
+    body: dict = {"username": name, "status": "active", "data_limit": int(gb * 1024 ** 3), "note": str(note or "")[:500]}
+
+    if typ == "pasarguard":
+        known = [g["id"] for g in avail_groups if g.get("id") is not None]
+        ids = [int(x) for x in (group_ids or [])]
+
+        if not ids:
+            if len(known) != 1:
+                raise ValueError("this panel has " + ("several groups: say which ones the user gets" if known else "no group"))
+
+            ids = known
+
+        for i in ids:
+            if i not in known:
+                raise ValueError(f"the panel has no group {i}")
+
+        body["group_ids"] = ids
+        body["expire"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(end)) if end else None
+        return body
+
+    have: dict[str, list[str]] = {}
+
+    for i in avail_inbounds:
+        if i.get("protocol") in _PROTOS and i.get("tag"):
+            have.setdefault(i["protocol"], []).append(i["tag"])
+
+    pick = have
+
+    if isinstance(inbounds, dict) and inbounds:
+        pick = {}
+
+        for proto, tags in inbounds.items():
+            if proto not in have:
+                raise ValueError(f"the panel has no {proto} inbound")
+
+            for tg in tags:
+                if tg not in have[proto]:
+                    raise ValueError(f"the panel has no inbound {tg}")
+
+            pick[proto] = [str(x) for x in tags]
+
+    if not pick:
+        raise ValueError("the panel has no inbound")
+
+    body["proxies"] = {p: {} for p in pick}
+    body["inbounds"] = pick
+    body["expire"] = end
+    return body
+
+
+def user_create(c: dict, username: str, limit_gb=0, days=0, note: str = "", inbounds=None, group_ids=None) -> dict:
+    """Make a new user on the panel; a name that is already taken there is refused (it may be another person's account)."""
+    opts = options(c)
+    body = create_body(c.get("type", ""), username, limit_gb, days, note, opts["inbounds"], opts["groups"], inbounds, group_ids)
+
+    try:
+        call(c, "GET", _upath(body["username"]))
+        raise ValueError("this username already exists on the panel")
+    except PanelError as e:
+        if e.code != 404:
+            raise
+
+    return user_row(call(c, "POST", "/api/user", body=body) or {})
+
+
 def users_bulk(c: dict, usernames: list, action: str, value=None) -> dict:
     done, failed = 0, []
 

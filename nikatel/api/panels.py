@@ -102,6 +102,12 @@ def users(panel_id: int, search: str = "", offset: int = 0, limit: int = 40, sta
     return {"ok": True, **_wrap(panels.users, _cred(panel_id), search, offset, limit, status, sort)}
 
 
+@router.get("/panels/{panel_id}/options")
+def panel_options(panel_id: int):
+    """What a new user can be given on this panel: its inbounds (Marzban) and groups (PasarGuard)."""
+    return {"ok": True, **_wrap(panels.options, _cred(panel_id))}
+
+
 @router.get("/panels/{panel_id}/users/{username}")
 def user_get(panel_id: int, username: str):
     """One user of the panel in full."""
