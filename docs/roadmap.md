@@ -109,7 +109,7 @@ always installable; a milestone ends with a tag.
 - [ ] #77 Metrics endpoint for operators who run Grafana (servers, tunnels, configs, jobs as gauges)
 - [ ] #78 Central Abuse-Defender: one rule list kept on the panel server, pushed to the nodes as an atomic ipset / nftables set, with every tunnel (any engine: its peers and ports) and every Iran server excluded by construction, and a check of the tunnels before and after each push; the per-node install that took minutes becomes a push of seconds
 - [ ] #79 Shop bot section of the panel: its name stays in the menu but it is switched off until the other sections are finished; then switch it on again and finish it (its pages and the Mini App links are untouched in the code)
-- [ ] #80 CDN: other record types (AAAA, CNAME, TXT, MX) - a type chooser beside the name in the record form, and make / edit / delete / restore for each type on ArvanCloud and Cloudflare (today every DNS path of the panel - edit, delete, restore, the failover - is built for A records only; each type needs its own body format and a test against the real API)
+- [ ] #80 CDN: more record types and editing them (AAAA, CNAME and TXT can be made and deleted since 1.35.24; still open: edit them in place, ANAME, NS, MX, SRV, and a test against the real APIs) - a type chooser beside the name in the record form, and make / edit / delete / restore for each type on ArvanCloud and Cloudflare (today every DNS path of the panel - edit, delete, restore, the failover - is built for A records only; each type needs its own body format and a test against the real API)
 
 ## Rules
 * Commit message: `<area>: <imperative sentence>` (`tunnels: treat lossy GRE as degraded`).

@@ -192,15 +192,18 @@ class ArvanProvider:
         items = [i for i in (r.get("value") if isinstance(r.get("value"), list) else [r.get("value")]) if isinstance(i, dict)]
         ips = ips_of(r.get("value")) if t in ("A", "AAAA") else []
         return {"account": self.acc.id, "domain": domain, "id": str(r.get("id") or ""), "type": t, "name": name, "fqdn": domain if name in ("@", "") else f"{name}.{domain}", "ips": ips, "port": next((i.get("port") for i in items if i.get("port")), None), "upstream": r.get("upstream_https") if t == "A" else None,
-                "value": ", ".join(ips) if ips else _text(r.get("value") or r.get("cname") or r.get("text") or r.get("mx") or r.get("ns") or ""), "ttl": r.get("ttl"), "cloud": bool(r.get("cloud")) if t in ("A", "AAAA", "CNAME") else None, "editable": t == "A"}
+                "value": ", ".join(ips) if ips else _text(r.get("value") or r.get("cname") or r.get("text") or r.get("mx") or r.get("ns") or ""), "ttl": r.get("ttl"), "cloud": bool(r.get("cloud")) if t in ("A", "AAAA", "CNAME") else None, "editable": t == "A", "deletable": t in ("A", "AAAA", "CNAME", "TXT")}
 
     def records(self, domain: str) -> list[dict]:
         with arvan.using(self.acc.key):
             return [self._row(domain, r) for r in arvan.records(domain)]
 
-    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:
+    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None, rtype: str = "A", value: str = "") -> dict:
         with arvan.using(self.acc.key):
-            made = arvan.create_a(domain, name, _check_ips(ips, False), ttl, cloud, port, upstream)
+            if str(rtype).upper() != "A":
+                made = arvan.create_other(domain, rtype, name, [str(i).strip() for i in ips], value, ttl, cloud)
+            else:
+                made = arvan.create_a(domain, name, _check_ips(ips, False), ttl, cloud, port, upstream)
 
         return self._row(made["domain"], made["record"])
 
@@ -261,7 +264,7 @@ class CloudflareProvider:
         name = "@" if fq == domain else (fq[: -len(domain) - 1] if fq.endswith("." + domain) else fq)
         ips = [str(r.get("content"))] if t == "A" and r.get("content") else []
         return {"account": self.acc.id, "domain": domain, "id": str(r.get("id") or ""), "type": t, "name": name, "fqdn": fq, "ips": ips, "port": None,
-                "value": str(r.get("content") or ""), "ttl": r.get("ttl"), "cloud": bool(r.get("proxied")) if t in ("A", "AAAA", "CNAME") else None, "editable": t == "A"}
+                "value": str(r.get("content") or ""), "ttl": r.get("ttl"), "cloud": bool(r.get("proxied")) if t in ("A", "AAAA", "CNAME") else None, "editable": t == "A", "deletable": t in ("A", "AAAA", "CNAME", "TXT")}
 
     def records(self, domain: str) -> list[dict]:
         return [self._row(domain, r) for r in cloudflare.records(self.acc.key, self._zid(domain))]
@@ -276,9 +279,47 @@ class CloudflareProvider:
 
         return {"type": "A", "name": domain if n == "@" else f"{n}.{domain}", "content": ip, "ttl": int(ttl), "proxied": bool(cloud)}
 
-    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:      # a Cloudflare record has no port or origin protocol here: both are ignored
+    @staticmethod
+    def _other_body(domain: str, rtype: str, name: str, ips: list[str], value: str, ttl: int, cloud: bool) -> dict:
+        """AAAA, CNAME and TXT: one value each (a Cloudflare AAAA record holds ONE address)."""
+        t = str(rtype).upper()
+        n = _check_name(name)
+
+        if int(ttl) != 1 and not 60 <= int(ttl) <= 86400:
+            raise ValueError("the TTL must be Auto or between 1 minute and 1 day")
+
+        if t == "AAAA":
+            if len(ips) != 1:
+                raise ValueError("a Cloudflare record holds ONE address: make one record per address")
+
+            try:
+                content = str(ipaddress.IPv6Address(str(ips[0]).strip()))
+            except ValueError:
+                raise ValueError(f"{str(ips[0]).strip()[:40]!r} is not an IPv6 address")
+        elif t == "CNAME":
+            content = str(value or "").strip().rstrip(".")
+
+            if not arvan.HOST_RE.match(content):
+                raise ValueError("a CNAME points at a host name such as target.example.com")
+        elif t == "TXT":
+            content = str(value or "").strip()
+
+            if not content or len(content) > 1000:
+                raise ValueError("the text of a TXT record is empty or longer than 1000 characters")
+        else:
+            raise ValueError("the record type must be A, AAAA, CNAME or TXT")
+
+        body = {"type": t, "name": domain if n == "@" else f"{n}.{domain}", "content": content, "ttl": int(ttl)}
+
+        if t in ("AAAA", "CNAME"):
+            body["proxied"] = bool(cloud)
+
+        return body
+
+    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None, rtype: str = "A", value: str = "") -> dict:      # a Cloudflare record has no port or origin protocol here: both are ignored
         z = self._zid(domain)
-        made = (cloudflare.req(self.acc.key, "POST", f"/zones/{z}/dns_records", body=self._body(domain, name, ips, ttl, cloud)).get("result")) or {}
+        body = self._body(domain, name, ips, ttl, cloud) if str(rtype).upper() == "A" else self._other_body(domain, rtype, name, ips, value, ttl, cloud)
+        made = (cloudflare.req(self.acc.key, "POST", f"/zones/{z}/dns_records", body=body).get("result")) or {}
 
         if not made.get("id"):
             raise RuntimeError("Cloudflare did not say which record it made")
@@ -302,8 +343,8 @@ class CloudflareProvider:
         z = self._zid(domain)
         before = self._get(z, rid)
 
-        if str(before.get("type", "")).upper() != "A":
-            raise RuntimeError("only A records are deleted here")
+        if str(before.get("type", "")).upper() not in ("A", "AAAA", "CNAME", "TXT"):
+            raise RuntimeError("only A, AAAA, CNAME and TXT records are deleted here")
 
         cloudflare.req(self.acc.key, "DELETE", f"/zones/{z}/dns_records/{rid}")
         return {"before": before, "before_row": self._row(domain, before)}

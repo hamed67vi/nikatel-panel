@@ -92,9 +92,11 @@ class RecordIn(BaseModel):
     account: str
     domain: str
     name: str = Field(min_length=1, max_length=120)
-    ips: list[str] = Field(min_length=1, max_length=10)
+    ips: list[str] = Field(default_factory=list, max_length=10)      # the addresses of an A or AAAA record; a CNAME or TXT record has none
     ttl: int = 120
     cloud: bool = False
+    type: str = Field("A", pattern="^(A|AAAA|CNAME|TXT)$")      # what kind of record to make (an existing record keeps its kind; only A records are edited)
+    value: str | None = Field(None, max_length=1000)      # the host name of a CNAME, the text of a TXT
     port: int | None = Field(None, ge=0, le=65535)      # None = keep, 0 = none
     upstream: str | None = Field(None, pattern="^(default|auto|http|https)$")      # the protocol to the origin server (ArvanCloud)
 
@@ -190,7 +192,7 @@ def record_create(body: RecordIn):
     _writable()
 
     try:
-        row = dnsprov.provider(body.account).create(body.domain, body.name, body.ips, body.ttl, body.cloud, body.port, body.upstream)
+        row = dnsprov.provider(body.account).create(body.domain, body.name, body.ips, body.ttl, body.cloud, body.port, body.upstream, body.type, body.value or "")
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
@@ -221,6 +223,9 @@ def record_one(account: str, domain: str, record_id: str):
 def record_edit(account: str, domain: str, record_id: str, body: RecordIn):
     """Change an A record by hand (name, addresses, TTL, cloud) - also what Point at a server does. Restore gives the old values back."""
     _writable()
+
+    if body.type != "A":
+        raise HTTPException(400, "only A records are edited here: delete the record and make it again with the new type")
 
     try:
         r = dnsprov.provider(account).update(domain, record_id, body.name, body.ips, body.ttl, body.cloud, body.port, body.upstream)

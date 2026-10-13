@@ -212,6 +212,57 @@ def a_body(name: str, ips: list[str], ttl: int = 120, cloud: bool = False, base:
     return body
 
 
+HOST_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9_]([A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?\.)+[A-Za-z]{2,63}\.?$")
+EXTRA_TYPES = ("aaaa", "cname", "txt")      # the other kinds of record the panel can make and delete (A is the one it also edits)
+
+
+def other_body(rtype: str, name: str, ips: list[str], value: str, ttl: int = 120, cloud: bool = False) -> dict:
+    """Pure: the body of an AAAA, CNAME or TXT record. ValueError for a wrong name, address, host name, text or ttl."""
+    t = str(rtype or "").lower()
+    n = str(name or "").strip().lower()
+
+    if t not in EXTRA_TYPES:
+        raise ValueError("the record type must be A, AAAA, CNAME or TXT")
+
+    if not NAME_RE.match(n):
+        raise ValueError("the name may only have letters, digits, dots, dashes and underscores (or @ for the domain itself, * for any)")
+
+    if int(ttl) not in TTLS:
+        raise ValueError("the TTL must be one of " + ", ".join(str(x) for x in TTLS))
+
+    body: dict = {"type": t, "name": n, "ttl": int(ttl)}
+
+    if t == "aaaa":
+        clean = []
+
+        for ip in ips:
+            try:
+                clean.append(str(ipaddress.IPv6Address(str(ip).strip())))
+            except ValueError:
+                raise ValueError(f"{str(ip).strip()[:40]!r} is not an IPv6 address")
+
+        if not clean or len(clean) > 10 or len(set(clean)) != len(clean):
+            raise ValueError("give one to ten different IPv6 addresses")
+
+        body.update({"cloud": bool(cloud), "value": [{"ip": ip, "port": None, "weight": None, "country": ""} for ip in clean], "upstream_https": "default",
+                     "ip_filter_mode": {"count": "single" if len(clean) == 1 else "multi", "order": "none", "geo_filter": "none"}})
+    elif t == "cname":
+        host = str(value or "").strip()
+
+        if not HOST_RE.match(host):
+            raise ValueError("a CNAME points at a host name such as target.example.com")
+
+        body.update({"cloud": bool(cloud), "value": {"host": host.rstrip("."), "host_header": "source"}, "upstream_https": "default"})
+    else:
+        text = str(value or "").strip()
+
+        if not text or len(text) > 1000:
+            raise ValueError("the text of a TXT record is empty or longer than 1000 characters")
+
+        body.update({"value": {"text": text}})
+
+    return body
+
 def _check_domain(domain: str) -> str:
     d = str(domain or "").strip().lower()
 
@@ -262,6 +313,20 @@ def update_a(domain: str, record_id: str, name: str, ips: list[str], ttl: int, c
     return {"domain": d, "id": str(record_id), "before": before, "after": after}
 
 
+def create_other(domain: str, rtype: str, name: str, ips: list[str], value: str, ttl: int = 120, cloud: bool = False) -> dict:
+    """Make an AAAA, CNAME or TXT record; read it back to be sure. Returns {domain, id, record}."""
+    d = _check_domain(domain)
+    body = other_body(rtype, name, ips, value, ttl, cloud)
+    made = _req("POST", f"/domains/{d}/dns-records", body=body).get("data") or {}
+    rid = str(made.get("id") or "")
+
+    if not rid:
+        raise RuntimeError("ArvanCloud did not say which record it made")
+
+    log.info("dns create %s %s.%s", body["type"], body["name"], d)
+    return {"domain": d, "id": rid, "record": get_record(d, rid)}
+
+
 def put_back(domain: str, record_id: str, body: dict) -> dict:
     """Restore: write a record as it was read before (an edit that is undone)."""
     d = _check_domain(domain)
@@ -288,8 +353,8 @@ def delete_record(domain: str, record_id: str) -> dict:
     d = _check_domain(domain)
     before = get_record(d, record_id)
 
-    if str(before.get("type", "")).lower() != "a":
-        raise RuntimeError("only A records are deleted here")
+    if str(before.get("type", "")).lower() not in ("a",) + EXTRA_TYPES:
+        raise RuntimeError("only A, AAAA, CNAME and TXT records are deleted here")
 
     _req("DELETE", f"/domains/{d}/dns-records/{record_id}")
 

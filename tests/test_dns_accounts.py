@@ -198,3 +198,28 @@ def test_a_cloudflare_key_that_is_not_a_token_gets_a_plain_answer(monkeypatch):
         assert "copy it again" in str(e)
     else:
         raise AssertionError("a non-ASCII token should be refused before it is sent")
+
+def test_other_record_types_are_built_and_refused_in_plain_words():
+    from nikatel.services import arvan, dnsprov
+
+    aaaa = arvan.other_body("AAAA", "v6", ["2001:db8::1"], "", 120, True)
+    assert aaaa["type"] == "aaaa" and aaaa["value"][0]["ip"] == "2001:db8::1" and aaaa["cloud"] is True
+    cname = arvan.other_body("cname", "www", [], "target.example.com.", 300, False)
+    assert cname["value"] == {"host": "target.example.com", "host_header": "source"}
+    txt = arvan.other_body("txt", "@", [], "v=spf1 -all", 120, False)
+    assert txt["value"] == {"text": "v=spf1 -all"} and "cloud" not in txt
+
+    for bad in (("aaaa", "x", ["203.0.113.1"], ""), ("cname", "x", [], "not a host"), ("txt", "x", [], ""), ("mx", "x", [], "")):
+        try:
+            arvan.other_body(bad[0], bad[1], bad[2], bad[3])
+        except ValueError:
+            continue
+
+        raise AssertionError(f"{bad} should be refused")
+
+    cf = dnsprov.CloudflareProvider._other_body("example.com", "CNAME", "www", [], "target.example.net", 1, True)
+    assert cf == {"type": "CNAME", "name": "www.example.com", "content": "target.example.net", "ttl": 1, "proxied": True}
+    cf6 = dnsprov.CloudflareProvider._other_body("example.com", "AAAA", "@", ["2001:db8::2"], "", 300, False)
+    assert cf6["name"] == "example.com" and cf6["content"] == "2001:db8::2"
+    cft = dnsprov.CloudflareProvider._other_body("example.com", "TXT", "t", [], "hello", 300, False)
+    assert "proxied" not in cft

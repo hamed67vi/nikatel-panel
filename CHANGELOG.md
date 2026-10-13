@@ -1,7 +1,15 @@
 # Changelog
 
+## 1.35.24
+
+- CDN account chips redone: the provider mark (the ArvanCloud mark, the Cloudflare cloud), the name, the number of domains in a small pill, a status light on the right, a glow for the chosen one.
+- CDN, make a record: a **Type** chooser beside the name (A, AAAA, CNAME, TXT) on ArvanCloud and Cloudflare; the fields follow the type (address, IPv6 address, host name, text). AAAA, CNAME and TXT records can be made and deleted (Restore works); only A records are edited. Cloud is on by default and is a switch like the others. The domain chooser shows the cloud of the provider (ArvanCloud teal, Cloudflare orange). Not yet tried against the live APIs.
+
 ## 1.35.23
 
+- Servers: every second card is a little lighter, like the tunnels and the DNS records.
+- Settings → Appearance: all the themes in ONE row; every card has a small picture of its theme (page colour, side bar, accent title bar, a card) and its name under it; the chosen one has a ring.
+- The outage box of a tunnel has one fixed size and only its list scrolls (the last 30); the window itself does not scroll.
 - Roadmap #80: other DNS record types (a type chooser beside the name) written down as an issue; every DNS path of the panel is built for A records today.
 
 ## 1.35.22

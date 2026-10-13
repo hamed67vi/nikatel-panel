@@ -4153,3 +4153,72 @@ html body #modal .tunwin .modal-body { overflow-y: auto; overscroll-behavior: co
 html body #modal .tunwin .mgrid .lc-wrap svg { max-height: 104px; width: 100%; }
 html body #modal .tunwin .mcard.mwide { padding-top: 6px; padding-bottom: 6px; }
 html body #modal .tunwin .mout { min-height: 126px; max-height: 126px; } html body #modal .tunwin .mgrid .lc-wrap svg { max-height: 96px; }
+
+/* the outage box: ONE fixed size; only its list scrolls (the window itself does not) */
+html body #modal .tunwin .mout { min-height: 158px; max-height: 158px; height: 158px; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+html body #modal .tunwin .mout > h6, html body #modal .tunwin .mout > .mout-h { flex: none; }
+html body #modal .tunwin .mout-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+html body #modal .tunwin .mgrid .lc-wrap svg { max-height: 74px; } html body #modal .tunwin .mgrid .mcard { padding-top: 7px; padding-bottom: 7px; }
+
+/* the themes: ALL of them in ONE row; every card has a small picture of the theme (its page colour, a side bar, a title bar in the accent colour, a second accent, a card) and its name under it */
+html body #page .theme-grid { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 1250px) { html body #page .theme-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+html body #page .theme-grid .tsw { position: relative; min-width: 0; width: auto; height: auto; min-height: 0; padding: 7px 7px 8px; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 7px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); cursor: pointer; transition: background .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease; }
+html body #page .theme-grid .tsw:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); transform: translateY(-1px); }
+html body #page .theme-grid .tsw.on { border-color: var(--ta); background: rgba(255,255,255,.07); box-shadow: 0 0 0 1px var(--ta), 0 8px 20px -10px var(--ta); }
+html body #page .theme-grid .tsw > i { display: block !important; width: 100% !important; height: 58px !important; min-height: 0; margin: 0 !important; border-radius: 9px !important; border: 1px solid rgba(255,255,255,.16) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 4px 10px -4px rgba(0,0,0,.5) !important; position: relative; overflow: hidden; animation: none !important; transform: none !important;
+  background:
+    radial-gradient(circle at 10px 9px, var(--ta) 0 2.6px, transparent 3.4px),
+    linear-gradient(var(--ta), var(--ta)) 78% 11px / 32% 5px no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 78% 22px / 22% 4px no-repeat,
+    linear-gradient(rgba(128,128,128,.22), rgba(128,128,128,.22)) 78% 36px / 58% 16px no-repeat,
+    linear-gradient(rgba(128,128,128,.2), rgba(128,128,128,.2)) 5px 19px / 18% 32px no-repeat,
+    var(--tb) !important; }
+html body #page .theme-grid .tsw > i::before { content: ""; position: absolute; left: 6px; top: 25px; width: 16px; height: 3px; border-radius: 2px; background: var(--ta); opacity: .9; box-shadow: 0 7px 0 -0px rgba(128,128,128,.45), 0 14px 0 0 rgba(128,128,128,.35); }
+html body #page .theme-grid .tsw > i::after { content: ""; position: absolute; right: 9px; bottom: 7px; width: 9px; height: 9px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 0 2px rgba(255,255,255,.12); }
+html body #page .theme-grid .tsw.flat > i { border-radius: 4px !important; }
+html body #page .theme-grid .tsw > b { display: block; max-width: 100%; text-align: center; font-size: 11.5px; font-weight: 600; letter-spacing: .01em; color: #cdd7ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body #page .theme-grid .tsw.on > b { color: #fff; }
+
+/* servers: every second card a little lighter, like the tunnels and the DNS records (the flag stays on top of the card colour) */
+html body #page .srv-tbl:not(.dns-tbl) tbody tr:nth-child(odd) td { background: rgba(255,255,255,.026) !important; }
+html body #page .srv-tbl:not(.dns-tbl) tbody tr:nth-child(even) td { background: rgba(120,150,210,.075) !important; }
+html body #page .srv-tbl:not(.dns-tbl) tbody tr:hover td { background: rgba(255,255,255,.1) !important; }
+
+html body #page .theme-grid { display: grid !important; grid-template-columns: repeat(13, minmax(0, 1fr)) !important; gap: 8px !important; }
+@media (max-width: 1250px) { html body #page .theme-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; } }
+html body #page .theme-grid .tsw { width: auto !important; height: auto !important; min-height: 0 !important; max-width: none !important; padding: 7px 7px 8px !important; display: flex !important; flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important; gap: 7px !important; border-radius: 14px !important; }
+html body #page .theme-grid .tsw > b { display: block !important; position: static !important; transform: none !important; text-align: center !important; font-size: 11.5px !important; }
+
+/* the theme cards are buttons inside Settings: win over the flat-button rule of Settings */
+html body #page .sf .theme-grid button.tsw:not(.eye):not(.mini) { height: auto !important; min-height: 0 !important; padding: 7px 7px 8px !important; gap: 7px !important; border-radius: 14px !important; background: rgba(255,255,255,.04) !important; border: 1px solid rgba(255,255,255,.09) !important; box-shadow: none !important; font-size: 11.5px !important; }
+html body #page .sf .theme-grid button.tsw:not(.eye):not(.mini):hover:not(:disabled) { background: rgba(255,255,255,.08) !important; border-color: rgba(255,255,255,.2) !important; }
+html body #page .sf .theme-grid button.tsw.on:not(.eye):not(.mini) { border-color: var(--ta) !important; background: rgba(255,255,255,.07) !important; box-shadow: 0 0 0 1px var(--ta), 0 8px 20px -10px var(--ta) !important; }
+html body #page .sf .theme-grid button.tsw::before, html body #page .sf .theme-grid button.tsw::after { display: none !important; }
+html body #page .theme-grid .tsw > b { font-size: 10.5px !important; letter-spacing: 0 !important; }
+html body #page .sf .theme-grid button.tsw:not(.eye):not(.mini) { padding: 6px 5px 7px !important; }
+
+/* the domain chooser shows the cloud of the provider (ArvanCloud teal, Cloudflare orange) instead of a globe */
+html body #page .dns-bar .dns-dsel[data-prov="arvan"]::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 18a4.5 4.5 0 01-.6-8.96A6 6 0 0117.8 8.6 4.7 4.7 0 0117 18H7z' fill='%2318c5b0' fill-opacity='.28' stroke='%2318c5b0' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat; width: 18px; height: 18px; }
+html body #page .dns-bar .dns-dsel[data-prov="cloudflare"]::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 18a4.5 4.5 0 01-.6-8.96A6 6 0 0117.8 8.6 4.7 4.7 0 0117 18H7z' fill='%23f6821f' fill-opacity='.3' stroke='%23f6821f' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat; width: 18px; height: 18px; }
+
+/* the record form: the type beside the name, the CDN switch like the other switches */
+html body #modal .qp2 .c1 { grid-column: span 1; }
+html body #modal .qp2 .qp-f.c1 .qp-sw .qp-sel { padding-left: 10px; padding-right: 26px; }
+html body #modal .qp2-cloud { gap: 12px; } html body #modal .qp2-cloud input.sw { flex: none; }
+
+/* the ArvanCloud mark (a dot and a slanted bar) instead of the cloud / globe, in the Arvan green */
+html body #page .dns-bar .dns-dsel[data-prov="arvan"]::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='6.2' cy='17.6' r='2.5' fill='%2322d3b0'/%3E%3Cpath d='M11.4 4.6L16.8 19' stroke='%2322d3b0' stroke-width='3.6' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") center/contain no-repeat; width: 18px; height: 18px; }
+
+/* the account chips, redone: the provider mark, the name, the number of domains in a small pill, and a status light on the right */
+html body #page .dns-chip { height: 36px; padding: 0 12px 0 10px; gap: 9px; border-radius: 12px; font-size: 13px; letter-spacing: .01em; background: linear-gradient(180deg, rgba(255,255,255,.065), rgba(255,255,255,.03)); border: 1px solid rgba(255,255,255,.11); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset; }
+html body #page .dns-chip:hover { background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.05)); border-color: rgba(255,255,255,.2); }
+html body #page .dns-chip.on { background: linear-gradient(180deg, rgba(122,176,255,.26), rgba(122,176,255,.12)); border-color: rgba(122,176,255,.6); color: #fff; box-shadow: 0 0 0 1px rgba(122,176,255,.25), 0 8px 18px -10px rgba(122,176,255,.7); }
+html body #page .dns-chip .pv { flex: none; width: 18px; height: 18px; border-radius: 6px; background: center/contain no-repeat; }
+html body #page .dns-chip .pv-arvan { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='6.2' cy='17.6' r='2.5' fill='%2322d3b0'/%3E%3Cpath d='M11.4 4.6L16.8 19' stroke='%2322d3b0' stroke-width='3.6' stroke-linecap='round' fill='none'/%3E%3C/svg%3E"); }
+html body #page .dns-chip .pv-cloudflare { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 18a4.5 4.5 0 01-.6-8.96A6 6 0 0117.8 8.6 4.7 4.7 0 0117 18H7z' fill='%23f6821f' fill-opacity='.3' stroke='%23f6821f' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+html body #page .dns-chip .pv-all { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239fb4d8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='13' height='13' rx='3'/%3E%3Cpath d='M8 20h10a3 3 0 003-3V9'/%3E%3C/svg%3E"); }
+html body #page .dns-chip .cnt { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: #aeb7ca; background: rgba(255,255,255,.08); }
+html body #page .dns-chip.on .cnt { color: #fff; background: rgba(122,176,255,.35); }
+html body #page .dns-chip .dot { flex: none; width: 7px; height: 7px; margin-left: 1px; box-shadow: 0 0 0 3px rgba(255,255,255,.05); } html body #page .dns-chip .dot.ok { box-shadow: 0 0 0 3px rgba(79,217,138,.16); } html body #page .dns-chip .dot.bad { box-shadow: 0 0 0 3px rgba(255,122,140,.18); }
+html body #modal input[type=checkbox].sw:checked::before { background: #4c8dff !important; }
