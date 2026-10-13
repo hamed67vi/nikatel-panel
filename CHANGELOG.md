@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.8
+
+- Server window: smaller type for the three boxes, the number cards (they all fit in the row now) and the chart numbers, so it looks less crowded.
+
 ## 1.35.7
 
 - Country flags are grey and turn to colour only under the pointer (server rows, cards, the window header).
