@@ -3799,3 +3799,18 @@ html body #page .set-tabs:not(.tf-tabs):not(#nk-x) { background: transparent !im
 html body #page .set-tabs:not(.tf-tabs):not(#nk-x) button { background: transparent !important; border: 0 !important; border-bottom: 2px solid transparent !important; border-radius: 0 !important; box-shadow: none !important; padding: 11px 16px 10px !important; margin-bottom: -1px; font-weight: 600; color: #98a3ba; }
 html body #page .set-tabs:not(.tf-tabs):not(#nk-x) button:hover { color: #d7deee; background: rgba(255,255,255,.03); }
 html body #page .set-tabs:not(.tf-tabs):not(#nk-x) button.on { color: #f2f5fb; border-bottom: 2px solid #4a8bf0 !important; background: rgba(74,139,240,.07) !important; }
+
+/* the type tag of a tunnel: one soft tone per type (the only thing that tells the types apart in the one table) */
+html body #page .tun-tbl .td-type.ty-backhaul { background: rgba(122,167,240,.2); border-color: rgba(122,167,240,.4); color: #cfe0ff; }
+html body #page .tun-tbl .td-type.ty-backpack { background: rgba(80,200,190,.2); border-color: rgba(80,200,190,.4); color: #c5f1ec; }
+html body #page .tun-tbl .td-type.ty-paqet { background: rgba(170,140,240,.22); border-color: rgba(170,140,240,.42); color: #e2d7ff; }
+html body #page .tun-tbl .td-type.ty-chisel { background: rgba(230,180,90,.2); border-color: rgba(230,180,90,.4); color: #fbe6bd; }
+html body #page .tun-tbl .td-type.ty-gre { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); }
+
+/* the tunnel window: the message strip sits under the header, like in the server window */
+#modal .modal.tunwin > .hmsg { display: flex; position: static; transform: none; z-index: auto; width: auto; max-width: none; flex: none; margin: 8px 22px 0; height: 30px; background: transparent; border-color: transparent; box-shadow: none; }
+#modal .modal.tunwin > .hmsg:not(:empty) { background: #1b2438; border-color: rgba(255,255,255,.16); } #modal .modal.tunwin > .hmsg.ok:not(:empty) { background: rgba(48,209,88,.12); border-color: rgba(48,209,88,.45); } #modal .modal.tunwin > .hmsg.bad:not(:empty) { background: rgba(255,69,58,.13); border-color: rgba(255,69,58,.5); } #modal .modal.tunwin > .hmsg.info:not(:empty) { background: rgba(10,132,255,.12); border-color: rgba(10,132,255,.45); }
+#modal .modal.tunwin > .hmsg > span { flex: 1 1 auto; }
+#modal .modal.tunwin .modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* the faint "new" tag of a tunnel built in the last 24 hours */
+html body #page .tun-tbl .newtag { margin-left: 8px; padding: 0 6px; border-radius: 999px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; color: rgba(150,205,255,.75); background: rgba(90,169,255,.1); border: 1px solid rgba(90,169,255,.22); }

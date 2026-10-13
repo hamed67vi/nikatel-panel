@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.35.1
+
+- Tunnels: one table for every tunnel; a type no longer gets its own header and table. Each type has its own soft tag colour (Backhaul, Backpack, Paqet, Chisel, GRE).
+- A faint `new` tag only on the two newest tunnels, and only for 30 minutes after they are built.
+- The tunnel window shows its messages in a strip under the header, like the server window.
+
 ## 1.35.0
 
 - **Fix (urgent):** the DNS page did not open in 1.34.1 (a comment ate the rest of a statement); every page of the panel was opened again in the test copy after the fix.
