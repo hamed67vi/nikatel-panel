@@ -4083,3 +4083,8 @@ html body #modal .mout-r > span { min-width: 0; overflow: hidden; text-overflow:
 html body #page .dns-tbl tbody tr.dr-rec:nth-child(odd) td { background: rgba(255,255,255,.026) !important; }
 html body #page .dns-tbl tbody tr.dr-rec:nth-child(even) td { background: rgba(120,150,210,.075) !important; }
 html body #page .dns-tbl tbody tr.dr-rec:hover td { background: rgba(255,255,255,.1) !important; }
+
+/* the addresses of the DNS records: the same face and size as the addresses of the server list */
+html body #page .dns-tbl td.val, html body #page .dns-tbl td.val .mono { font-family: "JetBrains Mono", "SF Mono", "Cascadia Mono", "Roboto Mono", ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums slashed-zero; font-feature-settings: "zero", "tnum"; font-size: 12.5px; font-weight: 500; letter-spacing: .01em; color: #c3cde2; }
+html body #page .dns-tbl td.val .mchip { font-family: var(--font, inherit); font-size: 10.5px; font-weight: 600; letter-spacing: 0; padding: 0 8px; line-height: 17px; }
+html body #page .dns-tbl td.dns-port { font-family: var(--font, inherit); font-size: inherit; }

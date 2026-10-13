@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.15
+
+- DNS records: the addresses have the same face and size as the addresses of the server list.
+
 ## 1.35.14
 
 - A window that is drawn again (after Health, Quality, a check ...) rewrites only the numbers that changed, in place, so the values in the boxes no longer blink or jump; the charts are updated the same way.
