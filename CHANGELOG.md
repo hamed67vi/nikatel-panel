@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.36.2 - the Analyst, shorter; the day theme of the Doctor's lists
+
+- The Analyst's tabs: Best today · Tunnels · At risk · Servers · **CPU cores** (the cores box moved up here from under the lists). The tables look like the tunnel and server lists (lifted header, zebra rows). Shorter: the "What fixes what" tab, the footnotes under the tables, the summary chips, the "Weak hours" and "Mean repair" columns and the server "Size" are gone.
+- The number fields of the mode cards: small fixed boxes with centred figures, no spinner.
+- Day theme: the lines of the Finished list, the pods and rows of Best today, the verdict chips, the Analyst's table header and the cores are readable now; the servers list's bars have a visible track and their level colours, the flag behind a server name is a faint tint instead of a grey smear, and the side menu's labels lost their ghost shadow.
+
 ## 1.36.1 - the Doctor's settings inside their mode cards
 
 - Each setting of the Doctor sits in the card of the mode it belongs to and is saved as soon as it is changed: "a tunnel down for N seconds is repaired" in **Fix tunnels**, "an Iran server off for N minutes is replaced" in **Fix + move the Iran server**. The settings row and its Save button are gone; Fix all / Explain and the count moved beside the tabs.

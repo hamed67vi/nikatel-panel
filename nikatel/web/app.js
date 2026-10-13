@@ -1562,7 +1562,7 @@ window.bestLoad = async () => {
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
-  const [d, tl, srvs, rp, dc, bl] = await Promise.all([api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse,move"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), api("/api/doctor").catch(() => null), api("/api/balance").catch(() => null)]);
+  const [d, tl, srvs, rp, dc] = await Promise.all([api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse,move"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), api("/api/doctor").catch(() => null)]);
   state.tunnelsCache = tl;
   const mode = rp.mode || (rp.auto ? "fix" : "off"), on = mode !== "off", lic = dc ? dc.licensed !== false : rp.licensed_move !== false, ro = !!d.read_only;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
@@ -1612,7 +1612,7 @@ PAGES.actions = async () => {
         <div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
       <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || '<div class="tk-empty"><b>Nothing yet</b></div>'}</div></div>
       <div class="ap-tbody ${apTab === "moves" ? "" : "hidden"}" id="ap-t-moves">${movesTab}</div>
-      <div class="ap-tbody ${apTab === "ana" ? "" : "hidden"}" id="ap-t-ana"><div id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div>${balCard(bl, srvs)}</div>
+      <div class="ap-tbody ${apTab === "ana" ? "" : "hidden"}" id="ap-t-ana"><div id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div></div>
     </div>
     `;
   if (apTab === "ana") anaLoad();          // the Analyst is the fourth list of the Doctor's box (In progress · Finished · Moves · Analyst); the CPU cores live under it
@@ -3745,17 +3745,17 @@ window.testProbe = async () => { toast("Asking the probe…"); try { const r = a
 window.installProbe = async e => { e.preventDefault(); const sid = +new FormData(e.target).get("server_id"); if (!await gconfirm("Install the probe on this Iran server? It copies the probe code and Xray (about 65 MB) over SSH and starts three services. Nothing else on the server is touched.")) return false; toast("Installing… (2–5 minutes)"); try { const r = await api(`/api/settings/probe/install?server_id=${sid}`, {method: "POST"}); toast(`✓ Probe on ${r.server} registered as ${r.role}`, "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.saveShopbot = e => { const f = new FormData(e.target); return put(e, "/api/settings/shopbot", {host: f.get("host").trim(), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, dir: f.get("dir").trim(), env: f.get("env").trim(), public_url: f.get("public_url").trim()}, "✓ Shop bot settings saved"); };
 /* the Doctor's mode and its two settings are saved by apMode / saveDoctor (the Tunnel Doctor page) */
-/* CPU on the cores: a busy server whose network work sits on ONE core gets RPS (the packets are steered to all cores); the Doctor does it by itself when this is on */
-const balCard = (bl, srvs) => {
+/* CPU on the cores (a tab of the Analyst): a busy server whose network work sits on ONE core gets RPS (the packets are steered to all cores); the Doctor does it by itself when this is on */
+const balBody = (bl, srvs) => {
   if (!bl) return "";
   const rows = Object.entries(bl.servers || {}).filter(([, v]) => v && v.name).sort((a, b) => (b[1].skewed - a[1].skewed) || (b[1].at - a[1].at));
   const row = ([id, v]) => `<div class="ap-row bal-row"><b>${esc(v.name)}</b><span class="mut">${v.cores} cores</span><span class="bal-bars" title="${esc((v.busy || []).map((b, i) => "core " + i + ": " + b + " %").join(", "))}">${(v.busy || []).map(b => `<i style="height:${Math.max(6, b)}%" class="${b >= 85 ? "bad" : b >= 60 ? "warn" : ""}"></i>`).join("")}</span>
       <span class="pill ${v.rps_on ? "ok" : v.skewed ? "err" : ""}">${v.rps_on ? "spread (RPS on)" : v.skewed ? "ONE core" : "balanced"}</span><span class="ap-why ${v.rps_on ? "good" : v.skewed ? "" : "calm"}" title="${esc(v.why || "")}">${esc(v.why || "")}</span><small class="mut">${v.at ? ago(v.at) + " ago" : ""}</small>
       ${v.skewed && !v.rps_on ? `<button class="sm pri" onclick="balApply(${id}, true)" title="Steer the network packets to all cores (RPS): at once, no connection is dropped, undone with Undo">⚖ Spread now</button>` : v.rps_on ? `<button class="sm" onclick="balApply(${id}, false)" title="Put the packet steering back as it was">Undo</button>` : ""}<button class="sm" onclick="balScan(${id})" title="Look at this server again (read only)">↻</button></div>`;
-  const ir = (srvs || []).filter(s => s.enabled && s.online !== false);
-  return `<div class="card ap-bal" data-tab="att"><h3>⚖ CPU on the cores <span class="sp"></span><label class="chk" title="On: a busy server whose network work sits on one core gets RPS from the Tunnel Doctor by itself (every 10 minutes, one server at a time, kept only when it helped). Off: only you do it."><input type="checkbox" ${bl.auto ? "checked" : ""} ${bl.read_only ? "disabled" : ""} onchange="balAuto(this)"> The Doctor spreads it by itself</label>
-      <select id="bal-srv" class="sm">${ir.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button class="sm" onclick="balScan(+$('#bal-srv').value)" title="Look at one server: how its cores share the network work (read only)">🔍 Check a server</button></h3>
-    <div class="ap-bal-list">${rows.map(row).join("") || '<div class="mut" style="padding:4px 0">Servers above 55 % CPU are looked at every 10 minutes; none was found yet, or none is busy. A server whose network packets are all processed on one core is shown here, and the Doctor spreads them.</div>'}</div></div>`;
+  const ir = (srvs || []).filter(s => s.enabled !== false && s.online !== false);
+  return `<div class="ana-bar bal-bar"><label class="chk" title="On: a busy server whose network work sits on one core gets RPS from the Tunnel Doctor by itself (every 10 minutes, one server at a time, kept only when it helped). Off: only you do it."><input type="checkbox" ${bl.auto ? "checked" : ""} ${bl.read_only ? "disabled" : ""} onchange="balAuto(this)"> The Doctor spreads it by itself</label><span class="sp"></span>
+      <select id="bal-srv" class="sm">${ir.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><button class="sm" onclick="balScan(+$('#bal-srv').value)" title="Look at one server: how its cores share the network work (read only)">🔍 Check a server</button></div>
+    <div class="ap-bal-list">${rows.map(row).join("") || '<div class="empty">No busy server yet. A server whose network packets all sit on one core shows here; the Doctor spreads them.</div>'}</div>`;
 };
 window.balAuto = async cb => { try { await api("/api/balance", {method: "PUT", body: JSON.stringify({auto: cb.checked})}); toast(cb.checked ? "✓ The Doctor spreads the network work by itself" : "The Doctor leaves it to you", "ok"); } catch (e) { cb.checked = !cb.checked; toast("✕ " + e.message, "bad"); } };
 window.balScan = async id => { if (!id) return; toast("Looking at the server…"); try { const r = await api(`/api/balance/${id}/scan`, {method: "POST"}); toast(`${r.name}: ${r.why}`, r.skewed ? "bad" : "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
