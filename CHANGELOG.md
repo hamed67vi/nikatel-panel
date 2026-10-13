@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.34.0
+
+- **Fix:** the DNS page (Records / Changes / Accounts) failed with *fast is not defined* since 1.32.0 (a change meant for the servers list reached its tables too).
+- **Create tunnel: Stop.** While a build or a test of a pair runs, Build and Test are off and a **Stop** button is there (`POST /api/tunnels/builds/{id}/stop`; the build rolls back what it made).
+- **Check all** of the tunnels works right on its button (`Checking…`), no window: the answer is one line in the status bar.
+- **Analyst** has *Best today* as its first tab (the separate Doctor tab is gone); the Analyst header is one row; the podium and the list are compact.
+- **DNS records:** the port has its own column next to the address, bigger, in a petrol-blue oval; the server name beside an address is faint; the DNS bar is built like the servers bar (one row, same sizes); no refresh button.
+- **The tunnel window** has the size of the full window from the first moment (the charts and the outages no longer make it grow).
+
 ## 1.33.2
 
 **Best today is a tab of the Tunnel Doctor's box** (In progress / Finished / Best today / CPU cores / Analyst), not a page of its own; the score bars show (they were hidden by a clashing class name).

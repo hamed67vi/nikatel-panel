@@ -249,6 +249,20 @@ def compare_status(jid: str):
         raise HTTPException(404, str(e))
 
 
+@router.post("/tunnels/builds/{action_id}/stop")
+def build_stop(action_id: int):
+    """Stop a build that is running: the next step of the build ends it and everything it made so far is rolled back."""
+    from ..services import actions, builder
+
+    s = actions.status(action_id)
+
+    if s is None or s.get("done") or s.get("action") not in ("build", "create"):
+        raise HTTPException(404, "no such build is running")
+
+    builder.CANCEL.add(action_id)
+    return {"ok": True}
+
+
 @router.post("/tunnel-test/compare/{jid}/stop")
 def compare_stop(jid: str):
     """Stop a comparison; the temporary tunnel is removed."""

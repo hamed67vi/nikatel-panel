@@ -1,6 +1,6 @@
 /* The analyst tab of the Tunnel Doctor: what the history says (profiles of the tunnels, what is at risk, what fixes what, how the servers are used) - read only.
    Loaded after app.js and uses its helpers ($, api, esc, state, refresh, toast). */
-state.anaTab = "tunnels";
+state.anaTab = "best";      // the Analyst opens on the best tunnels of the day
 
 const anaDur = s => s == null ? "—" : s < 90 ? s + " s" : s < 5400 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h";
 const anaChip = v => `<span class="ana-v ${esc(String(v).replace(" ", "-"))}">${esc(v)}</span>`;
@@ -74,10 +74,11 @@ window.anaUnderAuto = async cb => { try { await api("/api/analyst/underuse", {me
 function anaDraw() {
   const box = $("#ana-box"), a = state.ana; if (!box || !a) return;
   const sm = a.summary, T = state.anaTab;
-  const tabs = [["tunnels", "Tunnels", sm.chronic + sm.watch], ["risk", "At risk", a.risks.length + a.common.length], ["repairs", "What fixes what", 0], ["servers", "Servers", sm.idle + sm.redundant]];
-  const body = T === "tunnels" ? anaTunnels(a) : T === "risk" ? anaRisk(a) : T === "repairs" ? anaRepairs(a) : anaServers(a);
-  box.innerHTML = `<div class="ana-card"><div class="ana-head"><div class="tabs">${tabs.map(([k, l, c]) => `<button class="${k === T ? "on" : ""}" onclick="anaPick('${k}')">${l}${c ? ` <i class="cnt">${c}</i>` : ""}</button>`).join("")}</div><span class="sp"></span>
-      <span class="tcount pstat"><span class="tc info">Tunnels <b>${sm.tunnels}</b></span><span class="tc ${sm.chronic ? "bad" : "ok"}">Chronic <b>${sm.chronic}</b></span><span class="tc ${sm.at_risk ? "warn" : "ok"}">At risk <b>${sm.at_risk}</b></span><span class="tc info">Available <b>${sm.availability} %</b></span></span>
-      <select onchange="anaDays(this.value)" title="How many days of history to read">${[1, 3, 7, 14].map(d => `<option value="${d}" ${d === a.days ? "selected" : ""}>${d} day${d > 1 ? "s" : ""}</option>`).join("")}</select></div>
+  const tabs = [["best", "Best today", 0], ["tunnels", "Tunnels", sm.chronic + sm.watch], ["risk", "At risk", a.risks.length + a.common.length], ["repairs", "What fixes what", 0], ["servers", "Servers", sm.idle + sm.redundant]];
+  const body = T === "best" ? '<div id="ana-best"><div class="loading"><i class="spin"></i><span>Ranking the tunnels…</span></div></div>' : T === "tunnels" ? anaTunnels(a) : T === "risk" ? anaRisk(a) : T === "repairs" ? anaRepairs(a) : anaServers(a);
+  box.innerHTML = `<div class="ana-card"><div class="ana-head"><div class="tabs srv-tabs">${tabs.map(([k, l, c]) => `<button class="${k === T ? "on" : ""}" onclick="anaPick('${k}')">${l}${c ? ` <i class="cnt">${c}</i>` : ""}</button>`).join("")}</div><span class="sp"></span>
+      ${T === "best" ? "" : `<span class="tcount pstat"><span class="tc info">Tunnels <b>${sm.tunnels}</b></span><span class="tc ${sm.chronic ? "bad" : "ok"}">Chronic <b>${sm.chronic}</b></span><span class="tc ${sm.at_risk ? "warn" : "ok"}">At risk <b>${sm.at_risk}</b></span><span class="tc info">Available <b>${sm.availability} %</b></span></span>`}
+      ${T === "best" ? `<div class="tabs srv-tabs bt-range">${[[6, "6 hours"], [24, "24 hours"], [168, "7 days"]].map(([h, l]) => `<button class="${state.bestHours === h ? "on" : ""}" onclick="bestRange(${h})">${l}</button>`).join("")}</div><span class="mut bt-up" id="bt-up"></span>` : `<select onchange="anaDays(this.value)" title="How many days of history to read">${[1, 3, 7, 14].map(d => `<option value="${d}" ${d === a.days ? "selected" : ""}>${d} day${d > 1 ? "s" : ""}</option>`).join("")}</select>`}</div>
     <div class="ana-body">${body}</div></div>`;
+  if (T === "best") bestLoad();
 }
