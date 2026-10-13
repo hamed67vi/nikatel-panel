@@ -4088,3 +4088,20 @@ html body #page .dns-tbl tbody tr.dr-rec:hover td { background: rgba(255,255,255
 html body #page .dns-tbl td.val, html body #page .dns-tbl td.val .mono { font-family: "JetBrains Mono", "SF Mono", "Cascadia Mono", "Roboto Mono", ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums slashed-zero; font-feature-settings: "zero", "tnum"; font-size: 12.5px; font-weight: 500; letter-spacing: .01em; color: #c3cde2; }
 html body #page .dns-tbl td.val .mchip { font-family: var(--font, inherit); font-size: 10.5px; font-weight: 600; letter-spacing: 0; padding: 0 8px; line-height: 17px; }
 html body #page .dns-tbl td.dns-port { font-family: var(--font, inherit); font-size: inherit; }
+
+/* the record form (make / edit), rebuilt: one compact grid - account, domain, TTL / name, cloud / address, port / server, origin protocol / preview and Save */
+html body #modal .modal.plan-add { width: min(660px, 94vw); max-width: 94vw; }
+html body #modal .qp2-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 12px; }
+html body #modal .qp2 .c2 { grid-column: span 2; } html body #modal .qp2 .c3 { grid-column: span 3; } html body #modal .qp2 .c4 { grid-column: span 4; }
+html body #modal .qp2 .qp-f { display: grid; gap: 5px; align-content: start; min-width: 0; } html body #modal .qp2 .qp-f > label { font-size: 11.5px; font-weight: 600; color: #98a3ba; letter-spacing: .02em; }
+html body #modal .qp2 .qp-f > label small { font-weight: 400; color: #7f8aa6; }
+html body #modal .qp2 .qp-in, html body #modal .qp2 .qp-sel { height: 36px; min-height: 36px; font-size: 13px; border-radius: 10px; box-sizing: border-box; }
+html body #modal .qp2 .qp-sw { height: 36px; border-radius: 10px; } html body #modal .qp2 .qp-sw .qp-sel { height: 34px; padding-top: 0; padding-bottom: 0; }
+html body #modal .qp2-name { display: flex; align-items: stretch; height: 36px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.1); background: rgba(0,0,0,.22); }
+html body #modal .qp2-name .qp-in { flex: 1 1 auto; min-width: 0; border: 0; border-radius: 0; background: transparent; height: 100%; }
+html body #modal .qp2-suf { flex: none; display: grid; place-items: center; padding: 0 12px; font-size: 12px; color: #98a3ba; background: rgba(255,255,255,.05); border-left: 1px solid rgba(255,255,255,.08); font-family: var(--mono, ui-monospace, monospace); }
+html body #modal .qp2-cloud { height: 36px; display: flex; align-items: center; gap: 9px; font-size: 13px; color: #d5deef; cursor: pointer; }
+html body #modal .qp2-foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.07); }
+html body #modal .qp2-foot .qp-prev { flex: 1 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #modal .qp2-foot .qp-pri { flex: none; height: 36px; padding: 0 22px; font-size: 13px; border-radius: 10px; background: rgba(122,176,255,.16) !important; border: 1px solid rgba(122,176,255,.42) !important; color: #d9e7ff !important; box-shadow: none !important; }
+@media (max-width: 560px) { html body #modal .qp2 .c2, html body #modal .qp2 .c3, html body #modal .qp2 .c4 { grid-column: span 6; } }

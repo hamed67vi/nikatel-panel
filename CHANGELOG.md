@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.16
+
+- DNS · IP switch, edit and make a record (ArvanCloud): a **Port** field and the **protocol to the origin server** (Default / Auto / HTTP / HTTPS), like the ArvanCloud page. Only what you change is sent: a record with several ports keeps them when you leave the port alone. The form is rebuilt as one compact grid (the name shows its domain beside it, the long help texts are tooltips).
+
 ## 1.35.15
 
 - DNS records: the addresses have the same face and size as the addresses of the server list.

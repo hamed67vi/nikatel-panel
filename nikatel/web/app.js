@@ -4032,29 +4032,35 @@ window.dnsForm = k => {
   const sel = (localStorage.getItem("nk.dns.sel") || "").split("|"), acc = r ? r.account : (accs.find(a => a.id === sel[0]) || accs[0] || {}).id, a0 = accs.find(a => a.id === acc) || {}, dom = r ? r.domain : (sel[1] && (a0.domains || []).includes(sel[1]) ? sel[1] : (a0.domains || [])[0] || "");
   const ttls = (a0.ttls || [[120, "2 minutes"]]), ttl = r && r.ttl ? +r.ttl : (ttls[0] ? ttls[0][0] : 120), servers = (state.dnsServers || []).filter(s => s.enabled), chev = '<svg viewBox="0 0 16 16"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>';
   const sw = (inner, extra = "") => `<div class="qp-sw" ${extra}>${inner}${chev}</div>`;
-  showModal(`<b>${r ? "✎ Edit record" : "＋ Add record"}</b>`, `<form class="qp" onsubmit="return dnsSave(event, ${r ? `'${esc(k)}'` : "''"})">
-    <p class="qp-sub">${r ? "Change the name, the addresses, the TTL or the cloud of this A record; everything else stays as it is." : "Make an A record in one of your domains."} Every change is kept under <b>Changes</b> with a Restore.</p>
-    <div class="qp-grid">
-      <div class="qp-f"><label>Account</label>${sw(`<select class="qp-sel" name="account" ${r ? "disabled" : ""} onchange="dnsFormAcc(this.form)">${accs.map(a => `<option value="${esc(a.id)}" ${a.id === acc ? "selected" : ""}>${esc(a.name)} (${esc(a.provider === "arvan" ? "ArvanCloud" : "Cloudflare")})</option>`).join("")}</select>`)}</div>
-      <div class="qp-f"><label>Domain</label>${sw(`<select class="qp-sel" name="domain" ${r ? "disabled" : ""} onchange="dnsPrev(this.form)">${(a0.domains || []).map(d => `<option ${d === dom ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`)}</div>
-      <div class="qp-f"><label>Name <small>(before the domain · @ = the domain itself)</small></label><input class="qp-in" name="name" value="${esc(r ? r.name : "")}" required maxlength="120" placeholder="sub" autocomplete="off" oninput="dnsPrev(this.form)"></div>
-      <div class="qp-f"><label>TTL</label>${sw(`<select class="qp-sel" name="ttl">${ttls.map(([v, l]) => `<option value="${v}" ${v === ttl ? "selected" : ""}>${l}</option>`).join("")}${ttls.some(t => t[0] === ttl) ? "" : `<option value="${ttl}" selected>${ttl} s</option>`}</select>`)}</div>
-      <div class="qp-f" style="grid-column:1/-1"><label>Address <small id="dns-ipnote">(IPv4; several, separated by commas, share the traffic)</small></label><input class="qp-in" name="ips" value="${esc(r ? r.ips.join(", ") : "")}" required placeholder="203.0.113.10" autocomplete="off" dir="ltr" oninput="dnsPrev(this.form)">
-        <div class="qp-row" style="margin-top:6px">${sw(`<select class="qp-sel" onchange="if(this.value){this.form.elements.ips.value=this.value;dnsPrev(this.form);this.selectedIndex=0}"><option value="">…or the address of a server of the panel</option>${servers.map(s => `<option value="${esc(s.host)}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select>`)}</div></div>
-      <div class="qp-f"><label>Cloud</label><label class="chk" style="height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" name="cloud" ${r && r.cloud ? "checked" : ""}> through the CDN (orange cloud)</label></div></div>
-    <div class="qp-prev" id="dns-prev"></div>
-    <div class="qp-act"><span class="qp-hint">${r ? "Restore under Changes gives the old values back." : "Restore under Changes deletes it again."}</span><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add");
+  const fld = (cls, label, inner, tip = "") => `<div class="qp-f ${cls}"${tip ? ` title="${esc(tip)}"` : ""}><label>${label}</label>${inner}</div>`;
+  showModal(`<b>${r ? "✎ Edit record" : "＋ Add record"}</b>`, `<form class="qp qp2" onsubmit="return dnsSave(event, ${r ? `'${esc(k)}'` : "''"})">
+    <div class="qp2-grid">
+      ${fld("c2", "Account", sw(`<select class="qp-sel" name="account" ${r ? "disabled" : ""} onchange="dnsFormAcc(this.form)">${accs.map(a => `<option value="${esc(a.id)}" ${a.id === acc ? "selected" : ""}>${esc(a.name)}${/arvan|cloudflare/i.test(a.name) ? "" : " (" + (a.provider === "arvan" ? "ArvanCloud" : "Cloudflare") + ")"}</option>`).join("")}</select>`))}
+      ${fld("c2", "Domain", sw(`<select class="qp-sel" name="domain" ${r ? "disabled" : ""} onchange="dnsPrev(this.form)">${(a0.domains || []).map(d => `<option ${d === dom ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`))}
+      ${fld("c2", "TTL", sw(`<select class="qp-sel" name="ttl">${ttls.map(([v, l]) => `<option value="${v}" ${v === ttl ? "selected" : ""}>${l}</option>`).join("")}${ttls.some(t => t[0] === ttl) ? "" : `<option value="${ttl}" selected>${ttl} s</option>`}</select>`))}
+      ${fld("c4", "Name", `<div class="qp2-name"><input class="qp-in" name="name" value="${esc(r ? r.name : "")}" required maxlength="120" placeholder="sub  (@ = the domain itself)" autocomplete="off" oninput="dnsPrev(this.form)"><span class="qp2-suf" id="dns-suf"></span></div>`)}
+      ${fld("c2", "Cloud", `<label class="qp2-cloud" title="Through the CDN (the orange cloud)"><input type="checkbox" name="cloud" ${r && r.cloud ? "checked" : ""}><span>CDN</span></label>`)}
+      ${fld("c4", `Address <small id="dns-ipnote"></small>`, `<input class="qp-in" name="ips" value="${esc(r ? r.ips.join(", ") : "")}" required placeholder="203.0.113.10  (several: separate with commas)" autocomplete="off" dir="ltr" oninput="dnsPrev(this.form)">`, "IPv4. Several addresses, separated by commas, share the traffic.")}
+      ${fld("c2 dns-arv", "Port", `<input class="qp-in" name="port" type="number" min="1" max="65535" value="${r && r.port ? esc(r.port) : ""}" data-orig="${r && r.port ? esc(r.port) : ""}" placeholder="none" autocomplete="off" dir="ltr">`, "The port of the address. Empty = none.")}
+      ${fld("c3", "Or a server of the panel", sw(`<select class="qp-sel" onchange="if(this.value){this.form.elements.ips.value=this.value;dnsPrev(this.form);this.selectedIndex=0}"><option value="">choose a server…</option>${servers.map(s => `<option value="${esc(s.host)}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select>`))}
+      ${fld("c3 dns-arv", "Protocol to the origin", sw(`<select class="qp-sel" name="upstream" data-orig="${esc((r && r.upstream) || "default")}">${[["default", "Default"], ["auto", "Auto"], ["http", "HTTP"], ["https", "HTTPS"]].map(([v, l]) => `<option value="${v}" ${((r && r.upstream) || "default") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`), "How ArvanCloud talks to your server when the cloud is on.")}
+    </div>
+    <div class="qp2-foot"><div class="qp-prev" id="dns-prev"></div><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add");
   setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f) { dnsFormAcc(f, true); dnsPrev(f); f.elements.name.focus(); } }, 60);
 };
 window.dnsFormAcc = (f, keep) => {      // the account decides the domains and the TTL choices
   const a = (state.dnsAccounts || []).find(x => x.id === f.elements.account.value) || {}, d = f.elements.domain, t = f.elements.ttl;
   if (!keep && !d.disabled) { d.innerHTML = (a.domains || []).map(x => `<option>${esc(x)}</option>`).join(""); t.innerHTML = (a.ttls || []).map(([v, l]) => `<option value="${v}">${l}</option>`).join(""); }
-  const n = $("#dns-ipnote"); if (n) n.textContent = a.provider === "cloudflare" ? "(IPv4; Cloudflare keeps ONE address per record - make one record per address)" : "(IPv4; several, separated by commas, share the traffic)";
+  document.querySelectorAll(".modal .dns-arv").forEach(e => { e.style.display = a.provider === "cloudflare" ? "none" : ""; });      // the port and the origin protocol are ArvanCloud fields
+  const n = $("#dns-ipnote"); if (n) n.textContent = a.provider === "cloudflare" ? "(Cloudflare: ONE address per record)" : "";
   dnsPrev(f);
 };
-window.dnsPrev = f => { const el = $("#dns-prev"); if (!el || !f) return; const n = f.elements.name.value.trim().toLowerCase(), d = f.elements.domain.value, ips = f.elements.ips.value.split(/[,\s]+/).filter(Boolean); el.innerHTML = n && ips.length ? `<b dir="ltr">${esc(n === "@" ? d : n + "." + d)}</b> <span class="mut">→</span> <span class="mono">${esc(ips.join(" · "))}</span>` : ""; };
+window.dnsPrev = f => { const suf = $("#dns-suf"); if (suf && f) suf.textContent = "." + f.elements.domain.value; const el = $("#dns-prev"); if (!el || !f) return; const n = f.elements.name.value.trim().toLowerCase(), d = f.elements.domain.value, ips = f.elements.ips.value.split(/[,\s]+/).filter(Boolean); el.innerHTML = n && ips.length ? `<b dir="ltr">${esc(n === "@" ? d : n + "." + d)}</b> <span class="mut">→</span> <span class="mono">${esc(ips.join(" · "))}</span>` : ""; };
 window.dnsSave = async (e, k) => {
   e.preventDefault(); const f = e.target, r = k ? (state.dnsRecs || {})[k] : null, body = {account: r ? r.account : f.elements.account.value, domain: r ? r.domain : f.elements.domain.value, name: f.elements.name.value.trim(), ips: f.elements.ips.value.split(/[,\s]+/).filter(Boolean), ttl: +f.elements.ttl.value, cloud: f.elements.cloud.checked};
+  const po = f.elements.port, up = f.elements.upstream;      // only what was changed is sent: a record with several ports keeps them when you leave the port alone
+  if (po && po.value !== (po.dataset.orig || "")) body.port = po.value === "" ? 0 : +po.value;
+  if (up && up.value !== (up.dataset.orig || "default")) body.upstream = up.value;
   const btn = f.querySelector(".qp-pri"); btn.disabled = true;
   try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); state.dnsFresh = true; refresh(); }
   catch (err) { btn.disabled = false; toast("✕ " + err.message, "bad"); }

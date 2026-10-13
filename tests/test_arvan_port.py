@@ -25,3 +25,20 @@ def test_a_record_without_a_port_stays_without_one():
     assert body["value"][0]["port"] is None
     new = arvan.a_body("fresh", ["198.51.100.7"], 120, False)
     assert new["value"][0]["port"] is None
+
+
+def test_port_and_origin_protocol_can_be_set_cleared_or_kept():
+    base = _base([("203.0.113.4", 8075)])
+    kept = arvan.a_body("uae", ["203.0.113.4"], 120, False, base=base)
+    assert kept["value"][0]["port"] == 8075 and kept["upstream_https"] == "default"
+    changed = arvan.a_body("uae", ["203.0.113.4"], 120, False, base=base, port=8072, upstream="https")
+    assert changed["value"][0]["port"] == 8072 and changed["upstream_https"] == "https"
+    cleared = arvan.a_body("uae", ["203.0.113.4"], 120, False, base=base, port=0)
+    assert cleared["value"][0]["port"] is None
+    for bad in ({"port": 70000}, {"upstream": "ftp"}):
+        try:
+            arvan.a_body("uae", ["203.0.113.4"], 120, False, base=base, **bad)
+        except ValueError:
+            continue
+
+        raise AssertionError(f"{bad} should be refused")

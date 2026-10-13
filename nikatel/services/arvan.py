@@ -151,7 +151,10 @@ TTLS = (120, 180, 300, 600, 900, 1800, 3600, 7200, 18000, 43200, 86400, 172800, 
 NAME_RE = re.compile(r"^(@|\*|[a-z0-9_*]([a-z0-9_.*-]{0,120}[a-z0-9_*])?)$")
 
 
-def a_body(name: str, ips: list[str], ttl: int = 120, cloud: bool = False, base: dict | None = None) -> dict:
+UPSTREAM = ("default", "auto", "http", "https")      # how ArvanCloud talks to the origin server when the cloud is on
+
+
+def a_body(name: str, ips: list[str], ttl: int = 120, cloud: bool = False, base: dict | None = None, port: int | None = None, upstream: str | None = None) -> dict:
     """Pure: the body of an A record (create, or update of `base` = the record as it was read, so every other field stays as it was). ValueError for a wrong name, address or ttl."""
     n = str(name or "").strip().lower()
 
@@ -190,6 +193,20 @@ def a_body(name: str, ips: list[str], ttl: int = 120, cloud: bool = False, base:
         return old_items[0] if old_items else empty
 
     body["value"] = [{**item_for(i, ip), "ip": ip} for i, ip in enumerate(clean)]
+
+    if port is not None:      # None = keep what the record has; 0 = no port; 1..65535 = this port on every address
+        if not 0 <= int(port) <= 65535:
+            raise ValueError("the port must be between 1 and 65535 (empty = none)")
+
+        for item in body["value"]:
+            item["port"] = int(port) or None
+
+    if upstream is not None:
+        if upstream not in UPSTREAM:
+            raise ValueError("the protocol to the origin must be one of " + ", ".join(UPSTREAM))
+
+        body["upstream_https"] = upstream
+
     body.setdefault("upstream_https", "default")
     body.setdefault("ip_filter_mode", {"count": "single" if len(clean) == 1 else "multi", "order": "none", "geo_filter": "none"})
     return body
@@ -208,10 +225,10 @@ def get_record(domain: str, record_id: str) -> dict:
     return _req("GET", f"/domains/{domain}/dns-records/{record_id}").get("data") or {}
 
 
-def create_a(domain: str, name: str, ips: list[str], ttl: int = 120, cloud: bool = False) -> dict:
+def create_a(domain: str, name: str, ips: list[str], ttl: int = 120, cloud: bool = False, port: int | None = None, upstream: str | None = None) -> dict:
     """Make an A record; read it back to be sure. Returns {domain, id, record}."""
     d = _check_domain(domain)
-    body = a_body(name, ips, ttl, cloud)
+    body = a_body(name, ips, ttl, cloud, port=port, upstream=upstream)
     made = _req("POST", f"/domains/{d}/dns-records", body=body).get("data") or {}
     rid = str(made.get("id") or "")
 
@@ -227,7 +244,7 @@ def create_a(domain: str, name: str, ips: list[str], ttl: int = 120, cloud: bool
     return {"domain": d, "id": rid, "record": after}
 
 
-def update_a(domain: str, record_id: str, name: str, ips: list[str], ttl: int, cloud: bool) -> dict:
+def update_a(domain: str, record_id: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:
     """Change an A record (name, addresses, ttl, cloud); everything else stays as it was read; read back. Returns {domain, id, before, after}."""
     d = _check_domain(domain)
     before = get_record(d, record_id)
@@ -235,7 +252,7 @@ def update_a(domain: str, record_id: str, name: str, ips: list[str], ttl: int, c
     if str(before.get("type", "")).lower() != "a":
         raise RuntimeError("only A records are edited here")
 
-    _req("PUT", f"/domains/{d}/dns-records/{record_id}", body=a_body(name, ips, ttl, cloud, base=before))
+    _req("PUT", f"/domains/{d}/dns-records/{record_id}", body=a_body(name, ips, ttl, cloud, base=before, port=port, upstream=upstream))
     after = get_record(d, record_id)
 
     if sorted(_ips(after)) != sorted(str(ipaddress.IPv4Address(str(i).strip())) for i in ips):

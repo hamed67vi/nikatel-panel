@@ -191,22 +191,22 @@ class ArvanProvider:
         name = str(r.get("name") or "@")
         items = [i for i in (r.get("value") if isinstance(r.get("value"), list) else [r.get("value")]) if isinstance(i, dict)]
         ips = ips_of(r.get("value")) if t in ("A", "AAAA") else []
-        return {"account": self.acc.id, "domain": domain, "id": str(r.get("id") or ""), "type": t, "name": name, "fqdn": domain if name in ("@", "") else f"{name}.{domain}", "ips": ips, "port": next((i.get("port") for i in items if i.get("port")), None),
+        return {"account": self.acc.id, "domain": domain, "id": str(r.get("id") or ""), "type": t, "name": name, "fqdn": domain if name in ("@", "") else f"{name}.{domain}", "ips": ips, "port": next((i.get("port") for i in items if i.get("port")), None), "upstream": r.get("upstream_https") if t == "A" else None,
                 "value": ", ".join(ips) if ips else _text(r.get("value") or r.get("cname") or r.get("text") or r.get("mx") or r.get("ns") or ""), "ttl": r.get("ttl"), "cloud": bool(r.get("cloud")) if t in ("A", "AAAA", "CNAME") else None, "editable": t == "A"}
 
     def records(self, domain: str) -> list[dict]:
         with arvan.using(self.acc.key):
             return [self._row(domain, r) for r in arvan.records(domain)]
 
-    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool) -> dict:
+    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:
         with arvan.using(self.acc.key):
-            made = arvan.create_a(domain, name, _check_ips(ips, False), ttl, cloud)
+            made = arvan.create_a(domain, name, _check_ips(ips, False), ttl, cloud, port, upstream)
 
         return self._row(made["domain"], made["record"])
 
-    def update(self, domain: str, rid: str, name: str, ips: list[str], ttl: int, cloud: bool) -> dict:
+    def update(self, domain: str, rid: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:
         with arvan.using(self.acc.key):
-            r = arvan.update_a(domain, rid, name, _check_ips(ips, False), ttl, cloud)
+            r = arvan.update_a(domain, rid, name, _check_ips(ips, False), ttl, cloud, port, upstream)
 
         return {"before": r["before"], "after": self._row(domain, r["after"]), "before_row": self._row(domain, r["before"])}
 
@@ -272,7 +272,7 @@ class CloudflareProvider:
 
         return {"type": "A", "name": domain if n == "@" else f"{n}.{domain}", "content": ip, "ttl": int(ttl), "proxied": bool(cloud)}
 
-    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool) -> dict:
+    def create(self, domain: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:      # a Cloudflare record has no port or origin protocol here: both are ignored
         z = self._zid(domain)
         made = (cloudflare.req(self.acc.key, "POST", f"/zones/{z}/dns_records", body=self._body(domain, name, ips, ttl, cloud)).get("result")) or {}
 
@@ -284,7 +284,7 @@ class CloudflareProvider:
     def _get(self, z: str, rid: str) -> dict:
         return cloudflare.req(self.acc.key, "GET", f"/zones/{z}/dns_records/{rid}").get("result") or {}
 
-    def update(self, domain: str, rid: str, name: str, ips: list[str], ttl: int, cloud: bool) -> dict:
+    def update(self, domain: str, rid: str, name: str, ips: list[str], ttl: int, cloud: bool, port: int | None = None, upstream: str | None = None) -> dict:
         z = self._zid(domain)
         before = self._get(z, rid)
 

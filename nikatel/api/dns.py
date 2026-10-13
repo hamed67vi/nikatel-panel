@@ -95,6 +95,8 @@ class RecordIn(BaseModel):
     ips: list[str] = Field(min_length=1, max_length=10)
     ttl: int = 120
     cloud: bool = False
+    port: int | None = Field(None, ge=0, le=65535)      # None = keep, 0 = none
+    upstream: str | None = Field(None, pattern="^(default|auto|http|https)$")      # the protocol to the origin server (ArvanCloud)
 
 
 @router.get("/dns/accounts")
@@ -188,7 +190,7 @@ def record_create(body: RecordIn):
     _writable()
 
     try:
-        row = dnsprov.provider(body.account).create(body.domain, body.name, body.ips, body.ttl, body.cloud)
+        row = dnsprov.provider(body.account).create(body.domain, body.name, body.ips, body.ttl, body.cloud, body.port, body.upstream)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
@@ -205,7 +207,7 @@ def record_edit(account: str, domain: str, record_id: str, body: RecordIn):
     _writable()
 
     try:
-        r = dnsprov.provider(account).update(domain, record_id, body.name, body.ips, body.ttl, body.cloud)
+        r = dnsprov.provider(account).update(domain, record_id, body.name, body.ips, body.ttl, body.cloud, body.port, body.upstream)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
