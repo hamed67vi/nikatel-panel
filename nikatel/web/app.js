@@ -174,7 +174,8 @@ function renderSub() {
   box.classList.toggle("hidden", !list);
   if (!list) return;
   const cur = sub(state.page);
-  box.innerHTML = `<div class="tabs">${list.map(([k, label]) => `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${label}</button>`).join("")}</div>`;
+  const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
+  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label]) => `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
 window.setSub = (page, k) => { if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
@@ -3685,6 +3686,7 @@ const THEMES = [   // key, name, note, page colour, accent, second accent, flat 
   ["soft", "Soft", "clean white, raised glossy buttons", "#e8edf7", "#0a7cff", "#9cc7ff"],
 ];
 const LOOK = Object.assign({theme: "aurora", mode: "dark", size: "normal", anim: "calm"}, JSON.parse(localStorage.getItem("nk.look") || "{}"));
+if (!localStorage.getItem("nk.calm.v1")) { try { localStorage.setItem("nk.calm.v1", "1"); LOOK.theme = "calm"; localStorage.setItem("nk.look", JSON.stringify(LOOK)); } catch (e) { /* private window */ } }      // once: the quiet "Calm slate" look; Settings → Look has the others
 if (!["calm", "rich", "off"].includes(LOOK.anim)) LOOK.anim = "calm";      // the old "on" is the calm default now: nothing moves by itself, only what you touch
 function lookApply() { const h = document.documentElement; h.dataset.theme = LOOK.theme; h.dataset.size = LOOK.size; h.dataset.anim = LOOK.anim; const light = LOOK.mode === "light" || (LOOK.mode === "auto" && matchMedia("(prefers-color-scheme: light)").matches); h.dataset.mode = light ? "light" : "dark"; const b = $("#mode-btn"); if (b) b.textContent = light ? "🌙" : "☀"; const lg = document.querySelector(".logo-orb svg"); if (lg && lg.pauseAnimations) { if (LOOK.anim !== "rich") lg.pauseAnimations(); else lg.unpauseAnimations(); } }
 window.lookSet = (k, v) => { LOOK[k] = v; localStorage.setItem("nk.look", JSON.stringify(LOOK)); lookApply(); };

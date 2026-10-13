@@ -3675,11 +3675,24 @@ html[data-theme="calm"] body #modal .switch i, html[data-theme="calm"] body .srv
 .bt-sc { display: flex; align-items: center; gap: 10px; } .bt-bar { } .bt-sc .bt-bar { flex: 1; height: 7px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; display: block; } .bt-sc .bt-bar u { display: block; height: 100%; border-radius: 4px; text-decoration: none; } .bt-sc .bt-bar u.ok { background: #30d158; } .bt-sc .bt-bar u.mid { background: #f0b94a; } .bt-sc .bt-bar u.low { background: #ff5a52; } .bt-sc b { width: 28px; text-align: right; }
 @media (max-width: 1000px) { .bt-pods { grid-template-columns: 1fr; } }
 
-/* the tunnel list after the operator's design: ONE flat table (a thin line between the rows, no card per row); the arrows between the two servers stay as they were */
-html body #page .tun-tbl { border-collapse: collapse; border-spacing: 0; }
-html body #page .tun-tbl thead th { background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8791a8; padding: 10px 12px; }
-html body #page .tun-tbl tbody tr, html body #page .lbox .tun-tbl tbody tr:hover { background: transparent; box-shadow: none; transform: none !important; border-radius: 0; }
-html body #page .tun-tbl tbody tr td, html body #page .tun-tbl tbody tr.clk td { background: transparent !important; border: 0 !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; border-radius: 0 !important; padding-top: 9px; padding-bottom: 9px; }
-html body #page .tun-tbl tbody tr:hover td { background: rgba(255,255,255,.035) !important; }
-html body #page .tun-tbl tbody tr:last-child td { border-bottom: 0 !important; }
-html body #page .nk-ghead { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #aeb7ca; }
+
+/* ================= LESS COLOUR =================
+   the emoji of buttons and tabs are drawn as plain text glyphs (one tone, no colour) where the system font has them; the tab icons that stay colour are greyed;
+   the tabs of a page are the quiet kind: an underline under the chosen one, no coloured pill */
+html body button, html body .pill, html body .tabs, html body h3, html body h4, html body h5, html body .ins-row, html body .cta, html body label { font-variant-emoji: text; }
+.tab-ic { display: inline-block; filter: grayscale(1) brightness(1.35) contrast(.95); opacity: .85; margin-right: 2px; }
+html body #subnav .tic { filter: grayscale(1) brightness(1.15); opacity: .85; }
+html body #subnav .tabs.sub-tabs { background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.1); border-radius: 0; box-shadow: none; padding: 0; gap: 4px; }
+html body #subnav .tabs.sub-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; box-shadow: none; padding: 12px 18px 11px; margin-bottom: -1px; font-size: 14px; font-weight: 600; color: #98a3ba; transform: none; }
+html body #subnav .tabs.sub-tabs button:hover { color: #d7deee; background: rgba(255,255,255,.03); }
+html body #subnav .tabs.sub-tabs button.on { color: #f2f5fb; border-bottom-color: #4a8bf0; background: rgba(74,139,240,.07); box-shadow: none; }
+html body #subnav .tabs.sub-tabs button.on::before, html body #subnav .tabs.sub-tabs button::after { content: none; }
+/* the AI buttons and the gold ones: the plain button */
+html body .ai-btn, html body button.ai-btn { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13); color: #e6ebf7; box-shadow: none; }
+html body .ai-btn::before, html body .ai-btn::after { content: none; }
+/* the icon chip of every box title is slate, the bars are one soft blue, the charts one blue, the numbers white (a problem stays red or amber) */
+html body .sbox[data-b] > h5 > i, html body .sbox > h5 > i { background: #2c3855; color: #b9c8e8; }
+html body #modal .rrow.r-cpu u, html body #modal .rrow.r-ram u, html body #modal .rrow.r-swap u, html body #modal .rrow.r-disk u { background: #7ab0ff; }
+html body .mcard .ll, html body .mcard[data-c] .ll { stroke: #7aa7f0; } html body .mcard .la, html body .mcard[data-c] .la { fill: rgba(122,167,240,.12); }
+html body .mtile b, html body .mtile.ok b, html body .mtile.warn b { color: #f2f5fb; } html body .mtile.bad b { color: #ff8a82; }
+html body .strip i.ok { background: #5b88d8; }

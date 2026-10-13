@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.33.1
+
+**Less colour.** The tabs of a page are the quiet kind (the chosen one is underlined, no coloured pill; their icons are in one grey tone, the Iran / Foreign flags too); the emoji of buttons, tabs and headings are drawn as plain one-tone glyphs where the font has them (`font-variant-emoji`); the AI button is the plain button; box title chips are slate, bars one soft blue, charts one blue, numbers white. **Calm slate is the default look** of a browser that has not chosen one yet, and once in each browser this version switches to it (Settings → Look has the other themes). The tunnel list has its earlier look back.
+
 ## 1.33.0
 
 - **Tunnel test is gone; Tunnels → Best today is new.** The tunnels are tested all the time (a health check each minute, and a job, `quality`, measures the latency, jitter and packet loss of every tunnel again every half hour, read-only) and ranked by how they behaved in the last 6 h / 24 h / 7 days: how often they answered, how fast, how steady, how often they broke. A podium for the first three, then the whole list with a score bar, and a mark on the best of the tunnels that lead to the same foreign server. A tunnel with fewer than 20 checks has no score yet. `GET /api/besttoday?hours=` (`services/besttoday.py`, the score is a pure function with tests).
