@@ -175,7 +175,21 @@ def a_body(name: str, ips: list[str], ttl: int = 120, cloud: bool = False, base:
     body = {k: copy.deepcopy(v) for k, v in (base or {}).items() if k in KEEP and v is not None}
     old_items = [i for i in (body.get("value") or []) if isinstance(i, dict)]
     body.update({"type": "a", "name": n, "ttl": int(ttl), "cloud": bool(cloud)})
-    body["value"] = [{**next((o for o in old_items if o.get("ip") == ip), {"port": None, "weight": None, "country": ""}), "ip": ip} for ip in clean]
+    empty = {"port": None, "weight": None, "country": ""}
+
+    def item_for(i: int, ip: str) -> dict:
+        """The record keeps its port, weight and country when only the ADDRESS changes: the same address keeps its item, a new address takes the item of the same place (or the first one)."""
+        same = next((o for o in old_items if o.get("ip") == ip), None)
+
+        if same is not None:
+            return same
+
+        if len(old_items) == len(clean):
+            return old_items[i]
+
+        return old_items[0] if old_items else empty
+
+    body["value"] = [{**item_for(i, ip), "ip": ip} for i, ip in enumerate(clean)]
     body.setdefault("upstream_https", "default")
     body.setdefault("ip_filter_mode", {"count": "single" if len(clean) == 1 else "multi", "order": "none", "geo_filter": "none"})
     return body

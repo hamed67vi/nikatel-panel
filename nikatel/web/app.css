@@ -3733,3 +3733,33 @@ html body #page .srv-bar .dns-dsel { display: inline-flex; align-items: center; 
 html body #page .srv-bar .nd-stats .tc { white-space: nowrap; }
 
 #modal .bld-foot .ins-none, #modal .bld-foot button.hidden { display: none; } #modal .bld-foot button:disabled { opacity: .45; cursor: default; }
+
+/* the port of a DNS record: smaller, and right next to the address */
+.dns-tbl .dns-port { padding-left: 0; } .dns-tbl .port-pill { min-width: 46px; height: 22px; padding: 0 10px; font-size: 12.5px; font-weight: 700; }
+/* the DNS bar: ONE row (the buttons and numbers, the domain, the tabs, the search); the numbers are small */
+html body #page .srv-bar .nd-stats .tc { padding: 0 8px; font-size: 12px; }
+html body #page .srv-bar .nd-stats .tc b { font-size: 12.5px; }
+html body #page .srv-bar .sb-r1 { flex: 0 1 auto; } html body #page .srv-bar .sb-r2 { flex: 1 1 0; min-width: 0; }
+html body #page .srv-bar .sb-r2 .srv-tabs { flex: none; }
+@media (max-width: 1700px) { html body #page .srv-bar .nd-stats .tc:nth-child(n+4) { display: none; } }
+
+/* the list of suggestions under a field (DNS names): the design of the boxes, not the browser's own popup */
+.sugg-wrap { position: relative; display: block; } .sugg-wrap > input { width: 100%; box-sizing: border-box; }
+.sugg { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 6px); max-height: 252px; overflow: auto; padding: 6px; border-radius: 14px; background: #0f1626; border: 1px solid rgba(255,255,255,.14); box-shadow: 0 18px 44px rgba(0,0,0,.55); }
+.sugg.hidden { display: none; }
+.sg-i { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: 13.5px; } .sg-i b { font-weight: 600; color: #eef2fb; } .sg-i small { color: #8f9ab0; font-size: 12px; }
+.sg-i:hover, .sg-i.on { background: rgba(10,132,255,.16); } .sg-none { padding: 10px 12px; color: var(--mut); font-size: 13px; }
+#modal .dns-point .sugg-wrap { flex: 1; }
+
+/* the check boxes of the forms are small switches (a grey track, a white knob; blue when on) - the check boxes that SELECT rows of a list stay boxes */
+html body label.chk input[type="checkbox"], html body .chkline input[type="checkbox"], html body .bdns input[type="checkbox"], html body .x-cert-save input[type="checkbox"], html body .srv-opts input[type="checkbox"], html body .srv-form2 input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 38px !important; height: 22px !important; min-height: 0; padding: 0; margin: 0 8px 0 0; border-radius: 11px !important; border: 0 !important; background: #4b5468 !important; background-image: none !important; cursor: pointer; vertical-align: middle; box-shadow: none; transition: background .2s ease; }
+html body label.chk input[type="checkbox"]::after, html body .chkline input[type="checkbox"]::after, html body .bdns input[type="checkbox"]::after, html body .x-cert-save input[type="checkbox"]::after, html body .srv-opts input[type="checkbox"]::after, html body .srv-form2 input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform .2s cubic-bezier(.3, 1.2, .5, 1); }
+html body label.chk input[type="checkbox"]:checked, html body .chkline input[type="checkbox"]:checked, html body .bdns input[type="checkbox"]:checked, html body .x-cert-save input[type="checkbox"]:checked, html body .srv-opts input[type="checkbox"]:checked, html body .srv-form2 input[type="checkbox"]:checked { background: #3d8bf0 !important; }
+html body label.chk input[type="checkbox"]:checked::after, html body .chkline input[type="checkbox"]:checked::after, html body .bdns input[type="checkbox"]:checked::after, html body .x-cert-save input[type="checkbox"]:checked::after, html body .srv-opts input[type="checkbox"]:checked::after, html body .srv-form2 input[type="checkbox"]:checked::after { transform: translateX(16px); }
+html body label.chk input[type="checkbox"]:disabled, html body .srv-form2 input[type="checkbox"]:disabled { opacity: .45; cursor: default; }
+html body label.chk input[type="checkbox"]:focus-visible, html body .srv-form2 input[type="checkbox"]:focus-visible { outline: 2px solid #5aa9ff; outline-offset: 2px; }
+html body label.chk, html body .chkline { display: inline-flex; align-items: center; gap: 4px; }
+
+html body label.chk input[type="checkbox"], html body .chkline input[type="checkbox"], html body .bdns input[type="checkbox"] { margin-right: 12px !important; }

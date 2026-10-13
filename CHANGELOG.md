@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.34.1
+
+- **Fix:** changing the address of an ArvanCloud A record no longer loses its port (the port, weight and country of the record are kept; `a_body`).
+- The DNS records list no longer shows the records that cannot be changed (MX, NS ...). The port is smaller and right next to the address.
+- **DNS names to point after a build:** a list of our own under the field (the browser's popup is gone): nothing until you type, filtered while you type, it stays open after a pick so several names can be added, chosen names leave the list; arrow keys and Enter work.
+- **The check boxes of the forms are small switches** (grey track, white knob, blue when on); the boxes that select rows of a list stay boxes.
+- **A tunnel that is being built** says *building tunnel* in the Status column, and a click on its card brings the Create window back with the story of the build so far.
+- The sub-tabs of Tunnels: Tunnel manager, DNS · IP switch, Tunnel Doctor.
+
 ## 1.34.0
 
 - **Fix:** the DNS page (Records / Changes / Accounts) failed with *fast is not defined* since 1.32.0 (a change meant for the servers list reached its tables too).

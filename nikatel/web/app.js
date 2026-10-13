@@ -164,7 +164,7 @@ if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains and which server each one points at; point one at another Iran server by hand. The automatic switching is paused while it is tested."]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 DNS · IP switch", "The ArvanCloud records of your domains and which server each one points at; point one at another Iran server by hand. The automatic switching is paused while it is tested."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it, and says which tunnel is best on today's network."]],
   configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌐 Gateway & outbounds", INFO_GW]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -1339,7 +1339,7 @@ async function buildFormHtml() {
         <div class="bf-note mut">${esc(forHint) || "the defaults are the many-users settings"}</div></div>
       <div class="sbox bld-check"><h5><i>🛡</i>Check</h5><div id="build-check" class="bcheck"></div></div>
     </div>
-    ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server (ArvanCloud) <small class="mut">(comma separated; pick from the list)</small></label><input name="dns_names" list="dns-names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off"><datalist id="dns-names"></datalist></div>` : ""}
+    ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server (ArvanCloud) <small class="mut">(comma separated; pick from the list)</small></label><div class="sugg-wrap"><input name="dns_names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off" oninput="sugShow(this)" onfocus="sugShow(this)" onblur="sugHide(this)" onkeydown="sugKey(event, this)"><div class="sugg hidden"></div></div></div>` : ""}
     <div class="sbox badv"><h5 class="adv-h" onclick="bkAdv()"><i>⚙</i>Advanced settings<small>${bk.adv ? "change a value only when you measured a reason" : "keepalive, heartbeat, MTU, preset, UDP…"}</small><span class="sp"></span><em>${bk.adv ? "▾" : "▸"}</em></h5>${bk.adv ? `<div class="adv-grid">${options}</div>` : ""}</div>
     <div class="sbar bld-foot"><button class="pri" type="submit" ${bk.run ? "disabled" : ""}>Build</button><button type="button" onclick="startTest(event)" ${bk.run ? "disabled" : ""} title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" class="danger ${bk.run ? "" : "hidden"}" id="bld-stop" onclick="stopBuild()" title="Stop now: what was made so far is removed again">■ Stop</button><span class="sp"></span><small class="mut">Every default is the many-users setting; a test builds a temporary tunnel, measures it and removes it.</small></div>
   </form><div id="build-story" class="fix bld-log"></div>`;
@@ -1348,11 +1348,32 @@ async function buildFormHtml() {
 async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) return refresh(); const form = $("#modal form.build"); if (form) bkKeep(form); const story = $("#build-story"), keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; body.innerHTML = await buildFormHtml(); { const fm = $("#modal form.build"); if (fm) bkCheck(fm, true); } if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
 window.bkAdv = () => { bk.adv = !bk.adv; bkRedraw(); };
 /* the A records of the ArvanCloud account, for the name lists (fetched once per page load, the server keeps them for five minutes) */
-async function dnsListLoad(id) {
-  const dl = document.getElementById(id); if (!dl) return;
-  try { bk.dnsRows = bk.dnsRows || (await api("/api/arvan/records")).records; dl.innerHTML = bk.dnsRows.map(r => `<option value="${esc(r.fqdn)}">${esc(r.ips.join(", "))}</option>`).join(""); } catch (e) { toast("✕ " + e.message, "bad"); }
-}
-window.bkDns = cb => { bk.chk.dns_set = cb.checked; const inp = cb.closest(".bdns").querySelector("input[name=dns_names]"); inp.classList.toggle("hidden", !cb.checked); if (cb.checked) { dnsListLoad("dns-names"); inp.focus(); } };
+/* the DNS names to pick: a list of our own under the field (the name and its address), filtered while you type, chosen with the mouse or the arrow keys; the field takes several names, comma separated */
+async function dnsRowsLoad() { if (!bk.dnsRows) { try { bk.dnsRows = (await api("/api/arvan/records")).records || []; } catch (e) { bk.dnsRows = []; toast("✕ " + e.message, "bad"); } } return bk.dnsRows; }
+const sugBox = inp => inp.parentElement.querySelector(".sugg");
+window.sugShow = async inp => {
+  const box = sugBox(inp); if (!box) return; const rows = await dnsRowsLoad(), one = inp.dataset.sug === "one";
+  const parts = inp.value.split(","), cur = (one ? inp.value : parts[parts.length - 1]).trim().toLowerCase(), have = new Set(parts.map(x => x.trim().toLowerCase()));
+  const chosen = !one && parts.some(x => x.trim() && x.trim() !== inp.value.split(",").pop().trim());      // nothing is shown until something is typed; once a name is chosen the list stays, to add more
+  if (!cur && !chosen) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+  const list = rows.filter(r => r.type === undefined || r.type === "A").filter(r => (one || !have.has(r.fqdn.toLowerCase())) && (!cur || r.fqdn.toLowerCase().includes(cur))).slice(0, 40);
+  box.innerHTML = list.map((r, i) => `<div class="sg-i ${i === 0 ? "on" : ""}" data-v="${esc(r.fqdn)}" onmousedown="event.preventDefault(); sugPick(this)"><b>${esc(r.fqdn)}</b><small class="mono">${esc((r.ips || []).join(", "))}</small></div>`).join("") || (cur ? `<div class="sg-none">No record of this name</div>` : "");
+  box.classList.toggle("hidden", !box.innerHTML);
+};
+window.sugHide = inp => setTimeout(() => { const b = sugBox(inp); if (b) b.classList.add("hidden"); }, 120);
+window.sugPick = el => {
+  const box = el.parentElement, inp = box.parentElement.querySelector("input"), one = inp.dataset.sug === "one";
+  if (one) inp.value = el.dataset.v; else { const parts = inp.value.split(",").map(x => x.trim()).filter(Boolean); if (inp.value.trim() && !/,\s*$/.test(inp.value)) parts.pop(); parts.push(el.dataset.v); inp.value = parts.join(", ") + ", "; }
+  inp.focus(); if (one) box.classList.add("hidden"); else sugShow(inp);      // for several names the list stays open: pick the next one at once
+};
+window.sugKey = (e, inp) => {
+  const box = sugBox(inp); if (!box || box.classList.contains("hidden")) return; const items = [...box.querySelectorAll(".sg-i")]; if (!items.length) return;
+  let i = items.findIndex(x => x.classList.contains("on"));
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[i]?.classList.remove("on"); i = (i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length; items[i].classList.add("on"); items[i].scrollIntoView({block: "nearest"}); }
+  else if (e.key === "Enter" && i >= 0) { e.preventDefault(); sugPick(items[i]); }
+  else if (e.key === "Escape") box.classList.add("hidden");
+};
+window.bkDns = cb => { bk.chk.dns_set = cb.checked; const inp = cb.closest(".bdns").querySelector("input[name=dns_names]"); inp.classList.toggle("hidden", !cb.checked); if (cb.checked) inp.focus(); };
 window.bkType = v => { const [k, t] = v.split("|"); bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 const BP_MUXED = ["tcpmux", "wsmux", "wssmux"];
 bk.chk = {};   // every checkbox the form ever showed -> its last state (a box that is not on screen keeps its default)
@@ -1406,6 +1427,15 @@ window.autoIran = async form => { const f = new FormData(form), box = $("#auto-i
 /* while a build or a test runs the buttons are off and Stop is there; Stop removes what was made so far */
 window.bkRun = run => { bk.run = run; const st = $("#bld-stop"); if (st) st.classList.toggle("hidden", !run); document.querySelectorAll("#modal .bld-foot button:not(#bld-stop)").forEach(b => { b.disabled = !!run; }); };
 window.stopBuild = async () => { const run = bk.run; if (!run) return; try { await api(run.type === "build" ? `/api/tunnels/builds/${run.id}/stop` : `/api/tunnel-test/compare/${run.id}/stop`, {method: "POST"}); toast("Stopping: what was made so far is removed again", "info"); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* a tunnel that is being built: a click on its card brings the Create window back with the story of the build so far, and the story goes on in it */
+window.openBuilding = async t => {
+  let id = bk.run && bk.run.type === "build" ? bk.run.id : 0;
+  if (!id) { try { const a = (await api("/api/actions?limit=10&kinds=build,create")).actions.find(x => !x.done); id = a ? a.id : 0; } catch (e) { id = 0; } }
+  if (!id) return false;
+  state.build = true; state.open = null; state.edit = null; await refresh();
+  const box = $("#build-story"); if (!box) return false;
+  bkRun({type: "build", id}); followStory(id, box, 600).finally(() => bkRun(null)); return true;
+};
 window.startTest = async e => {
   const form = e.target.closest("form"), f = new FormData(form);
   const trn = bk.transport || f.get("transport") || "tcpmux";
@@ -1508,7 +1538,7 @@ window.toggleDetail = id => {
   if (state.open === id) { state.open = null; hideModal(); return; }
   state.open = id;
   if (state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === id); if (s) { srvModal(s); loadServerCharts(id); return; } }      // the window is one view: its charts load with it
-  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); loadTunnelCharts(id); return; } }
+  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t && t.state === "starting") { state.open = null; openBuilding(t).then(ok => { if (!ok) { state.open = id; tunModal(t); loadTunnelCharts(id); } }); return; } if (t) { tunModal(t); loadTunnelCharts(id); return; } }
   refresh();
 };
 window.fixTunnel = async (id, dry) => {
@@ -1663,7 +1693,7 @@ function pageTabs(key, tabs, dflt, counts = {}) {
 /* DNS changes (next to the history): every record the failover re-pointed in the CDN, each with its own Restore */
 const dnsCard = (fo, av = {}, irn = []) => {
   const rows = (fo && fo.dns_log) || [];
-  const point = av.has_api_key ? `<div class="dns-point"><small class="mut">Point a name at a server now:</small><input id="dns-point-name" list="dns-names2" placeholder="ca.example.ir" autocomplete="off" onfocus="dnsListLoad('dns-names2')"><datalist id="dns-names2"></datalist><select id="dns-point-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select><button class="sm pri" onclick="foPoint()">Apply</button></div>` : "";
+  const point = av.has_api_key ? `<div class="dns-point"><small class="mut">Point a name at a server now:</small><span class="sugg-wrap"><input id="dns-point-name" data-sug="one" placeholder="ca.example.ir" autocomplete="off" oninput="sugShow(this)" onfocus="sugShow(this)" onblur="sugHide(this)" onkeydown="sugKey(event, this)"><div class="sugg hidden"></div></span><select id="dns-point-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select><button class="sm pri" onclick="foPoint()">Apply</button></div>` : "";
   const row = e => `<div class="dns-row ${e.restored ? "back" : "live"}"><time title="${when(e.at)}">${ago(e.at)} ago</time><i></i><span class="dns-t"><b>${esc(e.fqdn)}</b><small class="mut">${esc(e.old)} → ${esc(e.new)} · ${esc(e.server)} → ${esc(e.target)}${(e.configs || []).length ? " · " + e.configs.length + " config(s)" : ""}</small></span>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : `<span class="pill ok">active</span><button class="sm" onclick="foRestore('${esc(e.id)}')" title="Point this record back at ${esc(e.old)}">↩ Restore</button>`}</div>`;
   return `<div class="card"><h3>🌐 DNS changes · CDN <span class="sp"></span><small class="mut">every record the failover re-pointed</small></h3>
     <div class="dns-list">${rows.map(row).join("") || '<div class="empty">No DNS record has been changed yet. When a failover moves the tunnels of a server, every record it re-points shows here and can be put back with one click.</div>'}</div>${point}</div>`;
@@ -1776,7 +1806,7 @@ function cfCode(name) { for (const t of String(name || "").toLowerCase().split(/
 function cfFlag(name) { for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return `<small class="cc" title="${esc(FLAGS[t].toUpperCase())}">${esc(FLAGS[t].toUpperCase())}</small> `; return ""; }   // the country code as small text instead of a flag picture: calmer lists
 const pingCls = v => v == null ? "mut" : v < 800 ? "ok" : v < 1000 ? "warn" : "bad";   // config delay: under 800 ms green, 800-999 yellow, above red
 const mb = v => v == null ? "—" : Number(v).toFixed(v >= 100 ? 0 : 1);
-const stName = st => st === "degraded" ? "unstable" : st;      // what the screen calls the state "degraded"
+const stName = st => st === "degraded" ? "unstable" : st === "starting" ? "building tunnel" : st;      // what the screen calls the state "degraded"
 const SRV_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="b" x="3" y="3.5" width="18" height="7" rx="2.2"/><rect class="b" x="3" y="13.5" width="18" height="7" rx="2.2"/><path class="b" d="M12 7h6M12 17h6"/><circle class="led" cx="7" cy="7" r="1.15"/><circle class="led l2" cx="7" cy="17" r="1.15"/></svg>';
 PAGES.configsList = async () => {
   const [d, subs, tl] = await Promise.all([api("/api/configs"), api("/api/subscriptions"), api("/api/tunnels").catch(() => [])]);
@@ -3987,7 +4017,7 @@ PAGES.dns = async () => {
   const fresh = state.dnsFresh ? "?fresh=true" : ""; state.dnsFresh = false;
   const [rr, accs, fo, all] = await Promise.all([api("/api/dns/records" + fresh).catch(e => ({err: e.message, records: [], accounts: []})), api("/api/dns/accounts").catch(() => ({accounts: [], providers: {}})), api("/api/failover").catch(() => null), api("/api/servers").catch(() => [])]);
   const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
-  const recs = (rr.records || []).filter(r => !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];
+  const recs = (rr.records || []).filter(r => r.editable !== false && !(r.type === "NS" && (r.name === "@" || r.name === "")))      // the records that cannot be changed (MX, NS ...) are not listed, log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];
   const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
   const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;
@@ -4032,7 +4062,7 @@ function dnsRecords(recs, err, byIp, cur, live) {
       <td class="mut">${dnsTtl(r.ttl)}</td>
       <td class="cl">${r.cloud === null ? "" : `<span class="cl-ic ${r.cloud ? "on" : ""}" title="${r.cloud ? "Through the CDN" : "DNS only"}">${DNS_CLOUD}</span>${ed ? sbSw(!!r.cloud, `dnsCloud('${k}')`, "Cloud", "Turn the CDN (orange cloud) on or off for this record").replace(/<em[^>]*>.*?<\/em>/, "") : ""}`}</td>
       <td class="dr-act">${ed ? `<button type="button" class="ic" title="Edit this record" onclick="dnsForm('${k}')">✎</button><button type="button" class="ic danger" title="Delete this record (kept under Changes with a Restore)" onclick="dnsDel('${k}')">🗑</button>` : ""}</td></tr>`; };
-  return `${failed}<table class="tbl lift srv-tbl dns-tbl joined"><colgroup><col style="width:7%"><col style="width:21%"><col style="width:24%"><col style="width:11%"><col style="width:9%"><col style="width:16%"><col style="width:12%"></colgroup>
+  return `${failed}<table class="tbl lift srv-tbl dns-tbl joined"><colgroup><col style="width:7%"><col style="width:21%"><col style="width:19%"><col style="width:8%"><col style="width:12%"><col style="width:20%"><col style="width:13%"></colgroup>
     <thead><tr><th>Type</th><th>Name</th><th>Value</th><th>Port</th><th>TTL</th><th>Cloud</th><th></th></tr></thead><tbody>${list.map(row).join("") || '<tr><td colspan="7" class="empty">No record in this domain.</td></tr>'}</tbody></table>`;
 }
 window.dnsPickDom = d => { try { localStorage.setItem("nk.dns.sel", d); } catch (e) { /* private window */ } refresh(); };
