@@ -201,6 +201,22 @@ def record_create(body: RecordIn):
     return {"ok": True, "id": row["id"]}
 
 
+@router.get("/dns/records/{account}/{domain}/{record_id}")
+def record_one(account: str, domain: str, record_id: str):
+    """One record read fresh from the provider (with the port and the protocol to the origin server), for the edit form."""
+    prov = dnsprov.provider(account)
+
+    if not hasattr(prov, "get"):
+        raise HTTPException(404, "this provider reads records only as a list")
+
+    try:
+        return {"ok": True, "record": prov.get(domain, record_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+
+
 @router.put("/dns/records/{account}/{domain}/{record_id}")
 def record_edit(account: str, domain: str, record_id: str, body: RecordIn):
     """Change an A record by hand (name, addresses, TTL, cloud) - also what Point at a server does. Restore gives the old values back."""

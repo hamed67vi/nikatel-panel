@@ -210,6 +210,10 @@ class ArvanProvider:
 
         return {"before": r["before"], "after": self._row(domain, r["after"]), "before_row": self._row(domain, r["before"])}
 
+    def get(self, domain: str, rid: str) -> dict:      # one record read fresh (the list of a domain may leave out fields such as the origin protocol)
+        with arvan.using(self.acc.key):
+            return self._row(domain, arvan.get_record(domain, rid))
+
     def delete(self, domain: str, rid: str) -> dict:
         with arvan.using(self.acc.key):
             r = arvan.delete_record(domain, rid)

@@ -4105,3 +4105,8 @@ html body #modal .qp2-foot { display: flex; align-items: center; justify-content
 html body #modal .qp2-foot .qp-prev { flex: 1 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #modal .qp2-foot .qp-pri { flex: none; height: 36px; padding: 0 22px; font-size: 13px; border-radius: 10px; background: rgba(122,176,255,.16) !important; border: 1px solid rgba(122,176,255,.42) !important; color: #d9e7ff !important; box-shadow: none !important; }
 @media (max-width: 560px) { html body #modal .qp2 .c2, html body #modal .qp2 .c3, html body #modal .qp2 .c4 { grid-column: span 6; } }
+
+/* tunnels: every second card a little lighter, like the DNS records */
+html body #page .tun-tbl tbody tr:nth-child(odd) td { background: rgba(255,255,255,.026) !important; }
+html body #page .tun-tbl tbody tr:nth-child(even) td { background: rgba(120,150,210,.075) !important; }
+html body #page .tun-tbl tbody tr:hover td { background: rgba(255,255,255,.1) !important; }

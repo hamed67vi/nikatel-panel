@@ -4047,6 +4047,12 @@ window.dnsForm = k => {
     </div>
     <div class="qp2-foot"><div class="qp-prev" id="dns-prev"></div><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add");
   setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f) { dnsFormAcc(f, true); dnsPrev(f); f.elements.name.focus(); } }, 60);
+  if (r && a0.provider === "arvan") api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`).then(d => {      // the list may not carry the origin protocol: the record is read fresh and the two fields are filled in
+    const f = document.querySelector(".modal.plan-add form"), row = d.record || {}; if (!f) return;
+    const up = f.elements.upstream, po = f.elements.port;
+    if (up && row.upstream && up.value === up.dataset.orig) { up.value = row.upstream; up.dataset.orig = row.upstream; }
+    if (po && po.value === (po.dataset.orig || "") && row.port) { po.value = row.port; po.dataset.orig = String(row.port); }
+  }).catch(() => { /* the form still works with what the list had */ });
 };
 window.dnsFormAcc = (f, keep) => {      // the account decides the domains and the TTL choices
   const a = (state.dnsAccounts || []).find(x => x.id === f.elements.account.value) || {}, d = f.elements.domain, t = f.elements.ttl;
