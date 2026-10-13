@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.36.1 - the Doctor's settings inside their mode cards
+
+- Each setting of the Doctor sits in the card of the mode it belongs to and is saved as soon as it is changed: "a tunnel down for N seconds is repaired" in **Fix tunnels**, "an Iran server off for N minutes is replaced" in **Fix + move the Iran server**. The settings row and its Save button are gone; Fix all / Explain and the count moved beside the tabs.
+
 ## 1.36.0 - the Tunnel Doctor in three modes
 
 - **Three modes**, one choice at the top of the Doctor: **Off** (watch and report), **Fix tunnels** (the ladder: restart, rebuild, a new GRE link, another tunnel type), **Fix + move the Iran server** (the ladder, and - by itself, without asking - the move of tunnels to another Iran server).
@@ -10,7 +14,7 @@
 - **Rails**: a tunnel moves at most 3 times a day with 2 hours between two moves; one move at a time; nothing while the panel is read-only; the mode "move" needs the failover license; Telegram tells before and after every move.
 - The Doctor page is rebuilt: three mode cards, two settings (how long a tunnel stays down, how long a server stays off), a **Suggestions** box, the tabs In progress · Finished · **Moves** · Analyst (the CPU-cores work is now inside the Analyst's server list), and **What if … went off?** for every Iran server. The failover settings of the CDN tab are gone (the Doctor's mode decides); its history stays.
 - API: `PUT /api/settings/repair` takes `mode` and `server_minutes`; `GET /api/doctor`, `/api/doctor/plan/{server}`, `/api/doctor/moves/{id}/return`, `/undo-dns`, `/api/doctor/suggestions/{id}/apply`, `/dismiss`; `/api/autopilot/move` goes through the same make-before-break path.
-- The provider-wide outage, the exhausted server, the return, the TTL wait and the record of each move are tested with fakes; a real move was done on the pair without users (see the notes of this release).
+- The provider-wide outage, the exhausted server, the return, the TTL wait and the record of each move are tested with fakes (`tests/test_doctor.py`); a real move on a pair without users is the next step before the mode "move" is switched on.
 ## 1.35.29
 
 - CDN: the *All accounts* chip is gone; the list shows one account at a time (the first one until you choose another).

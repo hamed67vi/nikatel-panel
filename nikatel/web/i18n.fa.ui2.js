@@ -268,6 +268,7 @@ I18N.add({
 "Fix tunnels": "تعمیر تانل‌ها", "Fix + move the Iran server": "تعمیر + جابه‌جایی سرور ایران",
 "The Doctor only watches and reports. You fix by hand: Diagnose, Fix with AI.": "دکتر فقط نگاه می‌کند و گزارش می‌دهد. خودتان تعمیر می‌کنید: تشخیص، تعمیر با هوش مصنوعی.",
 "Restarts, rebuilds, a new GRE link, another tunnel type - by itself. A move to another Iran server is only suggested.": "ری‌استارت، ساخت دوباره، لینک GRE تازه، نوع تانل دیگر - خودش. جابه‌جایی به سرور ایران دیگر فقط پیشنهاد می‌شود.",
+"The ladder, and an Iran server that is off gives its tunnels and DNS to another Iran server - by itself; back after 3 healthy hours.": "همان نردبان، و سرور ایرانی که خاموش باشد تانل‌ها و DNS‌اش به سرور ایران دیگری می‌رود - خودش؛ بعد از ۳ ساعت سلامت برمی‌گردد.",
 "The ladder, and an Iran server that is off for {} minutes gives its tunnels and DNS to another Iran server - by itself; back after 3 healthy hours.": "همان نردبان، و سرور ایرانی که {} دقیقه خاموش باشد تانل‌ها و DNS‌اش به سرور ایران دیگری می‌رود - خودش؛ بعد از ۳ ساعت سلامت برمی‌گردد.",
 "The Doctor needs NIKATEL_READ_ONLY=false on the panel server first": "دکتر اول به NIKATEL_READ_ONLY=false روی سرور پنل نیاز دارد", "The mode that moves servers needs the failover license (Settings → About → License)": "حالتی که سرور را جابه‌جا می‌کند لایسنس failover لازم دارد (تنظیمات ← درباره ← لایسنس)",
 "a tunnel down for": "تانلی که", "seconds is repaired": "ثانیه قطع باشد تعمیر می‌شود", "an Iran server off for": "سرور ایرانی که", "minutes is replaced": "دقیقه خاموش باشد جایگزین می‌شود",
