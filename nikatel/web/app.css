@@ -4616,3 +4616,19 @@ html body #page .ob3-relay { margin-top: 10px; }
 html body #page .ob3-path .ob3-addr { display: inline-flex; align-items: center; gap: 8px; min-width: 230px; } html body #page .ob3-path .ob3-addr b { font-size: 13px; }
 html body #page .ob3-adv + .ob3-adv { margin-top: -6px; } html body #page .ob3-adv summary small { font-weight: 400; margin-left: 6px; }
 html body #page .ob3-tiles { position: relative; max-height: 184px; overflow-y: auto; padding-right: 2px; } html body #page .ob3-tile { position: relative; }
+/* ---- 1.40.1: Outbound in the Tunnels section, full width: the steps side by side, the server lists like the Servers page */
+html body #page .ob4 { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px; align-items: start; }
+html body #page .ob4-col { display: grid; gap: 12px; align-content: start; min-width: 0; } html body #page .ob4-wide { grid-column: 1 / -1; display: grid; gap: 12px; }
+html body #page .ob4 .ob3-step, html body #page .ob4 .ob3-adv { margin: 0; }
+html body #page .ob4-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+html body #page .ob4-box.lbox { height: 300px; max-height: none; min-height: 0; margin: 0; } html body #page .ob4-pbox.lbox { max-height: 280px; margin: 0; }
+html body #page .ob4-box tbody tr.sel td { background: rgba(77,163,255,.10); } html body #page .ob4 .lbox td, html body #page .ob4 .lbox th { padding-left: 8px; padding-right: 8px; font-size: 12.5px; } html body #page .ob4 .lbox td.name b { font-weight: 600; }
+html body #page .ob4 .lbox .srv-sw { margin: 0; }
+html body #page .ob4-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 18px; margin-top: 10px; } html body #page .ob4-ports { flex: 1 1 280px; min-width: 0; } html body #page .ob4-ports .ob3-lbl { margin-top: 0; }
+html body #page .ob4-go { display: flex; align-items: center; gap: 10px; } html body #page .ob4-go .ob3-start { height: 40px; padding: 0 30px; }
+html body #page .ob4 .ob3-list { max-height: 230px; }
+@media (max-width: 1280px) { html body #page .ob4 { grid-template-columns: minmax(0, 1fr); } html body #page .ob4-two { grid-template-columns: minmax(0, 1fr); } }
+html body #page .ob4 .lbox td.name { white-space: nowrap; } html body #page .ob4 .lbox td.name .ob2-dot { margin-left: 8px; vertical-align: middle; } html body #page .ob4 .lbox td.name .pill { margin-left: 8px; }
+html body #page .ob4 .lbox td { padding-top: 5px; padding-bottom: 5px; }
+html body #page .ob3-path .ob3-addr, html body #page .ob4 .ob3-addr { min-width: 0; } html body #page .ob4 .ob3-addr { display: inline-flex; align-items: center; gap: 8px; } html body #page .ob4 .ob3-addr .ob2-dot { flex: none; }
+html body #page .ob4 .lbox td, html body #page .ob4 .lbox th { text-align: left; }

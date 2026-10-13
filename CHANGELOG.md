@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.40.1 - Outbound moved to Tunnels, wide layout
+
+- **Outbound is now Tunnels → Outbound** (next to the Tunnel manager, the CDN and the Tunnel Doctor), because it makes tunnels; the old address of the page (#gateway) still opens it. The Panels page keeps Configs and Panels.
+- **A wide page, the boxes side by side.** Step 1 (your configs) and step 3 (the addresses for the CDN) are on the left, step 2 (tunnels) on the right, so no empty space is left at the sides; below 1280 px they stack. The Iran and foreign server lists look like the Servers page (one box, a sticky header, a row per server; a click on the row ticks it) and scroll inside their box. The addresses for the CDN are a table with a Copy button on every row.
+
 ## 1.40.0 - Outbound on one page; one account on many panels (M12)
 
 - **Outbound is one page with three steps** (the Setup and Users tabs are merged). 1 **Your configs**: paste them. 2 **Tunnels**: tick the Iran servers (From), the foreign servers (To) and type the ports; Start makes a tunnel through your configs for every Iran server x foreign server x port (an Iran port that leads, through the exits and the relay, to the foreign server's port), picks the relay by itself (the quietest foreign server) and installs Xray where it is missing. 3 **Behind the CDN**: the list of `Iran address : port` to put in your CDN record by hand, each with a Copy button. Everything else (how the exits are used, all forwards, the CDN records you can move to the pool by hand) is folded under "Advanced".

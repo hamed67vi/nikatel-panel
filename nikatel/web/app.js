@@ -149,7 +149,7 @@ $("#logout").onclick = async () => {
 /* ---- router */
 const state = {page: localStorage.getItem("nk.page") || "dashboard", tab: localStorage.getItem("nk.tab") || "iran", q: "", open: null, edit: null, logs: {level: "", domain: "", q: "", origin: ""}};
 const PAGES = {};
-const INFO_GW = "How your Iran servers reach the foreign nodes when Iran is cut off from the world: a pool of exit configs (the load is shared by the ones that are alive), and a port on each chosen Iran server for every node and port.";
+const INFO_GW = "Tunnels through your own configs, for when Iran is cut off from the world: the configs are shared by the ones that are alive, and a port on each chosen Iran server leads to each chosen foreign server and port.";
 const INFO = {
   dashboard: ["Dashboard", "What needs attention right now, and what happened."],
   nodes: ["Servers", "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs."],
@@ -162,13 +162,13 @@ const INFO = {
 };
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
-const NAV_ALIAS = {servers: "nodes", gateway: "configs", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
+const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
-  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."]],
-  configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."], ["gateway", "🌉 Outbound", INFO_GW]],
+  tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["gateway", "🌉 Outbound", INFO_GW], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."]],
+  configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
 };
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur) ? cur : list[0][0]; }
@@ -1047,11 +1047,12 @@ PAGES.tunnels = async () => {
   renderSub();
   const s = sub("tunnels");
   if (s === "repairs") return PAGES.actions();
+  if (s === "gateway") return PAGES.gateway();
   if (s === "dns") return PAGES.dns();
   if (s === "create") { state.sub.tunnels = "list"; state.build = true; }
   return PAGES.tunnelsList();
 };
-PAGES.configs = async () => { renderSub(); const s = sub("configs"); return s === "gateway" ? PAGES.gateway() : s === "panels" ? PAGES.panels() : PAGES.configsList(); };
+PAGES.configs = async () => { renderSub(); const s = sub("configs"); return s === "panels" ? PAGES.panels() : PAGES.configsList(); };
 const tt = {job: null};      // the id of the temporary tunnel test of the Create tunnel window (the page of the tunnel test is gone)
 window.renameTunnel = async (id, cur) => {
   const v = await gprompt("New name of this tunnel (lowercase letters, digits and -, up to 15). Only the name in the panel changes; on the servers nothing is touched:", cur); if (v == null || !v.trim() || v.trim() === cur) return;
