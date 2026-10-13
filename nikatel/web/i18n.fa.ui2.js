@@ -262,5 +262,5 @@ I18N.add({
 "Is it healthy?": "سالم است؟", "Is anything broken?": "چیزی خراب است؟", "What happened lately?": "اخیراً چه شد؟", "What is slow?": "چه چیزی کند است؟", "Is the disk full?": "دیسک پر است؟", "Network and open ports": "شبکه و پورت‌های باز", "The answer shows here.": "جواب اینجا نشان داده می‌شود.", "Advanced: type your own command": "پیشرفته: دستور خودتان را بنویسید",
 "What went wrong in the last 24 hours": "در ۲۴ ساعت گذشته چه مشکلی پیش آمد", "The panel itself": "خود پنل", "A service on your server": "سرویسی روی سرور شما", "Outside the panel": "خارج از پنل", "Not determined": "نامشخص", "This session": "این نشست", "No record of this name": "رکوردی با این نام نیست",
 "Stopping: what was made so far is removed again": "در حال توقف: آنچه تا الان ساخته شده دوباره پاک می‌شود", "The panel itself ": "خود پنل ",
-
+"(asks first on Tunnels → CDN)": "(اول در تانل‌ها ← CDN می‌پرسد)", "Times the tunnel was down": "زمان‌هایی که تانل قطع بود", "Checking and measuring… (about 10 s)": "در حال بررسی و اندازه‌گیری… (حدود ۱۰ ثانیه)", "Shown for 10 minutes": "۱۰ دقیقه نمایش داده می‌شود", "shown for 10 minutes": "۱۰ دقیقه نمایش داده می‌شود", "Protocol to the origin": "پروتکل ارتباط با سرور اصلی", "Accounts": "حساب‌ها", "Add account": "افزودن حساب", "All accounts": "همهٔ حساب‌ها",
 });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.19
+
+- The sub-tab *DNS · IP switch* under Tunnels is now called **CDN**.
+
 ## 1.35.18
 
 - DNS · IP switch: an accounts row on top (all accounts, each account as a chip with its state and domain count, **Add account** for another ArvanCloud or a Cloudflare account) to switch between accounts at once; the rest of the bar is ONE row; the *renewing* note is gone.
