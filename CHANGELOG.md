@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.35.3
+
+- Every box looks like the boxes of the dashboard: a small quiet title, no coloured icon tile; the icons and emoji of the boxes, the console questions and the action buttons are one grey tone.
+- The timing test of "long work answers at once" has a wider margin (it failed twice on a busy server).
+
 ## 1.35.2
 
 - Server window header: a round flag badge with the status light on its corner, the address as a small chip, the role and host name as quiet tags.

@@ -3830,3 +3830,10 @@ html body #page .tun-tbl .newtag { margin-left: 8px; padding: 0 6px; border-radi
 #modal .sbox[data-b="access"] .kv2 > div { display: block !important; text-align: right; max-width: 74%; font-size: 11.5px !important; }
 #modal .sbox[data-b="access"] .kv2 { min-width: 0; } #modal .sbox[data-b="access"] .kv2 > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #modal .sbox[data-b="access"] .kv2 .mono { font-size: 11px !important; } #modal .sbox[data-b="access"] .cty { font-size: 11.5px; letter-spacing: .04em; }
+
+/* every box like the boxes of the dashboard: a small quiet title, no colour tile; icons and emoji in one grey tone */
+html body .sbox > h5, html body #modal .sbox[data-b] > h5 { font-size: 11.5px !important; font-weight: 700 !important; letter-spacing: .09em !important; text-transform: uppercase !important; color: #aeb7ca !important; gap: 8px !important; padding-bottom: 8px !important; }
+html body .sbox > h5 > i, html body #modal .sbox[data-b] > h5 > i, html body #modal .sbox[data-b="system"] > h5 > i, html body #modal .sbox[data-b="resources"] > h5 > i, html body #modal .sbox[data-b="access"] > h5 > i { width: auto !important; height: auto !important; background: transparent !important; box-shadow: none !important; color: #8d99b3 !important; font-style: normal; filter: grayscale(1) brightness(1.1); opacity: .85; }
+html body #modal .sbox[data-b] > h5 > i svg { width: 14px !important; height: 14px !important; }
+html body .con-tile i, html body .abtn .bi, html body .wtools i, html body .tool i { filter: grayscale(1) brightness(1.15); opacity: .85; }
+html body .con-tile.on { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.28); } html body .con-tile:hover { border-color: rgba(255,255,255,.22); }

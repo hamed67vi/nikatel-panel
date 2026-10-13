@@ -36,13 +36,13 @@ def test_long_work_answers_at_once_with_an_action_id(client, monkeypatch):
     from nikatel.services import actions
 
     rows = [{"id": 1, "name": "a", "state": "up", "why": ""}]
-    monkeypatch.setattr(actions, "health_all", lambda: (time.sleep(0.4), rows)[1])
+    monkeypatch.setattr(actions, "health_all", lambda: (time.sleep(1.0), rows)[1])
     t0 = time.time()
     r = client.post("/api/tunnels/health-all")
-    assert r.status_code == 202 and r.json()["ok"] and time.time() - t0 < 0.35
+    assert r.status_code == 202 and r.json()["ok"] and time.time() - t0 < 0.8
     aid = r.json()["action_id"]
 
-    for _ in range(40):
+    for _ in range(60):
         s = client.get(f"/api/actions/{aid}").json()
 
         if s["done"]:
