@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.18
+
+- DNS · IP switch: an accounts row on top (all accounts, each account as a chip with its state and domain count, **Add account** for another ArvanCloud or a Cloudflare account) to switch between accounts at once; the rest of the bar is ONE row; the *renewing* note is gone.
+
 ## 1.35.17
 
 - DNS edit form: the record is read fresh when the form opens, so the protocol to the origin server (and the port) show what the record really has (the list of a domain may leave the protocol out).

@@ -3962,6 +3962,7 @@ window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dock
    Records: all types are listed, the A records can be made, changed, deleted and put back; the cloud switch is the orange cloud. Changes: every record changed by hand (or by the failover) with its Restore.
    Accounts: the API keys. Failover: the preview of a plan and the earlier failovers (the automatic part is paused while it is tested). ---- */
 state.dnsTab = localStorage.getItem("nk.dns.tab") || "records";
+window.dnsPickAcc = id => { try { localStorage.setItem("nk.dns.acc", id); localStorage.setItem("nk.dns.sel", "*"); } catch (e) { /* private window */ } refresh(); };      // switch between the accounts (ArvanCloud, another ArvanCloud, Cloudflare ...)
 window.dnsSetTab = t => { state.dnsTab = t; try { localStorage.setItem("nk.dns.tab", t); } catch (e) { /* private window */ } refresh(); };
 const dnsKey = r => `${r.account}|${r.domain}|${r.id}`;
 const dnsTtl = v => { v = +v; if (v === 1) return "Auto"; if (!v) return "—"; if (v < 3600) return v / 60 + " min"; if (v < 86400) return v / 3600 + " h"; return v / 86400 + " d"; };
@@ -3971,7 +3972,9 @@ PAGES.dns = async () => {
   const fresh = state.dnsFresh ? "?fresh=true" : ""; state.dnsFresh = false;
   const [rr, accs, fo, all] = await Promise.all([api("/api/dns/records" + fresh).catch(e => ({err: e.message, records: [], accounts: []})), api("/api/dns/accounts").catch(() => ({accounts: [], providers: {}})), api("/api/failover").catch(() => null), api("/api/servers").catch(() => [])]);
   const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
-  const recs = (rr.records || []).filter(r => r.editable !== false && !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];      // the records that cannot be changed (MX, NS ...) are not listed
+  let recs = (rr.records || []).filter(r => r.editable !== false && !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];      // the records that cannot be changed (MX, NS ...) are not listed
+  const accPick = (() => { let v = "*"; try { v = localStorage.getItem("nk.dns.acc") || "*"; } catch (e) { /* private window */ } return accounts.some(a => a.id === v) ? v : "*"; })();      // the account chosen in the bar above ("*" = all of them)
+  if (accPick !== "*") recs = recs.filter(r => r.account === accPick);
   const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
   const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;
@@ -3980,16 +3983,16 @@ PAGES.dns = async () => {
   state.dnsAccounts = live; state.dnsServers = all;
   // the domain chooser: grouped by account
   const sel = localStorage.getItem("nk.dns.sel") || "";
-  const opts = live.filter(a => a.ok).map(a => ({a, doms: (a.domains || []).slice().sort()})).filter(x => x.doms.length);
+  const opts = live.filter(a => a.ok && (accPick === "*" || a.id === accPick)).map(a => ({a, doms: (a.domains || []).slice().sort()})).filter(x => x.doms.length);
   const valid = new Set(["*", ...opts.flatMap(x => x.doms.map(d => x.a.id + "|" + d))]), cur = valid.has(sel) ? sel : (opts[0] ? opts[0].a.id + "|" + opts[0].doms[0] : "*");
   const cnt = (id, d) => recs.filter(r => r.account === id && r.domain === d).length;
   const domSel = `<label class="dns-dsel" title="Choose a domain: its records are listed below"><span>Domain</span><select onchange="dnsPickDom(this.value)">${opts.map(({a, doms}) => `<optgroup label="${esc(a.name)}">${doms.map(d => `<option value="${esc(a.id + "|" + d)}" ${cur === a.id + "|" + d ? "selected" : ""}>${esc(d)} · ${cnt(a.id, d)}</option>`).join("")}</optgroup>`).join("")}<option value="*" ${cur === "*" ? "selected" : ""}>All domains · ${recs.length}</option></select></label>`;
   const addBtn = tab === "records" && connected ? `<button class="cta cta-server" onclick="dnsForm('')" title="Make a new A record in one of your domains"><i class="cta-ic">＋</i>Add record</button><i class="sep"></i>` : tab === "accounts" ? `<button class="cta cta-server" onclick="dnsAccForm('')" title="Add an ArvanCloud account or a Cloudflare account"><i class="cta-ic">＋</i>Add account</button><i class="sep"></i>` : "";
   const tabs = [["records", "Records", recs.length], ["changes", "Changes", log.length], ["accounts", "Accounts", accounts.length], ["failover", "Failover", (fo && fo.pending || []).length]];
-  const bar = `<div class="toolbar joined srv-bar"><div class="sb-r1">${addBtn}
-      <span class="tcount pstat nd-stats">${conn}${connected ? chip("info", "Domains", nDom) + chip("info", "A records", nA) + chip("ok", "On the panel", onPanel, "A records that point at a server added to this panel") : ""}${chip("warn", "Automatic switching", "off", "The panel never changes an IP by itself while this is being tested. You can still change a record by hand.")}</span></div>
-      <div class="sb-r2">${tab === "records" && connected ? domSel : ""}<div class="tabs srv-tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>
-      ${tab === "records" && connected ? searchSeg() : ""}${rr.refreshing ? '<small class="mut dns-renew" title="The list shown was read a while ago; the accounts are being asked again right now">renewing…</small>' : ""}</div></div>`;
+  const accChips = (accounts.length > 1 ? `<button type="button" class="dns-chip ${accPick === "*" ? "on" : ""}" onclick="dnsPickAcc('*')" title="Every account together"><b>All accounts</b></button>` : "") + accounts.map(a => { const l = live.find(x => x.id === a.id) || {}, ok = l.ok !== undefined ? l.ok : (a.status || {}).ok; return `<button type="button" class="dns-chip ${accPick === a.id ? "on" : ""}" onclick="dnsPickAcc('${esc(a.id)}')" title="${esc(ok ? a.name : (l.error || "this account does not answer"))}"><i class="dot ${ok ? "ok" : "bad"}"></i><b>${esc(a.name)}</b><small>${esc(a.provider === "arvan" ? "Arvan" : "Cloudflare")}${ok && l.domains ? " · " + l.domains.length : ""}</small></button>`; }).join("");
+  const bar = `<div class="toolbar joined srv-bar dns-bar"><div class="dns-r dns-accbar"><span class="dns-lab">Accounts</span>${accChips}<button type="button" class="dns-chip add" onclick="dnsAccForm('')" title="Add an ArvanCloud account (another one) or a Cloudflare account"><i class="cta-ic">＋</i><b>Add account</b></button></div>
+    <div class="dns-r dns-main">${addBtn}<span class="tcount pstat nd-stats">${conn}${connected ? chip("info", "Domains", nDom) + chip("info", "A records", nA) + chip("ok", "On the panel", onPanel, "A records that point at a server added to this panel") : ""}${chip("warn", "Automatic switching", "off", "The panel never changes an IP by itself while this is being tested. You can still change a record by hand.")}</span>
+      <span class="sp"></span>${tab === "records" && connected ? domSel : ""}<div class="tabs srv-tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>${tab === "records" && connected ? searchSeg() : ""}</div></div>`;
   let body = "";
 
   if (tab === "records") body = !accounts.length ? dnsEmpty() : dnsRecords(recs, rr.err, byIp, cur, live);
@@ -4029,7 +4032,7 @@ window.dnsCloud = async k => {
 window.dnsForm = k => {
   const r = k ? (state.dnsRecs || {})[k] : null, accs = (state.dnsAccounts || []).filter(a => a.ok);
   if (k && !r) { toast("Read the records again (↻) first", "bad"); return; }
-  const sel = (localStorage.getItem("nk.dns.sel") || "").split("|"), acc = r ? r.account : (accs.find(a => a.id === sel[0]) || accs[0] || {}).id, a0 = accs.find(a => a.id === acc) || {}, dom = r ? r.domain : (sel[1] && (a0.domains || []).includes(sel[1]) ? sel[1] : (a0.domains || [])[0] || "");
+  const sel = (localStorage.getItem("nk.dns.sel") || "").split("|"), acc = r ? r.account : (accs.find(a => a.id === (localStorage.getItem("nk.dns.acc") || "")) || accs.find(a => a.id === sel[0]) || accs[0] || {}).id, a0 = accs.find(a => a.id === acc) || {}, dom = r ? r.domain : (sel[1] && (a0.domains || []).includes(sel[1]) ? sel[1] : (a0.domains || [])[0] || "");
   const ttls = (a0.ttls || [[120, "2 minutes"]]), ttl = r && r.ttl ? +r.ttl : (ttls[0] ? ttls[0][0] : 120), servers = (state.dnsServers || []).filter(s => s.enabled), chev = '<svg viewBox="0 0 16 16"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>';
   const sw = (inner, extra = "") => `<div class="qp-sw" ${extra}>${inner}${chev}</div>`;
   const fld = (cls, label, inner, tip = "") => `<div class="qp-f ${cls}"${tip ? ` title="${esc(tip)}"` : ""}><label>${label}</label>${inner}</div>`;

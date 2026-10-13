@@ -4110,3 +4110,19 @@ html body #modal .qp2-foot .qp-pri { flex: none; height: 36px; padding: 0 22px; 
 html body #page .tun-tbl tbody tr:nth-child(odd) td { background: rgba(255,255,255,.026) !important; }
 html body #page .tun-tbl tbody tr:nth-child(even) td { background: rgba(120,150,210,.075) !important; }
 html body #page .tun-tbl tbody tr:hover td { background: rgba(255,255,255,.1) !important; }
+
+/* the DNS bar: an accounts row on top (switch between the accounts, add another), and ONE row under it (add a record, the numbers, domain, tabs, search) */
+html body #page .toolbar.joined.dns-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 10px; }
+html body #page .dns-bar .dns-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+html body #page .dns-bar .dns-r.dns-main { flex-wrap: nowrap; } @media (max-width: 1500px) { html body #page .dns-bar .dns-r.dns-main { flex-wrap: wrap; } }
+html body #page .dns-bar .dns-main .sp { flex: 1 1 0; min-width: 8px; }
+html body #page .dns-bar .dns-accbar { padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.07); }
+html body #page .dns-bar .dns-lab { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8d99b3; margin-right: 4px; }
+html body #page .dns-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 10px; font-size: 12.5px; font-weight: 600; color: #cdd7ea; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); cursor: pointer; box-shadow: none; transition: background .18s, border-color .18s; }
+html body #page .dns-chip small { font-size: 10.5px; font-weight: 500; color: #8d99b3; }
+html body #page .dns-chip:hover { background: rgba(255,255,255,.09); }
+html body #page .dns-chip.on { background: rgba(122,176,255,.16); border-color: rgba(122,176,255,.45); color: #e2edff; } html body #page .dns-chip.on small { color: #a9c3f2; }
+html body #page .dns-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #5b667c; } html body #page .dns-chip .dot.ok { background: #4fd98a; } html body #page .dns-chip .dot.bad { background: #ff7a8c; }
+html body #page .dns-chip.add { border-style: dashed; background: transparent; color: #aeb7ca; } html body #page .dns-chip.add:hover { color: #e2edff; border-color: rgba(122,176,255,.45); }
+html body #page .dns-chip.add .cta-ic { width: 16px; height: 16px; border-radius: 50%; background: rgba(122,176,255,.25); color: #fff; font-size: 12px; line-height: 16px; display: inline-grid; place-items: center; }
+html body #page .dns-bar .dns-main .dns-dsel { flex: 0 1 230px; min-width: 130px; } html body #page .dns-bar .dns-main .tb-search { flex: 0 1 190px; min-width: 96px; }
