@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.35.26
+
+- Create tunnel: *point these DNS names at the new Iran server* works with every DNS account (ArvanCloud, another ArvanCloud, Cloudflare): the account whose domain matches the name is used, the names to pick come from all accounts, and Restore puts the old record back.
+- Adding a Cloudflare account: a pasted Account ID (32 letters and digits) is recognised and the panel says that the API token is the longer text (cfat_ ...) shown once when it is created.
+- Day mode: the new look (lists, bars, chips, windows, forms, Settings, Install, the side foot, the themes) has its own day colours - dark text on white and pale blue, soft blue accents - so every text is readable; Pro slate has a real day palette.
+
 ## 1.35.25
 
 - CDN record form: the **Port** field is active only when the protocol to the origin is HTTP or HTTPS.

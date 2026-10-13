@@ -223,3 +223,14 @@ def test_other_record_types_are_built_and_refused_in_plain_words():
     assert cf6["name"] == "example.com" and cf6["content"] == "2001:db8::2"
     cft = dnsprov.CloudflareProvider._other_body("example.com", "TXT", "t", [], "hello", 300, False)
     assert "proxied" not in cft
+
+
+def test_the_account_id_is_recognised_when_it_is_pasted_instead_of_the_token():
+    from nikatel.services import cloudflare
+
+    try:
+        cloudflare.req("8ea4cc21fbaea5e9b0563323b22278eb", "GET", "/zones")
+    except RuntimeError as e:
+        assert "Account ID" in str(e) and "cfat_" in str(e)
+    else:
+        raise AssertionError("an Account ID should be named as such")

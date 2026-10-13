@@ -1255,8 +1255,8 @@ const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp
   "backpack_direct:udp": "low latency, voice, games", "backpack_direct:quic": "low latency, UDP open", "backpack_direct:pck": "Iran throttles TCP (root)", "backpack_direct:sni": "Iran only allows a domain", "backpack_direct:xdi": "UDP and TCP both blocked",
   "paqet:kcp": "ordinary TCP stalls, raw sockets", "chisel:ws": "small group, simplest", "chisel:wss": "small group, looks like HTTPS"};
 async function buildFormHtml() {
-  const [servers, kd, av] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds"), api("/api/settings/arvan").catch(() => ({}))]);
-  bk.kinds = kd.kinds; bk.arvan = ARVAN_UI && !!av.has_api_key; bk.arvanMode = av.mode || "off";
+  const [servers, kd, av, dacc] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds"), api("/api/settings/arvan").catch(() => ({})), api("/api/dns/accounts").catch(() => ({accounts: []}))]);
+  bk.kinds = kd.kinds; bk.arvan = ARVAN_UI && (!!av.has_api_key || (dacc.accounts || []).length > 0); bk.arvanMode = av.mode || "off";      // the DNS names can be in any DNS account (ArvanCloud or Cloudflare)
   const K = bk.kinds.find(k => k.key === bk.kind) || bk.kinds[0]; bk.kind = K.key;
   const tr = K.transports.find(t => t.key === bk.transport) || K.transports[0]; bk.transport = tr.key;
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
@@ -1289,7 +1289,7 @@ async function buildFormHtml() {
         <div class="bf-note mut">${esc(forHint) || "the defaults are the many-users settings"}</div></div>
       <div class="sbox bld-check"><h5><i>🛡</i>Check</h5><div id="build-check" class="bcheck"></div></div>
     </div>
-    ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server (ArvanCloud) <small class="mut">(comma separated; pick from the list)</small></label><div class="sugg-wrap"><input name="dns_names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off" oninput="sugShow(this)" onfocus="sugShow(this)" onblur="sugHide(this)" onkeydown="sugKey(event, this)"><div class="sugg hidden"></div></div></div>` : ""}
+    ${bk.arvan ? `<div class="bdns"><label class="chk"><input type="checkbox" name="dns_set" ${bk.chk.dns_set ? "checked" : ""} onchange="bkDns(this)"> After the build, point these DNS names at the new Iran server <small class="mut">(any of your DNS accounts: ArvanCloud or Cloudflare · comma separated; pick from the list)</small></label><div class="sugg-wrap"><input name="dns_names" class="${bk.chk.dns_set ? "" : "hidden"}" value="${val("dns_names", "")}" placeholder="ca.example.ir, ca2.example.ir" autocomplete="off" oninput="sugShow(this)" onfocus="sugShow(this)" onblur="sugHide(this)" onkeydown="sugKey(event, this)"><div class="sugg hidden"></div></div></div>` : ""}
     <div class="sbox badv"><h5 class="adv-h" onclick="bkAdv()"><i>⚙</i>Advanced settings<small>${bk.adv ? "change a value only when you measured a reason" : "keepalive, heartbeat, MTU, preset, UDP…"}</small><span class="sp"></span><em>${bk.adv ? "▾" : "▸"}</em></h5>${bk.adv ? `<div class="adv-grid">${options}</div>` : ""}</div>
     <div class="sbar bld-foot"><button class="pri" type="submit" ${bk.run ? "disabled" : ""}>Build</button><button type="button" onclick="startTest(event)" ${bk.run ? "disabled" : ""} title="Build a temporary tunnel of this kind between these two servers, measure it, remove it">Test this pair first</button><button type="button" class="danger ${bk.run ? "" : "hidden"}" id="bld-stop" onclick="stopBuild()" title="Stop now: what was made so far is removed again">■ Stop</button><span class="sp"></span><small class="mut">Every default is the many-users setting; a test builds a temporary tunnel, measures it and removes it.</small></div>
   </form><div id="build-story" class="fix bld-log"></div>`;
@@ -1299,7 +1299,7 @@ async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) ret
 window.bkAdv = () => { bk.adv = !bk.adv; bkRedraw(); };
 /* the A records of the ArvanCloud account, for the name lists (fetched once per page load, the server keeps them for five minutes) */
 /* the DNS names to pick: a list of our own under the field (the name and its address), filtered while you type, chosen with the mouse or the arrow keys; the field takes several names, comma separated */
-async function dnsRowsLoad() { if (!bk.dnsRows) { try { bk.dnsRows = (await api("/api/arvan/records")).records || []; } catch (e) { bk.dnsRows = []; toast("✕ " + e.message, "bad"); } } return bk.dnsRows; }
+async function dnsRowsLoad() { if (!bk.dnsRows) { try { bk.dnsRows = ((await api("/api/dns/records")).records || []).filter(r => r.type === "A"); } catch (e) { bk.dnsRows = []; toast("✕ " + e.message, "bad"); } } return bk.dnsRows; }
 const sugBox = inp => inp.parentElement.querySelector(".sugg");
 window.sugShow = async inp => {
   const box = sugBox(inp); if (!box) return; const rows = await dnsRowsLoad(), one = inp.dataset.sug === "one";

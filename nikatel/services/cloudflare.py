@@ -21,6 +21,9 @@ def req(token: str, method: str, path: str, body: dict | None = None, params: di
     if not t:
         raise RuntimeError("no Cloudflare API token saved")
 
+    if re.fullmatch(r"[0-9a-f]{32}", t):      # 32 letters and digits = the Account ID, not the token
+        raise RuntimeError("this is the Account ID (32 characters), not the API token. The token is the longer text, such as cfat_ followed by many letters, shown ONCE when the token is created (Cloudflare dashboard → API Tokens → Create Token → Edit zone DNS).")
+
     if not t.isascii() or not re.fullmatch(r"[A-Za-z0-9_\-]+", t):
         raise RuntimeError("the token has a character that is not a letter, a digit, - or _ (a Persian letter or a symbol from the copy?): copy it again from Cloudflare")
 

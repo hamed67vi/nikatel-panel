@@ -244,3 +244,35 @@ def test_precheck_offers_to_replace_a_dead_tunnel_that_holds_the_port(client, mo
     monkeypatch.setattr(create, "identify_owner", lambda node, sid, port: {"process": "nginx", "unit": "nginx.service"})
     r = client.post("/api/tunnels/precheck", json={"iran_id": w["ir2"], "foreign_id": w["fi1"], "ports": "8076", "live": True}).json()
     assert r["stale"] == [] and r["busy"][0]["by"] == "nginx (nginx.service)" and r["can_build"] is False
+
+def test_point_names_also_works_for_a_cloudflare_account(client, monkeypatch):
+    from nikatel.services import dnsprov
+
+    w = _world()
+    rows = {"r9": {"id": "r9", "type": "A", "name": "cf", "fqdn": "cf.cfzone.test", "ips": ["203.0.113.5"], "ttl": 1, "cloud": True}}
+    calls = []
+
+    class FakeCf:
+        def domains(self):
+            return ["cfzone.test"]
+
+        def records(self, domain):
+            return list(rows.values())
+
+        def update(self, domain, rid, name, ips, ttl, cloud):
+            before = dict(rows[rid])
+            rows[rid] = {**rows[rid], "ips": list(ips)}
+            calls.append((domain, rid, name, list(ips), ttl, cloud))
+            return {"before": {"type": "A", "name": f"{name}.{domain}", "content": before["ips"][0], "ttl": ttl, "proxied": cloud}, "after": rows[rid], "before_row": before}
+
+    cf_acc = dnsprov.Account("cf1", "cloudflare", "My Cloudflare", "tok")
+    monkeypatch.setattr(dnsprov, "accounts", lambda: [cf_acc])
+    monkeypatch.setattr(dnsprov, "provider_of", lambda acc: FakeCf())
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    said = []
+    monkeypatch.setattr(failover.autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    done = failover.point_names(8, ["cf.cfzone.test", "x.elsewhere.test"], w["ir2"])
+    assert len(done) == 1 and rows["r9"]["ips"] == ["203.0.113.9"] and calls == [("cfzone.test", "r9", "cf", ["203.0.113.9"], 1, True)]
+    entry = st.get("failover")["dns_log"][-1]
+    assert entry["account"] == "cf1" and entry["fqdn"] == "cf.cfzone.test" and entry["old"] == "203.0.113.5" and entry["new"] == "203.0.113.9" and entry["before"]["proxied"] is True
+    assert any("not in any domain" in x for x in said)

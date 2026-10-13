@@ -498,7 +498,10 @@ def _domain_of(fqdn: str, domains: list[str]) -> str:
 
 def point_names(aid: int, names: list[str], iran_id: int, tag: str = "create") -> list[dict]:
     """Point the A records of these names at the Iran server `iran_id` - as asked by the operator (a tick in Create tunnel, or the
-    small form on the DNS changes box). Every change is written to `dns_log`, so it can be put back with Restore."""
+    small form on the DNS changes box). The names may live in ANY of the DNS accounts (ArvanCloud, another ArvanCloud, Cloudflare): the account
+    whose domain matches the name is used. Every change is written to `dns_log`, so it can be put back with Restore."""
+    from . import dnsprov
+
     with session() as db:
         s = db.get(Server, iran_id)
 
@@ -508,28 +511,73 @@ def point_names(aid: int, names: list[str], iran_id: int, tag: str = "create") -
         target = {"id": s.id, "name": s.name, "ip": s.host}
         hosts = {x.host: x.name for x in db.scalars(select(Server))}
 
-    if not has_key():
-        autopilot._say(aid, "DNS: no ArvanCloud key is saved (Tunnels → DNS · IP switch), the names are not changed.")
+    accs = dnsprov.accounts()
+
+    if not accs:
+        autopilot._say(aid, "DNS: no DNS account is saved (Tunnels → CDN), the names are not changed.")
         return []
 
-    try:
-        domains = arvan.domains()
-    except RuntimeError as e:
-        autopilot._say(aid, f"DNS: ArvanCloud did not answer: {str(e)[:140]}")
-        return []
+    doms: dict[str, list[str]] = {}
 
-    done, s_ = [], _state()
+    for a in accs:
+        try:
+            doms[a.id] = dnsprov.provider_of(a).domains()
+        except (RuntimeError, ValueError) as e:
+            autopilot._say(aid, f"DNS: {a.name} did not answer: {str(e)[:140]}")
+            doms[a.id] = []
+
+    done, fq_done, s_ = [], [], _state()
     now = int(time.time())
 
     for raw in names:
         fqdn = raw.lower().strip().strip(".")
-        domain = _domain_of(fqdn, domains)
+        best = None
 
-        if not domain:
-            autopilot._say(aid, f"DNS {fqdn}: not in any domain of this ArvanCloud account ({', '.join(domains[:8]) or 'none'})")
+        for a in accs:      # the account whose domain matches the name best (the main ArvanCloud account wins a tie)
+            d = _domain_of(fqdn, doms.get(a.id, []))
+
+            if d and (best is None or len(d) > len(best[1])):
+                best = (a, d)
+
+        if best is None:
+            autopilot._say(aid, f"DNS {fqdn}: not in any domain of your DNS accounts ({', '.join(sorted({d for v in doms.values() for d in v})[:8]) or 'none'})")
             continue
 
+        acc, domain = best
         sub = "@" if fqdn == domain else fqdn[: -len(domain) - 1]
+
+        if acc.id != "arvan":      # another ArvanCloud account or Cloudflare: through the provider, written to the log as a change by hand (Restore puts the old record back)
+            prov = dnsprov.provider_of(acc)
+
+            try:
+                rows = [r for r in prov.records(domain) if r["type"] == "A" and r["name"] == sub]
+            except (RuntimeError, ValueError) as e:
+                autopilot._say(aid, f"DNS {fqdn}: {str(e)[:140]}")
+                continue
+
+            if not rows:
+                autopilot._say(aid, f"DNS {fqdn}: no A record with this name in {domain} ({acc.name}); nothing changed")
+                continue
+
+            for r in rows:
+                old_ips = list(r.get("ips") or [])
+
+                if old_ips == [target["ip"]]:
+                    autopilot._say(aid, f"DNS {fqdn}: already points at {target['ip']}")
+                    continue
+
+                try:
+                    res = prov.update(domain, r["id"], r["name"], [target["ip"]], int(r.get("ttl") or 120), bool(r.get("cloud")))
+                except (RuntimeError, ValueError) as e:
+                    autopilot._say(aid, f"DNS {fqdn}: not changed: {str(e)[:140]}")
+                    continue
+
+                log_manual("edit", domain, fqdn, str(r["id"]), ", ".join(old_ips), target["ip"], res.get("before"), acc.id)
+                done.append(res)
+                fq_done.append(fqdn)
+                autopilot._say(aid, f"DNS {fqdn} ({acc.name}): {', '.join(old_ips) or '-'} → {target['ip']} ({target['name']})")
+
+            continue
 
         try:
             recs = [r for r in arvan.records(domain) if str(r.get("type", "")).lower() == "a" and str(r.get("name") or "@") == sub]
@@ -554,20 +602,23 @@ def point_names(aid: int, names: list[str], iran_id: int, tag: str = "create") -
                     continue
 
                 done.append(res)
+                fq_done.append(fqdn)
                 s_["dns_log"].append({"id": f"{tag}-{aid}:{r['id']}:{old}", "at": now, "plan_id": f"{tag}-{aid}", "server": hosts.get(old, old), "target": target["name"], "domain": domain,
                                       "record_id": str(r["id"]), "fqdn": fqdn, "old": old, "new": target["ip"], "configs": [], "restored": False, "restored_at": None})
                 autopilot._say(aid, f"DNS {fqdn}: {old} → {target['ip']} ({target['name']})")
 
     if done:
-        _save(s_)
+        fresh = _state()      # the by-hand entries written meanwhile are kept: only the entries of this run are added to what is stored now
+        known = {e.get("id") for e in fresh["dns_log"]}
+        fresh["dns_log"].extend(e for e in s_["dns_log"] if e.get("id") not in known)
+        _save(fresh)
 
         with session() as db:
-            emit(db, "ok", "actions", f"DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}): {', '.join(sorted({d['fqdn'] for d in [x for x in s_['dns_log'] if x['plan_id'] == f'{tag}-{aid}']}))}.", target["name"])
+            emit(db, "ok", "actions", f"DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}): {', '.join(sorted(set(fq_done)))}.", target["name"])
 
         _notice(f"🌐 DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}).")
 
     return done
-
 
 def approve(plan_id: str) -> int:
     s = _state()
