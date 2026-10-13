@@ -171,7 +171,7 @@ def _work(aid: int, server_id: int, items: list[str], cert: str, resume: bool = 
             nodes.set_busy(server_id, "installing", LABEL[item])
             results[item] = _run_item(aid, node, ip, item, cert, resume)
             resume = False
-    except Exception as e:  # noqa: BLE001  the boundary of the thread
+    except Exception as e:
         log.exception("install on %s crashed", name)
         autopilot._say(aid, f"Stopped: {str(e)[:200]}", done=True, ok=False)
         results = {}

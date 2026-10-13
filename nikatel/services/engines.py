@@ -111,7 +111,7 @@ def check_start() -> bool:
     def work() -> None:
         try:
             check()
-        except Exception:  # noqa: BLE001  the boundary of the thread: the state says what happened
+        except Exception:
             log.exception("engine check failed")
         finally:
             _STATE["checking"] = False

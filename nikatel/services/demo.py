@@ -12,7 +12,19 @@ import time
 from sqlalchemy import delete, func, select
 
 from ..db import session
-from ..models import ActionLog, Config, ConfigSample, Event, Gateway, Job, Panel, Server, ServerSample, Tunnel, TunnelCheck
+from ..models import (
+    ActionLog,
+    Config,
+    ConfigSample,
+    Event,
+    Gateway,
+    Job,
+    Panel,
+    Server,
+    ServerSample,
+    Tunnel,
+    TunnelCheck,
+)
 
 # name, host, role, country, city, provider, cores, base cpu %, base ram %, base Mbit/s
 SERVERS = [

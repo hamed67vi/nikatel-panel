@@ -470,12 +470,12 @@ def run() -> None:
 
     try:
         resources()
-    except Exception:  # noqa: BLE001  one part of the job must not stop the other
+    except Exception:
         log.exception("doctor: resources")
 
     try:
         returns()
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("doctor: returns")
 
 
