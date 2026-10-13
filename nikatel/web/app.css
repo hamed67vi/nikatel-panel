@@ -4517,3 +4517,13 @@ html body nav#nav a > span, html body nav#nav a:hover > span, html body nav#nav 
 html[data-mode="light"] body nav#nav a > span { background: none !important; -webkit-background-clip: initial !important; background-clip: initial !important; color: #2a3055 !important; opacity: 1 !important; }
 html[data-mode="light"] body nav#nav a.on > span { color: #1456c8 !important; } html[data-mode="light"] body nav#nav a.nav-off > span { color: #8a93ad !important; }
 html[data-mode="light"] body nav#nav a .ic, html[data-mode="light"] body nav#nav a .ic svg, html[data-mode="light"] body nav#nav a:hover .ic svg, html[data-mode="light"] body nav#nav a.on .ic svg { filter: none !important; }
+/* day theme, the side menu's icons: slate, full strength; the open page's icon blue; the switched-off entry stays faded */
+html[data-mode="light"] body nav#nav a .ic { --ic: #4a5a7e; color: #4a5a7e !important; opacity: 1 !important; }
+html[data-mode="light"] body nav#nav a .ic svg { opacity: .92 !important; stroke: #4a5a7e; }
+html[data-mode="light"] body nav#nav a:hover .ic, html[data-mode="light"] body nav#nav a:hover .ic svg { color: #1456c8 !important; stroke: #1456c8; opacity: 1 !important; }
+html[data-mode="light"] body nav#nav a.on .ic { --ic: #1456c8; color: #1456c8 !important; } html[data-mode="light"] body nav#nav a.on .ic svg { stroke: #1456c8; opacity: 1 !important; }
+html[data-mode="light"] body nav#nav a .ic .led { fill: currentColor; }
+html[data-mode="light"] body nav#nav a.nav-off .ic, html[data-mode="light"] body nav#nav a.nav-off .ic svg { color: #8a93ad !important; stroke: #8a93ad; }
+html[data-mode="light"] body nav#nav a .ic svg, html[data-mode="light"] body nav#nav a .ic svg * { stroke: #4a5a7e !important; color: #4a5a7e !important; }
+html[data-mode="light"] body nav#nav a:hover .ic svg, html[data-mode="light"] body nav#nav a:hover .ic svg *, html[data-mode="light"] body nav#nav a.on .ic svg, html[data-mode="light"] body nav#nav a.on .ic svg *, html[data-mode="light"] body nav#nav a.active .ic svg, html[data-mode="light"] body nav#nav a.active .ic svg * { stroke: #1456c8 !important; color: #1456c8 !important; }
+html[data-mode="light"] body nav#nav a.nav-off .ic svg, html[data-mode="light"] body nav#nav a.nav-off .ic svg * { stroke: #a4acc2 !important; color: #a4acc2 !important; }

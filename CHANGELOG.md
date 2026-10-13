@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.36.3 - the side menu's icons in the day theme
+
+- Day theme: the icons of the side menu are slate at full strength, the open page's icon is blue (they were pale and the open one nearly invisible on its highlight).
+
 ## 1.36.2 - the Analyst, shorter; the day theme of the Doctor's lists
 
 - The Analyst's tabs: Best today · Tunnels · At risk · Servers · **CPU cores** (the cores box moved up here from under the lists). The tables look like the tunnel and server lists (lifted header, zebra rows). Shorter: the "What fixes what" tab, the footnotes under the tables, the summary chips, the "Weak hours" and "Mean repair" columns and the server "Size" are gone.
