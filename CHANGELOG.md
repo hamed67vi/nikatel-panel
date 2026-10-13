@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.35.29
+
+- CDN: the *All accounts* chip is gone; the list shows one account at a time (the first one until you choose another).
+- Create tunnel, the DNS names to pick: every connected account is listed (each name with the mark of its provider and its account); the search finds a part of the name, the address or the account (separators do not matter); the list scrolls inside itself.
+- The Add account and the record forms (CDN) stay open until the account or the record is really saved: a click beside the window or the Esc key no longer closes them and loses what was typed; the Close button still does.
+
 ## 1.35.28
 
 - CDN forms (Add account, make / edit a record): an error shows in full inside the form, in a red box above the button, instead of a clipped note on the edge of the window.

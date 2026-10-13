@@ -4415,4 +4415,10 @@ html body #modal .qp-err { display: flex; align-items: flex-start; gap: 10px; ma
 html body #modal .qp-err > i { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; background: rgba(255,90,100,.3); color: #fff; margin-top: 1px; }
 html body #modal .qp-err > span { min-width: 0; overflow-wrap: anywhere; }
 @keyframes qpErrIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
-html[data-mode="light"] body #modal .qp-err { background: #fdecee; border-color: rgba(200,40,60,.4); color: #9b1c2a; } html[data-mode="light"] body #modal .qp-err > i { background: #d4304a; color: #fff; }
+html[data-mode="light"] body #modal .qp-err { background: #fdecee; border-color: rgba(200,40,60,.4); color: #9b1c2a; } html[data-mode="light"] body #modal .qp-err > i { background: #d4304a; color: #fff; }/* the list of DNS names in Create tunnel: the provider mark, the name, the address and the account on one line; it scrolls inside */
+html body .sugg { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; }
+html body .sugg .sg-i { display: flex; align-items: center; gap: 10px; }
+html body .sugg .sg-i .pv { width: 18px; height: 18px; flex: none; }
+html body .sugg .sg-i > b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body .sugg .sg-i > small.mono { flex: none; opacity: .75; }
+html body .sugg .sg-i > .sg-acc { margin-left: auto; flex: none; font-size: 11px; opacity: .6; }

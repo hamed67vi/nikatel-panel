@@ -350,7 +350,7 @@ function showModal(title, body, cls = "", acts = "") {
     return;
   }
   const still = cur ? " style=\"animation:none\"" : "";      // another window in place of this one (details ↔ edit form): it is already on screen, so it does not fly in again
-  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this)closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="hmsg"></div><div class="modal-body">${body}</div></div></div>`;
+  m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this && !this.querySelector('.modal.keep'))closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="hmsg"></div><div class="modal-body">${body}</div></div></div>`;
 }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
@@ -399,7 +399,7 @@ window.closeModal = () => {
   hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
   if (state.pageStale) { state.pageStale = false; setTimeout(() => { if (state.open == null && !state.build) refresh(); }, 280); }      // what was held back while the window was open
 };
-document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML) closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML && !$("#modal .modal.keep")) closeModal(); /* a form marked keep (Add account, the record form) stays until it is saved or its Close button is pressed */ });
 
 /* ---- dashboard */
 /* the small search of the dashboard: a few letters, and the servers / tunnels / configs whose name (or a part of it) starts with them are listed; a click opens it */
@@ -1299,15 +1299,15 @@ async function bkRedraw() { const body = $("#modal .modal-body"); if (!body) ret
 window.bkAdv = () => { bk.adv = !bk.adv; bkRedraw(); };
 /* the A records of the ArvanCloud account, for the name lists (fetched once per page load, the server keeps them for five minutes) */
 /* the DNS names to pick: a list of our own under the field (the name and its address), filtered while you type, chosen with the mouse or the arrow keys; the field takes several names, comma separated */
-async function dnsRowsLoad() { if (!bk.dnsRows) { try { bk.dnsRows = ((await api("/api/dns/records")).records || []).filter(r => r.type === "A"); } catch (e) { bk.dnsRows = []; toast("✕ " + e.message, "bad"); } } return bk.dnsRows; }
+async function dnsRowsLoad() { if (!bk.dnsRows) { try { const d = await api("/api/dns/records"), accs = Object.fromEntries((d.accounts || []).map(a => [a.id, a])); bk.dnsRows = (d.records || []).filter(r => r.type === "A").map(r => ({...r, _prov: (accs[r.account] || {}).provider || "arvan", _acc: (accs[r.account] || {}).name || ""})); } catch (e) { bk.dnsRows = []; toast("✕ " + e.message, "bad"); } } return bk.dnsRows; }
 const sugBox = inp => inp.parentElement.querySelector(".sugg");
 window.sugShow = async inp => {
   const box = sugBox(inp); if (!box) return; const rows = await dnsRowsLoad(), one = inp.dataset.sug === "one";
   const parts = inp.value.split(","), cur = (one ? inp.value : parts[parts.length - 1]).trim().toLowerCase(), have = new Set(parts.map(x => x.trim().toLowerCase()));
   const chosen = !one && parts.some(x => x.trim() && x.trim() !== inp.value.split(",").pop().trim());      // nothing is shown until something is typed; once a name is chosen the list stays, to add more
   if (!cur && !chosen) { box.classList.add("hidden"); box.innerHTML = ""; return; }
-  const list = rows.filter(r => r.type === undefined || r.type === "A").filter(r => (one || !have.has(r.fqdn.toLowerCase())) && (!cur || r.fqdn.toLowerCase().includes(cur))).slice(0, 40);
-  box.innerHTML = list.map((r, i) => `<div class="sg-i ${i === 0 ? "on" : ""}" data-v="${esc(r.fqdn)}" onmousedown="event.preventDefault(); sugPick(this)"><b>${esc(r.fqdn)}</b><small class="mono">${esc((r.ips || []).join(", "))}</small></div>`).join("") || (cur ? `<div class="sg-none">No record of this name</div>` : "");
+  const list = rows.filter(r => r.type === undefined || r.type === "A").filter(r => (one || !have.has(r.fqdn.toLowerCase())) && (!cur || nkHit(r.fqdn + " " + (r.ips || []).join(" ") + " " + (r._acc || "") + " " + (r._prov || ""), cur))).slice(0, 80);      // the search finds a part of the name, the address or the account, separators do not matter
+  box.innerHTML = list.map((r, i) => `<div class="sg-i ${i === 0 ? "on" : ""}" data-v="${esc(r.fqdn)}" onmousedown="event.preventDefault(); sugPick(this)"><i class="pv pv-${esc(r._prov || "arvan")}"></i><b>${esc(r.fqdn)}</b><small class="mono">${esc((r.ips || []).join(", "))}</small><small class="sg-acc">${esc(r._acc || "")}</small></div>`).join("") || (cur ? `<div class="sg-none">No record of this name</div>` : "");
   box.classList.toggle("hidden", !box.innerHTML);
 };
 window.sugHide = inp => setTimeout(() => { const b = sugBox(inp); if (b) b.classList.add("hidden"); }, 120);
@@ -2940,7 +2940,7 @@ function qpDraw() {
       ${q.newCat ? `<div class="qp-newcat"><span>New category</span><input id="qp-cn" class="qp-in" type="text" aria-label="New category name" autocomplete="off" placeholder="For example: Gaming" value="${esc(q.catName)}" oninput="sb.qp.catName=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();sbQpCatSave()}"><button type="button" class="qp-pri sm" onclick="sbQpCatSave()">Save category</button><button type="button" class="qp-ghost" onclick="sbQpCat(false)">Cancel</button></div>` : ""}
       <div class="qp-prev"><span>Title will be</span><b dir="rtl" id="qp-title"></b><span id="qp-ptxt"></span><span role="alert" id="qp-err"></span></div>
       <small class="qp-hint">Use Edit afterwards for a custom title, description or stock. Panel settings are copied from the other plans of the same server.</small>
-      <div class="qp-act"><button type="button" class="qp-ghost" onclick="closeModal();sbPlanEdit(null)">Detailed form…</button><button type="submit" class="qp-pri"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add</button></div></form>`, "plan-add");
+      <div class="qp-act"><button type="button" class="qp-ghost" onclick="closeModal();sbPlanEdit(null)">Detailed form…</button><button type="submit" class="qp-pri"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>Add</button></div></form>`, "plan-add keep");
   qpPrev(); if (q.newCat) { const i = $("#qp-cn"); if (i) i.focus(); }
 }
 function qpPrev() {
@@ -3974,7 +3974,7 @@ PAGES.dns = async () => {
   const [rr, accs, fo, all] = await Promise.all([api("/api/dns/records" + fresh).catch(e => ({err: e.message, records: [], accounts: []})), api("/api/dns/accounts").catch(() => ({accounts: [], providers: {}})), api("/api/failover").catch(() => null), api("/api/servers").catch(() => [])]);
   const byIp = {}; all.forEach(s => { byIp[s.host] = s; });
   let recs = (rr.records || []).filter(r => (r.editable !== false || r.deletable) && !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];      // the records that cannot be changed (MX, NS ...) are not listed
-  const accPick = (() => { let v = "*"; try { v = localStorage.getItem("nk.dns.acc") || "*"; } catch (e) { /* private window */ } return accounts.some(a => a.id === v) ? v : "*"; })();      // the account chosen in the bar above ("*" = all of them)
+  const accPick = (() => { let v = "*"; try { v = localStorage.getItem("nk.dns.acc") || "*"; } catch (e) { /* private window */ } return accounts.some(a => a.id === v) ? v : (accounts[0] ? accounts[0].id : "*"); })();      // one account at a time (the first one until you choose)      // the account chosen in the bar above ("*" = all of them)
   if (accPick !== "*") recs = recs.filter(r => r.account === accPick);
   const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
   const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
@@ -3992,7 +3992,7 @@ PAGES.dns = async () => {
   const addBtn = tab === "records" && connected ? `<button class="cta cta-server" onclick="dnsForm('')" title="Make a new A record in one of your domains"><i class="cta-ic">＋</i>Add record</button><i class="sep"></i>` : tab === "accounts" ? `<button class="cta cta-server" onclick="dnsAccForm('')" title="Add an ArvanCloud account or a Cloudflare account"><i class="cta-ic">＋</i>Add account</button><i class="sep"></i>` : "";
   const tabs = [["records", "Records", recs.length], ["changes", "Changes", log.length], ["accounts", "Accounts", accounts.length], ["failover", "Failover", (fo && fo.pending || []).length]];
   const dstat = (label, val, tip = "") => `<span class="dns-stat" title="${esc(tip)}">${label} <b>${val}</b></span>`;
-  const accChips = (accounts.length > 1 ? `<button type="button" class="dns-chip ${accPick === "*" ? "on" : ""}" onclick="dnsPickAcc('*')" title="Every account together"><i class="pv pv-all"></i><b>All accounts</b></button>` : "") + accounts.map(a => { const l = live.find(x => x.id === a.id) || {}, ok = l.ok !== undefined ? l.ok : (a.status || {}).ok; return `<button type="button" class="dns-chip ${accPick === a.id ? "on" : ""}" onclick="dnsPickAcc('${esc(a.id)}')" title="${esc(ok ? a.name : (l.error || "this account does not answer"))}"><i class="pv pv-${esc(a.provider)}"></i><b>${esc(a.name)}</b>${ok && l.domains ? `<span class="cnt" title="${l.domains.length} domains">${l.domains.length}</span>` : ""}<i class="dot ${ok ? "ok" : "bad"}" title="${ok ? "connected" : "does not answer"}"></i></button>`; }).join("");
+  const accChips = accounts.map(a => { const l = live.find(x => x.id === a.id) || {}, ok = l.ok !== undefined ? l.ok : (a.status || {}).ok; return `<button type="button" class="dns-chip ${accPick === a.id ? "on" : ""}" onclick="dnsPickAcc('${esc(a.id)}')" title="${esc(ok ? a.name : (l.error || "this account does not answer"))}"><i class="pv pv-${esc(a.provider)}"></i><b>${esc(a.name)}</b>${ok && l.domains ? `<span class="cnt" title="${l.domains.length} domains">${l.domains.length}</span>` : ""}<i class="dot ${ok ? "ok" : "bad"}" title="${ok ? "connected" : "does not answer"}"></i></button>`; }).join("");
   const bar = `<div class="toolbar joined srv-bar dns-bar"><div class="dns-r dns-accbar"><span class="dns-lab">Accounts</span>${accChips}<button type="button" class="dns-chip add" onclick="dnsAccForm('')" title="Add an ArvanCloud account (another one) or a Cloudflare account"><i class="cta-ic">＋</i><b>Add account</b></button></div>
     <div class="dns-r dns-main">${addBtn}${tab === "records" && connected ? domSel : ""}<span class="dns-stats" title="The panel never changes an IP by itself while this is being tested. You can still change a record by hand.">${connected ? dstat("Domains", nDom) + dstat("A records", nA) + dstat("On the panel", onPanel, "A records that point at a server added to this panel") : conn}</span>
       <span class="sp"></span><div class="tabs srv-tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>${tab === "records" && connected ? searchSeg() : ""}</div></div>`;
@@ -4052,7 +4052,7 @@ window.dnsForm = k => {
       ${fld("c3 dns-ip", "Or a server of the panel", sw(`<select class="qp-sel" onchange="if(this.value){this.form.elements.ips.value=this.value;dnsPrev(this.form);this.selectedIndex=0}"><option value="">choose a server…</option>${servers.map(s => `<option value="${esc(s.host)}">${esc(s.name)} — ${esc(s.host)}</option>`).join("")}</select>`))}
       ${fld("c3 dns-arv", "Protocol to the origin", sw(`<select class="qp-sel" name="upstream" onchange="dnsFormSync(this.form)" data-orig="${esc((r && r.upstream) || "default")}">${[["default", "Default"], ["auto", "Auto"], ["http", "HTTP"], ["https", "HTTPS"]].map(([v, l]) => `<option value="${v}" ${((r && r.upstream) || "default") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`), "How ArvanCloud talks to your server when the cloud is on.")}
     </div>
-    <div class="qp2-foot"><div class="qp-prev" id="dns-prev"></div><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add");
+    <div class="qp2-foot"><div class="qp-prev" id="dns-prev"></div><button class="qp-pri" type="submit">${r ? "Save" : "Make the record"}</button></div></form>`, "plan-add keep");
   setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f) { dnsFormAcc(f, true); dnsFormSync(f); dnsPrev(f); f.elements.name.focus(); } }, 60);
   if (r && a0.provider === "arvan") api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`).then(d => {      // the list may not carry the origin protocol: the record is read fresh and the two fields are filled in
     const f = document.querySelector(".modal.plan-add form"), row = d.record || {}; if (!f) return;
@@ -4121,7 +4121,7 @@ window.dnsAccForm = id => {
       <div class="qp-f" ${a ? 'style="grid-column:1/-1"' : ""}><label>Name <small>(to tell the accounts apart)</small></label><input class="qp-in" name="name" value="${esc(a ? a.name : "")}" maxlength="40" placeholder="${a ? "" : "e.g. My second account"}" autocomplete="off"></div>
       <div class="qp-f" style="grid-column:1/-1"><label id="dns-keylab">API key</label><input class="qp-in" name="key" type="password" ${a ? "" : "required"} placeholder="${a ? "empty keeps the saved key" : "paste the key here"}" autocomplete="new-password" data-lpignore="true" dir="ltr"></div></div>
     <div class="qp-prev" id="dns-keyhint"></div>
-    <div class="qp-act"><span class="qp-hint"></span><button class="qp-pri" type="submit">${a ? "Save" : "Add the account"}</button></div></form>`, "plan-add");
+    <div class="qp-act"><span class="qp-hint"></span><button class="qp-pri" type="submit">${a ? "Save" : "Add the account"}</button></div></form>`, "plan-add keep");
   setTimeout(() => { const f = document.querySelector(".modal.plan-add form"); if (f && f.elements.provider) dnsAccHint(f); }, 60);
 };
 window.dnsAccHint = f => { const cf = f.elements.provider.value === "cloudflare"; $("#dns-keylab").textContent = cf ? "Cloudflare API token" : "ArvanCloud API key"; $("#dns-keyhint").innerHTML = cf ? "Cloudflare dashboard → My Profile → <b>API Tokens</b> → Create Token → <b>Edit zone DNS</b> template (permissions: Zone · DNS · Edit, Zone · Zone · Read) for the zones you want." : "panel.arvancloud.ir → profile → <b>Machine Users</b> → give it the <b>CDN</b> service with a manager role → create an access key and paste it (shown once)."; };
