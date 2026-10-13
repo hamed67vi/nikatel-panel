@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.20
+
+- CDN bar: the domain chooser is a clear labelled pill beside **Add record**; the numbers are three quiet figures without coloured lights (Domains, A records, On the panel); the *Accounts connected* and *Automatic switching* chips are gone (the account chips above already show the state); Add record never wraps.
+
 ## 1.35.19
 
 - The sub-tab *DNS · IP switch* under Tunnels is now called **CDN**.

@@ -4126,3 +4126,13 @@ html body #page .dns-chip .dot { width: 7px; height: 7px; border-radius: 50%; ba
 html body #page .dns-chip.add { border-style: dashed; background: transparent; color: #aeb7ca; } html body #page .dns-chip.add:hover { color: #e2edff; border-color: rgba(122,176,255,.45); }
 html body #page .dns-chip.add .cta-ic { width: 16px; height: 16px; border-radius: 50%; background: rgba(122,176,255,.25); color: #fff; font-size: 12px; line-height: 16px; display: inline-grid; place-items: center; }
 html body #page .dns-bar .dns-main .dns-dsel { flex: 0 1 230px; min-width: 130px; } html body #page .dns-bar .dns-main .tb-search { flex: 0 1 190px; min-width: 96px; }
+
+/* the DNS bar, calmer: Add record and the domain chooser side by side, three quiet numbers without lights, then the tabs and the search */
+html body #page .dns-bar .dns-main > .cta { white-space: nowrap; flex: none; } html body #page .dns-bar .dns-main > .sep { display: none; }
+html body #page .dns-bar .dns-stats { display: inline-flex; align-items: center; height: 34px; padding: 0 4px; border-radius: 10px; background: rgba(0,0,0,.16); border: 1px solid rgba(255,255,255,.07); flex: none; }
+html body #page .dns-bar .dns-stat { padding: 0 11px; font-size: 12px; color: #98a3ba; white-space: nowrap; } html body #page .dns-bar .dns-stat + .dns-stat { border-left: 1px solid rgba(255,255,255,.08); } html body #page .dns-bar .dns-stat b { margin-left: 3px; font-size: 12.5px; font-weight: 700; color: #e6ecf8; }
+html body #page .dns-bar .dns-dsel { position: relative; display: inline-flex; align-items: center; flex: 0 1 260px; min-width: 170px; height: 38px; padding: 0; border-radius: 12px; background: rgba(122,176,255,.08); border: 1px solid rgba(122,176,255,.3); }
+html body #page .dns-bar .dns-dsel > span { display: none; }
+html body #page .dns-bar .dns-dsel::before { content: ""; position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239fc0f2' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18'/%3E%3C/svg%3E") center/contain no-repeat; pointer-events: none; }
+html body #page .dns-bar .dns-dsel select { width: 100%; height: 36px; padding: 0 34px 0 38px; border: 0; background: transparent; color: #e6eeff; font-size: 13.5px; font-weight: 600; border-radius: 12px; cursor: pointer; }
+html body #page .dns-bar .dns-dsel:hover { background: rgba(122,176,255,.14); border-color: rgba(122,176,255,.5); }
