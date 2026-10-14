@@ -152,8 +152,8 @@ const PAGES = {};
 const INFO_GW = "Tunnels through your own configs, for when Iran is cut off from the world: the configs are shared by the ones that are alive, and a port on each chosen Iran server leads to each chosen foreign server and port.";
 const INFO = {
   dashboard: ["Dashboard", "What needs attention right now, and what happened."],
-  nodes: ["Servers", "Your Iran and foreign servers with their resources, the Iran gateway, events, jobs and logs."],
-  servers: ["Servers", "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH."],
+  nodes: ["Lab", "Your profiles - Iran servers, foreign servers and PasarGuard nodes - with their state and resources. Everything starts with Add profile; the servers the panel already has are picked there."],
+  servers: ["Lab", "Every Iran and foreign server: reachable, load, memory, disk. Sampled every 2 minutes over SSH."],
   tunnels: ["Network", "The CDN records, every tunnel between an Iran server and a foreign server, the Tunnel Doctor that repairs them, and the outbound pool."],
   events: ["Events", "One plain sentence per thing that happened. Newest first."],
   jobs: ["Jobs", "The background jobs of the panel and whether they succeed."],
@@ -165,12 +165,12 @@ const INFO = {
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
 const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actions: "tunnels/repairs", events: "nodes", jobs: "nodes", logs: "nodes",      // an old page name opens the page that holds it ("page/tab": on that tab)
   pghosts: "pgpanel/hosts", pgaccess: "pgpanel/access", pgcore: "pgpanel/core", pgadmins: "pgpanel/admins"};      // (1.47.0: the sections of PasarGuard are the tabs of the Panel page)
-if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
+if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "lab";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const CONFIGS_UI = false;      // the Configs list is switched off and hidden (no tab, no card, no problem rows) until the project grows (the owner, 2026-10-14, roadmap #98); the probe and the routes keep running; set true to bring it back
 Object.assign(NAV_ALIAS, CONFIGS_UI ? {panels: "configs"} : {panels: "pgpanel/users", configs: "pgpanel/users"});      // (the Users of the panels are the first tab of the Panel page while the Configs list is off)
 const SUB = {
-  nodes: [["lab", "🧪 Lab", "The new Servers page: make a profile (a group of servers, Iran and foreign mixed), add the servers to try, and open one - Overview, Node, Monitor and Tools in one window."], ["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts. (Archived: kept as it was; the Lab is the new Servers page.)", "arch"], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts. (Archived: kept as it was; the Lab is the new Servers page.)", "arch"], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
+  nodes: [["lab", "Any", "Every profile you added - Iran servers, foreign servers and PasarGuard nodes - in one list with their state, load and the last 24 hours. Open one for Overview, Node and Monitor; everything that can be done to it is in its ⋯ menu."], ["add", "＋ Add profile", "Add a profile: a foreign server, an Iran server or a PasarGuard node.", "act"], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
   configs: [...(CONFIGS_UI ? [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."]] : []), ["panels", "🧩 Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."]],      // the page is called Users; with the Configs tab off it has one tab, so the tab bar is not drawn
 };
@@ -183,16 +183,20 @@ SUB.pgpanel = [
   ["core", "Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
   ["admins", "Admins", "The admins of the panel you pick, their roles and their API keys."],
 ];
-const subBarOn = page => !!SUB[page] && SUB[page].length > 1;      // a page with a single tab has no tab bar
+/* a tab's 4th element: "off" = switched off (grey, cannot be chosen) or "act" = not a tab but a door to an action (the Lab's "Add profile": it is at the END of its list in the menu, with a "+" after its name, and a button in the bar;
+   it never is the open tab; SUB_ACT holds what it does) */
+const SUB_ACT = {};
+window.subAct = (page, k) => { const f = SUB_ACT[page + "/" + k]; if (f) f(); };
+const subBarOn = page => !!SUB[page] && SUB[page].filter(x => x[3] !== "act").length > 1;      // a page with a single tab has no tab bar (a door to an action is no tab)
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
-function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur && x[3] !== "off") ? cur : list[0][0]; }       // a tab that is switched off is never the current one
+function sub(page) { const list = (SUB[page] || []).filter(x => x[3] !== "act"); if (!list.length) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur && x[3] !== "off") ? cur : (list.find(x => x[3] !== "off") || list[0])[0]; }       // a tab that is switched off is never the current one
 function renderSub() {
   const list = SUB[state.page], box = $("#subnav");
   box.classList.toggle("hidden", !subBarOn(state.page));
   if (!list) return;
   const cur = sub(state.page);
   const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
-  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}${off === "arch" ? " sub-arch" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}${off === "arch" ? '<small class="arch-tag">archive</small>' : ""}</button>`).join("")}</div>`;      // ("arch": an archived tab - quiet, with a small "archive" mark - still works)
+  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : off === "act" ? `<button data-k="${k}" class="sub-act" onclick="subAct('${state.page}', '${k}')">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
 function subSet(page, k) {      // what changes when a tab of a page is chosen (setSub = this and a redraw; the left menu calls it through go)
@@ -215,7 +219,7 @@ const TITLE_ANIM = {
     page = target;
   }
   if (!PAGES[page] || page === "bot") page = "dashboard";      // the Shop bot section is switched off for now (roadmap #79)
-  if (page === "pgpanel" && window.labLocked && labLocked()) { labLockMsg(); return; }      // the Panel works through a PasarGuard profile: until one is added it says so instead of opening (lab.js)
+  if (page === "pgpanel" && window.labLocked && labLocked()) { labLockMsg(); return; }      // the Panel needs a connected panel: while there is none it says so instead of opening (lab.js)
   if (state.page !== page && !aliased) { delete state.sub[page]; TOP_TABS(); }   // a tab you come back to always opens on its first sub-tab (callers that want another one set it right after go())
   if (state.page !== page) {   // leaving a page: drop what it still waits for, start the new one at the top and show at once that it is loading (the old page never stays on screen)
     navCtl.abort(); navCtl = new AbortController(); navSeq++; retries = 0; clearTimeout(retryT); state.resetScroll = true;
@@ -256,7 +260,7 @@ function srvDiagnose(s, tl) {
   if (finds.length) step("🖥 Open the server", `docOpen(${s.id})`);
   return {s, finds, steps, bad: finds.some(i => i.lvl === "bad")};
 }
-window.docOpen = id => { const s = (state.serversCache || []).find(x => x.id === id); go("nodes", s ? s.role : undefined); if (s) { state.tab = s.role; localStorage.setItem("nk.tab", s.role); } state.open = id; state.edit = null; refresh(); };      // (the tab of its role - the Foreign / Iran lists, which are archived but work - is chosen by go itself, so the Lab is never drawn on the way)
+window.docOpen = (id, sec) => { go("nodes", "lab"); state.wsec = sec || "overview"; state.wtab = null; state.open = id; state.edit = null; refresh(); };      // the window of a server, on its section (Overview, Node, Monitor): on the Lab page (lab.js draws it, whether or not the server was put on the page)
 PAGES.serverDoctor = async () => {
   renderSub();
   const [list, tl] = await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
@@ -273,9 +277,9 @@ PAGES.serverDoctor = async () => {
   renderSub();
   const s = sub("nodes");
   if (s === "doctor") return PAGES.serverDoctor();
-  if (s === "lab" && PAGES.lab) return PAGES.lab();      // the Lab (lab.js): profiles, the quiet list, the window of four sections
-  state.tab = s === "lab" ? "iran" : s;                  // (lab.js did not load: the old list is shown instead of an empty page)
-  return PAGES.servers(false);
+  if (!PAGES.lab && document.readyState !== "complete") await new Promise(r => addEventListener("load", r, {once: true}));      // (a reload on this page draws it as soon as app.js has been read, before lab.js - a later script - has run)
+  if (PAGES.lab) return PAGES.lab();      // the Lab (lab.js): profiles, the quiet list, the window of a server
+  $("#page").innerHTML = '<div class="card"><div class="err">The files of the Lab page (lab.js) did not load. Reload the page; if this stays, the upgrade of the panel was not complete.</div></div>';
 };
 document.querySelectorAll("#nav a").forEach(a => { a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page, a.dataset.sub); }; });
 /* the groups of the left menu (the owner, 2026-10-14: like the sidebar of PasarGuard). A group is a head (a page) with a list of sections under it. The little arrow at the right of the head opens and closes
@@ -306,13 +310,16 @@ function navMark(openIt) {      // which items are the open page (and tab); `ope
   });
   navSubBar();
 }
-function navTabs() {      // the tabs that hang under their page: [key, name, icon]
+const navIcons = () => {      // the icons of the tabs of the menu (lab.js draws the kinds of the Lab with the same ones)
   const globe = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3.4 3.2 14.6 0 18M12 3c-3.2 3.4-3.2 14.6 0 18"/></svg>';
-  const ic = {foreign: globe, iran: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2.2 3.6L16 11H5"/></svg>',
-    list: SI.swap, dns: SI.cloud, repairs: SI.pulse, lab: '<svg viewBox="0 0 24 24"><path d="M9.5 3h5M10.5 3v6.2L5 18.4A2 2 0 006.7 21.5h10.6A2 2 0 0019 18.4l-5.5-9.2V3"/><path d="M7.6 14.5h8.8"/></svg>',
+  return {foreign: globe, iran: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2.2 3.6L16 11H5"/></svg>', node: SI.cube,
+    list: SI.swap, dns: SI.cloud, repairs: SI.pulse, lab: '<svg viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg>',
     users: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16M3 9.5h18"/></svg>', hosts: globe, access: '<svg viewBox="0 0 24 24"><path d="M12 3.5l8.5 4.7L12 13 3.5 8.2z"/><path d="M3.5 12.2L12 17l8.5-4.8M3.5 16.2L12 21l8.5-4.8"/></svg>',
     core: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.cog};      // (the tab of the Panel page that is called settings is General: the settings of the panel)
-  const of = page => (SUB[page] || []).map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "arch" ? "arch" : false]);      // (a tab that is switched off is in the menu too, grey like Shop bot: the owner asked to see the rest of the tabs of Tunnels; an archived one is quiet, with a mark)
+};
+function navTabs() {      // the tabs that hang under their page: [key, name, icon]
+  const ic = navIcons();
+  const of = page => (SUB[page] || []).map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "act" ? "act" : false]);      // (a tab that is switched off is in the menu too, grey like Shop bot: the owner asked to see the rest of the tabs of Tunnels; an "act" is a door to an action, drawn in the accent colour with a + after its name, never the open tab)
   return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};
 }
 function navBuild() {
@@ -321,9 +328,11 @@ function navBuild() {
     const head = nav.querySelector(`:scope > a[data-page="${page}"]`); if (!head || list.length < 2) continue;
     const g = document.createElement("div"), gh = document.createElement("div"), sub = document.createElement("div"), tg = document.createElement("button");
     g.className = "nav-g"; g.dataset.page = page; g.dataset.kind = "tabs"; g.dataset.open = "0"; gh.className = "nav-gh"; sub.className = "nav-sub"; sub.id = "nav-sub-" + page; tg.type = "button"; tg.className = "nav-tg";
-    sub.innerHTML = list.map(([k, name, icon, off]) => `<a data-page="${page}" data-sub="${k}"${off === "off" ? ' class="nav-off" aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)"' : off === "arch" ? ' class="nav-arch" title="Archived: the previous Servers lists, kept as they were. The Lab is the new Servers page."' : ""}><i class="ic">${icon}</i><span>${esc(name)}${off === "arch" ? '<small class="arch-tag">archive</small>' : ""}</span></a>`).join("");
+    sub.innerHTML = list.map(([k, name, icon, off]) => off === "act"
+      ? `<a class="nav-act" data-page="${page}" data-sub="${k}" data-act="1"><i class="ic"></i><span>${esc(name)}</span><b class="nav-plus" aria-hidden="true">+</b></a>`      // (an action: no icon of its own - the + after its name says what it does - and it is the last of the list)
+      : `<a data-page="${page}" data-sub="${k}"${off === "off" ? ' class="nav-off" aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)"' : ""}><i class="ic">${icon}</i><span>${esc(name)}</span></a>`).join("");
     head.replaceWith(g); gh.append(head, tg); g.append(gh, sub);
-    sub.querySelectorAll("a:not(.nav-off)").forEach(a => { a.onclick = () => go(a.dataset.page, a.dataset.sub); });
+    sub.querySelectorAll("a:not(.nav-off)").forEach(a => { a.onclick = () => a.dataset.act ? subAct(a.dataset.page, a.dataset.sub) : go(a.dataset.page, a.dataset.sub); });      // (an "act" does what SUB_ACT says: the Lab's Add profile opens the choice of what to add)
   }
   const saved = navOpenMap();
   nav.querySelectorAll(".nav-g").forEach(g => {
@@ -376,7 +385,7 @@ const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "Th
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".tabs button, #subnav button, .set-tabs button, .tf-tabs button, .srv-tabs button, .act-cats button, .ap-ttabs button")) state.softSwap = true; }, true);
 async function refresh() {
   navMark(false);      // (the open tab may have changed: the menu shows it)
-  if (window.labLockSync) labLockSync();      // whether a PasarGuard profile exists (the Panel item of the menu is grey until one does): asked at most every 30 s
+  if (window.labLockSync) labLockSync();      // whether a panel is connected (the Panel item of the menu is grey with a lock only while none is): asked at most every 30 s
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
   const seq = navSeq, pg0 = $("#page"), wasBusy = !!(pg0 && pg0.classList.contains("busy"));
@@ -650,86 +659,6 @@ const noLogin = s => s.enabled && s.online !== true && /permission denied|public
 /* a server added in the last hour is marked "new" (Nodes, and the server lists of Create tunnel / Tunnel test) */
 const isNew = s => s && s.created_at && Date.now() / 1000 - s.created_at < 3600;
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
-PAGES.servers = async () => {
-  const fast = !!(state.fastRender && state.serversCache && state.tunnelsCache && state.panelsCache); state.fastRender = false;      // switching Iran / Foreign draws from what is already known at once (no waiting, no blank page), then looks again in the background
-  const [list, tl] = fast ? [state.serversCache, state.tunnelsCache] : await Promise.all([api("/api/servers"), api("/api/tunnels").catch(() => [])]);
-  state.tunnelsCache = tl; state.serversCache = list;
-  if (fast) setTimeout(() => { if (state.page === "nodes" && !state.open) refresh(); }, 400);
-  const mine = list.filter(s => s.role === state.tab);
-  const MT = {all: () => true, online: s => s.enabled && s.online === true, problems: srvProblem, disabled: s => !s.enabled}, mt = MT[state.mtab] ? state.mtab : "all";
-  const rows = mine.filter(MT[mt]);
-  const hostN = {}; list.forEach(s => { hostN[s.host] = (hostN[s.host] || 0) + 1; });   // the same address added as two servers
-  const dupHost = s => hostN[s.host] > 1 ? `<span class="pill err" title="Another server in the list has the same address (${esc(s.host)}): a duplicate?">duplicate IP</span>` : "";
-  if (!fast || !state.ca) state.ca = await api("/api/checkall").catch(() => ({running: false}));
-  if (state.caWas && !state.ca.running) toast((state.ca.ok ? "✓ " : "") + (state.ca.line || "The check is finished"), state.ca.ok ? "ok" : "bad");
-  state.caWas = !!state.ca.running;
-  if (state.ca.running) { clearTimeout(window.__caT); window.__caT = setTimeout(() => { if (state.page === "nodes" && !state.open) refresh(); }, 2500); }
-  const live = mine.filter(s => s.enabled), nProb = mine.filter(srvProblem).length, online = live.filter(s => s.online).length, nOff = mine.length - live.length;      // a turned-off server is not counted in the totals
-  const avg = k => { const v = mine.filter(s => s.online && s.facts && s.facts[k] != null).map(s => s.facts[k]); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
-  const sumNet = mine.reduce((a, s) => a + ((s.facts || {}).rx_mbps || 0) + ((s.facts || {}).tx_mbps || 0), 0);
-  const greMark = s => {   // only a GRE that is NOT ok gets a mark, next to the name; a good or never-checked GRE shows nothing
-    const ts = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre")), mk = (txt, tip) => `<span class="pill err gre-bad" onclick="event.stopPropagation();greCheck(${s.id})" title="${esc(tip + " - click to check again")}">${txt}</span>`;
-    if (ts.length) { const bad = ts.filter(t => t.state === "down"); return bad.length ? mk(bad.length === ts.length ? "GRE ✕" : "GRE ✓/✕", ts.map(t => t.name + ": " + t.state).join(", ")) : ""; }
-    const g = (s.extra || {}).gre; return g && !g.ok && g.links ? mk("GRE ✕", g.detail + " · checked " + ago(g.at) + " ago") : "";
-  };
-  // Marzban / PasarGuard nodes that run on this server (matched by this panel by address, or through the DNS): the panel's name as a chip in the Panel column; a click opens that panel (pg_srvnode.js)
-  const pnl = fast ? state.panelsCache : await api("/api/panels").catch(() => ({panels: []}));
-  state.panelsCache = pnl;
-  if (!fast && window.pgSrvLoad) await pgSrvLoad();
-  const chips = s => window.pgSrvChips ? pgSrvChips(s) : "";
-  if (window.pgSrvPrune) pgSrvPrune(list);      // a server that is gone is not ticked any more
-  const ticks = !!(window.pgSrvTicks && pgSrvTicks()), ck = s => ticks ? pgSrvCk(s) : "";      // a tick in front of every server once one of them carries a PasarGuard node (for the Nodes… menu)
-  const pbar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<div class="pbar"><span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b>${v}%</b></div>`;
-  const foreignTab = state.tab === "foreign";
-  if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (state.page === "nodes") refresh(); }, 3000); }
-  const nameN = {}; (state.serversCache || list).forEach(x => { const k = String(x.name).toLowerCase(); nameN[k] = (nameN[k] || 0) + 1; });      // a name that more than one server carries is marked
-  const sameName = s => nameN[String(s.name).toLowerCase()] > 1 ? `<span class="dup" title="${nameN[String(s.name).toLowerCase()]} servers have this name (capitals do not count): rename one of them">⚠ ×${nameN[String(s.name).toLowerCase()]}</span>` : "";
-  /* ONE column for whatever is wrong with a server (nothing at all when it is fine): busy, disabled, no login, offline, SSH, GRE, filtered, bad route, network, duplicates */
-  const issues = s => {
-    const x = s.extra || {}, flt = x.iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked"), b = srvBusy(s), out = [];
-    const tag = (cls, txt, tip) => out.push(`<span class="pill ${cls}" title="${esc(tip || txt)}">${txt}</span>`);
-    if (b) return `<span class="busy-chip" title="${esc(b.what + (b.detail ? ": " + b.detail : ""))}"><i class="spin"></i>${esc(b.what)}…</span>`;
-    if (!s.enabled) return '<span class="mut iss-ok">—</span>';      // disabled: the Status column says it; nothing is checked, so there is nothing to report
-    if (noLogin(s)) tag("err", "No login", s.last_error);
-    else if (s.online === false) tag("err", "Offline", s.last_error || "The server does not answer");
-    else if (s.online && /^SSH does not answer/.test(s.last_error || "")) tag("warn", "SSH ✕", s.last_error);
-    else if (s.online == null) tag("off", "Not checked yet", "The panel has not looked at it yet");
-    out.push(greMark(s));
-    if (blocked) tag("err", "Filtered", "Not reachable from inside Iran");
-    if ((x.reach_ir || {}).level === "bad") tag("err", "Bad route", x.reach_ir.bad + " of " + x.reach_ir.total + " Iran servers lose packets toward it (worst " + x.reach_ir.worst + " %): the fault is this server or its provider");
-    if ((x.net || {}).level === "down") tag("err", "Network cut", "This Iran server cannot reach the internet");
-    else if ((x.net || {}).level === "bad") tag("warn", "Network ⚠", "internet " + x.net.anchor + "%, other Iran servers " + x.net.domestic + "%, foreign servers " + x.net.foreign + "% lost");
-    out.push(sameName(s), dupHost(s));
-    const html = out.filter(Boolean).join("");
-    return html || '<span class="mut iss-ok">—</span>';
-  };
-  const row = s => {   // the old panel's column names, fixed columns so nothing moves: Server | Status | (Filtered) | Panel | IPv4 | GRE | RAM | CPU | Disk
-    const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
-    const cls = (!s.enabled ? "srv-off" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
-    return `<tr class="${cls} clk" data-id="${s.id}" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
-      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}>${ck(s)}<i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</td>
-      <td>${!s.enabled ? '<span class="st dis">disabled</span>' : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
-      <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
-      <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td>
-      <td class="iss-cell">${issues(s)}</td>
-      ${s.enabled ? `<td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>` : `<td colspan="3" class="off-note" title="Disabled: the panel does not check it, sends no alerts for it and does not count it in the totals"><span class="off-chip"><i>⏾</i>Disabled · not checked, no alerts</span></td>`}
-      <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}<button type="button" class="row-x" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove ${esc(s.name)} from the panel (nothing changes on the server)" aria-label="Remove ${esc(s.name)}">${X_SVG}</button></div></td></tr>`;      // the faint cross at the end of a server's box: it asks first, then takes the server off the panel
-  };  const openSrv = list.find(s => s.id === state.open);
-  const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the nodes (not a server's) is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
-  const ca = state.ca || {running: false};
-  const caBtn = ca.running ? `<span class="ca-run"><button class="sm" disabled><i class="spin"></i>Checking ${ca.done || 0}/${ca.total || "…"}</button><a class="ca-stop" onclick="caStop()" title="Stop: the servers being checked now finish, no new one starts">${ca.stopping ? "stopping…" : "Stop"}</a></span>` : `<button onclick="caStart()" title="Checks every server: does it answer, does GRE work to it, is it filtered in Iran. It runs on the panel: reloading the page does not stop it."><i class="ic">✓</i><span class="bt">Check all</span></button>`;
-  pageTarget().innerHTML = `<div class="toolbar joined srv-bar"><div class="sb-r1">
-      <button class="cta cta-server ico lbl" onclick="newServer()" title="Add a server: one, or several at once with one password" aria-label="Add server"><i class="cta-ic">＋</i><span class="bt">Add server</span></button><i class="sep"></i>${caBtn}<i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user"><i class="ic">🔑</i><span class="bt">Download my SSH key</span></a>${window.pgSrvMenu && pgSrvPanels().length ? `<i class="sep"></i>${pgSrvMenu()}` : ""}
-      <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}"><span class="lab">Online </span><b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %"><span class="lab">Problems </span><b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%"><span class="lab">Load </span><b>${avg("cpu") ?? "—"}%</b> <small class="lab">cpu</small></span><span class="tc info opt3" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span></div>
-      <div class="sb-r2"><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div><span class="sp"></span>${searchSeg()}</div></div>
-    <table class="tbl lift srv-tbl joined ${fast ? "fx-in" : ""}"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:11%"><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:5%"></colgroup>
-      <thead><tr><th>Server</th><th>Status</th><th>Panel</th><th>IPv4</th><th>Issues</th><th>RAM</th><th>CPU</th><th>Disk</th><th></th></tr></thead>
-      <tbody>${rows.map(row).join("") || `<tr><td colspan="9" class="empty">No server.</td></tr>`}</tbody></table>`;
-  showWin();
-  applyQ();
-  if (state.open && state.edit !== state.open) loadServerCharts(state.open);
-  if (state.con && state.open) { const c = $(`#con-cmd-${state.con}`); if (c) c.focus(); }
-};
 function srvModal(s) {   // while the edit form is open the header keeps only the name and the switch: the form has Save and Back
   const editing = state.edit === s.id, on = s.enabled !== false;
   const sw = `<label class="srv-sw ${on ? "on" : ""}" title="${on ? "Enabled: the panel checks this server. Switch off to disable it: it is not checked and gives no alerts (nothing changes on the server)." : "Disabled: the panel does not check this server. Switch on to enable it."}"><input type="checkbox" ${on ? "checked" : ""} onchange="srvToggle(${s.id})" aria-label="Enable or disable ${esc(s.name)}"><i></i><b>${on ? "Enabled" : "Disabled"}</b></label>`;
@@ -933,31 +862,6 @@ function resBox(s) {
 };
 window.srvFilter = async id => { setRes("flt", '<span class="mut">⏳ pinging from your Iran servers… (about 30 s)</span>'); toast("Pinging from Iran… (about 30 s)"); try { const r = await api(`/api/servers/${id}/filter-check`, {method: "POST"}); toast((r.level === "clean" ? "✓ " : "⚠ ") + r.verdict, r.level === "clean" ? "ok" : "bad"); state.flt = id; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.srvReboot = async (id, name) => { if (!await gconfirm(`Reboot ${name}? Its tunnels are down until it is back (usually under a minute).`)) return; try { await api(`/api/servers/${id}/reboot`, {method: "POST"}); toast("✓ Reboot requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.greCheckAll = async () => { toast("Checking GRE on every server… (up to a minute)"); try { const r = await api("/api/servers/gre-check-all?role=" + encodeURIComponent(state.tab), {method: "POST"}); toast(`GRE: ${r.ok} ok · ${r.no_gre} without GRE · ${r.bad.length} not OK` + (r.bad.length ? " — " + r.bad.slice(0, 3).join("; ") : ""), r.bad.length ? "bad" : "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.srvGeo = async () => { toast("Looking up countries…"); try { const r = await api("/api/servers/geo-refresh", {method: "POST"}); toast(`✓ ${r.changes.length} changed`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.srvMany = () => { state.edit = "many"; state.open = null; refresh(); };
-window.addTab = k => { state.edit = k; addModal(); };
-function addModal() {   // one window for adding: a tab for one server, a tab for several at once
-  const one = state.edit === "new";
-  showModal(`<b>+ Add server</b>`, `<div class="tabs" style="margin-bottom:12px"><button class="${one ? "on" : ""}" onclick="addTab('new')">One server</button><button class="${one ? "" : "on"}" onclick="addTab('many')">Several at once</button></div>${one ? SERVER_FORM(null, state.tab) : MANY_FORM()}`);
-}
-window.srvManyGo = async e => { e.preventDefault(); const f = new FormData(e.target); toast("Adding… (a few seconds per server)"); try { const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: state.tab, lines: f.get("lines"), password: f.get("password"), ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22})}); state.manyRes = r.items; const ok = r.items.filter(i => i.ok).length; toast(`${ok ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, ok === r.items.length ? "ok" : "bad"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
-const MANY_FORM = () => {   // the same design as the form for one server: two boxes (the servers, the SSH access) and a foot with the button and the one-line help
-  const fl = (l, inner) => `<label class="kv2 kf bf"><span>${l}</span>${inner}</label>`;
-  return `<form class="frm srv-form2" onsubmit="return srvManyGo(event)">
-    <div class="sgrid two srv-two">
-      <div class="sbox"><h5><i>🖥</i>Servers</h5>
-        <label class="kv2 kf bf kf-top"><span>One per line</span><textarea name="lines" class="ob-raw" required rows="7" spellcheck="false" placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
-        <div class="bf-note mut">name host [user] [port] — the user and the port are optional</div></div>
-      <div class="sbox"><h5><i>🔑</i>SSH access</h5>
-        ${fl("User", `<input name="ssh_user" value="root">`)}
-        ${fl("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="22">`)}
-        ${fl("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already there" title="The same for all. With a password the panel logs in once, installs its own key and forgets the password">`)}
-        <div class="bf-note mut">The same for all the servers of the list.</div></div>
-    </div>
-    <div class="sbar bld-foot"><button class="pri" type="submit">Add ${state.tab} servers</button><span class="sp"></span><small class="mut">With a password the panel logs in once, installs its key and forgets it.</small></div>
-    ${state.manyRes ? `<div class="sbox srv-after"><h5><i>📋</i>Result</h5>${state.manyRes.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> — ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div>` : ""}</form>`;
-};
 /* ---- monitoring: real charts with axes, a hover read-out, min / avg / max, a range switch (1 h / 6 h / 24 h / 7 d) ---- */
 const CH = {}; let chSeq = 0;
 const RANGES = [[1, "1 h"], [6, "6 h"], [24, "24 h"], [168, "7 days"]];
@@ -1018,7 +922,7 @@ async function loadServerCharts(id) {
   morphHtml(box, chartsHtml);      // in place: only the numbers that changed are rewritten
   state.chartCache[id + ":" + state.mrange] = box.innerHTML;
 }
-function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }window.setTab = t => { state.tab = t; state.open = null; state.edit = null; localStorage.setItem("nk.tab", t); refresh(); };
+function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }
 let qT;
 /* ONE rule for every search box: each word of what you type may sit anywhere in the text (the middle of a name too), several words must all be found, and the separators do not matter (a dash, a dot, a space and nothing are the same) */
 const nkCompact = s => String(s).replace(/[\s._\-:\/@]+/g, "");
@@ -1056,9 +960,6 @@ window.srvSet = async (id, on, undoing) => {
     if (on) api(`/api/servers/${id}/check`, {method: "POST"}).then(() => { if (!undoing) toast(`${s.name} is enabled and online.`, "ok"); }).catch(e => toast(`${s.name} is enabled, but it does not answer yet: ${String(e.message).slice(0, 90)}`, "bad")).finally(() => refresh());
   } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
-window.caStart = async () => { try { await api("/api/checkall", {method: "POST", body: JSON.stringify({role: ""})}); toast("Checking all servers… it goes on if you reload the page; Stop ends it", "info"); state.ca = {running: true, done: 0, total: 0}; } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.caStop = async () => { try { await api("/api/checkall/stop", {method: "POST"}); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.newServer = () => { state.prefill = null; state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; state.wtab = "overview"; refresh(); };      // Edit leaves the console: Back from the form returns to the main window, not to the console
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
 window.openBuild = () => { state.build = true; state.open = null; refresh(); };

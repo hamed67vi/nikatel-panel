@@ -48,7 +48,7 @@ const pgNodesAfter = async () => {
 };
 
 /* ---- the windows of the node views: inside the Node view of a server window (a Back link under the window's header), else a window of their own */
-window.pgNodesModal = (title, body, cls = "wide") => { if (state.open == null) state.nodeWin = state.nodeWin || {}; showModal(title, body, cls); };      // (state.nodeWin: the Servers page must not close a window that is not a server's: see PAGES.servers)
+window.pgNodesModal = (title, body, cls = "wide") => { if (state.open == null) state.nodeWin = state.nodeWin || {}; showModal(title, body, cls); };      // (state.nodeWin: the Lab page must not close a window that is not a server's: see PAGES.lab)
 window.pgNodesWin = (title, body, cls = "wide") => {
   const el = $("#node-pane");
   if (!el) { pgNodesModal(title, body, cls); return; }

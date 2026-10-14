@@ -1,7 +1,11 @@
 """Profiles (the owner's idea, 2026-10-14: "instead of choosing the Iran and the Foreign tab, a profile - made first, from the very start - and the add-profile section has: Iran server, Foreign server,
 PasarGuard node"). A profile is one thing the owner added to the Lab page by saying what it is: an Iran server, a foreign server or a PasarGuard node. A server profile points at a server of ours, a node
 profile at a node of a PasarGuard panel (the panel is reached with its API key or a sign-in, services/panels.py), so nothing is copied and a profile changes nothing on a server or on a panel: it only says
-"this one is on the Lab page". The list of profiles is one list, whatever the kinds; the page filters it (All, Iran, Foreign, PasarGuard). web/lab.js is built on it."""
+"this one is on the Lab page". The list of profiles is one list, whatever the kinds; the page filters it (Any, Iran, Foreign, PasarGuard). web/lab.js is built on it.
+Since 1.49.1 the old Foreign / Iran lists are gone and NOTHING puts the servers the panel already has on the page by itself (the owner: "I did not say to move the cards, only to bring the information of
+the servers"): the page lists only what was added with Add profile. A server that is MADE there - one new server, several at once, the API, the importer - gets its profile at once (`ensure_server`); the
+servers the panel already had are picked in the "Already in the panel" tab of Add profile (their name, address and provider are listed; "Select all" takes the lot). A profile that is taken off the page
+only unlists the server - the panel still watches it, its tunnels go on - and the same tab brings it back."""
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -119,6 +123,25 @@ def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None) 
     db.flush()
     emit(db, "info", "servers", f"{what} added as a profile.", what)
     return p
+
+
+def ensure_server(db: Session, server: Server) -> bool:
+    """A server that is MADE - by the Add profile flow, the API, the importer, several at once - is on the Lab page at once: it gets the profile of its kind. The servers the panel already had are not touched
+    (they are picked in Add profile). True when the profile was made now, False when the server had one already."""
+    if db.scalar(select(Profile.id).where(Profile.server_id == server.id)) is not None:
+        return False
+
+    db.add(Profile(kind=server.role if server.role in ("iran", "foreign") else "foreign", server_id=server.id))
+    return True
+
+
+def follow_role(db: Session, server: Server) -> None:
+    """A server that was said to be in Iran (or abroad) after all: its profile is of that kind now."""
+    if server.role not in ("iran", "foreign"):
+        return
+
+    for p in db.scalars(select(Profile).where(Profile.server_id == server.id)):
+        p.kind = server.role
 
 
 def delete(db: Session, pid: int) -> str:

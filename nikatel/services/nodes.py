@@ -17,6 +17,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server
 from ..ssh import Node, SSHError, run_action, run_raw, run_script
+from . import profiles
 from .events import emit
 
 log = get_logger("nodes")
@@ -257,6 +258,7 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
             srv = Server(name=it["name"], host=it["host"], role=role, ssh_user=it["user"], ssh_port=it["port"])
             db.add(srv)
             db.flush()
+            profiles.ensure_server(db, srv)          # (every server is on the Lab page)
             it["id"] = srv.id
             emit(db, "info", "servers", f"Server {srv.name} ({role}) added.", srv.name)
 

@@ -75,23 +75,55 @@ def test_go_takes_the_tab_the_menu_asks_for():
 
 def test_a_tab_that_is_switched_off_is_in_the_menu_grey_and_cannot_be_clicked():
     """The owner asked to see the rest of the tabs of Tunnels: Outbound is switched off (roadmap #92) and shows grey, like the Shop bot, instead of missing from the group."""
-    assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "arch" ? "arch" : false])' in APP
+    assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "act" ? "act" : false])' in APP
     assert 'class="nav-off" aria-disabled="true"' in APP and 'sub.querySelectorAll("a:not(.nav-off)")' in APP          # (and a click on it does nothing)
     assert re.search(r'\["gateway", "[^"]*Outbound", INFO_GW, "off"\]', APP)
 
 
-def test_the_lab_is_the_first_tab_of_servers_and_the_old_lists_are_archived_but_still_open():
-    """The owner (2026-10-14): "make a test page" with profiles, and "archive the current Servers section". The Lab is the first tab, so Servers opens on it; Foreign and Iran are the
-    same lists as before, marked "arch" (quiet, with a small mark, still clickable) - a tab marked "off" would be grey and dead."""
+def test_the_old_foreign_and_iran_lists_are_out_of_the_project_and_the_lab_is_the_page_of_the_servers():
+    """The owner (2026-10-14): "hide these two sections entirely - I mean take them out of the project, but let us have them in case we want them somewhere else". The Foreign and Iran lists are not
+    tabs, not pages and not code of the panel any more (a copy of them is kept outside of the project); the Lab opens by itself, and a shortcut to a server (the dashboard, a diagnosis) opens its window on the Lab."""
     block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
     tabs = re.findall(r'^  nodes: \[(.*)\],$', block, re.MULTILINE)[0]
-    assert tabs.index('["lab",') < tabs.index('["foreign",') < tabs.index('["iran",')
-    assert re.search(r'\["foreign", "[^\n]*?", "arch"\]', tabs) and re.search(r'\["iran", "[^\n]*?", "arch"\]', tabs)
-    assert 'if (s === "lab" && PAGES.lab) return PAGES.lab();' in APP          # (and the old list when lab.js did not load)
-    assert 'off === "arch" ? " sub-arch" : ""' in APP and 'class="nav-arch"' in APP
-    assert 'go("nodes", s ? s.role : undefined)' in APP          # a shortcut to a server (the dashboard, a diagnosis) opens the tab of its role, never the Lab by mistake
-    assert "go('nodes');state.tab=" not in APP
+    assert '["foreign",' not in tabs and '["iran",' not in tabs          # (Foreign and Iran are kinds of profile, never tabs of the page)
+    assert tabs.index('["lab",') < tabs.index('["add",')
+    assert "PAGES.servers" not in APP and "srvManyGo" not in APP and "function addModal" not in APP and "window.addModal" not in APP          # the code of the old lists is gone, not hidden
+    assert 'if (PAGES.lab) return PAGES.lab();' in APP and "lab.js) did not load" in APP          # (and a page that says so when lab.js did not load, never the old list)
+    assert 'window.docOpen = (id, sec) => { go("nodes", "lab");' in APP and "state.tab = s.role" not in APP
+    assert '"arch"' not in APP and "nav-arch" not in APP and "sub-arch" not in APP and "arch-tag" not in (WEB / "lab.css").read_text(encoding="utf-8")          # (no archive mark: there is no archive in the project)
 
+def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_kinds_and_add_profile_plus_at_the_end():
+    """The owner (2026-10-14): "the Servers section is called Lab", "show Add profile there when you click on it", "Add profile comes below the profiles; foreign, iran, pasargaurd; the profiles item is called
+    any", then "Add profile comes at the END of the list, no arrow in front of it, a + after it". The group of the menu is Lab: Any (every profile), an item for each kind that has a profile (Foreign, Iran,
+    PasarGuard - only with two kinds or more, like the tabs of the page), and Add profile + as the LAST item: a door to the add flow, an "act" of the tabs (no page and no tab of its own, never the open one)."""
+    assert re.search(r'<a data-page="nodes"[^>]*data-short="Lab"', INDEX) and re.search(r'<span>Lab</span></a>', NAV) and "<span>Servers</span>" not in NAV
+    assert re.search(r'^  nodes: \["Lab", ', APP, re.MULTILINE)
+    block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
+    tabs = re.findall(r'^  nodes: \[(.*)\],$', block, re.MULTILINE)[0]
+    assert tabs.index('["lab", "Any"') < tabs.index('["add", "＋ Add profile"') and '"act"]' in tabs and "Profiles" not in tabs.split('["add"', 1)[0]          # (the list first, Add profile at the end)
+    assert '<b class="nav-plus" aria-hidden="true">+</b>' in APP and "nav-ag" not in APP and "nav-act-k" not in APP          # (a + after its name, no arrow, no small group)
+    assert "window.subAct = (page, k) =>" in APP and 'SUB[page].filter(x => x[3] !== "act")' in APP and "a.dataset.act ? subAct(a.dataset.page, a.dataset.sub)" in APP
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
+    assert 'const LAB_NAV = [["foreign", "Foreign"], ["iran", "Iran"], ["node", "PasarGuard"]]' in lab and "if (kinds.length > 1)" in lab and "any.onclick = () => labGoKind(\"any\")" in lab          # (the kinds follow the profiles)
+    assert lab.count("labNavSync();") >= 3          # (when the page is drawn, when a tab of the page is chosen, when the profiles were read in the background)
+    assert 'if (k === "add") labAdd(); else if (typeof k === "object") labServerStep(k.kind || "foreign", "new", k); else labAddKind(k);' in lab          # (the page opens the add flow once it is drawn, whichever way it was reached)
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert ".nav-plus" in css and ".nav-ag" not in css and ".nav-ak" not in css
+
+
+def test_the_servers_the_panel_already_has_are_not_moved_to_the_lab_by_themselves_they_are_picked_in_add_profile():
+    """The owner (2026-10-14): "I did not say to move the cards, I only said to bring the information of the servers". Nothing puts a server on the page by itself: Add profile lists the
+    servers the panel already has (name, address, provider) under "Already in the panel", with a search and "Select all", and it opens on that list when there are some."""
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    assert "const labFree = " in lab and 'labServerStep(k, labFree(k).length ? "have" : "new")' in lab          # it opens on the list of the servers that are there
+    assert 'Already in the panel<i class="cnt">' in lab and '<label class="lab-all">' in lab and "window.labPickAll = " in lab and "window.labPickFilter = " in lab
+    assert "already in the panel</em>" in lab and "lab-first-note" in lab          # the first page and the cards of Add profile say how many there are
+    assert "labSaveMany" in lab and '"/api/servers/add-many"' in lab          # several at once: lines of name and address
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert ".lab-pick-bar" in css and ".lab-all" in css and ".lab-have" in css
+    db = (WEB.parent / "db.py").read_text(encoding="utf-8")
+    assert "backfill" not in db and "(17," not in db          # (and no step of an upgrade puts them there)
 
 def test_the_section_that_was_called_tunnels_is_called_network_and_starts_with_the_cdn():
     """The owner (2026-10-14): "this section's name becomes Network", "bring CDN above the Tunnel manager". CDN is the first tab, so a shortcut that used to land on the Tunnel manager by
@@ -105,18 +137,21 @@ def test_the_section_that_was_called_tunnels_is_called_network_and_starts_with_t
     assert 'actions: "tunnels/repairs"' in APP
 
 
-def test_the_panel_item_is_grey_until_a_pasarguard_profile_exists_and_says_why_when_it_is_clicked():
-    """The owner (2026-10-14): "until a PasarGuard profile is added the Panel section shows disabled; click it and it says a PasarGuard profile must be added first; for now full compatibility with the
-    PasarGuard panel". The lock is in go() (every way into the Panel passes there), in the Panel page itself (a reload on it) and on the menu (a grey item that still answers a click)."""
+def test_the_panel_item_is_locked_only_while_no_panel_is_connected_and_says_why_when_it_is_clicked():
+    """The owner (2026-10-14): "we have a panel now, it must not be locked; the lock is for when no panel is connected". The lock is in go() (every way into the Panel passes there), in the Panel
+    page itself (a reload on it) and on the menu (a grey item that still answers a click). It follows the list of panels - a panel that is connected - and NOT the nodes on the Lab page."""
     assert 'if (page === "pgpanel" && window.labLocked && labLocked()) { labLockMsg(); return; }' in APP
     assert "PAGES.pgpanel = async () => { if (window.labLockNow && await labLockNow()) return;" in APP
     assert "if (window.labLockSync) labLockSync();" in APP
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
-    assert "window.labLocked = () => LAB.pg === false" in lab and 'document.getElementById("demo-pill")' in lab          # (the public demo has no PasarGuard panel: its Panel page stays open)
-    assert 'a.classList.toggle("nav-lock", lock)' in lab and "p.kind === \"node\"" in lab
+    assert "window.labLocked = () => LAB.pg === false" in lab and 'document.getElementById("demo-pill")' in lab          # (the public demo has no panel to connect: its Panel page stays open)
+    assert 'a.classList.toggle("nav-lock", lock)' in lab
+    sync = lab.split("window.labLockSync", 1)[1].split("window.labLockNow", 1)[0]
+    assert 'api("/api/panels")' in sync and "(r.panels || []).length > 0" in sync          # a panel is connected: it is in the list of panels
+    assert "if (pnl) labLockSet((pnl.panels || []).length > 0);" in lab and "labLockSet(LAB.profiles.some(" not in lab and 'p.kind === "node")' not in sync          # (a node profile has nothing to do with it)
+    assert "labLockSet(true);      // (a panel is connected" in lab          # (connecting one opens the item at once)
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     assert "nav a.nav-lock" in css and "pointer-events" not in css.split("nav a.nav-lock", 1)[1].split("}", 1)[0]          # (unlike a switched-off item, a click on it must arrive)
-
 
 def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_of_many_buttons():
     """The owner (2026-10-14): "the model of the cards and their icons as before, only the contents of the columns new", "the flags as before, for my Iran servers too", "instead of many buttons"

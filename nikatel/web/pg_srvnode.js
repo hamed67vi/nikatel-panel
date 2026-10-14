@@ -22,12 +22,12 @@ window.pgSrvLoad = async () => {
 };
 const pgSrvTip = x => `${x.type === "pasarguard" ? "PasarGuard" : "Marzban"} node ${x.name} of the panel ${x.panel}: ${x.status || "?"}${x.message ? " (" + x.message + ")" : ""}${x.match === "dns" ? " - matched through the DNS" : ""}`;
 window.pgSrvChips = s => pgSrvOn(s).map(x => `<span class="mchip ${pgSrvCls(x)}" onclick="event.stopPropagation();pgSrvOpenNode(${s.id}, '${pgSrvKey(x)}')" title="${esc(pgSrvTip(x))} - click to open it">${esc(x.panel)}</span>`).join("");
-window.pgSrvOpenNode = (sid, key) => {      // the window of the server, on its Node view (the node `key` when the server carries more than one)
+window.pgSrvOpenNode = (sid, key) => {      // the window of the server, on its Node section (the node `key` when the server carries more than one)
   if (key) { pgNodeV.key = key; pgNodeV.err = null; }
-  if (window.labOn && labOn()) { if (state.open === sid && $("#modal .srvwin")) wtab("node"); else labOpen(sid, "node"); return; }      // the Lab page opens the window in its own list, on its Node section (lab.js)
+  if (window.labOn && labOn()) { if (state.open === sid && $("#modal .srvwin")) wtab("node"); else labOpenServer(sid, "node"); return; }      // the Lab page opens the window itself (lab.js)
   if (state.open === sid && state.page === "nodes" && $("#modal .srvwin")) { wtab("node"); return; }
   if (!(state.serversCache || []).some(x => x.id === sid)) return;
-  docOpen(sid); state.wtab = "node";      // (docOpen goes to the Servers page and opens the window; it starts on the Node view)
+  docOpen(sid, "node");      // (docOpen goes to the Lab page and opens the window there, on its Node section)
 };
 window.pgSrvOpenPanel = (pid, pg) => {      // the panel itself: the Panel page, on General (a PasarGuard panel: pg is 1) or on Users (a Marzban panel has no General)
   pn.id = String(pid); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null;
@@ -224,8 +224,4 @@ window.pgSrvAfterDelete = async (sname, nodes) => {
 
 /* ---- a node outside our servers can be added to them (the form opens with the name and the address filled in) */
 window.pgSrvAddFromNode = i => { const x = (pgSrv.outside || [])[i]; if (x) pgSrvAddServer(x.name, x.address); };      // a node outside our servers: its row number (the handler never carries a name that came from a panel)
-window.pgSrvAddServer = (name, address) => {
-  state.prefill = {name: String(name || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60), host: String(address || "").replace(/^\[|\]$/g, "")};
-  closeModal(); go("nodes", "foreign"); state.edit = "new"; state.open = null; refresh();      // (the form of the Servers list - the archived Foreign tab - works as it did; the Lab adds servers through its own profiles)
-  setTimeout(() => { const f = document.querySelector(".srv-form2"); if (f && f.elements.host && f.elements.host.value && typeof srvWhere === "function") srvWhere(f); }, 900);      // where is it (Iran or foreign): found from the address
-};
+window.pgSrvAddServer = (name, address) => { closeModal(); labAddWith(name, address); };      // the Lab's Add profile opens on a new server with the name and the address filled in (lab.js finds where it is, Iran or foreign, from the address)

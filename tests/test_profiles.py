@@ -1,14 +1,15 @@
 """Profiles (services/profiles.py, api/profiles.py) and the strip of cells that shows how a server looked (services/uptime.py): the Lab page is built on them. The owner asked (2026-10-14) for a profile
-in place of the Iran / Foreign tabs, made first, and said what the add-profile section has: Iran server, Foreign server, PasarGuard node."""
+in place of the Iran / Foreign tabs, made first, and said what the add-profile section has: Iran server, Foreign server, PasarGuard node. Then the old lists went; a server that is made is on the page
+at once, and the servers the panel already had are NOT moved there by themselves ("I did not say to move the cards, only to bring the information of the servers"): Add profile picks them."""
 import time
 
 import pytest
 from sqlalchemy import select
 
-from nikatel.db import session
+from nikatel.db import init_db, session
 from nikatel.models import Panel, Profile, Server, ServerSample
+from nikatel.services import nodes, uptime
 from nikatel.services import profiles as svc
-from nikatel.services import uptime
 
 
 # ------------------------------------------------------------------ the kinds (pure)
@@ -49,34 +50,73 @@ def _server(client, name="ir1", host="1.1.1.1", role="iran", **extra):
     return r.json()
 
 
-def _panel(kind="pasarguard", name="pg1", nodes=None) -> int:
+def _bare(name, host, role="iran") -> int:
+    """A server with no profile: one that was taken off the page (or made by a script that never heard of profiles)."""
     with session() as db:
-        p = Panel(name=name, type=kind, url="https://panel.example:8000", nodes=nodes if nodes is not None else [{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected", "xray": "1.8"}, {"id": 8, "name": "n8", "address": "203.0.113.8", "status": "error"}])
+        s = Server(name=name, host=host, role=role)
+        db.add(s)
+        db.flush()
+        return s.id
+
+
+def _panel(kind="pasarguard", name="pg1", nodes_=None) -> int:
+    with session() as db:
+        p = Panel(name=name, type=kind, url="https://panel.example:8000", nodes=nodes_ if nodes_ is not None else [{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected", "xray": "1.8"}, {"id": 8, "name": "n8", "address": "203.0.113.8", "status": "error"}])
         db.add(p)
         db.flush()
         return p.id
 
 
-def test_an_iran_and_a_foreign_server_are_added_by_kind_and_the_kind_must_fit_the_server(client):
-    a, b = _server(client, "ir1", "1.1.1.1", "iran"), _server(client, "fo1", "2.2.2.2", "foreign")
-    assert client.get("/api/profiles").json()["profiles"] == []
+def _profiles(client):
+    return client.get("/api/profiles").json()["profiles"]
 
-    r = client.post("/api/profiles", json={"kind": "iran", "server_ids": [a["id"]]})
+
+def test_every_server_that_is_made_is_on_the_page_at_once_and_its_kind_follows_its_role(client, monkeypatch):
+    a = _server(client, "ir1", "1.1.1.1", "iran")
+    assert [(p["kind"], p["name"], p["server_id"]) for p in _profiles(client)] == [("iran", "ir1", a["id"])]
+
+    r = client.put(f"/api/servers/{a['id']}", json={"name": "ir1", "host": "1.1.1.1", "role": "foreign"})                  # it was abroad after all
+    assert r.status_code == 200 and [p["kind"] for p in _profiles(client)] == ["foreign"]
+
+    def no_ssh(*a, **k):
+        raise nodes.SSHError("no key in a test")
+
+    monkeypatch.setattr(nodes, "run_script", no_ssh)
+    r = client.post("/api/servers/add-many", json={"role": "iran", "lines": "ir5 3.3.3.3\nir6 4.4.4.4 root 2222"})          # several at once: each made server is on the page, even when its login fails
+    assert r.status_code == 200 and [i["ok"] for i in r.json()["items"]] == [False, False]
+    assert sorted((p["kind"], p["name"]) for p in _profiles(client)) == [("foreign", "ir1"), ("iran", "ir5"), ("iran", "ir6")]
+
+
+def test_the_servers_the_panel_already_had_are_not_put_on_the_page_by_the_upgrade_they_are_picked_in_add_profile(client):
+    ids = [_bare("ir1", "1.1.1.1", "iran"), _bare("fo1", "2.2.2.2", "foreign")]
+    init_db()                                                                       # (what an upgrade runs on start)
+    assert _profiles(client) == []                                                  # no card is moved by itself
+
+    assert sorted(s["name"] for s in client.get("/api/servers").json()) == ["fo1", "ir1"]            # but they are all there, with their information, for the picker (and for the tunnels, the checks)
+    assert client.post("/api/profiles", json={"kind": "iran", "server_ids": [ids[0]]}).status_code == 201
+    assert [(p["kind"], p["name"]) for p in _profiles(client)] == [("iran", "ir1")]
+
+
+def test_a_server_that_was_taken_off_the_page_is_put_back_by_kind_and_the_kind_must_fit(client):
+    a, b = _bare("ir1", "1.1.1.1", "iran"), _bare("fo1", "2.2.2.2", "foreign")
+    assert _profiles(client) == []
+
+    r = client.post("/api/profiles", json={"kind": "iran", "server_ids": [a]})
     assert r.status_code == 201, r.text
     p = r.json()["added"][0]
     assert (p["kind"], p["name"], p["address"], p["label"], p["missing"]) == ("iran", "ir1", "1.1.1.1", "Iran server", False)
 
-    assert client.post("/api/profiles", json={"kind": "foreign", "server_ids": [a["id"]]}).status_code == 400             # ir1 is an Iran server
-    assert "Iran server" in client.post("/api/profiles", json={"kind": "foreign", "server_ids": [a["id"]]}).json()["error"]
-    assert client.post("/api/profiles", json={"kind": "iran", "server_ids": [a["id"]]}).status_code == 409              # once is enough
+    assert client.post("/api/profiles", json={"kind": "foreign", "server_ids": [a]}).status_code == 400             # ir1 is an Iran server
+    assert "Iran server" in client.post("/api/profiles", json={"kind": "foreign", "server_ids": [a]}).json()["error"]
+    assert client.post("/api/profiles", json={"kind": "iran", "server_ids": [a]}).status_code == 409              # once is enough
     assert client.post("/api/profiles", json={"kind": "iran", "server_ids": [9999]}).status_code == 404
     assert client.post("/api/profiles", json={"kind": "iran", "server_ids": []}).status_code == 400
-    assert client.post("/api/profiles", json={"kind": "marzban", "server_ids": [a["id"]]}).status_code == 400
+    assert client.post("/api/profiles", json={"kind": "marzban", "server_ids": [a]}).status_code == 400
 
-    r = client.post("/api/profiles", json={"kind": "foreign", "server_ids": [b["id"], a["id"], 9999]})                  # several at once: what fits is added, the rest says why
+    r = client.post("/api/profiles", json={"kind": "foreign", "server_ids": [b, a, 9999]})                          # several at once: what fits is added, the rest says why
     assert r.status_code == 201 and [x["name"] for x in r.json()["added"]] == ["fo1"] and len(r.json()["skipped"]) == 2
 
-    assert [x["name"] for x in client.get("/api/profiles").json()["profiles"]] == ["ir1", "fo1"]
+    assert [x["name"] for x in _profiles(client)] == ["ir1", "fo1"]
 
 
 def test_a_node_is_added_from_a_pasarguard_panel_that_knows_it(client):
@@ -98,17 +138,17 @@ def test_a_node_is_added_from_a_pasarguard_panel_that_knows_it(client):
 def test_a_profile_is_taken_off_without_touching_what_it_points_at_and_follows_the_death_of_its_target(client):
     s, other = _server(client, "ir1", "1.1.1.1"), _server(client, "ir2", "3.3.3.3")
     pid = _panel()
-    ids = {k: client.post("/api/profiles", json=body).json()["added"][0]["id"] for k, body in (("s", {"kind": "iran", "server_ids": [s["id"]]}), ("o", {"kind": "iran", "server_ids": [other["id"]]}),
-                                                                                                ("n", {"kind": "node", "panel_id": pid, "node_ids": [7]}))}
+    node = client.post("/api/profiles", json={"kind": "node", "panel_id": pid, "node_ids": [7]}).json()["added"][0]["id"]
+    by_name = {p["name"]: p["id"] for p in _profiles(client)}
 
-    assert client.delete(f"/api/profiles/{ids['o']}").json()["removed"] == "ir2"
-    assert client.get(f"/api/servers/{other['id']}").status_code == 200 and client.delete(f"/api/profiles/{ids['o']}").status_code == 404
+    assert client.delete(f"/api/profiles/{by_name['ir2']}").json()["removed"] == "ir2"
+    assert client.get(f"/api/servers/{other['id']}").status_code == 200 and client.delete(f"/api/profiles/{by_name['ir2']}").status_code == 404
 
     assert client.delete(f"/api/servers/{s['id']}").status_code == 200                                    # a server that is deleted takes its profile with it
-    assert [p["kind"] for p in client.get("/api/profiles").json()["profiles"]] == ["node"]
+    assert [p["kind"] for p in _profiles(client)] == ["node"] and _profiles(client)[0]["id"] == node
 
     assert client.delete(f"/api/panels/{pid}").status_code == 200                                         # so does a panel that is removed, for the profiles of its nodes
-    assert client.get("/api/profiles").json()["profiles"] == []
+    assert _profiles(client) == []
 
     with session() as db:
         assert db.scalars(select(Profile)).all() == []
@@ -121,17 +161,16 @@ def test_a_node_that_left_the_panel_is_still_listed_as_missing(client):
     with session() as db:
         db.get(Panel, pid).nodes = [{"id": 8, "name": "n8", "address": "203.0.113.8", "status": "error"}]
 
-    p = client.get("/api/profiles").json()["profiles"][0]
+    p = _profiles(client)[0]
     assert p["missing"] is True and p["name"] == "node 7" and p["panel"] == "pg1"
 
 
 def test_the_strips_come_from_the_samples_for_the_servers_of_the_profiles_only(client):
-    a, b = _server(client, "ir1", "1.1.1.1"), _server(client, "ir2", "3.3.3.3")
-    client.post("/api/profiles", json={"kind": "iran", "server_ids": [a["id"]]})
+    a, b = _server(client, "ir1", "1.1.1.1"), _bare("ir2", "3.3.3.3")
     now = int(time.time())
 
     with session() as db:
-        for sid in (a["id"], b["id"]):
+        for sid in (a["id"], b):
             db.get(Server, sid).created_at = now - 3 * 86400
 
         for k in range(0, 12 * 3600, 120):                                  # answered every two minutes for the last twelve hours, silent before

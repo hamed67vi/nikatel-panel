@@ -31,7 +31,7 @@ nikatel/
   jobs.py          background loops with their status in the jobs table; stop_all waits for in-flight SSH
   services/        the logic, importable without HTTP
     facts.py         server resources (parse_facts is pure)
-    profiles.py      profiles: named groups of servers (Iran and foreign mixed) with the SSH defaults of a new server, made first on the Lab page (1.49.0); api/profiles.py, web/lab.js
+    profiles.py      profiles: what is on the Lab page - an Iran server, a foreign server or a PasarGuard node (1.49.0); a server that is made gets its profile (ensure_server), the servers the panel already has are picked in Add profile; api/profiles.py, web/lab.js
     uptime.py        the strip of cells that shows how a server looked over the last hours, read from the samples only (build_strip / up_percent are pure); api/servers.py and api/profiles.py serve it
     tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
     builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports; pending rebuilds that survive a

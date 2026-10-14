@@ -138,6 +138,7 @@ def add_server(body: ServerIn):
         s = Server(**data)
         db.add(s)
         db.flush()
+        profiles.ensure_server(db, s)          # (every server is on the Lab page: the old Foreign / Iran lists are gone)
         emit(db, "info", "servers", f"Server {s.name} ({s.role}) added.", s.name)
         return ServerOut.model_validate(s)
 
@@ -165,6 +166,8 @@ def update_server(server_id: int, body: ServerIn):
 
         for k, v in data.items():
             setattr(s, k, v)
+
+        profiles.follow_role(db, s)                  # (a server whose role was changed is of that kind on the Lab page)
 
         if s.name != old_name:                       # the tunnels that carry the name the panel made for them follow the new server name
             from ..services import builder

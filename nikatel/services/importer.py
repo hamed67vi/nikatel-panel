@@ -10,6 +10,7 @@ from sqlalchemy import select
 from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel
+from . import profiles
 from .events import emit
 
 log = get_logger("import")
@@ -39,6 +40,8 @@ def import_servers(path: Path, role: str) -> tuple[int, int]:
             if srv is None:
                 srv = Server(name=name, host=host, role=role)
                 db.add(srv)
+                db.flush()
+                profiles.ensure_server(db, srv)          # (every server is on the Lab page)
                 added += 1
             else:
                 updated += 1
