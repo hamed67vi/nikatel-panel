@@ -76,8 +76,13 @@ nikatel/
     demo.py          the public demo: invented data, no sign-in, every change refused (NIKATEL_DEMO=true; docs/demo.md)
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
     configs.py       configs on the probe, subscriptions, group sync; probe.py probe API client; probe_install.py
-    panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
+    panels.py        Marzban / PasarGuard client: how a panel is connected (API key / token / sign in once, docs/panels.md), status, nodes, users, hosts, test config per panel
     hosttls.py       TLS copies of the plain WebSocket hosts of a panel (port 443, security tls, SNI = the Host header): the plan, a real test from the panel server (TCP, TLS with the SNI, WebSocket upgrade), the copies with a backup file, the removal
+    pg_access.py     PasarGuard groups and user templates (roadmap #94), api/pg_access.py, web/pg_access.js
+    pg_nodes.py      PasarGuard nodes joined with the servers of this panel by address, api/pg_nodes.py, web/pg_nodes.js
+    pg_cores.py      PasarGuard cores (Xray configs): dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
+    pg_admin.py      PasarGuard admins, API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
+    pg_usage.py      Usage analytics of a PasarGuard / Marzban panel, read only: counters, usage by node and Tehran day, admin / user lookups, top users, Jalali calendar; api/pg_usage.py, web/pg_usage.js
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side, one action / a new user on every panel, the signed merged subscription link (/sub/<token>, api/sub.py)
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)
     outbound.py      the Outbound section: a pool of exit configs (vless / vmess / trojan / ss) and forwards to the foreign nodes, put on the

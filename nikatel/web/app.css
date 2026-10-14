@@ -3221,6 +3221,21 @@ html[data-mode="light"] body #page .dns-tbl .tybadge { background: rgba(60,80,13
 .pn-win { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .pn-win .chk, .pn-win .frm-act { grid-column: 1 / -1; }
 @media (max-width: 560px) { .pn-win { grid-template-columns: 1fr; } }
+/* the connection of a panel (Add / Edit): the two ways to give it a credential, what is kept now, the hint under the fields */
+.pn-win .pn-wide { grid-column: 1 / -1; }
+.pn-win[data-mode="key"] .pn-login, .pn-win[data-mode="login"] .pn-key { display: none; }
+.pn-win .pn-mode { justify-self: start; }
+.pn-win .pn-hint { display: block; font-size: 11.5px; line-height: 1.5; color: var(--mut); margin-top: -4px; } .pn-win .pn-hint b, .pn-win .pn-hint i { color: var(--text); font-style: normal; font-weight: 600; }
+.pn-conn { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+.pn-conn .pn-conn-t { flex: 1 1 240px; min-width: 0; display: grid; gap: 3px; font-size: 12.5px; } .pn-conn .pn-conn-t small { font-size: 11px; line-height: 1.45; color: var(--mut); } .pn-conn .pill { margin-left: 8px; }
+.pn-conn > button { flex: none; }
+.pn-top .pn-auth, .pn-bar .pn-auth { cursor: pointer; white-space: nowrap; }
+html[data-mode="light"] .pn-conn { background: rgba(30,50,100,.04); }
+html body #modal .pn-win .pn-mode { display: inline-flex; gap: 4px; padding: 3px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
+html body #modal .pn-win .pn-mode button { height: 28px; padding: 0 12px; border-radius: 9px; border: 0; background: transparent; color: var(--mut); font-size: 12.5px; font-weight: 600; box-shadow: none; }
+html body #modal .pn-win .pn-mode button.on { background: rgba(10,132,255,.2); color: #8cc4ff; box-shadow: inset 0 0 0 1px rgba(10,132,255,.7); }
+html[data-mode="light"] body #modal .pn-win .pn-mode { background: rgba(30,50,100,.05); border-color: rgba(30,50,100,.14); }
+html[data-mode="light"] body #modal .pn-win .pn-mode button.on { background: #e3edff; color: #0b3a8c; box-shadow: inset 0 0 0 1px #6f9ee8; }
 /* the analyst tab of the Tunnel Doctor: one box, its own tabs, the list scrolls inside */
 .ana-card { padding: 10px 12px; }
 .ana-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -4382,6 +4397,14 @@ html body #page .dns-chip.add b { font-weight: 600; line-height: 1; }
 html[data-mode="light"] body #page .dns-chip.add { background: linear-gradient(180deg, #eaf2ff, #dde9fd); border-color: #8fb4f0; color: #0b3a8c; }
 html[data-mode="light"] body #page .dns-chip.add:hover { background: linear-gradient(180deg, #dbe8fd, #cfe0fb); border-color: #5f93e8; color: #072a6a; }
 html[data-mode="light"] body #page .dns-chip.add .cta-ic { background: #2f6fe0; color: #fff; }
+/* the faint cross of an account / panel box (CDN accounts, Panels): at the right end of the box, nearly invisible; it takes the account off the list when pressed (after a confirmation) and turns red under the pointer */
+html body #page .dns-cw { position: relative; display: inline-flex; align-items: center; }
+html body #page .dns-cw > .dns-chip { padding-right: 34px; }
+/* "Add" is only a plus: a round button the height of the boxes (accounts, panels) and of the buttons (servers) */
+html body #page .dns-chip.add.ico { width: 36px; min-width: 36px; padding: 0; gap: 0; justify-content: center; }
+html body #page .dns-chip.add.ico .cta-ic { margin: 0; }
+html body button.cta.ico, html body #page .toolbar.joined > button.cta.ico { width: 38px; min-width: 38px; padding: 0; gap: 0; justify-content: center; }
+/* the same faint cross at the end of a server's box */
 /* the provider marks (ArvanCloud: a dot and a thick slanted bar in the green tile; Cloudflare: the two-tone orange cloud in a dark tile), used in the chooser, the account chips and the Add account form */
 html body .pv-arvan, html body #page .dns-chip .pv-arvan { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2342f2cb'/%3E%3Cstop offset='1' stop-color='%2312b39d'/%3E%3C/linearGradient%3E%3ClinearGradient id='t' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23163f45'/%3E%3Cstop offset='1' stop-color='%230b2227'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='7' fill='url(%23t)'/%3E%3Crect x='.5' y='.5' width='23' height='23' rx='6.5' fill='none' stroke='%23fff' stroke-opacity='.14'/%3E%3Ccircle cx='7' cy='16.6' r='2.7' fill='url(%23g)'/%3E%3Cpath d='M12.4 6.6L16.9 17.6' stroke='url(%23g)' stroke-width='4.8' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") center/contain no-repeat !important; border-radius: 6px; }
 html body .pv-cloudflare, html body #page .dns-chip .pv-cloudflare { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='t' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%232b1b10'/%3E%3Cstop offset='1' stop-color='%23150d07'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='7' fill='url(%23t)'/%3E%3Crect x='.5' y='.5' width='23' height='23' rx='6.5' fill='none' stroke='%23fff' stroke-opacity='.14'/%3E%3Cg fill='%23f6821f'%3E%3Ccircle cx='9.4' cy='11.6' r='3.1'/%3E%3Ccircle cx='13.3' cy='10.2' r='4'/%3E%3Crect x='4.3' y='12.4' width='13' height='4.4' rx='2.2'/%3E%3C/g%3E%3Cg fill='%23fbad41'%3E%3Ccircle cx='17.6' cy='13.2' r='2.3'/%3E%3Crect x='15.2' y='13.6' width='5.2' height='3.2' rx='1.6'/%3E%3C/g%3E%3Cpath d='M4.6 16.8H20.2' stroke='%23150d07' stroke-width='.7' opacity='.55'/%3E%3C/svg%3E") center/contain no-repeat !important; border-radius: 6px; }
@@ -4726,3 +4749,22 @@ html body #page .ob2-sw:has(input:checked) i::after { transform: translateX(18px
 html body #page .ob2-sw:has(input:disabled) { opacity: .45; }
 html body #page .usr-tbl .ob2-sw, html body #page .hp-row .ob2-sw, html body #page .hp .ob2-sw { vertical-align: middle; }
 html body #page .hp-row > .ob2-sw { margin-right: 6px; } html body #page summary > .ob2-sw { margin-right: 8px; }
+/* the boxes that SELECT rows (users, hosts) are checkboxes, not switches: a rounded square, dark when empty, blue with a white tick when ticked, a dash when only some of a group are ticked */
+html body #page input.ck[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; display: inline-block; vertical-align: middle; width: 20px; height: 20px; min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; margin: 0; padding: 0; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.3); background: #1f2638 center / 14px no-repeat; box-shadow: none; cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+html body #page input.ck[type=checkbox]:hover { border-color: #6fb2ff; background-color: #263047; }
+html body #page input.ck[type=checkbox]:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47,157,255,.35); }
+html body #page input.ck[type=checkbox]:checked { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 14px no-repeat, linear-gradient(180deg, #3aa4ff, #0a7cf5); border-color: #5eb0ff; box-shadow: 0 0 0 1px rgba(10,124,245,.45), 0 2px 8px rgba(10,132,255,.42); }
+html body #page input.ck[type=checkbox]:indeterminate { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E") center / 14px no-repeat, linear-gradient(180deg, #3aa4ff, #0a7cf5); border-color: #5eb0ff; box-shadow: 0 0 0 1px rgba(10,124,245,.45), 0 2px 8px rgba(10,132,255,.42); }
+html body #page input.ck[type=checkbox]:disabled { opacity: .45; cursor: default; }
+html body #page .hp-row > input.ck { margin-right: 8px; } html body #page summary > input.ck { margin-right: 10px; }
+html[data-mode="light"] body #page input.ck[type=checkbox]:not(:checked):not(:indeterminate) { background-color: #fff; border-color: rgba(30,50,100,.38); }
+html[data-mode="light"] body #page input.ck[type=checkbox]:not(:checked):not(:indeterminate):hover { background-color: #eef4ff; border-color: #2f7fe0; }
+/* the faint cross that takes an account / panel (the right end of its box) or a server (the end of its row) off the list: nearly invisible, red under the pointer.
+   A plain <button> inherits the strong rules of the toolbars (height, border, colour), so these are written to win over them */
+html body #page .dns-bar .dns-r .dns-cw > button.dns-x, html body #page .srv-tbl .td-act > button.row-x { display: inline-grid !important; place-items: center; box-sizing: border-box; min-width: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; border-radius: 50% !important; background: transparent !important; box-shadow: none !important; color: rgba(205,215,234,.3) !important; cursor: pointer; overflow: visible !important; transition: color .15s, background .15s; }
+html body #page .dns-bar .dns-r .dns-cw > button.dns-x { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 20px !important; height: 20px !important; }
+html body #page .srv-tbl .td-act > button.row-x { position: relative; flex: none; width: 24px !important; height: 24px !important; margin-left: 4px !important; }
+html body #page button.dns-x svg, html body #page button.row-x svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; pointer-events: none; }
+html body #page .dns-bar .dns-r .dns-cw > button.dns-x:hover, html body #page .dns-bar .dns-r .dns-cw > button.dns-x:focus-visible, html body #page .srv-tbl .td-act > button.row-x:hover, html body #page .srv-tbl .td-act > button.row-x:focus-visible { color: #ff7a8c !important; background: rgba(255,122,140,.16) !important; outline: none; }
+html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x, html[data-mode="light"] body #page .srv-tbl .td-act > button.row-x { color: rgba(30,50,100,.3) !important; }
+html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x:hover, html[data-mode="light"] body #page .srv-tbl .td-act > button.row-x:hover { color: #d4304a !important; background: rgba(212,48,74,.12) !important; }

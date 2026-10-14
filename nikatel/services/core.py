@@ -179,7 +179,9 @@ def _put(c: dict, cur: dict, cfg: dict):
     if cur["kind"] == "pasarguard":
         body = {"name": cur["extra"].get("name") or "Default Core Config", "config": cfg,
                 "exclude_inbound_tags": cur["extra"].get("exclude_inbound_tags") or [], "fallbacks_inbound_tags": cur["extra"].get("fallbacks_inbound_tags") or []}
-        return call(c, "PUT", f"/api/core/{cur['core_id']}?modify_users=false", body=body, timeout=120)
+        # PasarGuard 5.x REQUIRES `restart_nodes` (the nodes use a saved config only after a restart, as Marzban's PUT does by itself): without it the panel answers 422.
+        # `modify_users` is the older name of a parameter; a newer panel ignores it.
+        return call(c, "PUT", f"/api/core/{cur['core_id']}?restart_nodes=true&modify_users=false", body=body, timeout=120)
 
     return call(c, "PUT", "/api/core/config", body=cfg, timeout=120)
 

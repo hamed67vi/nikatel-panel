@@ -1,0 +1,29 @@
+/* PasarGuard tab: usage and live statistics of a panel. Every class starts with .pg-usage- */
+html body #page .pg-usage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+html body #page .pg-usage .pg-bar { margin: 0; } html body #page .pg-usage .pg-bar input[type=date] { width: 138px; }
+html body #page .pg-usage-j { font-size: 11.5px; color: var(--acc-2); margin: 0 6px 0 -2px; white-space: nowrap; }
+html body #page .pg-usage-dates { font-size: 12.5px; white-space: nowrap; } html body #page .pg-usage-dates small { color: var(--acc-2); font-size: 11.5px; }
+html body #page .pg-usage-tiles { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; margin: 0; padding: 8px; }
+html body #page .pg-usage-tiles .tile { padding: 6px 10px; } html body #page .pg-usage-tiles .tile b { font-size: 17px; margin-top: 1px; white-space: nowrap; }
+html body #page .pg-usage-ver { display: block; margin: 4px 2px 0; }
+html body #page .pg-usage-tiles .tile.wide { grid-column: span 2; }
+html body #page .pg-usage-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; } html body #page .pg-usage-look { order: -1; }
+html body #page .pg-usage-card { margin: 0; padding: 10px 12px; min-width: 0; } html body #page .pg-usage-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; } html body #page .pg-usage-card h3 .sp { flex: 1; }
+html body #page .pg-usage-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 6px; } html body #page .pg-usage-head > span.mut { font-size: 12px; }
+html body #page .pg-usage-big { font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
+html body #page .pg-usage-chart { margin: 0 0 8px; } html body #page .pg-usage-svg { display: block; width: 100%; height: auto; max-height: 170px; }
+html body #page .pg-usage-bar { fill: var(--acc); opacity: .85; } html body #page .pg-usage-bar.top { fill: var(--acc-2); opacity: 1; }
+html body #page .pg-usage-hit { fill: transparent; } html body #page .pg-usage-hit:hover { fill: rgba(255,255,255,.07); }
+html body #page .pg-usage-ax { fill: var(--mut); font-size: 10px; } html body #page .pg-usage-line { stroke: var(--line); stroke-width: 1; }
+html body #page .pg-usage-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; } html body #page .pg-usage-row select, html body #page .pg-usage-row input, html body #page .pg-usage-row button { height: 30px; } html body #page .pg-usage-row input { flex: 1; min-width: 150px; }
+html body #page .pg-usage-nodes { max-height: 230px; overflow: auto; margin: 0; } html body #page .pg-usage-topbox { height: 330px; overflow: auto; margin: 0; }
+html body #page .pg-usage-th { cursor: pointer; user-select: none; white-space: nowrap; } html body #page .pg-usage-th.on { color: var(--acc-2); }
+html body #page .pg-usage-num { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+html body #page .pg-usage-share { display: inline-block; width: 72px; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; vertical-align: middle; } html body #page .pg-usage-share i { display: block; height: 100%; background: var(--acc); }
+html body #page .pg-usage-hint { padding: 14px 4px; font-size: 12.5px; }
+html body #page .pg-usage-busy { opacity: .55; transition: opacity .2s; }
+html body #page .pg-usage-nw { white-space: nowrap; }
+html body #page .pg-usage-stale { margin: 0 0 6px; padding: 5px 8px; border: 1px solid rgba(255,196,77,.45); border-radius: 8px; color: var(--warn); font-size: 12px; }
+/* the page of this tab is several blocks, taller than a screen: it scrolls (app.css switches the page scroll off for every page that has an .lbox, as the list pages fit the screen); the lists inside keep their own height */
+@media (min-width: 761px) { html body .main:has(.pg-usage) { overflow-y: auto; } }
+@media (min-width: 1560px) { html body #page .pg-usage-cols { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } html body #page .pg-usage-look { order: 0; } }

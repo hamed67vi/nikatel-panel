@@ -1,15 +1,23 @@
-"""Marzban / PasarGuard panels: login, health + nodes every 2 minutes, users and hosts on demand.
+"""Marzban / PasarGuard panels: the connection (an API key or token), health + nodes every 2 minutes, users and hosts on demand.
 
 Both panels share the Marzban API shape (`/api/admin/token`, `/api/system`, `/api/nodes`, `/api/users`,
 `/api/hosts`); where PasarGuard differs (hosts as a list with ids, expire as a date string, cores as a
-list) the functions look at the shape of the answer, not at the declared type."""
+list) the functions look at the shape of the answer, not at the declared type.
+
+How a panel is connected (docs/panels.md): the panel is given a credential, not a password. PasarGuard has API keys (`pg_key_...`,
+header X-Api-Key: they have their own end date and can be revoked one by one). Marzban and PasarGuard both accept the admin's access
+token (a JWT that a sign-in produces, header Authorization: Bearer; it ends when the panel's JWT lifetime says). "Sign in once" gets
+a token with the admin's username and password and forgets the password; a password is kept only when the owner asks for it (to renew
+a token that ends)."""
 from __future__ import annotations
 
+import base64
 import calendar
 import datetime
 import json
 import re
 import time
+import uuid
 from pathlib import Path
 
 import httpx
@@ -30,6 +38,10 @@ _SORTS = ("created_at", "-created_at", "username", "-username", "used_traffic", 
 _RESETS = ("no_reset", "day", "week", "month", "year")
 _STATUSES = ("active", "disabled", "limited", "expired", "on_hold")
 NODE_OK = ("connected", "disabled", "healthy", "connecting")
+TOKEN_SHORT_DAYS = 30        # a token that ends sooner is no way to stay connected without a login that renews it
+KEY_META_EVERY = 12 * 3600   # how often the panel is asked about its API key (end date, still active)
+_JWT = re.compile(r"^[A-Za-z0-9_\-]{4,}\.[A-Za-z0-9_\-]{4,}\.[A-Za-z0-9_\-]*$")
+_ALERTED: dict[int, str] = {}      # panel id -> the level of the warning about the key / token the owner was last given (forgotten when it is fine)
 
 
 # ------------------------------------------------------------------ pure helpers
@@ -151,6 +163,153 @@ def hosts_rows(raw, ports: dict) -> list[dict]:
     return hosts
 
 
+# ------------------------------------------------------------------ the API key / token (pure)
+def is_api_key(s: str) -> bool:
+    """A PasarGuard API key: 'pg_key_' and a version-4 UUID (the panel turns away anything else before it looks the key up)."""
+    s = str(s or "")
+
+    if not s.startswith("pg_key_"):
+        return False
+
+    try:
+        return uuid.UUID(s[7:]).version == 4
+    except ValueError:
+        return False
+
+
+def auth_headers(secret: str) -> dict:
+    """An API key travels in X-Api-Key (PasarGuard); an access token is a Bearer token (both panels)."""
+    return {"X-Api-Key": secret} if is_api_key(secret) else {"Authorization": "Bearer " + secret}
+
+
+def _epoch(s) -> int | None:
+    """An ISO date from a panel ('2027-10-22T01:13:50Z') -> unix seconds; None when empty or unreadable."""
+    if not s:
+        return None
+
+    try:
+        d = datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    return int((d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)).timestamp())
+
+
+def token_claims(token: str) -> dict | None:
+    """What an access token says about itself (admin, rights, issued, ends), or None when it is not a JWT.
+
+    The signature cannot be checked here (the secret stays on the panel): the claims only tell WHEN the token ends, which is what the
+    owner needs to see. A token without `exp` never ends."""
+    t = str(token or "").strip()
+
+    if not _JWT.match(t):
+        return None
+
+    body = t.split(".")[1]
+
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except ValueError:         # bad base64, bad UTF-8 and bad JSON are all ValueErrors
+        return None
+
+    return claims if isinstance(claims, dict) else None
+
+
+def _secs(v) -> int | None:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+
+
+def token_info(token: str, now: float | None = None) -> dict:
+    """{"known", "admin", "access", "exp", "left_s", "life_s"}: exp / left_s / life_s are None when the token never ends (or is unreadable)."""
+    now = time.time() if now is None else now
+    cl = token_claims(token)
+    exp, iat = _secs((cl or {}).get("exp")), _secs((cl or {}).get("iat"))
+    return {"known": cl is not None, "admin": str((cl or {}).get("sub") or "")[:64], "access": str((cl or {}).get("access") or "")[:20],
+            "exp": exp, "left_s": int(exp - now) if exp else None, "life_s": exp - iat if exp and iat and exp > iat else None}
+
+
+def clean_token(token: str, now: float | None = None) -> str:
+    """What was pasted (maybe in quotes, or after "Bearer ", "ApiKey " or "X-Api-Key:") -> the bare API key or access token; ValueError says why it cannot work."""
+    t = str(token or "").strip().strip("\"'").strip()
+
+    for lead in ("bearer ", "apikey ", "x-api-key:"):
+        if t.lower().startswith(lead):
+            t = t[len(lead):].strip()
+            break
+
+    if is_api_key(t):
+        return t
+
+    if token_claims(t) is None:
+        raise ValueError("this is neither an API key (pg_key_…) nor an access token (three parts joined by dots, xxxx.yyyy.zzzz)")
+
+    left = token_info(t, now)["left_s"]
+
+    if left is not None and left <= 60:
+        raise ValueError("this token has already ended — get a fresh one")
+
+    return t
+
+
+def span_text(seconds: float) -> str:
+    """'35 min' / '23 h' / '5 days' for a length of time (the sign is ignored)."""
+    s = abs(int(seconds))
+
+    if s < 3600:
+        return f"{max(1, s // 60)} min"
+
+    if s < 86400:
+        return f"{s // 3600} h"
+
+    d = s // 86400
+    return "1 day" if d == 1 else f"{d} days"
+
+
+def auth_of(token: str, username: str, has_login: bool, meta: dict | None = None, now: float | None = None) -> dict:
+    """How a panel is connected, for the page: what is kept, who the admin is, when it ends and whether that needs attention.
+
+    kind is api_key | token | login | none, level is ok | warn | bad. `meta` is what the panel said about its API key (name, end, status):
+    a key has no claims to read. A saved login renews a connection that ends, so only a key or token WITHOUT a login can run out."""
+    now = time.time() if now is None else now
+    meta = meta if isinstance(meta, dict) else {}
+    key = is_api_key(token)
+    info = token_info(token, now)
+    kind = "api_key" if key else "token" if token else "login" if has_login else "none"
+
+    if key:
+        exp = _secs(meta.get("exp"))
+        left, known = (int(exp - now) if exp else None), bool(meta.get("found"))
+    else:
+        exp, left, known = info["exp"], info["left_s"], info["known"]
+
+    what = "API key" if key else "token"
+    status = str(meta.get("status") or "active") if key else "active"
+
+    if kind == "none":
+        level, note = "bad", "no API key, no token and no saved login"
+    elif status != "active":
+        level, note = ("ok", f"the API key is {status}: the saved login is used") if has_login else ("bad", f"the API key is {status}")
+    elif has_login:
+        level, note = "ok", f"the saved login renews the {what}" if token else "signs in with the saved login"
+    elif not known:
+        level, note = "ok", f"the end of this {what} is not known"
+    elif left is None:
+        level, note = "ok", f"the {what} never ends"
+    elif left <= 0:
+        level, note = "bad", f"the {what} ended {span_text(left)} ago"
+    elif left < 86400:
+        level, note = "bad", f"the {what} ends in {span_text(left)}"
+    elif left < 7 * 86400:
+        level, note = "warn", f"the {what} ends in {span_text(left)}"
+    else:
+        level, note = "ok", f"the {what} is valid for {span_text(left)}"
+
+    return {"kind": kind, "token": bool(token), "login": has_login, "admin": (str(meta.get("admin") or "") if key else info["admin"]) or username,
+            "access": str(meta.get("role") or "") if key else info["access"], "exp": exp, "left_s": left, "life_s": info["life_s"],
+            "short": kind == "token" and left is not None and left < TOKEN_SHORT_DAYS * 86400, "level": level, "note": note,
+            "key_name": str(meta.get("name") or "")[:128] if key else "", "key_status": status if key else ""}
+
+
 # ------------------------------------------------------------------ HTTP
 class PanelError(RuntimeError):
     def __init__(self, msg: str, code: int = 0):
@@ -159,14 +318,18 @@ class PanelError(RuntimeError):
 
 
 def _cred(p: Panel) -> dict:
-    return {"id": p.id, "url": p.url, "username": p.username, "password": (p.secrets or {}).get("password", ""), "verify_tls": p.verify_tls, "type": p.type}
+    sec = p.secrets or {}
+    tok = str(sec.get("token") or "")
+    return {"id": p.id, "url": p.url, "username": p.username, "password": sec.get("password", ""), "token": tok,
+            "key_meta": sec.get("key_meta") or {}, "verify_tls": p.verify_tls, "type": p.type,
+            "api_key_trimmed": f"{tok[:10]}***{tok[-3:]}" if is_api_key(tok) else ""}      # the form the panel lists its keys in: the API keys tab marks (and protects) the key this panel is connected with
 
 
 def _http(c: dict, method: str, path: str, token: str | None = None, form: dict | None = None, body=None, timeout: float = 20):
     headers = {"Accept": "application/json", "User-Agent": "nikatel-panel"}
 
     if token:
-        headers["Authorization"] = "Bearer " + token
+        headers.update(auth_headers(token))
 
     try:
         r = httpx.request(method, c["url"] + path, headers=headers, data=form, json=body if form is None else None,
@@ -194,22 +357,82 @@ def _http(c: dict, method: str, path: str, token: str | None = None, form: dict 
         raise PanelError("the panel answered with something that is not JSON")
 
 
-def _token(c: dict, fresh: bool = False) -> str:
-    tok = _TOKENS.get(c["id"])
-
-    if tok and not fresh and tok[1] > time.time():
-        return tok[0]
-
-    r = _http(c, "POST", "/api/admin/token", form={"username": c["username"], "password": c["password"]})
+def _login(c: dict) -> str:
+    """One sign-in with the admin's username and password. The answer is an access token (the only credential Marzban has; PasarGuard also has API keys)."""
+    r = _http(c, "POST", "/api/admin/token", form={"username": c.get("username", ""), "password": c.get("password", "")})
     t = (r or {}).get("access_token") if isinstance(r, dict) else None
 
     if not t:
         raise PanelError("login failed: no token returned")
 
-    if c["id"]:
-        _TOKENS[c["id"]] = (t, time.time() + 45 * 60)
+    return str(t)
 
-    return t
+
+def _token(c: dict, fresh: bool = False) -> str:
+    """The credential for a request: a token a saved login made (cached), else the API key / token the owner gave (while it lasts), else a sign-in with the saved login.
+
+    `fresh` is the retry after the panel answered 401: nothing stored is tried again, only the saved login can still help."""
+    now = time.time()
+    cached = _TOKENS.get(c["id"])
+
+    if cached and not fresh and cached[1] > now:
+        return cached[0]
+
+    own = str(c.get("token") or "")
+
+    if own and not fresh:
+        left = token_info(own, now)["left_s"]         # None for an API key: its end is the panel's business, a 401 tells
+
+        if left is None or left > 60:
+            return own
+
+    if c.get("username") and c.get("password"):
+        t = _login(c)
+
+        if c["id"]:
+            _TOKENS[c["id"]] = (t, now + 45 * 60)
+
+        return t
+
+    if own:
+        raise PanelError(f"the panel does not accept the {'API key' if is_api_key(own) else 'token'} (it ended or was revoked) — paste a new one in Edit", 401)
+
+    raise PanelError("no API key, no token and no saved login for this panel — paste an API key or token in Edit", 401)
+
+
+def key_info(c: dict) -> dict:
+    """What the panel says about the API key it is connected with: {"found", "name", "status", "exp", "inherit", "admin", "role", "asked"}.
+
+    The key is found in the panel's list of keys by its trimmed form ("pg_key_a9d***dc4"); the admin it acts as comes from /api/admin.
+    A key that may not read these (no 'api_keys: read' right) just stays unknown: the answer is {"asked": now} and nothing is guessed."""
+    key = str(c.get("token") or "")
+    meta: dict = {"asked": int(time.time())}
+
+    if not is_api_key(key):
+        return meta
+
+    try:
+        me = call(c, "GET", "/api/admin")
+        role = (me or {}).get("role") if isinstance(me, dict) else None
+        meta["admin"] = str((me or {}).get("username") or "")[:64] if isinstance(me, dict) else ""
+        meta["role"] = str((role or {}).get("name") or ("owner" if (role or {}).get("is_owner") else ""))[:40] if isinstance(role, dict) else ""
+    except (PanelError, ValueError):
+        pass
+
+    try:
+        r = call(c, "GET", "/api/api_keys?limit=200")
+    except (PanelError, ValueError):
+        return meta
+
+    for k in (r.get("api_keys") if isinstance(r, dict) else None) or []:
+        t = str(k.get("api_key_trimmed") or "") if isinstance(k, dict) else ""
+
+        if "***" in t and t.startswith(key[:10]) and t.endswith(key[-3:]):
+            meta.update(found=True, id=k.get("id"), name=str(k.get("name") or "")[:128], status=str(k.get("status") or "active"),
+                        exp=_epoch(k.get("expire_date")), inherit=bool(k.get("inherit_permissions", True)))
+            break
+
+    return meta
 
 
 def call(c: dict, method: str, path: str, **kw):
@@ -259,6 +482,12 @@ def node_reconnect(c: dict, node_id: int) -> None:
 
 
 def node_logs(c: dict, node_id: int) -> str:
+    if c.get("type") == "pasarguard":
+        # PasarGuard answers with an endless server-sent-events stream: `call` would wait for a body that never ends. services/pg_nodes.py reads it for a few seconds.
+        from . import pg_nodes
+
+        return "\n".join(pg_nodes.node_logs(c, node_id, 120)["lines"])[-6000:]
+
     r = call(c, "GET", f"/api/node/{int(node_id)}/logs?lines=120")
 
     if isinstance(r, dict):
@@ -268,6 +497,34 @@ def node_logs(c: dict, node_id: int) -> str:
         r = "\n".join(str(x) for x in r)
 
     return str(r or "")[-6000:]
+
+
+def _auth(p: Panel) -> dict:
+    sec = p.secrets or {}
+    return auth_of(str(sec.get("token") or ""), p.username, bool(p.username and sec.get("password")), sec.get("key_meta"))
+
+
+def _token_alert(db, p: Panel, label: str) -> None:
+    """Tells the owner, once per level, that an API key or token kept WITHOUT a login is about to end (or ended): after that the panel stops answering."""
+    a = _auth(p)
+    lvl = a["level"] if a["kind"] in ("api_key", "token") and not a["login"] else "ok"
+
+    if lvl == "ok":
+        _ALERTED.pop(p.id, None)
+    elif _ALERTED.get(p.id) != lvl:
+        _ALERTED[p.id] = lvl
+        emit(db, lvl, "panels", f"Panel {label}: {a['note']} — paste a new {'API key' if a['kind'] == 'api_key' else 'token'} in Panels → Edit.", p.name)
+
+
+def refresh_key_meta(panel_id: int, c: dict) -> None:
+    """Asks the panel about its API key (when does it end, is it still active) so the page can warn before the connection dies."""
+    meta = key_info(c)
+
+    with session() as db:
+        p = db.get(Panel, panel_id)
+
+        if p is not None and (p.secrets or {}).get("token") == c["token"]:          # not replaced while the panel was asked
+            p.secrets = {**(p.secrets or {}), "key_meta": meta}
 
 
 def check_all() -> None:
@@ -291,6 +548,7 @@ def check_all() -> None:
             label = f"{p.name} ({p.type})"
             p.checked_at = now
             p.latency_ms = res["latency_ms"]
+            _token_alert(db, p, label)
 
             if res["ok"]:
                 p.fails = 0
@@ -336,6 +594,9 @@ def check_all() -> None:
                     emit(db, "bad", "panels", f"Panel {label} is not answering: {res['error']}", p.name)
                     p.status, p.status_since = "down", now
 
+        if res["ok"] and is_api_key(c.get("token", "")) and now - int((c.get("key_meta") or {}).get("asked") or 0) > KEY_META_EVERY:
+            refresh_key_meta(pid, c)
+
         log.info("panel %s ok=%s nodes=%s latency=%s %s", c["url"].split("//")[-1].split("/")[0].split(":")[0][:3] + "…", res["ok"], len(res["nodes"]), res["latency_ms"], res["error"])
 
 
@@ -343,10 +604,52 @@ def check_all() -> None:
 def public(p: Panel) -> dict:
     return {"id": p.id, "name": p.name, "type": p.type, "url": p.url, "username": p.username, "verify_tls": p.verify_tls, "enabled": p.enabled,
             "status": p.status, "status_since": p.status_since, "fails": p.fails, "checked_at": p.checked_at, "latency_ms": p.latency_ms,
-            "version": p.version, "stats": p.stats or {}, "nodes": p.nodes or [], "last_error": p.last_error}
+            "version": p.version, "stats": p.stats or {}, "nodes": p.nodes or [], "last_error": p.last_error, "auth": _auth(p)}
 
 
-def add(name: str, typ: str, url: str, username: str, password: str, verify_tls: bool = True) -> dict:
+def _credentials(c: dict, token: str, username: str, password: str, keep_login: bool) -> tuple[dict, dict]:
+    """What the owner gave -> (the cred that is tried, the secrets that would be kept). ValueError when it is neither a key / token nor a login.
+
+    An API key or token is used as it is (a key is also asked what it is: name, end, the admin it acts as). A username and password are
+    used ONCE to get a token; the password is kept only when keep_login is true (the tried cred never holds it otherwise, so the check
+    really tests the key / token)."""
+    c = dict(c)
+
+    if str(token or "").strip():
+        t = clean_token(token)
+        sec: dict = {"token": t}
+
+        if is_api_key(t):
+            if c.get("type") == "marzban":
+                raise ValueError("Marzban has no API keys (PasarGuard has): paste an access token, or sign in once")
+
+            c.update(token=t, password="")
+            meta = key_info(c)
+            c.update(key_meta=meta, username=meta.get("admin") or c.get("username", ""))
+            sec["key_meta"] = meta
+        else:
+            c.update(token=t, password="", username=token_info(t)["admin"] or c.get("username", ""))
+
+        return c, sec
+
+    username, password = str(username or "").strip()[:64], str(password or "")
+
+    if not username or not password:
+        raise ValueError("paste the panel's API key or an access token, or sign in once with the admin's username and password")
+
+    c.update(username=username, password=password, token="")
+
+    try:
+        t = _login(c)
+    except PanelError as e:
+        raise ValueError("the panel did not accept the sign-in: " + str(e)[:140])
+
+    c.update(token=t, password=password if keep_login else "")
+    return c, ({"token": t, "password": password} if keep_login else {"token": t})
+
+
+def add(name: str, typ: str, url: str, *, token: str = "", username: str = "", password: str = "", verify_tls: bool = True, keep_login: bool = False) -> dict:
+    """Adds a panel with an API key or access token. Or "sign in once": the username and password get a token and only the token is kept."""
     name = str(name or "").strip()[:40]
     typ = str(typ or "").strip().lower()
 
@@ -356,29 +659,51 @@ def add(name: str, typ: str, url: str, username: str, password: str, verify_tls:
     if not name or not re.match(r"^[\w .\-]{1,40}$", name):
         raise ValueError("give the panel a short name (letters, digits, - _ . and spaces)")
 
-    if not username or not password:
-        raise ValueError("the admin username and password are needed")
-
-    c = {"id": 0, "url": base_url(url), "username": str(username).strip(), "password": str(password), "verify_tls": bool(verify_tls), "type": typ}
+    base = {"id": 0, "url": base_url(url), "username": "", "password": "", "token": "", "verify_tls": bool(verify_tls), "type": typ}
+    c, sec = _credentials(base, token, username, password, keep_login)
     res = check(c)
 
     if not res["ok"]:
-        raise ValueError("the panel did not accept the login or did not answer: " + (res["error"] or "unknown error"))
+        raise ValueError("the panel did not accept it or did not answer: " + (res["error"] or "unknown error"))
 
     with session() as db:
         if db.scalar(select(Panel).where(Panel.name == name)):
             raise ValueError("a panel with this name already exists")
 
-        p = Panel(name=name, type=typ, url=c["url"], username=c["username"], secrets={"password": password}, verify_tls=c["verify_tls"],
+        p = Panel(name=name, type=typ, url=c["url"], username=c["username"], secrets=sec, verify_tls=c["verify_tls"],
                   status="up", status_since=int(time.time()), checked_at=int(time.time()), latency_ms=res["latency_ms"],
                   version=res["stats"].get("version", ""), stats=res["stats"], nodes=[dict(n, fails=0) for n in res["nodes"]])
         db.add(p)
         db.flush()
-        emit(db, "info", "panels", f"Panel {name} ({typ}) added.", name)
+        emit(db, "info", "panels", f"Panel {name} ({typ}) added with its {'API key' if is_api_key(sec['token']) else 'token'}" + (" and the login." if "password" in sec else "."), name)
         return public(p)
 
 
 def update(panel_id: int, changes: dict) -> dict:
+    """Name, address, TLS check, enabled; and the credentials: a new `token`, or a `password` (a login that is kept unless keep_login is false).
+
+    New credentials are tried on the panel first; nothing is replaced when the panel does not accept them."""
+    token, password = str(changes.get("token") or "").strip(), str(changes.get("password") or "")
+    sec, admin = None, ""
+
+    if token or password:
+        c = cred_for(panel_id)
+        keep = changes.get("keep_login")
+
+        if changes.get("url"):
+            c["url"] = base_url(changes["url"])
+
+        if "verify_tls" in changes:
+            c["verify_tls"] = bool(changes["verify_tls"])
+
+        c, sec = _credentials(c, token, changes.get("username") or c.get("username", ""), password, True if keep is None else bool(keep))
+        res = check(c)
+
+        if not res["ok"]:
+            raise ValueError("the panel did not accept it: " + (res["error"] or "unknown error"))
+
+        admin = c["username"]
+
     with session() as db:
         p = db.get(Panel, panel_id)
 
@@ -391,8 +716,15 @@ def update(panel_id: int, changes: dict) -> dict:
         if changes.get("username"):
             p.username = str(changes["username"]).strip()[:64]
 
-        if changes.get("password"):
-            p.secrets = {"password": str(changes["password"])}
+        if sec is not None:
+            old = p.secrets or {}
+
+            if token and old.get("password"):
+                sec = {**sec, "password": old["password"]}      # a new token does not wipe the saved login: that is "forget the login"
+            elif admin:
+                p.username = admin
+
+            p.secrets = sec
 
         if "verify_tls" in changes:
             p.verify_tls = bool(changes["verify_tls"])
@@ -409,6 +741,53 @@ def update(panel_id: int, changes: dict) -> dict:
             p.name = n
 
         _TOKENS.pop(p.id, None)
+        _ALERTED.pop(p.id, None)
+        return public(p)
+
+
+def forget_login(panel_id: int, force: bool = False) -> dict:
+    """Keeps only a token: signs in one last time with the saved login, keeps the token it gives and wipes the password.
+
+    Refused when that token ends within TOKEN_SHORT_DAYS (the panel would stop answering) unless `force`."""
+    c = cred_for(panel_id)
+
+    if not (c["username"] and c["password"]):
+        raise ValueError("no login is saved for this panel")
+
+    tok = str(c.get("token") or "")
+    left = token_info(tok)["left_s"] if tok else 0
+
+    if not tok or (left is not None and left < TOKEN_SHORT_DAYS * 86400):
+        try:
+            tok = _login(c)          # the kept token is missing or short: the panel gives a fresh one
+        except PanelError as e:
+            raise ValueError("the saved login did not work: " + str(e)[:140])
+
+    info = token_info(tok)
+
+    if info["left_s"] is not None and info["left_s"] < TOKEN_SHORT_DAYS * 86400 and not force:
+        fix = ("Make an API key on the panel (API Keys page) and paste it in Edit first" if c.get("type") == "pasarguard"
+               else "Raise JWT_ACCESS_TOKEN_EXPIRE_MINUTES on the panel (0 = never) and paste a fresh token first")
+        raise ValueError(f"The token this panel gives lasts only {span_text(info['left_s'])}: without the login the panel would stop answering after that. "
+                         f"{fix} — or forget the login anyway and paste a new token yourself when it ends.")
+
+    res = check(dict(c, token=tok, password=""))
+
+    if not res["ok"]:
+        raise ValueError("the token did not work: " + (res["error"] or "unknown error"))
+
+    with session() as db:
+        p = db.get(Panel, panel_id)
+
+        if p is None:
+            raise ValueError("panel not found")
+
+        meta = c.get("key_meta") or {}
+        p.secrets = {"token": tok, **({"key_meta": meta} if meta and tok == c.get("token") else {})}       # what the panel said about the key stays
+        p.username = info["admin"] or (meta.get("admin") if tok == c.get("token") else "") or p.username
+        emit(db, "info", "panels", f"Panel {p.name}: the saved login was forgotten, it is connected with its {'API key' if is_api_key(tok) else 'token'} only.", p.name)
+        _TOKENS.pop(p.id, None)
+        _ALERTED.pop(p.id, None)
         return public(p)
 
 
@@ -421,6 +800,7 @@ def remove(panel_id: int) -> None:
             db.delete(p)
 
     _TOKENS.pop(panel_id, None)
+    _ALERTED.pop(panel_id, None)
 
 
 def bootstrap() -> None:
@@ -445,8 +825,13 @@ def bootstrap() -> None:
             if not isinstance(x, dict) or x.get("type") not in TYPES or not x.get("url"):
                 continue
 
+            sec = {k: str(x[k]) for k in ("token", "password") if x.get(k)}
+
+            if x.get("api_key") and "token" not in sec:
+                sec["token"] = str(x["api_key"])         # panels.json may call the PasarGuard key api_key
+
             db.add(Panel(name=str(x.get("name") or x.get("id") or "panel")[:40], type=x["type"], url=str(x["url"]).rstrip("/"),
-                         username=str(x.get("username", "")), secrets={"password": str(x.get("password", ""))}, verify_tls=bool(x.get("verify_tls", True))))
+                         username=str(x.get("username", "")), secrets=sec, verify_tls=bool(x.get("verify_tls", True))))
 
         log.info("panels taken from %s", f)
 

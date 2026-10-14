@@ -103,6 +103,7 @@ def test_panel_test_config_imports_to_probe(client, monkeypatch):
     from nikatel.services import configs
 
     monkeypatch.setattr(panels, "_token", lambda c, fresh=False: "t")
+    monkeypatch.setattr(panels, "_login", lambda c: "tok.tok.tok")
     monkeypatch.setattr(panels, "call", lambda c, m, p, **kw: {"version": "1", "total_user": 1} if p == "/api/system" else [] if p == "/api/nodes" else (_ for _ in ()).throw(PanelError("HTTP 404", 404)))
     pid = client.post("/api/panels", json={"name": "shop", "type": "marzban", "url": "https://1.1.1.1", "username": "a", "password": "p"}).json()["panel"]["id"]
     monkeypatch.setattr(panels, "test_user", lambda c, name: {"username": "nikatel-test-shop", "sub": "https://1.1.1.1/sub/x"})

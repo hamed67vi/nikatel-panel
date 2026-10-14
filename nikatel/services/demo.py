@@ -85,6 +85,10 @@ EVENTS = [
 ]
 
 
+# a well-formed access token that holds nothing real and never ends: the demo panel shows a healthy connection, it is never used
+DEMO_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIiwiYWNjZXNzIjoic3VkbyJ9.demo"
+
+
 def _wave(ts: float, base: float, amp: float, seed: int) -> float:
     """A day-shaped curve: quiet at night, busy in the evening, with a little noise that is the same for the same time."""
     hour = (ts % 86400) / 3600.0
@@ -169,7 +173,7 @@ def seed() -> str:
             for k in range(72, -1, -1):
                 db.add(ConfigSample(config_id=c.id, ts=now - k * 1200, up=not (status == "down" and k < 9), ping_ms=None if (status == "down" and k < 9) else (ping or 0) + random.Random(k + i).uniform(-12, 18)))
 
-        db.add(Panel(name="Demo panel", type="marzban", url="https://panel.example.test", username="demo", secrets={}, enabled=True, status="up", status_since=now - 86400, checked_at=now - 10, latency_ms=64,
+        db.add(Panel(name="Demo panel", type="marzban", url="https://panel.example.test", username="demo", secrets={"token": DEMO_TOKEN}, enabled=True, status="up", status_since=now - 86400, checked_at=now - 10, latency_ms=64,
                      version="0.8.0", stats={"users_total": 1840, "users_active": 1215, "users_online": 143, "cpu": 21, "mem_pct": 48, "bw": 83},
                      nodes=[{"id": 1, "name": "de-edge-1", "address": "203.0.113.11", "status": "connected", "xray": "25.3.6", "message": "", "fails": 0},
                             {"id": 2, "name": "nl-edge-1", "address": "203.0.113.21", "status": "connected", "xray": "25.3.6", "message": "", "fails": 0},

@@ -1,0 +1,53 @@
+/* PasarGuard tabs Groups and Templates. Every class starts with .pg-access- ; the page rules say `html body #page`, the window rules `html body #modal`, to win over the theme layers of app.css. */
+
+/* ---- the lists */
+html body #page .pg-access { display: flex; flex-direction: column; min-width: 0; }
+html body #page .pg-access .pg-bar { margin: 0 0 8px; } html body #page .pg-access .pg-bar input[type=search] { width: 250px; }
+html body #page .pg-access-bulk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+html body #page .pg-access-warn { padding: 0 4px 8px; font-size: 12px; }
+html body #page .pg-access-box { margin: 0; }
+html body #page .pg-access-box .tbl td { overflow: hidden; text-overflow: ellipsis; }
+html body #page .pg-access-box .tbl td.num { font-variant-numeric: tabular-nums; }
+html body #page .pg-access-box .tbl td.name small { font-weight: 400; }
+html body #page .pg-access-tags { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
+html body #page .pg-access-tags .td-type { flex: none; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pg-access-tags small { flex: none; }
+html body #page .pg-access-gone { color: var(--bad); border-color: rgba(255,107,139,.5); }
+html body #page .pg-access-act { white-space: nowrap; text-align: right; } html body #page .pg-access-act button + button { margin-left: 4px; }
+html body #page .pg-access-box th .ob2-sw { vertical-align: middle; }
+html body #page .pg-access-box td .ob2-sw { vertical-align: middle; }
+
+/* ---- the windows (forms, members, backups) */
+html body #modal .pg-access-frm { gap: 10px 14px; }
+html body #modal .pg-access-line { display: flex; align-items: center; gap: 10px; align-self: end; min-height: 32px; font-size: 12px; color: var(--mut); }
+html body #modal .pg-access-full { grid-column: 1 / -1; }
+html body #modal .pg-access-pick { grid-column: 1 / -1; min-width: 0; padding: 8px 10px 6px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.03); }
+html body #modal .pg-access-pickbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; font-size: 12px; } html body #modal .pg-access-pickbar .sp { flex: 1; }
+html body #modal .pg-access-pickbar input[type=search] { width: 180px; height: 28px; }
+html body #modal .pg-access-picklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; max-height: 214px; overflow-y: auto; overscroll-behavior: contain; }
+html body #modal .pg-access-prow { display: flex; align-items: center; gap: 8px; min-height: 30px; min-width: 0; font-size: 12px; }
+html body #modal .pg-access-prow .ell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #modal .pg-access-prow .name { flex: 0 1 auto; font-weight: 700; } html body #modal .pg-access-prow small { flex: 1; text-align: right; }
+html body #modal .pg-access-prow .pill { margin-left: 0; flex: none; }
+html body #modal .pg-access-hide { display: none; }
+html body #modal .pg-access-memtxt { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; }
+html body #modal .pg-access-mres { min-height: 18px; font-size: 12.5px; grid-column: 1 / -1; }
+html body #modal .pg-access-prev { font-size: 12px; } html body #modal .pg-access-prev b { color: var(--text); }
+html body #modal .pg-access-done { display: grid; gap: 10px; } html body #modal .pg-access-done .frm-act { margin-top: 0; }
+html body #modal .pg-access-link { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-size: 11.5px; word-break: break-all; user-select: all; }
+html body #modal .pg-access-bk { max-height: 52vh; margin: 0 0 10px; }
+html body #modal .pg-access-box .tbl td { overflow: hidden; text-overflow: ellipsis; }
+html body #modal .pg-access-act { white-space: nowrap; text-align: right; }
+html body #modal .pg-access-bk .tbl td.name { font-weight: 700; }
+
+/* the switch of the panel inside a window (the page rules of app.css only reach `#page`): the same blue pill with a white knob */
+html body #modal .pg-access-frm .ob2-sw, html body #modal .pg-access-pick .ob2-sw { margin: 0; flex: none; padding: 0; width: 40px; min-width: 40px; height: 22px; background: transparent; border: 0; box-shadow: none; }
+html body #modal .pg-access-frm .ob2-sw i, html body #modal .pg-access-pick .ob2-sw i { width: 40px; height: 22px; border-radius: 11px; background: #35405a; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); transition: background .18s, box-shadow .18s; }
+html body #modal .pg-access-frm .ob2-sw i::after, html body #modal .pg-access-pick .ob2-sw i::after { top: 2px; left: 2px; width: 18px; height: 18px; background: linear-gradient(180deg, #fff, #dde5f6); box-shadow: 0 1px 3px rgba(0,0,0,.38); }
+html body #modal .pg-access-frm .ob2-sw:has(input:checked) i, html body #modal .pg-access-pick .ob2-sw:has(input:checked) i { background: linear-gradient(180deg, #2f9dff, #0a7cf5) !important; box-shadow: 0 0 0 1px rgba(10,124,245,.55), 0 0 9px rgba(10,132,255,.42); }
+html body #modal .pg-access-frm .ob2-sw:has(input:checked) i::after, html body #modal .pg-access-pick .ob2-sw:has(input:checked) i::after { transform: translateX(18px); }
+html[data-mode="light"] body #modal .pg-access-frm .ob2-sw i, html[data-mode="light"] body #modal .pg-access-pick .ob2-sw i { background: #c3cde0; }
+
+@media (max-width: 760px) {
+  html body #page .pg-access .pg-bar input[type=search] { width: 100%; flex: 1 1 100%; }
+  html body #modal .pg-access-picklist { grid-template-columns: minmax(0, 1fr); }
+}

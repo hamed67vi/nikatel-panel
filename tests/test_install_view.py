@@ -11,11 +11,18 @@ def _add(client, name, host, role="foreign"):
     return r.json()["id"]
 
 
-def test_the_pasarguard_install_is_the_documented_command_and_takes_only_a_plain_key():
-    script = ssh.render_action("install_pasarguard_node", {"KEY": "abcd1234efgh"})
+NODE_KEY = "123e4567-e89b-12d3-a456-426614174000"
+
+
+def test_the_pasarguard_install_is_the_documented_command_and_answers_with_flags_not_with_stdin():
+    script = ssh.render_action("install_pasarguard_node", {"KEY": NODE_KEY})
     assert "PasarGuard/scripts/raw/main/pg-node.sh" in script and '@ install' in script and "shred" in script
-    assert "abcd1234efgh" in script                                 # the key is answered to the installer ...
-    for bad in ("short", "has space in it", "x'; reboot; '", "a" * 300):
+    assert NODE_KEY in script                                       # the key is written to a 0600 file the installer reads it from ...
+    # ... and every other answer is a flag: the questions of the installer change from one release to the next, so a stdin answer lands on the wrong one
+    for flag in ("-y", "--api-key", "--self-signed", "--use-grpc", "--service-port 62050", "--install-service", "--api-port 62051"):
+        assert f" {flag}" in script, flag
+    assert "printf '\\n\\n\\n\\n'" not in script and "< /dev/null" in script
+    for bad in ("short", "has space in it", "x'; reboot; '", "a" * 300, "abcd1234efgh", "123e4567-e89b-12d3-a456-42661417400"):     # only a UUID is accepted (the installer refuses anything else)
         with pytest.raises(ValueError):
             ssh.render_action("install_pasarguard_node", {"KEY": bad})
 
@@ -40,7 +47,7 @@ def test_the_install_request_is_checked_before_anything_starts(client):
     sid = _add(client, "fr-i", "198.51.100.31")
     r = client.post(f"/api/servers/{sid}/install", json={"items": ["pasarguard_node"], "cert": ""})
     assert r.status_code == 400 and "API key" in r.text
-    r = client.post(f"/api/servers/{sid}/install", json={"items": ["pasarguard_node", "os_update"], "cert": "abcd1234efgh"})
+    r = client.post(f"/api/servers/{sid}/install", json={"items": ["pasarguard_node", "os_update"], "cert": NODE_KEY})
     assert r.status_code == 400 and "on its own" in r.text
     r = client.post(f"/api/servers/{sid}/install", json={"items": ["marzban_node"], "cert": "not a certificate"})
     assert r.status_code == 400

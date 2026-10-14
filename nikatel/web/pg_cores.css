@@ -1,0 +1,74 @@
+/* PasarGuard tab: the cores (Xray configs) of a PasarGuard panel with backup and rollback. Every class starts with .pg-cores- */
+/* The page does not scroll in this layout, the lists do: the body of the open core is given exactly the room that is left (pg_cores.js sets its height),
+   and what is inside it takes that room and scrolls inside. */
+html body #page .pg-cores-list.lbox.full, html body #page .pg-cores-ib.lbox.full, html body #page .pg-cores-ob.lbox.full, html body #page .pg-cores-bk.lbox.full { min-height: 0; margin: 0 0 8px; }
+html body #page .pg-cores-list.lbox.full { max-height: calc(100vh - 360px); }
+html body #modal .pg-cores-list.lbox.full { margin: 0; max-height: 60vh; min-height: 0; }
+html body #page .pg-cores-list tr.pg-cores-on td, html body #modal .pg-cores-list tr.pg-cores-on td { background: rgba(124, 131, 255, .12); }
+html body .pg-cores-go { text-align: right; white-space: nowrap; }
+html body #page .pg-bar button, html body #page .pg-cores-sub button, html body #page .pg-cores-head button, html body #page .pg-cores-act button, html body #page .pg-cores-go button { height: 30px; }
+html body #page .pg-bar button small { margin-left: 2px; opacity: .7; }
+
+/* the open core: its name and facts on one row, then the three views */
+html body #page .pg-cores-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 2px 0 8px; font-size: 12.5px; }
+html body #page .pg-cores-head .sp { flex: 1; }
+html body #page .pg-cores-name { font-size: 15px; }
+html body #page .pg-cores-sub { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+html body #page .pg-cores-sub button small { margin-left: 4px; opacity: .75; }
+html body #page .pg-cores-note { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 0 0 8px; line-height: 1.5; }
+html body #page .pg-cores-note button { flex: none; }
+html body #page .pg-cores-body { display: flex; flex-direction: column; min-height: 0; }
+html body #page .pg-cores-body > .lbox.full { flex: 1 1 auto; max-height: none; min-height: 90px; }
+html body #page .pg-cores-body > .pg-cores-ib.lbox.full { flex: 3 1 0; }
+html body #page .pg-cores-body > .pg-cores-ob.lbox.full { flex: 2 1 0; min-height: 84px; }
+html body #page .pg-cores-ib td, html body #page .pg-cores-ib th, html body #page .pg-cores-ob td, html body #page .pg-cores-ob th, html body #page .pg-cores-bk td:nth-child(2), html body #page .pg-cores-bk th:nth-child(2) { text-align: left; }
+html body #page .pg-cores-body > small { flex: none; margin: 0 0 8px; }
+
+/* the editor on the left, its consequences on the right */
+html body #page .pg-cores-split { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; flex: 1 1 auto; min-height: 0; }
+html body #page .pg-cores-left { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+html body #page .pg-cores-right { min-width: 0; min-height: 0; overflow: auto; padding-right: 2px; }
+html body #page textarea.pg-cores-ta { display: block; flex: 1 1 auto; width: 100%; height: auto; min-height: 120px; box-sizing: border-box; padding: 10px 12px; border-radius: 12px; resize: none;
+  font: 12px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); tab-size: 2; white-space: pre; overflow: auto; }
+html body #page .pg-cores-act { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+html body #page .pg-cores-act .sp { flex: 1; }
+html body .pg-cores-stat { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 2px 0 6px; font-size: 12px; }
+html body .pg-cores-add { color: var(--ok); font-weight: 700; font-family: var(--mono, monospace); }
+html body .pg-cores-rm { color: var(--bad); font-weight: 700; font-family: var(--mono, monospace); }
+html body #page .pg-cores-hint, html body #page .pg-cores-how { display: block; margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+html body #page .pg-cores-act button:disabled { opacity: .4; cursor: not-allowed; filter: saturate(.5); }
+
+/* the line diff: a changed line has a coloured row and a sign; a long unchanged stretch is one grey line */
+html body .pg-cores-diff { margin: 6px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: rgba(5, 8, 20, .35); font: 11.5px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); }
+html body #modal .pg-cores-diff { max-height: 40vh; overflow-y: auto; }
+html body .pg-cores-dl { display: flex; width: max-content; min-width: 100%; white-space: pre; }
+html body .pg-cores-dl i { flex: none; width: 22px; text-align: center; font-style: normal; color: var(--mut); user-select: none; }
+html body .pg-cores-dl code { display: block; min-height: 1.5em; padding-right: 12px; font: inherit; }
+html body .pg-cores-dl.add { background: rgba(61, 220, 151, .13); } html body .pg-cores-dl.add i { color: var(--ok); }
+html body .pg-cores-dl.rm { background: rgba(255, 107, 139, .13); } html body .pg-cores-dl.rm i { color: var(--bad); }
+html body .pg-cores-dl.gap { justify-content: center; color: var(--mut); background: rgba(255, 255, 255, .04); font-style: italic; }
+html[data-mode="light"] body .pg-cores-diff, html[data-mode="light"] body .pg-cores-pre, html[data-mode="light"] body .pg-cores-dl.gap { background: rgba(17, 21, 39, .05); }
+
+/* the server's dry run and the warnings */
+html body .pg-cores-dry { margin: 10px 0 0; padding: 6px 10px 8px; border: 1px dashed var(--line); border-radius: 12px; }
+html body .pg-cores-dry.stale { opacity: .6; }
+html body .pg-cores-ws { list-style: none; margin: 6px 0 2px; padding: 0; display: grid; gap: 4px; }
+html body .pg-cores-ws li { padding: 6px 10px; border-radius: 9px; border-left: 3px solid var(--warn); background: rgba(255, 196, 77, .09); font-size: 12.5px; line-height: 1.45; }
+html body .pg-cores-ws li.danger { border-left-color: var(--bad); background: rgba(255, 107, 139, .10); }
+html body .pg-cores-ws li b { margin-right: 6px; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--warn); }
+html body .pg-cores-ws li.danger b { color: var(--bad); }
+
+/* a backup in its window */
+html body .pg-cores-full { margin: 8px 0 4px; } html body .pg-cores-full summary { cursor: pointer; font-size: 12px; color: var(--mut); }
+html body .pg-cores-pre { max-height: 320px; overflow: auto; margin: 6px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(5, 8, 20, .45);
+  font: 11.5px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); white-space: pre; }
+
+/* a narrow screen: nothing is fitted, the blocks stack and the page scrolls */
+@media (max-width: 1099px) {
+  html body #page .pg-cores-list.lbox.full, html body #page .pg-cores-ib.lbox.full, html body #page .pg-cores-ob.lbox.full, html body #page .pg-cores-bk.lbox.full { max-height: none; }
+  html body #page .pg-cores-body > .lbox.full { flex: none; min-height: 0; }
+  html body #page .pg-cores-split { display: block; }
+  html body #page textarea.pg-cores-ta { height: 52vh; min-height: 240px; resize: vertical; }
+  html body #page .pg-cores-right { overflow: visible; margin-top: 10px; }
+  html body .pg-cores-diff { max-height: 320px; overflow-y: auto; }
+}

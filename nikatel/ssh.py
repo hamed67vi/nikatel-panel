@@ -1148,8 +1148,9 @@ nohup setsid bash -c 'bash /var/lib/nikatel-install/mznode.sh > /var/lib/nikatel
 echo STARTED
 """, {"B64": _B64}),
 
-    # a PasarGuard node, installed the way PasarGuard documents it: bash -c "$(curl -sL .../pg-node.sh)" @ install. The installer asks for the API key that the PasarGuard panel gives (answered from the
-    # panel; the key sits in a 0600 file only while the installer runs and is shredded) and makes the node's certificate, which the operator then sets in the panel (see pgnode_cert). Detached.
+    # a PasarGuard node, installed the way PasarGuard documents it: bash -c "$(curl -sL .../pg-node.sh)" @ install. Every answer is given as a flag of the installer (it asks questions in a different order
+    # from one release to the next, so answering on stdin lands on the wrong question): -y, --api-key (a UUID: the node's key from the panel, in a 0600 file only while the installer runs and shredded
+    # after), --self-signed (the node makes its own certificate, which is then set in the panel: see pgnode_cert), --use-grpc, the ports 62050 / 62051 and --install-service. Detached.
     "install_pasarguard_node": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
 [ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
 command -v pg-node >/dev/null 2>&1 && { echo PGNODE_EXISTS; exit 0; }
@@ -1162,14 +1163,14 @@ d=/var/lib/nikatel-install; cd $d
 command -v curl >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null; }
 curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pg-node.sh -o pg-node.sh
 [ -s pg-node.sh ] || { echo DOWNLOAD_FAILED; shred -u pgnode.key 2>/dev/null; exit 1; }
-( cat pgnode.key; printf '\n\n\n\n' ) | timeout 900 bash -c "$(cat pg-node.sh)" @ install > pg-install.log 2>&1 || true
+timeout 900 bash -c "$(cat pg-node.sh)" @ install -y --api-key "$(cat pgnode.key)" --self-signed --use-grpc --service-port 62050 --install-service --api-port 62051 < /dev/null > pg-install.log 2>&1 || true
 shred -u pgnode.key 2>/dev/null || unlink pgnode.key 2>/dev/null || true
 pkill -f 'docker.* logs' 2>/dev/null || true
 if command -v pg-node >/dev/null 2>&1; then echo "PGNODE_OK installed" > pgnode.out; else echo PGNODE_FAILED; tail -n 12 pg-install.log | cut -c1-200; exit 1; fi
 EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/pgnode.sh > /var/lib/nikatel-install/pgnode.log 2>&1 && touch /var/lib/nikatel-install/pgnode.ok || touch /var/lib/nikatel-install/pgnode.fail' >/dev/null 2>&1 &
 echo STARTED
-""", {"KEY": r"^[A-Za-z0-9._:+/=-]{8,200}$"}),
+""", {"KEY": r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"}),      # the installer accepts only a UUID as the node's API key
 
     # update the system packages of the server (apt update + upgrade, no questions, old config files kept); the server is NOT rebooted. Detached.
     "install_os_update": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d

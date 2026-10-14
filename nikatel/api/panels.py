@@ -26,39 +26,54 @@ def _cred(panel_id: int) -> dict:
 
 class PanelIn(BaseModel):
     name: str = Field(min_length=1, max_length=40)
-    type: str
-    url: str
-    username: str
-    password: str
+    type: str = Field(max_length=16)
+    url: str = Field(max_length=200)
+    token: str = Field(default="", max_length=4000)        # a PasarGuard API key (pg_key_...) or an access token (JWT): what the panel is connected with
+    username: str = Field(default="", max_length=64)       # "sign in once": a username and password only to get a token, forgotten unless keep_login
+    password: str = Field(default="", max_length=200)
+    keep_login: bool = False
     verify_tls: bool = True
 
 
 class PanelPatch(BaseModel):
-    name: str | None = None
-    url: str | None = None
-    username: str | None = None
-    password: str | None = None
+    name: str | None = Field(default=None, max_length=40)
+    url: str | None = Field(default=None, max_length=200)
+    token: str | None = Field(default=None, max_length=4000)
+    username: str | None = Field(default=None, max_length=64)
+    password: str | None = Field(default=None, max_length=200)
+    keep_login: bool | None = None
     verify_tls: bool | None = None
     enabled: bool | None = None
 
 
+class ForgetIn(BaseModel):
+    force: bool = False
+
+
 @router.get("/panels")
 def list_panels():
-    """The Marzban / PasarGuard panels this panel manages: status, latency, version, users, nodes (as last checked)."""
+    """The Marzban / PasarGuard panels this panel manages: status, latency, version, users, nodes (as last checked) and how each is connected (never a secret)."""
     with session() as db:
         return {"ok": True, "panels": [panels.public(p) for p in db.scalars(select(Panel).order_by(Panel.name))]}
 
 
 @router.post("/panels")
 def add_panel(body: PanelIn):
-    """Add a panel: the login is tried first; the password stays on this server."""
-    return {"ok": True, "panel": _wrap(panels.add, body.name, body.type, body.url, body.username, body.password, body.verify_tls)}
+    """Add a panel with its API key or access token (or sign in once: only the token is kept); the credential is tried first and stays on this server."""
+    return {"ok": True, "panel": _wrap(panels.add, body.name, body.type, body.url, token=body.token, username=body.username, password=body.password,
+                                       verify_tls=body.verify_tls, keep_login=body.keep_login)}
 
 
 @router.patch("/panels/{panel_id}")
 def patch_panel(panel_id: int, body: PanelPatch):
-    """Change a panel's name, address, login, TLS check or whether it is checked."""
+    """Change a panel's name, address, TLS check, whether it is checked, or its API key / token (a new one is tried on the panel before it replaces the old)."""
     return {"ok": True, "panel": _wrap(panels.update, panel_id, body.model_dump(exclude_none=True))}
+
+
+@router.post("/panels/{panel_id}/forget-login")
+def forget_panel_login(panel_id: int, body: ForgetIn | None = None):
+    """Keep only a token: sign in once with the saved login, keep the token it gives and wipe the password (refused for a token that ends within 30 days unless forced)."""
+    return {"ok": True, "panel": _wrap(panels.forget_login, panel_id, bool(body and body.force))}
 
 
 @router.delete("/panels/{panel_id}")
@@ -76,9 +91,13 @@ def test_config(panel_id: int):
 
 @router.post("/panels/{panel_id}/check")
 def check_panel(panel_id: int):
-    """Ask the panel now: status, latency, version, nodes (a few seconds)."""
+    """Ask the panel now: status, latency, version, nodes (a few seconds); an API key is asked about too (its end date, whether it is still active)."""
     c = _cred(panel_id)
     res = panels.check(c)
+
+    if res["ok"] and panels.is_api_key(c.get("token", "")):
+        panels.refresh_key_meta(panel_id, c)
+
     return {"ok": res["ok"], **res}
 
 

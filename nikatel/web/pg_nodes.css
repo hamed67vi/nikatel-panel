@@ -1,0 +1,29 @@
+/* PasarGuard tab: the nodes of a PasarGuard panel, joined with the servers of this panel (by address). Every class starts with .pg-nodes- */
+html body #page .pg-nodes-sum { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; } html body #page .pg-nodes-sum .pill { margin: 0; height: 22px; display: inline-flex; align-items: center; }
+html body #page .pg-nodes-q { width: 260px; }
+html body #page .pg-nodes-run { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 4px 12px; min-height: 34px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-size: 12.5px; } html body #page .pg-nodes-run.ok { border-color: rgba(61,220,151,.4); } html body #page .pg-nodes-run.bad { border-color: rgba(255,107,139,.45); } html body #page .pg-nodes-run span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pg-nodes-run button { height: 26px; min-height: 26px; } html body #page .pg-nodes-run .spin { width: 14px; height: 14px; flex: none; }
+html body #page .pg-nodes-warn { margin: 0 0 8px; padding: 6px 12px; border-radius: 10px; font-size: 12px; color: var(--warn); border: 1px solid rgba(255,200,70,.35); background: rgba(255,200,70,.06); }
+html body #page .pg-nodes-h { display: flex; align-items: center; gap: 8px; margin: 2px 2px 6px; font-size: 11px; letter-spacing: .9px; text-transform: uppercase; color: var(--mut); } html body #page .pg-nodes-h b { color: var(--text); letter-spacing: .6px; } html body #page .pg-nodes-h .pill { margin: 0; height: 18px; display: inline-flex; align-items: center; } html body #page .pg-nodes-h small { text-transform: none; letter-spacing: 0; font-size: 11.5px; }
+/* two boxes share the height of the window (the script sets --pg-nodes-h; the page's own fitting would make each box end at the bottom of the window, hence !important), each scrolls inside */
+html body #page .pg-nodes-box { margin: 0 0 8px; min-height: 96px; max-height: var(--pg-nodes-h, calc((100vh - 400px) * .6)) !important; }
+html body #page .pg-nodes-box.pg-nodes-b { max-height: var(--pg-nodes-h, calc((100vh - 400px) * .4)) !important; }
+html body #page .pg-nodes-tbl td { padding: 0 8px; height: 36px; } html body #page .pg-nodes-tbl th { padding: 0 8px 2px; }
+html body #page .pg-nodes-tbl td small { font-weight: 400; }
+html body #page .pg-nodes-tbl .pbar { gap: 5px; } html body #page .pg-nodes-tbl .pbar .bar { flex: 0 1 34px; min-width: 14px; } html body #page .pg-nodes-tbl .pbar b { min-width: 32px; font-size: 12px; text-align: left; }
+html body #page .pg-nodes-srv { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; } html body #page .pg-nodes-srv b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pg-nodes-srv .pill { margin: 0; flex: none; }
+html body #page .pg-nodes-link { cursor: pointer; color: inherit; } html body #page .pg-nodes-link:hover b { color: var(--acc-2); text-decoration: underline; }
+html body #page .pg-nodes-act { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; max-width: 100%; } html body #page .pg-nodes-act button, html body #page .pg-nodes-act select { height: 28px; min-height: 28px; } html body #page .pg-nodes-act select.pg-nodes-more { width: 74px; padding-left: 8px; }
+html body #page .pg-nodes-tbl td:last-child { overflow: visible; }
+html body #page .pg-nodes-tbl tr.pg-nodes-else td { opacity: .72; } html body #page .pg-nodes-tbl tr.pg-nodes-else td .pill { margin: 0 4px 0 0; }
+@media (max-width: 760px) { html body #page .pg-nodes-box, html body #page .pg-nodes-box.pg-nodes-b { max-height: none !important; } html body #page .pg-nodes-q { width: 100%; } html body #page .pg-nodes-act select.pg-nodes-more { width: 110px; } }
+
+/* the windows */
+.pg-nodes-form .pg-nodes-key { flex-basis: 100%; display: flex; gap: 6px; } .pg-nodes-form .pg-nodes-key input { flex: 1; min-width: 0; } .pg-nodes-form .pg-nodes-key button { height: 32px; flex: none; }
+html body .pg-nodes-form textarea { height: auto; min-height: 64px; font-family: var(--mono); font-size: 11.5px; line-height: 1.4; }
+.pg-nodes-tools { margin: 0 0 8px; align-items: center; } .pg-nodes-tools select, .pg-nodes-tools button { height: 30px; }
+.pg-nodes-log { max-height: calc(100vh - 260px); overflow: auto; margin: 0; font-size: 11.5px; line-height: 1.45; word-break: break-all; }
+.pg-nodes-tot { display: flex; gap: 6px; margin: 0 0 8px; } .pg-nodes-tot .pill { margin: 0; }
+.pg-nodes-ubox { max-height: calc(100vh - 330px); min-height: 120px; overflow: auto; margin: 0 0 8px; }
+.pg-nodes-plan { margin: 0 0 10px; } .pg-nodes-steps { margin: 4px 0 8px; padding-left: 22px; font-size: 13px; line-height: 1.6; }
+.pg-nodes-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; } .pg-nodes-note .pill { margin: 0 6px 0 0; } .pg-nodes-amber { color: var(--warn); }
+.pg-nodes-story { height: 300px; }

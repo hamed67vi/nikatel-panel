@@ -99,6 +99,7 @@ def test_user_body_rules():
 
 def test_check_and_add_via_api(client, fake, monkeypatch):
     monkeypatch.setattr(panels, "_token", lambda c, fresh=False: "t")
+    monkeypatch.setattr(panels, "_login", lambda c: "tok.tok.tok")                 # "sign in once": the login gives a token, the password is not kept
     r = client.post("/api/panels", json={"name": "shop", "type": "marzban", "url": "https://1.1.1.1:8000/dashboard", "username": "admin", "password": "pw"})
     assert r.status_code == 200, r.text
     p = r.json()["panel"]
@@ -167,6 +168,7 @@ def test_core_validate_and_edits():
 
 def test_core_save_backup_and_rollback(client, fake, monkeypatch):
     monkeypatch.setattr(panels, "_token", lambda c, fresh=False: "t")
+    monkeypatch.setattr(panels, "_login", lambda c: "tok.tok.tok")
     pid = client.post("/api/panels", json={"name": "shop", "type": "marzban", "url": "https://1.1.1.1:8000", "username": "a", "password": "p"}).json()["panel"]["id"]
 
     # read-only panel refuses to write
