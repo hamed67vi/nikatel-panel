@@ -699,6 +699,7 @@ def add(name: str, typ: str, url: str, *, token: str = "", username: str = "", p
                   version=res["stats"].get("version", ""), stats=res["stats"], nodes=[dict(n, fails=0) for n in res["nodes"]])
         db.add(p)
         db.flush()
+        profiles.auto_nodes(db, p)          # (a PasarGuard panel puts its nodes on the Lab page by itself, tagged PasarGuard)
         emit(db, "info", "panels", f"Panel {name} ({typ}) added with its {'API key' if is_api_key(sec['token']) else 'token'}" + (" and the login." if "password" in sec else "."), name)
         return public(p)
 

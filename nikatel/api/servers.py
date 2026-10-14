@@ -48,6 +48,7 @@ class ServerIn(BaseModel):
     ssh_port: int = Field(22, ge=1, le=65535)
     enabled: bool = True
     provider: str = Field("", max_length=128)
+    tag: str = Field("", max_length=40)        # a new server is listed on the Lab page under this tag ("" = Any); an edit does not change it
 
 
 @router.get("/servers", response_model=list[ServerOut])
@@ -121,6 +122,12 @@ def add_server(body: ServerIn):
             raise HTTPException(409, why[0].upper() + why[1:])
 
         data = body.model_dump()
+        tag = data.pop("tag")
+
+        try:
+            profiles.check_tag(tag)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
 
         if not data["role"]:
             from ..services import nodes
@@ -138,7 +145,7 @@ def add_server(body: ServerIn):
         s = Server(**data)
         db.add(s)
         db.flush()
-        profiles.ensure_server(db, s)          # (every server is on the Lab page: the old Foreign / Iran lists are gone)
+        profiles.ensure_server(db, s, tag)          # (every server is on the Lab page: the old Foreign / Iran lists are gone)
         emit(db, "info", "servers", f"Server {s.name} ({s.role}) added.", s.name)
         return ServerOut.model_validate(s)
 
@@ -160,6 +167,7 @@ def update_server(server_id: int, body: ServerIn):
         was_enabled, old_name, old_host = s.enabled, s.name, s.host
 
         data = body.model_dump()
+        data.pop("tag")
 
         if not data["role"]:
             data["role"] = s.role                    # an edit without a role keeps the one the server has

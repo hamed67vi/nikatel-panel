@@ -119,12 +119,20 @@ class Many(BaseModel):
     password: str = ""
     ssh_user: str = "root"
     ssh_port: int = 22
+    tag: str = Field("", max_length=40)
 
 
 @router.post("/servers/add-many")
 def add_many(body: Many):
-    """Add several servers from pasted lines (name, address, password), installing the key on each."""
-    return {"ok": True, "items": _wrap(nodes.add_many, body.role, body.lines, body.password, body.ssh_user, body.ssh_port)}
+    """Add several servers from pasted lines (name, address, password), installing the key on each; they are listed on the Lab page under `tag`."""
+    from ..services import profiles
+
+    try:
+        profiles.check_tag(body.tag)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+    return {"ok": True, "items": _wrap(nodes.add_many, body.role, body.lines, body.password, body.ssh_user, body.ssh_port, body.tag)}
 
 
 @router.get("/servers/{server_id}/launcher")

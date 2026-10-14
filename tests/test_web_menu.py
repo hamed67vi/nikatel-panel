@@ -92,10 +92,10 @@ def test_the_old_foreign_and_iran_lists_are_out_of_the_project_and_the_lab_is_th
     assert 'window.docOpen = (id, sec) => { go("nodes", "lab");' in APP and "state.tab = s.role" not in APP
     assert '"arch"' not in APP and "nav-arch" not in APP and "sub-arch" not in APP and "arch-tag" not in (WEB / "lab.css").read_text(encoding="utf-8")          # (no archive mark: there is no archive in the project)
 
-def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_kinds_and_add_profile_plus_at_the_end():
-    """The owner (2026-10-14): "the Servers section is called Lab", "show Add profile there when you click on it", "Add profile comes below the profiles; foreign, iran, pasargaurd; the profiles item is called
-    any", then "Add profile comes at the END of the list, no arrow in front of it", then "+ Add profile". The group of the menu is Lab: Any (every profile), an item for each kind that has a profile (Foreign, Iran,
-    PasarGuard - only with two kinds or more, like the tabs of the page), and "+ Add profile" as the LAST item: a door to the add flow, an "act" of the tabs (no page and no tab of its own, never the open one)."""
+def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_tags_and_add_profile_plus_at_the_end():
+    """The owner (2026-10-14): "the Servers section is called Lab", "the profiles item is called any", "+ Add profile" as the last item, then "make me three categories: Marzban, PasarGuard, Iran". The group
+    of the menu is Lab: Any (every profile), one item for each TAG (the three categories are there from the start, any tag he types joins them) and "+ Add profile" as the LAST item: a door to the add flow,
+    an "act" of the tabs (no page and no tab of its own, never the open one)."""
     assert re.search(r'<a data-page="nodes"[^>]*data-short="Lab"', INDEX) and re.search(r'<span>Lab</span></a>', NAV) and "<span>Servers</span>" not in NAV
     assert re.search(r'^  nodes: \["Lab", ', APP, re.MULTILINE)
     block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
@@ -105,39 +105,51 @@ def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_k
     assert "window.subAct = (page, k) =>" in APP and 'SUB[page].filter(x => x[3] !== "act")' in APP and "a.dataset.act ? subAct(a.dataset.page, a.dataset.sub)" in APP
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
-    assert 'const LAB_NAV = [["foreign", "Foreign"], ["iran", "Iran"], ["node", "PasarGuard"]]' in lab and "if (kinds.length > 1)" in lab and "any.onclick = () => labGoKind(\"any\")" in lab          # (the kinds follow the profiles)
+    assert 'for (const t of labTags())' in lab and 'any.onclick = () => labGoKind("any")' in lab          # (one item for each tag, drawn from the tags the page read)
+    assert 'const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard", "Iran"];' in lab          # (the three categories are there before anything is read)
     assert lab.count("labNavSync();") >= 3          # (when the page is drawn, when a tab of the page is chosen, when the profiles were read in the background)
-    assert 'if (k === "add") labAdd(); else if (k === "connect") labConnect(); else if (typeof k === "object") labServerStep(k.kind || "foreign", "new", k); else labAddKind(k);' in lab          # (the page opens the add flow once it is drawn, whichever way it was reached)
+    assert 'if (k === "connect") labConnect(); else if (typeof k === "object") labAdd("new", k); else labAdd(); }' in lab          # (the page opens the add box once it is drawn, whichever way it was reached)
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     assert ".nav-plus" in css and ".nav-ag" not in css and ".nav-ak" not in css
 
 
+def test_a_profile_is_added_in_one_box_that_asks_its_name_and_its_tag_any_unless_he_chooses_one():
+    """The owner (2026-10-14): "first we add a profile; a box opens and asks its name and its tag; the default is any, but a tag with a name of my own can be chosen; Iran and Foreign are suggested"."""
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    assert "labChooser" not in lab and "labAddKind" not in lab and "labServerStep" not in lab          # (no choice of three kinds any more: one box)
+    assert 'name="tag" id="lab-tag" list="lab-taglist"' in lab and 'placeholder="Any"' in lab          # the Tag field: empty is Any, a datalist suggests
+    assert '["Iran", "Foreign", ...labTags()]' in lab          # Iran and Foreign are suggested, then every tag there is
+    assert '<label><span>Name</span><input name="name" required' in lab and "${labTagField()}" in lab
+    assert "const labRoleOf = " in lab and 'role: labRoleOf(tag)' in lab and "tag};" in lab          # the tags Iran / Foreign say where a new server is; the tag goes to the API
+    assert "window.labSetTag = " in lab and 'Change tag…' in lab and '`/api/profiles/${id}/tag`' in lab          # a tag can be changed from the ⋯ menu
+
+
 def test_the_pasarguard_node_option_is_grey_until_a_pasarguard_panel_is_connected_and_a_click_says_why():
-    """The owner (2026-10-14): "this option is active when we have added a PasarGuard panel". The PasarGuard node card of Add profile is grey (aria-disabled) while no PasarGuard panel is connected; asking for
-    it says why and leads to connecting one - with the API key, or a username and password, the same screen the locked Panel item leads to - and the option is live as soon as one is connected."""
+    """The owner (2026-10-14): "this option is active when we have added a PasarGuard panel". The "A PasarGuard node" tab of the Add profile box is grey while no PasarGuard panel is connected; asking for it
+    says why and leads to connecting one - with the API key, or a username and password, the same screen the locked Panel item leads to - and the option is live as soon as one is connected."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert "const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);" in lab
-    assert 'off = k === "node" && noPg' in lab and 'aria-disabled="true" title="Connect a PasarGuard panel first"' in lab
-    assert 'if (k === "node") { if (labHasPg()) labNodePanel(); else labPgFirst(); }' in lab          # (asking for the grey option says why)
+    assert 'class="${labHasPg() ? "" : "off"}" onclick="labAddNode()"' in lab and 'title="Connect a PasarGuard panel first"' in lab
+    assert "window.labAddNode = () => { if (labHasPg()) labNodePanel(); else labPgFirst(); };" in lab          # (asking for the grey option says why)
     assert "window.labConnect = () => labNodePanel(true);" in lab and "state.labOnly = only === true;" in lab          # (only the panel is asked for: no node)
     assert "if (state.labOnly) { state.labOnly = false; closeModal(); refresh(); return false; }" in lab          # (and once it is connected the option is live)
     assert 'if (labOn()) labConnect(); else { LAB.pending = "connect"; go("nodes", "lab"); }' in lab          # (the locked Panel item leads to the same screen)
     assert "state.panelsCache = r; labLockSet(" in lab          # (the background look keeps the list of panels the option reads)
-    assert ".lab-card.off" in (WEB / "lab.css").read_text(encoding="utf-8")
+    assert ".lab-addtabs button.off" in (WEB / "lab.css").read_text(encoding="utf-8")
 
 
 def test_the_servers_the_panel_already_has_are_not_moved_to_the_lab_by_themselves_they_are_picked_in_add_profile():
-    """The owner (2026-10-14): "I did not say to move the cards, I only said to bring the information of the servers". Nothing puts a server on the page by itself: Add profile lists the
-    servers the panel already has (name, address, provider) under "Already in the panel", with a search and "Select all", and it opens on that list when there are some."""
+    """The owner (2026-10-14): "I did not say to move the cards, I only said to bring the information of the servers". Nothing puts a server on the page by itself: the box lists the servers the panel
+    already has (name, address, provider) under "Already in the panel", with a search and "Select all"."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
-    assert "const labFree = " in lab and 'labServerStep(k, labFree(k).length ? "have" : "new")' in lab          # it opens on the list of the servers that are there
+    assert "const labFree = () => " in lab and "lab-first-note" in lab          # the first page says how many there are
     assert 'lb("Already in the panel", "In the panel")}<i class="cnt">' in lab and '<label class="lab-all">' in lab and "window.labPickAll = " in lab and "window.labPickFilter = " in lab
-    assert "already in the panel</em>" in lab and "lab-first-note" in lab          # the first page and the cards of Add profile say how many there are
     assert "labSaveMany" in lab and '"/api/servers/add-many"' in lab          # several at once: lines of name and address
     css = (WEB / "lab.css").read_text(encoding="utf-8")
-    assert ".lab-pick-bar" in css and ".lab-all" in css and ".lab-have" in css
+    assert ".lab-pick-bar" in css and ".lab-all" in css
     db = (WEB.parent / "db.py").read_text(encoding="utf-8")
-    assert "backfill" not in db and "(17," not in db          # (and no step of an upgrade puts them there)
+    assert "backfill" not in db and "auto_all" in db          # (no step of an upgrade puts SERVERS there; only the nodes of a connected PasarGuard panel come by themselves)
+
 
 def test_the_section_that_was_called_tunnels_is_called_network_and_starts_with_the_cdn():
     """The owner (2026-10-14): "this section's name becomes Network", "bring CDN above the Tunnel manager". CDN is the first tab, so a shortcut that used to land on the Tunnel manager by
@@ -178,7 +190,7 @@ def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_o
     assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "n > 10" in lab         # one menu, two columns when it is long
     assert "labItem(\"Delete server…\"" in lab and "danger: true" in lab and ".lab-mi.danger" in css                         # the dangerous item is last and red
     assert 'class="sm abtn' not in lab and "wtools" not in lab                                                                # no row of buttons, no tiles of tools
-    assert "const labKinds = " in lab and "labKinds().length > 1" in lab and "kinds.length > 1 ?" in lab                      # the tabs are not made in advance: a kind has its tab only while a profile of it exists
+    assert "const labTags = " in lab and '["any", ...labTags()]' in lab                                                       # the tabs are the tags: Any, then Marzban, PasarGuard, Iran and every other tag
     assert ".lab-bar { container: labbar" in css and "flex-wrap: nowrap" in css.split(".lab-bar {", 1)[1].split("}", 1)[0]    # the bar is one row at every width
     assert [k for k, _ in re.findall(r'\["(overview|node|monitor|tools)", "(\w+)"\]', lab.split("const LAB_SECS", 1)[1].split("\n", 1)[0])] == ["overview", "node", "monitor"]
 

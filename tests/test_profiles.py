@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from nikatel.db import init_db, session
 from nikatel.models import Panel, Profile, Server, ServerSample
-from nikatel.services import nodes, uptime
+from nikatel.services import nodes, panels, uptime
 from nikatel.services import profiles as svc
 
 
@@ -186,3 +186,59 @@ def test_the_strips_come_from_the_samples_for_the_servers_of_the_profiles_only(c
     assert one["strip"] == st["strip"] and one["up"] == st["up"]
     assert client.get("/api/servers/9999/uptime").status_code == 404
     assert client.get(f"/api/servers/{a['id']}/uptime?hours=9999").status_code == 422
+
+
+# ------------------------------------------------------------------ tags (the owner, 2026-10-14: a name and a tag - Any unless he chooses one - and three categories from the start)
+def test_a_tag_is_free_text_empty_or_any_is_no_tag_and_the_three_categories_are_always_there(client):
+    assert [svc.check_tag(v) for v in ("", None, " Any ", "ANY", "Iran", "  my  tag ")] == ["", "", "", "", "Iran", "my tag"]
+
+    for bad in ("x" * 41, "a/b", "<b>"):
+        with pytest.raises(ValueError):
+            svc.check_tag(bad)
+
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran"]                     # before anything is added
+
+    a = _server(client, "ir1", "3.3.3.3", "iran", tag="Edge")
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran", "Edge"]            # a tag he types joins them
+    assert [p["tag"] for p in _profiles(client)] == ["Edge"]
+
+    pid = _profiles(client)[0]["id"]
+    assert client.put(f"/api/profiles/{pid}/tag", json={"tag": "iran"}).json()["tag"] == "iran"
+    assert client.put(f"/api/profiles/{pid}/tag", json={"tag": "any"}).json()["tag"] == ""                   # Any = no tag
+    assert client.put(f"/api/profiles/{pid}/tag", json={"tag": "a/b"}).status_code == 400
+    assert client.put("/api/profiles/9999/tag", json={"tag": "x"}).status_code == 404
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran"]                    # (Edge is not used any more)
+    assert a["id"]
+
+
+def test_a_new_server_and_several_at_once_and_the_picked_ones_are_listed_under_the_tag_that_was_given(client, monkeypatch):
+    assert client.post("/api/servers", json={"name": "ir1", "host": "3.3.3.3", "role": "iran", "tag": "x/y"}).status_code == 400          # a bad tag is refused before the server is made
+    assert client.get("/api/servers").json() == []
+
+    monkeypatch.setattr(nodes, "run_script", lambda *a, **k: (_ for _ in ()).throw(nodes.SSHError("no key in a test")))
+    r = client.post("/api/servers/add-many", json={"role": "foreign", "lines": "fo5 4.4.4.4", "tag": "Hetzner"})
+    assert r.status_code == 200 and [i["ok"] for i in r.json()["items"]] == [False]
+    r = client.post("/api/servers/add-many", json={"role": "foreign", "lines": "fo6 5.5.5.5", "tag": "a/b"})
+    assert r.status_code == 400
+
+    b = _bare("fo7", "8.8.8.8", "foreign")
+    r = client.post("/api/profiles", json={"kind": "foreign", "server_ids": [b], "tag": "Backup"})
+    assert r.status_code == 201 and r.json()["added"][0]["tag"] == "Backup"
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo5", "Hetzner"), ("fo7", "Backup")]
+
+
+def test_the_nodes_of_a_pasarguard_panel_are_put_on_the_page_by_themselves_tagged_pasarguard(client, monkeypatch):
+    nodes_ = [{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected"}, {"id": 8, "name": "n8", "address": "203.0.113.8", "status": "error"}]
+    monkeypatch.setattr(panels, "_credentials", lambda base, token, username, password, keep: ({**base, "url": "https://p.example:8000", "username": ""}, {"token": "pg_key_x"}))
+    monkeypatch.setattr(panels, "check", lambda c: {"ok": True, "latency_ms": 5, "stats": {"version": "1"}, "nodes": nodes_, "error": ""})
+
+    panels.add("pg1", "pasarguard", "https://p.example:8000", token="pg_key_x")
+    assert sorted((p["kind"], p["name"], p["tag"]) for p in _profiles(client)) == [("node", "n7", "PasarGuard"), ("node", "n8", "PasarGuard")]
+
+    panels.add("mz1", "marzban", "https://m.example:8000", token="t")                                        # a Marzban panel has no PasarGuard nodes
+    assert len(_profiles(client)) == 2
+
+    with session() as db:
+        db.execute(Profile.__table__.delete())
+        assert svc.auto_all(db) == 2 and svc.auto_all(db) == 0                                               # the upgrade step: once, and a second run makes nothing
+        assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard"}

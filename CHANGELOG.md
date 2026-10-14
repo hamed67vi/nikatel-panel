@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.50.0 - A profile has a name and a TAG; Marzban, PasarGuard and Iran are the categories
+
+- **One box adds a profile (the owner: "first we add a profile; a box opens and asks its name and its tag - Any unless I choose one, a name of my own is allowed, Iran and Foreign are suggested").** The choice of three kinds is gone: the box has the **Name**, the **Tag** (empty = Any; a list suggests Iran, Foreign and every tag there is) and what the profile is - *A new server* (address, SSH, an optional password), *Several at once*, *Already in the panel* (the servers the panel has, with a search and Select all) and *A PasarGuard node* (grey until a PasarGuard panel is connected). The tag Iran or Foreign says where a new server is; with another tag the panel finds it from the address. A tag is changed from the card's "⋯" menu (**Change tag…**, `PUT /api/profiles/{id}/tag`).
+- **Categories (the owner: "make me three categories: Marzban, PasarGuard, Iran").** They are on the page from the start, as tabs of the list and as items of the Lab menu (Any, Marzban, PasarGuard, Iran, then **+ Add profile**); any other tag a profile carries joins them, and one that no profile uses any more goes. `profiles.tag` (migration 17), `GET /api/profiles` has `tags`, `POST /api/profiles`, `POST /api/servers` and `POST /api/servers/add-many` take a `tag`.
+- **A PasarGuard panel puts its nodes on the page by itself (the owner: "if a PasarGuard panel was added, a profile is added in the Lab by itself").** When a panel is connected, every node it has gets a profile tagged **PasarGuard**; the upgrade does the same once for the panels that are connected already. A node that is taken off the page does not come back by itself.
+- Tests: the tags (free text, Any, the three categories, a tag joins and leaves), a server made, several at once and picked ones under their tag, the nodes of a connected PasarGuard panel and the one-time step of the upgrade, the new box and the menu.
+
 ## 1.49.2 - "+ Add profile", the node option waits for a panel, the add flow on a phone, the sheet of UI elements
 
 - **The last item of the Lab list is written "+ Add profile" (the owner)**: the + is in front of its name, where the icon of the other items stands - 1.49.1 had it at the far end of the row.

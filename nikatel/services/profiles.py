@@ -8,6 +8,8 @@ servers the panel already had are picked in the "Already in the panel" tab of Ad
 only unlists the server - the panel still watches it, its tunnels go on - and the same tab brings it back."""
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,8 @@ from .events import emit
 KINDS = ("iran", "foreign", "node")
 LABEL = {"iran": "Iran server", "foreign": "Foreign server", "node": "PasarGuard node"}
 MAX_PROFILES = 400
+DEFAULT_TAGS = ("Marzban", "PasarGuard", "Iran")      # the categories the owner asked for (2026-10-14): they are on the page from the start; any other tag he types is made by using it
+NODE_TAG = "PasarGuard"      # the tag of the profiles that are made by themselves for the nodes of a connected PasarGuard panel
 
 
 def _int(v, what: str) -> int:
@@ -36,6 +40,32 @@ def check_kind(v) -> str:
     return k
 
 
+def check_tag(v) -> str:
+    """Pure: the tag of a profile - free text of up to 40 letters, digits, spaces and - _ . ; empty or "any" is no tag (Any)."""
+    t = re.sub(r"\s+", " ", str(v or "").strip())
+
+    if t.lower() == "any":
+        return ""
+
+    if len(t) > 40 or (t and not re.match(r"^[\w .\-]+$", t)):
+        raise ValueError("a tag is up to 40 letters, digits, spaces and - _ .")
+
+    return t
+
+
+def all_tags(db: Session) -> list[str]:
+    """The categories of the page: the three that are always there, then every other tag a profile carries (a tag is written once, whatever its case)."""
+    out = list(DEFAULT_TAGS)
+    seen = {t.lower() for t in out}
+
+    for t in db.scalars(select(Profile.tag).distinct().order_by(Profile.tag)):
+        if t and t.lower() not in seen:
+            seen.add(t.lower())
+            out.append(t)
+
+    return out
+
+
 def node_in(panel: Panel, node_id: int) -> dict | None:
     """Pure: the node of the panel (as the health job last read it) with this id, or None."""
     return next((n for n in (panel.nodes or []) if isinstance(n, dict) and n.get("id") == node_id), None)
@@ -43,7 +73,7 @@ def node_in(panel: Panel, node_id: int) -> dict | None:
 
 def row(p: Profile, servers: dict[int, Server], panels: dict[int, Panel]) -> dict:
     """Pure: one profile for the list - what it is, and what it points at (its name and address; `missing` when that is gone)."""
-    out = {"id": p.id, "kind": p.kind, "label": LABEL.get(p.kind, p.kind), "server_id": p.server_id, "panel_id": p.panel_id, "node_id": p.node_id, "created_at": p.created_at}
+    out = {"id": p.id, "kind": p.kind, "tag": p.tag or "", "label": LABEL.get(p.kind, p.kind), "server_id": p.server_id, "panel_id": p.panel_id, "node_id": p.node_id, "created_at": p.created_at}
 
     if p.kind == "node":
         pn = panels.get(p.panel_id or 0)
@@ -76,9 +106,10 @@ def _count(db: Session) -> int:
     return len(db.scalars(select(Profile.id)).all())
 
 
-def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None) -> Profile:
+def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None, tag: str = "") -> Profile:
     """One profile. iran / foreign: an existing server of that kind (a server is on the page once). node: a node of a PasarGuard panel that is connected (a node is on the page once)."""
     kind = check_kind(kind)
+    tag = check_tag(tag)
 
     if _count(db) >= MAX_PROFILES:
         raise ValueError(f"at most {MAX_PROFILES} profiles")
@@ -101,7 +132,7 @@ def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None) 
         if db.scalar(select(Profile.id).where(Profile.kind == "node", Profile.panel_id == pid, Profile.node_id == nid)) is not None:
             raise FileExistsError(f"the node {n.get('name') or nid} is on the page already")
 
-        p = Profile(kind="node", panel_id=pid, node_id=nid)
+        p = Profile(kind="node", panel_id=pid, node_id=nid, tag=tag)
         what = f"PasarGuard node {n.get('name') or nid} ({panel.name})"
     else:
         sid = _int(server_id, "the server")
@@ -116,7 +147,7 @@ def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None) 
         if db.scalar(select(Profile.id).where(Profile.kind == kind, Profile.server_id == sid)) is not None:
             raise FileExistsError(f"{s.name} is on the page already")
 
-        p = Profile(kind=kind, server_id=sid)
+        p = Profile(kind=kind, server_id=sid, tag=tag)
         what = f"{LABEL[kind]} {s.name}"
 
     db.add(p)
@@ -125,13 +156,44 @@ def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None) 
     return p
 
 
-def ensure_server(db: Session, server: Server) -> bool:
+def set_tag(db: Session, pid: int, tag) -> str:
+    """Give a profile another tag (the category it is listed under). Returns the tag ("" = Any)."""
+    p = db.get(Profile, int(pid))
+
+    if p is None:
+        raise LookupError("profile not found")
+
+    p.tag = check_tag(tag)
+    return p.tag
+
+
+def auto_nodes(db: Session, panel: Panel) -> int:
+    """A PasarGuard panel was connected (the owner: "a profile is added by itself on the Lab page, tagged PasarGuard"): every node it has, that is not on the page yet, gets a profile with the tag PasarGuard. Returns how many."""
+    if panel.type != "pasarguard":
+        return 0
+
+    made = 0
+
+    for n in panel.nodes or []:
+        if isinstance(n, dict) and isinstance(n.get("id"), int) and db.scalar(select(Profile.id).where(Profile.kind == "node", Profile.panel_id == panel.id, Profile.node_id == n["id"])) is None:
+            db.add(Profile(kind="node", panel_id=panel.id, node_id=n["id"], tag=NODE_TAG))
+            made += 1
+
+    return made
+
+
+def auto_all(db: Session) -> int:
+    """The one-time step of the upgrade to 1.50.0: the nodes of the PasarGuard panels that are connected already."""
+    return sum(auto_nodes(db, p) for p in db.scalars(select(Panel)))
+
+
+def ensure_server(db: Session, server: Server, tag: str = "") -> bool:
     """A server that is MADE - by the Add profile flow, the API, the importer, several at once - is on the Lab page at once: it gets the profile of its kind. The servers the panel already had are not touched
     (they are picked in Add profile). True when the profile was made now, False when the server had one already."""
     if db.scalar(select(Profile.id).where(Profile.server_id == server.id)) is not None:
         return False
 
-    db.add(Profile(kind=server.role if server.role in ("iran", "foreign") else "foreign", server_id=server.id))
+    db.add(Profile(kind=server.role if server.role in ("iran", "foreign") else "foreign", server_id=server.id, tag=check_tag(tag)))
     return True
 
 

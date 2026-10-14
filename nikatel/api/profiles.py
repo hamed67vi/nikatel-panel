@@ -16,6 +16,11 @@ class ProfilesIn(BaseModel):
     server_ids: list[int] = Field(default_factory=list, max_length=100)        # iran / foreign: servers of ours that exist
     panel_id: int | None = None                                       # node: the PasarGuard panel ...
     node_ids: list[int] = Field(default_factory=list, max_length=100)          # ... and the nodes of it
+    tag: str = Field("", max_length=40)                                # the category it is listed under ("" / "any" = Any)
+
+
+class TagIn(BaseModel):
+    tag: str = Field("", max_length=40)
 
 
 def _code(e: Exception) -> int:
@@ -26,7 +31,7 @@ def _code(e: Exception) -> int:
 def list_profiles():
     """Every profile on the Lab page - an Iran server, a foreign server or a PasarGuard node - with the name and address of what it points at."""
     with session() as db:
-        return {"ok": True, "profiles": svc.list_all(db), "kinds": [{"key": k, "label": svc.LABEL[k]} for k in svc.KINDS]}
+        return {"ok": True, "profiles": svc.list_all(db), "tags": svc.all_tags(db), "kinds": [{"key": k, "label": svc.LABEL[k]} for k in svc.KINDS]}
 
 
 @router.post("/profiles", status_code=201)
@@ -47,7 +52,7 @@ def add_profiles(body: ProfilesIn):
     with session() as db:
         for i in dict.fromkeys(ids):
             try:
-                p = svc.create(db, kind, server_id=None if kind == "node" else i, panel_id=body.panel_id, node_id=i if kind == "node" else None)
+                p = svc.create(db, kind, server_id=None if kind == "node" else i, panel_id=body.panel_id, node_id=i if kind == "node" else None, tag=body.tag)
                 added.append(svc.get_row(db, p.id))
             except (ValueError, LookupError, FileExistsError) as e:
                 skipped.append({"id": i, "why": str(e.args[0]) if e.args else str(e), "code": _code(e)})
@@ -56,6 +61,18 @@ def add_profiles(body: ProfilesIn):
         raise HTTPException(skipped[0]["code"], skipped[0]["why"])
 
     return {"ok": True, "added": added, "skipped": skipped}
+
+
+@router.put("/profiles/{profile_id}/tag")
+def tag_profile(profile_id: int, body: TagIn):
+    """Give a profile another tag - the category it is listed under on the Lab page (empty or "any" = Any); nothing changes on what it points at."""
+    with session() as db:
+        try:
+            return {"ok": True, "tag": svc.set_tag(db, profile_id, body.tag)}
+        except LookupError as e:
+            raise HTTPException(404, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
 
 
 @router.delete("/profiles/{profile_id}")

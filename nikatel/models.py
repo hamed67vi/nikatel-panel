@@ -54,6 +54,7 @@ class Profile(Base):
     server_id: Mapped[int | None] = mapped_column(Integer, nullable=True)     # iran / foreign: the server
     panel_id: Mapped[int | None] = mapped_column(Integer, nullable=True)      # node: the PasarGuard panel and the id of the node in it
     node_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tag: Mapped[str] = mapped_column(String(40), default="", server_default="")        # the category the owner gave it ("" = Any): free text, Iran / Foreign / PasarGuard / Marzban are the first ones
     created_at: Mapped[int] = mapped_column(Integer, default=now)
 
 

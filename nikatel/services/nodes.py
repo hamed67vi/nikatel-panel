@@ -215,7 +215,7 @@ def server_conflict(db, name: str, host: str, exclude_id: int = 0) -> str:
 
     return ""
 
-def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", ssh_port: int = 22) -> list[dict]:
+def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", ssh_port: int = 22, tag: str = "") -> list[dict]:
     """Lines of `name host [user] [port]`; every server is added to the panel and, with a password, connected in parallel."""
     if role not in ("iran", "foreign"):
         raise ValueError("bad role")
@@ -258,7 +258,7 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
             srv = Server(name=it["name"], host=it["host"], role=role, ssh_user=it["user"], ssh_port=it["port"])
             db.add(srv)
             db.flush()
-            profiles.ensure_server(db, srv)          # (every server is on the Lab page)
+            profiles.ensure_server(db, srv, tag)          # (a made server is on the Lab page at once, under its tag)
             it["id"] = srv.id
             emit(db, "info", "servers", f"Server {srv.name} ({role}) added.", srv.name)
 
