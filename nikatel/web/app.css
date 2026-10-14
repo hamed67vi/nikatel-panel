@@ -4424,14 +4424,17 @@ html[data-mode="light"] body .bot-anim .hd { fill: rgba(47,111,224,.08); stroke:
 html[data-mode="light"] body .gear-anim .gear { fill: rgba(47,111,224,.12); stroke: #3a5aa0; stroke-width: 1.6; }
 html[data-mode="light"] body .head h1 .t-anim, html[data-mode="light"] body #title .t-anim { opacity: 1; }html body #page .dns-tbl .port-pill { height: 22px; min-width: 46px; padding: 0 10px; font-size: 12.5px; font-weight: 700; letter-spacing: .01em; }
 
-/* ---- the left menu: the sections of PasarGuard hang under "Panel" like in the sidebar of PasarGuard itself (the owner, 2026-10-14; roadmap #102). The head is the Panel page; Users, Hosts,
-   Access, Core and Admins sit under it on a thin line; the little arrow opens and closes the group (web/app.js navGroup). Only the fluid layout in a wide window draws it so; in the rail
-   (under 1180 px) the sections are icons under the head in a quiet box; on a phone and in the old layout the group is not drawn and every item is a plain item of the bar.
-   The menu scrolls when the window is short, and the bottom bar of a phone scrolls sideways (every item keeps a hand-sized width) */
+/* ---- the left menu: groups like the sidebar of PasarGuard itself (the owner, 2026-10-14; roadmap #102). A group is a head (a page) with its sections - the tabs of the page: Servers (Foreign, Iran),
+   Tunnels, Panel (Users, Hosts, Access, Core, Admins, Panel settings), Settings - on a thin line under it; the little arrow opens and closes them (web/app.js navGroup). Only the fluid layout in a wide
+   window draws a group so: while a group is open its tabs are in the menu and the bar under the header is not drawn. In the rail (under 1180 px), on a phone and in the old layout a group is its head
+   alone: the bar under the header has the tabs. The menu scrolls when the window is short, and the bottom bar of a phone scrolls sideways (every item keeps a hand-sized width) */
 nav#nav { min-height: 0; overflow-y: auto; scrollbar-width: none; } nav#nav::-webkit-scrollbar { display: none; }
+html body nav#nav a, html body nav#nav a:hover, html body nav#nav a.on:hover { transform: none !important; }      /* the card of an item keeps its size and its place when the mouse is over it (it slid 3 px to the right, under the edge of the menu, and the arrow of a group stayed behind) */
 @media not ((max-width: 760px) and (pointer: coarse)) { .side { max-height: calc(100vh - 28px); min-height: 0; } }      /* a short window: the menu scrolls inside the side bar, the sign-out stays in view */
 nav#nav .nav-g, nav#nav .nav-gh, nav#nav .nav-sub { display: contents; } nav#nav .nav-tg { display: none; }      /* (the default: the wrappers are not there) */
+nav#nav .nav-g .nav-sub { display: none; }      /* (the tabs of a page are in the bar under the header, except in a wide window) */
 @media (min-width: 1181px) {
+  html[data-fluid][data-navsub="1"] #subnav { display: none; }      /* the open page has its tabs in the menu */
   html[data-fluid] nav#nav .nav-g { display: grid; gap: 4px; }
   html[data-fluid] nav#nav .nav-gh { display: block; position: relative; }
   html[data-fluid] body nav#nav .nav-gh > a { padding-right: 44px; }
@@ -4441,23 +4444,21 @@ nav#nav .nav-g, nav#nav .nav-gh, nav#nav .nav-sub { display: contents; } nav#nav
   html[data-fluid] nav#nav .nav-g[data-open="1"] .nav-tg::before { transform: translateY(-2px) rotate(135deg); }
   html[data-fluid] nav#nav .nav-tg:hover { background: rgba(255,255,255,.08); color: var(--text); } html[data-fluid] nav#nav .nav-tg:hover::before { opacity: 1; }
   html[data-fluid] nav#nav .nav-tg:focus-visible { outline: 2px solid rgba(47,139,255,.7); outline-offset: 1px; }
-  html[data-fluid] nav#nav .nav-sub { display: grid; gap: 2px; margin: 0 0 2px 22px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.14); }
+  html[data-fluid] nav#nav .nav-g .nav-sub { display: grid; gap: 2px; margin: 0 0 2px 22px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.14); }
   html[data-fluid] nav#nav .nav-g[data-open="0"] .nav-sub { display: none; }
   html[data-fluid] body nav#nav .nav-sub a { height: 40px; padding: 0 12px 0 10px; gap: 12px; font-size: 14px; border-radius: 12px; }
   html[data-fluid] body nav#nav .nav-sub a::after { content: none !important; display: none !important; }      /* a section has no chevron: only the head opens something */
   html[data-fluid] nav#nav .nav-sub a .ic svg { width: 19px; height: 19px; }
   html[data-fluid] nav#nav .nav-g.has-on > .nav-gh > a:not(.on) { color: var(--text); background: rgba(255,255,255,.05); }      /* the open page is one of the sections: the head says so while the group is closed */
-  html[data-mode="light"][data-fluid] nav#nav .nav-sub { border-left-color: rgba(30,50,100,.18); }
+  html[data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on { color: var(--text); border-color: transparent; background: rgba(255,255,255,.05); box-shadow: none; }      /* the head of a "tabs" group while one of its tabs is the open one: the tab is the blue one */
+  html[data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on::before { display: none; }
+  html[data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on .ic { color: var(--ic); }
+  html[data-mode="light"][data-fluid] nav#nav .nav-g .nav-sub { border-left-color: rgba(30,50,100,.18); }
   html[data-mode="light"][data-fluid] nav#nav .nav-tg:hover { background: rgba(30,50,100,.08); }
-  html[data-mode="light"][data-fluid] nav#nav .nav-g.has-on > .nav-gh > a:not(.on) { background: rgba(30,50,100,.06); }
+  html[data-mode="light"][data-fluid] nav#nav .nav-g.has-on > .nav-gh > a:not(.on), html[data-mode="light"][data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on { background: rgba(30,50,100,.06); }
   html[dir="rtl"][data-fluid] nav#nav .nav-tg { right: auto; left: 7px; }
   html[dir="rtl"][data-fluid] body nav#nav .nav-gh > a { padding-right: 14px; padding-left: 44px; }
-  html[dir="rtl"][data-fluid] nav#nav .nav-sub { margin: 0 22px 2px 0; padding: 0 8px 0 0; border-left: 0; border-right: 1px solid rgba(255,255,255,.14); }
-}
-@media (max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse))) {      /* the rail: the head and its sections are icons in one quiet box */
-  html[data-fluid] nav#nav .nav-g { display: grid; gap: 4px; padding: 3px 0; border-radius: 16px; background: rgba(255,255,255,.04); }
-  html[data-fluid] nav#nav .nav-g.has-on { background: rgba(47,139,255,.08); }
-  html[data-mode="light"][data-fluid] nav#nav .nav-g { background: rgba(30,50,100,.05); }
+  html[dir="rtl"][data-fluid] nav#nav .nav-g .nav-sub { margin: 0 22px 2px 0; padding: 0 8px 0 0; border-left: 0; border-right: 1px solid rgba(255,255,255,.14); }
 }
 @media (max-width: 760px) and (pointer: coarse) {
   #nav { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; } #nav::-webkit-scrollbar { display: none; }

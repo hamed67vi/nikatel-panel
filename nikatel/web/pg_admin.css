@@ -157,22 +157,50 @@ html body #modal .pg-ctpl-form .pg-ctpl-ta { display: flex; flex-direction: colu
 html body #modal .pg-ctpl-form .pg-ctpl-ta textarea { width: 100%; box-sizing: border-box; min-height: 320px; padding: 10px 12px; border-radius: 12px; font: 12px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); tab-size: 2; white-space: pre; resize: vertical; }
 /* ---- the Users window and tools of a PasarGuard panel (pg_users.js) */
 html body #page select.pgu-tools { height: 32px; width: 104px; border-radius: 10px; }
-html body #modal .modal.pgu { max-width: 840px; }
+html body #modal .modal.pgu { max-width: 860px; }
 html body #modal .modal.pgu-tool { max-width: 580px; }
 html body #modal .pgu [hidden], html body #modal .pgu-tool [hidden] { display: none !important; }
-html body #modal .pgu .pgu-groups, html body #modal .pgu-tool .pgu-groups { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 112px; overflow: auto; padding: 4px 0; min-width: 0; }
-html body #modal .pgu label.chk, html body #modal .pgu-tool label.chk { height: 26px; font-size: 12.5px; }
-html body #modal .pgu .pgu-grp .pgu-groups { max-height: 150px; }
-html body #modal .pgu .kv2.kf input[type="number"], html body #modal .pgu .kv2.kf input[type="date"] { width: 150px; flex: none; }
-html body #modal .pgu .pgu-plan .kv2.kf select { width: 150px; flex: none; }
-html body #modal .pgu .pgu-act { margin: 0 0 8px; }
-html body #modal .pgu .pgu-act > h5 { text-transform: none; letter-spacing: 0; }
-html body #modal .pgu .pg-admin-seg { display: inline-flex; gap: 4px; margin: 0; }
-html body #modal .pgu .pg-admin-seg button { height: 26px; padding: 0 11px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--mut); background: var(--panel); border: 1px solid var(--line); box-shadow: none; }
+html body #modal .pgu-tool .pgu-groups { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 112px; overflow: auto; padding: 4px 0; min-width: 0; }
+html body #modal .pgu-tool label.chk { height: 26px; font-size: 12.5px; }
+/* the window of ONE user, tight (1.47.0): boxes of 8 px padding, fields of 30 px in two columns, the usage beside the account, the next plan beside the groups, a short activity list */
+html body #modal .pgu .modal-body { padding: 8px 12px 10px; container: pgu / inline-size; }
+html body #modal .pgu .pu-form { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
+html body #modal .pgu .pu-top, html body #modal .pgu .pu-mid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 8px; align-items: stretch; }
+html body #modal .pgu .pu-box { margin: 0; padding: 7px 12px 9px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); box-shadow: none; min-width: 0; }
+html body #modal .pgu .pu-box > h5 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 5px; padding: 0; border: 0; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); }
+html body #modal .pgu .pu-box > h5 .sp { flex: 1; }
+html body #modal .pgu .pu-box > h5 small { font-size: 11px; letter-spacing: 0; text-transform: none; }
+html body #modal .pgu .pu-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 14px; }
+html body #modal .pgu .pu-f { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 30px; margin: 0; padding: 0; }
+html body #modal .pgu .pu-f.wide { grid-column: 1 / -1; }
+html body #modal .pgu .pu-f > span:first-child { flex: 0 0 72px; font-size: 12px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body #modal .pgu .pu-f input:not([type="checkbox"]), html body #modal .pgu .pu-f select { flex: 1 1 0; min-width: 0; width: auto; height: 30px; min-height: 0; padding: 0 9px; border-radius: 9px; font-size: 13px; }
+html body #modal .pgu .pu-f em { flex: none; font-style: normal; font-size: 11.5px; color: var(--mut); }
+html body #modal .pgu .pu-f .srv-sw { margin: 0; }
+html body #modal .pgu .pu-link { display: block; flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; cursor: pointer; color: var(--text); }
+html body #modal .pgu .pu-use { display: flex; flex-direction: column; gap: 0; }
+html body #modal .pgu .pu-big { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; }
+html body #modal .pgu .pu-big b { font-size: 21px; font-weight: 700; letter-spacing: -.3px; }
+html body #modal .pgu .pu-big span { font-size: 12px; color: var(--mut); }
+html body #modal .pgu .pu-bar { height: 6px; margin: 5px 0 6px; border-radius: 3px; background: var(--panel-2, rgba(255, 255, 255, .08)); overflow: hidden; }
+html body #modal .pgu .pu-bar i { display: block; height: 100%; border-radius: 3px; background: var(--acc); } html body #modal .pgu .pu-bar i.warn { background: var(--warn); } html body #modal .pgu .pu-bar i.bad { background: var(--bad, #f0506e); }
+html body #modal .pgu .pu-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 22px; font-size: 12.5px; border-top: 1px solid var(--line); }
+html body #modal .pgu .pu-kv > span { color: var(--mut); } html body #modal .pgu .pu-kv > b { font-weight: 600; text-align: right; }
+html body #modal .pgu .pu-meta { display: block; margin-top: auto; padding-top: 4px; font-size: 11px; line-height: 1.35; }
+html body #modal .pgu .pu-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px 6px; max-height: 92px; overflow: auto; }
+html body #modal .pgu .pu-chip { position: relative; display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--mut); cursor: pointer; user-select: none; }
+html body #modal .pgu .pu-chip input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; pointer-events: none; }
+html body #modal .pgu .pu-chip:has(input:checked) { color: var(--text); background: rgba(122, 167, 240, .17); border-color: rgba(122, 167, 240, .5); }
+html body #modal .pgu .pu-chip:has(input:focus-visible) { outline: 2px solid rgba(47, 139, 255, .7); outline-offset: 1px; }
+html body #modal .pgu .pu-save { margin: 0; padding: 0; }
+html body #modal .pgu .pg-admin-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 0; max-width: 100%; }
+html body #modal .pgu .pg-admin-seg button { height: 24px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--mut); background: var(--panel); border: 1px solid var(--line); box-shadow: none; }
 html body #modal .pgu .pg-admin-seg button.on { color: var(--text); background: rgba(122, 167, 240, .17); border-color: rgba(122, 167, 240, .5); }
-html body #modal .pgu #pgu-actbody { max-height: 176px; overflow: auto; }
+html body #modal .pgu #pgu-actbody { max-height: 118px; overflow: auto; }
+@container pgu (max-width: 700px) { html body #modal .pgu .pu-top, html body #modal .pgu .pu-mid { grid-template-columns: minmax(0, 1fr); } }
+@container pgu (max-width: 470px) { html body #modal .pgu .pu-grid { grid-template-columns: minmax(0, 1fr); } }
 html body #modal .pgu .pgu-tbl { width: 100%; table-layout: fixed; }
-html body #modal .pgu .pgu-tbl th, html body #modal .pgu .pgu-tbl td { padding: 3px 8px; font-size: 12.5px; }
+html body #modal .pgu .pgu-tbl th, html body #modal .pgu .pgu-tbl td { padding: 2px 8px; font-size: 12.5px; }
 html body #modal .pgu .pgu-tbl td.name { text-align: left; }
 html body #modal .pgu .pgu-foot { display: flex; justify-content: flex-end; padding-top: 6px; }
 html body #modal .pgu .pgu-fmtbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 6px; } html body #modal .pgu .pgu-fmtbar .sp { flex: 1; }
@@ -193,12 +221,6 @@ html body #modal .pgu-tool .pgu-names { display: flex; flex-wrap: wrap; gap: 4px
 html body #modal .pgu-tool .pgu-names span { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; }
 html body #modal .pgu-tool .pgu-links { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 6px; font-size: 11.5px; color: var(--mut); }
 html body #modal .pgu-tool .pgu-links textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 12px; font: 12px/1.45 var(--mono, ui-monospace, Menlo, Consolas, monospace); white-space: pre; resize: vertical; }
-html body #modal .pgu .pgu-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-html body #modal .pgu .pgu-col > .sbox { margin: 0; }
-html body #modal .pgu .pgu-row { margin: 0 0 8px; }
-html body #modal .pgu .pgu-meta { display: block; padding-top: 5px; font-size: 11.5px; }
-html body #modal .pgu .ue-account .kv2, html body #modal .pgu .pgu-plan .kv2 { min-height: 30px; padding: 1px 0; }
-html body #modal .pgu .ue-usage .kv2 { min-height: 26px; padding: 0; }
 html body #modal .pgu-tool .kv2.kf > div.pgu-chips, html body #modal .pgu-tool .kv2.kf > div.pgu-groups { flex-wrap: wrap; white-space: normal; overflow: visible; justify-content: flex-start; text-align: left; align-items: center; }
 html body #modal .pgu-tool .kv2.kf > .pgu-two { flex: 1 1 auto; justify-content: flex-end; min-width: 0; }
 html body #modal .pgu-tool .pgu-two input[type="date"] { width: 128px; min-width: 0; }

@@ -159,23 +159,30 @@ const INFO = {
   jobs: ["Jobs", "The background jobs of the panel and whether they succeed."],
   logs: ["Logs", "The panel's own log, newest first. Secrets are masked before they are written."],
   settings: ["Settings", "Account, Telegram and backup, the probe, appearance and about, AI and automation."],
-  pghosts: ["Hosts", "The address, port and TLS of every link in the subscriptions of the PasarGuard panel you pick."],
-  pgaccess: ["Access", "Groups (which inbounds a user gets) and templates (the recipe of a new user) of the panel you pick."],
-  pgcore: ["Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
-  pgadmins: ["Admins", "The admins of the panel you pick, their roles and their API keys."],
-  pgpanel: ["Panel", "Usage, system and settings of the panel you pick."],
+  pgpanel: ["Panel", "Everything of the Marzban or PasarGuard panel you pick, in tabs: users, hosts, access, core, admins and the settings of the panel."],
 };
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
-const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
+const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes",      // an old page name opens the page that holds it ("page/tab": on that tab)
+  pghosts: "pgpanel/hosts", pgaccess: "pgpanel/access", pgcore: "pgpanel/core", pgadmins: "pgpanel/admins"};      // (1.47.0: the sections of PasarGuard are the tabs of the Panel page)
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const CONFIGS_UI = false;      // the Configs list is switched off and hidden (no tab, no card, no problem rows) until the project grows (the owner, 2026-10-14, roadmap #98); the probe and the routes keep running; set true to bring it back
+Object.assign(NAV_ALIAS, CONFIGS_UI ? {panels: "configs"} : {panels: "pgpanel/users", configs: "pgpanel/users"});      // (the Users of the panels are the first tab of the Panel page while the Configs list is off)
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["pgnodes", "<i class=\"tic tic-node\"></i>Nodes", "The PasarGuard nodes of the panel you pick: connected or not, the server each one runs on (Make a node turns a server of the list into one), their usage."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
   configs: [...(CONFIGS_UI ? [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."]] : []), ["panels", "🧩 Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."]],      // the page is called Users; with the Configs tab off it has one tab, so the tab bar is not drawn
 };
+/* the Panel page (1.47.0, the owner: "when we click Panel, show everything as tabs"): ONE page for the panel you pick, with a tab for each section of PasarGuard that was a page of its own (what PG_SUBS says about the tabs inside each) */
+SUB.pgpanel = [
+  ["users", "Users", "The users of the panel you pick: search, status, edit, bulk actions and the tools of the More… menu. Pick a panel in the bar."],
+  ["hosts", "Hosts", "The address, port and TLS of every link in the subscriptions of the PasarGuard panel you pick."],
+  ["access", "Access", "Groups (which inbounds a user gets) and templates (the recipe of a new user) of the panel you pick."],
+  ["core", "Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
+  ["admins", "Admins", "The admins of the panel you pick, their roles and their API keys."],
+  ["settings", "Panel settings", "Usage, system and settings of the panel you pick."],
+];
 const subBarOn = page => !!SUB[page] && SUB[page].length > 1;      // a page with a single tab has no tab bar
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur && x[3] !== "off") ? cur : list[0][0]; }       // a tab that is switched off is never the current one
@@ -188,7 +195,10 @@ function renderSub() {
   box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
-window.setSub = (page, k) => { if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = ""; refresh(); };
+function subSet(page, k) {      // what changes when a tab of a page is chosen (setSub = this and a redraw; the left menu calls it through go)
+  if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = "";
+}
+window.setSub = (page, k) => { subSet(page, k); refresh(); };
 const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
 /* a small animated drawing beside the title of the main pages: lights of a server, packets in a tunnel, bars of a panel, the blink of the shop bot */
 const TITLE_ANIM = {
@@ -197,11 +207,11 @@ const TITLE_ANIM = {
   configs: `<svg class="t-anim pan-anim" viewBox="0 0 32 28" width="32" height="28" aria-hidden="true"><rect class="win" x="2" y="2" width="28" height="24" rx="3.5"/><path class="bar0" d="M2 8h28"/><rect class="b b1" x="7" y="12" width="4" height="10" rx="1"/><rect class="b b2" x="14" y="12" width="4" height="10" rx="1"/><rect class="b b3" x="21" y="12" width="4" height="10" rx="1"/><circle class="dt" cx="6" cy="5" r="1"/><circle class="dt" cx="10" cy="5" r="1"/></svg>`,
   settings: `<svg class="t-anim gear-anim" viewBox="0 0 30 30" width="28" height="28" aria-hidden="true"><g class="gear"><path d="M15 3.5l2 .4.7 3 2.2 1 2.6-1.6 2.7 2.7-1.6 2.6 1 2.2 3 .7.4 2-.4 2-3 .7-1 2.2 1.6 2.6-2.7 2.7-2.6-1.6-2.2 1-.7 3-2 .4-2-.4-.7-3-2.2-1-2.6 1.6-2.7-2.7 1.6-2.6-1-2.2-3-.7-.4-2 .4-2 3-.7 1-2.2-1.6-2.6 2.7-2.7 2.6 1.6 2.2-1 .7-3z" transform="translate(0 0) scale(.9) translate(1.7 1.7)"/><circle cx="15" cy="15" r="4"/></g></svg>`,
   bot: `<svg class="t-anim bot-anim" viewBox="0 0 30 30" width="30" height="30" aria-hidden="true"><path class="ant" d="M15 3v4"/><circle class="ap" cx="15" cy="3" r="1.8"/><rect class="hd" x="4" y="8" width="22" height="17" rx="5"/><ellipse class="eye" cx="11" cy="16" rx="2.3" ry="2.6"/><ellipse class="eye" cx="19" cy="16" rx="2.3" ry="2.6"/><path class="mo" d="M11 21.2h8"/></svg>`,
-};function go(page) {
+};function go(page, tab) {      // `tab`: a section of the left menu - the page opens on that tab
   let aliased = false;
   if (NAV_ALIAS[page]) {   aliased = true;               // an old page name: open the page that holds it, on the right sub-tab
-    const target = NAV_ALIAS[page];
-    if ((SUB[target] || []).some(x => x[0] === page)) state.sub[target] = page;
+    const [target, want] = NAV_ALIAS[page].split("/"), k = want || page;
+    if ((SUB[target] || []).some(x => x[0] === k)) { state.sub[target] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); }      // (kept: a reload comes back to the same tab)
     page = target;
   }
   if (!PAGES[page] || page === "bot") page = "dashboard";      // the Shop bot section is switched off for now (roadmap #79)
@@ -212,9 +222,9 @@ const TITLE_ANIM = {
     const pg = $("#page"); if (pg) { if (pg.childElementCount && !pg.querySelector(".loading")) { pg.style.minHeight = pg.offsetHeight + "px"; pg.classList.add("busy"); } else pg.innerHTML = loadingBox(page); pg.classList.remove("enter"); }      // the old page stays (dimmed, still) until the new one has its data: nothing collapses, nothing jumps
     hideModal();
   }   // what the page we leave still waits for is dropped; the new page starts at the top
+  if (tab) { if (page === "settings") tabSet(tab); else if (SUB[page]) subSet(page, tab); }      // (after the reset above: the tab asked for is the one that stays)
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
-  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
-  navGroupOf(page);
+  navMark(true);
   const navOn = $("#nav a.on"); if (navOn && isPhone()) navOn.scrollIntoView({inline: "center", block: "nearest"});      // the bottom bar of a phone scrolls: the item of the open page stays in view
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
   if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
@@ -266,26 +276,68 @@ PAGES.serverDoctor = async () => {
   state.tab = s;
   return PAGES.servers(false);
 };
-document.querySelectorAll("#nav a").forEach(a => { a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page); }; if (!a.title) a.title = a.querySelector("span").textContent.trim(); });      // (the title is what the rail of icons shows on hover)
-/* the PasarGuard group of the left menu (the owner, 2026-10-14: like the sidebar of PasarGuard): "Panel" is the head, Users / Hosts / Access / Core / Admins hang under it. The little arrow opens and closes
-   the group (the choice is kept in this browser); a page of the group opens it by itself, and while it is closed the head shows that the open page is one of its sections. The rail and the phone draw it flat (CSS). */
-const NAV_GROUP = ["pgpanel", "configs", "pghosts", "pgaccess", "pgcore", "pgadmins"];
-function navGroup(open, keep) {
-  const g = $("#nav-g"), b = $("#nav-tg"); if (!g || !b) return;
-  g.dataset.open = open ? "1" : "0"; b.setAttribute("aria-expanded", open ? "true" : "false");
-  if (keep) { try { localStorage.setItem("nk.nav.g", open ? "1" : "0"); } catch (e) { /* kept for this visit only */ } }
+document.querySelectorAll("#nav a").forEach(a => { a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page, a.dataset.sub); }; });
+/* the groups of the left menu (the owner, 2026-10-14: like the sidebar of PasarGuard). A group is a head (a page) with a list of sections under it. The little arrow at the right of the head opens and closes
+   the list (what was chosen is kept in this browser), the head opens its page AND the list, and a page of a group opens it by itself (and it closes again when another page is opened). The sections of a group are the
+   tabs the page already has (Servers: Foreign, Iran...; Tunnels; Panel: Users, Hosts, Access, Core, Admins, Panel settings; Settings), made by navBuild at the end of this file. The rail and the phone draw a group as
+   its head alone (the tabs are in the bar under the header there); while a group is open in a wide window its tabs are in the menu and the bar is not drawn (app.css). */
+const navPlain = t => String(t).replace(/<[^>]*>/g, "").replace(/^[^\p{L}\p{N}]+/u, "").trim();      // the name of a tab without its icon
+const navOpenMap = () => { try { const m = JSON.parse(localStorage.getItem("nk.nav.g") || "{}"); return m && typeof m === "object" ? m : {}; } catch (e) { return {}; } };
+function navGroup(g, open, keep) {      // `keep`: the owner chose it with the arrow (remembered, and the group stays as it is); else it was opened by a page and closes again when another page is opened
+  g.dataset.open = open ? "1" : "0";
+  const b = g.querySelector(".nav-tg"); if (b) b.setAttribute("aria-expanded", open ? "true" : "false");
+  if (keep) { delete g.dataset.auto; const m = navOpenMap(); m[g.dataset.page] = open ? 1 : 0; try { localStorage.setItem("nk.nav.g", JSON.stringify(m)); } catch (e) { /* kept for this visit only */ } }
+  navSubBar();
 }
-function navGroupOf(page) {
-  const g = $("#nav-g"); if (!g) return;
-  const inside = NAV_GROUP.includes(page);
-  g.classList.toggle("has-on", inside && page !== "pgpanel");
-  if (inside && g.dataset.open !== "1") navGroup(true, false);
+function navSubBar() {      // while the group of the open page is open its tabs are in the menu: the bar under the header is not drawn then (a wide window; app.css)
+  const g = document.querySelector(`#nav .nav-g[data-kind="tabs"][data-page="${state.page}"]`);
+  document.documentElement.dataset.navsub = g && SUB[state.page] && g.dataset.open === "1" ? "1" : "";
 }
-(() => {
-  let was = "1"; try { was = localStorage.getItem("nk.nav.g") || "1"; } catch (e) { /* the default: open */ }
-  navGroup(was !== "0", false);
-  const b = $("#nav-tg"); if (b) b.onclick = () => navGroup($("#nav-g").dataset.open !== "1", true);
-})();
+function navMark(openIt) {      // which items are the open page (and tab); `openIt` (a page was opened) also opens the group it is in, a redraw of the same page never does
+  const page = state.page, tab = page === "settings" ? state.stab : SUB[page] ? sub(page) : "";
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page && (a.dataset.sub === undefined || a.dataset.sub === tab)));
+  document.querySelectorAll("#nav .nav-g").forEach(g => {
+    const inside = g.dataset.page === page;
+    g.classList.toggle("has-on", !!g.querySelector(".nav-sub a.on"));
+    if (!openIt) return;
+    if (inside && g.dataset.open !== "1") { navGroup(g, true, false); g.dataset.auto = "1"; }      // a page of the group opens it by itself ...
+    else if (!inside && g.dataset.auto === "1") { navGroup(g, false, false); delete g.dataset.auto; }      // ... and it closes again when another page is opened (a group the owner opened with the arrow stays open)
+  });
+  navSubBar();
+}
+function navTabs() {      // the tabs that hang under their page: [key, name, icon]
+  const globe = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3.4 3.2 14.6 0 18M12 3c-3.2 3.4-3.2 14.6 0 18"/></svg>';
+  const ic = {foreign: globe, iran: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2.2 3.6L16 11H5"/></svg>', pgnodes: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.4"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/></svg>',
+    list: SI.swap, dns: SI.cloud, repairs: SI.pulse,
+    users: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16M3 9.5h18"/></svg>', hosts: globe, access: '<svg viewBox="0 0 24 24"><path d="M12 3.5l8.5 4.7L12 13 3.5 8.2z"/><path d="M3.5 12.2L12 17l8.5-4.8M3.5 16.2L12 21l8.5-4.8"/></svg>',
+    core: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.gear};      // (the tab of the Panel page that is called settings is the settings of the panel)
+  const of = page => (SUB[page] || []).filter(t => t[3] !== "off").map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc]);
+  return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};
+}
+function navBuild() {
+  const nav = $("#nav"); if (!nav) return;
+  for (const [page, list] of Object.entries(navTabs())) {
+    const head = nav.querySelector(`:scope > a[data-page="${page}"]`); if (!head || list.length < 2) continue;
+    const g = document.createElement("div"), gh = document.createElement("div"), sub = document.createElement("div"), tg = document.createElement("button");
+    g.className = "nav-g"; g.dataset.page = page; g.dataset.kind = "tabs"; g.dataset.open = "0"; gh.className = "nav-gh"; sub.className = "nav-sub"; sub.id = "nav-sub-" + page; tg.type = "button"; tg.className = "nav-tg";
+    sub.innerHTML = list.map(([k, name, icon]) => `<a data-page="${page}" data-sub="${k}"><i class="ic">${icon}</i><span>${esc(name)}</span></a>`).join("");
+    head.replaceWith(g); gh.append(head, tg); g.append(gh, sub);
+    sub.querySelectorAll("a").forEach(a => { a.onclick = () => go(a.dataset.page, a.dataset.sub); });
+  }
+  const saved = navOpenMap();
+  nav.querySelectorAll(".nav-g").forEach(g => {
+    const tg = g.querySelector(".nav-tg"), name = g.querySelector(".nav-gh > a > span").textContent.trim();
+    tg.setAttribute("aria-controls", g.querySelector(".nav-sub").id); tg.setAttribute("aria-label", `Show or hide the sections of ${name}`); tg.title = `Show or hide the sections of ${name}`;
+    tg.onclick = () => navGroup(g, g.dataset.open !== "1", true);
+    navGroup(g, saved[g.dataset.page] === 1, false);
+  });
+  navTitles(); matchMedia("(max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse)))").addEventListener("change", navTitles);
+  navMark(false);
+}
+function navTitles() {      // the name of an item is its tooltip only where the words are not on the screen (the rail of icons); in a wide window a tooltip with the same word would only get in the way
+  const rail = matchMedia("(max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse)))").matches;
+  document.querySelectorAll("#nav a:not(.nav-off)").forEach(a => { if (rail) a.title = a.querySelector("span").textContent.trim(); else a.removeAttribute("title"); });
+}
 
 
 /* every list (a table or the config cards) sits in a box of a fixed height with its own scrollbar and a header that stays on top; done once for whatever a page draws, also what loads later */
@@ -322,6 +374,7 @@ const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "Th
 /* every tab, sub-tab and range switch of the panel: the content that follows comes in softly (see .soft-in, and the animation of a tab panel in app.css) instead of jumping */
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".tabs button, #subnav button, .set-tabs button, .tf-tabs button, .srv-tabs button, .act-cats button, .ap-ttabs button")) state.softSwap = true; }, true);
 async function refresh() {
+  navMark(false);      // (the open tab may have changed: the menu shows it)
   const snap = state.resetScroll ? [] : scrollSnapshot();
   state.resetScroll = false;
   const seq = navSeq, pg0 = $("#page"), wasBusy = !!(pg0 && pg0.classList.contains("busy"));
@@ -438,7 +491,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal"
 state.dq = ""; let dqSel = 0;
 function dqSections() {   // every section of the panel by its name: the pages, their tabs, the tabs of Settings and of the shop bot
   const strip = s => String(s).replace(/<[^>]*>/g, "").replace(/^[^A-Za-z0-9]+/, "").trim(), out = [], pages = {};
-  document.querySelectorAll("#nav a:not(.nav-off)").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });
+  document.querySelectorAll("#nav a:not(.nav-off):not([data-sub])").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });      // (the pages; the tabs that hang under them in the menu come from SUB and SET_TABS below)
   Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label, , off]) => { if (off !== "off") out.push({page, subKey: k, name: strip(label), sub: pages[page] || page}); }));
   Object.entries(SET_TABS).forEach(([k, v]) => out.push({page: "settings", setTab: k, name: strip(v[0]), sub: "Settings"}));
   SB_TABS.forEach(([k, l]) => out.push({page: "bot", sbTab: k, name: l, sub: "Shop bot"}));
@@ -2081,15 +2134,18 @@ window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription re
 const pn = {id: localStorage.getItem("nk.pn") || "", tab: "users", add: false, edit: false, users: null, usersKey: "", uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostsKey: "", hostEdit: null, core: null, raw: false, logs: null};
 INFO.panels = ["Users", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
-/* ---- the PasarGuard sections are pages of the left menu (1.45.0, roadmap #102): each page shows the bar of the panels (which panel) and its own tab(s) of what was one page with ten tabs.
-   Nodes are a tab of Servers (the server beside the node it runs). pn.want = the tab a link asked for; pnShow() settles pn.tab for the page that is open. */
-const PG_PAGES = {configs: ["users"], pghosts: ["hosts"], pgaccess: ["groups", "templates"], pgcore: ["cores"], pgadmins: ["admins"], pgpanel: ["usage", "system", "settings"], nodes: ["nodes"]};
-const PG_PAGE_OF = {}; Object.entries(PG_PAGES).forEach(([pg, tabs]) => tabs.forEach(t => { PG_PAGE_OF[t] = pg; }));
+/* ---- the PasarGuard sections are the tabs of the Panel page (1.47.0; in 1.45.0 they were pages of the left menu, roadmap #102): every tab shows the bar of the panels (which panel) and its own tab(s) of what was one page
+   with ten tabs - PG_SUBS says which tabs (of pgTabs) each tab of the Panel page holds. Nodes are a tab of Servers (the server beside the node it runs). pn.want = the tab a link asked for; pnShow() settles pn.tab
+   for the part that is open. */
+const PG_SUBS = {users: ["users"], hosts: ["hosts"], access: ["groups", "templates"], core: ["cores"], admins: ["admins"], settings: ["usage", "system", "settings"]};
+const PG_SUB_OF = {}; Object.entries(PG_SUBS).forEach(([s, tabs]) => tabs.forEach(t => { PG_SUB_OF[t] = s; }));
+const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : state.page === "nodes" ? ["nodes"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
+const pnIsUsers = () => (state.page === "pgpanel" && sub("pgpanel") === "users") || (state.page === "configs" && sub("configs") === "panels");
 const pnShow = tabs => { if (pn.want && tabs.includes(pn.want)) pn.tab = pn.want; else if (!tabs.includes(pn.tab)) pn.tab = tabs[0]; pn.want = null; };
 PAGES.panels = async () => {
   const list = (await api("/api/panels")).panels; state.panelsCache = list;
-  pnShow(PG_PAGES[state.page] || ["users"]);
-  if (pn.id === "*" && list.length > 1 && state.page === "configs") return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
+  pnShow(pnPageTabs());
+  if (pn.id === "*" && list.length > 1 && pnIsUsers()) return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
   if (pn.id === "*") pn.id = "";
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
@@ -2123,13 +2179,14 @@ function pnNodesHtml(p) {
     ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
 }
 window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };      // (another panel: the page and its tab stay)
-window.pnTab = t => {      // a tab of the page that is open stays here; a tab that belongs to another page opens that page
+window.pnTab = t => {      // a tab of the part that is open stays here; a tab that belongs to another tab of the Panel page (or to Servers) opens that
   pn.user = null; pn.hostEdit = null;
-  const pg = PG_PAGE_OF[t];
-  if (pg && pg !== state.page) { pn.want = t; go(pg); if (pg === "nodes") setSub("nodes", "pgnodes"); return; }
+  if (pnPageTabs().includes(t)) { pn.tab = t; refresh(); return; }
+  if (t === "nodes") { pn.want = t; go("nodes", "pgnodes"); return; }
+  if (PG_SUB_OF[t]) { pn.want = t; go("pgpanel", PG_SUB_OF[t]); return; }
   pn.tab = t; refresh();
 };
-["pghosts", "pgaccess", "pgcore", "pgadmins", "pgpanel"].forEach(pg => { PAGES[pg] = () => PAGES.panels(); });
+PAGES.pgpanel = async () => { renderSub(); return PAGES.panels(); };      // the Panel page: the bar of tabs under the header, then the panel you pick and what the tab holds
 window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (p) showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };
 window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -2342,7 +2399,7 @@ pn.live = {t: null, id: 0, top: null, total: 0};
 function pnLiveStop() { clearInterval(pn.live.t); pn.live.t = null; }
 function pnLiveStart(id) { if (pn.live.id !== id) Object.assign(pn.live, {id, top: null, total: 0}); if (!pn.live.t) pn.live.t = setInterval(() => pnLiveTick(id), 15000); }
 async function pnLiveTick(id) {
-  if (state.page !== "configs" || sub("configs") !== "panels" || pn.tab !== "users" || String(pn.id) !== String(id) || !$("#pn-body .usr-tbl")) { pnLiveStop(); return; }      // left the list: no more questions
+  if (!pnIsUsers() || pn.tab !== "users" || String(pn.id) !== String(id) || !$("#pn-body .usr-tbl")) { pnLiveStop(); return; }      // left the list: no more questions
   if (document.hidden || $("#modal .modal")) return;
   let r; try { r = await api(`/api/panels/${id}/users?limit=1&sort=-created_at`); } catch (e) { return; }
   const top = (r.users[0] || {}).username || "", total = +r.total || 0, l = pn.live;
@@ -2377,7 +2434,7 @@ let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = se
 const pnType = () => ((state.panelsCache || []).find(p => String(p.id) === pn.id) || {}).type || "";
 /* the tabs of the panel: Users, Hosts, then every tab a pg_*.js file registered in pgTabs for this type of panel (PasarGuard: groups, templates, nodes, cores, admins, settings, usage) */
 const pnExtraTabs = () => Object.entries(window.pgTabs || {}).filter(([, t]) => !t.types || t.types.includes(pnType())).sort((a, b) => (a[1].order || 99) - (b[1].order || 99)).map(([k, t]) => [k, t.label]);
-const pnTabs = () => { const mine = PG_PAGES[state.page] || ["users"], list = [["users", "Users"], ["hosts", "Hosts"], ...pnExtraTabs()].filter(([t]) => mine.includes(t)).sort((a, b) => mine.indexOf(a[0]) - mine.indexOf(b[0])); return list.length > 1 ? `<div class="toolbar pn-tabs"><div class="tabs">${list.map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>` : ""; };      // only the tabs of the page that is open; a page with one tab has no strip
+const pnTabs = () => { const mine = pnPageTabs(), list = [["users", "Users"], ["hosts", "Hosts"], ...pnExtraTabs()].filter(([t]) => mine.includes(t)).sort((a, b) => mine.indexOf(a[0]) - mine.indexOf(b[0])); return list.length > 1 ? `<div class="toolbar pn-tabs"><div class="tabs">${list.map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>` : ""; };      // only the tabs of the page that is open; a page with one tab has no strip
 const pnFoot = mid => mid;
 function pnPager(total, ps, off = pn.uoff, fn = "pnGo") {
   const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), last = pages - 1;
@@ -3945,7 +4002,8 @@ settingsTabs.only = () => {   // switch the card without touching the server or 
   byName[pick].classList.remove("hidden");
   if (pick === "About & update") aboutLoad(); if (pick === "Core update") enginesLoad();
 };
-window.setTab = k => { state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); refresh(); };
+function tabSet(k) { state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); }      // (the tab of Settings that is open; the left menu calls it through go)
+window.setTab = k => { tabSet(k); refresh(); };
 state.stab = localStorage.getItem("nk.stab") || "account";
 window.onLangChange = () => { try { refresh(); } catch (e) { /* not signed in yet */ } };
 const formJson = (e, nums = [], bools = []) => { const f = new FormData(e.target), o = {}; for (const [k, v] of f.entries()) o[k] = v; nums.forEach(k => o[k] = +o[k]); bools.forEach(k => o[k] = f.get(k) === "on"); return o; };
@@ -4058,6 +4116,7 @@ window.changePassword = async e => {
 };
 
 /* ---- boot */
+navBuild();      // the groups of the left menu: the tabs of Servers, Tunnels and Settings hang under their pages (everything they need is defined above)
 (() => {
   const me = api("/api/auth/me").then(r => { showApp(); if (r && r.demo) demoBanner(); }, () => showLogin());
   Promise.resolve().then(() => go(state.page));      // the page asks for its data at once, beside the sign-in check (a 401 answer shows the sign-in page): one round trip less before the first paint; it starts when the whole file has been read

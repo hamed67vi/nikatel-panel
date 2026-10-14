@@ -21,45 +21,46 @@ async function pgUReload() {
 }
 const pgUPlanOf = u => { const p = u.next_plan || {}; return {template_id: p.template_id || null, data_gb: p.data_gb ?? null, expire_days: p.expire_days ?? null, add_remaining: !!p.add_remaining}; };
 
-function pgUserShow() {
-  const {user: u, options: o} = pgU.d, id = pgU.id, nm = esc(u.username), lim = u.limit || 0, used = u.used || 0, pct = lim ? Math.min(100, Math.round(used * 100 / lim)) : 0;
+function pgUserShow() {      // the window of one user, made tight (1.47.0: the owner asked for it rebuilt and compact): the buttons are in the header, the account is two columns of fields, the usage beside it, the plan and the groups in one row
+  const {user: u, options: o} = pgU.d, nm = esc(u.username), lim = u.limit || 0, used = u.used || 0, pct = lim ? Math.min(100, Math.round(used * 100 / lim)) : 0;
   const em = pgUMs(u.expire), left = em ? Math.ceil((em - Date.now()) / 86400000) : null, hold = u.status === "on_hold", off = u.status === "disabled", np = u.next_plan || {};
-  const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`;
-  const fld = (l, inner, fid = "", hid = false) => `<label class="kv2 kf"${fid ? ` id="${fid}"` : ""}${hid ? " hidden" : ""}><span>${l}</span>${inner}</label>`;
-  const box = (icon, title, rows, cls = "") => `<div class="sbox ${cls}"><h5><i>${icon}</i>${title}</h5>${rows}</div>`;
-  const b = (icon, title, tip, click, cls = "") => `<button type="button" class="sm abtn ${cls}" onclick="${click}" title="${esc(tip)}"><i>${icon}</i>${title}</button>`;
+  const f = (label, inner, id = "", hid = false, cls = "", tip = "") => `<label class="pu-f ${cls}"${id ? ` id="${id}"` : ""}${hid ? " hidden" : ""}${tip ? ` title="${esc(tip)}"` : ""}><span>${label}</span>${inner}</label>`;
+  const kv = (l, v) => `<div class="pu-kv"><span>${l}</span><b>${v}</b></div>`;
+  const b = (svg, title, tip, click, cls = "") => `<button type="button" class="sm ${cls}" onclick="${click}" title="${esc(tip)}" aria-label="${esc(title)}"><i class="bi">${svg}</i><span class="bt">${title}</span></button>`;
   const sel = (name, opts, cur, attrs = "") => `<select name="${name}" ${attrs}>${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   const sub = u.sub || "", odd = !["active", "disabled", "on_hold"].includes(u.status);
   const admins = o.admins.map(a => a.name); if (u.admin && !admins.includes(u.admin)) admins.unshift(u.admin);
-  const bar = `<div class="sbar ue-acts"><span class="sg">${b("↺", "Reset usage", "Set the used traffic back to zero", "pgUserDo('reset')")}${b("🔑", "Revoke subscription", "A new subscription link: the old one stops working", "pgUserDo('revoke_sub')")}</span><i class="sep"></i>
-    <span class="sg">${b(off ? "▶" : "⏸", off ? "Enable" : "Disable", off ? "Let the user connect again" : "Stop the user from connecting", `pgUserDo('${off ? "enable" : "disable"}')`)}${u.next_plan ? b("⏭", "Start next plan", "Start the next plan now: its data and duration replace the current ones", "pgUserDo('active_next')") : ""}</span><span class="sp"></span>
-    ${b("🗑", "Delete user", "Remove the user from the panel", "pgUserDo('delete')", "danger")}</div>`;
-  const usage = box("📊", "Usage", `<div class="ue-big"><b>${fmtB(used)}</b><span>${lim ? "of " + gb(lim) + " · " + pct + " %" : "unlimited"}</span></div>${lim ? `<div class="ue-bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>` : ""}`
+  const pause = '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>', skip = '<svg viewBox="0 0 24 24"><path d="M5 5l9 7-9 7zM18 5v14"/></svg>';
+  const acts = `${b(SI.reset, "Reset usage", "Set the used traffic back to zero", "pgUserDo('reset')")}${b(SI.key, "New link", "Revoke the subscription: a new link, the old one stops working", "pgUserDo('revoke_sub')")}${b(off ? SI.play : pause, off ? "Enable" : "Disable", off ? "Let the user connect again" : "Stop the user from connecting", `pgUserDo('${off ? "enable" : "disable"}')`)}`
+    + `${u.next_plan ? b(skip, "Next plan", "Start the next plan now: its data and duration replace the current ones", "pgUserDo('active_next')") : ""}${b(SI.trash, "Delete", "Remove the user from the panel", "pgUserDo('delete')", "danger")}<i class="mh-sep"></i>`;
+  const usage = `<div class="pu-big"><b>${fmtB(used)}</b><span>${lim ? "of " + gb(lim) + " · " + pct + " %" : "unlimited"}</span></div>${lim ? `<div class="pu-bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>` : ""}`
     + kv("Left", lim ? fmtB(Math.max(0, lim - used)) : "—")
     + kv("Expires", hold ? `after its first connection${u.on_hold_days ? ` <small class="mut">+${u.on_hold_days} d</small>` : ""}` : u.expire_day ? `${esc(u.expire_day)} <small class="${left < 0 ? "err" : "mut"}">${left < 0 ? "expired" : left + " d"}</small>` : "never")
     + kv("Online", esc(pgUAgo(u.online_at)))
-    + `<small class="mut pgu-meta">Lifetime ${fmtB(u.lifetime || 0)} · created ${esc(pgUWhen(u.created_at))}${u.edit_at ? " · edited " + esc(pgUAgo(u.edit_at)) : ""}</small>`, "ue-usage");
-  const account = box("👤", "Account", fld("Status", sel("status", [...(odd ? [[u.status, u.status + " (by the panel)"]] : []), ["active", "active"], ["disabled", "disabled"], ["on_hold", "on hold"]], u.status, `onchange="pgUserSt(this)"`))
-    + fld("Data limit", `<input name="limit_gb" type="number" step="0.1" min="0" value="${u.limit_gb ?? 0}" title="GB, 0 = unlimited"><em>GB</em>`)
-    + fld("Reset usage", sel("reset", ["no_reset", "day", "week", "month", "year"].map(s => [s, s]), u.reset))
-    + fld("Expires", `<input name="expire_day" type="date" value="${esc(u.expire_day)}" title="empty = never">`, "pgu-f-exp", hold)
-    + fld("On hold for", `<input name="on_hold_days" type="number" step="0.5" min="0" value="${u.on_hold_days ?? ""}" placeholder="days" title="After its first connection the user stays valid for this many days"><em>days</em>`, "pgu-f-hold", !hold)
-    + fld("Starts anyway", `<input name="on_hold_timeout_day" type="date" value="${esc(u.on_hold_timeout_day)}" title="A user on hold that has not connected by this day starts counting anyway. Empty = it waits">`, "pgu-f-tmo", !hold)
-    + fld("Devices", `<input name="hwid_limit" type="number" step="1" min="0" value="${u.hwid_limit ?? ""}" placeholder="panel rule" title="How many devices may use this user. Empty = the rule of the panel">`)
-    + (admins.length ? fld("Owner", sel("owner", admins.map(a => [a, a]), u.admin), "", false) : "")
-    + fld("Note", `<input name="note" maxlength="500" value="${esc(u.note)}" placeholder="optional">`)
-    + (sub ? kv("Link", `<span class="mono ell ue-link" title="Click to copy the subscription link" onclick="copyFrom(this, '${esc(sub)}')">${esc(sub)}</span>`) : ""), "ue-account");
-  const groups = box("👥", `Groups <small class="mut pgu-gn"></small>`, `<div class="pgu-groups">${o.groups.map(g => `<label class="chk" title="${esc(g.name)}"><input type="checkbox" name="grp" value="${g.id}" ${u.group_ids.includes(g.id) ? "checked" : ""} onchange="pgUserGn()"><span>${esc(g.name)}</span></label>`).join("") || '<span class="mut">this panel has no group</span>'}</div>`
-    + `<small class="mut">The groups decide which inbounds (and so which hosts) the user gets.</small>`, "pgu-grp pgu-row");
-  const plan = box("⏭", "Next plan", fld("Template", sel("np_tpl", [["", "own values"], ...o.templates.map(t => [t.id, t.name])], np.template_id || "", `onchange="pgUserNp(this)"`))
-    + fld("Data", `<input name="np_gb" type="number" step="0.1" min="0" value="${np.data_gb ?? ""}" placeholder="GB, 0 = unlimited"><em>GB</em>`, "pgu-f-npg", !!np.template_id)
-    + fld("Duration", `<input name="np_days" type="number" step="1" min="0" value="${np.expire_days ?? ""}" placeholder="days, empty = no end"><em>days</em>`, "pgu-f-npd", !!np.template_id)
-    + `<div class="kv2 kf"><span>Add the rest</span>${pgSw(!!np.add_remaining, "", 'name="np_add" title="Add what is left of the current data to the new plan"')}</div>`
-    + `<small class="mut">Starts by itself when the user runs out of data or time (or with “Start next plan”). Everything empty = no next plan.</small>`, "pgu-plan");
-  const act = `<div class="sbox pgu-act pgu-row"><h5><i>📡</i>Activity<span class="sp"></span><span class="pg-admin-seg">${[["devices", "Devices"], ["subs", "Subscription"], ["format", "Formats"], ["online", "Online now"]].map(([k, l]) => `<button type="button" class="${pgU.act === k ? "on" : ""}" data-k="${k}" onclick="pgUserAct('${k}')">${l}</button>`).join("")}</span></h5><div id="pgu-actbody"></div></div>`;
+    + `<small class="mut pu-meta">Lifetime ${fmtB(u.lifetime || 0)} · created ${esc(pgUWhen(u.created_at))}${u.edit_at ? " · edited " + esc(pgUAgo(u.edit_at)) : ""}</small>`;
+  const account = f("Status", sel("status", [...(odd ? [[u.status, u.status + " (by the panel)"]] : []), ["active", "active"], ["disabled", "disabled"], ["on_hold", "on hold"]], u.status, `onchange="pgUserSt(this)"`))
+    + f("Data limit", `<input name="limit_gb" type="number" step="0.1" min="0" value="${u.limit_gb ?? 0}"><em>GB</em>`, "", false, "", "GB, 0 = unlimited")
+    + f("Reset", sel("reset", ["no_reset", "day", "week", "month", "year"].map(s => [s, s]), u.reset), "", false, "", "How often the used traffic is set back to zero")
+    + f("Expires", `<input name="expire_day" type="date" value="${esc(u.expire_day)}">`, "pgu-f-exp", hold, "", "empty = never")
+    + f("On hold for", `<input name="on_hold_days" type="number" step="0.5" min="0" value="${u.on_hold_days ?? ""}" placeholder="days"><em>days</em>`, "pgu-f-hold", !hold, "", "After its first connection the user stays valid for this many days")
+    + f("Starts anyway", `<input name="on_hold_timeout_day" type="date" value="${esc(u.on_hold_timeout_day)}">`, "pgu-f-tmo", !hold, "", "A user on hold that has not connected by this day starts counting anyway. Empty = it waits")
+    + f("Devices", `<input name="hwid_limit" type="number" step="1" min="0" value="${u.hwid_limit ?? ""}" placeholder="panel rule">`, "", false, "", "How many devices may use this user. Empty = the rule of the panel")
+    + (admins.length ? f("Owner", sel("owner", admins.map(a => [a, a]), u.admin)) : "")
+    + f("Note", `<input name="note" maxlength="500" value="${esc(u.note)}" placeholder="optional">`, "", false, "wide")
+    + (sub ? `<div class="pu-f wide"><span>Link</span><span class="mono ell pu-link" title="Click to copy the subscription link" onclick="copyFrom(this, '${esc(sub)}')">${esc(sub)}</span></div>` : "");
+  const plan = f("Template", sel("np_tpl", [["", "own values"], ...o.templates.map(t => [t.id, t.name])], np.template_id || "", `onchange="pgUserNp(this)"`))
+    + `<label class="pu-f" title="Add what is left of the current data to the new plan"><span>Add the rest</span>${pgSw(!!np.add_remaining, "", 'name="np_add"')}</label>`
+    + f("Data", `<input name="np_gb" type="number" step="0.1" min="0" value="${np.data_gb ?? ""}" placeholder="no limit"><em>GB</em>`, "pgu-f-npg", !!np.template_id, "", "GB; 0 or empty = no data limit")
+    + f("Duration", `<input name="np_days" type="number" step="1" min="0" value="${np.expire_days ?? ""}" placeholder="no end"><em>days</em>`, "pgu-f-npd", !!np.template_id, "", "days; empty = no end date");
+  const groups = o.groups.map(g => `<label class="pu-chip" title="${esc(g.name)}"><input type="checkbox" name="grp" value="${g.id}" ${u.group_ids.includes(g.id) ? "checked" : ""} onchange="pgUserGn()"><span>${esc(g.name)}</span></label>`).join("") || '<span class="mut">this panel has no group</span>';
+  const act = `<section class="pu-box pgu-act"><h5>Activity<span class="sp"></span><span class="pg-admin-seg">${[["devices", "Devices"], ["subs", "Subscription"], ["format", "Formats"], ["online", "Online now"]].map(([k, l]) => `<button type="button" class="${pgU.act === k ? "on" : ""}" data-k="${k}" onclick="pgUserAct('${k}')">${l}</button>`).join("")}</span></h5><div id="pgu-actbody"></div></section>`;
   showModal(`<span class="st ${u.status === "active" ? "online" : u.status === "disabled" ? "" : "offline"}"></span><b>${nm}</b> <span class="pill">${esc(String(u.status).replace("_", " "))}</span>${u.admin ? ` <span class="pill" title="The admin that owns this user">${esc(u.admin)}</span>` : ""}`,
-    `${bar}<form class="frm ue-form" onsubmit="return pgUserSave(event)"><div class="sgrid ue-grid two">${account}<div class="pgu-col">${usage}${plan}</div></div>${groups}${act}
-    <div class="frm-act ue-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide ue pgu");
+    `<form class="frm pu-form" onsubmit="return pgUserSave(event)">
+      <div class="pu-top"><section class="pu-box"><h5>Account</h5><div class="pu-grid">${account}</div></section><section class="pu-box pu-use"><h5>Usage</h5>${usage}</section></div>
+      <div class="pu-mid"><section class="pu-box"><h5 title="Starts by itself when the user runs out of data or time (or with “Next plan” above). Everything empty = no next plan.">Next plan</h5><div class="pu-grid">${plan}</div></section>
+        <section class="pu-box"><h5 title="The groups decide which inbounds (and so which hosts) the user gets.">Groups <small class="mut pgu-gn"></small></h5><div class="pu-chips">${groups}</div></section></div>
+      ${act}
+      <div class="frm-act pu-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide ue pgu", acts);
   pgUserGn();
 }
 window.pgUserGn = () => { const xs = [...document.querySelectorAll('#modal input[name="grp"]')], c = document.querySelector("#modal .pgu-gn"); if (c) c.textContent = xs.length ? `${xs.filter(x => x.checked).length} of ${xs.length}` : ""; };

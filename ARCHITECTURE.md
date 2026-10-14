@@ -129,9 +129,10 @@ docs/              operations, development, logging, roadmap, adr/
 
 ## 2b. The UI, page by page
 
-The left menu (`web/index.html`): **Dashboard · Servers · Tunnels**, the **Panel** group - the head is the Panel page and **Users · Hosts · Access · Core · Admins** hang under it, like the
-sidebar of PasarGuard (`#nav-g`; the arrow `#nav-tg` opens and closes it, `navGroup` / `navGroupOf` in app.js; the rail and the phone draw it flat, see app.css) - Shop bot (switched off) and
-**Settings**. `PAGES.<name>` draws a page, `SUB` holds the tabs of a page (the bar under the header), `NAV_ALIAS` keeps the old page names working.
+The left menu (`web/index.html`): **Dashboard · Servers · Tunnels · Panel**, Shop bot (switched off) and **Settings**. Every page with tabs is a group like the sidebar of PasarGuard: `navBuild()`
+(app.js) puts the tabs of the page - `SUB.<page>`, or `SET_TABS` for Settings - under its head, the arrow opens and closes the list (`navGroup`), `navMark` says which item is the open page and tab, and
+a wide window does not draw the bar of tabs under the header while the group is open (see app.css; the rail and the phone show the head alone). `PAGES.<name>` draws a page, `SUB` holds the tabs of a
+page, `go(page, tab)` opens a page on a tab, `NAV_ALIAS` keeps the old page names working (`"page/tab"` = on that tab).
 
 * **Dashboard** - health rows, Problems box (live state, Fix with AI, Fix all), activity feed with
   categories; auto-refresh.
@@ -141,10 +142,10 @@ sidebar of PasarGuard (`#nav-g`; the arrow `#nav-tg` opens and closes it, `navGr
   test over several engines and transports, Advanced for the transports), Core update, Tunnel Doctor
   (attention list, live repair stories, history), DNS · IP switch (ArvanCloud records, Point, failover plans,
   the DNS change log with Restore).
-* **The Panel group** (Marzban panels have Users, Hosts and Usage only) - every page draws the bar of the panels (`pnBar`: which panel) and its tab(s); a tab is a `pgTabs`
-  entry of a `web/pg_*.js` file and a route first (`/api/panels/{id}/pg/…`). `PG_PAGES` (app.js) says which tab belongs to which page, `pnTab(t)` opens the page that owns a tab:
-  **Users** (users, accounts over every panel) · **Hosts** · **Access** (Groups, Templates, client templates) · **Core** · **Admins** (admins, API keys, roles) · **Panel** (Usage, System,
-  Settings). The Nodes tab is a tab of Servers. Configs (the probe's client configs) are switched off.
+* **Panel** (Marzban panels have Users, Hosts and Usage only) - ONE page with a tab for each section of PasarGuard (`SUB.pgpanel`): **Users** (users, accounts over every panel) · **Hosts** ·
+  **Access** (Groups, Templates, client templates) · **Core** · **Admins** (admins, API keys, roles) · **Panel settings** (Usage, System, Settings). Every tab draws the bar of the panels (`pnBar`:
+  which panel) and its own tab(s); those are `pgTabs` entries of the `web/pg_*.js` files, each a route first (`/api/panels/{id}/pg/…`). `PG_SUBS` (app.js) says which `pgTabs` each tab holds,
+  `pnTab(t)` opens the tab that holds one (a test fails when a registered tab has no place). The Nodes tab is a tab of Servers. Configs (the probe's client configs) are switched off.
 * **Shop bot** - Overview · Payments · Orders · Users · Plans · Categories · Servers · Discounts ·
   Gift codes · Broadcast · Tickets · Texts · Settings · Tools (Mini App, backups, apps, top-ups, tables,
   SQL, stats, webhook, commands, restart, dump, logs, import).
