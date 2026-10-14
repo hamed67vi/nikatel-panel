@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.51.1 - The logos have no background and are sharper
+
+- The winged lion (PasarGuard) and the barbed wire (Marzban) are cut out with a clear background, cropped tight and larger (160 px), so they stay sharp in the tabs, the menu and the rows; the screen blending is gone.
+
 ## 1.51.0 - Add server, a + beside the profiles, the logos of PasarGuard and Marzban, a grouped node menu
 
 - **The button is called Add server** (bar of the Lab, the first page, the menu, the box) - the owner. A **"+" beside the tabs** makes a new profile (a category by hand: `POST /api/profiles/tags`, kept in the settings key `lab`, it stays while no server carries it).
