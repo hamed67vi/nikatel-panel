@@ -204,10 +204,10 @@ function pgUsageTopHtml(d, busy) {
   const stCls = v => v === "active" ? "ok" : v === "on_hold" ? "" : "err";
   const sorts = (d.sorts || ["used_traffic"]).map(k => `<option value="${k}" ${s.topSort === k ? "selected" : ""}>${labels[k] || k}</option>`).join("");
   const adm = `<option value="">All admins</option>` + (s.admins || []).map(a => `<option ${s.topAdmin === a ? "selected" : ""}>${esc(a)}</option>`).join("");
-  const rows = (d.users || []).map(u => `<tr class="clk" data-u="${esc(u.username)}" onclick="pgUsageLookupUser(this.dataset.u)" title="Show this user's usage in the chosen range"><td class="name">${esc(u.username)}</td><td class="pg-usage-num">${esc(pgUsageGbText(u.used_gb))}</td><td class="pg-usage-num mut">${u.limit_gb == null ? "∞" : esc(pgUsageGbText(u.limit_gb))}${u.percent == null ? "" : ` <small>${u.percent}%</small>`}</td><td><span class="pill ${stCls(u.status)}">${esc(u.status)}</span></td><td class="mut">${esc(u.admin)}</td><td class="mut mono" title="${esc(pgUsageJalaliOf(u.expire))}">${esc(u.expire || "—")}</td><td class="mut mono" title="${esc(pgUsageJalaliOf(pgUsageTehran(u.online_at).slice(0, 10)))}">${esc(pgUsageTehran(u.online_at) || "—")}</td></tr>`).join("");
+  const rows = (d.users || []).slice(0, 8).map(u => `<tr class="clk" data-u="${esc(u.username)}" onclick="pgUsageLookupUser(this.dataset.u)" title="Show this user's usage in the chosen range"><td class="name">${esc(u.username)}</td><td class="pg-usage-num">${esc(pgUsageGbText(u.used_gb))}</td><td class="pg-usage-num mut">${u.limit_gb == null ? "∞" : esc(pgUsageGbText(u.limit_gb))}${u.percent == null ? "" : ` <small>${u.percent}%</small>`}</td><td><span class="pill ${stCls(u.status)}">${esc(u.status)}</span></td><td class="mut pg-usage-x">${esc(u.admin)}</td><td class="mut mono pg-usage-x" title="${esc(pgUsageJalaliOf(u.expire))}">${esc(u.expire || "—")}</td><td class="mut mono" title="${esc(pgUsageJalaliOf(pgUsageTehran(u.online_at).slice(0, 10)))}">${esc(pgUsageTehran(u.online_at) || "—")}</td></tr>`).join("");
   return `<div class="card pg-usage-card"><h3>Top users <span class="sp"></span><small class="mut">${d.users.length} of ${Number(d.total).toLocaleString("en-US")}${d.cached && d.age_s >= 1 ? " · cached " + Math.round(d.age_s) + " s" : ""}</small></h3>
-    <div class="pg-usage-row"><select onchange="pgUsageTopSet('topSort', this.value)">${sorts}</select><select onchange="pgUsageTopSet('topAdmin', this.value)">${adm}</select><small class="mut">the panel's own counters since the last reset, not the range</small></div>
-    <div class="lbox full pg-usage-topbox ${busy ? "pg-usage-busy" : ""}" data-sk="top" onscroll="pgUsageState.scroll[this.dataset.sk] = this.scrollTop"><table class="tbl lift"><thead><tr><th>User</th><th>Used</th><th>Limit</th><th>Status</th><th>Admin</th><th>Expires</th><th title="Tehran time">Last online</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="mut">No users</td></tr>'}</tbody></table></div></div>`;
+    <div class="pg-usage-row"><select onchange="pgUsageTopSet('topSort', this.value)">${sorts}</select><select onchange="pgUsageTopSet('topAdmin', this.value)">${adm}</select><small class="mut">the panel's own counters, not the range</small></div>
+    <div class="lbox full pg-usage-topbox ${busy ? "pg-usage-busy" : ""}" data-sk="top" onscroll="pgUsageState.scroll[this.dataset.sk] = this.scrollTop"><table class="tbl lift"><thead><tr><th>User</th><th>Used</th><th>Limit</th><th>Status</th><th class="pg-usage-x">Admin</th><th class="pg-usage-x">Expires</th><th title="Tehran time">Last online</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="mut">No users</td></tr>'}</tbody></table></div></div>`;
 }
 function pgUsageDrawTop() {
   const s = pgUsageState;
@@ -318,10 +318,15 @@ function pgUsageRelook() {
 }
 
 /* ---- the tab */
-const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-usage-bar"></div><div id="pg-usage-cards"></div><div id="pg-usage-range"></div>
-  <div class="pg-usage-cols pg-usage-pair" id="pg-usage-pair" hidden><div id="pg-usage-counts"></div><div id="pg-usage-apps"></div></div>
-  <div class="pg-usage-cols"><div id="pg-usage-top"></div><div class="card pg-usage-card pg-usage-look"><h3>Usage of an admin or a user</h3><div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div></div></div></div>`;
-async function pgUsageLoadRanges() {
+const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-usage-bar"></div><div id="pg-usage-cards"></div>
+  <div class="pg-usage-grid"><div class="pg-usage-col"><div id="pg-usage-range"></div></div>
+    <div class="pg-usage-col pg-usage-pair" id="pg-usage-pair" hidden><div id="pg-usage-counts"></div><div id="pg-usage-apps"></div></div>
+    <div class="pg-usage-col"><div id="pg-usage-top"></div><div class="card pg-usage-card pg-usage-look"><h3>Usage of an admin or a user</h3><div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div></div></div></div></div>`;      // (one screen: the range and its nodes | users over time and apps | the top users and the lookup - no scrolling on a desktop window; a narrow one stacks them)
+function pgUsageFit() {      // the tab is as tall as what is left of the window, so nothing needs to scroll
+  const el = $("#pg-usage"); if (!el) return;
+  el.style.height = matchMedia("(min-width: 1100px) and (min-height: 560px)").matches ? Math.max(440, innerHeight - el.getBoundingClientRect().top - 12) + "px" : "";
+}
+if (typeof window.addEventListener === "function") window.addEventListener("resize", () => pgUsageFit());async function pgUsageLoadRanges() {
   const s = pgUsageState, id = s.id, r = await pgApi(id, "/usage/ranges");          // the dates of the presets: no question to the panel, so it is cheap
   if (s.id !== id) return;
   s.ranges = r; s.rangesAt = Date.now();
@@ -350,6 +355,7 @@ async function pgUsageRender(id, box) {
   pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageDrawTop();
   pgUsagePut("#pg-usage-look-form", pgUsageLookFormHtml()); pgUsageDrawLook();
   pgUsageKick(false);
+  pgUsageFit(); setTimeout(pgUsageFit, 250);
 }
 window.pgUsageRefresh = () => { pgUsageKick(true); };
 

@@ -183,7 +183,7 @@ def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_o
     assert 'cc = s.role === "iran" ? "ir"' in lab and "has-flag" in lab                                                        # Iran has its flag too
     assert ".lab-root" in css and not re.search(r"^\.lab \{", css, re.MULTILINE)                                              # (".lab" is hidden by the fluid layer on a narrow window)
     assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "const two = false" in lab         # one menu, always ONE column (the owner)
-    assert "labItem(\"Delete server…\"" in lab and "danger: true" in lab and ".lab-mi.danger" in css                         # the dangerous item is last and red
+    assert "labIt(\"Delete server…\"" in lab and "danger: true" in lab and ".lab-mi.danger" in css                         # the dangerous item is last and red
     assert 'class="sm abtn' not in lab and "wtools" not in lab                                                                # no row of buttons, no tiles of tools
     assert "const labTags = " in lab and '["any", ...labTags()]' in lab                                                       # the tabs are the tags: Any, then Marzban, PasarGuard, Iran and every other tag
     assert ".lab-bar { container: labbar" in css and "flex-wrap: nowrap" in css.split(".lab-bar {", 1)[1].split("}", 1)[0]    # the bar is one row at every width

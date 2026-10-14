@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.52.1 - Usage in one screen, a server without tunnels is green
+
+- **Panel → General → Usage is rebuilt (the owner: "compact it all, tidy and unified, so tight that nothing needs a scroll").** On a desktop window the tab is ONE screen: the bar, one row of counters, then three columns that share the height - the usage of the range with its nodes, users over time with the subscription apps, the top users with the lookup. A narrow window stacks them as before.
+- **Every menu of a server is like the node's** (the owner): one column, an icon before each item, a line between the groups.
+- **A server that no tunnel uses is not marked for its GRE (the owner: such servers are green):** the GRE tag and the yellow icon appear only for a server whose tunnels have a GRE problem.
+
 ## 1.52.0 - PasarGuard Nodes, the old Add server box, one-column menus
 
 - **The category is called PasarGuard Nodes** (the owner); the upgrade renames it (migration 18) and the nodes that came by themselves carry it.

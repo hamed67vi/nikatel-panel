@@ -28,7 +28,7 @@ function labIssues(s) {
   else if (s.online && /^SSH does not answer/.test(s.last_error || "")) add("warn", "SSH ✕", s.last_error);
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name), gre = mine.filter(t => (t.type === "backhaul" || t.type === "gre") && t.state === "down");
   if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "), true);
-  else if (!mine.length && x.gre && !x.gre.ok && x.gre.links) add("bad", "GRE ✕", x.gre.detail, true);
+  /* (a server that no tunnel uses has no GRE to lose: its GRE links not answering is no fault - the owner: such servers are green) */
   const down = mine.filter(t => t.state === "down" && !gre.includes(t));
   if (down.length) add("bad", `${down.length} tunnel${down.length === 1 ? "" : "s"} down`, down.map(t => t.name).join(", "));
   const flt = x.iran_filter; if (flt && (flt.level === "filtered" || flt.level === "blocked")) add("bad", "Filtered", "Not reachable from inside Iran");
@@ -54,9 +54,9 @@ function labStateHtml(s) {
 }
 function labGreTag(s) {      // a small tag for the GRE links of a server: green when they answer, yellow when some do not, red when none does (the owner: the GRE tag smaller, green when it is well)
   const mine = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre")), g = (s.extra || {}).gre;
-  if (!s.enabled || s.online === false || (!mine.length && !(g && g.links))) return "";
-  const up = mine.filter(t => t.state === "up").length, ok = mine.length ? up === mine.length : !!g.ok, none = mine.length ? up === 0 : !g.ok;
-  return `<span class="lab-gre ${ok ? "ok" : none ? "bad" : "warn"}" title="${esc(mine.length ? mine.map(t => t.name + ": " + t.state).join("\n") : (g.detail || "GRE links"))}">GRE</span>`;
+  if (!s.enabled || s.online === false || !mine.length) return "";
+  const up = mine.filter(t => t.state === "up").length, ok = up === mine.length, none = up === 0;
+  return `<span class="lab-gre ${ok ? "ok" : none ? "bad" : "warn"}" title="${esc(mine.map(t => t.name + ": " + t.state).join("\n"))}">GRE</span>`;
 }
 const labCells = (strip, tip) => `<span class="lab-strip" title="${esc(tip)}">${[...(strip || "")].map(c => `<i class="c${c === "-" ? "n" : c}"></i>`).join("")}</span>`;
 const labBar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</b>`;
@@ -392,15 +392,23 @@ function labMenuItems(ctx, id) {      // ctx "row" / "win": id = a profile; "nod
   if (p.kind === "node") { const r = labNodeRow(p); return labNodeItems(r || {panel_id: p.panel_id, node_id: p.node_id, name: p.name}, p, ctx); }
   const s = labServer(p); return s ? labServerItems(p, s, ctx) : [labItem("Take it off the page", () => labRemove(p.id))];
 }
-function labServerItems(p, s, ctx) {
+const LAB_P = {      // the icons of the menus (24 px, drawn with a line): one set for the menu of a server and of a node
+  overview: '<rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 9.5V20"/>', check: '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>', console: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
+  edit: '<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>', tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>', reboot: '<path d="M12 3v8M7 6.5a8 8 0 1010 0"/>', exit: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>', key: '<circle cx="8" cy="14" r="4"/><path d="M11 11l9-8M16 6l3 3M14 8l2 2"/>', lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>', forget: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+  ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>', gre: '<path d="M7 7h12M16 3l4 4-4 4M17 17H5M8 13l-4 4 4 4"/>', shield: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+  abuse: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>', box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>', up: '<path d="M7 18a4.5 4.5 0 01-.5-9A6 6 0 0118 10a4 4 0 01-1 8"/><path d="M12 20v-8M9 14.5l3-3 3 3"/>', plus: '<path d="M12 5v14M5 12h14"/>'};
+const labSvg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${LAB_P[k] || ""}</svg>`, labIt = (t, k, fn, o) => labItem(t, fn, {ic: labSvg(k), ...o});
+function labServerItems(p, s, ctx) {      // one column, an icon before each item, a line between the groups (the owner: every menu like the node's)
   const off = s.online === false && s.enabled !== false, nm = s.name, f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, tip = off ? "The server is off or does not answer" : "";
-  if (ctx === "row") return [labItem("Overview", () => labOpen(p.id)), labItem("Check now", () => labCheckOne(p.id)), labItem("Console", () => srvConsole(s.id), {off, tip}), labItem("Edit…", () => editServer(s.id)), labItem("Change tag…", () => labSetTag(p.id)), labItem("Reboot…", () => srvReboot(s.id, nm), {off, tip}),
-    labSep, labItem("Off the page", () => labRemove(p.id)), labItem("Delete server…", () => deleteServer(s.id, nm), {danger: true})];
-  return [labItem("Check now", () => checkServer(s.id)), labItem("Console", () => srvConsole(s.id), {off, tip}), labItem("Edit…", () => editServer(s.id)),
-    labSep, labGrp("Access"), labItem("Connect SSH…", () => srvConnect(s.id, nm)), labItem("Change SSH password…", () => srvPassword(s.id, nm)), labItem("Forget host key…", () => forgetKey(s.id, nm)), labItem("Open in an SSH program…", async () => { const v = await glassChoice(`Open ${nm} in:`, [{label: "Windows ssh", v: "ssh", note: "a .bat with your own key"}, {label: "PuTTY", v: "putty"}, {label: "MobaXterm", v: "mobaxterm"}]); if (v) srvOpen(s.id, v); }),
-    labSep, labGrp("Tests"), labItem("GRE test", () => greCheck(s.id), {off, tip}), ...(s.role === "foreign" ? [labItem("Is it filtered in Iran?", () => srvFilter(s.id), {off, tip}), labItem(abuseOn ? "Abuse-Defender: remove…" : "Abuse-Defender: install…", () => srvAbuse(s.id, abuseOn ? "remove" : "install"), {off, tip})] : []),
-    labSep, labGrp("Install"), labItem("Nodes and tools…", () => wtab("install"), {off, tip}), labItem("Update the server…", () => srvInstall(s.id, "os_update"), {off, tip}),
-    labSep, labItem("Reboot…", () => srvReboot(s.id, nm), {off, tip}), p ? labItem("Off the page", () => labRemove(p.id)) : labItem("Put on the page", () => labAdopt(s.id)), labItem("Delete server…", () => deleteServer(s.id, nm), {danger: true})];
+  const gone = p ? labIt("Off the page", "exit", () => labRemove(p.id)) : labIt("Put on the page", "plus", () => labAdopt(s.id)), del = labIt("Delete server…", "trash", () => deleteServer(s.id, nm), {danger: true});
+  if (ctx === "row") return [labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Change tag…", "tag", () => labSetTag(p.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
+    labSep, gone, labSep, del];
+  return [labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)),
+    labSep, labIt("Connect SSH…", "key", () => srvConnect(s.id, nm)), labIt("Change SSH password…", "lock", () => srvPassword(s.id, nm)), labIt("Forget host key…", "forget", () => forgetKey(s.id, nm)), labIt("Open in an SSH program…", "ext", async () => { const v = await glassChoice(`Open ${nm} in:`, [{label: "Windows ssh", v: "ssh", note: "a .bat with your own key"}, {label: "PuTTY", v: "putty"}, {label: "MobaXterm", v: "mobaxterm"}]); if (v) srvOpen(s.id, v); }),
+    labSep, labIt("GRE test", "gre", () => greCheck(s.id), {off, tip}), ...(s.role === "foreign" ? [labIt("Is it filtered in Iran?", "shield", () => srvFilter(s.id), {off, tip}), labIt(abuseOn ? "Abuse-Defender: remove…" : "Abuse-Defender: install…", "abuse", () => srvAbuse(s.id, abuseOn ? "remove" : "install"), {off, tip})] : []),
+    labSep, labIt("Nodes and tools…", "box", () => wtab("install"), {off, tip}), labIt("Update the server…", "up", () => srvInstall(s.id, "os_update"), {off, tip}),
+    labSep, labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}), gone, labSep, del];
 }
 function labNodeItems(cur, p, ctx) {      // everything the Node view could do with its eight buttons, as items; `p` = the profile (a node profile), null in the Node section of a server
   const pid = cur.panel_id, id = cur.node_id, c = typeof pgNodesC !== "undefined" ? pgNodesC[pid] : null, d = c && c.data ? (c.data.nodes || []).find(n => n.id === id) : null, off = d && d.status === "disabled";
