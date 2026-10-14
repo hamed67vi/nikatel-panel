@@ -4705,3 +4705,18 @@ html body #page .ob5-line { display: flex; align-items: center; flex-wrap: nowra
 html body #page .ob5-line select { flex: 1 1 100px; min-width: 0; max-width: none; height: 32px; border-radius: 10px; font-size: 12.5px; } html body #page .ob5-line .pill, html body #page .ob5-line .ob2-hub { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .ob5-line button { flex: none; }
 /* a tab that is switched off for now (the same look as the Shop bot in the menu) */
 html body .sub-tabs button.sub-off { opacity: .38; filter: grayscale(1); pointer-events: none; cursor: default; }
+/* TLS copies of the hosts (roadmap #93) */
+html body #modal .tls-opts { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 10px; } html body #modal .tls-opts label { display: grid; gap: 4px; font-size: 12px; } html body #modal .tls-opts input, html body #modal .tls-opts select { height: 32px; min-width: 110px; }
+html body #modal .tls-sum { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; } html body #modal .tls-box { max-height: 340px; margin: 0 0 10px; } html body #modal .tls-box td, html body #modal .tls-box th { font-size: 12.5px; }
+html body #modal .frm-act .sp { flex: 1; } html body #modal .frm-act a { cursor: pointer; text-decoration: underline; font-size: 12.5px; }
+html body #page .pn-st-sel { height: 32px; min-width: 150px; border-radius: 10px; }
+/* one row on top: the chips, the facts and the buttons of the panel; the list controls sit right under it */
+html body #page .dns-bar .dns-r.pn-one { flex-wrap: wrap; width: 100%; padding-bottom: 0; border-bottom: 0; } html body #page .pn-bar .dns-stats { display: inline-flex; gap: 10px; align-items: center; }
+html body #page .pn-bar .dns-stat { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); font-size: 12px; } html body #page .pn-bar .dns-stat.ok b { color: #4fd98a; } html body #page .pn-bar .dns-stat.bad b { color: #ff7a8c; } html body #page .pn-bar .dns-stat[onclick] { cursor: pointer; }
+html body #page .pn-bar > .dns-r button:not(.dns-chip) { height: 32px; }
+/* the buttons that act on the ticked rows */
+html body #page .pn-acts { display: inline-flex; gap: 6px; align-items: center; } html body #page .pn-actbtn { height: 32px; padding: 0 14px; border-radius: 10px; font-weight: 600; } html body #page .pn-actbtn:disabled { opacity: .38; cursor: default; } html body #page .pn-actbtn:not(:disabled) { background: rgba(77,163,255,.18); border-color: rgba(77,163,255,.5); color: #cfe3ff; }
+/* tighter, so that each of the two rows stays ONE row on a laptop width */
+html body #page .pn-bar .dns-chip small { display: none; } html body #page .pn-bar .dns-r.pn-one { gap: 8px; } html body #page .pn-bar .dns-stat { padding: 0 8px; }
+html body #page .pn-acts { display: none; } html body #page .pn-sel.on ~ .pn-acts { display: inline-flex; }      /* the buttons that act on the ticked rows appear as soon as one is ticked */
+html body #page #pn-uq, html body #page #pn-hq { width: 190px; min-width: 0; } html body #page .pn-st-sel { min-width: 120px; }

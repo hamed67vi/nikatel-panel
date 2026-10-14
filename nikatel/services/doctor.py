@@ -200,8 +200,9 @@ def _run_move(aid: int, tunnel_id: int, target_id: int, reason: str, why: str) -
     failover._work(aid, p)
 
 
-def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = "") -> int:
-    """Start the move of one tunnel to this Iran server (the DNS records that serve only it follow). Returns the story id."""
+def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = "", rails: bool = True) -> int:
+    """Start the move of one tunnel to this Iran server (the DNS records that serve only it follow). Returns the story id. `rails`: the limits of the automatic moves (how many a day,
+    the cooldown) apply to every reason but "manual"; the Return button passes rails=False, because it is the operator asking (found by the real test: it was refused for two hours)."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -218,7 +219,7 @@ def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = ""
 
         name = t.name
 
-    if reason != "manual":
+    if reason != "manual" and rails:
         block = may_move(name, _state()["moves"], int(time.time()))
 
         if block:
@@ -257,7 +258,7 @@ def return_now(move_id: str) -> int:
         raise ValueError("these tunnels are no longer on the server they were moved to")
 
     tid = rows[0][0]
-    return move_now(tid, int(e["from_id"]), "return", f"back to {e['from']} as asked")
+    return move_now(tid, int(e["from_id"]), "return", f"back to {e['from']} as asked", rails=False)
 
 
 def _purge_leftovers(aid: int, server_id: int, name: str) -> None:

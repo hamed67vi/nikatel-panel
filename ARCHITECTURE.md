@@ -77,6 +77,7 @@ nikatel/
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
     configs.py       configs on the probe, subscriptions, group sync; probe.py probe API client; probe_install.py
     panels.py        Marzban / PasarGuard client: status, nodes, users, hosts, test config per panel
+    hosttls.py       TLS copies of the plain WebSocket hosts of a panel (port 443, security tls, SNI = the Host header): the plan, a real test from the panel server (TCP, TLS with the SNI, WebSocket upgrade), the copies with a backup file, the removal
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side, one action / a new user on every panel, the signed merged subscription link (/sub/<token>, api/sub.py)
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)
     outbound.py      the Outbound section: a pool of exit configs (vless / vmess / trojan / ss) and forwards to the foreign nodes, put on the

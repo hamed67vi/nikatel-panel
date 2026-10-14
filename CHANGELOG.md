@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.41.0 - TLS copies of the plain WebSocket hosts
+
+- **Panels → Hosts → "🔒 TLS copies on 443…"**: tick the plain vless / vmess / trojan WebSocket hosts of a Marzban or PasarGuard panel, and every one gets a COPY with port 443, security tls, SNI = its Host header (the CDN name), alpn http/1.1 and fingerprint chrome. Nothing is changed on the nodes or the tunnels: the CDN (ArvanCloud) ends the TLS and sends the same plain WebSocket on to the same port as before, when HTTPS is on for that domain.
+- **A real test decides.** Before a copy is made the panel tests it from its own server: a TCP connect to the address, a TLS handshake with the SNI (the certificate must be valid for it), then a WebSocket upgrade on the inbound's path. The answer says where it stopped (dns, tcp, tls, cert, ws). A copy that passes is ON, one that fails is made OFF (or not made: your choice). The originals are never touched, so users keep both links and you switch the plain ones off when you are sure; the hosts are saved to `host-backups/` before every change and "Remove the copies made earlier" takes the copies away again.
+- **The top of the Panels pages is the bar of the CDN page**: a row of chips (one per panel, and the dashed "＋ Add panel" chip) and a row of facts (status, users, nodes, traffic) with Check now and Edit. The "All panels" chip was taken away (its page is still in the code), and the status buttons of the Users list (All, Active, Disabled, Limited, Expired, On hold) are one drawer.
+- **Found by the real Doctor test:** "Return now" was refused for two hours after a move (the cooldown of the automatic moves also held the operator's button); it goes through at once now.
+- The test is made from the panel server, not from inside Iran: it does not show what the Iranian filter does with the SNI, so give a copy to a few users first (roadmap #93 keeps that open). API: `POST /api/panels/{id}/hosts-tls/plan`, `/hosts-tls`, `/hosts-tls/remove` (docs/api.md).
+
 ## 1.40.3 - Outbound: no empty corner, small switches
 
 - **The left column is full.** The Advanced and CDN-records bars moved up into the left column (under the configs, the CDN addresses and a new Relay card), the server lists are taller, and both columns end on the same line; nothing is left lying at the bottom of the page and no empty space is left at the top left.

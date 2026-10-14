@@ -307,3 +307,20 @@ def test_restore_of_a_record_of_another_account_goes_through_its_provider(monkey
     back = failover.undo("1-1")
     assert len(back) == 1 and back[0]["restored"] is True and FakeProv.calls == [("back", "cf1", "example.test", "r-c", e["before"])]
     assert st.get("failover")["history"][0]["undone"] is True
+
+def test_the_return_button_is_not_held_back_by_the_cooldown_but_an_automatic_return_is(monkeypatch):
+    """Found by the real test (2026-10-14): after a move, "Return now" said "moved 0 minutes ago; the next move waits 2 hours". The button is the operator asking: no cooldown."""
+    import time
+
+    from nikatel.services import autopilot, doctor
+
+    ids = _servers_and_tunnels()
+    started = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **kw: started.append((label, a)) or 7)
+    s = doctor._state()
+    s["moves"].append({"id": "m1", "at": int(time.time()), "tunnels": ["t1"], "ok": True, "from_id": ids["ir2"], "from": "ir2", "to_id": ids["ir1"], "to": "ir1", "reason": "manual"})
+    doctor._save(s)
+    assert doctor.return_now("m1") == 7 and started[0][1][1] == ids["ir2"] and started[0][1][2] == "return"          # the button goes through at once
+    with pytest.raises(ValueError, match="waits"):
+        doctor.move_now(ids["t1"], ids["ir2"], "return", "the clock says back")                                      # an automatic return still waits for the cooldown
+    assert doctor.move_now(ids["t1"], ids["ir2"], "manual") == 7                                                      # a manual move never did

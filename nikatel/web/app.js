@@ -2054,11 +2054,8 @@ PAGES.panels = async () => {
   const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">● up · ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
   if (!list.length) { $("#page").innerHTML = '<div class="empty">No panel yet. <button onclick="pnAddWin()">+ Add a panel</button></div>'; return; }
   const p = sel, s = p.stats || {};
-  $("#page").innerHTML = `<div class="toolbar pn-top">${pnSelect(list, p.id)}${chip(p)}
-      
-      <span class="tcount pstat"><span class="tc info" title="${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now">Users <b>${(+s.users_total || 0).toLocaleString()}</b></span><span class="tc click ${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length === (p.nodes || []).length ? "ok" : "bad"}" onclick="pnNodesWin()" title="Open the nodes of this panel (green: all connected)">Nodes <b>${(p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length} / ${(p.nodes || []).length}</b></span><span class="tc info" title="↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}">Traffic <b>${s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—"}</b></span></span><span class="sp"></span>
-      <button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnEditWin()">Edit</button><button onclick="pnAddWin()">+ Add panel</button></div>
-    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
+  const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}">${label} <b>${val}</b></span>`;
+  $("#page").innerHTML = pnBar(list, p.id, `${chip(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`)}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", nodesOk === (p.nodes || []).length ? "ok" : "bad", 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`)}</span><button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnEditWin()">Edit</button>`) + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
@@ -2105,11 +2102,17 @@ window.pnNodeReconnect = async (id, nid) => { try { await api(`/api/panels/${id}
 window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (await api(`/api/panels/${id}/nodes/${nid}/logs`)).log}; } catch (e) { pn.logs = {name, text: "✕ " + e.message}; } refresh(); };
 
 /* ---- All panels: one account = the same person on every panel (same username, or a link made by hand); every panel is asked through its API when you look */
+/* the bar on top of the Panels pages is the one of the CDN page: a row of chips (one per panel, "All panels", and the dashed "＋ Add panel" chip) and a row of facts and buttons */
+const pnBar = (list, cur, row2) => {
+  const dot = p => p.status === "up" ? "ok" : p.status === "down" ? "bad" : "";
+  const chips = list.map(p => `<button type="button" class="dns-chip ${String(p.id) === String(cur) ? "on" : ""}" onclick="pnPick('${p.id}')" title="${esc(p.url || "")}${p.status === "down" ? " · down" : ""}"><i class="dot ${dot(p)}"></i><b>${esc(p.name)}</b><small>${esc(p.type)}</small></button>`).join("");
+  const all = "";      // the "All panels" chip was taken away (2026-10-14); the page of the accounts over every panel is still in the code (pnPick("*"))
+  return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one"><span class="dns-lab">Panels</span>${all}${chips}<button type="button" class="dns-chip add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i><b>Add panel</b></button><span class="sp"></span>${row2}</div></div>`;
+};
 const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
 const pa = {q: "", data: null, seq: 0};
 function pnAllRender(list) {
-  $("#page").innerHTML = `<div class="toolbar pn-top">${pnSelect(list, "*")}<span class="tcount pstat"><span class="tc info">Panels <b>${list.length}</b></span></span><span class="sp"></span><button class="sm pri" onclick="paNew()" title="Make the same new user on several panels at once">＋ New account</button><div class="toolbar pn-sb"><input id="pa-q" type="search" placeholder="Search a user on every panel…" value="${esc(pa.q)}" oninput="paQ(this.value)" autocomplete="off" spellcheck="false"></div></div>
-    <div id="pa-body"><div class="loading"><i class="spin"></i><span>Asking every panel…</span></div></div>`;
+  $("#page").innerHTML = pnBar(list, "*", `<span class="dns-stats"><span class="dns-stat">Panels <b>${list.length}</b></span></span><button class="sm pri" onclick="paNew()" title="Make the same new user on several panels at once">＋ New account</button><div class="toolbar pn-sb"><input id="pa-q" type="search" placeholder="Search a user on every panel…" value="${esc(pa.q)}" oninput="paQ(this.value)" autocomplete="off" spellcheck="false"></div>`) + `    <div id="pa-body"><div class="loading"><i class="spin"></i><span>Asking every panel…</span></div></div>`;
   paLoad();
 }
 window.paQ = v => { pa.q = v.trim(); clearTimeout(qT); qT = setTimeout(paLoad, 350); };
@@ -2204,8 +2207,8 @@ async function pnUsersLoad(id) {
   }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
-  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><div class="tabs pn-st" title="Show the users of one status">${[["", "All"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<button class="${pn.ustatus === v ? "on" : ""}" onclick="pn.ustatus='${v}';pn.uoff=0;pnUsersLoad(+pn.id)">${l}</button>`).join("")}</div><span class="pn-cnt-chip"><b>${(+u.total || 0).toLocaleString()}</b> users</span><button class="sm pn-reload" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
-      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked users" onchange="pnBulkAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option><option value="renew">Add days…</option></select></div></div>
+  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select class="sm pn-st-sel" title="Show the users of one status" onchange="pn.ustatus=this.value;pn.uoff=0;pnUsersLoad(+pn.id)">${[["", "All statuses"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<option value="${v}" ${pn.ustatus === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="pn-cnt-chip"><b>${(+u.total || 0).toLocaleString()}</b> users</span><button class="sm pn-reload" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
+      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'enable')" title="Switch the ticked users on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'disable')" title="Switch the ticked users off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnBulkRenew(${id})" title="Add days to the ticked users">＋ Days…</button></span></div></div>
     <div class="lbox full usr-box"><table class="tbl lift usr-tbl"><colgroup><col style="width:46px"><col style="width:30%"><col style="width:12%"><col style="width:38%"><col></colgroup>
       <thead><tr><th><input type="checkbox" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th></tr></thead>
       <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"} clk" onclick="pnUserOpen(${id}, '${esc(x.username)}')" title="Click to open the user"><td onclick="event.stopPropagation()"><input type="checkbox" class="pn-uchk" value="${esc(x.username)}" onchange="pnSelCount()"></td><td class="name"><div class="usr-wrap"><i class="usr-av ${x.status}">${SI.user}</i><div class="usr-nm"><b>${esc(x.username)}</b>${x.note ? `<small class="mut" title="${esc(x.note)}">${esc(String(x.note).slice(0, 60))}</small>` : ""}</div></div></td><td><span class="spill ${x.status}">${esc(String(x.status).replace("_", " "))}</span></td>
@@ -2306,6 +2309,7 @@ window.pnSelCount = () => {
   const all = [...document.querySelectorAll(".pn-uchk, .pn-hchk")], n = all.filter(x => x.checked).length;
   const c = $("#pn-seln"); if (c) c.textContent = n;
   const a = $("#pn-act"); if (a) a.disabled = !n;
+  document.querySelectorAll(".pn-actbtn").forEach(b => { b.disabled = !n; });          // the buttons of the ticked users / hosts light up as soon as something is ticked
   const h = $("#pn-all"); if (h) { h.checked = n > 0 && n === all.length; h.indeterminate = n > 0 && n < all.length; }
   const s = document.querySelector(".pn-sel"); if (s) s.classList.toggle("on", n > 0);
 };
@@ -2332,7 +2336,7 @@ async function pnHostsLoad(id) {
     return `<details class="hp ${on ? "" : "alloff"}" data-port="${pk}" ${open ? "open" : ""} ontoggle="pn.hopen['${pk}'] = this.open"><summary><input type="checkbox" class="hp-master" title="Tick every host of this port" onchange="hpMaster(this)"><b class="hp-port">${k === "" ? "inbound port" : ":" + pk}</b><small class="mut hp-n"></small>
       <span class="hp-bar" title="${on} of ${g.length} hosts are on"><i class="${pct === 100 ? "full" : ""}" style="width:${pct}%"></i></span><span class="hp-st"><b>${on}</b> on${g.length - on ? ` · <b>${g.length - on}</b> off` : ""}</span>
       <span class="hp-tags">${tg.slice(0, 3).map(t => `<span class="td-type" title="Inbound">${esc(t)}</span>`).join("")}${tg.length > 3 ? `<small class="mut" title="${esc(tg.slice(3).join(", "))}">+${tg.length - 3}</small>` : ""}</span></summary><div class="hp-rows">${g.map(hostRow).join("")}</div></details>`; };  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts · ${ports.length} ports</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
-      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host shown">select all</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><select id="pn-act" class="sm" disabled title="What to do with the ticked hosts" onchange="pnHostAct(${id}, this)"><option value="">Do with selected…</option><option value="enable">Enable</option><option value="disable">Disable</option></select></div></div>
+      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host shown">select all</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, false)" title="Switch the ticked hosts on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, true)" title="Switch the ticked hosts off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnHostTls(${id})" title="A TLS copy (port 443) of each ticked plain WebSocket host, tested first">🔒 TLS copies…</button></span></div></div>
     <div class="hp-list">${ports.map(group).join("") || '<div class="mut" style="padding:16px">no host matches</div>'}</div>`;
   box.querySelectorAll(".hp").forEach(hpCount);
   const hl = box.querySelector(".hp-list"); if (hl) hl.style.maxHeight = Math.max(160, innerHeight - hl.getBoundingClientRect().top - 74) + "px";   // the list ends above the bottom strip: only it scrolls
@@ -2343,7 +2347,7 @@ window.hpCount = d => { if (!d) return; const xs = [...d.querySelectorAll(".pn-h
 window.hpMaster = m => { const d = m.closest("details"); d.querySelectorAll(".pn-hchk").forEach(x => { x.checked = m.checked; }); hpCount(d); pnSelCount(); };
 window.pnHQ = v => { pn.hq = v.trim(); clearTimeout(qT); qT = setTimeout(refresh, 250); };
 window.pnHGo = i => { pn.hoff = Math.max(0, i) * pnPS(); refresh(); };
-window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v) pnHostsToggle(id, v === "disable"); };function pnHostHtml(id, h) {
+window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v === "tls") pnHostTls(id); else if (v) pnHostsToggle(id, v === "disable"); };function pnHostHtml(id, h) {
   const txt = ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint"], bools = ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"];
   return `<form class="frm" onsubmit="return pnHostSave(event, ${id}, '${esc(h.key)}')">${txt.map(k => `<label>${k}${k === "port" ? " <small>(empty = inbound port)</small>" : ""}<input name="${k}" value="${esc(h[k] == null ? "" : h[k])}"></label>`).join("")}
     <label>security<select name="security">${["inbound_default", "none", "tls"].map(s => `<option ${h.security === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
@@ -2353,6 +2357,57 @@ window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if
 window.pnHostOpen = async (id, key) => { try { pn.hostEdit = (await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`)).host; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnHostSave = async (e, id, key) => { e.preventDefault(); const f = new FormData(e.target), body = {}; ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint", "security"].forEach(k => body[k] = f.get(k)); ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"].forEach(k => body[k] = !!f.get(k)); try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "PUT", body: JSON.stringify(body)}); toast("✓ Host saved", "ok"); pn.hostEdit = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnHostsToggle = async (id, disable) => { const keys = [...document.querySelectorAll(".pn-hchk:checked")].map(x => x.value); if (!keys.length) { toast("Tick some hosts first", "bad"); return; } try { const r = await api(`/api/panels/${id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys, disable})}); toast(`✓ ${r.changed} hosts ${disable ? "disabled" : "enabled"}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+/* TLS copies of the ticked plain WebSocket hosts: a copy with port 443, security tls and the Host header as SNI; a real test from the panel server decides whether it is on. The originals are never touched. */
+const tls = {id: 0, keys: [], items: [], opts: {port: 443, alpn: "http/1.1", fingerprint: "chrome"}, failed: "disabled"};
+window.pnHostTls = async id => {
+  const keys = [...document.querySelectorAll(".pn-hchk:checked")].map(x => x.value);
+  if (!keys.length) { toast("Tick some hosts first", "bad"); return; }
+  Object.assign(tls, {id, keys, items: []});
+  showModal("<b>🔒 TLS copies on 443</b>", '<div id="tls-body"></div>', "wide");
+  tlsRun();
+};
+const tlsOpt = (id, list, cur) => `<select id="${id}">${list.map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+function tlsPaint(state, done = 0) {
+  const body = $("#tls-body"); if (!body) return;
+  const o = tls.opts, opts = `<div class="frm tls-opts"><label>Port<input id="tls-port" type="number" min="1" max="65535" value="${o.port}"></label><label>ALPN${tlsOpt("tls-alpn", [["http/1.1", "http/1.1"], ["h2,http/1.1", "h2, http/1.1"], ["", "none"]], o.alpn)}</label><label>Fingerprint${tlsOpt("tls-fp", [["chrome", "chrome"], ["firefox", "firefox"], ["safari", "safari"], ["ios", "ios"], ["random", "random"], ["", "none"]], o.fingerprint)}</label><button class="sm" ${state === "running" ? "disabled" : ""} onclick="tlsRun()">Test again</button></div>`;
+  if (state === "running") { body.innerHTML = `${opts}<div class="loading"><i class="spin"></i><span>Testing from the panel server: ${done} of ${tls.keys.length} hosts (TCP, TLS with the SNI, WebSocket)…</span></div>`; return; }
+  const news = tls.items.filter(i => i.status === "new"), pass = news.filter(i => i.check && i.check.ok);
+  const res = i => i.status === "made_on" ? '<span class="pill ok">made · ON</span>' : i.status === "made_off" ? '<span class="pill warn">made · OFF</span>' : i.status === "not_made" ? '<span class="pill">not made</span>' : i.status === "exists" ? '<span class="pill">has a copy</span>' : i.status === "skip" ? '<span class="pill">skipped</span>' : (i.check && i.check.ok ? '<span class="pill ok">will be ON</span>' : '<span class="pill warn">will be OFF</span>');
+  const test = i => i.check ? (i.check.ok ? `<span class="gw-ok">✓ ${esc(i.check.detail)}</span>` : `<span class="err" title="${esc(i.check.detail)}">✕ ${esc(i.check.stage)}: ${esc(i.check.detail)}</span>`) : `<span class="mut">${esc(i.reason || "")}</span>`;
+  const row = i => `<tr><td class="name"><b>${esc(i.remark || i.key)}</b><small class="mut">${esc(i.tag || "")}</small></td><td class="mono mut">${i.twin ? esc(i.address) + ":" + esc(String(i.port == null ? "" : i.port)) + " → :" + i.twin.port + "<br>SNI " + esc(i.twin.sni) : ""}</td><td>${test(i)}</td><td>${res(i)}</td></tr>`;
+  const made = tls.items.some(i => /^made|not_made/.test(i.status));
+  body.innerHTML = `${made ? "" : opts}<div class="tls-sum"><span class="pill">${tls.items.length} ticked</span><span class="pill ok">${pass.length} pass the test</span>${news.length - pass.length ? `<span class="pill warn">${news.length - pass.length} fail</span>` : ""}${tls.items.length - news.length && !made ? `<span class="pill">${tls.items.length - news.length} skipped or done</span>` : ""}</div>
+    <div class="lbox full tls-box"><table class="tbl lift"><colgroup><col style="width:28%"><col style="width:28%"><col><col style="width:14%"></colgroup><thead><tr><th>Host</th><th>Address → copy</th><th>Real test from the panel server</th><th>${made ? "Result" : "Would be"}</th></tr></thead><tbody>${tls.items.map(row).join("")}</tbody></table></div>
+    ${made ? `<div class="frm-act"><button class="pri" onclick="closeModal()">Done</button><span class="mut">Saved before the change: ${esc(tls.backup || "")} (data folder / host-backups)</span></div>`
+      : `<div class="frm-act"><button class="pri" ${news.length ? "" : "disabled"} onclick="tlsMake()">Make ${news.length} cop${news.length === 1 ? "y" : "ies"}</button><select id="tls-failed" title="What to do with a copy whose test failed">${[["disabled", "a copy that fails is made OFF"], ["skip", "a copy that fails is not made"]].map(([v, l]) => `<option value="${v}" ${tls.failed === v ? "selected" : ""}>${l}</option>`).join("")}</select><button onclick="closeModal()">Close</button><span class="sp"></span><a class="mut" onclick="pnHostTlsRemove()">Remove the copies made earlier</a></div>`}
+    <small class="mut">The originals are never touched; the hosts are saved to a file before the change. A copy is ON only when its test passed from this server: this test does not tell what the filter inside Iran does with the SNI, so give a copy to a few users first.</small>`;
+}
+window.tlsRun = async () => {
+  const g = (i, d) => ($(i) || {}).value ?? d;
+  tls.opts = {port: +g("#tls-port", 443) || 443, alpn: g("#tls-alpn", "http/1.1"), fingerprint: g("#tls-fp", "chrome")};
+  tls.items = []; tlsPaint("running", 0);
+  let done = 0; const batches = []; for (let i = 0; i < tls.keys.length; i += 6) batches.push(tls.keys.slice(i, i + 6));
+  await Promise.all(batches.map(async b => {
+    try { tls.items.push(...(await api(`/api/panels/${tls.id}/hosts-tls/plan`, {method: "POST", body: JSON.stringify({keys: b, ...tls.opts})})).items); } catch (e) { b.forEach(k => tls.items.push({key: k, status: "skip", remark: k, reason: e.message})); }
+    done += b.length; tlsPaint("running", done);
+  }));
+  tls.items.sort((a, b) => tls.keys.indexOf(a.key) - tls.keys.indexOf(b.key)); tlsPaint("ready");
+};
+window.tlsMake = async () => {
+  tls.failed = ($("#tls-failed") || {}).value || "disabled";
+  const keys = tls.items.filter(i => i.status === "new").map(i => i.key), out = [];
+  tlsPaint("running", 0);
+  try {
+    for (let i = 0; i < keys.length; i += 6) { const r = await api(`/api/panels/${tls.id}/hosts-tls`, {method: "POST", body: JSON.stringify({keys: keys.slice(i, i + 6), ...tls.opts, failed: tls.failed})}); out.push(...r.items); tls.backup = r.backup || tls.backup; tlsPaint("running", Math.min(keys.length, i + 6)); }
+    const by = Object.fromEntries(out.map(x => [x.key, x])); tls.items = tls.items.map(i => by[i.key] || i);
+    toast(`✓ ${out.filter(x => x.status === "made_on").length} copies made and ON, ${out.filter(x => x.status === "made_off").length} made OFF`, "ok"); pn.hosts = null; refresh();
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+  tlsPaint("ready");
+};
+window.pnHostTlsRemove = async () => {
+  if (!await gconfirm("Remove every TLS copy made by this tool (the hosts whose name ends with TLS and whose security is tls)? The hosts are saved to a file first. The original hosts stay.", {danger: true})) return;
+  try { const r = await api(`/api/panels/${tls.id}/hosts-tls/remove`, {method: "POST"}); toast(`✓ ${r.removed} copies removed`, "ok"); closeModal(); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
 window.pnHostClone = async (id, key) => { try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}/clone`, {method: "POST"}); toast("✓ Cloned", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnHostDel = async (id, key, name) => { if (!await gconfirm(`Delete host ${name} from the panel? Users lose that address in their links.`)) return; try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Panel
-from ..services import core, panels
+from ..services import core, hosttls, panels
 from ..services.panels import PanelError
 
 router = APIRouter(tags=["panels"], dependencies=[Depends(current_user)])
@@ -147,6 +147,33 @@ def user_action(panel_id: int, username: str, body: UserAction):
 def users_bulk(panel_id: int, body: UserAction):
     """The same action on many users at once (the panel is written one user at a time)."""
     return {"ok": True, **_wrap(panels.users_bulk, _cred(panel_id), body.usernames, body.action, body.value)}
+
+
+# ---- TLS copies of the plain WebSocket hosts (roadmap #93)
+class TlsIn(BaseModel):
+    keys: list[str] = Field(min_length=1, max_length=40)
+    port: int = Field(443, ge=1, le=65535)
+    alpn: str = Field("http/1.1", max_length=40)
+    fingerprint: str = Field("chrome", max_length=20)
+    failed: str = Field("disabled", pattern=r"^(disabled|skip)$")
+
+
+@router.post("/panels/{panel_id}/hosts-tls/plan")
+def hosts_tls_plan(panel_id: int, body: TlsIn):
+    """For the ticked hosts: the TLS copy each would get, whether it can be made, and a REAL test from the panel server (TCP, TLS with the SNI, WebSocket upgrade). Nothing is changed. Up to 40 hosts a call; a call takes a few seconds."""
+    return {"ok": True, "items": _wrap(hosttls.plan, _cred(panel_id), body.keys, body.port, body.alpn, body.fingerprint)}
+
+
+@router.post("/panels/{panel_id}/hosts-tls")
+def hosts_tls_create(panel_id: int, body: TlsIn):
+    """Make the TLS copies of the ticked hosts: a copy that passes the real test is ON, one that fails is made OFF (`failed: disabled`) or not made (`skip`). The panel's hosts are saved to a file first; the originals are never touched."""
+    return {"ok": True, **_wrap(hosttls.create, _cred(panel_id), body.keys, body.port, body.alpn, body.fingerprint, hosttls.SUFFIX, body.failed)}
+
+
+@router.post("/panels/{panel_id}/hosts-tls/remove")
+def hosts_tls_remove(panel_id: int):
+    """Remove every TLS copy made by this tool (the hosts whose remark ends with " TLS" and whose security is tls); the hosts are saved to a file first."""
+    return {"ok": True, **_wrap(hosttls.remove, _cred(panel_id))}
 
 
 # ---- hosts
