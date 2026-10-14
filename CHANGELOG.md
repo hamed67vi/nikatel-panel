@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.49.2 - "+ Add profile", the node option waits for a panel, the add flow on a phone, the sheet of UI elements
+
+- **The last item of the Lab list is written "+ Add profile" (the owner)**: the + is in front of its name, where the icon of the other items stands - 1.49.1 had it at the far end of the row.
+- **The PasarGuard node option of Add profile is grey until a PasarGuard panel is connected (the owner: "this option is active when we have added a PasarGuard panel").** Asking for it says why and leads to connecting one - the panel's address and its API key, or a username and password - on the same screen the locked Panel item leads to (its button used to say "Lab → Add profile → PasarGuard node", which the grey option would have made a circle); once the panel is connected the option is live and the Panel item opens.
+- **The add flow on a phone:** its three tabs (A new server · Several at once · Already in the panel) are one row with short names (New · Several · In the panel), the window uses the whole width, and the list of the servers the panel already has shows each address under its name (a phone hid it).
+- Docs: the owner's sheet of UI elements - the buttons, switches, fields, chips and the action row - is kept in `docs/design/ui-kit-components.webp`, and building the whole panel from them is roadmap **#105**, deliberately the last job.
+
 ## 1.49.1 - The section is called Lab, the old lists are out of the project, the lock follows the panel
 
 - **The section that was called Servers is called Lab; its list is Any, the kinds, and Add profile + at the END (the owner: "Add profile comes below the profiles; foreign, iran, pasargaurd; the profiles item is called any", then "Add profile at the end of the list, no arrow in front of it, a + after it").** The group of the menu is **Lab**: **Any** (every profile), an item for each kind that has a profile - **Foreign · Iran · PasarGuard**, only while there are two kinds or more, like the tabs of the page (a click opens the Lab on that kind, and the open one is marked in the menu and on the page alike) - and **Add profile +** as the last item: an action, drawn in the accent colour with a + after its name and no arrow; it is no tab and never the open one (an "act" of the tabs of a page; the bar of a page draws it as a button). A click on it opens the choice of what to add.

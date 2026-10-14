@@ -329,7 +329,7 @@ function navBuild() {
     const g = document.createElement("div"), gh = document.createElement("div"), sub = document.createElement("div"), tg = document.createElement("button");
     g.className = "nav-g"; g.dataset.page = page; g.dataset.kind = "tabs"; g.dataset.open = "0"; gh.className = "nav-gh"; sub.className = "nav-sub"; sub.id = "nav-sub-" + page; tg.type = "button"; tg.className = "nav-tg";
     sub.innerHTML = list.map(([k, name, icon, off]) => off === "act"
-      ? `<a class="nav-act" data-page="${page}" data-sub="${k}" data-act="1"><i class="ic"></i><span>${esc(name)}</span><b class="nav-plus" aria-hidden="true">+</b></a>`      // (an action: no icon of its own - the + after its name says what it does - and it is the last of the list)
+      ? `<a class="nav-act" data-page="${page}" data-sub="${k}" data-act="1"><i class="ic"><b class="nav-plus" aria-hidden="true">+</b></i><span>${esc(name)}</span></a>`      // (an action: the + in front of its name is its icon - "+ Add profile" - and it is the last of the list)
       : `<a data-page="${page}" data-sub="${k}"${off === "off" ? ' class="nav-off" aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)"' : ""}><i class="ic">${icon}</i><span>${esc(name)}</span></a>`).join("");
     head.replaceWith(g); gh.append(head, tg); g.append(gh, sub);
     sub.querySelectorAll("a:not(.nav-off)").forEach(a => { a.onclick = () => a.dataset.act ? subAct(a.dataset.page, a.dataset.sub) : go(a.dataset.page, a.dataset.sub); });      // (an "act" does what SUB_ACT says: the Lab's Add profile opens the choice of what to add)

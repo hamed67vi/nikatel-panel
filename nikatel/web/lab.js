@@ -113,16 +113,18 @@ PAGES.lab = async () => {
   if (openSrv && state.edit !== openSrv.id) labAfter(openSrv);
   labLoadNodes();
   labNavSync();      // (the menu: the kinds that have a profile, and which one is open)
-  if (LAB.pending) { const k = LAB.pending; LAB.pending = null; if (k === "add") labAdd(); else if (typeof k === "object") labServerStep(k.kind || "foreign", "new", k); else labAddKind(k); }      // "Add profile" of the menu, "Add a PasarGuard profile" of the message the Panel item gives, a node outside our servers to add: the add flow opens at once
+  if (LAB.pending) { const k = LAB.pending; LAB.pending = null; if (k === "add") labAdd(); else if (k === "connect") labConnect(); else if (typeof k === "object") labServerStep(k.kind || "foreign", "new", k); else labAddKind(k); }      // "Add profile" of the menu, "Add a PasarGuard profile" of the message the Panel item gives, a node outside our servers to add: the add flow opens at once
 };
 function labFirst() {      // no profile yet: nothing else works until one is added
   const have = labFree("iran").length + labFree("foreign").length;
   return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a profile</h2>
     <p>Everything on this page starts with a profile - in place of the Iran and Foreign tabs. Choose what you are adding:</p>${labChooser()}${have ? `<p class="mut lab-first-note">The panel has ${have} server${have === 1 ? "" : "s"} already. Nothing puts them here by itself: their information (name, address, provider) is under <b>Already in the panel</b>, where you pick some - or all - of them.</p>` : ""}</div></div>`;
 }
+const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
 function labChooser() {
-  const card = (k, title, text, ic) => { const n = k === "node" ? 0 : labFree(k).length;      // (a div, like the tiles of the console: the buttons of a window have a stack of rules of their own)
-    return `<div role="button" tabindex="0" class="lab-card" onclick="labAddKind('${k}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();labAddKind('${k}')}"><i>${ic}</i><b>${title}</b><small>${text}${n ? `<em class="lab-have">${n} already in the panel</em>` : ""}</small></div>`; };
+  const noPg = !labHasPg();
+  const card = (k, title, text, ic) => { const n = k === "node" ? 0 : labFree(k).length, off = k === "node" && noPg;      // (a div, like the tiles of the console: the buttons of a window have a stack of rules of their own)
+    return `<div role="button" tabindex="0" class="lab-card${off ? " off" : ""}" ${off ? 'aria-disabled="true" title="Connect a PasarGuard panel first"' : ""} onclick="labAddKind('${k}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();labAddKind('${k}')}"><i>${ic}</i><b>${title}</b><small>${text}${off ? '<em class="lab-have">Connect a PasarGuard panel first</em>' : n ? `<em class="lab-have">${n} already in the panel</em>` : ""}</small></div>`; };
   return `<div class="lab-choose">${card("iran", "Iran server", "A server inside Iran: the end of your tunnels, watched over SSH.", flagImg("IR") || "IR")}${card("foreign", "Foreign server", "A server abroad: a tunnel's other end, a node, the filtering check.", "🌍")}${card("node", "PasarGuard node", "A node of your PasarGuard panel, managed through the panel's API.", SI.cube)}</div>`;
 }
 /* the tabs are not made in advance (the owner: "the sections must not be built beforehand"): a tab of a kind is there only while a profile of that kind is, and the bar is there only when there are two kinds or more - one kind is the whole list */
@@ -160,11 +162,17 @@ async function labLoadNodes() {      // the panels of the node profiles are aske
 /* ---------------------------------------------------------------- adding a profile: Iran server | Foreign server | PasarGuard node */
 const labModal = (title, body) => { state.nodeWin = state.nodeWin || {lab: 1}; showModal(title, body, "keep"); };
 window.labAdd = () => labModal("<b>Add a profile</b>", `<div class="lab-pfwin"><p class="mut lab-lead">What are you adding?</p>${labChooser()}</div>`);
-window.labAddKind = k => { if (k === "node") labNodePanel(); else labServerStep(k, labFree(k).length ? "have" : "new"); };      // (servers the panel already has: they are listed first)
+window.labAddKind = k => { if (k === "node") { if (labHasPg()) labNodePanel(); else labPgFirst(); } else labServerStep(k, labFree(k).length ? "have" : "new"); };      // (servers the panel already has: they are listed first; a node needs a connected PasarGuard panel)
+window.labPgFirst = async () => {      // the option of a node is grey while no PasarGuard panel is connected: asking for it says why and leads to connecting one
+  const v = await glassChoice("A PasarGuard node belongs to a PasarGuard panel, so the panel comes first: connect it with its API key (or its username and password). This option opens as soon as one is connected.", [{label: "Connect a PasarGuard panel", v: "go", cls: "pri"}]);
+  if (v === "go") labConnect();
+};
+window.labConnect = () => labNodePanel(true);      // only the panel: the same screen as the node's first step, and no node is asked for
 const labBack = '<div class="wback"><button type="button" class="sm" onclick="labAdd()">← Back</button></div>';
 window.labServerStep = (kind, tab, fill) => {
   const noun = kind === "iran" ? "Iran" : "foreign", free = labFree(kind);
-  const tabs = `<div class="tabs lab-addtabs"><button type="button" class="${tab === "new" ? "on" : ""}" onclick="labServerStep('${kind}', 'new')">A new server</button><button type="button" class="${tab === "many" ? "on" : ""}" onclick="labServerStep('${kind}', 'many')">Several at once</button><button type="button" class="${tab === "have" ? "on" : ""}" onclick="labServerStep('${kind}', 'have')">Already in the panel<i class="cnt">${free.length}</i></button></div>`;
+  const lb = (full, short) => `<span class="lb-f">${full}</span><span class="lb-s">${short}</span>`;      // (a phone shows the short name: the three tabs stay one row)
+  const tabs = `<div class="tabs lab-addtabs"><button type="button" class="${tab === "new" ? "on" : ""}" onclick="labServerStep('${kind}', 'new')">${lb("A new server", "New")}</button><button type="button" class="${tab === "many" ? "on" : ""}" onclick="labServerStep('${kind}', 'many')">${lb("Several at once", "Several")}</button><button type="button" class="${tab === "have" ? "on" : ""}" onclick="labServerStep('${kind}', 'have')">${lb("Already in the panel", "In the panel")}<i class="cnt">${free.length}</i></button></div>`;
   const form = `<form class="lab-pf" onsubmit="return labSaveServer(event, '${kind}')" autocomplete="off">
     <div class="lab-pf-two"><label><span>Name</span><input name="name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" placeholder="${kind === "iran" ? "ir7" : "de4"}" title="Letters, digits . _ - (a name is never used twice)" value="${esc((fill || {}).name || "")}"></label><label><span>Address</span><input name="host" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" placeholder="203.0.113.10" value="${esc((fill || {}).host || "")}"></label></div>
     <div class="lab-pf-two"><label><span>SSH user</span><input name="ssh_user" value="root" maxlength="32"></label><label><span>SSH port</span><input name="ssh_port" type="number" min="1" max="65535" value="22"></label></div>
@@ -225,10 +233,11 @@ window.labSaveMany = async (e, kind) => {      // several at once: the lines are
 
 /* the PasarGuard node: first the panel it belongs to - its API key, or a username and password - then the nodes of that panel */
 state.labAuth = "key";
-window.labNodePanel = () => {
-  const ps = window.pgSrvPanels ? pgSrvPanels() : [], list = ps.length ? `<p class="mut lab-lead">Which PasarGuard panel does the node belong to?</p><div class="lab-panels">${ps.map(p => `<div role="button" tabindex="0" class="lab-panel" onclick="labNodeList(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();labNodeList(${p.id})}"><b>${esc(p.name)}</b><small class="mono">${esc(p.url)}</small><span class="mchip ${p.status === "up" ? "ok" : "bad"}">${esc(p.status || "?")}</span></div>`).join("")}</div>` : "";
-  labModal("<b>Add a PasarGuard node</b>", `<div class="lab-pfwin lab-wide">${labBack}${list}
-    <details class="lab-conn" ${ps.length ? "" : "open"}><summary>${ps.length ? "＋ Connect another PasarGuard panel" : "Connect your PasarGuard panel first: the node is managed through its API"}</summary>
+window.labNodePanel = only => {      // only: no node is asked for - just the connecting of a panel (the Panel item and the grey node option lead here)
+  state.labOnly = only === true;
+  const ps = window.pgSrvPanels ? pgSrvPanels() : [], list = ps.length && !state.labOnly ? `<p class="mut lab-lead">Which PasarGuard panel does the node belong to?</p><div class="lab-panels">${ps.map(p => `<div role="button" tabindex="0" class="lab-panel" onclick="labNodeList(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();labNodeList(${p.id})}"><b>${esc(p.name)}</b><small class="mono">${esc(p.url)}</small><span class="mchip ${p.status === "up" ? "ok" : "bad"}">${esc(p.status || "?")}</span></div>`).join("")}</div>` : "";
+  labModal(`<b>${state.labOnly ? "Connect a PasarGuard panel" : "Add a PasarGuard node"}</b>`, `<div class="lab-pfwin lab-wide">${state.labOnly ? "" : labBack}${list}
+    <details class="lab-conn" ${ps.length && !state.labOnly ? "" : "open"}><summary>${state.labOnly ? "Connect your PasarGuard panel: its nodes are managed through its API" : ps.length ? "＋ Connect another PasarGuard panel" : "Connect your PasarGuard panel first: the node is managed through its API"}</summary>
       <form class="lab-pf" onsubmit="return labConnectPanel(event)" autocomplete="off">
         <label><span>Panel address</span><input name="url" required maxlength="200" placeholder="https://panel.example.com:8000"></label>
         <label><span>Name <small>(optional)</small></span><input name="name" maxlength="40" placeholder="taken from the address"></label>
@@ -237,7 +246,7 @@ window.labNodePanel = () => {
         <div class="lab-auth-login hidden"><div class="lab-pf-two"><label><span>Username</span><input name="username" maxlength="64"></label><label><span>Password</span><input name="password" type="password" autocomplete="new-password" maxlength="200"></label></div>
           <label class="chk lab-chk"><input type="checkbox" name="keep"> Keep the login, so the panel renews its token by itself</label><small class="mut">Without it the password is used once to get a token and is forgotten. A PasarGuard token lasts 24 hours unless the panel was set longer - an API key is better.</small></div>
         <label class="chk lab-chk"><input type="checkbox" name="tls" checked> Check the TLS certificate of the panel</label>
-        <div class="lab-pf-act"><button class="pri" type="submit">Connect and choose the node</button></div></form></details></div>`);
+        <div class="lab-pf-act"><button class="pri" type="submit">${state.labOnly ? "Connect the panel" : "Connect and choose the node"}</button></div></form></details></div>`);
 };
 window.labAuth = m => { state.labAuth = m; document.querySelectorAll(".lab-auth button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); const k = document.querySelector(".lab-auth-key"), l = document.querySelector(".lab-auth-login"); if (k) k.classList.toggle("hidden", m !== "key"); if (l) l.classList.toggle("hidden", m !== "login"); };
 window.labConnectPanel = async e => {
@@ -247,13 +256,14 @@ window.labConnectPanel = async e => {
   if (m === "login" && (!v("username") || !f.get("password"))) { toast("✕ Type the username and the password of the panel", "bad"); return false; }
   let host = "panel"; try { host = new URL(url).hostname; } catch (er) { /* the check above passed: this cannot fail */ }
   const body = {name: v("name") || host.slice(0, 40), type: "pasarguard", url: url.replace(/\/+$/, ""), token: m === "key" ? v("token") : "", username: m === "login" ? v("username") : "", password: m === "login" ? String(f.get("password")) : "", keep_login: m === "login" && !!f.get("keep"), verify_tls: !!f.get("tls")};
-  const btn = e.target.querySelector("button[type=submit]"); if (btn) { btn.disabled = true; btn.textContent = "Trying it on the panel…"; }
+  const btn = e.target.querySelector("button[type=submit]"), label = btn ? btn.textContent : ""; if (btn) { btn.disabled = true; btn.textContent = "Trying it on the panel…"; }
   try {
     const r = await api("/api/panels", {method: "POST", body: JSON.stringify(body)});
     state.panelsCache = await api("/api/panels").catch(() => state.panelsCache); toast(`✓ Connected: ${r.panel.name}`, "ok");
-    labLockSet(true);      // (a panel is connected: the Panel item of the menu opens)
+    labLockSet(true);      // (a panel is connected: the Panel item of the menu opens, and the option of a node)
+    if (state.labOnly) { state.labOnly = false; closeModal(); refresh(); return false; }      // (only the panel was asked for)
     labNodeList(r.panel.id);
-  } catch (err) { toast("✕ " + err.message, "bad"); if (btn) { btn.disabled = false; btn.textContent = "Connect and choose the node"; } }
+  } catch (err) { toast("✕ " + err.message, "bad"); if (btn) { btn.disabled = false; btn.textContent = label; } }
   return false;
 };
 window.labNodeList = async pid => {
@@ -284,7 +294,7 @@ window.labLockSet = has => { LAB.pg = !!has; LAB.pgAt = Date.now(); labLockPaint
 window.labLockSync = async force => {      // asked at most every 30 s (every refresh calls it); a failure leaves what is known
   if (!force && LAB.pgAt && Date.now() - LAB.pgAt < 30000) return;
   LAB.pgAt = Date.now();
-  try { const [r, p] = await Promise.all([api("/api/panels"), api("/api/profiles")]); labLockSet((r.panels || []).length > 0); LAB.profiles = p.profiles; labNavSync(); } catch (e) { /* not signed in, or the panel is restarting: nothing changes */ }      // (the same look also tells the menu which kinds have a profile)
+  try { const [r, p] = await Promise.all([api("/api/panels"), api("/api/profiles")]); state.panelsCache = r; labLockSet((r.panels || []).length > 0); LAB.profiles = p.profiles; labNavSync(); } catch (e) { /* not signed in, or the panel is restarting: nothing changes */ }      // (the same look also tells the menu which kinds have a profile)
 };
 window.labLockNow = async () => {      // the Panel page was asked for (a reload on it, a shortcut): is it open? When not, the message and the Lab instead
   if (LAB.pg === null) await labLockSync(true);
@@ -292,8 +302,8 @@ window.labLockNow = async () => {      // the Panel page was asked for (a reload
   go("nodes", "lab"); labLockMsg(); return true;
 };
 window.labLockMsg = async () => {
-  const v = await glassChoice("No panel is connected yet, so the Panel section is closed. Connect your PasarGuard panel first: Lab → Add profile → PasarGuard node, with the API key of the panel (or its username and password).", [{label: "Connect a PasarGuard panel", v: "add", cls: "pri"}]);
-  if (v === "add") { LAB.pending = "node"; if (labOn()) refresh(); else go("nodes", "lab"); }
+  const v = await glassChoice("No panel is connected yet, so the Panel section is closed. Connect your PasarGuard panel first - with its API key, or its username and password.", [{label: "Connect a PasarGuard panel", v: "add", cls: "pri"}]);
+  if (v === "add") { if (labOn()) labConnect(); else { LAB.pending = "connect"; go("nodes", "lab"); } }      // (the same screen the grey node option leads to: the page asks for it once it is drawn)
 };
 
 /* ---------------------------------------------------------------- checking, taking off the page */

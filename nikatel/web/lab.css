@@ -67,7 +67,8 @@ html body .lab-tbl td.name .lab-nm small { color: var(--mut); font-family: var(-
 .lab-card:active { transform: scale(.985); } .lab-card:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .lab-card i { font-style: normal; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.09); font-size: 15px; overflow: hidden; } .lab-card i .flg { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; } .lab-card i svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--acc); }
 .lab-card b { font-size: 14px; } .lab-card small { color: var(--mut); font-size: 11.5px; line-height: 1.4; }
-.lab-card .lab-have { display: block; margin-top: 3px; font-style: normal; font-weight: 700; color: var(--acc); } .lab-first p.lab-first-note { margin: 12px 0 0; font-size: 12px; }
+.lab-card .lab-have { display: block; margin-top: 3px; font-style: normal; font-weight: 700; color: var(--acc); }
+.lab-card.off { opacity: .55; } .lab-card.off:hover { border-color: var(--line); } .lab-card.off .lab-have { color: var(--mut); }      /* (the option of a node while no PasarGuard panel is connected: grey, and a click says why) */ .lab-first p.lab-first-note { margin: 12px 0 0; font-size: 12px; }
 .lab-card:hover { border-color: var(--line-hi); }
 .lab-pfwin { width: min(500px, 80vw); } .lab-pfwin.lab-wide { width: min(640px, 82vw); }
 .lab-lead { margin: 0 0 10px; font-size: 13px; }
@@ -77,7 +78,7 @@ html body .lab-tbl td.name .lab-nm small { color: var(--mut); font-family: var(-
 .lab-pf-row { display: grid; gap: 6px; font-size: 12px; color: var(--mut); }
 .lab-pf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lab-pf-act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
-.lab-addtabs { margin: 0 0 12px; } .lab-addtabs button { display: inline-flex; align-items: center; gap: 7px; }
+.lab-addtabs { margin: 0 0 12px; } .lab-addtabs button { display: inline-flex; align-items: center; gap: 7px; } .lab-addtabs .lb-s { display: none; }
 html:not([data-mode="light"]) body #modal .lab-addtabs button.on, html:not([data-mode="light"]) body #modal .lab-auth button.on, html:not([data-mode="light"]) body #modal .lab-sec button.on { background: var(--grad) !important; color: #fff !important; border-color: transparent !important; box-shadow: 0 4px 14px rgba(124,131,255,.35) !important; }      /* (the open tab inside a window: the rules of a window's buttons had flattened it, so the open one could not be told from the others) */
 .lab-auth { margin: 0; width: max-content; max-width: 100%; }
 .lab-conn { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 0 14px; margin-top: 4px; } .lab-conn > summary { cursor: pointer; padding: 11px 0; font-weight: 700; font-size: 13px; list-style: none; } .lab-conn > summary::-webkit-details-marker { display: none; } .lab-conn[open] { padding-bottom: 14px; } .lab-conn[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 12px; }
@@ -121,7 +122,9 @@ html:not([data-mode="light"]) body #modal .lab-addtabs button.on, html:not([data
 .lab-bars-x { display: flex; justify-content: space-between; margin-top: 3px; color: var(--mut); font-size: 10.5px; }
 html body #modal .lab-body .np > .wback { display: none !important; }
 html body #modal .lab-body .np .np-bar { display: none !important; }      /* the eight buttons of the Node view are in its "⋯" menu here */
-@media (max-width: 700px) { .lab-ins-grid { grid-template-columns: minmax(0, 1fr); } .lab-ban { flex-wrap: wrap; } .lab-ban .lb-a { flex: 1 1 100%; justify-content: flex-start; } .lab-pf-two { grid-template-columns: 1fr; } .lab-choose { grid-template-columns: minmax(0, 1fr); } .lab-card { min-height: 0; grid-template-rows: auto; grid-template-columns: 30px 1fr; column-gap: 12px; } .lab-card i { grid-row: 1 / 3; } .lab-pick-row { grid-template-columns: 18px 24px minmax(0, 1fr) auto; } .lab-pick-row .mono, .lab-pick-row .mut, .lab-pick-row .pill { display: none; } }
+@media (max-width: 700px) { .lab-ins-grid { grid-template-columns: minmax(0, 1fr); } .lab-ban { flex-wrap: wrap; } .lab-ban .lb-a { flex: 1 1 100%; justify-content: flex-start; } .lab-pf-two { grid-template-columns: 1fr; } .lab-choose { grid-template-columns: minmax(0, 1fr); } .lab-card { min-height: 0; grid-template-rows: auto; grid-template-columns: 30px 1fr; column-gap: 12px; } .lab-card i { grid-row: 1 / 3; } .lab-pfwin, .lab-pfwin.lab-wide { width: 100%; }
+  .lab-addtabs { display: flex; } .lab-addtabs button { flex: 0 1 auto; white-space: nowrap; padding: 0 12px; } .lab-addtabs .lb-f { display: none; } .lab-addtabs .lb-s { display: inline; }      /* (the three tabs of the add flow are one row: short names) */
+  .lab-pick-row { grid-template-columns: 18px 24px minmax(0, 1fr); row-gap: 0; padding: 7px 12px; } .lab-pick-row > input, .lab-pick-row > .lab-fl { grid-row: 1 / 3; align-self: center; } .lab-pick-row > b, .lab-pick-row > .mono { grid-column: 3; } .lab-pick-row > .mono { font-size: 11px; } .lab-pick-row > .mut:not(.mono), .lab-pick-row > .pill, .lab-pick-row > .mchip { display: none; }      /* (a server: its name and, under it, its address - the information is not hidden on a phone) */ }
 
 /* ONE "⋯" button in place of many buttons: on a card, in the header of a window, and over the Node view; its menu is a small dark box of plain words, in two columns when it is long, the dangerous item last and red */
 html body .lab-kb, html body #modal .lab-kb { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; border-radius: 9px; border: 1px solid transparent; background: rgba(255,255,255,.07); color: var(--mut); box-shadow: none; backdrop-filter: none; flex: none; overflow: visible; }
@@ -146,8 +149,8 @@ html[data-mode="light"] .lab-mg + .lab-mg { border-color: rgba(30,50,100,.12); }
 
 /* the menu of the page: "Add profile" is the first item of the Lab group (an action, not a tab: drawn in the accent colour, never "open"), the Panel item is grey (and says why) until a PasarGuard profile exists */
 .nav-sub a.nav-act, .nav-sub a.nav-act .ic, .tabs button.sub-act { color: var(--acc); } .nav-sub a.nav-act > span, .tabs button.sub-act { font-weight: 700; }
-/* Add profile is the LAST item of the Lab list, with a "+" after its name and no arrow (the owner: "Add profile comes at the end of the list, no arrow, a + after it") */
-.nav-sub a.nav-act .nav-plus { flex: none; margin-left: 2px; font-size: 19px; font-weight: 600; line-height: 1; color: var(--acc); }
+/* Add profile is the LAST item of the Lab list and has no arrow: it is written "+ Add profile" - the + stands in front of its name, where the icon of the other items stands (the owner: "+ Add profile") */
+html body nav#nav .nav-sub a.nav-act .nav-plus { font-size: 21px; font-weight: 600; line-height: 1; color: var(--acc); }
 html body nav a.nav-lock { opacity: .42; filter: grayscale(1); cursor: pointer; }
 html body nav a.nav-lock:hover { opacity: .65; }
 html body nav a.nav-lock::before, html body nav a.nav-lock::after { display: none !important; }

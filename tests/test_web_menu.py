@@ -94,22 +94,36 @@ def test_the_old_foreign_and_iran_lists_are_out_of_the_project_and_the_lab_is_th
 
 def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_kinds_and_add_profile_plus_at_the_end():
     """The owner (2026-10-14): "the Servers section is called Lab", "show Add profile there when you click on it", "Add profile comes below the profiles; foreign, iran, pasargaurd; the profiles item is called
-    any", then "Add profile comes at the END of the list, no arrow in front of it, a + after it". The group of the menu is Lab: Any (every profile), an item for each kind that has a profile (Foreign, Iran,
-    PasarGuard - only with two kinds or more, like the tabs of the page), and Add profile + as the LAST item: a door to the add flow, an "act" of the tabs (no page and no tab of its own, never the open one)."""
+    any", then "Add profile comes at the END of the list, no arrow in front of it", then "+ Add profile". The group of the menu is Lab: Any (every profile), an item for each kind that has a profile (Foreign, Iran,
+    PasarGuard - only with two kinds or more, like the tabs of the page), and "+ Add profile" as the LAST item: a door to the add flow, an "act" of the tabs (no page and no tab of its own, never the open one)."""
     assert re.search(r'<a data-page="nodes"[^>]*data-short="Lab"', INDEX) and re.search(r'<span>Lab</span></a>', NAV) and "<span>Servers</span>" not in NAV
     assert re.search(r'^  nodes: \["Lab", ', APP, re.MULTILINE)
     block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
     tabs = re.findall(r'^  nodes: \[(.*)\],$', block, re.MULTILINE)[0]
     assert tabs.index('["lab", "Any"') < tabs.index('["add", "＋ Add profile"') and '"act"]' in tabs and "Profiles" not in tabs.split('["add"', 1)[0]          # (the list first, Add profile at the end)
-    assert '<b class="nav-plus" aria-hidden="true">+</b>' in APP and "nav-ag" not in APP and "nav-act-k" not in APP          # (a + after its name, no arrow, no small group)
+    assert '<i class="ic"><b class="nav-plus" aria-hidden="true">+</b></i><span>${esc(name)}</span>' in APP and "nav-ag" not in APP and "nav-act-k" not in APP          # ("+ Add profile": the + in front of its name, no arrow, no small group)
     assert "window.subAct = (page, k) =>" in APP and 'SUB[page].filter(x => x[3] !== "act")' in APP and "a.dataset.act ? subAct(a.dataset.page, a.dataset.sub)" in APP
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
     assert 'const LAB_NAV = [["foreign", "Foreign"], ["iran", "Iran"], ["node", "PasarGuard"]]' in lab and "if (kinds.length > 1)" in lab and "any.onclick = () => labGoKind(\"any\")" in lab          # (the kinds follow the profiles)
     assert lab.count("labNavSync();") >= 3          # (when the page is drawn, when a tab of the page is chosen, when the profiles were read in the background)
-    assert 'if (k === "add") labAdd(); else if (typeof k === "object") labServerStep(k.kind || "foreign", "new", k); else labAddKind(k);' in lab          # (the page opens the add flow once it is drawn, whichever way it was reached)
+    assert 'if (k === "add") labAdd(); else if (k === "connect") labConnect(); else if (typeof k === "object") labServerStep(k.kind || "foreign", "new", k); else labAddKind(k);' in lab          # (the page opens the add flow once it is drawn, whichever way it was reached)
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     assert ".nav-plus" in css and ".nav-ag" not in css and ".nav-ak" not in css
+
+
+def test_the_pasarguard_node_option_is_grey_until_a_pasarguard_panel_is_connected_and_a_click_says_why():
+    """The owner (2026-10-14): "this option is active when we have added a PasarGuard panel". The PasarGuard node card of Add profile is grey (aria-disabled) while no PasarGuard panel is connected; asking for
+    it says why and leads to connecting one - with the API key, or a username and password, the same screen the locked Panel item leads to - and the option is live as soon as one is connected."""
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    assert "const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);" in lab
+    assert 'off = k === "node" && noPg' in lab and 'aria-disabled="true" title="Connect a PasarGuard panel first"' in lab
+    assert 'if (k === "node") { if (labHasPg()) labNodePanel(); else labPgFirst(); }' in lab          # (asking for the grey option says why)
+    assert "window.labConnect = () => labNodePanel(true);" in lab and "state.labOnly = only === true;" in lab          # (only the panel is asked for: no node)
+    assert "if (state.labOnly) { state.labOnly = false; closeModal(); refresh(); return false; }" in lab          # (and once it is connected the option is live)
+    assert 'if (labOn()) labConnect(); else { LAB.pending = "connect"; go("nodes", "lab"); }' in lab          # (the locked Panel item leads to the same screen)
+    assert "state.panelsCache = r; labLockSet(" in lab          # (the background look keeps the list of panels the option reads)
+    assert ".lab-card.off" in (WEB / "lab.css").read_text(encoding="utf-8")
 
 
 def test_the_servers_the_panel_already_has_are_not_moved_to_the_lab_by_themselves_they_are_picked_in_add_profile():
@@ -117,7 +131,7 @@ def test_the_servers_the_panel_already_has_are_not_moved_to_the_lab_by_themselve
     servers the panel already has (name, address, provider) under "Already in the panel", with a search and "Select all", and it opens on that list when there are some."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert "const labFree = " in lab and 'labServerStep(k, labFree(k).length ? "have" : "new")' in lab          # it opens on the list of the servers that are there
-    assert 'Already in the panel<i class="cnt">' in lab and '<label class="lab-all">' in lab and "window.labPickAll = " in lab and "window.labPickFilter = " in lab
+    assert 'lb("Already in the panel", "In the panel")}<i class="cnt">' in lab and '<label class="lab-all">' in lab and "window.labPickAll = " in lab and "window.labPickFilter = " in lab
     assert "already in the panel</em>" in lab and "lab-first-note" in lab          # the first page and the cards of Add profile say how many there are
     assert "labSaveMany" in lab and '"/api/servers/add-many"' in lab          # several at once: lines of name and address
     css = (WEB / "lab.css").read_text(encoding="utf-8")
