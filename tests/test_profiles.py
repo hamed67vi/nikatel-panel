@@ -196,10 +196,10 @@ def test_a_tag_is_free_text_empty_or_any_is_no_tag_and_the_three_categories_are_
         with pytest.raises(ValueError):
             svc.check_tag(bad)
 
-    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran"]                     # before anything is added
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard Nodes", "Iran"]                     # before anything is added
 
     a = _server(client, "ir1", "3.3.3.3", "iran", tag="Edge")
-    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran", "Edge"]            # a tag he types joins them
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard Nodes", "Iran", "Edge"]            # a tag he types joins them
     assert [p["tag"] for p in _profiles(client)] == ["Edge"]
 
     pid = _profiles(client)[0]["id"]
@@ -207,7 +207,7 @@ def test_a_tag_is_free_text_empty_or_any_is_no_tag_and_the_three_categories_are_
     assert client.put(f"/api/profiles/{pid}/tag", json={"tag": "any"}).json()["tag"] == ""                   # Any = no tag
     assert client.put(f"/api/profiles/{pid}/tag", json={"tag": "a/b"}).status_code == 400
     assert client.put("/api/profiles/9999/tag", json={"tag": "x"}).status_code == 404
-    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran"]                    # (Edge is not used any more)
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard Nodes", "Iran"]                    # (Edge is not used any more)
     assert a["id"]
 
 
@@ -233,7 +233,7 @@ def test_the_nodes_of_a_pasarguard_panel_are_put_on_the_page_by_themselves_tagge
     monkeypatch.setattr(panels, "check", lambda c: {"ok": True, "latency_ms": 5, "stats": {"version": "1"}, "nodes": nodes_, "error": ""})
 
     panels.add("pg1", "pasarguard", "https://p.example:8000", token="pg_key_x")
-    assert sorted((p["kind"], p["name"], p["tag"]) for p in _profiles(client)) == [("node", "n7", "PasarGuard"), ("node", "n8", "PasarGuard")]
+    assert sorted((p["kind"], p["name"], p["tag"]) for p in _profiles(client)) == [("node", "n7", "PasarGuard Nodes"), ("node", "n8", "PasarGuard Nodes")]
 
     panels.add("mz1", "marzban", "https://m.example:8000", token="t")                                        # a Marzban panel has no PasarGuard nodes
     assert len(_profiles(client)) == 2
@@ -241,14 +241,14 @@ def test_the_nodes_of_a_pasarguard_panel_are_put_on_the_page_by_themselves_tagge
     with session() as db:
         db.execute(Profile.__table__.delete())
         assert svc.auto_all(db) == 2 and svc.auto_all(db) == 0                                               # the upgrade step: once, and a second run makes nothing
-        assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard"}
+        assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard Nodes"}
 
 def test_a_category_made_by_hand_stays_on_the_page_while_no_profile_carries_it(client):
     r = client.post("/api/profiles/tags", json={"tag": "  Gaming  "})
     assert r.status_code == 201 and r.json()["tag"] == "Gaming"
     assert client.post("/api/profiles/tags", json={"tag": "gaming"}).status_code == 201                         # the same name again changes nothing
     assert client.post("/api/profiles/tags", json={"tag": "iran"}).status_code == 201
-    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran", "Gaming"]          # after the three, in the order they were made; no profile carries it
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard Nodes", "Iran", "Gaming"]          # after the three, in the order they were made; no profile carries it
     assert client.post("/api/profiles/tags", json={"tag": "any"}).status_code == 400                         # Any is every profile, not a category
     assert client.post("/api/profiles/tags", json={"tag": ""}).status_code == 400
     assert client.post("/api/profiles/tags", json={"tag": "a/b"}).status_code == 400
@@ -257,14 +257,24 @@ def test_a_category_can_be_renamed_and_deleted_and_its_servers_follow(client):
     s = _server(client, "ir1", "3.3.3.3", "iran", tag="Iran")
     _server(client, "fo1", "4.4.4.4", "foreign", tag="Marzban")
     assert client.put("/api/profiles/tags/Marzban", json={"tag": "Backup"}).json()["tag"] == "Backup"
-    assert client.get("/api/profiles").json()["tags"] == ["Backup", "PasarGuard", "Iran"]                       # the same place in the list
+    assert client.get("/api/profiles").json()["tags"] == ["Backup", "PasarGuard Nodes", "Iran"]                       # the same place in the list
     assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", "Backup"), ("ir1", "Iran")]       # the server follows
     assert client.put("/api/profiles/tags/Backup", json={"tag": "iran"}).status_code == 409                       # a name that exists
     assert client.put("/api/profiles/tags/Nothing", json={"tag": "x"}).status_code == 404
     assert client.put("/api/profiles/tags/Backup", json={"tag": "any"}).status_code == 400
 
     assert client.delete("/api/profiles/tags/Backup").json()["moved"] == 1
-    assert client.get("/api/profiles").json()["tags"] == ["PasarGuard", "Iran"]                                   # his own set now: the three are no longer forced
+    assert client.get("/api/profiles").json()["tags"] == ["PasarGuard Nodes", "Iran"]                                   # his own set now: the three are no longer forced
     assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", ""), ("ir1", "Iran")]             # the server is under Any, still on the page
     assert client.delete("/api/profiles/tags/any").status_code == 400
     assert client.get(f"/api/servers/{s['id']}").status_code == 200
+
+def test_the_category_that_was_called_pasarguard_is_called_pasarguard_nodes_by_the_upgrade(client):
+    _server(client, "ir1", "3.3.3.3", "iran", tag="pasarguard")
+    _server(client, "fo1", "4.4.4.4", "foreign", tag="Marzban")
+
+    with session() as db:
+        assert svc.rename_old_tag(db) == 1
+        assert svc.rename_old_tag(db) == 0                                                                 # once
+
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", "Marzban"), ("ir1", "PasarGuard Nodes")]

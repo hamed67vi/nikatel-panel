@@ -127,7 +127,7 @@ function labFirst() {      // no profile yet: nothing else works until one is ad
 }
 const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
 /* the categories are tags (the owner, 2026-10-14: "make me three categories: Marzban, PasarGuard, Iran"): they are on the page from the start, any other tag he types joins them, and Any is every profile */
-const labLogo = t => { const l = String(t).toLowerCase(); return l === "pasarguard" || l === "marzban" ? `<img class="lab-logo" src="/static/logos/${l}.png" alt="" width="16" height="16">` : ""; };      // (the logos the owner sent: the lion of PasarGuard, the barbed wire of Marzban)
+const labLogo = t => { const l = String(t).toLowerCase(); return l.startsWith("pasarguard") || l === "marzban" ? `<img class="lab-logo" src="/static/logos/${l.startsWith("pasarguard") ? "pasarguard" : l}.png" alt="" width="16" height="16">` : ""; };      // (the logos the owner sent: the lion of PasarGuard, the barbed wire of Marzban)
 window.labAddTag = async () => {      // the "+" beside the tabs: a new profile (category)
   const v = await gprompt("Name of the new profile (a category on this page):", ""); if (v == null || !String(v).trim()) return;
   try { const r = await api("/api/profiles/tags", {method: "POST", body: JSON.stringify({tag: v})}); LAB.kind = r.tag; localStorage.setItem("nk.lab.k", r.tag); toast("✓ Profile " + r.tag + " added", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
@@ -142,7 +142,7 @@ window.labDeleteTag = async () => {      // 🗑 beside the tabs: the profile (c
   if (!await gconfirm(`Delete the profile ${cur}? Its servers stay on the page, under Any; nothing is done to them.`, {danger: true})) return;
   try { await api(`/api/profiles/tags/${encodeURIComponent(cur)}`, {method: "DELETE"}); LAB.kind = "any"; localStorage.setItem("nk.lab.k", "any"); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard", "Iran"];
+const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard Nodes", "Iran"];
 const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind).toLowerCase()) || "any";
 function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }function labListInner(shown) {
   if (!shown.length) return `<div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button></div>`;
@@ -184,20 +184,14 @@ window.labPgFirst = async () => {      // the option of a node is grey while no 
 };
 window.labConnect = () => labNodePanel(true);      // only the panel: the same screen as the node's first step, and no node is asked for
 const labBack = '<div class="wback"><button type="button" class="sm" onclick="labTagDraft.v = \'\'; labAdd()">← Back</button></div>';
-window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase() === "pasarguard") labAddNode(); };      // choosing the tag PasarGuard brings the settings of a PasarGuard node (its panel, then its nodes)
-window.labAdd = (fill) => {      // ONE box: the name, the tag (one field: Any unless chosen) and the server; with the tag PasarGuard the settings of a node come instead of the server's
+window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase().startsWith("pasarguard")) labAddNode(); };      // choosing the tag PasarGuard brings the settings of a PasarGuard node (its panel, then its nodes)
+window.labTagInput = () => `<input name="tag" id="lab-tag" list="lab-taglist" maxlength="40" autocomplete="off" placeholder="Any" value="${esc(labTagDraft.v)}" oninput="labTagDraft.v = this.value" onchange="labTagPick(this.value)"><datalist id="lab-taglist">${[...new Set(["Iran", "Foreign", ...labTags()])].map(t => `<option value="${esc(t)}"></option>`).join("")}</datalist>`;      // (the Tag field: one box, Any when empty, Iran and Foreign suggested)
+window.labAdd = (fill) => {      // the box is the one the Servers page always had (SERVER_FORM: the server, how the panel reaches it, what to install after) with ONE more field, the Tag; with the tag PasarGuard the settings of a node come instead
   fill = fill && typeof fill === "object" ? fill : null; if (fill && fill.tag != null) labTagDraft.v = fill.tag;
-  const form = `<form class="lab-pf" onsubmit="return labSaveServer(event)" autocomplete="off">
-    <div class="lab-pf-two"><label><span>Name</span><input name="name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" placeholder="de4" title="Letters, digits . _ - (a name is never used twice)" value="${esc((fill || {}).name || "")}"></label><label><span>Tag <small>(the category it is listed under)</small></span><input name="tag" id="lab-tag" list="lab-taglist" maxlength="40" autocomplete="off" placeholder="Any" value="${esc(labTagDraft.v)}" oninput="labTagDraft.v = this.value" onchange="labTagPick(this.value)"><datalist id="lab-taglist">${[...new Set(["Iran", "Foreign", ...labTags()])].map(t => `<option value="${esc(t)}"></option>`).join("")}</datalist></label></div>
-    <label><span>Address</span><input name="host" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" placeholder="203.0.113.10" value="${esc((fill || {}).host || "")}"></label>
-    <div class="lab-pf-two"><label><span>SSH user</span><input name="ssh_user" value="root" maxlength="32"></label><label><span>SSH port</span><input name="ssh_port" type="number" min="1" max="65535" value="22"></label></div>
-    <label><span>SSH password <small>(optional)</small></span><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the server"></label>
-    <small class="mut">With a password the panel logs in once, installs its own key and forgets the password. Without one, the panel's key must already be in the server's authorized_keys (Settings shows the key). The tag Iran or Foreign says where the server is; with another tag the panel finds it from the address. The tag PasarGuard is for a node of your PasarGuard panel.</small>
-    <div class="lab-pf-act"><button class="pri" type="submit">Add server</button></div></form>`;
-  labModal("<b>Add a server</b>", `<div class="lab-pfwin lab-wide">${form}</div>`);
-  setTimeout(() => { const i = document.querySelector(".lab-pf input[name=name]"); if (i) i.focus(); }, 60);
-};
-window.labAddWith = async (name, host) => {      // a node outside our servers ("Add to servers"): the box opens on a new server with its name and address filled in; where it is (Iran or foreign) is found from the address and put in the tag
+  state.prefill = fill ? {name: fill.name || "", host: fill.host || ""} : null;
+  labModal("<b>Add a server</b>", `<div class="lab-pfwin lab-xwide">${SERVER_FORM(null)}</div>`);
+  setTimeout(() => { const i = document.querySelector(".srv-form2 input[name=name]"); if (i) i.focus(); const h = document.querySelector(".srv-form2 input[name=host]"); if (h && h.value && typeof srvWhere === "function") srvWhere(h.form); }, 80);
+};window.labAddWith = async (name, host) => {      // a node outside our servers ("Add to servers"): the box opens on a new server with its name and address filled in; where it is (Iran or foreign) is found from the address and put in the tag
   const fill = {tag: "Foreign", name: String(name || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60), host: String(host || "").replace(/^\[|\]$/g, "")};
   try { const w = await api("/api/servers/where?host=" + encodeURIComponent(fill.host)); if (w.role === "iran") fill.tag = "Iran"; } catch (e) { /* no geo answer: abroad is the usual place of a node; the Tag field can be changed */ }
   LAB.pending = fill; if (labOn()) refresh(); else go("nodes", "lab");
@@ -212,20 +206,6 @@ window.labPickCount = () => {
   const n = document.querySelectorAll(".lab-pick-row input:checked").length, b = $("#lab-pick-go"), all = document.querySelector(".lab-all input"), open = [...document.querySelectorAll(".lab-pick-row:not(.q-hide):not(.off) input:not(:disabled)")];
   if (b) { b.disabled = !n; b.textContent = n ? `Add ${n} ${b.dataset.noun || "server"}${n === 1 ? "" : "s"}` : "Add"; }
   if (all) all.checked = open.length > 0 && open.every(i => i.checked);      // ("Select all" follows the boxes: it is ticked only while every shown row is)
-};
-window.labSaveServer = async e => {
-  e.preventDefault(); const f = new FormData(e.target), v = k => String(f.get(k) || "").trim(), pw = f.get("password") || "", tag = v("tag");
-  const body = {name: v("name"), host: v("host"), role: labRoleOf(tag), ssh_user: v("ssh_user") || "root", ssh_port: +v("ssh_port") || 22, provider: "", enabled: true, tag};      // (the tag Iran / Foreign says where it is; any other tag: the panel finds it from the address)
-  const have = (state.serversCache || []).find(s => s.host === body.host || s.name.toLowerCase() === body.name.toLowerCase());
-  if (have) { toast(`✕ The panel knows ${have.name} (${have.host}) already`, "bad"); return false; }
-  try {
-    const saved = await api("/api/servers", {method: "POST", body: JSON.stringify(body)});      // (a server is on the page the moment it is made: the panel gives it its profile, under its tag)
-    closeModal(); refresh();      // the new row appears at once; it says "connecting…" while the password login runs
-    if (pw) { toast("Server added - connecting with the password…"); try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Added and connected: " + r.hostname, "ok"); } catch (err) { await connectWithPrompt(saved.id, body.name, err.message); } }
-    else { try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); } }
-    refresh();
-  } catch (err) { toast("✕ " + err.message, "bad"); }
-  return false;
 };
 
 /* the PasarGuard node: first the panel it belongs to - its API key, or a username and password - then the nodes of that panel */
@@ -275,7 +255,7 @@ window.labNodeList = async pid => {
 };
 window.labNodeGo = async pid => {
   const ids = [...document.querySelectorAll(".lab-pick-row input:checked")].map(i => +i.value); if (!ids.length) return;
-  try { const r = await api("/api/profiles", {method: "POST", body: JSON.stringify({kind: "node", panel_id: pid, node_ids: ids})}); toast("✓ Added: " + r.added.map(x => x.name).join(", ") + (r.skipped.length ? ` (${r.skipped.length} skipped: ${r.skipped[0].why})` : ""), "ok"); labLockSet(true); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
+  try { const r = await api("/api/profiles", {method: "POST", body: JSON.stringify({kind: "node", panel_id: pid, node_ids: ids, tag: labTagDraft.v || "PasarGuard Nodes"})}); toast("✓ Added: " + r.added.map(x => x.name).join(", ") + (r.skipped.length ? ` (${r.skipped.length} skipped: ${r.skipped[0].why})` : ""), "ok"); labLockSet(true); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
 };
 
 /* ---------------------------------------------------------------- the Panel item of the menu: grey with a lock only while NO panel is connected (the owner: "we have a panel now, it must not be locked; the lock is for when no panel is connected").
@@ -342,9 +322,9 @@ window.labAdopt = async sid => {      // a server that is on no profile (it was 
 window.labWinHtml = s => {
   if (state.wtab === "console") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + serverPartHtml(s, "console");
   if (state.wtab === "install") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + installHtml(s);
-  const sec = LAB_SECS.some(x => x[0] === state.wsec) ? state.wsec : "overview";
-  const hasNode = window.pgSrvOn && pgSrvOn(s).length;
-  const bar = `<div class="tabs lab-sec">${LAB_SECS.map(([k, l]) => `<button class="${k === sec ? "on" : ""}" onclick="wtab('${k}')">${l}${k === "node" && hasNode ? '<i class="lab-sec-dot"></i>' : ""}</button>`).join("")}</div>`;
+  const hasNode = !!(window.pgSrvOn && pgSrvOn(s).length), sec = LAB_SECS.some(x => x[0] === state.wsec) && (state.wsec !== "node" || hasNode) ? state.wsec : "overview";
+  const bar = `<div class="tabs lab-sec">${LAB_SECS.map(([k, l]) => { const off = k === "node" && !hasNode;      // (a server that is no PasarGuard node: its node settings are off - the owner)
+    return `<button class="${k === sec ? "on" : ""}${off ? " off" : ""}" ${off ? 'disabled aria-disabled="true" title="This server carries no PasarGuard node"' : ""} onclick="wtab('${k}')">${l}${k === "node" && hasNode ? '<i class="lab-sec-dot"></i>' : ""}</button>`; }).join("")}</div>`;
   return bar + `<div class="lab-body" data-sec="${sec}">${labSec(s, sec)}</div>`;
 };
 function labSec(s, sec) {
@@ -393,7 +373,7 @@ window.labMenu = (btn, ctx, id, ev) => {
     b.n++; if (!it.grp) n++;
     b.html += it.grp ? `<small class="lab-mgrp">${esc(it.grp)}</small>` : `<button type="button" role="menuitem" class="lab-mi${it.danger ? " danger" : ""}" ${it.off ? "disabled" : ""} ${it.tip ? `title="${esc(it.tip)}"` : ""} onclick="labMenuPick(${i})">${it.ic ? `<span class="lab-mic">${it.ic}</span>` : ""}${esc(it.t)}</button>`;
   });
-  const two = n > 10 && !icons, cols = [{n: 0, html: ""}, {n: 0, html: ""}];
+  const two = false, cols = [{n: 0, html: ""}, {n: 0, html: ""}];
   for (const b of blocks.filter(b => b.n)) { const c = two && cols[1].n < cols[0].n ? cols[1] : cols[0]; c.n += b.n; c.html += `<div class="lab-mg">${b.html}</div>`; }
   m.className = "lab-menu" + (two ? " two" : "") + (icons ? " flat" : ""); m.innerHTML = `<div class="lab-mbody">${cols.filter(c => c.n).map(c => `<div class="lab-mcol">${c.html}</div>`).join("")}</div>`;
   document.body.appendChild(m); labMenuEl = m;
@@ -507,7 +487,7 @@ function labNavSync() {
   const ic = typeof navIcons === "function" ? navIcons() : {}; let after = any;
   for (const t of labTags()) {
     const l = t.toLowerCase(), a = document.createElement("a"); a.className = "nav-kind"; a.dataset.page = "nodes"; a.dataset.sub = "lab:" + l; a.dataset.kind = t;
-    a.innerHTML = `<i class="ic">${labLogo(t) || (l === "iran" ? ic.iran : l === "foreign" ? ic.foreign : l === "pasarguard" ? ic.node : ic.access) || ""}</i><span>${esc(t)}</span>`; a.onclick = () => labGoKind(t); after.after(a); after = a;
+    a.innerHTML = `<i class="ic">${labLogo(t) || (l === "iran" ? ic.iran : l === "foreign" ? ic.foreign : l.startsWith("pasarguard") ? ic.node : ic.access) || ""}</i><span>${esc(t)}</span>`; a.onclick = () => labGoKind(t); after.after(a); after = a;
   }
   any.onclick = () => labGoKind("any");
   const cur = labOn() ? labKindNow() : null;      // (the open one is the tag the page shows)

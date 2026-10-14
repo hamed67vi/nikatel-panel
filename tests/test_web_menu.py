@@ -106,7 +106,7 @@ def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_t
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
     assert 'for (const t of labTags())' in lab and 'any.onclick = () => labGoKind("any")' in lab          # (one item for each tag, drawn from the tags the page read)
-    assert 'const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard", "Iran"];' in lab          # (the three categories are there before anything is read)
+    assert 'const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard Nodes", "Iran"];' in lab          # (the three categories are there before anything is read)
     assert lab.count("labNavSync();") >= 3          # (when the page is drawn, when a tab of the page is chosen, when the profiles were read in the background)
     assert 'if (k === "connect") labConnect(); else if (typeof k === "object") labAdd("new", k); else labAdd(); }' in lab          # (the page opens the add box once it is drawn, whichever way it was reached)
     css = (WEB / "lab.css").read_text(encoding="utf-8")
@@ -119,10 +119,10 @@ def test_a_profile_is_added_in_one_box_with_no_tabs_that_asks_its_name_and_its_t
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert "labChooser" not in lab and "labAddKind" not in lab and "labServerStep" not in lab          # (no choice of three kinds)
     assert "lab-addtabs" not in lab and "labSaveMany" not in lab and "labPickGo" not in lab and "Already in the panel" not in lab and "Several at once" not in lab          # (no tabs, no several-at-once, no already-in-the-panel)
-    assert 'name="tag" id="lab-tag" list="lab-taglist"' in lab and 'placeholder="Any"' in lab          # ONE Tag field: empty is Any, a datalist suggests
+    assert 'name="tag" id="lab-tag" list="lab-taglist"' in lab and 'placeholder="Any"' in lab and "SERVER_FORM(null)" in lab and "labTagInput()" in (WEB / "app.js").read_text(encoding="utf-8")          # the old box of the Servers page, with one more field          # ONE Tag field: empty is Any, a datalist suggests
     assert '["Iran", "Foreign", ...labTags()]' in lab          # Iran and Foreign are suggested, then every tag there is
-    assert 'onchange="labTagPick(this.value)"' in lab and 'window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase() === "pasarguard") labAddNode(); };' in lab          # the tag PasarGuard brings the node's settings
-    assert "const labRoleOf = " in lab and "role: labRoleOf(tag)" in lab and "tag};" in lab          # the tags Iran / Foreign say where a new server is; the tag goes to the API
+    assert 'onchange="labTagPick(this.value)"' in lab and 'window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase().startsWith("pasarguard")) labAddNode(); };' in lab          # the tag PasarGuard brings the node's settings
+    assert "const labRoleOf = " in lab and "labRoleOf(f.get(\"tag\"))" in (WEB / "app.js").read_text(encoding="utf-8") and "tag: String(f.get(\"tag\")" in (WEB / "app.js").read_text(encoding="utf-8")          # the tags Iran / Foreign say where a new server is; the tag goes to the API
     assert "window.labSetTag = " in lab and 'Change tag…' in lab and '`/api/profiles/${id}/tag`' in lab          # a tag can be changed from the ⋯ menu
 
 
@@ -182,7 +182,7 @@ def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_o
     assert '<table class="tbl lift srv-tbl joined lab-tbl">' in lab and "${SRV_IC}" in lab and 'class="srv-ic"' in lab          # the table, the server icon and the flag of the old list
     assert 'cc = s.role === "iran" ? "ir"' in lab and "has-flag" in lab                                                        # Iran has its flag too
     assert ".lab-root" in css and not re.search(r"^\.lab \{", css, re.MULTILINE)                                              # (".lab" is hidden by the fluid layer on a narrow window)
-    assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "n > 10" in lab         # one menu, two columns when it is long
+    assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "const two = false" in lab         # one menu, always ONE column (the owner)
     assert "labItem(\"Delete server…\"" in lab and "danger: true" in lab and ".lab-mi.danger" in css                         # the dangerous item is last and red
     assert 'class="sm abtn' not in lab and "wtools" not in lab                                                                # no row of buttons, no tiles of tools
     assert "const labTags = " in lab and '["any", ...labTags()]' in lab                                                       # the tabs are the tags: Any, then Marzban, PasarGuard, Iran and every other tag

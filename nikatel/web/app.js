@@ -625,6 +625,7 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
     <div class="sgrid two srv-two">
       <div class="sbox"><h5><i>🖥</i>Server</h5>
         ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" value="${esc(s ? s.name : ((state.prefill || {}).name || ""))}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)" oninput="pgSrvMirror(this.form)">`)}
+        ${!s && window.labTagInput ? fl("Tag", labTagInput()) : ""}
         ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : ((state.prefill || {}).host || ""))}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
         <label class="kv2 kf bf"><span>Where</span><input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></label>
         <label class="kv2 kf bf"><span>Checked</span><span class="chkline"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> by the panel</span></label></div>
@@ -981,9 +982,10 @@ window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);
   let role = f.get("role") || "";
+  if (!role && !id && window.labRoleOf) role = labRoleOf(f.get("tag"));      // (the tag Iran / Foreign of the Lab says where a new server is)
   if (!role) { role = await srvWhere(e.target, true); if (!role) { await srvFlip(e.target); role = (e.target.querySelector("[name=role]") || {}).value || ""; } }
   if (!role) { toast("✕ Say where the server is (Iran or foreign) first", "bad"); return false; }
-  const body = {name: f.get("name").trim(), host: f.get("host").trim(), role, ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on"}, pw = f.get("password") || "";
+  const body = {name: f.get("name").trim(), host: f.get("host").trim(), role, ssh_user: f.get("ssh_user").trim() || "root", ssh_port: +f.get("ssh_port") || 22, provider: (f.get("provider") || "").trim(), enabled: f.get("enabled") === "on", tag: String(f.get("tag") || "").trim()}, pw = f.get("password") || "";
   const items = [f.get("x_bt") === "on" ? "btblock" : "", f.get("x_node") === "on" ? "marzban_node" : ""].filter(Boolean), cert = f.get("x_cert") || "";
   if (items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
   if (items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
@@ -992,6 +994,7 @@ window.saveServer = async (e, id) => {
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;
+    if (!id && window.labOn && labOn()) closeModal();      // (the box of the Lab closes: the new row appears on the page)
     if (!id) refresh();          // the new row appears at once; it says "connecting…" while the password login runs
     let connected = true;
     if (id && !pw) toast("✓ Saved", "ok");

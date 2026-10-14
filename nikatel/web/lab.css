@@ -176,3 +176,5 @@ html body #page .lab-tabact .lab-ib svg { width: 16px; height: 16px; fill: none;
 html body #page .lab-tabact .lab-ib:hover { background: rgba(255,255,255,.16); } html body #page .lab-tabact .lab-ib.danger:hover { color: #ff6f86; }
 .nav-sub a.nav-act .ic svg { stroke: currentColor; }
 .lab-gre { display: inline-block; margin-left: 6px; padding: 0 5px; height: 15px; line-height: 15px; border-radius: 999px; font-size: 8.5px; font-weight: 800; letter-spacing: .4px; vertical-align: middle; } .lab-gre.ok { background: rgba(52,211,153,.16); color: #34d399; } .lab-gre.warn { background: rgba(251,191,36,.16); color: #fbbf24; } .lab-gre.bad { background: rgba(255,95,120,.16); color: #ff6f86; }
+.lab-pfwin.lab-xwide { width: min(900px, 92vw); } .lab-pfwin.lab-xwide .srv-form2 { margin: 0; }
+.lab-sec button.off { opacity: .4; cursor: not-allowed; }

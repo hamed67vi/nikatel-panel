@@ -20,8 +20,8 @@ from .events import emit
 KINDS = ("iran", "foreign", "node")
 LABEL = {"iran": "Iran server", "foreign": "Foreign server", "node": "PasarGuard node"}
 MAX_PROFILES = 400
-DEFAULT_TAGS = ("Marzban", "PasarGuard", "Iran")      # the categories the owner asked for (2026-10-14): they are on the page from the start; any other tag he types is made by using it
-NODE_TAG = "PasarGuard"      # the tag of the profiles that are made by themselves for the nodes of a connected PasarGuard panel
+DEFAULT_TAGS = ("Marzban", "PasarGuard Nodes", "Iran")      # the categories the owner asked for (2026-10-14): they are on the page from the start; any other tag he types is made by using it
+NODE_TAG = "PasarGuard Nodes"      # (the owner: "PasarGuard Nodes") the tag of the profiles that are made by themselves for the nodes of a connected PasarGuard panel
 
 
 def _int(v, what: str) -> int:
@@ -243,6 +243,23 @@ def auto_nodes(db: Session, panel: Panel) -> int:
             made += 1
 
     return made
+
+
+def rename_old_tag(db: Session) -> int:
+    """The step of the upgrade to 1.52.0: the category that was called PasarGuard is called PasarGuard Nodes (the owner). Returns how many profiles followed."""
+    n = 0
+
+    for p in db.scalars(select(Profile)):
+        if (p.tag or "").lower() == "pasarguard":
+            p.tag = NODE_TAG
+            n += 1
+
+    mine = settings.get("lab").get("tags")
+
+    if isinstance(mine, list) and any(isinstance(x, str) and x.lower() == "pasarguard" for x in mine):
+        settings.put("lab", {"tags": [NODE_TAG if isinstance(x, str) and x.lower() == "pasarguard" else x for x in mine]})
+
+    return n
 
 
 def auto_all(db: Session) -> int:

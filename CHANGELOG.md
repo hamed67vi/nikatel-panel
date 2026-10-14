@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.52.0 - PasarGuard Nodes, the old Add server box, one-column menus
+
+- **The category is called PasarGuard Nodes** (the owner); the upgrade renames it (migration 18) and the nodes that came by themselves carry it.
+- **Add server is the box the Servers page always had** (the server, how the panel reaches it, what to install after) with one more field, the **Tag**; the tag Iran / Foreign says where the server is, the tag PasarGuard Nodes brings the node settings.
+- **Every menu of a server is one column** (the window's menu was two).
+- **A server that carries no PasarGuard node has its Node section switched off** (grey, with the reason).
+
 ## 1.51.3 - A small GRE tag
 
 - **The GRE of a server is a small tag beside its state (the owner):** green when its GRE links answer, yellow when some do not, red when none does; it no longer makes the state pill long (the server's icon still turns yellow for a GRE fault).
