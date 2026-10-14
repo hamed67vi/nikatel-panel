@@ -63,6 +63,39 @@ def add_profiles(body: ProfilesIn):
     return {"ok": True, "added": added, "skipped": skipped}
 
 
+@router.post("/profiles/tags", status_code=201)
+def add_tag(body: TagIn):
+    """Make a category (a tag) by hand - the "+" beside the tabs of the Lab; it stays on the page while no profile carries it."""
+    try:
+        return {"ok": True, "tag": svc.add_tag(body.tag)}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@router.put("/profiles/tags/{tag}")
+def rename_tag(tag: str, body: TagIn):
+    """Rename a category of the Lab (a profile in the owner's words): the servers that carry it follow."""
+    with session() as db:
+        try:
+            return {"ok": True, "tag": svc.rename_tag(db, tag, body.tag)}
+        except LookupError as e:
+            raise HTTPException(404, str(e)) from None
+        except FileExistsError as e:
+            raise HTTPException(409, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+
+@router.delete("/profiles/tags/{tag}")
+def delete_tag(tag: str):
+    """Delete a category of the Lab: the servers that carried it go to Any; nothing else changes on them."""
+    with session() as db:
+        try:
+            return {"ok": True, "moved": svc.delete_tag(db, tag)}
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+
 @router.put("/profiles/{profile_id}/tag")
 def tag_profile(profile_id: int, body: TagIn):
     """Give a profile another tag - the category it is listed under on the Lab page (empty or "any" = Any); nothing changes on what it points at."""

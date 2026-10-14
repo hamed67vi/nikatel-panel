@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Panel, Profile, Server
+from . import settings
 from .events import emit
 
 KINDS = ("iran", "foreign", "node")
@@ -53,9 +54,15 @@ def check_tag(v) -> str:
     return t
 
 
+def _base() -> list[str]:
+    """The categories the owner has: his own list when he changed it (made, renamed or deleted one), else the three he asked for."""
+    mine = settings.get("lab").get("tags")
+    return [t for t in mine if isinstance(t, str)] if isinstance(mine, list) else list(DEFAULT_TAGS)
+
+
 def all_tags(db: Session) -> list[str]:
-    """The categories of the page: the three that are always there, then every other tag a profile carries (a tag is written once, whatever its case)."""
-    out = list(DEFAULT_TAGS)
+    """The categories of the page: his set, then every other tag a profile carries (a tag is written once, whatever its case)."""
+    out = _base()
     seen = {t.lower() for t in out}
 
     for t in db.scalars(select(Profile.tag).distinct().order_by(Profile.tag)):
@@ -64,7 +71,6 @@ def all_tags(db: Session) -> list[str]:
             out.append(t)
 
     return out
-
 
 def node_in(panel: Panel, node_id: int) -> dict | None:
     """Pure: the node of the panel (as the health job last read it) with this id, or None."""
@@ -155,6 +161,63 @@ def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None, 
     emit(db, "info", "servers", f"{what} added as a profile.", what)
     return p
 
+
+def add_tag(tag) -> str:
+    """A category made by hand (the "+" beside the tabs of the Lab): it stays on the page while no profile carries it. Returns the tag as it is written."""
+    t = check_tag(tag)
+
+    if not t:
+        raise ValueError("give the profile a name")
+
+    cur = _base()
+
+    if t.lower() not in {x.lower() for x in cur}:
+        settings.put("lab", {"tags": [*cur, t][:60]})
+
+    return t
+
+
+def rename_tag(db: Session, old, new) -> str:
+    """Rename a category: the profiles that carry it follow. Returns the new name."""
+    o, n = check_tag(old), check_tag(new)
+
+    if not o or not n:
+        raise ValueError("give the profile a name")
+
+    cur = _base()
+    known = {x.lower() for x in cur} | {t.lower() for t in db.scalars(select(Profile.tag).distinct()) if t}
+
+    if o.lower() not in known:
+        raise LookupError("no such profile")
+
+    if n.lower() != o.lower() and n.lower() in known:
+        raise FileExistsError(f"{n} exists already")
+
+    settings.put("lab", {"tags": [n if x.lower() == o.lower() else x for x in cur] if o.lower() in {x.lower() for x in cur} else [*cur, n]})
+
+    for p in db.scalars(select(Profile)):
+        if (p.tag or "").lower() == o.lower():
+            p.tag = n
+
+    return n
+
+
+def delete_tag(db: Session, tag) -> int:
+    """Delete a category: the profiles that carried it go to Any (nothing else changes). Returns how many."""
+    t = check_tag(tag)
+
+    if not t:
+        raise ValueError("Any cannot be deleted")
+
+    settings.put("lab", {"tags": [x for x in _base() if x.lower() != t.lower()]})
+    n = 0
+
+    for p in db.scalars(select(Profile)):
+        if (p.tag or "").lower() == t.lower():
+            p.tag = ""
+            n += 1
+
+    return n
 
 def set_tag(db: Session, pid: int, tag) -> str:
     """Give a profile another tag (the category it is listed under). Returns the tag ("" = Any)."""

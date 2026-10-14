@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.50.1 - The Add profile box has no tabs; the tag PasarGuard brings the node settings
+## 1.51.0 - Add server, a + beside the profiles, the logos of PasarGuard and Marzban, a grouped node menu
+
+- **The button is called Add server** (bar of the Lab, the first page, the menu, the box) - the owner. A **"+" beside the tabs** makes a new profile (a category by hand: `POST /api/profiles/tags`, kept in the settings key `lab`, it stays while no server carries it).
+- **The logos the owner sent:** the winged lion for PasarGuard and the barbed wire for Marzban, in the tabs, in the menu and on the rows of the nodes (`web/logos/`).
+- **The menu of a node is grouped like the owner's picture:** one column, an icon before every item, a line between the groups - Log, Usage, Resources, Latency, Certificate / Edit, Restart, Disable, Resync users, Reset counters / Update the node, Xray, geo files / Off the page / Delete the node (red).
+- **A profile (category) can be renamed and deleted** (✎ and 🗑 beside the tabs while one is open; `PUT` / `DELETE /api/profiles/tags/{tag}`): its servers follow the new name, or go to Any when it is deleted; the three categories are the owner's own list from then on. **Every row shows the flag of its server** - the nodes too (the server they run on).
 
 - **The box that adds a profile is one form with no tabs (the owner: "remove these tabs; remove adding several servers at once and Already in the panel").** The tabs *Several at once* and *Already in the panel* are gone (their code too); the Name and the one Tag field stay, with the address and the SSH login of the server below.
 - **Choosing the tag PasarGuard brings the settings of a PasarGuard node (the owner: "for the tag put only one box, and when the tag PasarGuard is chosen the settings of a PasarGuard node come").** The panel first (its address and API key or login, when none is connected - the reason is said), then the nodes of it to pick; Back returns to the form.

@@ -100,7 +100,7 @@ def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_t
     assert re.search(r'^  nodes: \["Lab", ', APP, re.MULTILINE)
     block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
     tabs = re.findall(r'^  nodes: \[(.*)\],$', block, re.MULTILINE)[0]
-    assert tabs.index('["lab", "Any"') < tabs.index('["add", "＋ Add profile"') and '"act"]' in tabs and "Profiles" not in tabs.split('["add"', 1)[0]          # (the list first, Add profile at the end)
+    assert tabs.index('["lab", "Any"') < tabs.index('["add", "＋ Add server"') and '"act"]' in tabs and "Profiles" not in tabs.split('["add"', 1)[0]          # (the list first, Add profile at the end)
     assert '<i class="ic"><b class="nav-plus" aria-hidden="true">+</b></i><span>${esc(name)}</span>' in APP and "nav-ag" not in APP and "nav-act-k" not in APP          # ("+ Add profile": the + in front of its name, no arrow, no small group)
     assert "window.subAct = (page, k) =>" in APP and 'SUB[page].filter(x => x[3] !== "act")' in APP and "a.dataset.act ? subAct(a.dataset.page, a.dataset.sub)" in APP
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
@@ -197,3 +197,14 @@ def test_the_lab_files_are_loaded_and_versioned_like_the_others():
     assert '"lab.js"' in main and '"lab.css"' in main
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert "PAGES.lab = async () =>" in lab and "window.labOn = " in lab and "window.labWinHtml = " in lab and "window.labWtab = " in lab
+
+def test_the_lab_names_the_button_add_server_has_a_plus_beside_the_tabs_and_the_logos_of_the_panels():
+    """The owner (2026-10-14): the button is "Add server"; "a + beside the other profiles" (the tabs) makes a new profile (category); the emoji of PasarGuard is the winged lion, of Marzban the barbed wire; the menu of
+    a node is grouped - only the important ones (Log, Edit, Restart, Disable) are not, and they stand in ONE ROW."""
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert 'aria-label="Add server"' in lab and '＋ Add server</button>' in lab and 'labModal("<b>Add a server</b>"' in lab
+    assert 'class="lab-plus" onclick="labAddTag()"' in lab and "window.labAddTag = " in lab and '"/api/profiles/tags"' in lab and ".lab-kinds .lab-plus" in css
+    assert (WEB / "logos" / "pasarguard.png").is_file() and (WEB / "logos" / "marzban.png").is_file() and "const labLogo = " in lab and "labLogo(k)" in lab and "labLogo(t)" in lab and ".lab-logo" in css
+    assert "const I = d => `<svg" in lab and 'class="lab-mic"' in lab and ".lab-menu.flat" in css and 'it("Delete the node…"' in lab          # the node menu: one column, an icon before each item, a line between the groups
+    assert "window.labRenameTag = " in lab and "window.labDeleteTag = " in lab and "ncc ? \"has-flag\"" in lab          # a profile can be renamed and deleted from beside the tabs; every row shows the flag of its server

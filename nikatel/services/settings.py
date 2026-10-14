@@ -43,6 +43,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "security": {"entry_path": ""},
     # Add server → Marzban node: the certificate of the Marzban panel that is filled in by default (a public certificate, kept in the panel database only)
     "nodes": {"marzban_cert": ""},
+    # the Lab page (services/profiles.py): the categories (tags) the owner made by hand, kept even while no profile carries them
+    "lab": {"tags": None},      # None = the three categories of the owner; a list = his own set (made, renamed, deleted by hand)
     # the license token (see services/license.py); empty = the free tier, unless NIKATEL_LICENSE=owner
     "license": {"token": ""},
 }

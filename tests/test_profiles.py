@@ -242,3 +242,29 @@ def test_the_nodes_of_a_pasarguard_panel_are_put_on_the_page_by_themselves_tagge
         db.execute(Profile.__table__.delete())
         assert svc.auto_all(db) == 2 and svc.auto_all(db) == 0                                               # the upgrade step: once, and a second run makes nothing
         assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard"}
+
+def test_a_category_made_by_hand_stays_on_the_page_while_no_profile_carries_it(client):
+    r = client.post("/api/profiles/tags", json={"tag": "  Gaming  "})
+    assert r.status_code == 201 and r.json()["tag"] == "Gaming"
+    assert client.post("/api/profiles/tags", json={"tag": "gaming"}).status_code == 201                         # the same name again changes nothing
+    assert client.post("/api/profiles/tags", json={"tag": "iran"}).status_code == 201
+    assert client.get("/api/profiles").json()["tags"] == ["Marzban", "PasarGuard", "Iran", "Gaming"]          # after the three, in the order they were made; no profile carries it
+    assert client.post("/api/profiles/tags", json={"tag": "any"}).status_code == 400                         # Any is every profile, not a category
+    assert client.post("/api/profiles/tags", json={"tag": ""}).status_code == 400
+    assert client.post("/api/profiles/tags", json={"tag": "a/b"}).status_code == 400
+
+def test_a_category_can_be_renamed_and_deleted_and_its_servers_follow(client):
+    s = _server(client, "ir1", "3.3.3.3", "iran", tag="Iran")
+    _server(client, "fo1", "4.4.4.4", "foreign", tag="Marzban")
+    assert client.put("/api/profiles/tags/Marzban", json={"tag": "Backup"}).json()["tag"] == "Backup"
+    assert client.get("/api/profiles").json()["tags"] == ["Backup", "PasarGuard", "Iran"]                       # the same place in the list
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", "Backup"), ("ir1", "Iran")]       # the server follows
+    assert client.put("/api/profiles/tags/Backup", json={"tag": "iran"}).status_code == 409                       # a name that exists
+    assert client.put("/api/profiles/tags/Nothing", json={"tag": "x"}).status_code == 404
+    assert client.put("/api/profiles/tags/Backup", json={"tag": "any"}).status_code == 400
+
+    assert client.delete("/api/profiles/tags/Backup").json()["moved"] == 1
+    assert client.get("/api/profiles").json()["tags"] == ["PasarGuard", "Iran"]                                   # his own set now: the three are no longer forced
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", ""), ("ir1", "Iran")]             # the server is under Any, still on the page
+    assert client.delete("/api/profiles/tags/any").status_code == 400
+    assert client.get(f"/api/servers/{s['id']}").status_code == 200
