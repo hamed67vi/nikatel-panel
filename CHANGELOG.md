@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.43.1 - The phone is a phone again
+
+- **Fixed (a mistake of 1.43.0):** the new `fluid.css` (the narrow-window layer that is still being built) was meant for windows that are not phones, but its first rule, `min-width: 560px` on the page, was not fenced: on a phone the page was laid out 560 px wide and shown small. The whole file now applies only to "not a phone" (a touch screen up to 760 px keeps `mobile.css` alone, as before 1.43.0). Found by measuring the phone layout (375 px) page by page.
+
 ## 1.43.0 - Every section of PasarGuard, Configs off, Panels is called Users
 
 - **Configs is switched off and not shown** (menu, dashboard, search) until the project grows; one flag brings it back (`CONFIGS_UI` in `web/app.js`). The **Panels** section is called **Users**. Add server, Add panel and Add account are the same round blue ＋.

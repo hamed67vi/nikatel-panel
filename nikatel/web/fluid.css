@@ -3,6 +3,7 @@
    A phone (a touch screen up to 760 px) has mobile.css instead: every block here is for "not a phone".
    The steps follow the width of the window: 1400, 1180, 1000, 860, 720. Under 560 px the page keeps its size and scrolls sideways (nothing is squeezed to nothing). */
 
+@media not ((max-width: 760px) and (pointer: coarse)) {      /* (1.43.1: the rules below were meant for "not a phone" but were not fenced: on a phone the body got min-width 560 px and the page shrank) */
 html body { min-width: 560px; }
 
 /* ---- Panels: the bar on top. One row: "PANELS", the boxes of the panels (they share what is left and shrink, down to a dot and a cross), the round +, then the facts and the buttons.
@@ -43,6 +44,7 @@ html body #page .pn-chips.many .dns-cw:hover .dns-x { display: inline-grid !impo
 @container pnbar (max-width: 920px) { html body #page .pn-facts button .bt { display: none !important; } html body #page .pn-facts button { padding: 0 11px; } html body #page .pn-bar .pn-one { gap: 6px; } html body #page .pn-facts .pill .up { display: none; } }
 @container pnbar (max-width: 760px) { html body #page .pn-facts .dns-stat .lab { display: none !important; } html body #page .pn-bar .pn-one > .dns-lab { display: none !important; } html body #page .pn-facts .pn-auth { max-width: 74px; overflow: hidden; text-overflow: ellipsis; } }
 @container pnbar (max-width: 600px) { html body #page .pn-facts .st-nodes, html body #page .pn-facts .pn-auth { display: none !important; } }
+}
 
 /* ---- the frame: under 1180 px the side bar is a rail of icons (the labels are in the tooltips), the head and the status line get slimmer */
 @media (max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse))) {
