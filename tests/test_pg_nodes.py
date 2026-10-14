@@ -1111,6 +1111,46 @@ def test_an_installed_node_can_be_registered_with_its_own_key_or_the_one_this_pa
         pg_nodes.register(C, c2)
 
 
+def add_panel_with_nodes(typ, name, nodes):
+    with session() as db:
+        p = Panel(name=name, type=typ, url=f"https://{name}.example.test", username="admin", secrets={"password": "x"}, status="up", nodes=nodes)
+        db.add(p)
+        db.flush()
+        return p.id
+
+
+def test_the_servers_page_gets_the_nodes_of_every_panel_on_the_server_they_run_on(world, monkeypatch):
+    a = add_server("fr1", "203.0.113.10")
+    b = add_server("de1", "node-b.example.test")
+    c = add_server("nl1", "203.0.113.30")
+    pa = add_panel_with_nodes("pasarguard", "alpha", [{"id": 1, "name": "n1", "address": "203.0.113.10", "status": "connected", "message": ""},
+                                                       {"id": 2, "name": "far", "address": "198.51.100.9", "status": "connected"},
+                                                       {"id": 3, "name": "by-name", "address": "node-b.example.test", "status": "error", "message": "refused"}])
+    pm = add_panel_with_nodes("marzban", "beta", [{"id": 7, "name": "m1", "address": "203.0.113.10", "status": "error", "message": "boom"}, {"name": "no-id", "address": "203.0.113.30", "status": "connected"}, {"id": 9, "address": ""}])
+    got = pg_nodes.by_server()
+    assert sorted(got) == sorted([a, b, c])                                                                    # nl1 carries "no-id" (a node without an id still counts), fr1 two nodes, de1 one
+    assert [(r["panel_id"], r["panel"], r["type"], r["node_id"], r["name"], r["status"]) for r in got[a]] == [(pa, "alpha", "pasarguard", 1, "n1", "connected"), (pm, "beta", "marzban", 7, "m1", "error")]
+    assert got[b][0]["match"] == "address" and got[b][0]["message"] == "refused"
+    assert got[c][0]["node_id"] is None and got[c][0]["name"] == "no-id"                                       # a node without an id is shown, but nothing can be done to it from here
+    assert all("api_key" not in r for rows in got.values() for r in rows)
+    assert not any(r["name"] == "far" for rows in got.values() for r in rows)                                  # a node on an address that is none of our servers is nobody's
+
+
+def test_the_dns_matches_a_node_that_has_a_name_to_the_server_with_the_ip(world, monkeypatch):
+    s = add_server("fr1", "203.0.113.10")
+    add_panel_with_nodes("pasarguard", "alpha", [{"id": 1, "name": "n1", "address": "n1.example.test", "status": "connected"}])
+    monkeypatch.setattr(pg_nodes, "resolve_names", lambda names, timeout=3.0: {"n1.example.test": ["203.0.113.10"]})
+    got = pg_nodes.by_server()
+    assert list(got) == [s] and got[s][0]["match"] == "dns"
+
+
+def test_the_api_gives_the_servers_page_its_nodes_without_asking_any_panel(client, world):
+    s = add_server("fr1", "203.0.113.10")
+    add_panel_with_nodes("pasarguard", "alpha", [{"id": 1, "name": "n1", "address": "203.0.113.10", "status": "connected"}])
+    j = client.get("/api/servers/panel-nodes").json()
+    assert j["ok"] is True and list(j["servers"]) == [str(s)] and j["servers"][str(s)][0]["name"] == "n1" and world.pg.calls == []      # the health job already knows: no call to a panel
+
+
 # ------------------------------------------------------------------ the API
 def test_the_api_lists_nodes_and_refuses_what_is_not_a_pasarguard_panel(client, world, pid):
     add_server("node-a", "203.0.113.10")

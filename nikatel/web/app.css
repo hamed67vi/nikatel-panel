@@ -177,7 +177,7 @@ nav a { height: 38px; font-size: 13.5px; }
 .cf-sub { color: var(--mut); opacity: .6; font-size: 11.5px; } td.cf-sub { overflow: hidden; text-overflow: ellipsis; } .cf-card .cf-sub { display: block; margin-top: 2px; }
 .cf-list .flg { width: 17px; height: 12px; vertical-align: -1px; } .cf-list input.cf-cdn { height: 22px; font-size: 11px; max-width: 70px; border-radius: 7px; padding: 0 6px; } .cf-list .cf-acts button.sm { height: 22px; padding: 0 8px; font-size: 11px; } .cf-list .cf-grp { font-size: 11px; }
 .cf-list td.mono { font-size: 11px; } .cf-list .td-type { font-size: 9.5px; padding: 0 6px; }
-.addpick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } @media (max-width: 640px) { .addpick { grid-template-columns: 1fr; } }
+.addpick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } @media (max-width: 640px) and (pointer: coarse) { .addpick { grid-template-columns: 1fr; } }
 .addpick a { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 26px 18px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; transition: border-color .25s, filter .25s, background .25s; }
 .addpick a:hover { border-color: var(--line-hi); filter: brightness(1.08); } .addpick i { font-style: normal; font-size: 34px; } .addpick b { font-size: 15px; } .addpick small { color: var(--mut); font-size: 12px; line-height: 1.45; }
 /* server rows like the old panel: Server | Status | IPv4 | GRE | RAM | CPU | Disk; a colour bar on the left, an accent sweep on hover */
@@ -284,7 +284,7 @@ button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); bord
 .modal { width: min(840px, 100%); max-height: calc(100vh - 96px); display: flex; flex-direction: column; border-radius: 22px; background: var(--glass-hi); border: 1px solid rgba(255,255,255,.2); backdrop-filter: var(--blur); box-shadow: 0 30px 80px rgba(0,0,0,.5), var(--edge); animation: rise .28s var(--ease) both; }
 .modal.wide { width: min(960px, 100%); }
 /* balance: a window is a tall card, not a wide strip - stacked charts, two-column facts */
-.modal .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; } @media (max-width: 700px) { .modal .charts { grid-template-columns: 1fr; } } .modal .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
+.modal .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; } @media (max-width: 700px) and (pointer: coarse) { .modal .charts { grid-template-columns: 1fr; } } .modal .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
 .modal .frm-act { margin-top: 14px; flex-wrap: wrap; gap: 6px; } .modal .ob-inbounds { margin-top: 10px; }
 /* window tabs and tool groups (server / tunnel windows) */
 /* monitoring tab: tiles, range switch, charts */
@@ -292,7 +292,7 @@ button.danger-fill { background: linear-gradient(135deg, #ff6b8b, #ff8a5c); bord
 .mtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .mtile { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .mtile small { display: block; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); font-weight: 700; } .mtile b { display: block; font-size: 19px; margin: 1px 0; letter-spacing: -.3px; } .mtile span { font-size: 10.5px; color: var(--mut); }
 .mtile.ok b { color: var(--ok); } .mtile.warn b { color: var(--warn); } .mtile.bad b { color: var(--bad); }
-.mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; } @media (max-width: 760px) { .mgrid { grid-template-columns: 1fr; } }
+.mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; } @media (max-width: 760px) and (pointer: coarse) { .mgrid { grid-template-columns: 1fr; } }
 .mcard { padding: 10px 14px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); box-sizing: border-box; } .mcard.mwide { grid-column: 1 / -1; }
 .mcard h6 { margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); } .mval { font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--text); font-weight: 700; } .mval.warn { color: var(--warn); } .mval.bad { color: var(--bad); }
 .lc-wrap { position: relative; } svg.lc { width: 100%; height: auto; display: block; cursor: crosshair; } svg.lc .lg { stroke: rgba(255,255,255,.07); stroke-width: 1; } svg.lc .lt { fill: var(--mut); font-size: 9px; }
@@ -303,7 +303,7 @@ svg.lc .lc-cur { stroke: rgba(255,255,255,.35); stroke-width: 1; stroke-dasharra
 .mstat { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--mut); } .mstat b { color: var(--text); font-weight: 600; } .chart-empty { padding: 26px 0; text-align: center; font-size: 12px; }
 /* info windows: every group of facts in its own box */
 .iboxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 4px; align-items: stretch; }   /* two equal columns, the two boxes of a row are equally tall, a lone last box takes the full width */
-.iboxes > .ibox:last-child:nth-child(odd) { grid-column: 1 / -1; } @media (max-width: 760px) { .iboxes { grid-template-columns: 1fr; } }
+.iboxes > .ibox:last-child:nth-child(odd) { grid-column: 1 / -1; } @media (max-width: 760px) and (pointer: coarse) { .iboxes { grid-template-columns: 1fr; } }
 .ibox { padding: 10px 14px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); box-sizing: border-box; } .ibox.wide-box { margin-top: 10px; }
 .iboxes > .ibox:last-child:nth-child(odd) .irow > div { white-space: nowrap; }
 .ibox h5 { margin: 0 0 6px; padding-bottom: 6px; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); border-bottom: 1px solid var(--line); } .ibox h5 i { font-style: normal; font-size: 14px; } .ibox h5 small { margin-left: auto; text-transform: none; letter-spacing: 0; }
@@ -395,7 +395,7 @@ nav a > span:first-child { display: inline-flex; align-items: center; gap: 8px; 
 .dc-row { display: grid; grid-template-columns: 14px minmax(120px, 1.4fr) minmax(90px, auto) minmax(90px, auto) minmax(120px, 1fr); align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; font-size: 12.5px; }
 .dc-row:hover { background: rgba(255,255,255,.04); } .dc-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; } .dc-name a { color: var(--text); } .dc-name a:hover { color: var(--acc-2); }
 .dc-n { font-family: var(--mono); font-size: 12px; white-space: nowrap; } .dc-n small { font-family: var(--font, inherit); } .dc-site { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
-@media (max-width: 760px) { .dc-row { grid-template-columns: 14px 1fr auto; } .dc-row .dc-n:nth-child(4), .dc-row .dc-site { grid-column: 2 / -1; padding-left: 0; } }
+@media (max-width: 760px) and (pointer: coarse) { .dc-row { grid-template-columns: 14px 1fr auto; } .dc-row .dc-n:nth-child(4), .dc-row .dc-site { grid-column: 2 / -1; padding-left: 0; } }
 
 /* ---- fade: buttons and cards change colour smoothly when the mouse enters or leaves; frames and boxes (.card, .ibox, .modal) are left alone */
 button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .dash-action, .tile.click, .ev.click, .rd-row, tbody tr, .mchip, a.mut {
@@ -408,7 +408,7 @@ button, .sm, .wtool, .gchip, .gchip button, .tabs button, #nav a, .cf-card, .das
 .flg { margin-right: 4px; }
 
 /* ---- dashboard row: health (small) | problems | activity */
-.dash-cols { grid-template-columns: minmax(230px, .8fr) minmax(280px, 1fr) minmax(300px, 1.25fr); } @media (max-width: 1250px) { .dash-cols { grid-template-columns: 1fr 1fr; } .dash-cols .card.act { grid-column: 1 / -1; } } @media (max-width: 760px) { .dash-cols { grid-template-columns: 1fr; } }
+.dash-cols { grid-template-columns: minmax(230px, .8fr) minmax(280px, 1fr) minmax(300px, 1.25fr); } @media (max-width: 1250px) { .dash-cols { grid-template-columns: 1fr 1fr; } .dash-cols .card.act { grid-column: 1 / -1; } } @media (max-width: 760px) and (pointer: coarse) { .dash-cols { grid-template-columns: 1fr; } }
 .card.health { padding: 8px 12px; } .card.health h3 { margin: 2px 0 4px; font-size: 11px; } .card.health .dash-row { padding: 4px 0; gap: 8px; } .card.health .dash-name { font-size: 11.5px; } .card.health .dash-name small { font-size: 9.5px; margin-top: 1px; } .card.health b { font-size: 11.5px; }
 .card.problems { margin-bottom: 0; overflow: auto; padding: 8px 12px; box-sizing: border-box; } .card.problems h3 { margin: 2px 0 6px; }
 .pb-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-top: 1px solid var(--line); } .pb-row:first-of-type { border-top: 0; } .pb-t { flex: 1; min-width: 0; } .pb-t b { display: block; font-size: 12.5px; font-weight: 700; } .pb-t b .mut { font-weight: 500; font-size: 11px; margin-left: 3px; } .pb-t small { display: block; font-size: 10.5px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -547,7 +547,7 @@ button::after { transition: opacity .3s ease; }
 
 
 /* ==== phones (up to 760 px): a bottom bar with icons instead of the sidebar, one column, tables that scroll sideways, full-screen windows */
-@media (max-width: 760px) {
+@media (max-width: 760px) and (pointer: coarse) {
   html, body { height: auto; min-height: 100%; }
   .app { display: block; padding: 8px 8px calc(126px + env(safe-area-inset-bottom)); gap: 0; height: auto; }
   .main { overflow: visible; padding: 0; }
@@ -587,7 +587,7 @@ button::after { transition: opacity .3s ease; }
   .tt-log { height: 180px; } .fix, .modal .fix, #ap-story { max-height: 220px; height: auto; }
   .login-box { width: 100%; margin: 10px; }
 }
-@media (max-width: 760px) and (orientation: landscape) { .app { padding-bottom: calc(96px + env(safe-area-inset-bottom)); } #nav a::after { display: none; } #nav a { height: 36px; min-height: 36px; } }
+@media (max-width: 760px) and (orientation: landscape) and (pointer: coarse) { .app { padding-bottom: calc(96px + env(safe-area-inset-bottom)); } #nav a::after { display: none; } #nav a { height: 36px; min-height: 36px; } }
 
 /* the user window of a Marzban / PasarGuard panel */
 .modal.ue { max-width: 760px; }
@@ -597,7 +597,7 @@ button::after { transition: opacity .3s ease; }
 .ue-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ue-form .ue-note, .ue-form .ue-save { grid-column: 1 / -1; }
 .ue-sub { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ue-sub .ell { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
 .ue-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); } .ue-acts .sp { flex: 1; }
-@media (max-width: 760px) { .ue-top, .ue-form { grid-template-columns: 1fr; } .ue-facts { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) and (pointer: coarse) { .ue-top, .ue-form { grid-template-columns: 1fr; } .ue-facts { grid-template-columns: 1fr 1fr; } }
 
 /* ---- Persian: right to left, the Persian font first; technical text (addresses, code, numbers in tables, charts) stays left to right */
 .lang-btn { min-width: 40px; height: 34px; padding: 0 10px; border-radius: 12px; font-weight: 800; font-size: 13px; }
@@ -646,7 +646,7 @@ button[onclick^="newTunnel("]:hover::after, button[onclick^="openBuild("]:hover:
 .powered b { font-weight: 800; letter-spacing: 1px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 /* ---- the sidebar menu gets the wand too: it flicks in, a light sweeps across the row, the icon bounces */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   nav a { background-image: linear-gradient(105deg, transparent 38%, rgba(255, 224, 150, .22) 50%, transparent 62%); background-repeat: no-repeat; background-size: 260% 100%; background-position: 140% 0; }
   nav a::after { content: "🪄"; position: absolute; right: 10px; top: 50%; font-size: 13px; line-height: 1; opacity: 0; transform: translate(14px, -30%) rotate(40deg) scale(.6); transform-origin: 80% 90%; pointer-events: none; }
   nav a:hover { border-color: rgba(255, 224, 150, .35); animation: nav-sweep .8s ease-out; }
@@ -676,7 +676,7 @@ button.danger:hover { box-shadow: 0 6px 18px rgba(255, 90, 120, .25), 0 0 0 3px 
 html[dir="rtl"] .ai-btn::before { left: auto; right: 12px; } html[dir="rtl"] .ai-btn:hover { padding-left: 14px; padding-right: 42px; }
 
 /* the magic wand belongs to the AI buttons only; everything else gets a small white curtain that passes over it on hover (no click animation anywhere) */
-@media (min-width: 761px) { nav a::after { content: none !important; animation: none !important; } nav a:hover .cnt { opacity: 1; } }
+@media (min-width: 761px), (pointer: fine) { nav a::after { content: none !important; animation: none !important; } nav a:hover .cnt { opacity: 1; } }
 button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):not(.lang-btn)::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .26) 50%, transparent 62%); transform: translateX(-130%); }
 button:not(.ai-btn):not([onclick^="newTunnel("]):not([onclick^="openBuild("]):not(.lang-btn):hover::after { animation: curtain .75s ease-out; }
 @keyframes curtain { to { transform: translateX(130%); } }
@@ -712,7 +712,7 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 .dk.ok .dk-ic { background: rgba(61,220,151,.25); color: var(--ok); } .dk.bad .dk-ic { background: rgba(255,107,139,.25); color: var(--bad); }
 .dk-t { display: flex; flex-direction: column; min-width: 0; flex: 1; } .dk-t b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dk-t small { color: var(--mut); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dk-x { flex: none; padding: 0 5px; border: 0; background: none; color: var(--mut); cursor: pointer; }
-@media (max-width: 700px) { #dock { bottom: 64px; } }
+@media (max-width: 700px) and (pointer: coarse) { #dock { bottom: 64px; } }
 
 /* ---- the list of panel messages: time, a coloured dot and the whole text on the full width */
 .msg-row { display: grid; grid-template-columns: 74px 12px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
@@ -728,7 +728,7 @@ html[dir="rtl"] .ai-btn::before { right: auto !important; left: auto !important;
 .dns-row time { color: var(--mut); font-family: var(--mono); font-size: 11px; } .dns-row i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px rgba(61,220,151,.6); } .dns-row.back i { background: var(--unk); box-shadow: none; }
 .dns-t { display: flex; flex-direction: column; min-width: 0; } .dns-t b, .dns-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dns-row.back { opacity: .72; }
-@media (max-width: 700px) { .dns-row { grid-template-columns: 56px 10px minmax(0, 1fr); } .dns-row .pill, .dns-row button { grid-column: 3; justify-self: start; } }
+@media (max-width: 700px) and (pointer: coarse) { .dns-row { grid-template-columns: 56px 10px minmax(0, 1fr); } .dns-row .pill, .dns-row button { grid-column: 3; justify-self: start; } }
 
 /* ---- Create tunnel: the port check under the form (a used port stops the build; a tunnel on the same port to the same foreign server can be replaced) */
 .bcheck { display: grid; gap: 6px; margin: 2px 0 8px; } .bcheck:empty { display: none; }
@@ -822,7 +822,7 @@ nav a:not(.on):hover > span { background-image: linear-gradient(100deg, #8d96c4 
 nav a { font-family: "Poppins", "Vazirmatn", "Inter", system-ui, sans-serif; font-size: 16px; height: 46px; gap: 12px; letter-spacing: .1px; }
 nav a > span { font-weight: 600; } nav a.on > span { font-weight: 700; }
 nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins", "Inter", sans-serif; font-size: 11.5px; }
-@media (max-width: 700px) { nav a { font-size: 13px; height: auto; } }
+@media (max-width: 700px) and (pointer: coarse) { nav a { font-size: 13px; height: auto; } }
 
 /* ---- the footer in Poppins as well, on one line */
 .side-ver, .sc-out, .side-foot { font-family: "Poppins", "Vazirmatn", "Inter", system-ui, sans-serif; }
@@ -998,7 +998,7 @@ button, .card, .tile, .gw-row, .gw-out, .fix, .tabs, .ob-raw, .gl-out, .detail t
 .modal .irow > span { width: 96px; }
 .modal .iboxes > .ibox:last-child:nth-child(odd) { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-content: start; } .modal .iboxes > .ibox:last-child:nth-child(odd) > h5 { grid-column: 1 / -1; }
 .modal .iboxes > .ibox:last-child:nth-child(odd) .irow + .irow { border-top: 0; }
-@media (max-width: 760px) { .modal .iboxes { grid-auto-rows: auto; } .modal .iboxes > .ibox:last-child:nth-child(odd) { display: block; } }
+@media (max-width: 760px) and (pointer: coarse) { .modal .iboxes { grid-auto-rows: auto; } .modal .iboxes > .ibox:last-child:nth-child(odd) { display: block; } }
 /* ---- the link between the Iran node and the foreign node: the ping over a stretched double arrow, a packet running along it (faster for a lower ping) */
 .td-arrow { text-align: center !important; padding: 0 8px !important; } .tbl th.c { text-align: center; }
 .tlink { --c: var(--unk, #8b93a7); display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--c); }
@@ -1024,7 +1024,7 @@ button, .card, .tile, .gw-row, .gw-out, .fix, .tabs, .ob-raw, .gl-out, .detail t
 .modal .wtool b, .modal .wtools.uni .wtool > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
 .modal .wtool small, .modal .wtools.uni .wtool > small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; font-size: 11px; line-height: 1.3; }
 .modal .wgroup h4 { margin: 10px 2px 6px; }
-@media (max-width: 760px) { .modal .wtools, .modal .wtools.uni { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) and (pointer: coarse) { .modal .wtools, .modal .wtools.uni { grid-template-columns: 1fr 1fr; } }
 /* ================= themes: every one sets the colours, the radius, the art behind the page and how flat or glassy the surfaces are ================= */
 /* Ocean: deep water, teal and sky, faint wave lines */
 html[data-theme="ocean"] { --bg: #04101c; --bg-2: #07192b; --acc: #2dd4bf; --acc-2: #38bdf8; --grad: linear-gradient(135deg, #0ea5a4 0%, #38bdf8 100%); --line: rgba(125,211,252,.16); --line-hi: rgba(45,212,191,.6); --ok: #34e0a1; }
@@ -1193,7 +1193,7 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 .chk-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; padding-top: 4px; }
 .chk-row { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 12px; line-height: 1.35; border-top: 1px solid rgba(255,255,255,.04); }
 .chk-row b { flex: none; width: 16px; text-align: center; } .chk-row.ok b { color: var(--ok); } .chk-row.bad b { color: var(--bad); } .chk-row span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-@media (max-width: 760px) { .chk-list { grid-template-columns: 1fr; } }
+@media (max-width: 760px) and (pointer: coarse) { .chk-list { grid-template-columns: 1fr; } }
 /* the server name cell shows its badges whole (network, bad route, disabled): the datacentre name is in the window, not here */
 .srv-tbl td.name { overflow: visible; text-overflow: clip; } .srv-tbl td.name .pill { margin-left: 6px; }
 
@@ -1204,12 +1204,12 @@ button, .tabs button, .gchip, .wtool, #nav a, .cf-card, .pill, .mchip { transiti
 .lbox .tbl { margin: 0; } .lbox.full .tbl.lift, .lbox.full .tbl { padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; }
 .lbox.full > .cf-grid { padding: 6px; background: none; border: 0; box-shadow: none; }
 .lbox::-webkit-scrollbar { width: 8px; height: 8px; } .lbox::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 8px; }
-@media (max-width: 760px) { .lbox { max-height: none; } }
+@media (max-width: 760px) and (pointer: coarse) { .lbox { max-height: none; } }
 html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 .pill.new { color: #1b1405; background: linear-gradient(180deg, #f8e293, #ebbd4d); border-color: transparent; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; font-size: 9.5px; padding: 0 7px; }
 
 /* the list boxes never show a horizontal scrollbar that comes and goes: the table fits the box, the vertical bar keeps its place, a hovered row does not move or grow */
-@media (min-width: 761px) { .lbox { overflow-x: hidden; scrollbar-gutter: stable; } }
+@media (min-width: 761px), (pointer: fine) { .lbox { overflow-x: hidden; scrollbar-gutter: stable; } }
 .lbox tbody tr, .lbox tbody tr:hover { transform: none !important; } .lbox .tbl { width: 100%; max-width: 100%; }
 /* the server window, rebuilt: one button bar, three equal tight boxes, aligned bars, a line of tunnels, a line of results */
 .sbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; padding: 6px 8px; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
@@ -1238,7 +1238,7 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 .modal .mcard svg.lc { max-height: 64px; width: 100%; } .modal .mcard h6 { margin-bottom: 0; } .modal .mcard h6 .mval { font-size: 14px; } .modal .mstat { font-size: 9.5px; margin-top: 0; }
 @media (max-width: 900px) { .modal .mgrid { grid-template-columns: 1fr 1fr; } }
 /* a page with a list box has ONE scrollbar - the list's; the page itself does not scroll (the box is sized to end at the bottom of the window) */
-@media (min-width: 761px) { .main:has(.lbox) { overflow-y: hidden; } }
+@media (min-width: 761px), (pointer: fine) { .main:has(.lbox) { overflow-y: hidden; } }
 /* "Open in..." is a select that looks like the other buttons */
 select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; text-align: center; text-align-last: center; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); color: inherit; font-weight: 700; } select.abtn-open option { background: #151a30; color: #eef1ff; }
 /* the three boxes: the labels are short and on one line; the tunnel chips share the row */
@@ -1486,7 +1486,7 @@ button.abtn:disabled, .btn:disabled { opacity: .38; filter: grayscale(1); cursor
 .srv-extra label.chk { height: 24px; font-size: 12px; } .srv-extra label.chk small { display: none; } .srv-extra .x-cert { grid-column: 1 / -1; }
 .srv-form .frm-act { margin-top: 2px; } .srv-form > small { font-size: 11px; line-height: 1.4; }
 #modal .modal-body > .tabs:first-child { padding: 3px; } #modal .modal-body > .tabs:first-child button { height: 30px; padding: 0 16px; font-size: 12.5px; }
-@media (max-width: 760px) { .srv-form { grid-template-columns: 1fr 1fr; } .srv-form > label:nth-of-type(n) { grid-column: span 1; } }
+@media (max-width: 760px) and (pointer: coarse) { .srv-form { grid-template-columns: 1fr 1fr; } .srv-form > label:nth-of-type(n) { grid-column: span 1; } }
 /* the toolbar of Servers: groups of buttons with a divider, the key as a button of the same height */
 .toolbar .sep { width: 1px; height: 22px; margin: 0 4px; background: var(--line); } a.btn.tbtn { height: 34px; padding: 0 14px; font-size: 13px; }
 
@@ -1560,7 +1560,7 @@ button.cta-tunnel:hover { transform: scale(1.04); animation: ctaRing 1.1s ease-o
 .trf2-b { display: flex; align-items: center; gap: 10px; } .trf2-b .rbar { flex: 1; height: 5px; } .trf2-b small { font-size: 10.5px; color: var(--mut); white-space: nowrap; min-width: 92px; text-align: right; }
 /* Tunnel Doctor: what it does, above the two boxes */
 .ap-intro { margin-bottom: 8px; border-top-left-radius: 0 !important; padding-bottom: 12px; } .ap-intro h3 { margin-bottom: 8px; } .ap-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .ap-steps > div { display: grid; gap: 3px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); } .ap-steps b { font-size: 12px; color: var(--acc-2); letter-spacing: .3px; } .ap-steps span { font-size: 12px; line-height: 1.45; color: var(--text); opacity: .85; } .ap-steps i { font-style: normal; font-weight: 700; color: var(--acc-2); }
-@media (max-width: 1100px) { .ap-steps { grid-template-columns: 1fr 1fr; } } @media (max-width: 760px) { .ap-steps { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .ap-steps { grid-template-columns: 1fr 1fr; } } @media (max-width: 760px) and (pointer: coarse) { .ap-steps { grid-template-columns: 1fr; } }
 /* Settings: every tab is a folder tab joined to the frame under it */
 .set-top { margin: 0 0 -1px 2px; position: relative; z-index: 3; } .set-top .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; backdrop-filter: none; }
 .set-top .tabs button { height: 38px; padding: 0 18px; border-radius: 15px 15px 0 0; border: 1px solid var(--line); border-bottom: 0; background: rgba(255,255,255,.035); color: var(--mut); box-shadow: none; font-size: 13px; transform: none; }
@@ -1600,7 +1600,7 @@ nav a.on .ic .s1 { animation: icS .7s ease-in-out infinite alternate; } nav a.on
 .usr-tbl td { height: var(--rh, 54px); } .usr-tbl tbody td { padding-top: 0; padding-bottom: 0; }
 .pgs .pgn { min-width: 40px; width: 40px; padding: 0; text-align: center; } .pgs .pgn-gap { display: inline-block; width: 24px; text-align: center; padding: 0; }
 .pn-foot { min-height: 36px; box-sizing: border-box; }.cf-list .sec-tls, .sec-tls { color: #7cc4ff; font-weight: 700; } .cf-list .sec-reality, .sec-reality { color: #c9a0ff; font-weight: 700; } .sec-xtls { color: #ffb86b; font-weight: 700; }
-@media (min-width: 761px) { .main:has(.usr-tbl) { padding-bottom: 0; } }
+@media (min-width: 761px), (pointer: fine) { .main:has(.usr-tbl) { padding-bottom: 0; } }
 
 /* ===== 1.17.34: names, logo, themes (day mode, buttons, quiet moving backgrounds), server icon, hover ===== */
 @font-face { font-family: 'Unbounded'; font-style: normal; font-weight: 700; font-display: swap; src: url('/static/fonts/unbounded-700-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122; }
@@ -1697,7 +1697,7 @@ html[data-theme="graphite"] .bg-scene::before { display: block; left: 0; right: 
 @keyframes bgScan { to { transform: translate3d(0, 600%, 0); } }
 :root[data-anim="off"] .bg-scene::before, :root[data-anim="off"] .bg-scene::after, :root[data-anim="off"] body::before { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .bg-scene::before, .bg-scene::after, body::before { animation: none !important; } }
-@media (max-width: 760px) { .bg-scene { display: none; } }
+@media (max-width: 760px) and (pointer: coarse) { .bg-scene { display: none; } }
 
 /* appearance box: compact, brighter previews */
 .theme-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 3px 0 8px; } @media (max-width: 900px) { .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -1707,7 +1707,7 @@ html[data-theme="graphite"] .bg-scene::before { display: block; left: 0; right: 
 .tsw b { font-size: 12px; } .tsw small { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .look-frm { grid-template-columns: repeat(3, minmax(0, 1fr)) auto !important; align-items: end; gap: 8px 10px !important; }
 .look-frm > div:first-child { grid-column: 1 / -1; } .look-frm .frm-act { margin: 0; padding: 0; gap: 8px; align-items: center; flex-wrap: nowrap; white-space: nowrap; } .look-frm label { margin: 0; } .look-frm select { height: 30px; }
-@media (max-width: 760px) { .look-frm { grid-template-columns: 1fr 1fr !important; } }
+@media (max-width: 760px) and (pointer: coarse) { .look-frm { grid-template-columns: 1fr 1fr !important; } }
 
 /* the servers list: a server picture instead of the coloured edge */
 .srv-tbl td:first-child, .srv-tbl tr.up td:first-child, .srv-tbl tr.down td:first-child, .srv-tbl tr.sev-red td:first-child, .srv-tbl tr.sev-yellow td:first-child, .srv-tbl tr.degraded td:first-child { border-left: 1px solid var(--line) !important; }
@@ -1853,7 +1853,7 @@ html[data-anim="off"] .bg-scene { display: none; } html[data-anim="off"] body::b
 .eff-grid span { padding: 4px 9px; border-radius: 9px; } .eff-grid em { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .eff-grid b { font-size: 12px; white-space: nowrap; }
 
 /* every theme preview in ONE row; the notes are in the tooltip */
-.theme-grid { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; } @media (max-width: 1100px) { .theme-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } } @media (max-width: 600px) { .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.theme-grid { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; } @media (max-width: 1100px) { .theme-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } } @media (max-width: 600px) and (pointer: coarse) { .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .tsw { padding: 5px 5px 6px; gap: 3px; border-radius: 10px; } .tsw i { height: 34px; border-radius: 7px; } .tsw i::after { bottom: 4px; height: 7px; left: 5px; right: 5px; } .tsw b { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tsw small { display: none; }
 .look-frm .frm-act { grid-column: auto !important; }
 
@@ -1875,7 +1875,7 @@ html[data-anim="off"] .bg-scene { display: none; } html[data-anim="off"] body::b
 /* Settings: every card is as wide as the tab bar and has the same minimum height; forms flow into columns */
 #page .grid2.one > .card { width: 100%; justify-self: stretch; min-height: 330px; box-sizing: border-box; }
 #page .grid2.one .frm.one { max-width: none; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; } #page .grid2.one .frm.one > .frm-act, #page .grid2.one .frm.one > label.chk, #page .grid2.one .frm.one > .ob-raw, #page .grid2.one .frm.one > small { grid-column: 1 / -1; }
-.sec-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } @media (max-width: 1500px) { .sec-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 760px) { .sec-cards { grid-template-columns: 1fr; } }
+.sec-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } @media (max-width: 1500px) { .sec-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 760px) and (pointer: coarse) { .sec-cards { grid-template-columns: 1fr; } }
 .pw-card .sec-body { gap: 6px; } .pw-card label { display: grid; gap: 2px; font-size: 11px; color: var(--mut); } .pw-card label.chk { display: flex; align-items: center; gap: 8px; font-size: 12px; } .pw-card input:not([type=checkbox]) { height: 30px; font-size: 12.5px; } .pw-card .sec-a { margin-top: 2px; }
 .sec-card .sec-d { min-height: 0; }
 
@@ -1911,7 +1911,7 @@ button.cta-server::after, button.cta-tunnel::after { display: none !important; }
 .modal { animation-duration: .18s; } @keyframes pgIn { from { opacity: 0; } to { opacity: 1; } }
 html[data-theme="neon"] .bg-scene, html[data-theme="gold"] .bg-scene { display: none; } html[data-anim="rich"][data-theme="neon"] .bg-scene, html[data-anim="rich"][data-theme="gold"] .bg-scene { display: block; }
 /* Settings: the frame of every tab is as wide as the row of tabs (--set-w is measured by the script); inside it the parts sit side by side, each up to the middle */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   #page .grid2.one { grid-template-columns: min(var(--set-w, 100%), 100%) !important; justify-content: start; }
   #page .grid2.one > .card { width: 100%; min-height: 0; }
   .sec-cards { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -1947,7 +1947,7 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
 .sf .sr.x .eff-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) !important; } @media (max-width: 1300px) { .sf .sr.x .eff-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
 .sf .eff-grid span { padding: 4px 8px; } .sf .eff-grid em { font-size: 9px; } .sf .eff-grid b { font-size: 11.5px; }
 /* inside a group the rows sit two per line, so nothing is left empty on a wide screen; a wide row (.x) takes the whole line */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .ss-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: dense; }
   .ss-rows > .sr.x, .ss-rows > pre, .ss-rows > .sr.li, .sg.one .ss-rows > .sr:has(input[name=public_url]), .ss-rows > #eng-box { grid-column: 1 / -1; }
   .ss-rows > .sr:nth-child(even):not(.x):not(.li) { border-left: 1px solid var(--line); }
@@ -1956,23 +1956,23 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
   #page .set-wrap > .card.sf { padding: 10px 12px 12px; } .sf > h3 { margin-bottom: 8px; }
 }
 /* the page header scrolls away; the rows of tabs stay locked at the top, so nothing falls behind the header */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .head { position: static; }
   .subnav, .set-top { position: sticky; top: 0; z-index: 7; background: var(--bg); padding-top: 4px; margin-top: -4px; }
   .subnav::before, .set-top::before { content: ""; position: absolute; left: -6px; right: -6px; top: 0; bottom: 0; z-index: -1; background: var(--bg); }
 }
 /* every tab's frame has the same height (the Appearance tab's); a tab with more content grows */
-@media (min-width: 761px) { #page .set-wrap > .card.sf { min-height: 640px !important; } }
+@media (min-width: 761px), (pointer: fine) { #page .set-wrap > .card.sf { min-height: 640px !important; } }
 /* the settings frame: as wide as the row of tabs (first tab to a little past the last one), the height only what the content needs;
    the description strip and the tab bar end at the same edge; a lone row at the end of a group takes the whole line */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   #page .set-wrap > .card.sf { min-height: 0 !important; }
   #page .set-top, #page .set-desc { width: min(var(--set-w, 100%), 100%); box-sizing: border-box; }
   .ss-rows > .sr:not(.x):not(.li):nth-child(odd):is(:last-child, :has(+ .x), :has(+ .li), :has(+ pre), :has(+ .hidden:last-child)) { grid-column: 1 / -1; border-left: 0; }
   .sf .theme-grid { gap: 5px; } .sf .tsw { padding: 4px 4px 5px; } .sf .tsw b { font-size: 10px; letter-spacing: -.1px; } .sf .tsw i { height: 30px; }
 }
 /* the groups do not fill the frame: each is 640 px wide (the wide ones - theme, cores, service settings - take the frame), rows one per line */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .sf .ss, .sf .ss-hero { width: min(100%, 640px); } .sf .ss.x { width: 100%; }
   .ss-rows { display: block; } .ss-rows > .sr { border-left: 0 !important; grid-column: auto; } .sr > .v { flex: 0 1 250px; }
 }
@@ -1980,7 +1980,7 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
 .tlink.cut { --c: var(--bad); } .tlink.cut .wire::before, .tlink.cut .wire::after { background: repeating-linear-gradient(90deg, var(--c) 0 8px, transparent 8px 13px); opacity: .9; } .tlink.cut .pk { display: none; }
 
 /* settings rows: the control sits right after its label, nothing is stretched; a group is only as wide as its content */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .sf .ss, .sf .ss-hero { width: fit-content; min-width: 360px; max-width: 100%; } .sf .ss.x { width: 100%; }
   .ss-h { min-height: 30px; padding: 5px 10px; } .ss-h > small { flex: 0 1 auto; }
   .sr { justify-content: flex-start; gap: 12px; min-height: 34px; padding: 3px 10px; }
@@ -1992,7 +1992,7 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
   .ss-hero { gap: 10px; padding: 6px 10px; } .ss-hero .ss-ht b, .ss-hero .ss-ht small { white-space: normal; }
 }
 /* a group of many short rows (numbers, passwords) shows them two per line, each column only as wide as its content */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .ss.two .ss-rows { display: grid; grid-template-columns: max-content max-content; } .ss.two .ss-rows > .sr:nth-child(even) { border-left: 1px solid var(--line) !important; }
   .ss.two .ss-rows > .sr:nth-child(odd):last-child, .ss.two .ss-rows > pre { grid-column: 1 / -1; }
   .ss.two .sr > span { max-width: 260px; }
@@ -2006,11 +2006,11 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
 .swl { display: inline-flex; align-items: center; } .si .sec-url { display: inline; padding: 1px 6px; font-size: 11px; }
 .ss.flat { border: 0 !important; background: none !important; border-radius: 0 !important; width: 100% !important; min-width: 0 !important; margin: 0 0 6px !important; overflow: visible; }
 .ss.flat .ss-h { padding: 6px 4px 4px; } .ss.flat .ss-rows { display: block; } .ss.flat .sr { padding: 3px 4px; } .ss.flat .ss-a { background: none; border-top: 0; padding: 4px 4px 6px; justify-content: flex-start; }
-@media (min-width: 761px) { .ss.flat.two .ss-rows { display: grid; grid-template-columns: max-content max-content; } .ss.flat.two .ss-rows > .sr:nth-child(even) { border-left: 0 !important; } }
+@media (min-width: 761px), (pointer: fine) { .ss.flat.two .ss-rows { display: grid; grid-template-columns: max-content max-content; } .ss.flat.two .ss-rows > .sr:nth-child(even) { border-left: 0 !important; } }
 /* one box only (the password); the rest are plain lines. An item: icon, name, state, and its buttons in one column close by. */
 .ss.flat { border: 0 !important; background: none !important; } .ss.flat .sr { border-top: 0 !important; } .ss.flat .ss-a { border-top: 0 !important; background: none !important; }
 .ss-hero { border: 0 !important; background: none !important; padding: 4px 4px !important; } .ss-hero .ss-ht { flex: 0 1 auto; } .ss-hero .ss-hr { margin-left: 10px; }
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .si { display: grid; grid-template-columns: 30px 190px max-content; align-items: center; gap: 10px; border-top: 0; min-height: 36px; padding: 3px 4px; width: max-content; max-width: 100%; }
   .si-t { flex-wrap: nowrap; } .si-a { justify-content: flex-start; } .si-t .pill { flex: none; }
   .sr > span small { display: none; }
@@ -2019,27 +2019,27 @@ input[type=checkbox].sw { appearance: none; -webkit-appearance: none; background
 input[type=checkbox].sw { width: 38px !important; height: 22px !important; min-width: 38px !important; padding: 0 !important; border: 0 !important; border-radius: 999px !important; box-sizing: border-box; background-image: none !important; background-color: rgba(255,255,255,.18); flex: none; }
 input[type=checkbox].sw::after { top: 2px !important; left: 2px !important; width: 18px !important; height: 18px !important; } input[type=checkbox].sw:checked { background-color: var(--ok) !important; } input[type=checkbox].sw:checked::after { transform: translateX(16px) !important; } input[type=checkbox].sw::before { content: none !important; }
 /* the items (two-step, recovery, secret path, backups, probe install): name with its explanation underneath, the buttons in ONE column right after the text */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .sl { display: grid; grid-template-columns: 30px max-content max-content; column-gap: 12px; row-gap: 2px; align-items: center; justify-content: start; width: max-content; max-width: 100%; }
   .si { display: contents; } .si > * { padding: 5px 0; } .si-t { display: grid; gap: 1px; min-width: 0; } .si-n { display: flex; align-items: center; gap: 8px; } .si-t small { display: block; flex: none; font-size: 11px; color: var(--mut); line-height: 1.3; }
   .si-a { display: flex; align-items: center; gap: 6px; justify-self: start; }
 }
-@media (min-width: 761px) { .sl { grid-template-columns: 30px minmax(0, 340px) max-content; } .si-t small { white-space: normal; } }
+@media (min-width: 761px), (pointer: fine) { .sl { grid-template-columns: 30px minmax(0, 340px) max-content; } .si-t small { white-space: normal; } }
 /* buttons of the items: one size, in one column; the text boxes of two items */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .si-a button, .si-a a.btn { min-width: 124px; justify-content: center; text-align: center; } .si-a { flex-wrap: wrap; max-width: 420px; }
   .si-f { display: block; width: 100%; max-width: 340px; margin-top: 4px; font-size: 12px; height: 28px; border-radius: 8px; padding: 0 9px; } textarea.si-f { height: 52px; padding: 5px 9px; resize: none; font-family: var(--mono); font-size: 11px; line-height: 1.4; }
   .si-t .sec-url { display: inline-block; margin-top: 3px; }
 }
 /* Current (the old password) is set apart from New and Repeat: an amber edge, on its own line */
 .sr.cur .v input { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)) !important; background: color-mix(in srgb, var(--warn) 7%, var(--panel-2)) !important; } .sr .v input.nw { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)) !important; }
-@media (min-width: 761px) { .ss.two .ss-rows > .sr.cur { grid-column: 1 / -1; } }
+@media (min-width: 761px), (pointer: fine) { .ss.two .ss-rows > .sr.cur { grid-column: 1 / -1; } }
 /* the hero strip is the one boxed piece */
 .ss-hero { border: 1px solid color-mix(in srgb, var(--sc) 40%, var(--line)) !important; background: var(--panel-2) !important; padding: 7px 12px !important; border-radius: 14px !important; width: fit-content; max-width: 100%; margin: 0 0 8px !important; }
 /* the switch: 40 x 24, knob 20, an even 2 px gap all round */
 input[type=checkbox].sw { width: 40px !important; height: 24px !important; min-width: 40px !important; } input[type=checkbox].sw::after { width: 20px !important; height: 20px !important; top: 2px !important; left: 2px !important; } input[type=checkbox].sw:checked::after { transform: translateX(16px) !important; }
 /* settings rows: a fixed label column and a fixed control column, so every box lines up in columns */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .ss .sr:not(.x) { display: grid !important; grid-template-columns: 170px max-content; column-gap: 10px; align-items: center; justify-content: start; min-height: 36px; padding: 3px 4px; }
   .ss .sr > span { max-width: none; white-space: nowrap; } .ss .sr > .v { justify-content: flex-start; flex: none; width: auto; } .ss .sr > .v.t { max-width: 520px; white-space: normal; }
   .ss .sr > .v input:not([type=checkbox]):not([type=number]):not([type=datetime-local]), .ss .sr > .v select { width: 290px; } .ss .sr > .v input[type=number] { width: 110px; } .ss .sr > .v input[type=datetime-local] { width: 200px; }
@@ -2048,9 +2048,9 @@ input[type=checkbox].sw { width: 40px !important; height: 24px !important; min-w
   .ss.two .sr > .v input[type=password] { width: 200px; }
   .ss .sr.li { display: flex !important; gap: 12px; } .ss .ss-a { padding: 6px 4px 8px; }
 }
-@media (min-width: 761px) { .ss .sr:has(.sw) { grid-template-columns: max-content max-content !important; column-gap: 14px; } }
+@media (min-width: 761px), (pointer: fine) { .ss .sr:has(.sw) { grid-template-columns: max-content max-content !important; column-gap: 14px; } }
 /* every item is ONE row: icon, name (explanation under it), its text box, its buttons - the four columns line up from row to row */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .sl { grid-template-columns: 30px 290px minmax(0, 330px) max-content; column-gap: 14px; row-gap: 4px; }
   .si-c { display: flex; align-items: center; gap: 6px; padding: 5px 0; min-width: 0; } .si-c .si-f { margin: 0; flex: 1 1 auto; max-width: none; width: auto; min-width: 0; height: 30px; font-size: 12.5px; }
   .si-c.pw { grid-column: 3; flex-wrap: wrap; } .si-c.pw .si-f { flex: 1 1 100%; } .si-c.pw .swl { gap: 8px; font-size: 12px; color: var(--mut); }
@@ -2060,7 +2060,7 @@ input[type=checkbox].sw { width: 40px !important; height: 24px !important; min-w
 }
 /* categories: a small caption over its rows; every control in a row is the same size */
 .sc { font-size: 10.5px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; color: var(--mut); padding: 8px 4px 2px; } .sc:first-child { padding-top: 2px; }
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .ss .sr > .v input:not([type=checkbox]):not([type=number]):not([type=datetime-local]), .ss .sr > .v select, .ss .sr > .v input[type=datetime-local] { width: 260px; } .ss .sr > .v input[type=number] { width: 100px; }
   .ss .sr > .v input, .ss .sr > .v select { height: 30px; border-radius: 8px; font-size: 12.5px; padding: 0 10px; text-align: left; }
   .ss .sr.x textarea { width: 430px; }
@@ -2072,7 +2072,7 @@ input[type=checkbox].sw { width: 40px !important; height: 24px !important; min-w
 .pwf-f .si-f.cur { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)) !important; background: color-mix(in srgb, var(--warn) 7%, var(--panel-2)) !important; } .pwf-f .si-f.nw { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)) !important; }
 .pwf-f .swl { gap: 8px; font-size: 12px; color: var(--mut); } .pwf-a { padding: 4px 0; } .pwf-a button { height: 30px; min-width: 150px; }
 /* an item: icon on the left; name, explanation, and under them the text box with its buttons beside it */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .sl { display: block; width: auto; }
   .si { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; align-items: start; width: auto; padding: 8px 4px; border-top: 1px solid var(--line); min-height: 0; } .sl > .si:first-child { border-top: 0; }
   .si > .ss-ic { margin-top: 2px; } .si-b { min-width: 0; } .si-t { display: grid; gap: 2px; } .si-t small { white-space: normal; }
@@ -2085,7 +2085,7 @@ input[type=checkbox].sw:checked { background-color: var(--ok) !important; backgr
 input[type=checkbox].sw::after, input[type=checkbox].sw::before { content: none !important; display: none !important; }
 html[data-mode="light"] input[type=checkbox].sw { background-color: rgba(0,0,0,.2) !important; } html[data-mode="light"] input[type=checkbox].sw:checked { background-color: var(--ok) !important; }
 /* every tab like Security: a name on top, each text box UNDER its name, the buttons beside the boxes */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   .ss.flat { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 18px; width: 100% !important; padding: 8px 4px 10px; border-top: 1px solid var(--line) !important; } .sf > .ss.flat:first-of-type, .sf > .ss-hero + .ss.flat, .sg > .ss.flat:first-child { border-top: 0 !important; }
   .ss.flat > .ss-h { flex: 0 0 100%; padding: 0 0 2px; } .ss.flat > .ss-rows { display: contents !important; }
   .ss.flat .sc { flex: 0 0 100%; padding: 4px 0 0; }
@@ -2103,10 +2103,10 @@ input[type=checkbox].sw:checked { background-position: calc(100% - 4px) 50% !imp
 .pwf-f { flex-direction: column; align-items: flex-start; gap: 8px; } .pwi { position: relative; display: block; } .pwf-f .pwi .si-f { width: 320px; padding-right: 38px; }
 .pwi .eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 24px; min-width: 0; padding: 0; border: 0; border-radius: 6px; background: none; box-shadow: none; display: grid; place-items: center; color: var(--mut); cursor: pointer; } .pwi .eye:hover { color: var(--text); background: rgba(255,255,255,.08); }
 .pwi .eye svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .pwi .eye .slash { display: none; } .pwi .eye.on .slash { display: block; }
-@media (min-width: 761px) { .ss.flat .sr > .v, .sg.one .ss.flat .sr > .v { flex: 0 0 auto !important; height: auto; width: auto; } .ss.flat .sr:has(.v.t) > .v { flex: 1 1 auto !important; } }
+@media (min-width: 761px), (pointer: fine) { .ss.flat .sr > .v, .sg.one .ss.flat .sr > .v { flex: 0 0 auto !important; height: auto; width: auto; } .ss.flat .sr:has(.v.t) > .v { flex: 1 1 auto !important; } }
 .si-n .si-a { display: inline-flex; gap: 6px; margin-left: 10px; } .si-n .si-a button, .si-n .si-a a.btn { height: 28px; padding: 0 14px; }
 /* ALL text boxes of the Security items share one column and one width */
-@media (min-width: 761px) { .si-r .si-f, .pwf-f .pwi, .pwf-f .pwi .si-f { width: 340px; max-width: 100%; } .pwf-f { padding: 6px 0 2px; } .pwf-a { padding: 6px 0 0; } .si .pwf-f .si-f { height: 30px; } }
+@media (min-width: 761px), (pointer: fine) { .si-r .si-f, .pwf-f .pwi, .pwf-f .pwi .si-f { width: 340px; max-width: 100%; } .pwf-f { padding: 6px 0 2px; } .pwf-a { padding: 6px 0 0; } .si .pwf-f .si-f { height: 30px; } }
 /* the switch: a track 18 px high with a knob a little bigger than the track (26 px), like a real toggle */
 input[type=checkbox].sw { position: relative; width: 46px !important; height: 28px !important; min-width: 46px !important; background: none !important; background-image: none !important; border-radius: 999px !important; transition: none !important; }
 input[type=checkbox].sw::before { content: "" !important; display: block !important; position: absolute; left: 0; right: 0; top: 5px; bottom: 5px; border-radius: 999px; background: rgba(255,255,255,.2); transition: background .18s; }
@@ -2274,7 +2274,7 @@ html body #page .sf .ss-hero .ss-ht small { font-size: 13px; color: var(--mut); 
 /* buttons in the settings: one size */
 html body #page .sf button:not(.eye):not(.tsw) { height: 38px; padding: 0 22px; font-size: 14px; }
 html body #page .sf a.btn { height: 38px; padding: 0 22px; font-size: 14px; }
-@media (max-width: 760px) {
+@media (max-width: 760px) and (pointer: coarse) {
   html body #page .sf .ss, html body #page .sf .si, html body #page .sf .ss-hero { padding: 12px 14px !important; border-radius: 16px !important; }
   html body #page .sf .ss { grid-template-columns: minmax(0, 1fr); }
   html body #page .sf .ss > .ss-rows, html body #page .sf .ss > .ss-a { grid-column: 1; }
@@ -2299,7 +2299,7 @@ html body #page .sf #eng-box .eng-bar { display: flex; align-items: center; just
 /* ---- the reference look: blue primary, outlined tabs, icon fields, backup cards ---- */
 html[data-theme="aurora"] { --acc: #4da3ff; --acc-2: #38d9f5; --grad: linear-gradient(135deg, #5aa9ff 0%, #0a7cff 100%); --line-hi: rgba(77,163,255,.55); --pri-top: #5eb0ff; --pri-mid: #0a7cff; --pri-bot: #0062e6; --pri-edge: #0050c0; --pri-ink: #ffffff; --pri-rim: rgba(180,215,255,.6); --glow: 10,124,255; }
 html[data-theme="aurora"] button.pri:not(.ai-btn):not(.cta) { text-shadow: 0 1px 1px rgba(0,40,120,.35); }
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   html body #page .set-top .set-tabs { display: flex; flex-wrap: nowrap; gap: 8px; padding: 6px; border: 1px solid rgba(255,255,255,.07); border-radius: 22px; background: rgba(255,255,255,.02); }
   html body #page .set-tabs button { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; font-size: 14px; font-weight: 600; border-radius: 14px; border: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.03); box-shadow: none; color: var(--text); }
   html body #page .set-tabs button:hover { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); }
@@ -2333,7 +2333,7 @@ html body #page .sf .si.bp { align-items: start; }
 .bp-l { display: inline-flex; align-items: center; } .bp-s .bi svg { width: 14px; height: 14px; }
 .bp-s .pill { display: inline-flex; align-items: center; border-color: rgba(47,139,255,.5); color: #6db3ff; background: rgba(10,124,255,.08); }
 .bp-s a.mut { display: inline-flex; align-items: center; cursor: pointer; }
-@media (max-width: 760px) { html body #page .sf .si.bp { grid-template-columns: 38px minmax(0, 1fr); } html body #page .sf .si.bp .bp-r { grid-column: 1 / -1; justify-items: start; } .bp-a, .bp-s { justify-content: flex-start; } }
+@media (max-width: 760px) and (pointer: coarse) { html body #page .sf .si.bp { grid-template-columns: 38px minmax(0, 1fr); } html body #page .sf .si.bp .bp-r { grid-column: 1 / -1; justify-items: start; } .bp-a, .bp-s { justify-content: flex-start; } }
 
 html body #page .sf .sf-act { display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; margin: 2px 0 6px; }
 html body #page .sf .ss .sr.sw2 { display: grid !important; grid-template-columns: auto auto; justify-content: start; align-items: center; column-gap: 14px; row-gap: 6px; flex: 1 1 280px; }
@@ -2343,20 +2343,20 @@ html body #page .sf .ss .sc.sub b { font-weight: 700; } html body #page .sf .ss 
 html body #page .sf .ss .ss-rows > .sc.sub:first-child { padding-top: 0; }
 html body #page .set-tabs button { white-space: nowrap; }
 html body #page .set-top { overflow-x: auto; scrollbar-width: none; } html body #page .set-top::-webkit-scrollbar { display: none; }
-@media (min-width: 761px) and (max-width: 1180px) { html body #page .set-tabs button { padding: 0 11px; gap: 6px; font-size: 13px; } }
+@media ((min-width: 761px) or (pointer: fine)) and (max-width: 1180px) { html body #page .set-tabs button { padding: 0 11px; gap: 6px; font-size: 13px; } }
 html body #page .set-tabs button { flex: 0 0 auto; }
 html body #page .set-tabs button { display: inline-flex; align-items: center; gap: 6px; }
 
 html body #page .sf .theme-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 1200px) { html body #page .sf .theme-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-@media (max-width: 600px) { html body #page .sf .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) and (pointer: coarse) { html body #page .sf .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 html body #page .sf .tsw { padding: 8px 8px 9px; gap: 7px; border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); }
 html body #page .sf .tsw i { height: 40px; border-radius: 10px; } html body #page .sf .tsw i::after { bottom: 6px; height: 8px; left: 8px; right: 8px; border-radius: 99px; }
 html body #page .sf .tsw b { font-size: 12.5px; font-weight: 600; letter-spacing: 0; }
 html body #page .sf .tsw.on { border: 2px solid #2f8bff; padding: 7px 7px 8px; box-shadow: 0 0 0 3px rgba(47,139,255,.18); background: rgba(47,139,255,.07); }
 
 /* ---- side menu like the reference: coloured line icons, a chevron at the right, a blue active item with a bar ---- */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   nav#nav a { position: relative; display: flex; align-items: center; gap: 14px; height: 46px; padding: 0 16px 0 14px; border-radius: 14px; border: 1px solid transparent; font-weight: 600; font-size: 14.5px; }
   nav#nav a[data-page="dashboard"] { --ic: #9aa4c0; } nav#nav a[data-page="nodes"] { --ic: #4da3ff; } nav#nav a[data-page="tunnels"] { --ic: #38bdf8; } nav#nav a[data-page="configs"] { --ic: #ffa94d; } nav#nav a[data-page="bot"] { --ic: #ff7a9c; } nav#nav a[data-page="settings"] { --ic: #b57cff; }
   nav#nav a .ic { display: inline-grid; place-items: center; color: var(--ic); } nav#nav a .ic svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -2367,7 +2367,7 @@ html body #page .sf .tsw.on { border: 2px solid #2f8bff; padding: 7px 7px 8px; b
 }
 
 /* ---- every tab bar and every "add" button in the reference style ---- */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   html body #page .tabs:not(.set-tabs) { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; border: 0; background: none; }
   html body #page .tabs:not(.set-tabs) button { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 20px; font-size: 14px; font-weight: 600; border-radius: 14px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); box-shadow: none; color: var(--text); }
   html body #page .tabs:not(.set-tabs) button:hover { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); }
@@ -2406,7 +2406,7 @@ html body #page .ap-steps > div > span { grid-column: 2; color: var(--text); fon
 html body #page .ap-steps > div:nth-child(1)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234da3ff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E"); } html body #page .ap-steps > div:nth-child(2)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234da3ff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12a7 7 0 1 1-2.1-5'/%3E%3Cpath d='M19 4v4h-4'/%3E%3C/svg%3E"); }
 html body #page .ap-steps > div:nth-child(3)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff9f4a' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 6.5a4 4 0 0 0-5 5L4 17l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z'/%3E%3C/svg%3E"); background-color: rgba(255,159,74,.14); } html body #page .ap-steps > div:nth-child(4)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334d399' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 20v-9M12 20V5M18 20v-7' stroke-width='3'/%3E%3C/svg%3E"); background-color: rgba(52,211,153,.14); }
 html body #page .ap-steps > div:nth-child(5)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa4c0' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 7.5V12l3 2'/%3E%3C/svg%3E"); background-color: rgba(154,164,192,.14); } html body #page .ap-steps > div:nth-child(6)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='3.5' width='14' height='17' rx='2.4'/%3E%3Cpath d='M8.5 8.5h7M8.5 12h7M8.5 15.5h4'/%3E%3C/svg%3E"); background-color: rgba(167,139,250,.16); }
-@media (max-width: 1100px) { html body #page .ap-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 700px) { html body #page .ap-steps { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { html body #page .ap-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 700px) and (pointer: coarse) { html body #page .ap-steps { grid-template-columns: 1fr; } }
 /* the check box: a blue rounded square with a tick */
 html body input[type=checkbox]:not(.sw) { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; min-width: 20px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.25); background: rgba(0,0,0,.2); display: inline-grid; place-items: center; cursor: pointer; vertical-align: middle; transition: background .15s, border-color .15s; }
 html body input[type=checkbox]:not(.sw):checked { background: #1f8bff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/14px no-repeat; border-color: #5eb0ff; box-shadow: 0 0 10px rgba(31,139,255,.4); }
@@ -2490,7 +2490,7 @@ html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .si-t small, h
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss .sr > .v input:not([type=checkbox]), html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .ss .sr > .v select, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .si-r .si-f, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .pwf-f .pwi .si-f, html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .sic select { background-color: #0b1120 !important; border: 1px solid rgba(255,255,255,.07) !important; border-radius: 10px !important; box-shadow: none !important; height: 40px; }
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf .frame-h3, html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-desc { color: #9aa4b8; }
 html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf > h3 { color: #5aa9ff; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-top .set-tabs { padding: 0; border: 0; background: none; border-radius: 0; gap: 8px; }
   html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-tabs button { height: 40px; padding: 0 18px; gap: 9px; font-size: 14px; font-weight: 500; border-radius: 12px; color: #e6eaf3; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); box-shadow: none; }
   html[data-theme="aurora"]:not([data-mode="light"]) body #page .set-tabs button:hover { background: rgba(255,255,255,.09); }
@@ -2499,7 +2499,7 @@ html[data-theme="aurora"]:not([data-mode="light"]) body #page .sf > h3 { color: 
   html[data-theme="aurora"]:not([data-mode="light"]) body #page .tabs:not(.set-tabs) button.on { color: #5aa9ff; font-weight: 600; background: rgba(10,132,255,.14); border-color: #0a84ff; box-shadow: 0 0 0 3px rgba(10,132,255,.15); }
 }
 /* the menu */
-@media (min-width: 761px) {
+@media (min-width: 761px), (pointer: fine) {
   html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a { color: #a9b0c4; border-radius: 14px; }
   html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a.on { color: #3b8cff; background: rgba(10,132,255,.16); border-color: rgba(10,132,255,.55); box-shadow: 0 6px 20px rgba(10,132,255,.18); }
   html[data-theme="aurora"]:not([data-mode="light"]) nav#nav a.on .ic { color: #3b8cff; }
@@ -2691,7 +2691,7 @@ body #page .sb-bks { display: flex; flex-wrap: wrap; gap: 8px; }
 body #page .sb-bk { height: 32px; box-sizing: border-box; padding: 0 12px; display: inline-flex; align-items: center; gap: 10px; background: #0b1120; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; } body #page .sb-bk b { font-size: 13px; font-weight: 500; } body #page .sb-bk .mono { font-size: 12px; color: #9aa4b8; }
 body #page .sb-logd summary { cursor: pointer; color: #9aa4b8; font-size: 13px; padding: 2px 0; } body #page .sb-logd pre { margin: 8px 0 0; max-height: 260px; overflow: auto; }
 @media (max-width: 1100px) { body #page .sb-head, body #page .sb-two { grid-template-columns: 1fr; } body #page .sb-stat4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } body #page .sb-tgrid { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { body #page .sb-ar { grid-template-columns: 40px minmax(0, 1fr); } body #page .sb-ar .si-a { grid-column: 1 / -1; flex-wrap: wrap; } body #page .sb-gbox { flex-wrap: wrap; } }
+@media (max-width: 760px) and (pointer: coarse) { body #page .sb-ar { grid-template-columns: 40px minmax(0, 1fr); } body #page .sb-ar .si-a { grid-column: 1 / -1; flex-wrap: wrap; } body #page .sb-gbox { flex-wrap: wrap; } }
 html[data-mode="light"] body #page .sb-card { background: #fff; border-color: rgba(60,80,130,.14); } html[data-mode="light"] body #page .sb-gbox { background: rgba(60,80,130,.05); border-color: rgba(60,80,130,.12); } html[data-mode="light"] body #page .sb-nt { color: #1c1f2a; }
 html[data-mode="light"] body #page .sb-prow, html[data-mode="light"] body #page .sb-bk { background: #f1f4fa; border-color: rgba(60,80,130,.12); } html[data-mode="light"] body #page .sb-btn { color: #1c1f2a; background: rgba(60,80,130,.06); border-color: rgba(60,80,130,.14); } html[data-mode="light"] body #page .sb-btn.pri, html[data-mode="light"] body #page .sb-btn.red { color: #fff; }
 body #page .sb-plist { display: flex; flex-direction: column; gap: 8px; max-height: 232px; overflow: auto; padding-right: 2px; }
@@ -2699,7 +2699,7 @@ body #page .sb-plist { display: flex; flex-direction: column; gap: 8px; max-heig
 body #page .sb-ar { grid-template-columns: 40px minmax(0, 1fr) auto; } body #page .sb-ar:has(.sb-x) { grid-template-columns: 40px minmax(0, 1fr) auto 28px; }
 body #page .sb-x { width: 28px; height: 28px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; color: #9aa4b8; background: transparent; border: 0; box-shadow: none; } body #page .sb-x svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; } body #page .sb-x:hover { background: rgba(255,255,255,.10); color: #f2f5fb; }
 body #page .sb-link { margin-left: auto; padding: 0 8px; height: 24px; font-size: 12.5px; color: #5aa9ff; background: transparent; border: 0; box-shadow: none; }
-@media (max-width: 760px) { body #page .sb-ar:has(.sb-x) { grid-template-columns: 40px minmax(0, 1fr) 28px; } body #page .sb-ar:has(.sb-x) .si-a { grid-column: 1 / -1; } }
+@media (max-width: 760px) and (pointer: coarse) { body #page .sb-ar:has(.sb-x) { grid-template-columns: 40px minmax(0, 1fr) 28px; } body #page .sb-ar:has(.sb-x) .si-a { grid-column: 1 / -1; } }
 
 body #page .sb-plist { max-height: 188px; }
 body #page .sb-pc { min-width: 20px; height: 20px; padding: 0 7px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #9aa4b8; background: rgba(255,255,255,.07); border-radius: 10px; }
@@ -2804,7 +2804,7 @@ body .qp-prev { min-height: 28px; display: flex; align-items: center; flex-wrap:
 body .qp-prev b { height: 26px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 14px; font-weight: 600; color: #f2f5fb; background: #0b1120; border: 1px solid rgba(255,255,255,.07); border-radius: 9px; }
 body .qp-prev #qp-ptxt { color: #c7cfdf; font-variant-numeric: tabular-nums; } body .qp-prev #qp-err { font-weight: 500; color: #ff6b81; }
 body .qp-hint { font-size: 12.5px; color: #8791a8; } body .qp-act { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-@media (max-width: 760px) { body .qp-grid { grid-template-columns: 1fr; } body #page .sb-sel { max-width: none; } body #page .sb-ract { margin-left: 0; } }
+@media (max-width: 760px) and (pointer: coarse) { body .qp-grid { grid-template-columns: 1fr; } body #page .sb-sel { max-width: none; } body #page .sb-ract { margin-left: 0; } }
 
 /* the light mode of the lists, toolbars and the Add-plan window */
 html[data-mode="light"] body #page #sb-body.fit { background: #eef2f9; border-color: rgba(60,80,130,.14); } html[data-mode="light"] body #page #sb-body.fit.self { background: none; }
@@ -2864,7 +2864,7 @@ body .modal .qp-chk > span { width: 26px; height: 26px; flex: none; border-radiu
 body .qp-prev .qp-chk { margin-right: 6px; }
 body .qp-lerr { display: flex; align-items: center; gap: 16px; } body .qp-act:has(.qp-lerr) { justify-content: flex-start; }
 body .modal.plan-edit .qp-in, body .modal.plan-edit .qp-sel { height: 46px; font-size: 15px; border-radius: 14px; } body .modal.plan-edit .qp-pri { height: 46px; padding: 0 34px; font-size: 16px; border-radius: 23px; }
-@media (max-width: 760px) { body .qp-grid.three { grid-template-columns: 1fr; } }
+@media (max-width: 760px) and (pointer: coarse) { body .qp-grid.three { grid-template-columns: 1fr; } }
 html[data-mode="light"] body .modal .qp-ta { color: #1c1f2a; background: #fff; border-color: rgba(60,80,130,.18); color-scheme: light; } html[data-mode="light"] body .modal .qp-chk { color: #1c1f2a; } html[data-mode="light"] body .modal .qp-chk > span:not(.on) { background: #fff; border-color: rgba(60,80,130,.3); }
 
 /* ---- columns: a header and its cells start at the same place, whatever script the text is in ---- */
@@ -2927,7 +2927,7 @@ body .modal .sb-swc { display: inline-flex; align-items: center; gap: 8px; } bod
 body .modal .sb-tog { position: relative; width: 40px; height: 24px; min-width: 40px; padding: 0; border: 0; border-radius: 12px; background: rgba(255,255,255,.2); box-shadow: none; cursor: pointer; transition: background .2s; } body .modal .sb-tog.on, body .modal .sb-tog.on:hover { background: #30d158; }
 body .modal .sb-tog > i { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform .2s; pointer-events: none; } body .modal .sb-tog.on > i { transform: translateX(16px); }
 html[data-mode="light"] body .cr-job { background: #eef2f9; border-color: rgba(60,80,130,.14); } html[data-mode="light"] body .cr-s { background: #fff; border-color: rgba(60,80,130,.14); } html[data-mode="light"] body .cr-s > b { color: #1c1f2a; } html[data-mode="light"] body .cr-in { color: #1c1f2a; background: #f1f4fa; border-color: rgba(60,80,130,.18); }
-@media (max-width: 760px) { body .qp-grid.three .span2 { grid-column: auto; } body .modal .cr-sch { width: 100%; } body .cr-h { flex-wrap: wrap; } }
+@media (max-width: 760px) and (pointer: coarse) { body .qp-grid.three .span2 { grid-column: auto; } body .modal .cr-sch { width: 100%; } body .cr-h { flex-wrap: wrap; } }
 
 /* ---- settings on one page: the groups side by side, each with its own arrow ---- */
 body #page .st-secs { display: grid; grid-template-columns: repeat(auto-fit, minmax(470px, 1fr)); gap: 10px 12px; align-items: start; }
@@ -2948,7 +2948,7 @@ body .user-box .uacts { display: grid; grid-template-columns: repeat(3, minmax(0
 body .modal .ua { height: 36px; padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; color: #f2f5fb; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.10); border-radius: 18px; white-space: nowrap; } body .modal .ua:hover { background: rgba(255,255,255,.16); } body .modal .ua i { font-style: normal; font-size: 14px; } body .modal .ua.danger { color: #ff6b81; background: rgba(255,69,58,.14); border-color: rgba(255,69,58,.28); }
 body .user-box .sb-disc { display: inline-flex; align-items: center; gap: 4px; } body .user-box .sb-disc input { width: 64px; height: 28px; box-sizing: border-box; padding: 0 6px; text-align: center; font-size: 13.5px; color: #f2f5fb; background: #0b1120; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; } body .user-box .sb-disc em { font-style: normal; color: #9aa4b8; }
 html[data-mode="light"] body .user-box .sb-disc input { color: #1c1f2a; background: #fff; border-color: rgba(60,80,130,.2); } html[data-mode="light"] body .modal .ua { color: #1c1f2a; background: rgba(60,80,130,.07); border-color: rgba(60,80,130,.16); }
-@media (max-width: 760px) { body .user-box .ugrid { grid-template-columns: 1fr; } body .user-box .uacts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) and (pointer: coarse) { body .user-box .ugrid { grid-template-columns: 1fr; } body .user-box .uacts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* settings: the groups flow into columns of equal height (4 on a wide window), so the whole page fits without a scroll */
 body #page .st-secs { display: block; columns: 280px 4; column-gap: 12px; }
@@ -2997,7 +2997,7 @@ html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,8
 @media (max-width: 1100px) { .dns-intro .ap-steps { grid-template-columns: 1fr 1fr; } .dns-rec { grid-template-columns: 1fr; } }
 
 /* ---- a phone: every shop bot list row is a card of two columns (no header row, no sideways scroll); the fixed box is already off below 760 px ---- */
-@media (max-width: 760px) {
+@media (max-width: 760px) and (pointer: coarse) {
   body #page .sb-lh { display: none; }
   body #page .sb-lrows, body #page .sb-ptable .sb-pfoot, body #page .sb-lh, body #page .sb-lr { min-width: 0; }
   body #page .sb-lr { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; height: auto; min-height: 0; padding: 9px 12px; row-gap: 5px; column-gap: 10px; }
@@ -3017,7 +3017,7 @@ html[data-mode="light"] body .pe-box { background: #fff; border-color: rgba(60,8
 }
 
 /* ---- a phone, continued: the Payments / Orders rows (sb-prow2) fold the same way, and every cell carries the name of its column ---- */
-@media (max-width: 760px) {
+@media (max-width: 760px) and (pointer: coarse) {
   body #page .sb-phead { display: none; }
   body #page .sb-prows, body #page .sb-prow2 { min-width: 0; }
   body #page .sb-prow2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; height: auto; min-height: 0; padding: 9px 12px; row-gap: 5px; column-gap: 10px; align-items: start; }
@@ -3097,14 +3097,14 @@ html body #page .dns-intro .ap-steps > div { grid-template-columns: 26px minmax(
 html body #page .dns-intro .ap-steps > div::before { width: 26px; height: 26px; border-radius: 8px; background-size: 15px; }
 html body #page .dns-intro .ap-steps > div > b { font-size: 12.5px; }
 html body #page .dns-intro .ap-steps > div > span { font-size: 11.5px; line-height: 1.35; }
-@media (max-width: 1300px) { html body #page .dns-intro .ap-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 700px) { html body #page .dns-intro .ap-steps { grid-template-columns: 1fr; } }
+@media (max-width: 1300px) { html body #page .dns-intro .ap-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 700px) and (pointer: coarse) { html body #page .dns-intro .ap-steps { grid-template-columns: 1fr; } }
 body #page .dns-recs { max-height: calc(100vh - 430px); min-height: 220px; overflow-y: auto; gap: 3px; padding-right: 4px; }
 body #page .dns-rec { grid-template-columns: minmax(200px, 1fr) minmax(220px, 1.2fr) auto; gap: 10px; min-height: 36px; padding: 3px 10px; border-radius: 10px; }
 body #page .dns-rec > b { font-size: 13px; } body #page .dns-ip .mono { font-size: 12px; } body #page .dns-ip .pill { height: 18px; font-size: 10.5px; padding: 0 7px; }
 body #page .dns-act select { height: 28px; max-width: 230px; font-size: 12.5px; } body #page .dns-act button { height: 28px; padding: 0 12px; }
 body #page .dns-recs + .empty, body #page .card:has(> .dns-recs) > h3 { gap: 10px; } body #page .card:has(> .dns-recs) > h3 .tb-search input { height: 28px; width: 190px; font-size: 12.5px; }
 body #page .card:has(> .dns-recs) { padding: 8px 12px 10px; }
-@media (max-width: 760px) { body #page .dns-rec { grid-template-columns: 1fr; } body #page .dns-recs { max-height: none; } }
+@media (max-width: 760px) and (pointer: coarse) { body #page .dns-rec { grid-template-columns: 1fr; } body #page .dns-recs { max-height: none; } }
 body #page .dns-ip { white-space: nowrap; } body #page .dns-ip .pill { white-space: nowrap; } body #page .dns-rec > b { overflow: hidden; text-overflow: ellipsis; }
 
 /* the records of one domain together, under a small header with the domain and how many */
@@ -3140,7 +3140,7 @@ body #page .dns-pane .card { margin: 0; padding: 10px 14px 12px; } body #page .d
 body #page .dns-warn { border-color: rgba(255,196,77,.35); background: linear-gradient(180deg, rgba(255,196,77,.08), rgba(255,196,77,.02)); }
 body #page .dns-pane .frm { display: grid; gap: 8px; } body #page .dns-pane .frm label { display: grid; gap: 4px; font-size: 12.5px; }
 html[data-mode="light"] body #page .dns-tbl tr.dr-dom td { background: linear-gradient(180deg, rgba(10,98,201,.10), rgba(10,98,201,.04)); } html[data-mode="light"] body #page .dns-tbl tr.dr-dom b { color: #0a62c9; }
-@media (max-width: 760px) { body #page .dns-tbl { min-width: 0; } }
+@media (max-width: 760px) and (pointer: coarse) { body #page .dns-tbl { min-width: 0; } }
 body #page .dns-tbl tr.dr-dom td { text-align: left !important; justify-content: flex-start; } body #page .dns-tbl tbody + tbody tr.dr-dom td { border-top: 1px solid rgba(77,163,255,.22); }
 
 /* ---- Tunnel Doctor: ONE bar (the switch, the delay, how far, Save, the AI buttons, the count) and under it the list and the history side by side; the six steps are a closed drawer ---- */
@@ -3192,7 +3192,7 @@ html[data-mode="light"] body #page .dns-tbl .tybadge { background: rgba(60,80,13
 #demo-pill { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 9000; padding: 3px 12px; border-radius: 999px; font-size: 11.5px; line-height: 1.6; white-space: nowrap;
   background: color-mix(in srgb, var(--accent, #4f8cff) 16%, var(--card, #fff)); color: var(--text, #222); border: 1px solid color-mix(in srgb, var(--accent, #4f8cff) 40%, transparent); pointer-events: none; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
 #demo-pill b { font-weight: 700; }
-@media (max-width: 640px) { #demo-pill { font-size: 10.5px; padding: 2px 9px; top: 3px; } }
+@media (max-width: 640px) and (pointer: coarse) { #demo-pill { font-size: 10.5px; padding: 2px 9px; top: 3px; } }
 /* panel outbounds in ONE compact box: the outbounds in two columns, the add row in one line, rules and backups folded (no page scroll) */
 .ob-one { padding: 10px 12px; }
 .ob-one > h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; flex-wrap: nowrap; }
@@ -3215,12 +3215,12 @@ html[data-mode="light"] body #page .dns-tbl .tybadge { background: rgba(60,80,13
 .ob-line { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; border-top: 1px solid rgba(255,255,255,.06); }
 .ob-line .ob-bo { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 .ob-h { margin: 10px 0 6px; }
-@media (max-width: 760px) { .ob-grid, .ob-more { grid-template-columns: 1fr; } .ob-note { display: none; } .ob-add { flex-wrap: wrap; } }
+@media (max-width: 760px) and (pointer: coarse) { .ob-grid, .ob-more { grid-template-columns: 1fr; } .ob-note { display: none; } .ob-add { flex-wrap: wrap; } }
 /* the add / edit window of a panel */
 .modal.narrow { width: min(560px, 94vw); }
 .pn-win { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .pn-win .chk, .pn-win .frm-act { grid-column: 1 / -1; }
-@media (max-width: 560px) { .pn-win { grid-template-columns: 1fr; } }
+@media (max-width: 560px) and (pointer: coarse) { .pn-win { grid-template-columns: 1fr; } }
 /* the connection of a panel (Add / Edit): the two ways to give it a credential, what is kept now, the hint under the fields */
 .pn-win .pn-wide { grid-column: 1 / -1; }
 .pn-win[data-mode="key"] .pn-login, .pn-win[data-mode="login"] .pn-key { display: none; }
@@ -3466,7 +3466,7 @@ html body .srv-tbl td.iss-cell .pill.off { color: #8f9ab0; }
 #modal .modal.srvwin > .hmsg { display: flex; position: static; transform: none; z-index: auto; width: auto; max-width: none; flex: none; margin: 8px 22px 0; height: 30px; background: transparent; border-color: transparent; box-shadow: none; }
 #modal .modal.srvwin > .hmsg:not(:empty) { background: #1b2438; border-color: rgba(255,255,255,.16); } #modal .modal.srvwin > .hmsg.ok:not(:empty) { background: rgba(48,209,88,.12); border-color: rgba(48,209,88,.45); } #modal .modal.srvwin > .hmsg.bad:not(:empty) { background: rgba(255,69,58,.13); border-color: rgba(255,69,58,.5); } #modal .modal.srvwin > .hmsg.info:not(:empty) { background: rgba(10,132,255,.12); border-color: rgba(10,132,255,.45); }
 #modal .modal.srvwin > .hmsg > span { flex: 1 1 auto; }
-@media (max-width: 760px) { #modal .modal.srvwin { height: 100%; } }
+@media (max-width: 760px) and (pointer: coarse) { #modal .modal.srvwin { height: 100%; } }
 /* the small message in the header of a window: one line between the name and the buttons; a click opens the whole text under the header */
 #modal .modal { position: relative; }
 .hmsg { display: none; position: absolute; z-index: 6; top: -15px; left: 50%; transform: translateX(-50%); width: max-content; align-items: center; gap: 8px; max-width: min(520px, 80%); min-width: 0; height: 28px; box-sizing: border-box; padding: 0 6px 0 14px; border-radius: 14px; font-size: 12px; font-weight: 600; background: #1b2438; border: 1px solid rgba(255,255,255,.16); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
@@ -4119,7 +4119,7 @@ html body #modal .qp2-cloud { height: 36px; display: flex; align-items: center; 
 html body #modal .qp2-foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.07); }
 html body #modal .qp2-foot .qp-prev { flex: 1 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #modal .qp2-foot .qp-pri { flex: none; height: 36px; padding: 0 22px; font-size: 13px; border-radius: 10px; background: rgba(122,176,255,.16) !important; border: 1px solid rgba(122,176,255,.42) !important; color: #d9e7ff !important; box-shadow: none !important; }
-@media (max-width: 560px) { html body #modal .qp2 .c2, html body #modal .qp2 .c3, html body #modal .qp2 .c4 { grid-column: span 6; } }
+@media (max-width: 560px) and (pointer: coarse) { html body #modal .qp2 .c2, html body #modal .qp2 .c3, html body #modal .qp2 .c4 { grid-column: span 6; } }
 
 /* tunnels: every second card a little lighter, like the DNS records */
 html body #page .tun-tbl tbody tr:nth-child(odd) td { background: rgba(255,255,255,.026) !important; }
@@ -4138,8 +4138,6 @@ html body #page .dns-chip small { font-size: 10.5px; font-weight: 500; color: #8
 html body #page .dns-chip:hover { background: rgba(255,255,255,.09); }
 html body #page .dns-chip.on { background: rgba(122,176,255,.16); border-color: rgba(122,176,255,.45); color: #e2edff; } html body #page .dns-chip.on small { color: #a9c3f2; }
 html body #page .dns-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #5b667c; } html body #page .dns-chip .dot.ok { background: #4fd98a; } html body #page .dns-chip .dot.bad { background: #ff7a8c; }
-html body #page .dns-chip.add { border-style: dashed; background: transparent; color: #aeb7ca; } html body #page .dns-chip.add:hover { color: #e2edff; border-color: rgba(122,176,255,.45); }
-html body #page .dns-chip.add .cta-ic { width: 16px; height: 16px; border-radius: 50%; background: rgba(122,176,255,.25); color: #fff; font-size: 12px; line-height: 16px; display: inline-grid; place-items: center; }
 html body #page .dns-bar .dns-main .dns-dsel { flex: 0 1 230px; min-width: 130px; } html body #page .dns-bar .dns-main .tb-search { flex: 0 1 190px; min-width: 96px; }
 
 /* the DNS bar, calmer: Add record and the domain chooser side by side, three quiet numbers without lights, then the tabs and the search */
@@ -4304,7 +4302,6 @@ html[data-mode="light"] body #page .dns-chip { background: #ffffff; border-color
 html[data-mode="light"] body #page .dns-chip:hover { background: #f1f5fc; border-color: rgba(30,50,100,.28); }
 html[data-mode="light"] body #page .dns-chip.on { background: #e3edff; border-color: #7fa9ee; color: #0b3a8c; box-shadow: 0 0 0 1px rgba(47,111,224,.18), 0 6px 14px -8px rgba(47,111,224,.5); }
 html[data-mode="light"] body #page .dns-chip .cnt { background: rgba(30,50,100,.09); color: #34456b; } html[data-mode="light"] body #page .dns-chip.on .cnt { background: #bcd5fb; color: #0b3a8c; }
-html[data-mode="light"] body #page .dns-chip.add { background: transparent; color: #5b6b8c; border-color: rgba(30,50,100,.28); } html[data-mode="light"] body #page .dns-chip.add:hover { color: #0b3a8c; border-color: #7fa9ee; background: #f1f5fc; }
 html[data-mode="light"] body #page .dns-chip .pv-all { filter: brightness(.55) saturate(1.4); }
 html[data-mode="light"] body #page .dns-bar .dns-dsel { background: #e8f0fe; border-color: #9bbcf3; } html[data-mode="light"] body #page .dns-bar .dns-dsel:hover { background: #dbe8fd; border-color: #6f9cea; }
 html[data-mode="light"] body #page .dns-bar .dns-dsel select { color: #0b3a8c; } html[data-mode="light"] body #page .dns-bar .dns-dsel select option { color: #14213d; background: #fff; }
@@ -4386,23 +4383,15 @@ html[data-mode="light"] body .ap-ttabs button.on small, html[data-mode="light"] 
 html[data-mode="light"] body .tc b, html[data-mode="light"] body .tc.info b { color: #14213d; } html[data-mode="light"] body .tc.info b { color: #1456c8; } html[data-mode="light"] body .tc.ok b { color: #0b7a4f; }
 html[data-mode="light"] body .spill.active, html[data-mode="light"] body .epill.ok, html[data-mode="light"] body .tc.ok { color: #0b7a4f; }
 html[data-mode="light"] body .exp-c, html[data-mode="light"] body .pgs .pgn { color: #34456b; } html[data-mode="light"] body .pgs .pgn:disabled { color: rgba(30,50,100,.4); }
-html[data-mode="light"] body #page .dns-chip.add .cta-ic, html[data-mode="light"] body #page .toolbar .cta-ic { background: rgba(47,111,224,.22); color: #1a52b8; }
-html[data-mode="light"] body #page .toolbar.joined > button.cta .cta-ic { background: rgba(0,0,0,.18) !important; color: #fff; }/* the "Add account" chip: straight, the same height as the account chips, a soft blue outline and a clean plus (dark and day) */
-html body #page .dns-chip.add { height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px 0 8px; border-style: solid; border-width: 1px; border-color: rgba(122,176,255,.4); background: linear-gradient(180deg, rgba(122,176,255,.16), rgba(122,176,255,.07)); color: #cfe0ff; font-size: 13px; font-weight: 600; letter-spacing: .01em; line-height: 1; transform: none; }
-html body #page .dns-chip.add:hover { background: linear-gradient(180deg, rgba(122,176,255,.26), rgba(122,176,255,.12)); border-color: rgba(122,176,255,.65); color: #fff; }
-html body #page .dns-chip.add .cta-ic { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(122,176,255,.3); color: #fff; font-size: 0; line-height: 0; position: relative; }
-html body #page .dns-chip.add .cta-ic::before, html body #page .dns-chip.add .cta-ic::after { content: ""; position: absolute; left: 50%; top: 50%; background: currentColor; border-radius: 1px; transform: translate(-50%, -50%); }
-html body #page .dns-chip.add .cta-ic::before { width: 10px; height: 2px; } html body #page .dns-chip.add .cta-ic::after { width: 2px; height: 10px; }
-html body #page .dns-chip.add b { font-weight: 600; line-height: 1; }
-html[data-mode="light"] body #page .dns-chip.add { background: linear-gradient(180deg, #eaf2ff, #dde9fd); border-color: #8fb4f0; color: #0b3a8c; }
-html[data-mode="light"] body #page .dns-chip.add:hover { background: linear-gradient(180deg, #dbe8fd, #cfe0fb); border-color: #5f93e8; color: #072a6a; }
-html[data-mode="light"] body #page .dns-chip.add .cta-ic { background: #2f6fe0; color: #fff; }
+html[data-mode="light"] body #page .toolbar .cta-ic { background: rgba(47,111,224,.22); color: #1a52b8; }
+html[data-mode="light"] body #page .toolbar.joined > button.cta .cta-ic { background: rgba(0,0,0,.18) !important; color: #fff; }/* "Add" (a server, a panel, an account) is ONE button everywhere: the round blue plus of the Servers page (cta cta-server ico). In a bar of boxes (panels, accounts) it is the height of the boxes; the first panel's button has its name. */
+html body #page .pn-add, html body #page .dns-add { flex: none; }
+html body #page .pn-bar .cta, html body #page .dns-accbar .cta { height: 36px; box-sizing: border-box; }
+html body #page .pn-bar .cta.ico, html body #page .dns-accbar .cta.ico { width: 36px; min-width: 36px; }
 /* the faint cross of an account / panel box (CDN accounts, Panels): at the right end of the box, nearly invisible; it takes the account off the list when pressed (after a confirmation) and turns red under the pointer */
 html body #page .dns-cw { position: relative; display: inline-flex; align-items: center; }
 html body #page .dns-cw > .dns-chip { padding-right: 34px; }
-/* "Add" is only a plus: a round button the height of the boxes (accounts, panels) and of the buttons (servers) */
-html body #page .dns-chip.add.ico { width: 36px; min-width: 36px; padding: 0; gap: 0; justify-content: center; }
-html body #page .dns-chip.add.ico .cta-ic { margin: 0; }
+/* "Add" is only a plus: a round button (accounts, panels, servers) */
 html body button.cta.ico, html body #page .toolbar.joined > button.cta.ico { width: 38px; min-width: 38px; padding: 0; gap: 0; justify-content: center; }
 /* the same faint cross at the end of a server's box */
 /* the provider marks (ArvanCloud: a dot and a thick slanted bar in the green tile; Cloudflare: the two-tone orange cloud in a dark tile), used in the chooser, the account chips and the Add account form */
@@ -4720,7 +4709,7 @@ html body #page .ob2-sw.on i { background: linear-gradient(180deg, #2f9dff, #0a7
 html body #page .ob2-sw.on i::after { transform: translateX(18px); }
 html[data-mode="light"] body #page .ob2-sw i { background: #c3cde0 !important; box-shadow: inset 0 0 0 1px rgba(30,40,80,.12); }
 /* a page with list boxes locks the scroll of the page (.main:has(.lbox)); this one has bars that open, so its page scrolls */
-@media (min-width: 761px) { html body .main:has(.ob4) { overflow-y: auto; } }
+@media (min-width: 761px), (pointer: fine) { html body .main:has(.ob4) { overflow-y: auto; } }
 /* the switch in the first cell sits clear of the row's rounded left edge, so it is never cut */
 html body #page .ob4 .lbox td:first-child, html body #page .ob4 .lbox th:first-child { padding-left: 16px; padding-right: 6px; overflow: visible; }
 html body #page .ob4 .lbox .ob2-sw { display: inline-flex; vertical-align: middle; }
@@ -4741,7 +4730,7 @@ html body #page .pn-bar > .dns-r button:not(.dns-chip) { height: 32px; }
 html body #page .pn-acts { display: inline-flex; gap: 6px; align-items: center; } html body #page .pn-actbtn { height: 32px; padding: 0 14px; border-radius: 10px; font-weight: 600; } html body #page .pn-actbtn:disabled { opacity: .38; cursor: default; } html body #page .pn-actbtn:not(:disabled) { background: rgba(77,163,255,.18); border-color: rgba(77,163,255,.5); color: #cfe3ff; }
 /* tighter, so that each of the two rows stays ONE row on a laptop width */
 html body #page .pn-bar .dns-chip small { display: none; } html body #page .pn-bar .dns-r.pn-one { gap: 8px; } html body #page .pn-bar .dns-stat { padding: 0 8px; }
-html body #page .pn-acts { display: none; } html body #page .pn-sel.on ~ .pn-acts { display: inline-flex; }      /* the buttons that act on the ticked rows appear as soon as one is ticked */
+html body #page .pn-acts { display: none; } html body #page .pn-acts.on { display: inline-flex; }      /* the buttons that act on the ticked rows appear as soon as one is ticked */
 html body #page #pn-uq, html body #page #pn-hq { width: 190px; min-width: 0; } html body #page .pn-st-sel { min-width: 120px; }
 /* the switches also follow the real state of their box (a list that ticks its boxes by script needs no class): the same look as the Outbound page */
 html body #page .ob2-sw:has(input:checked) i { background: linear-gradient(180deg, #2f9dff, #0a7cf5) !important; box-shadow: 0 0 0 1px rgba(10,124,245,.55), 0 0 9px rgba(10,132,255,.42); }

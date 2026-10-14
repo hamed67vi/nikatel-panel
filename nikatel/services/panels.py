@@ -348,6 +348,9 @@ def _http(c: dict, method: str, path: str, token: str | None = None, form: dict 
 
         raise PanelError(f"HTTP {r.status_code}" + (f": {detail}" if detail else ""), r.status_code)
 
+    if 300 <= r.status_code < 400:                                       # a redirect is not an answer: a POST to /api/host (no slash) got 307 from a PasarGuard 5.4.1 panel and created nothing, quietly
+        raise PanelError(f"HTTP {r.status_code}: the panel redirected {method} {path} to {r.headers.get('location', 'somewhere else')} instead of doing it", r.status_code)
+
     if not r.content:
         return None
 
@@ -513,7 +516,7 @@ def _token_alert(db, p: Panel, label: str) -> None:
         _ALERTED.pop(p.id, None)
     elif _ALERTED.get(p.id) != lvl:
         _ALERTED[p.id] = lvl
-        emit(db, lvl, "panels", f"Panel {label}: {a['note']} — paste a new {'API key' if a['kind'] == 'api_key' else 'token'} in Panels → Edit.", p.name)
+        emit(db, lvl, "panels", f"Panel {label}: {a['note']} — paste a new {'API key' if a['kind'] == 'api_key' else 'token'} in Users → Edit.", p.name)
 
 
 def refresh_key_meta(panel_id: int, c: dict) -> None:
@@ -942,7 +945,7 @@ def user_body(ch: dict, cur_expire, typ: str) -> dict:
         d = str(ch["expire_date"] or "").strip()
 
         if not d:
-            body["expire"] = None if typ == "pasarguard" else 0
+            body["expire"] = 0           # "no end": both panels read 0 as "remove the end" (a PasarGuard PUT with expire null means "leave it as it is", which kept the old date)
         else:
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
                 raise ValueError("the date must look like 2027-01-31")
@@ -987,6 +990,17 @@ def proxies_for(cur_proxies: dict, inbounds: dict) -> dict:
     return {p: (cur_proxies.get(p) if isinstance(cur_proxies.get(p), dict) else {}) for p, tags in inbounds.items() if tags}
 
 
+def keep_next_plan(body: dict, cur: dict, typ: str) -> dict:
+    """A PasarGuard PUT that does not carry `next_plan` DELETES the next plan of the user (the panel's own rule: no next_plan in the body = none wanted). Every change made from here
+    resends the plan the user has, so editing a note or a limit never takes it away."""
+    plan = cur.get("next_plan") if isinstance(cur, dict) else None
+
+    if typ == "pasarguard" and isinstance(plan, dict) and "next_plan" not in body:
+        body["next_plan"] = {k: plan.get(k) for k in ("user_template_id", "data_limit", "expire", "add_remaining_traffic")}
+
+    return body
+
+
 def user_update(c: dict, username: str, ch: dict) -> dict:
     cur = call(c, "GET", _upath(username)) or {}
     body = user_body(ch, cur.get("expire"), c.get("type", ""))
@@ -994,7 +1008,7 @@ def user_update(c: dict, username: str, ch: dict) -> dict:
     if "inbounds" in body and c.get("type", "") != "pasarguard":
         body["proxies"] = proxies_for(cur.get("proxies") or {}, body["inbounds"])
 
-    call(c, "PUT", _upath(username), body=body)
+    call(c, "PUT", _upath(username), body=keep_next_plan(body, cur, c.get("type", "")))
     return user_get(c, username)
 
 
@@ -1002,7 +1016,8 @@ def user_action(c: dict, username: str, action: str, value=None) -> None:
     path = _upath(username)
 
     if action in ("enable", "disable"):
-        call(c, "PUT", path, body={"status": "active" if action == "enable" else "disabled"})
+        cur = call(c, "GET", path) or {} if c.get("type") == "pasarguard" else {}
+        call(c, "PUT", path, body=keep_next_plan({"status": "active" if action == "enable" else "disabled"}, cur, c.get("type", "")))
     elif action == "reset":
         call(c, "POST", path + "/reset", body={})
     elif action == "renew":
@@ -1012,7 +1027,7 @@ def user_action(c: dict, username: str, action: str, value=None) -> None:
             raise ValueError("days must be between 1 and 3650")
 
         cur = call(c, "GET", path) or {}
-        call(c, "PUT", path, body={"expire": expire_plus(cur.get("expire"), days)})
+        call(c, "PUT", path, body=keep_next_plan({"expire": expire_plus(cur.get("expire"), days)}, cur, c.get("type", "")))
     elif action == "revoke":
         call(c, "POST", path + "/revoke_sub", body={})
     elif action == "delete":
@@ -1023,7 +1038,8 @@ def user_action(c: dict, username: str, action: str, value=None) -> None:
         if not 0 <= gb <= 100000:
             raise ValueError("the limit must be between 0 and 100000 GB (0 = unlimited)")
 
-        call(c, "PUT", path, body={"data_limit": int(gb * 1024 ** 3)})
+        cur = call(c, "GET", path) or {} if c.get("type") == "pasarguard" else {}
+        call(c, "PUT", path, body=keep_next_plan({"data_limit": int(gb * 1024 ** 3)}, cur, c.get("type", "")))
     else:
         raise ValueError("unknown action")
 
@@ -1274,11 +1290,30 @@ def _host_find(c: dict, key: str):
     raise ValueError("host not found")
 
 
+_MUX_READ_WRITE = {"xudpConcurrency": "xudp_concurrency", "xudpProxyUDP443": "xudp_proxy_udp_443"}
+
+
+def host_input(h: dict) -> dict:
+    """A PasarGuard host as the panel READS it (GET) turned into what the panel WRITES (PUT / POST), as a copy. The xray mux comes back with the names xudpConcurrency and
+    xudpProxyUDP443 but is written with xudp_concurrency and xudp_proxy_udp_443: a host read and put again as it is silently resets both of them (found on a live 5.4.1 panel)."""
+    out = json.loads(json.dumps(h))
+    mux = out.get("mux_settings")
+    xray = mux.get("xray") if isinstance(mux, dict) else None
+
+    if isinstance(xray, dict):
+        for read, write in _MUX_READ_WRITE.items():
+            if read in xray:
+                v = xray.pop(read)
+                xray.setdefault(write, v)
+
+    return out
+
+
 def _host_put(c: dict, raw, h, marz: bool, key: str) -> None:
     if marz:
         call(c, "PUT", "/api/hosts", body=raw)
     else:
-        call(c, "PUT", "/api/host/" + httpx.QueryParams({"k": str(key)})["k"], body=h)
+        call(c, "PUT", "/api/host/" + httpx.QueryParams({"k": str(key)})["k"], body=host_input(h))
 
 
 def host_get(c: dict, key: str) -> dict:
@@ -1349,7 +1384,7 @@ def host_clone(c: dict, key: str) -> None:
         raw[str(key).rsplit("#", 1)[0]].append(cp)
         call(c, "PUT", "/api/hosts", body=raw)
     else:
-        call(c, "POST", "/api/host", body=cp)
+        call(c, "POST", "/api/host/", body=host_input(cp))                  # (with the slash: without it the panel only redirects)
 
 
 def host_delete(c: dict, key: str) -> None:

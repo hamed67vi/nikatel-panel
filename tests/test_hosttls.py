@@ -154,3 +154,35 @@ def test_the_api(client, marz, panel_row):
     assert client.post(f"/api/panels/{panel_row}/hosts-tls", json={**body, "failed": "x"}).status_code == 422
     assert client.post(f"/api/panels/{panel_row}/hosts-tls/plan", json={"keys": [], "port": 443}).status_code == 422
     assert client.post(f"/api/panels/{panel_row}/hosts-tls/remove").json()["removed"] == 2
+
+
+def test_a_pasarguard_copy_has_a_list_for_alpn_and_is_posted_with_the_slash(monkeypatch):
+    """Found on a live 5.4.1 panel: alpn as a text is refused (422) and POST /api/host without the slash is only redirected (nothing is made)."""
+    pg_host = {"id": 3, "remark": "WS", "address": ["dr.example.test"], "port": 80, "sni": [], "host": ["front.example.test"], "path": "/p", "security": "inbound_default", "alpn": None, "fingerprint": "",
+               "allowinsecure": None, "is_disabled": False, "inbound_tag": "VLESS WS", "priority": 2, "mux_settings": {"xray": {"enabled": True, "xudpConcurrency": 9, "xudpProxyUDP443": "allow"}}}
+    tw = hosttls.twin_of(pg_host)
+    assert tw["alpn"] == ["http/1.1"] and hosttls.twin_of(pg_host, alpn="h2,http/1.1")["alpn"] == ["h2", "http/1.1"] and hosttls.twin_of(pg_host, alpn="")["alpn"] == []
+    assert "id" not in tw and hosttls.twin_of({**pg_host, "address": "dr.example.test"})["alpn"] == "http/1.1"                       # a Marzban host keeps its text
+    posts = []
+
+    def call(c, method, path, **kw):
+        if (method, path) == ("GET", "/api/hosts"):
+            return [json.loads(json.dumps(pg_host))]
+
+        if (method, path) == ("GET", "/api/cores"):                                                          # PasarGuard keeps its inbounds in its cores (it has no /api/core/config)
+            return {"cores": [{"id": 1, "name": "main", "config": {"inbounds": [{"tag": "VLESS WS", "port": 8072, "streamSettings": {"network": "ws", "security": "none", "wsSettings": {"path": "/p"}}}]}},
+                              {"id": 2, "name": "second", "config": {"inbounds": [{"tag": "OTHER", "port": 1, "streamSettings": {"network": "tcp"}}]}}], "count": 2}
+
+        posts.append((method, path, kw.get("body")))
+        return {"id": 9}
+
+    monkeypatch.setattr(panels, "call", call)
+    monkeypatch.setattr(hosttls, "check_one", lambda *a, **kw: {"ok": True, "stage": "ok", "detail": "TLS valid", "cert": "", "issuer": "", "days": 60, "ms": 5, "ws": 101})
+    info = hosttls.inbound_info(hosttls._core({"id": 1, "type": "pasarguard"}))
+    assert sorted(info) == ["OTHER", "VLESS WS"] and info["VLESS WS"]["network"] == "ws"                                              # the inbounds of every core
+    assert hosttls._core({"id": 1, "type": "pasarguard", "x": 1}) != {} and hosttls.candidate(pg_host, info["VLESS WS"]) == ""
+    out = hosttls.create({"id": 1, "type": "pasarguard"}, ["3"])
+    assert out["made"] == 1 and out["on"] == 1
+    method, path, body = posts[-1]
+    assert (method, path) == ("POST", "/api/host/") and body["alpn"] == ["http/1.1"] and body["security"] == "tls" and body["port"] == 443
+    assert body["mux_settings"]["xray"] == {"enabled": True, "xudp_concurrency": 9, "xudp_proxy_udp_443": "allow"}

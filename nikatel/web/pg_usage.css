@@ -25,5 +25,5 @@ html body #page .pg-usage-busy { opacity: .55; transition: opacity .2s; }
 html body #page .pg-usage-nw { white-space: nowrap; }
 html body #page .pg-usage-stale { margin: 0 0 6px; padding: 5px 8px; border: 1px solid rgba(255,196,77,.45); border-radius: 8px; color: var(--warn); font-size: 12px; }
 /* the page of this tab is several blocks, taller than a screen: it scrolls (app.css switches the page scroll off for every page that has an .lbox, as the list pages fit the screen); the lists inside keep their own height */
-@media (min-width: 761px) { html body .main:has(.pg-usage) { overflow-y: auto; } }
+@media (min-width: 761px), (pointer: fine) { html body .main:has(.pg-usage) { overflow-y: auto; } }
 @media (min-width: 1560px) { html body #page .pg-usage-cols { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } html body #page .pg-usage-look { order: 0; } }

@@ -1,3 +1,6 @@
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from nikatel.services import core, panels
@@ -89,7 +92,7 @@ def test_pure_helpers():
 def test_user_body_rules():
     b = panels.user_body({"expire_date": "2027-01-31", "limit_gb": 2, "note": "x"}, 1800000000, "marzban")
     assert b["data_limit"] == 2 * 1024 ** 3 and isinstance(b["expire"], int) and b["note"] == "x"
-    assert panels.user_body({"expire_date": ""}, None, "pasarguard")["expire"] is None
+    assert panels.user_body({"expire_date": ""}, None, "pasarguard")["expire"] == 0                  # 0 removes the end; null would mean "leave it" to a PasarGuard panel
     assert panels.user_body({"expire_date": ""}, 0, "marzban")["expire"] == 0
     with pytest.raises(ValueError):
         panels.user_body({"expire_date": "31/01/2027"}, 0, "marzban")
@@ -216,3 +219,40 @@ def test_a_panels_subscription_is_found_in_configs_under_any_name():
     assert group_of_panel("https://pnl.example.com:8443/", "marzban-main", subs, {"Turkey pack"}) == "Turkey pack"     # another name, same panel
     assert group_of_panel("https://nothing.example.net", "marzban-main", subs, {"Turkey pack", "marzban-main"}) == "marzban-main"   # a group named like the panel
     assert group_of_panel("https://nothing.example.net", "marzban-main", subs, {"Turkey pack"}) == ""                    # not there: the test user is made
+
+
+# ------------------------------------------------------------------ found on a live PasarGuard 5.4.1 panel (2026-10-14)
+def test_a_redirect_is_an_error_not_a_quiet_nothing(monkeypatch):
+    """POST /api/host (no slash) got 307 from the panel, which makes nothing: the answer had no body and the call returned None as if it had worked."""
+    resp = SimpleNamespace(status_code=307, content=b"", headers={"location": "http://panel.example.test/api/host/"})
+    monkeypatch.setattr(panels.httpx, "request", lambda *a, **kw: resp)
+
+    with pytest.raises(panels.PanelError, match="redirected POST /api/host to http://panel.example.test/api/host/") as e:
+        panels._http({"url": "http://panel.example.test"}, "POST", "/api/host", token="t", body={})
+
+    assert e.value.code == 307
+
+
+def test_a_host_read_from_the_panel_is_put_back_with_the_names_the_panel_writes():
+    read = {"id": 4, "remark": "r", "mux_settings": {"sing_box": None, "clash": None, "xray": {"enabled": True, "concurrency": 8, "xudpConcurrency": 16, "xudpProxyUDP443": "allow"}}}
+    out = panels.host_input(read)
+    assert out["mux_settings"]["xray"] == {"enabled": True, "concurrency": 8, "xudp_concurrency": 16, "xudp_proxy_udp_443": "allow"}
+    assert read["mux_settings"]["xray"]["xudpConcurrency"] == 16                                                              # the original is not touched
+    assert panels.host_input(out) == out and panels.host_input({"remark": "x"}) == {"remark": "x"} and panels.host_input({"mux_settings": None}) == {"mux_settings": None}
+
+
+def test_clone_and_save_of_a_pasarguard_host_use_the_write_names_and_the_slash(monkeypatch):
+    calls = []
+    host = {"id": 7, "remark": "h", "address": ["a.example.test"], "inbound_tag": "T", "priority": 1, "mux_settings": {"xray": {"enabled": True, "xudpConcurrency": 4, "xudpProxyUDP443": "skip"}}}
+
+    def call(c, method, path, **kw):
+        calls.append((method, path, kw.get("body")))
+        return [json.loads(json.dumps(host))] if (method, path) == ("GET", "/api/hosts") else None
+
+    monkeypatch.setattr(panels, "call", call)
+    panels.host_clone({"id": 1, "type": "pasarguard"}, "7")
+    method, path, body = calls[-1]
+    assert (method, path) == ("POST", "/api/host/") and "id" not in body and body["remark"] == "h copy" and body["mux_settings"]["xray"] == {"enabled": True, "xudp_concurrency": 4, "xudp_proxy_udp_443": "skip"}
+    panels.host_save({"id": 1, "type": "pasarguard"}, "7", {"remark": "renamed"})
+    method, path, body = [x for x in calls if x[0] == "PUT"][-1]
+    assert path == "/api/host/7" and body["remark"] == "renamed" and body["mux_settings"]["xray"]["xudp_concurrency"] == 4

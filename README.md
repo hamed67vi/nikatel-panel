@@ -57,7 +57,7 @@ starts the panel on `https://<server>:9443`. Run it again to upgrade. Non-intera
 | **Dashboard** | health of everything, only the problems that exist *now*, one-click *Fix with AI* / *Fix all*, the event feed |
 | **Nodes** | Iran and foreign servers: CPU, RAM, disk, load, traffic every 2 minutes, 24 h charts, console, tools, the Iran gateway |
 | **Tunnels** | build, monitor every minute, alert, repair, test, update — five engines, 24 transports |
-| **Panels** | client configs on the probe (ping, speed, history, subscriptions) and the Marzban / PasarGuard panels (users, hosts, nodes, outbounds) |
+| **Users** | the Marzban / PasarGuard panels from one place: users, hosts, nodes, groups, cores, admins and roles, templates, settings, usage (every section of a PasarGuard panel's API) |
 | **Shop bot** | payments, orders, users, plans, categories, discounts, gift codes, broadcast, tickets, every text and switch |
 | **Mini App** | the customers' Telegram app: buy, renew, top up, tickets, referral |
 | **Settings** | account with two-step sign-in, alerts, encrypted backups, probe, repairs and AI, appearance, one-click update |
@@ -97,7 +97,14 @@ Primary probe plus standbys with automatic failover; one-click probe installer f
 **Marzban / PasarGuard** — status every 2 minutes, nodes with automatic reconnect and logs, users (search, status
 filter, a full edit window, bulk disable / enable / renew), hosts (edit, clone, disable), the Xray core's
 outbounds with backup, validation and automatic rollback, and a small test user per panel whose subscription is kept
-alive on the probe.
+alive on the probe. A **PasarGuard** panel is covered section by section (docs/api.md, docs/pasarguard-coverage.md):
+the whole user (groups, on hold, devices, next plan, owner, devices and subscription fetches), many users at once
+(shift end dates or data limits after a count, clean up expired ones, users from a template), every field of a host
+with the advanced settings checked key by key, cores (make, duplicate, delete, add an inbound from a form, REALITY keys),
+nodes (add from the Add server form, bulk actions, usage and latency), groups, admin roles, client templates, API keys,
+settings and usage. Every change is saved to a file first and can be put back.
+
+*The configs-on-the-probe section is switched off in the menu for now (one flag, `CONFIGS_UI` in `web/app.js`).*
 
 **Iran gateway** — a plain Xray pushed to an Iran server over SSH: ports forwarded to foreign nodes, borrowed
 vless / vmess / trojan / ss configs as the way out during internet cuts, modes auto / borrowed / direct, exit test per config.

@@ -61,6 +61,15 @@ def list_servers(role: str | None = None):
         return [ServerOut.model_validate(s) for s in db.scalars(q)]
 
 
+@router.get("/servers/panel-nodes")
+def server_panel_nodes():
+    """For every server of ours, the nodes of the panels (Marzban and PasarGuard) that run on it, as the health job saw them last: {"servers": {server id: [{panel_id, panel, type, node_id, name, address,
+    status, message, match}]}}. Matched by address, or through the DNS when one side is a name; a server that carries no node is not listed. No call to any panel is made."""
+    from ..services import pg_nodes
+
+    return {"ok": True, "servers": {str(k): v for k, v in pg_nodes.by_server().items()}}
+
+
 @router.get("/servers/where")
 def server_where(host: str = Query(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9.\-]*$")):
     """Where a server is before it is added: its country by the geo services, and the role that follows (iran / foreign); empty when no service answers."""

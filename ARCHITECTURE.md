@@ -79,9 +79,15 @@ nikatel/
     panels.py        Marzban / PasarGuard client: how a panel is connected (API key / token / sign in once, docs/panels.md), status, nodes, users, hosts, test config per panel
     hosttls.py       TLS copies of the plain WebSocket hosts of a panel (port 443, security tls, SNI = the Host header): the plan, a real test from the panel server (TCP, TLS with the SNI, WebSocket upgrade), the copies with a backup file, the removal
     pg_access.py     PasarGuard groups and user templates (roadmap #94), api/pg_access.py, web/pg_access.js
-    pg_nodes.py      PasarGuard nodes joined with the servers of this panel by address, api/pg_nodes.py, web/pg_nodes.js
-    pg_cores.py      PasarGuard cores (Xray configs): dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
+    pg_nodes.py      PasarGuard nodes joined with the servers of this panel by address (add / install a node from the Add server form, web/pg_srvnode.js), api/pg_nodes.py, web/pg_nodes.js
+    pg_nodes_extra.py  PasarGuard nodes, the rest of the API: bulk enable / disable / reset / reconnect / delete, usage and latency curves, user counts, clearing usage; routes in api/pg_nodes.py
+    pg_cores.py      PasarGuard cores (Xray configs): make / duplicate / delete, inbound add / change / delete with a REALITY builder, dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
     pg_admin.py      PasarGuard admins, API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
+    pg_roles.py      PasarGuard admin roles (permissions, limits, access, device rules) with backups and restore, api/pg_roles.py, web/pg_roles.js
+    pg_client_templates.py  PasarGuard client (subscription) templates - Clash, Xray, sing-box, User-Agent lists - with backups, api/pg_client_templates.py, web/pg_client.js
+    pg_system.py     PasarGuard System tab: version, resources, user counters and the other numbers the panel keeps, api/pg_system.py, web/pg_system.js
+    pg_users.py      PasarGuard users in full: the whole user (groups, on hold, devices limit, next plan, owner), devices, subscription fetches, bulk by name, shift of end dates and data limits, clean-up, users from a template; api/pg_users.py, web/pg_users.js
+    pg_hosts.py      PasarGuard hosts in full: every field, the advanced settings as checked JSON, make / change / clone / delete / bulk, backups; api/pg_hosts.py, web/pg_hosts.js
     pg_usage.py      Usage analytics of a PasarGuard / Marzban panel, read only: counters, usage by node and Tehran day, admin / user lookups, top users, Jalali calendar; api/pg_usage.py, web/pg_usage.js
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side, one action / a new user on every panel, the signed merged subscription link (/sub/<token>, api/sub.py)
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)

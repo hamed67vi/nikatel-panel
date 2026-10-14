@@ -144,3 +144,79 @@ html body #modal .pg-admin-form2 input:not([type="checkbox"]), html body #modal 
 html body #modal .pg-admin-urange input { min-height: 0; }html body #page .pg-admin-exp { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.15; }
 html body #page .pg-admin-exp small { font-size: 10.5px; }
 html body #page .pg-admin-acts select.pg-admin-menu { width: 82px; }
+/* ---- the roles view of the Admins tab (pg_roles.js) */
+html body #modal .pg-roles-form .pg-roles-lim { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
+html body #modal .pg-roles-form .pg-roles-lim .kf > span:first-child { width: auto; flex: 1 1 auto; }
+html body #modal .pg-roles-form .pg-roles-lim input { width: 96px; flex: none; }
+html body #modal .pg-roles-form .pg-roles-h { margin: 8px 0 2px; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
+html body #modal .pg-roles-form .pg-roles-list { display: flex; flex-wrap: wrap; gap: 4px 16px; max-height: 108px; overflow: auto; padding: 4px 2px; }
+html body #modal .pg-roles-form .pg-roles-pick label.chk { height: 26px; font-size: 12.5px; }
+/* ---- the client templates view of the Templates tab (pg_client.js) */
+html body #modal .pg-ctpl-form .pg-ctpl-ta { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 11.5px; color: var(--mut); }
+html body #modal .pg-ctpl-form .pg-ctpl-ta textarea { width: 100%; box-sizing: border-box; min-height: 320px; padding: 10px 12px; border-radius: 12px; font: 12px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); tab-size: 2; white-space: pre; resize: vertical; }
+/* ---- the Users window and tools of a PasarGuard panel (pg_users.js) */
+html body #page select.pgu-tools { height: 32px; width: 104px; border-radius: 10px; }
+html body #modal .modal.pgu { max-width: 840px; }
+html body #modal .modal.pgu-tool { max-width: 580px; }
+html body #modal .pgu [hidden], html body #modal .pgu-tool [hidden] { display: none !important; }
+html body #modal .pgu .pgu-groups, html body #modal .pgu-tool .pgu-groups { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 112px; overflow: auto; padding: 4px 0; min-width: 0; }
+html body #modal .pgu label.chk, html body #modal .pgu-tool label.chk { height: 26px; font-size: 12.5px; }
+html body #modal .pgu .pgu-grp .pgu-groups { max-height: 150px; }
+html body #modal .pgu .kv2.kf input[type="number"], html body #modal .pgu .kv2.kf input[type="date"] { width: 150px; flex: none; }
+html body #modal .pgu .pgu-plan .kv2.kf select { width: 150px; flex: none; }
+html body #modal .pgu .pgu-act { margin: 0 0 8px; }
+html body #modal .pgu .pgu-act > h5 { text-transform: none; letter-spacing: 0; }
+html body #modal .pgu .pg-admin-seg { display: inline-flex; gap: 4px; margin: 0; }
+html body #modal .pgu .pg-admin-seg button { height: 26px; padding: 0 11px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--mut); background: var(--panel); border: 1px solid var(--line); box-shadow: none; }
+html body #modal .pgu .pg-admin-seg button.on { color: var(--text); background: rgba(122, 167, 240, .17); border-color: rgba(122, 167, 240, .5); }
+html body #modal .pgu #pgu-actbody { max-height: 176px; overflow: auto; }
+html body #modal .pgu .pgu-tbl { width: 100%; table-layout: fixed; }
+html body #modal .pgu .pgu-tbl th, html body #modal .pgu .pgu-tbl td { padding: 3px 8px; font-size: 12.5px; }
+html body #modal .pgu .pgu-tbl td.name { text-align: left; }
+html body #modal .pgu .pgu-foot { display: flex; justify-content: flex-end; padding-top: 6px; }
+html body #modal .pgu-tool .pgu-p { margin: 0 0 8px; font-size: 12.5px; }
+html body #modal .pgu-tool .pgu-chips { display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: flex-end; }
+html body #modal .pgu-tool .pgu-two { display: inline-flex; align-items: center; gap: 8px; }
+html body #modal .pgu-tool .pgu-two i { font-style: normal; color: var(--mut); }
+html body #modal .pgu-tool .kv2.kf input[type="number"], html body #modal .pgu-tool .kv2.kf input[type="date"] { width: 150px; flex: none; }
+html body #modal .pgu-tool .kv2.kf input:not([type="checkbox"]):not([type="number"]):not([type="date"]), html body #modal .pgu-tool .kv2.kf select { flex: 1 1 auto; min-width: 0; }
+html body #modal .pgu-tool .pgu-res { margin: 8px 0; }
+html body #modal .pgu-tool .pgu-count { padding: 7px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; }
+html body #modal .pgu-tool .pgu-count b { margin-right: 4px; font-size: 17px; }
+html body #modal .pgu-tool .pgu-count.none { color: var(--mut); }
+html body #modal .pgu-tool .pgu-names { display: flex; flex-wrap: wrap; gap: 4px 6px; max-height: 150px; overflow: auto; margin-top: 6px; }
+html body #modal .pgu-tool .pgu-names span { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; }
+html body #modal .pgu-tool .pgu-links { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 6px; font-size: 11.5px; color: var(--mut); }
+html body #modal .pgu-tool .pgu-links textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 12px; font: 12px/1.45 var(--mono, ui-monospace, Menlo, Consolas, monospace); white-space: pre; resize: vertical; }
+html body #modal .pgu .pgu-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+html body #modal .pgu .pgu-col > .sbox { margin: 0; }
+html body #modal .pgu .pgu-row { margin: 0 0 8px; }
+html body #modal .pgu .pgu-meta { display: block; padding-top: 5px; font-size: 11.5px; }
+html body #modal .pgu .ue-account .kv2, html body #modal .pgu .pgu-plan .kv2 { min-height: 30px; padding: 1px 0; }
+html body #modal .pgu .ue-usage .kv2 { min-height: 26px; padding: 0; }
+html body #modal .pgu-tool .kv2.kf > div.pgu-chips, html body #modal .pgu-tool .kv2.kf > div.pgu-groups { flex-wrap: wrap; white-space: normal; overflow: visible; justify-content: flex-start; text-align: left; align-items: center; }
+html body #modal .pgu-tool .kv2.kf > .pgu-two { flex: 1 1 auto; justify-content: flex-end; min-width: 0; }
+html body #modal .pgu-tool .pgu-two input[type="date"] { width: 128px; min-width: 0; }
+
+/* ---- the host window of a PasarGuard panel (pg_hosts.js) */
+html body #modal .modal.pgh { max-width: 860px; }
+html body #modal .pgh [hidden] { display: none !important; }
+html body #modal .pgh .kv2.kf > div.pgh-chips { display: flex; flex-wrap: wrap; gap: 2px 12px; white-space: normal; overflow: visible; justify-content: flex-start; text-align: left; align-items: center; }
+html body #modal .pgh label.chk { height: 26px; font-size: 12.5px; }
+html body #modal .pgh .kv2.kf textarea { flex: 1 1 auto; min-width: 0; min-height: 34px; padding: 6px 10px; border-radius: 10px; resize: vertical; font: inherit; }
+html body #modal .pgh .kv2.kf input[type="number"] { width: 150px; flex: none; }
+html body #modal .pgh .kv2.kf select { flex: 1 1 auto; min-width: 0; }
+html body #modal .pgh .pgh-row { margin: 0 0 8px; }
+html body #modal .pgh details.sbox > summary { cursor: pointer; user-select: none; list-style: none; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+html body #modal .pgh details.sbox > summary::-webkit-details-marker { display: none; }
+html body #modal .pgh details.sbox > summary::before { content: "▸"; color: var(--mut); width: 12px; }
+html body #modal .pgh details.sbox[open] > summary::before { content: "▾"; }
+html body #modal .pgh details.sbox[open] > summary { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+html body #modal .pgh .pgh-a { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-top: 1px solid var(--line); }
+html body #modal .pgh .pgh-a:first-of-type { border-top: 0; }
+html body #modal .pgh .pgh-ah { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+html body #modal .pgh .pgh-ah small { flex: 1 1 160px; min-width: 0; }
+html body #modal .pgh .pgh-a textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 10px; font: 12px/1.45 var(--mono, ui-monospace, Menlo, Consolas, monospace); white-space: pre; resize: vertical; }
+html body #modal .pgh .pgh-a textarea.bad { border-color: var(--bad, #ff453a); }
+html body #modal .pgh .frm-act .sp { flex: 1; }
+html body #modal .pgh form.pgh-form { display: block !important; }

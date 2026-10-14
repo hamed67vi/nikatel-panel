@@ -47,7 +47,7 @@ html body #modal .pg-access-frm .ob2-sw:has(input:checked) i, html body #modal .
 html body #modal .pg-access-frm .ob2-sw:has(input:checked) i::after, html body #modal .pg-access-pick .ob2-sw:has(input:checked) i::after { transform: translateX(18px); }
 html[data-mode="light"] body #modal .pg-access-frm .ob2-sw i, html[data-mode="light"] body #modal .pg-access-pick .ob2-sw i { background: #c3cde0; }
 
-@media (max-width: 760px) {
+@media (max-width: 760px) and (pointer: coarse) {
   html body #page .pg-access .pg-bar input[type=search] { width: 100%; flex: 1 1 100%; }
   html body #modal .pg-access-picklist { grid-template-columns: minmax(0, 1fr); }
 }

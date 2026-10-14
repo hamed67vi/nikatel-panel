@@ -1,0 +1,68 @@
+/* fluid.css - the panel SHRINKS instead of re-flowing (the owner's rule, 2026-10-14): a narrower window makes the boxes smaller; rows stay rows and columns stay
+   columns; a bar of chips or tabs never becomes two rows; a table keeps its columns and cuts a long text with "…". Loaded last, so it wins over app.css and the tab sheets.
+   A phone (a touch screen up to 760 px) has mobile.css instead: every block here is for "not a phone".
+   The steps follow the width of the window: 1400, 1180, 1000, 860, 720. Under 560 px the page keeps its size and scrolls sideways (nothing is squeezed to nothing). */
+
+html body { min-width: 560px; }
+
+/* ---- Panels: the bar on top. One row: "PANELS", the boxes of the panels (they share what is left and shrink, down to a dot and a cross), the round +, then the facts and the buttons.
+   Whatever does not fit goes in this order: the traffic, the words of the buttons, the words before the numbers, the nodes (the bar is its own container, so it follows its own width) */
+html body #page .pn-bar { container: pnbar / inline-size; }
+html body #page .pn-bar .dns-r.pn-one { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; width: 100%; min-width: 0; padding-bottom: 0; border-bottom: 0; }
+html body #page .pn-bar .pn-one > .dns-lab { flex: none; margin-right: 0; }
+html body #page .pn-chips { display: flex; flex: 0 1 auto; gap: 6px; min-width: calc(var(--n, 1) * 38px + (var(--n, 1) - 1) * 6px); overflow: hidden; }
+html body #page .pn-chips .dns-cw { flex: 0 1 auto; min-width: 38px; }
+html body #page .pn-chips .dns-cw > .dns-chip { width: 100%; min-width: 0; overflow: hidden; padding: 0 24px 0 9px; gap: 7px; }
+html body #page .pn-chips .dns-x { right: 4px; }
+html body #page .pn-chips .dns-chip b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pn-bar .pn-one > .pn-add { flex: none; }
+html body #page .pn-bar .pn-one > .sp { flex: 1 1 0; min-width: 0; }
+html body #page .pn-facts { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 8px; }
+html body #page .pn-facts > * { flex: none; margin: 0; }
+html body #page .pn-facts .dns-stats { gap: 6px; }
+html body #page .pn-facts .lab { font-style: normal; }
+html body #page .pn-facts button { display: inline-flex; align-items: center; gap: 6px; }
+html body #page .pn-facts button .ic { font-style: normal; }
+/* ---- Panels: the tabs and the tools under the bar are ONE row too (the tabs shrink and cut their words, the search takes what is left) */
+html body #pn-body > .pn-bars { flex-wrap: nowrap; min-width: 0; }
+html body #pn-body > .pn-bars > .toolbar.pn-tabs { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+html body #pn-body .pn-tabs .tabs { display: flex; flex-wrap: nowrap; min-width: 0; gap: 4px; }
+html body #pn-body .pn-tabs .tabs button { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 clamp(6px, 1.1vw, 14px); }
+html body #pn-body > .pn-bars > .toolbar.pn-sb { flex: 1 1 120px; min-width: 90px; width: auto; }
+html body #pn-body .pn-sb input { width: 100%; min-width: 0; }
+html body #pn-body > .pn-bars > .toolbar:not(.pn-tabs):not(.pn-sb) { flex: 0 1 auto; min-width: 0; }
+html body #pn-body .pn-bars select { min-width: 0; max-width: 100%; }
+/* seven panels or more: only the lit box keeps its name, the others are a dot (the name is in the tip), the cross shows when the pointer is on the box */
+html body #page .pn-chips.many { min-width: calc(var(--n, 1) * 26px + (var(--n, 1) - 1) * 6px); }
+html body #page .pn-chips.many .dns-cw { min-width: 26px; }
+html body #page .pn-chips.many .dns-cw:has(> .dns-chip.on) { flex: 0 0 auto; }
+html body #page .pn-chips.many .dns-cw > .dns-chip { padding: 0 4px 0 9px; }
+html body #page .pn-chips.many .dns-x { display: none !important; }
+html body #page .pn-chips.many .dns-cw:hover .dns-x { display: inline-grid !important; right: 2px; background: #1a2036 !important; }
+@container pnbar (max-width: 1100px) { html body #page .pn-facts .st-traffic { display: none !important; } }
+@container pnbar (max-width: 920px) { html body #page .pn-facts button .bt { display: none !important; } html body #page .pn-facts button { padding: 0 11px; } html body #page .pn-bar .pn-one { gap: 6px; } html body #page .pn-facts .pill .up { display: none; } }
+@container pnbar (max-width: 760px) { html body #page .pn-facts .dns-stat .lab { display: none !important; } html body #page .pn-bar .pn-one > .dns-lab { display: none !important; } html body #page .pn-facts .pn-auth { max-width: 74px; overflow: hidden; text-overflow: ellipsis; } }
+@container pnbar (max-width: 600px) { html body #page .pn-facts .st-nodes, html body #page .pn-facts .pn-auth { display: none !important; } }
+
+/* ---- the frame: under 1180 px the side bar is a rail of icons (the labels are in the tooltips), the head and the status line get slimmer */
+@media (max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse))) {
+  html body .app { grid-template-columns: 56px minmax(0, 1fr); gap: 8px; padding: 8px; }
+  html body .side { padding: 8px 4px; gap: 10px; align-items: center; border-radius: 18px; }
+  html body .side .brand { justify-content: center; padding: 0; margin: 0; gap: 0; }
+  html body .side .brand > div:not(.logo-orb) { display: none; }
+  html body .side .brand .logo-orb { margin: 0; }
+  html body .side .brand .logo-orb svg { width: 36px; height: 36px; }
+  html body #nav { width: 100%; gap: 4px; }
+  html body #nav a { justify-content: center; width: 100%; height: 40px; padding: 0; gap: 0; }
+  html body #nav a > span, html body #nav a .cnt { display: none; }
+  html body #nav a:hover { transform: none; }
+  html body #nav a::before { top: 12px; bottom: 12px; }
+  html body .side-foot { width: 100%; align-items: center; padding: 0; gap: 6px; }
+  html body .side-foot .side-ver, html body .side-foot .badge { display: none; }
+  html body #logout { width: 100%; justify-content: center; padding: 0; font-size: 0; }
+  html body #logout i { font-size: 16px; }
+  html body .head { height: 52px; padding: 0 14px; margin-bottom: 8px; border-radius: 16px; gap: 10px; }
+  html body .head h1 { font-size: 20px; }
+  html body .head p#subtitle { display: none; }
+  html body .main { padding: 2px 4px 14px 2px; }
+}

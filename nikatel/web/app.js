@@ -165,16 +165,18 @@ const INFO = {
 const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actions: "tunnels", events: "nodes", jobs: "nodes", logs: "nodes", panels: "configs"};
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
+const CONFIGS_UI = false;      // the Configs list is switched off and hidden (no tab, no card, no problem rows) until the project grows (the owner, 2026-10-14, roadmap #98); the probe and the routes keep running; set true to bring it back
 const SUB = {
   nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
-  configs: [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."], ["panels", "🧩 Panels", "Your Marzban and PasarGuard panels: status, nodes, users, hosts and core outbounds. Each panel can keep a test config on the probe."]],
+  configs: [...(CONFIGS_UI ? [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."]] : []), ["panels", "🧩 Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."]],      // the page is called Users; with the Configs tab off it has one tab, so the tab bar is not drawn
 };
+const subBarOn = page => !!SUB[page] && SUB[page].length > 1;      // a page with a single tab has no tab bar
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = SUB[page]; if (!list) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur && x[3] !== "off") ? cur : list[0][0]; }       // a tab that is switched off is never the current one
 function renderSub() {
   const list = SUB[state.page], box = $("#subnav");
-  box.classList.toggle("hidden", !list);
+  box.classList.toggle("hidden", !subBarOn(state.page));
   if (!list) return;
   const cur = sub(state.page);
   const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
@@ -209,7 +211,7 @@ const TITLE_ANIM = {
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
   if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
-  $("#subnav").classList.toggle("hidden", !SUB[page]);
+  $("#subnav").classList.toggle("hidden", !subBarOn(page));
   refresh();
 }
 /* ---- Server Doctor: what is wrong with a server, in plain words, and what to do about it */
@@ -261,11 +263,14 @@ document.querySelectorAll("#nav a").forEach(a => a.onclick = () => { if (!a.clas
 
 /* every list (a table or the config cards) sits in a box of a fixed height with its own scrollbar and a header that stays on top; done once for whatever a page draws, also what loads later */
 let pendScroll = null;   // the scroll positions a refresh wants back: the list boxes are made a moment after the page is drawn, so they are put back once those exist
+/* A phone (a touch screen up to 760 px) has the layout of its own in mobile.css: one column, a tab bar at the bottom, tables as cards. A desktop window that is only made narrow does NOT:
+   it keeps the desktop layout and everything shrinks (fluid.css: boxes get smaller, rows stay rows, columns stay columns). */
+function isPhone() { return matchMedia("(max-width: 760px) and (pointer: coarse)").matches; }
 (() => {
   const pg = $("#page"); if (!pg) return;
   let q = 0;
-  const fit = () => { if (innerWidth <= 760) return; const fixed = !!pg.querySelector(".cf-top"); pg.querySelectorAll(".lbox").forEach(b => { const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
-  const labelCells = () => { if (innerWidth > 760) return; pg.querySelectorAll("table.tbl").forEach(tb => { const hs = [...tb.querySelectorAll("thead th")].map(h => h.textContent.trim()); if (!hs.length) return; tb.querySelectorAll("tbody tr").forEach(tr => { let i = 0; for (const td of tr.children) { if (td.tagName !== "TD") continue; if (!td.hasAttribute("data-l")) td.setAttribute("data-l", hs[i] || ""); i += +td.getAttribute("colspan") || 1; } }); }); };
+  const fit = () => { if (isPhone()) return; const fixed = !!pg.querySelector(".cf-top"); pg.querySelectorAll(".lbox").forEach(b => { const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
+  const labelCells = () => { if (!isPhone()) return; pg.querySelectorAll("table.tbl").forEach(tb => { const hs = [...tb.querySelectorAll("thead th")].map(h => h.textContent.trim()); if (!hs.length) return; tb.querySelectorAll("tbody tr").forEach(tr => { let i = 0; for (const td of tr.children) { if (td.tagName !== "TD") continue; if (!td.hasAttribute("data-l")) td.setAttribute("data-l", hs[i] || ""); i += +td.getAttribute("colspan") || 1; } }); }); };
   const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); labelCells(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
   window.addEventListener("resize", () => requestAnimationFrame(fit));
@@ -435,13 +440,14 @@ window.dqPick = i => {
 };
 /* the numbers at a glance, beside the search; and a row of free slots under the cards, kept empty for whatever is added to the dashboard later */
 const dashKpis = (o, cfg, cUp) => {
-  const nProb = (o.tunnels.down || 0) + (o.tunnels.degraded || 0) + (o.servers.offline || 0) + (cfg.configs.length - cUp);
+  const nProb = (o.tunnels.down || 0) + (o.tunnels.degraded || 0) + (o.servers.offline || 0) + (CONFIGS_UI ? cfg.configs.length - cUp : 0);
   const k = (label, val, cls, to) => `<a class="kpi" ${to ? `onclick="go('${to}')"` : ""}><i class="dash-dot ${cls}"></i><span><b>${val}</b><small>${label}</small></span></a>`;
-  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Servers online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs")}${k("Problems", nProb, nProb ? "red" : "green", "")}</div>`;
+  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Servers online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${CONFIGS_UI ? k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs") : ""}${k("Problems", nProb, nProb ? "red" : "green", "")}</div>`;
 };
 const dashFree = () => `<div class="dash-free"><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div></div>`;
 PAGES.dashboard = async () => {
-  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=" + state.actLimit), api("/api/configs").catch(() => ({configs: []})), api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
+  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=" + state.actLimit), CONFIGS_UI ? api("/api/configs").catch(() => ({configs: []})) : {configs: []}, api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
+  if (!CONFIGS_UI) ev.events = ev.events.filter(e => e.domain !== "configs");      // what the probe says about configs is not shown while the Configs list is off
   state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.serversCache = srv;
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
  
@@ -455,7 +461,7 @@ PAGES.dashboard = async () => {
     <div class="dash-cols ${state.actBig ? "exp" : ""}"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " unstable" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
-      ${hrow("VLESS / VMess connectivity", cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "")}
+      ${CONFIGS_UI ? hrow("VLESS / VMess connectivity", cfg.configs.length - cUp ? (cfg.configs.length - cUp) + " down on the probe" : "all answer from inside Iran", `${cUp} / ${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : cfg.configs.length ? "red" : "") : ""}
       ${hrow("Reachable from Iran", "clean filter check", `${clean.length} / ${foreign.length}`, bad.length ? "red" : clean.length === foreign.length && foreign.length ? "green" : "yellow")}
       ${hrow("Last filter checks", checked.length ? checked.sort((a, b) => b.extra.iran_filter.checked_at - a.extra.iran_filter.checked_at).slice(0, 3).map(s => esc(s.name) + (s.extra.iran_filter.level === "clean" ? " ✓" : " ✕")).join(" · ") : "none yet", `${bad.length} filtered`, bad.length ? "red" : checked.length ? "green" : "")}
       ${hrow("Background jobs", o.jobs.failing.length ? "failing: " + esc(o.jobs.failing.join(", ")) : o.jobs.stale.length ? "stale: " + esc(o.jobs.stale.join(", ")) : "all running", `${o.jobs.total}`, o.jobs.failing.length ? "red" : o.jobs.stale.length ? "yellow" : "green")}
@@ -479,7 +485,7 @@ function problemsCard(o, tl, srv, configs, filtered) {
   tl.filter(t => t.enabled !== false && (t.state === "down" || t.state === "degraded")).sort((a, b) => (a.state === "down" ? 0 : 1) - (b.state === "down" ? 0 : 1))
     .forEach(t => row(t.state === "down" ? "bad" : "warn", `Tunnel ${esc(t.name)} <span class="mut">${esc(stName(t.state))}</span>`, t.last_error || `${t.iran_name} ⇄ ${t.foreign_name}`, fix("apDiagnose", t.id), `go('tunnels');state.open=${t.id};refresh()`));
   srv.filter(srvProblem).forEach(s => { const f = s.facts || {}; row(s.online === false ? "bad" : "warn", `Server ${esc(s.name)} <span class="mut">${s.online === false ? "offline" : "overloaded"}</span>`, s.online === false ? (s.last_error || "does not answer over SSH") : `CPU ${f.cpu ?? "—"} % · RAM ${f.ram ?? "—"} % · disk ${f.disk ?? "—"} %`, `<button class="sm" onclick="checkServer(${s.id})" title="Ask the server now">Check now</button>`, `go('nodes');state.tab='${s.role}';localStorage.setItem('nk.tab','${s.role}');state.open=${s.id};refresh()`); });
-  const down = configs.filter(c => c.status === "down");
+  const down = CONFIGS_UI ? configs.filter(c => c.status === "down") : [];
   down.slice(0, state.pbAll ? 999 : 5).forEach(c => row("bad", `Config ${esc(c.name)} <span class="mut">down</span>`, c.last_error || "the probe gets no answer through it", fix("cfDiagnose", c.id), `go('configs');cf.open=${c.id};refresh()`));
   if (down.length > 5) rows.push(`<div class="pb-more"><a onclick="pbAll()">${state.pbAll ? "show fewer" : `and ${down.length - 5} more configs are down → show them`}</a> · <a onclick="go('configs')">open the list</a></div>`);
   srv.filter(s => s.role === "foreign" && s.enabled && ((s.extra || {}).reach_ir || {}).level === "bad").forEach(s => { const r = s.extra.reach_ir; row("bad", `Server ${esc(s.name)} <span class="mut">bad route from Iran</span>`, `${r.bad} of ${r.total} Iran servers lose packets toward it (worst ${r.worst} %) - the tunnels on it suffer; the fault is this server or its provider`, `<button class="sm" onclick="go('tunnels');setSub('tunnels','test')" title="Compare the tunnel types to this server">Test</button>`, `go('nodes');state.tab='foreign';localStorage.setItem('nk.tab','foreign');state.open=${s.id};refresh()`); });
@@ -527,8 +533,8 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
   return `<form class="frm srv-form2" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
     <div class="sgrid two srv-two">
       <div class="sbox"><h5><i>🖥</i>Server</h5>
-        ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" value="${esc(s ? s.name : "")}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)">`)}
-        ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : "")}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
+        ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" value="${esc(s ? s.name : ((state.prefill || {}).name || ""))}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)" oninput="pgSrvMirror(this.form)">`)}
+        ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : ((state.prefill || {}).host || ""))}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
         <label class="kv2 kf bf"><span>Where</span><input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></label>
         <label class="kv2 kf bf"><span>Checked</span><span class="chkline"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> by the panel</span></label></div>
       <div class="sbox"><h5><i>🔑</i>SSH access</h5>
@@ -541,9 +547,11 @@ const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how
     <div class="sbox srv-after"><h5><i>⚙</i>${s ? "Install after saving" : "Install after adding"}<small>optional · needs root · the server is ${s ? "saved" : "added"} first</small></h5>
       <div class="srv-opts">
         <label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>
-        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="this.closest('.srv-after').querySelectorAll('.x-cert, .x-cert-save').forEach(e => { e.classList.toggle('off', !this.checked); e.querySelectorAll('textarea, input').forEach(i => { i.disabled = !this.checked; }); })"> Marzban node</label></div>
+        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="srvNodeKind(this)"> Marzban node</label>
+        ${window.pgSrvTick ? pgSrvTick() : ""}</div>
       <label class="x-cert off">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" disabled spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
-      <label class="x-cert-save off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label></div>
+      <label class="x-cert-save off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label>
+      ${window.pgSrvBox ? pgSrvBox() : ""}</div>
     <div class="sbar bld-foot"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<span class="sp"></span>
       <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install acts on the server itself." : "Without a password the panel's key must already be in the server's authorized_keys (Settings shows the key)."}</small></div>
   </form>`;
@@ -582,12 +590,11 @@ PAGES.servers = async () => {
     if (ts.length) { const bad = ts.filter(t => t.state === "down"); return bad.length ? mk(bad.length === ts.length ? "GRE ✕" : "GRE ✓/✕", ts.map(t => t.name + ": " + t.state).join(", ")) : ""; }
     const g = (s.extra || {}).gre; return g && !g.ok && g.links ? mk("GRE ✕", g.detail + " · checked " + ago(g.at) + " ago") : "";
   };
-  // Marzban / PasarGuard nodes that sit on this server's address: "Panel ✓ name" chips next to the status
+  // Marzban / PasarGuard nodes that run on this server (matched by this panel by address, or through the DNS): the panel's name as a chip in the Panel column; a click opens that panel (pg_srvnode.js)
   const pnl = fast ? state.panelsCache : await api("/api/panels").catch(() => ({panels: []}));
   state.panelsCache = pnl;
-  const byIp = {};
-  (pnl.panels || []).forEach(p => (p.nodes || []).forEach(n => { const ip = String(n.address || "").trim(); if (ip) (byIp[ip] = byIp[ip] || []).push({panel: p.name, status: n.status, name: n.name}); }));
-  const chips = s => (byIp[s.host] || []).map(x => { const ok = x.status === "connected"; return `<span class="mchip ${ok ? "ok" : "bad"}" title="Node ${esc(x.name)} in panel ${esc(x.panel)}: ${esc(x.status || "?")}">${esc(x.panel)}</span>`; }).join("");
+  if (!fast && window.pgSrvLoad) await pgSrvLoad();
+  const chips = s => window.pgSrvChips ? pgSrvChips(s) : "";
   const pbar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<div class="pbar"><span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b>${v}%</b></div>`;
   const foreignTab = state.tab === "foreign";
   if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (state.page === "nodes") refresh(); }, 3000); }
@@ -643,7 +650,7 @@ PAGES.servers = async () => {
 function srvModal(s) {   // while the edit form is open the header keeps only the name and the switch: the form has Save and Back
   const f = s.facts || {}, editing = state.edit === s.id, on = s.enabled !== false;
   const sw = `<label class="srv-sw ${on ? "on" : ""}" title="${on ? "Enabled: the panel checks this server. Switch off to disable it: it is not checked and gives no alerts (nothing changes on the server)." : "Disabled: the panel does not check this server. Switch on to enable it."}"><input type="checkbox" ${on ? "checked" : ""} onchange="srvToggle(${s.id})" aria-label="Enable or disable ${esc(s.name)}"><i></i><b>${on ? "Enabled" : "Disabled"}</b></label>`;
-  const who = `<span class="mh-who"><span class="mh-flag">${flagImg(s.role === "iran" ? "IR" : s.country) || `<small class="flgt">${esc(String(s.country || "").toUpperCase())}</small>`}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span></span><span class="mh-txt"><b>${esc(s.name)}</b><span class="mh-meta"><span class="mono ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span><em class="mh-tag">${esc(s.role)}</em>${f.hostname ? `<span class="mh-host">${esc(f.hostname)}</span>` : ""}</span></span></span>`;
+  const who = `<span class="mh-who"><span class="mh-flag">${flagImg(s.role === "iran" ? "IR" : s.country) || `<small class="flgt">${esc(String(s.country || "").toUpperCase())}</small>`}<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}"></span></span><span class="mh-txt"><b>${esc(s.name)}</b><span class="mh-meta"><span class="mono ip-copy mh-ip" onclick="copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</span><em class="mh-tag">${esc(s.role)}</em>${f.hostname ? `<span class="mh-host">${esc(f.hostname)}</span>` : ""}${window.pgSrvChips ? pgSrvChips(s) : ""}</span></span></span>`;
   const acts = `${sw}${editing ? "" : `<i class="mh-sep"></i><button class="sm" ${s.online === false && s.enabled !== false ? 'disabled title="The server is off or does not answer"' : `onclick="srvConsole(${s.id})" title="Run a command on the server, with presets"`}><i class="bi">${SI.term}</i>Console</button><button class="sm" onclick="editServer(${s.id})" title="Name, address, SSH user, port"><i class="bi">${SI.edit}</i>Edit</button><button class="sm danger" onclick="deleteServer(${s.id}, '${esc(s.name)}')" title="Remove it from the panel (nothing changes on the server)"><i class="bi">${SI.trash}</i>Delete</button>`}<i class="mh-sep"></i>`;
   showModal(who, `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide srvwin", acts);      // details and edit form are ONE window of ONE fixed size (see .srvwin): the charts area is reserved, so nothing grows when the charts arrive, and Edit / Back / Console never shrink it
   const mdl = $("#modal .modal"); if (mdl) { mdl.classList.toggle("editing", editing); const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // Edit / Back / Console never make the window shorter than it has been
@@ -793,21 +800,18 @@ function installHtml(s) {
       <div class="ins-node"><div class="ins-h"><span class="ins-sq mz"></span><b>Marzban node</b></div>
         <div class="ins-field"><textarea id="ins-cert-${s.id}" rows="3" spellcheck="false" placeholder="Certificate from the Marzban panel (Nodes → Add node), from BEGIN to END">${esc(window.NODE_CERT || "")}</textarea><button type="button" class="ins-mini" title="Paste the certificate from the clipboard" onclick="insPaste(${s.id})">${insIc("doc")}</button></div>
         <div class="ins-act">${btn("copy", "Copy", `insCopy(${s.id})`)}<span class="sp"></span>${btn("dl", "Install node", `srvInstall(${s.id}, 'marzban_node')`, "pri")}</div></div>
-      <div class="ins-node"><div class="ins-h"><span class="ins-sq pg"></span><b>PasarGuard node</b></div>
-        <div class="ins-field"><input id="ins-key-${s.id}" type="password" autocomplete="off" spellcheck="false" placeholder="Node API key from the PasarGuard panel (a UUID)"><button type="button" class="ins-mini" title="Show or hide the key" onclick="insEye(${s.id})">${insIc("eye")}</button></div>
-        <div class="ins-act">${btn("doc", "Show certificate", `srvPgCert(${s.id})`)}<span class="sp"></span>${btn("dl", "Install node", `srvInstall(${s.id}, 'pasarguard_node')`, "pri")}</div></div>
+      ${window.pgSrvCard ? pgSrvCard(s) : ""}
     </div>
     <div class="ins-rows">
       ${s.role === "foreign" ? row("shield", "Abuse-Defender", `<span class="pill ins-chip ${abuseOn ? "ok" : "off"}"><i></i>${abuseOn ? "Installed" : "Not installed"}</span>`, btn("dl", "Install", `srvAbuse(${s.id}, 'install')`, "", abuseOn) + btn("trash", "Remove", `srvAbuse(${s.id}, 'remove')`, "danger", !abuseOn), "Drops traffic to abused address ranges") : ""}
       ${row("up", "Update the server", '<span class="pill ins-chip off">apt</span>', btn("refresh", "Update", `srvInstall(${s.id}, 'os_update')`, "pri"), "apt update and upgrade of the system packages; the server is not rebooted")}
     </div></div>`;
 }
-window.insEye = id => { const i = $(`#ins-key-${id}`); if (i) i.type = i.type === "password" ? "text" : "password"; };
 window.insCopy = id => { const t = (($(`#ins-cert-${id}`) || {}).value || "").trim(); if (!t) { toast("Nothing to copy: paste the certificate first", "bad"); return; } try { navigator.clipboard.writeText(t); toast("✓ Copied", "ok"); } catch (e) { toast("✕ The browser did not allow the copy", "bad"); } };
 window.insPaste = async id => { try { const t = await navigator.clipboard.readText(); const a = $(`#ins-cert-${id}`); if (a && t) a.value = t.trim(); } catch (e) { toast("✕ The browser did not allow reading the clipboard: paste with Ctrl+V", "bad"); } };
 const INS_LABEL = {marzban_node: "Marzban node", pasarguard_node: "PasarGuard node", os_update: "system update"};
 window.srvPgCert = async id => {      // the public certificate the PasarGuard node made: shown to copy into the PasarGuard panel
-  try { const r = await api(`/api/servers/${id}/pasarguard-cert`); const ta = $(`#ins-key-${id}`); const box = ta && ta.closest(".ins-node"); if (!box) return;
+  try { const r = await api(`/api/servers/${id}/pasarguard-cert`); const sel = $(`#ins-pgp-${id}`); const box = sel && sel.closest(".ins-node"); if (!box) return;
     let out = box.querySelector(".ins-cert"); if (!out) { out = document.createElement("textarea"); out.className = "ins-cert"; out.readOnly = true; out.rows = 5; box.querySelector(".ins-act").before(out); }
     out.value = r.cert; out.select(); try { navigator.clipboard.writeText(r.cert); } catch (e) { /* the box is selected: copy it by hand */ } toast("✓ Certificate copied: set it in the PasarGuard panel", "ok");
   } catch (e) { toast("✕ " + e.message, "bad"); }
@@ -815,7 +819,6 @@ window.srvPgCert = async id => {      // the public certificate the PasarGuard n
 window.srvInstall = async (id, item) => {
   const s = (state.serversCache || []).find(x => x.id === id); if (!s) return;
   let cert = ""; if (item === "marzban_node") { cert = ($(`#ins-cert-${id}`) || {}).value || ""; if (!/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first", "bad"); return; } }
-  if (item === "pasarguard_node") { cert = (($(`#ins-key-${id}`) || {}).value || "").trim(); if (cert.length < 8) { toast("✕ Paste the API key from the PasarGuard panel first", "bad"); return; } }      // the key goes to the installer and is not kept
   if (!await gconfirm(`Install: ${INS_LABEL[item]} on ${s.name}? It runs on the server for a few minutes.`)) return;
   try { const r = await api(`/api/servers/${id}/install`, {method: "POST", body: JSON.stringify({items: [item], cert})}); showModal(`<b>⬇ ${INS_LABEL[item]} on ${esc(s.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.id, $("#ap-story"), 400).then(() => refresh()); }
   catch (e) { toast("✕ " + e.message, "bad"); }
@@ -968,7 +971,7 @@ window.srvSet = async (id, on, undoing) => {
 };
 window.caStart = async () => { try { await api("/api/checkall", {method: "POST", body: JSON.stringify({role: ""})}); toast("Checking all servers… it goes on if you reload the page; Stop ends it", "info"); state.ca = {running: true, done: 0, total: 0}; } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.caStop = async () => { try { await api("/api/checkall/stop", {method: "POST"}); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.newServer = () => { state.edit = "new"; state.open = null; refresh(); };
+window.newServer = () => { state.prefill = null; state.edit = "new"; state.open = null; refresh(); };
 window.editServer = id => { state.edit = id; state.open = id; state.wtab = "overview"; refresh(); };      // Edit leaves the console: Back from the form returns to the main window, not to the console
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
 window.openBuild = () => { state.build = true; state.open = null; refresh(); };
@@ -996,6 +999,8 @@ window.saveServer = async (e, id) => {
   const items = [f.get("x_bt") === "on" ? "btblock" : "", f.get("x_node") === "on" ? "marzban_node" : ""].filter(Boolean), cert = f.get("x_cert") || "";
   if (items.includes("marzban_node") && !/BEGIN CERTIFICATE/.test(cert)) { toast("✕ Paste the certificate of the Marzban panel first (or untick Marzban node)", "bad"); return false; }
   if (items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
+  let pgNode = null; try { pgNode = window.pgSrvAsk ? pgSrvAsk(f) : null; } catch (er) { toast("✕ " + er.message, "bad"); return false; }      // the PasarGuard node (tick): checked before anything is added
+  if (pgNode && role === "iran" && !await gconfirm(`${body.name} is an Iran server. A PasarGuard node normally runs on a foreign server (the installer needs Docker and GitHub, which Iran often blocks). Go on?`)) return false;
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;
@@ -1009,12 +1014,14 @@ window.saveServer = async (e, id) => {
     } else {          // no password: the panel's key must already be on the server - try it
       try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); api(`/api/servers/${saved.id}/gre-check`, {method: "POST"}).catch(() => {}).then(() => refresh()); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
-    refresh();
+    refresh(); state.prefill = null;
     if (items.length && connected) {   // the extras run in one story the operator can follow (and minimise)
       const r = await api(`/api/servers/${saved.id}/install`, {method: "POST", body: JSON.stringify({items, cert})});
       showModal(`<b>⬇ Installing on ${esc(body.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
-      followStory(r.id, $("#ap-story"), 400).then(() => refresh());
+      await followStory(r.id, $("#ap-story"), 400); refresh();
     } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
+    if (pgNode && connected) { await pgSrvMake(saved.id, body.name, pgNode); refresh(); }      // the node of the PasarGuard panel: the flow of the Nodes tab, after the other installs
+    else if (pgNode) toast("The server is added, but it does not log in yet, so the node is not made: fix the login, then use Install → PasarGuard node in the window of the server", "bad");
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
@@ -1033,7 +1040,9 @@ window.srvPassword = async (id, name) => {
 const X_SVG = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>';      // the cross of the faint "remove" buttons (accounts, panels, servers)
 window.deleteServer = async (id, name) => {
   if (!await gconfirm(`Remove ${name} from the panel? Nothing changes on the server itself.`, {danger: true})) return;
-  try { await api(`/api/servers/${id}`, {method: "DELETE"}); toast("✓ Removed", "ok"); state.edit = null; state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  const nodes = window.pgSrvOn ? pgSrvOn({id}).map(x => ({...x})) : [];      // the nodes of the panels that run on it (read before it is gone)
+  try { await api(`/api/servers/${id}`, {method: "DELETE"}); toast("✓ Removed", "ok"); state.edit = null; state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  if (nodes.length && window.pgSrvAfterDelete) await pgSrvAfterDelete(name, nodes);      // then: should its node leave the PasarGuard panel too (asked, never done by itself)
 };
 window.forgetKey = async (id, name) => {
   if (!await gconfirm(`Forget the SSH host key of ${name}? Do this only after the server was reinstalled.`)) return;
@@ -1759,7 +1768,7 @@ window.apMoveTo = async (id, iranId, name) => {
 };window.checkTunnel = async id => { toast("Checking both servers…"); try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); toast("✓ Checked", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* ---- configs (what the probe keeps alive and tests) */
-INFO.configs = ["Panels", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription; edit a link field by field."];
+INFO.configs = ["Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."];      // the page is called Users (the Configs list is off: CONFIGS_UI)
 const cf = {open: null, edit: null, sub: null, q: "", group: localStorage.getItem("nk.cfgroup") || "__all"};
 const FLAGS = {de: "de", germany: "de", fi: "fi", finland: "fi", nl: "nl", netherlands: "nl", us: "us", usa: "us", unitedstates: "us", fr: "fr", france: "fr", gb: "gb", uk: "gb", unitedkingdom: "gb", england: "gb", tr: "tr", turkey: "tr", ae: "ae", uae: "ae", emirates: "ae", dubai: "ae", se: "se", sweden: "se", pl: "pl", poland: "pl", ru: "ru", russia: "ru", ir: "ir", iran: "ir", ca: "ca", canada: "ca", jp: "jp", japan: "jp", sg: "sg", singapore: "sg", hk: "hk", hongkong: "hk", it: "it", italy: "it", es: "es", spain: "es", at: "at", austria: "at", ch: "ch", switzerland: "ch", kz: "kz", kazakhstan: "kz", am: "am", armenia: "am", az: "az", ge: "ge", georgia: "ge", qa: "qa", qatar: "qa", bh: "bh", bahrain: "bh", om: "om", oman: "om", lt: "lt", lv: "lv", ee: "ee", cz: "cz", czech: "cz", czechia: "cz", ro: "ro", romania: "ro", bg: "bg", bulgaria: "bg", gr: "gr", greece: "gr", pt: "pt", portugal: "pt", ie: "ie", ireland: "ie", no: "no", norway: "no", dk: "dk", denmark: "dk", be: "be", belgium: "be", lu: "lu", ua: "ua", ukraine: "ua", md: "md", rs: "rs", serbia: "rs", in: "in", india: "in", kr: "kr", korea: "kr", au: "au", australia: "au", br: "br", brazil: "br", mx: "mx", za: "za", cn: "cn", china: "cn", tw: "tw", taiwan: "tw", vn: "vn", vietnam: "vn", th: "th", thailand: "th", my: "my", malaysia: "my", id: "id", indonesia: "id", ph: "ph", eg: "eg", egypt: "eg", sa: "sa", saudi: "sa", kw: "kw", kuwait: "kw", iq: "iq", iraq: "iq", pk: "pk", pakistan: "pk", il: "il", cy: "cy", cyprus: "cy", mt: "mt", malta: "mt", hu: "hu", hungary: "hu", sk: "sk", si: "si", hr: "hr", croatia: "hr", fin: "fi", ger: "de", ned: "nl", fra: "fr", tur: "tr", ita: "it", swe: "se", pol: "pl", can: "ca", aus: "au", usa2: "us"};
 function cfCode(name) { for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return FLAGS[t].toLowerCase(); return ""; }      // the country of a config name, "" when none
@@ -2044,7 +2053,7 @@ window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription re
 
 /* ---- panels (Marzban / PasarGuard): health, nodes, users, hosts, outbounds */
 const pn = {id: localStorage.getItem("nk.pn") || "", tab: "users", add: false, edit: false, users: null, usersKey: "", uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostsKey: "", hostEdit: null, core: null, raw: false, logs: null};
-INFO.panels = ["Panels", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
+INFO.panels = ["Users", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
 PAGES.panels = async () => {
   const list = (await api("/api/panels")).panels; state.panelsCache = list;
@@ -2052,11 +2061,11 @@ PAGES.panels = async () => {
   if (pn.id === "*") pn.id = "";
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
-  const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">● up · ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
+  const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
   if (!list.length) { $("#page").innerHTML = pnBar([], "", "") + '<div class="empty">No panel yet. Add one with its API key or access token.</div>'; return; }
   const p = sel, s = p.stats || {};
-  const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}">${label} <b>${val}</b></span>`;
-  $("#page").innerHTML = pnBar(list, p.id, `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`)}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", nodesOk === (p.nodes || []).length ? "ok" : "bad", 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`)}</span><button onclick="pnCheck(${p.id})">↻ Check now</button><button onclick="pnEditWin()">Edit</button>`) + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
+  const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
+  $("#page").innerHTML = pnBar(list, p.id, `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span><button class="pn-b-chk" onclick="pnCheck(${p.id})" title="Ask the panel now"><i class="ic">↻</i><span class="bt">Check now</span></button><button class="pn-b-edit" onclick="pnEditWin()" title="Name, address, key or token, TLS check"><i class="ic">✎</i><span class="bt">Edit</span></button>`) + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
@@ -2067,7 +2076,7 @@ function pnOverviewHtml(p) {
   const s = p.stats || {}, nodes = p.nodes || [], bad = nodes.filter(n => !["connected", "healthy", "disabled"].includes(n.status));
   return `<div class="card"><h3>Nodes <span class="sp"></span><span class="pill ${bad.length ? "err" : "ok"}">${bad.length ? bad.length + " not connected" : nodes.length ? "all connected" : "none"}</span></h3>${pnNodesHtml(p)}</div>
     <div class="card"><h3>About this panel</h3><div class="kv"><div><span>type</span> ${esc(p.type)} · <span>version</span> ${esc(p.version || "—")}</div><div><span>users</span> ${s.users_total ?? "—"} total · ${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now</div>
-      <div><span>test config</span> ${s.test_user ? `<b class="gw-ok">✓</b> <span class="mono">${esc(s.test_user)}</span> — kept alive and measured on the probe as the group <b>${esc(p.name)}</b>` : "none yet — press <b>Test config on probe</b> above"}</div>
+      ${CONFIGS_UI ? `<div><span>test config</span> ${s.test_user ? `<b class="gw-ok">✓</b> <span class="mono">${esc(s.test_user)}</span> — kept alive and measured on the probe as the group <b>${esc(p.name)}</b>` : "none yet — press <b>Test config on probe</b> above"}</div>` : ""}
       <div><span>checked</span> ${p.checked_at ? ago(p.checked_at) + " ago" : "never"} · every 2 minutes${p.last_error ? ` · <span class="err">${esc(p.last_error)}</span>` : ""}</div></div>
       <small class="mut">Open <b>Users</b> for the user list (search, status filter, edit, bulk actions) and <b>Hosts</b> for the address:port of every subscription link — they are read from the panel only when you open them.</small></div>`;
 }
@@ -2139,8 +2148,8 @@ window.pnAdd = async e => {
   toast(mode === "key" ? "Trying it on the panel…" : "Signing in…");
   try {
     const r = await api("/api/panels", {method: "POST", body: JSON.stringify(body)}), a = r.panel.auth || {};
-    toast(`✓ ${r.panel.name} added${a.level !== "ok" ? " — but " + a.note : ""} — making its test config on the probe…`, a.level === "ok" ? "ok" : "bad");
-    closeModal(); pn.id = String(r.panel.id); refresh(); pnTestConfig(r.panel.id, r.panel.name, true);
+    toast(`✓ ${r.panel.name} added${a.level !== "ok" ? " — but " + a.note : ""}${CONFIGS_UI ? " — making its test config on the probe…" : ""}`, a.level === "ok" ? "ok" : "bad");
+    closeModal(); pn.id = String(r.panel.id); refresh(); if (CONFIGS_UI) pnTestConfig(r.panel.id, r.panel.name, true);      // the test user (and its configs on the probe) belongs to the Configs list: nothing is made on the panel while that is off
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
@@ -2169,8 +2178,8 @@ const pnBar = (list, cur, row2) => {
   const dot = p => p.status === "up" ? "ok" : p.status === "down" ? "bad" : "";
   const chips = list.map(p => `<span class="dns-cw"><button type="button" class="dns-chip ${String(p.id) === String(cur) ? "on" : ""}" onclick="pnPick('${p.id}')" title="${esc(p.url || "")}${p.status === "down" ? " · down" : ""}"><i class="dot ${dot(p)}"></i><b>${esc(p.name)}</b><small>${esc(p.type)}</small></button><button type="button" class="dns-x" onclick="pnDel(${p.id}, '${esc(p.name)}')" title="Remove the panel ${esc(p.name)} from this list (nothing changes on the panel itself)" aria-label="Remove ${esc(p.name)}">${X_SVG}</button></span>`).join("");      // each panel box has a faint cross: it takes the panel off the list (after a confirmation)
   const all = "";      // the "All panels" chip was taken away (2026-10-14); the page of the accounts over every panel is still in the code (pnPick("*"))
-  const add = list.length ? `<button type="button" class="dns-chip add ico" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel" aria-label="Add panel"><i class="cta-ic">＋</i></button>` : `<button type="button" class="dns-chip add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i><b>Add panel</b></button>`;      // the first one has a name ("Add panel"); once a panel is there it is only a plus
-  return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one"><span class="dns-lab">Panels</span>${all}${chips}${add}<span class="sp"></span>${row2}</div></div>`;
+  const add = list.length ? `<button type="button" class="cta cta-server ico pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel" aria-label="Add panel"><i class="cta-ic">＋</i></button>` : `<button type="button" class="cta cta-server pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i>Add panel</button>`;      // the same round blue plus as "Add server"; the first one has a name ("Add panel"); once a panel is there it is only a plus
+  return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one"><span class="dns-lab">Panels</span><div class="pn-chips${list.length > 6 ? " many" : ""}" style="--n:${list.length}">${all}${chips}</div>${add}<span class="sp"></span><div class="pn-facts">${row2}</div></div></div>`;
 };
 const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
 const pa = {q: "", data: null, seq: 0};
@@ -2271,7 +2280,7 @@ async function pnUsersLoad(id) {
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
   box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select class="sm pn-st-sel" title="Show the users of one status" onchange="pn.ustatus=this.value;pn.uoff=0;pnUsersLoad(+pn.id)">${[["", "All statuses"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<option value="${v}" ${pn.ustatus === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="sp"></span>
-      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'enable')" title="Switch the ticked users on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'disable')" title="Switch the ticked users off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnBulkRenew(${id})" title="Add days to the ticked users">＋ Days…</button></span></div></div>
+      <span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'enable')" title="Switch the ticked users on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'disable')" title="Switch the ticked users off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnBulkRenew(${id})" title="Add days to the ticked users">＋ Days…</button></span>${window.pgUsersMenu ? pgUsersMenu() : ""}</div></div>
     <div class="lbox full usr-box"><table class="tbl lift usr-tbl"><colgroup><col style="width:64px"><col style="width:30%"><col style="width:12%"><col style="width:36%"><col></colgroup>
       <thead><tr><th><input type="checkbox" class="ck" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th></tr></thead>
       <tbody>${u.users.map(x => `<tr class="${x.status === "active" ? "up" : x.status === "disabled" ? "" : "down"} clk" onclick="pnUserOpen(${id}, '${esc(x.username)}')" title="Click to open the user"><td onclick="event.stopPropagation()"><input type="checkbox" class="ck pn-uchk" value="${esc(x.username)}" onchange="pnSelCount()"></td><td class="name"><div class="usr-wrap"><i class="usr-av ${x.status}">${SI.user}</i><div class="usr-nm"><b>${esc(x.username)}</b>${x.note ? `<small class="mut" title="${esc(x.note)}">${esc(String(x.note).slice(0, 60))}</small>` : ""}</div></div></td><td><span class="spill ${x.status}">${esc(String(x.status).replace("_", " "))}</span></td>
@@ -2306,11 +2315,11 @@ async function pnLiveTick(id) {
 }
 const pnRow = {h: 46, done: true};
 const mainBottom = () => { const m = document.querySelector(".main"); return m ? Math.min(innerHeight, m.getBoundingClientRect().bottom) : innerHeight; };
-const pnPS = () => { if (innerWidth <= 760) return 10; const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - 56 - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
+const pnPS = () => { if (isPhone()) return 10; const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - 56 - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
 /* the list box is one fixed box from its top down to the pager, which sits on the bottom edge: the rows are stretched to fill it exactly, so nothing scrolls and no empty strip is left */
 function pnFitSoon(ps, n = 0) { clearTimeout(pnFitSoon.t); pnFitSoon.t = setTimeout(() => { if (document.querySelector("#pn-body .usr-tbl") && !document.querySelector("#pn-body .lbox") && n < 20) return pnFitSoon(ps, n + 1); pnFit(ps); }, n ? 60 : 30); }      // waits until the list sits in its box
 function pnFit(ps) {
-  if (innerWidth <= 760) return;
+  if (isPhone()) return;
   const box = document.querySelector("#pn-body .lbox"), foot = $("#pn-foot"); if (!box) return;
   const tb = box.querySelector("table"), th = box.querySelector("thead"); if (!tb || !th) return;
   box.style.height = ""; box.style.maxHeight = "none"; box.style.overflow = "hidden"; box.style.minHeight = "0";
@@ -2373,7 +2382,7 @@ function pnUserHtml(id, u) {   // the user window: the actions on top, three box
   return `${bar}<form class="frm ue-form" onsubmit="return pnUserSave(event, ${id}, '${nm}')"><div class="sgrid ue-grid ${ib ? "" : "two"}">${usage}${account}${inbounds}</div>
     <div class="frm-act ue-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`;
 }window.pnUQ = v => { pn.uq = v.trim(); pn.uoff = 0; clearTimeout(qT); qT = setTimeout(() => pnUsersLoad(+pn.id), 300); };
-window.pnUserOpen = async (id, name) => { try { pn.user = (await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`)).user; const u = pn.user; showModal(`<span class="st ${u.status === "active" ? "online" : u.status === "disabled" ? "" : "offline"}"></span><b>${esc(u.username)}</b> <span class="pill">${esc(u.status)}</span>`, pnUserHtml(id, u), "wide ue"); document.querySelectorAll("#modal .ue-ibp").forEach(ibCount); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnUserOpen = async (id, name) => { if (pnType() === "pasarguard" && window.pgUserOpen) return pgUserOpen(id, name); try { pn.user =(await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`)).user; const u = pn.user; showModal(`<span class="st ${u.status === "active" ? "online" : u.status === "disabled" ? "" : "offline"}"></span><b>${esc(u.username)}</b> <span class="pill">${esc(u.status)}</span>`, pnUserHtml(id, u), "wide ue"); document.querySelectorAll("#modal .ue-ibp").forEach(ibCount); } catch (e) { toast("✕ " + e.message, "bad"); } };
 const ibBody = form => { const xs = [...form.querySelectorAll('input[name^="ib_"]')]; if (!xs.length) return {}; const inbounds = {}; xs.forEach(x => { const [p, tag] = x.name.slice(3).split("__"); inbounds[p] = inbounds[p] || []; if (x.checked) inbounds[p].push(tag); }); return {inbounds}; };
 window.pnUserSave = async (e, id, name) => { e.preventDefault(); const f = new FormData(e.target); try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}`, {method: "PUT", body: JSON.stringify(Object.assign({status: f.get("status"), expire_date: f.get("expire_date"), limit_gb: +f.get("limit_gb"), reset: f.get("reset"), note: f.get("note")}, ibBody(e.target)))}); toast("✓ Saved", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.pnUAct = async (id, name, action, value) => { if (action === "renew" && !value) return; try { await api(`/api/panels/${id}/users/${encodeURIComponent(name)}/action`, {method: "POST", body: JSON.stringify({action, value})}); toast("✓ " + action + " done", "ok"); pn.user = null; closeModal(); pn.users = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -2393,11 +2402,10 @@ window.copyFrom = async (el, text) => {
 };
 window.pnSelCount = () => {
   const all = [...document.querySelectorAll(".pn-uchk, .pn-hchk")], n = all.filter(x => x.checked).length;
-  const c = $("#pn-seln"); if (c) c.textContent = n;
   const a = $("#pn-act"); if (a) a.disabled = !n;
-  document.querySelectorAll(".pn-actbtn").forEach(b => { b.disabled = !n; });          // the buttons of the ticked users / hosts light up as soon as something is ticked
+  document.querySelectorAll(".pn-actbtn").forEach(b => { b.disabled = !n; b.title = b.title.replace(/ \(\d+ ticked\)$/, "") + (n ? ` (${n} ticked)` : ""); });          // the buttons of the ticked users / hosts light up as soon as something is ticked (and say how many in their tip)
   const h = $("#pn-all"); if (h) { h.checked = n > 0 && n === all.length; h.indeterminate = n > 0 && n < all.length; }
-  const s = document.querySelector(".pn-sel"); if (s) s.classList.toggle("on", n > 0);
+  const s = document.querySelector(".pn-acts"); if (s) s.classList.toggle("on", n > 0);
 };
 window.pnSelAll = on => { document.querySelectorAll(".pn-uchk, .pn-hchk").forEach(x => { x.checked = on; }); pnSelCount(); };
 window.pnBulkAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if (v === "renew") pnBulkRenew(id); else if (v) pnBulk(id, v); };
@@ -2422,7 +2430,7 @@ async function pnHostsLoad(id) {
     return `<details class="hp ${on ? "" : "alloff"}" data-port="${pk}" ${open ? "open" : ""} ontoggle="pn.hopen['${pk}'] = this.open"><summary><input type="checkbox" class="ck hp-master" title="Tick every host of this port" onclick="event.stopPropagation()" onchange="hpMaster(this)"><b class="hp-port">${k === "" ? "inbound port" : ":" + pk}</b><small class="mut hp-n"></small>
       <span class="hp-bar" title="${on} of ${g.length} hosts are on"><i class="${pct === 100 ? "full" : ""}" style="width:${pct}%"></i></span><span class="hp-st"><b>${on}</b> on${g.length - on ? ` · <b>${g.length - on}</b> off` : ""}</span>
       <span class="hp-tags">${tg.slice(0, 3).map(t => `<span class="td-type" title="Inbound">${esc(t)}</span>`).join("")}${tg.length > 3 ? `<small class="mut" title="${esc(tg.slice(3).join(", "))}">+${tg.length - 3}</small>` : ""}</span></summary><div class="hp-rows">${g.map(hostRow).join("")}</div></details>`; };  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts · ${ports.length} ports</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
-      <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every host shown">select all</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, false)" title="Switch the ticked hosts on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, true)" title="Switch the ticked hosts off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnHostTls(${id})" title="A TLS copy (port 443) of each ticked plain WebSocket host, tested first">🔒 TLS copies…</button></span></div></div>
+      <span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, false)" title="Switch the ticked hosts on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, true)" title="Switch the ticked hosts off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnHostTls(${id})" title="A TLS copy (port 443) of each ticked plain WebSocket host, tested first">🔒 TLS copies…</button></span>${window.pgHostsMenu ? pgHostsMenu(id) : ""}</div></div>
     <div class="hp-list">${ports.map(group).join("") || '<div class="mut" style="padding:16px">no host matches</div>'}</div>`;
   box.querySelectorAll(".hp").forEach(hpCount);
   const hl = box.querySelector(".hp-list"); if (hl) hl.style.maxHeight = Math.max(160, innerHeight - hl.getBoundingClientRect().top - 74) + "px";   // the list ends above the bottom strip: only it scrolls
@@ -2440,9 +2448,9 @@ window.pnHostAct = (id, sel) => { const v = sel.value; sel.selectedIndex = 0; if
     ${bools.map(k => `<label class="chk"><input type="checkbox" name="${k}" ${h[k] ? "checked" : ""}> ${k}</label>`).join("")}
     <div class="frm-act"><button class="pri" type="submit">Save host</button><button type="button" onclick="pn.hostEdit=null;refresh()">Close</button></div></form>`;
 }
-window.pnHostOpen = async (id, key) => { try { pn.hostEdit = (await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`)).host; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnHostSave = async (e, id, key) => { e.preventDefault(); const f = new FormData(e.target), body = {}; ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint", "security"].forEach(k => body[k] = f.get(k)); ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"].forEach(k => body[k] = !!f.get(k)); try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "PUT", body: JSON.stringify(body)}); toast("✓ Host saved", "ok"); pn.hostEdit = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
-window.pnHostsToggle = async (id, disable) => { const keys = [...document.querySelectorAll(".pn-hchk:checked")].map(x => x.value); if (!keys.length) { toast("Tick some hosts first", "bad"); return; } try { const r = await api(`/api/panels/${id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys, disable})}); toast(`✓ ${r.changed} hosts ${disable ? "disabled" : "enabled"}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostOpen = async (id, key) => { if (pnType() === "pasarguard" && window.pgHostOpen) return pgHostOpen(id, +key); try { pn.hostEdit =(await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`)).host; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostSave = async (e, id, key) => { e.preventDefault(); const f = new FormData(e.target), body = {}; ["remark", "address", "port", "sni", "host", "path", "alpn", "fingerprint", "security"].forEach(k => body[k] = f.get(k)); ["allowinsecure", "mux_enable", "random_user_agent", "use_sni_as_host", "is_disabled"].forEach(k => body[k] = !!f.get(k)); try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "PUT", body: JSON.stringify(body)}); toast("✓ Host saved", "ok"); pn.hostEdit = null; pn.hosts = null; refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
+window.pnHostsToggle = async (id, disable) => { const keys = [...document.querySelectorAll(".pn-hchk:checked")].map(x => x.value); if (!keys.length) { toast("Tick some hosts first", "bad"); return; } try { const r = await api(`/api/panels/${id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys, disable})}); toast(`✓ ${r.changed} hosts ${disable ? "disabled" : "enabled"}`, "ok"); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* TLS copies of the ticked plain WebSocket hosts: a copy with port 443, security tls and the Host header as SNI; a real test from the panel server decides whether it is on. The originals are never touched. */
 const tls = {id: 0, keys: [], items: [], opts: {port: 443, alpn: "http/1.1", fingerprint: "chrome"}, failed: "disabled"};
 window.pnHostTls = async id => {
@@ -2494,8 +2502,8 @@ window.pnHostTlsRemove = async () => {
   if (!await gconfirm("Remove every TLS copy made by this tool (the hosts whose name ends with TLS and whose security is tls)? The hosts are saved to a file first. The original hosts stay.", {danger: true})) return;
   try { const r = await api(`/api/panels/${tls.id}/hosts-tls/remove`, {method: "POST"}); toast(`✓ ${r.removed} copies removed`, "ok"); closeModal(); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-window.pnHostClone = async (id, key) => { try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}/clone`, {method: "POST"}); toast("✓ Cloned", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnHostDel = async (id, key, name) => { if (!await gconfirm(`Delete host ${name} from the panel? Users lose that address in their links.`)) return; try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostClone = async (id, key) => { if (pnType() === "pasarguard" && window.pgHostClone) return pgHostClone(id, +key); try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}/clone`, {method: "POST"}); toast("✓ Cloned", "ok"); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.pnHostDel = async (id, key, name) => { if (pnType() === "pasarguard" && window.pgHostDelete) return pgHostDelete(id, +key, name); if (!await gconfirm(`Delete host ${name} from the panel? Users lose that address in their links.`)) return; try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 
 /* (the Xray outbounds of a panel's core are no longer edited here: the Outbound page is the one place; the API /api/panels/{id}/core stays) */
 
@@ -2609,7 +2617,7 @@ async function sbPays() {
 const sbPayRowH = 46;
 function sbFitBox(id, base = 46, foot = 44, pad = 24) {      // whole rows, a little taller if needed, so the list box ends at the bottom of the page and never scrolls
   const box = $("#" + id); if (!box) return 5;
-  if (innerWidth <= 760) { box.style.height = ""; box.style.removeProperty("--prh"); return 8; }      // a phone: rows are cards of their own height, eight to a page, the page scrolls
+  if (isPhone()) { box.style.height = ""; box.style.removeProperty("--prh"); return 8; }      // a phone: rows are cards of their own height, eight to a page, the page scrolls
   const avail = Math.floor(mainBottom() - box.getBoundingClientRect().top - foot - pad), ps = Math.max(5, Math.floor(avail / base)), rh = Math.floor(avail / ps * 10) / 10;
   box.style.height = ps * rh + "px"; box.style.setProperty("--prh", rh + "px"); return ps;
 }
@@ -2617,7 +2625,7 @@ function sbPayFit() { sb.payPS = sbFitBox("pay-rows", sbPayRowH); }
 /* the tabs that are not lists of their own keep their content in one fixed box down to the bottom of the page (it scrolls inside only when it is longer) */
 function sbFitBody() {
   const b = $("#sb-body"); if (!b) return;
-  if (innerWidth <= 760) { b.style.height = ""; b.classList.remove("fit", "self"); return; }      // a phone: the page scrolls as usual
+  if (isPhone()) { b.style.height = ""; b.classList.remove("fit", "self"); return; }      // a phone: the page scrolls as usual
   b.classList.add("fit"); b.classList.toggle("self", sbSelf.includes(sb.tab));
   b.style.height = Math.max(240, Math.floor(mainBottom() - b.getBoundingClientRect().top - 24)) + "px";
 }
@@ -2700,7 +2708,7 @@ window.sbListPage = p => sbListLoad(p);
 /* a phone: every cell of a list row gets the column name of its header as a small label (the header row itself is hidden there), so a
    bare number still says what it is. Runs on any redraw inside the shop bot page; does nothing on a wide screen. */
 function sbPhoneLabels() {
-  if (innerWidth > 760) return;
+  if (!isPhone()) return;
   document.querySelectorAll("#page .sb-ptable").forEach(tbl => {
     const heads = [...tbl.querySelectorAll(":scope > .sb-lh > span, :scope > .sb-phead > span")].map(s => s.textContent.trim());
     if (!heads.length) return;
@@ -3089,7 +3097,7 @@ window.sbPeInb = async () => {
 function sbPeInbDraw() {
   const box = $("#pe-pick"), f = sb.pe; if (!box || !f) return; const r = f.inb;
   if (!r) { box.innerHTML = `<div class="mut">${f.server_id && f.server_id !== "0" ? "Reading the panel…" : "Pick a server first."}</div>`; return; }
-  if (r.panel_id == null) { box.innerHTML = `<div class="pe-note">${r.error ? esc(r.error) + " · " : ""}This server's panel is not in <b>Panels</b>, so its inbounds cannot be listed. Add the panel there, or write the settings in the JSON box below.</div>`; return; }
+  if (r.panel_id == null) { box.innerHTML = `<div class="pe-note">${r.error ? esc(r.error) + " · " : ""}This server's panel is not in <b>Users</b> (the panels page), so its inbounds cannot be listed. Add the panel there, or write the settings in the JSON box below.</div>`; return; }
   let body;
   if (r.type === "pasarguard") {
     body = `<div class="pe-grp"><div class="pe-gh"><b>Groups</b><span class="sp"></span></div><div class="pe-chs">${(r.groups || []).map((g, i) => `<button type="button" class="pe-ch ${f.gsel.includes(g.id) ? "on" : ""}" role="checkbox" aria-checked="${f.gsel.includes(g.id)}" onclick="sbPeGroup(${i})">${esc(g.name)}<small>#${esc(g.id)}</small></button>`).join("") || '<span class="mut">no group on the panel</span>'}</div></div>`;
@@ -4163,7 +4171,7 @@ PAGES.dns = async () => {
   const tabs = [["records", "Records", recs.length], ["changes", "Changes", log.length], ["accounts", "Accounts", accounts.length], ["failover", "Failover", 0]];
   const dstat = (label, val, tip = "") => `<span class="dns-stat" title="${esc(tip)}">${label} <b>${val}</b></span>`;
   const accChips = accounts.map(a => { const l = live.find(x => x.id === a.id) || {}, ok = l.ok !== undefined ? l.ok : (a.status || {}).ok; return `<span class="dns-cw"><button type="button" class="dns-chip ${accPick === a.id ? "on" : ""}" onclick="dnsPickAcc('${esc(a.id)}')" title="${esc(ok ? a.name : (l.error || "this account does not answer"))}"><i class="pv pv-${esc(a.provider)}"></i><b>${esc(a.name)}</b>${ok && l.domains ? `<span class="cnt" title="${l.domains.length} domains">${l.domains.length}</span>` : ""}<i class="dot ${ok ? "ok" : "bad"}" title="${ok ? "connected" : "does not answer"}"></i></button><button type="button" class="dns-x" onclick="dnsAccDel('${esc(a.id)}', '${esc(a.name)}')" title="Remove the account ${esc(a.name)} from this panel (nothing changes at the provider)" aria-label="Remove ${esc(a.name)}">${X_SVG}</button></span>`; }).join("");      // each account box has a faint cross: it takes the account off the list (after a confirmation)
-  const bar = `<div class="toolbar joined srv-bar dns-bar"><div class="dns-r dns-accbar"><span class="dns-lab">Accounts</span>${accChips}<button type="button" class="dns-chip add ico" onclick="dnsAccForm('')" title="Add an ArvanCloud account (another one) or a Cloudflare account" aria-label="Add account"><i class="cta-ic">＋</i></button></div>
+  const bar = `<div class="toolbar joined srv-bar dns-bar"><div class="dns-r dns-accbar"><span class="dns-lab">Accounts</span>${accChips}<button type="button" class="cta cta-server ico dns-add" onclick="dnsAccForm('')" title="Add an ArvanCloud account (another one) or a Cloudflare account" aria-label="Add account"><i class="cta-ic">＋</i></button></div>
     <div class="dns-r dns-main">${addBtn}${tab === "records" && connected ? domSel : ""}<span class="dns-stats" title="The panel never changes an IP by itself while this is being tested. You can still change a record by hand.">${connected ? dstat("Domains", nDom) + dstat("A records", nA) + dstat("On the panel", onPanel, "A records that point at a server added to this panel") : conn}</span>
       <span class="sp"></span><div class="tabs srv-tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>${tab === "records" && connected ? searchSeg() : ""}</div></div>`;
   let body = "";

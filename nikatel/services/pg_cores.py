@@ -11,6 +11,7 @@ next restart. `POST /api/core/{id}/restart` restarts Xray on every node of the c
 an explicit `confirm`."""
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import hmac
@@ -18,6 +19,7 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -703,6 +705,11 @@ def dry_run(c: dict, core_id: int, text: str | None = None, config=None) -> dict
     panel to the edited one, with secrets as placeholders on both sides."""
     cur = _get_core(c, core_id)
     new, errors = _candidate(cur, text, config)
+    return _dry_of(c, cur, new, errors)
+
+
+def _dry_of(c: dict, cur: dict, new, errors: list[str]) -> dict:
+    """The answer of a dry run for a config `new` (None when it could not even be read, then `errors` say why) against the core `cur` as the panel has it."""
     base = {"valid": False, "errors": errors, "warnings": [], "changed": None, "needs_confirm": False, "diff": None, "rev": rev_of(cur), "inbounds": 0, "outbounds": 0}
 
     if new is None:
@@ -991,3 +998,507 @@ def restart(c: dict, core_id: int, confirm: bool = False) -> dict:
         _record(c, f"Xray restarted on the nodes of core “{cur['name']}” (#{cur['id']}) of panel #{c['id']}.")
 
     return {"restarted": True, "nodes": nodes}
+
+
+# ------------------------------------------------------------------ a new core, deleting one, the two tag lists, one inbound at a time (the owner asked for add / edit / delete of cores and inbounds)
+CORE_TYPES = ("xray", "wg", "mtproto", "singbox")           # CoreType of PasarGuard 5.4
+DEFAULT_CORE_ID = 1                                         # the panel refuses to delete the first core (403)
+PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks")     # what the inbound builder makes; anything else (hysteria, wireguard, ...) is written as JSON
+NETWORKS = ("tcp", "ws", "grpc", "httpupgrade", "xhttp")
+SECURITIES = ("none", "tls", "reality")
+XHTTP_MODES = ("auto", "packet-up", "stream-up", "stream-one")
+_DEFAULT_XRAY = {      # the config a 5.4 panel starts with (read from a real one): one Shadowsocks inbound, DIRECT and BLOCK, private addresses blocked
+    "policy": {"levels": {"0": {"statsUserOnline": True}}},
+    "log": {"loglevel": "warning"},
+    "inbounds": [{"tag": "Shadowsocks TCP", "listen": "0.0.0.0", "port": 1080, "protocol": "shadowsocks", "settings": {"clients": [], "network": "tcp,udp"}}],
+    "outbounds": [{"protocol": "freedom", "tag": "DIRECT"}, {"protocol": "blackhole", "tag": "BLOCK"}],
+    "routing": {"rules": [{"ip": ["geoip:private"], "outboundTag": "BLOCK", "type": "field"}]},
+}
+_HOSTPORT = re.compile(r"^[A-Za-z0-9._\-\[\]:]{1,253}$")
+
+
+def check_core_name(name) -> str:
+    n = str(name or "").strip()
+
+    if not n or len(n) > 256:
+        raise ValueError("a core needs a name of 1 to 256 characters")
+
+    if any(ord(ch) < 32 for ch in n):
+        raise ValueError("the name of a core cannot hold a control character")
+
+    return n
+
+
+def tag_list(v, what: str = "tags") -> list[str]:
+    """A list of inbound tags from a list or from a text (comma or line separated): sorted, without doubles; the panel takes at most 2048 characters in all."""
+    if v in (None, ""):
+        return []
+
+    if isinstance(v, str):
+        v = re.split(r"[,\n]", v)
+
+    if not isinstance(v, (list, tuple, set)):
+        raise ValueError(f"the {what} are a list of inbound tags")  # noqa: TRY004 - the caller shows the ValueError text to the operator
+
+    out = sorted({str(x).strip() for x in v if str(x).strip()})
+
+    if len(",".join(out)) > 2048:
+        raise ValueError(f"the {what} are too long (2048 characters in all)")
+
+    return out
+
+
+def _all_tags(c: dict) -> set[str]:
+    """Every inbound tag of every core of the panel (a tag is one name for the hosts and groups, so a new core should not reuse one)."""
+    try:
+        raw = panels.call(c, "GET", "/api/cores")
+    except (PanelError, ValueError):
+        return set()
+
+    items = raw.get("cores") if isinstance(raw, dict) else raw
+    return {r["tag"] for x in (items if isinstance(items, list) else []) if isinstance(x, dict) for r in inbound_rows(_obj(x.get("config"))) if r["tag"]}
+
+
+def _free_tag(tag: str, taken: set[str]) -> str:
+    if tag not in taken:
+        return tag
+
+    n = 2
+
+    while f"{tag} {n}" in taken:
+        n += 1
+
+    return f"{tag} {n}"
+
+
+def default_config(core_type: str = "xray", taken: set[str] | None = None) -> dict:
+    """The config a new core starts with: the one of the panel for Xray (its inbound gets a tag that no core uses yet), an empty object for the other types (the editor says what is missing)."""
+    if core_type != "xray":
+        return {}
+
+    cfg = copy.deepcopy(_DEFAULT_XRAY)
+    cfg["inbounds"][0]["tag"] = _free_tag(cfg["inbounds"][0]["tag"], taken or set())
+    return cfg
+
+
+def nodes_on(c: dict, core_id: int) -> list[dict]:
+    """The nodes of the panel that run this core: [{id, name, status}]. An unreadable list is an empty one (the panel's own answer to a delete still decides)."""
+    try:
+        raw = panels.call(c, "GET", "/api/nodes")
+    except (PanelError, ValueError):
+        return []
+
+    items = raw.get("nodes") if isinstance(raw, dict) else raw
+    return [{"id": n.get("id"), "name": str(n.get("name") or ""), "status": str(n.get("status") or "")} for n in (items if isinstance(items, list) else [])
+            if isinstance(n, dict) and n.get("core_config_id") == int(core_id)]
+
+
+def create(c: dict, name, core_type: str = "xray", text: str | None = None, config=None, exclude=None, fallbacks=None, copy_from: int | None = None) -> dict:
+    """A new core with its own name, type, config and tag lists. The config is the editor's `text`, an object, a copy of another core (`copy_from`, secrets and all) or the
+    starting config of the panel. The panel checks it and answers 400 with its words; nothing restarts: a new core runs on no node until a node is told to use it."""
+    _writable()
+    t = str(core_type or "xray").strip().lower()
+
+    if t not in CORE_TYPES:
+        raise ValueError(f"the type of a core is one of {', '.join(CORE_TYPES)}")
+
+    name = check_core_name(name)
+
+    if copy_from:
+        cfg = copy.deepcopy(_get_core(c, int(copy_from))["config"])
+    elif text is not None:
+        cfg = unmask_secrets(parse_text(text), {})                # a placeholder of another core's editor stands for nothing here: refused with a sentence
+    elif config is not None:
+        cfg = config
+    else:
+        cfg = default_config(t, _all_tags(c))
+
+    errors = check_config(cfg, t)
+
+    if errors:
+        raise ValueError("; ".join(errors)[:700])
+
+    body = {"name": name, "type": t, "config": cfg, "exclude_inbound_tags": tag_list(exclude, "excluded tags"), "fallbacks_inbound_tags": tag_list(fallbacks, "fallback tags")}
+
+    with _WRITE_LOCK:
+        try:
+            made = panels.call(c, "POST", "/api/core", body=body, timeout=120)
+        except PanelError as e:
+            raise PanelError(f"the panel refused the core ({_scrub(str(e), cfg)})", e.code) from None
+
+        if not isinstance(made, dict) or not isinstance(made.get("id"), int):
+            raise PanelError("the panel answered without the id of the new core: look at its cores before you try again")
+
+        core = _norm_core(made)
+        _record(c, f"Core “{name}” (#{core['id']}, {t}) made on panel #{c['id']}: {len(_dicts(cfg.get('inbounds')))} inbounds.")
+
+    return {"created": True, "core": _meta(core), "inbounds": len(_dicts(cfg.get("inbounds"))), "outbounds": len(_dicts(cfg.get("outbounds")))}
+
+
+def delete_warnings(c: dict, cur: dict) -> list[dict]:
+    """What deleting a core takes with it: the nodes that run it, and every inbound that hosts and groups of the panel still use."""
+    hosts, groups = _usage_sources(c)
+    out = [w for w in warnings(cur["config"], {"inbounds": [], "outbounds": [], "routing": {}}, hosts, groups) if w["code"] == "tag_removed"]
+    nodes = nodes_on(c, cur["id"])
+
+    if nodes:
+        out.insert(0, {"code": "nodes_use_core", "level": "danger", "tag": "", "text": f"{_plural(len(nodes), 'node')} run this core ({', '.join(n['name'] for n in nodes[:6])}): the panel leaves them without a core config until another one is chosen for them."})
+
+    return out
+
+
+def delete_check(c: dict, core_id: int) -> dict:
+    """What deleting this core would take with it, nothing is changed: {allowed, reason, name, warnings, nodes}. The first core is not allowed (the panel keeps it)."""
+    cur = _get_core(c, core_id)
+    nodes = nodes_on(c, core_id)
+    allowed = int(core_id) != DEFAULT_CORE_ID
+    return {"allowed": allowed, "reason": "" if allowed else "the first core of the panel is its default one: the panel does not delete it", "name": cur["name"], "warnings": delete_warnings(c, cur), "nodes": nodes,
+            "inbounds": len(inbound_rows(cur["config"]))}
+
+
+def delete(c: dict, core_id: int, confirm: bool = False) -> dict:
+    """Delete a core (never the first one, which the panel keeps). Needs `confirm`; the warnings (nodes that run it, hosts and groups that use its inbounds) are listed in the refusal.
+    The whole core is written to a backup first: `recreate` makes a new core from it (new id, nodes must be pointed at it again)."""
+    _writable()
+
+    if int(core_id) == DEFAULT_CORE_ID:
+        raise ValueError("the first core of the panel is its default one: the panel does not delete it")
+
+    with _WRITE_LOCK:
+        cur = _get_core(c, core_id)
+        warns = delete_warnings(c, cur)
+
+        if warns and not confirm:
+            raise NeedsConfirm(warns)
+
+        if not confirm:
+            raise ValueError("deleting a core cannot be undone on the panel: send confirm: true (a backup is kept here, see the deleted cores)")
+
+        name = backup_write(c["id"], cur, "before deleting the core")
+
+        try:
+            panels.call(c, "DELETE", f"/api/core/{int(core_id)}")
+        except PanelError as e:
+            (_bdir() / name).unlink(missing_ok=True)                    # nothing was deleted: the backup is not needed
+            raise PanelError(f"the panel did not delete the core ({_scrub(str(e), cur['config'])})", e.code) from None
+
+        _record(c, f"Core “{cur['name']}” (#{cur['id']}) of panel #{c['id']} deleted (backup {name}).")
+
+    return {"deleted": True, "backup": name, "warnings": warns}
+
+
+def deleted_backups(c: dict) -> list[dict]:
+    """The newest backup of every core of this panel that is not on the panel any more (deleted here or there): {core, name, at, file, inbounds, outbounds, type}."""
+    try:
+        raw = panels.call(c, "GET", "/api/cores")
+    except (PanelError, ValueError):
+        return []
+
+    items = raw.get("cores") if isinstance(raw, dict) else raw
+    live = {int(x["id"]) for x in (items if isinstance(items, list) else []) if isinstance(x, dict) and isinstance(x.get("id"), int)}
+    best: dict[int, dict] = {}
+
+    for f in sorted(_bdir().glob(f"cores-{int(c['id'])}-*-*.json")):
+        m = _BACKUP_NAME.match(f.name)
+
+        if not m or int(m.group(2)) in live:
+            continue
+
+        try:
+            body = json.loads(f.read_text(encoding="utf-8"))
+            cfg = _obj(body.get("config"))
+        except (OSError, ValueError, AttributeError):
+            continue
+
+        best[int(m.group(2))] = {"core": int(m.group(2)), "name": str(body.get("name") or ""), "type": str(body.get("type") or "xray"), "at": body.get("at"), "file": f.name,
+                                 "inbounds": len(_dicts(cfg.get("inbounds"))), "outbounds": len(_dicts(cfg.get("outbounds"))), "note": str(body.get("note") or "")}
+
+    return sorted(best.values(), key=lambda r: -(r["at"] or 0))
+
+
+def recreate(c: dict, core_id: int, name: str) -> dict:
+    """Make a new core from the backup of a core that is gone (the name, type, config and tag lists of the backup; the new core has a new id)."""
+    stored = _backup_load(c["id"], core_id, name)
+    return create(c, stored.get("name") or f"core {core_id}", stored.get("type") or "xray", config=stored["config"], exclude=stored.get("exclude_inbound_tags"), fallbacks=stored.get("fallbacks_inbound_tags"))
+
+
+def update_meta(c: dict, core_id: int, name=None, exclude=None, fallbacks=None, base_rev: str | None = None) -> dict:
+    """Rename a core and/or change its two tag lists (excluded and fallback inbound tags); the config is sent back as it is. The core is backed up first and read back."""
+    _writable()
+
+    with _WRITE_LOCK:
+        cur = _get_core(c, core_id)
+
+        if base_rev and base_rev != rev_of(cur):
+            raise Conflict("the core was changed on the panel after you opened it: reload it and make the change again")
+
+        new = {**cur, "name": check_core_name(name) if name is not None else cur["name"], "exclude": tag_list(exclude, "excluded tags") if exclude is not None else cur["exclude"],
+               "fallbacks": tag_list(fallbacks, "fallback tags") if fallbacks is not None else cur["fallbacks"]}
+
+        if (new["name"], new["exclude"], new["fallbacks"]) == (cur["name"], cur["exclude"], cur["fallbacks"]):
+            raise ValueError("nothing to change: the name and the tag lists are the same")
+
+        bk = backup_write(c["id"], cur, "before a change of the name or the tag lists")
+
+        try:
+            _put(c, new, cur["config"])
+        except PanelError as e:
+            (_bdir() / bk).unlink(missing_ok=True)
+            raise PanelError(f"the panel refused the change ({_scrub(str(e), cur['config'])})", e.code) from None
+
+        back = _get_core(c, core_id)
+        _record(c, f"Core “{cur['name']}” (#{cur['id']}) of panel #{c['id']}: name / tag lists changed (backup {bk}).")
+
+    return {"saved": True, "backup": bk, "core": _meta(back), "rev": rev_of(back)}
+
+
+def reality_scan(c: dict, target: str, timeout: float | None = None) -> dict:
+    """Ask the panel whether a site can be a REALITY target (POST /api/core/reality-scan): TLS 1.3, h2, x25519, the names of its certificate, the delay. Reads only."""
+    t = str(target or "").strip()
+
+    if not t or not _HOSTPORT.match(t) or "://" in t:
+        raise ValueError("the target is a name or an address, with a port if it is not 443 (for example www.example.com:443)")
+
+    body: dict = {"target": t}
+
+    if timeout is not None:
+        body["timeout"] = max(1.0, min(30.0, float(timeout)))
+
+    r = panels.call(c, "POST", "/api/core/reality-scan", body=body, timeout=60)
+    return r if isinstance(r, dict) else {}
+
+
+# ---- one inbound at a time: the builder (a flat form -> the Xray inbound), and the change of a config
+def _int_port(v) -> int:
+    try:
+        p = int(str(v).strip())
+    except (TypeError, ValueError):
+        raise ValueError("the port is a number from 1 to 65535") from None
+
+    if not 1 <= p <= 65535:
+        raise ValueError("the port is a number from 1 to 65535")
+
+    return p
+
+
+def reality_keys() -> dict:
+    """A new X25519 key pair for REALITY, written the way Xray writes it (URL-safe base64 without padding)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import x25519
+
+    k = x25519.X25519PrivateKey.generate()
+    return {"private_key": _b64(k.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())),
+            "public_key": _b64(k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))}
+
+
+def _b64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).decode().rstrip("=")
+
+
+def public_of(private_key: str) -> str:
+    """The public key of a REALITY private key (both URL-safe base64 without padding); ValueError when it is not an X25519 key."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import x25519
+
+    try:
+        raw = base64.urlsafe_b64decode(str(private_key).strip() + "=" * (-len(str(private_key).strip()) % 4))
+        k = x25519.X25519PrivateKey.from_private_bytes(raw)
+    except (ValueError, TypeError):
+        raise ValueError("that is not a REALITY private key (43 characters of URL-safe base64)") from None
+
+    return _b64(k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))
+
+
+def _words(v) -> list[str]:
+    if isinstance(v, str):
+        v = re.split(r"[,\s]+", v)
+
+    return [str(x).strip() for x in (v or []) if str(x).strip()]
+
+
+def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = False) -> tuple[dict, str | None]:
+    """The Xray inbound for a flat form: (the inbound, the public key of its REALITY key). The REALITY private key is `reality_private_key` of the form (its public key is worked out) or a new
+    pair; a `preview` never makes a real key (a dummy stands in, and no public key is given). `taken` are the tags already used. The inbound has no clients: the panel puts its users in at run time."""
+    s = dict(spec or {})
+    proto, network, security = (str(s.get(k) or d).strip().lower() for k, d in (("protocol", "vless"), ("network", "tcp"), ("security", "none")))
+
+    if proto not in PROTOCOLS:
+        raise ValueError(f"the protocol is one of {', '.join(PROTOCOLS)} (anything else: write the JSON)")
+
+    if network not in NETWORKS:
+        raise ValueError(f"the network is one of {', '.join(NETWORKS)}")
+
+    if security not in SECURITIES:
+        raise ValueError(f"the security is one of {', '.join(SECURITIES)}")
+
+    if security == "reality" and (proto != "vless" and proto != "trojan" and proto != "vmess"):
+        raise ValueError("REALITY needs a vless, vmess or trojan inbound")
+
+    port = _int_port(s.get("port"))
+    tag = str(s.get("tag") or "").strip() or _free_tag(f"{proto.upper()} {network.upper()} {security.upper()}".replace(" NONE", ""), taken or set())
+
+    if "," in tag or "<=>" in tag:
+        raise ValueError("a tag cannot hold a comma or <=>")
+
+    settings: dict = {"clients": []}
+
+    if proto == "vless":
+        settings["decryption"] = "none"
+    elif proto == "shadowsocks":
+        settings["network"] = "tcp,udp"
+
+    stream: dict = {"network": network, "security": security}
+    path, host = str(s.get("path") or "").strip(), str(s.get("host") or "").strip()
+
+    if network == "tcp":
+        stream["tcpSettings"] = {}
+    elif network == "ws":
+        ws: dict = {"path": path or "/"}
+
+        if host:
+            ws["headers"] = {"Host": host}
+
+        stream["wsSettings"] = ws
+    elif network == "grpc":
+        stream["grpcSettings"] = {"serviceName": str(s.get("service") or "").strip(), "multiMode": True}
+    elif network == "httpupgrade":
+        stream["httpupgradeSettings"] = {"path": path or "/", "host": host}
+    else:
+        mode = str(s.get("mode") or "auto").strip().lower()
+
+        if mode not in XHTTP_MODES:
+            raise ValueError(f"the xhttp mode is one of {', '.join(XHTTP_MODES)}")
+
+        stream["xhttpSettings"] = {"path": path or "/", "host": host, "mode": mode}
+
+    pub = None
+
+    if security == "tls":
+        cert, kf = str(s.get("tls_cert") or "").strip(), str(s.get("tls_key") or "").strip()
+
+        if not cert or not kf:
+            raise ValueError("TLS needs the path of the certificate and of its key on the node (for example /var/lib/pg-node/certs/ssl_cert.pem)")
+
+        tls: dict = {"certificates": [{"certificateFile": cert, "keyFile": kf}], "minVersion": "1.2"}
+        alpn = _words(s.get("alpn"))
+
+        if alpn:
+            tls["alpn"] = alpn
+
+        stream["tlsSettings"] = tls
+    elif security == "reality":
+        dest = str(s.get("reality_dest") or "").strip()
+        names = _words(s.get("reality_names"))
+
+        if not dest or not _HOSTPORT.match(dest) or "://" in dest:
+            raise ValueError("REALITY needs the site it imitates, like www.example.com:443")
+
+        if not names:
+            names = [dest.rsplit(":", 1)[0] if dest.count(":") == 1 else dest]
+
+        ids = _words(s.get("reality_short_ids")) or [secrets.token_hex(8)]
+
+        if not all(re.fullmatch(r"[0-9a-fA-F]{0,16}", i) and len(i) % 2 == 0 for i in ids):
+            raise ValueError("a REALITY short id is up to 16 hex characters, an even number of them")
+
+        given = str(s.get("reality_private_key") or "").strip()
+
+        if given:
+            keys = {"private_key": given, "public_key": public_of(given)}
+        elif preview:
+            keys = {"private_key": "PREVIEW-ONLY-KEY-NOT-STORED", "public_key": None}
+        else:
+            keys = reality_keys()
+
+        pub = keys["public_key"]
+        stream["realitySettings"] = {"show": False, "dest": dest if ":" in dest else dest + ":443", "xver": 0, "serverNames": names, "privateKey": keys["private_key"], "shortIds": ids}
+
+    inbound: dict = {"tag": tag, "listen": str(s.get("listen") or "0.0.0.0").strip(), "port": port, "protocol": proto, "settings": settings, "streamSettings": stream}
+
+    if s.get("sniffing", True):
+        inbound["sniffing"] = {"enabled": True, "destOverride": ["http", "tls", "quic"]}
+
+    return inbound, pub
+
+
+def inbound_change(cfg: dict, op: str, tag: str | None = None, inbound: dict | None = None) -> dict:
+    """Pure: the config after one change of one inbound - op "add" (a new inbound), "set" (replace the inbound called `tag`, its tag may change) or "delete"."""
+    new = copy.deepcopy(cfg)
+    lst = new.get("inbounds")
+
+    if not isinstance(lst, list):
+        raise ValueError("the config has no inbounds list")  # noqa: TRY004 - the caller shows the ValueError text to the operator
+
+    idx = next((i for i, ib in enumerate(lst) if isinstance(ib, dict) and ib.get("tag") == tag), None) if tag is not None else None
+
+    if op == "add":
+        if not isinstance(inbound, dict) or not str(inbound.get("tag") or "").strip():
+            raise ValueError("the inbound needs a tag")
+
+        if any(isinstance(ib, dict) and ib.get("tag") == inbound["tag"] for ib in lst):
+            raise ValueError(f"an inbound called “{inbound['tag']}” exists already")
+
+        lst.append(inbound)
+    elif op == "set":
+        if idx is None:
+            raise ValueError(f"no inbound is called “{tag}”")
+
+        if not isinstance(inbound, dict):
+            raise ValueError("the inbound must be a JSON object")
+
+        lst[idx] = inbound
+    elif op == "delete":
+        if idx is None:
+            raise ValueError(f"no inbound is called “{tag}”")
+
+        del lst[idx]
+    else:
+        raise ValueError("op is add, set or delete")
+
+    return new
+
+
+def _inbound_candidate(cur: dict, op: str, tag: str | None, spec: dict | None, text: str | None, taken: set[str], preview: bool) -> tuple[dict, dict | None, str | None]:
+    """(the new config, the inbound as it will be stored, the public key made now): from the form (`spec`) or the inbound's JSON (`text`, its placeholders put back from the core)."""
+    ib, pub = None, None
+
+    if op == "delete":
+        return inbound_change(cur["config"], op, tag), None, None
+
+    if spec is not None:
+        ib, pub = build_inbound(spec, taken, preview=preview)
+    elif text is not None:
+        ib = unmask_secrets(parse_text(text), cur["config"])
+    else:
+        raise ValueError("send the inbound as `spec` (the form) or `text` (its JSON)")
+
+    return inbound_change(cur["config"], op, tag, ib), ib, pub
+
+
+def inbound_dry_run(c: dict, core_id: int, op: str, tag: str | None = None, spec: dict | None = None, text: str | None = None) -> dict:
+    """What one change of one inbound would do, written nowhere: the answer of a dry run of the whole config (checks, warnings about the hosts and groups that use the inbound, the diff) plus
+    `inbound`, the inbound as it would be stored (secrets as placeholders)."""
+    cur = _get_core(c, core_id)
+
+    try:
+        new, ib, _pub = _inbound_candidate(cur, op, tag, spec, text, _all_tags(c) if op == "add" else set(), True)
+    except ValueError as e:
+        return {**_dry_of(c, cur, None, [str(e)]), "inbound": None}
+
+    out = _dry_of(c, cur, new, [])
+    out["inbound"] = mask_secrets(ib)[0] if ib is not None else None
+    return out
+
+
+def inbound_apply(c: dict, core_id: int, op: str, tag: str | None = None, spec: dict | None = None, text: str | None = None, confirm: bool = False, restart_after: bool = False,
+                  base_rev: str | None = None) -> dict:
+    """Add, replace or delete ONE inbound of a core: everything a save does (the checks, the warnings that need `confirm`, the backup first, the read back, the optional restart)
+    with the change built here. A REALITY inbound made from the form gets a new key pair: the answer carries its public key (the private one never leaves)."""
+    _writable()
+    cur = _get_core(c, core_id)
+    new, ib, pub = _inbound_candidate(cur, op, tag, spec, text, _all_tags(c) if op == "add" else set(), False)
+    note = {"add": f"before adding the inbound {_obj(ib).get('tag')}", "set": f"before changing the inbound {tag}", "delete": f"before deleting the inbound {tag}"}[op]
+    out = save(c, core_id, config=new, confirm=confirm, restart_after=restart_after, base_rev=base_rev or rev_of(cur), note=note)
+    out["inbound"] = mask_secrets(ib)[0] if ib is not None else None
+    out["public_key"] = pub
+    return out

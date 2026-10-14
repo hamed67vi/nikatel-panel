@@ -13,7 +13,7 @@ const pgAdminDays = iso => iso ? Math.ceil((Date.parse(iso) - Date.now()) / 8640
 const pgAdminLabel = s => String(s || "").replace(/_/g, " ");
 const pgAdminSelect = (name, options, cur, attrs = "") => `<select name="${name}" ${attrs}>${options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
 const pgAdminSeg = items => `<div class="pg-admin-seg">${items.map(([k, l, on, cls, click]) => `<button type="button" class="${on ? "on" : ""} ${cls || ""}" onclick="${click}">${esc(l)}</button>`).join("")}</div>`;
-const pgAdminViewSeg = () => pgAdminSeg([["admins", "Admins", pgAdminS.view === "admins", "", "pgAdminView('admins')"], ["keys", "API keys", pgAdminS.view === "keys", "", "pgAdminView('keys')"]]);
+const pgAdminViewSeg = () => pgAdminSeg([["admins", "Admins", pgAdminS.view === "admins", "", "pgAdminView('admins')"], ["keys", "API keys", pgAdminS.view === "keys", "", "pgAdminView('keys')"], ["roles", "Roles", pgAdminS.view === "roles", "", "pgAdminView('roles')"]]);
 
 /* the app draws a switch by the class "on" of its label, not by :checked: in the forms of these tabs (nothing is redrawn while a box is ticked) the class follows the box */
 document.addEventListener("change", e => {
@@ -78,6 +78,7 @@ window.pgAdminPwGenerate = btn => { const i = btn.parentElement.querySelector("i
 /* ================================================================== ADMINS */
 pgTabs.admins = {label: "Admins", order: 60, types: ["pasarguard"], render: async (id, box) => {
   const S = pgAdminS; pgAdminEnter(id, "admins");
+  if (S.view === "roles" && window.pgRolesRender) return pgRolesRender(id, box);      // the third view: the roles (pg_roles.js)
   const w = S.view === "keys" ? "K" : "A";
   if (!S[w]) { pgLoading(box, w === "K" ? "Reading the API keys…" : "Reading the admins…"); try { await pgAdminLoad(w); } catch (e) { pgAdminFail(e, box); return; } }
   if (!box.isConnected || S.id !== id || !S[w]) return;

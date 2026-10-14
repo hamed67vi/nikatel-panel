@@ -97,7 +97,7 @@ def twin_of(h: dict, port: int = 443, alpn: str = "http/1.1", fingerprint: str =
     if not one(h.get("host")):
         cp["host"] = [sni] if isinstance(h.get("host"), list) else sni
 
-    cp["alpn"] = alpn
+    cp["alpn"] = [a.strip() for a in alpn.split(",") if a.strip()] if isinstance(h.get("address"), list) else alpn         # (PasarGuard wants a list of names, Marzban one text)
     cp["fingerprint"] = fingerprint
     cp["allowinsecure"] = False
     cp["is_disabled"] = False
@@ -239,7 +239,14 @@ def _read(c: dict) -> tuple[object, bool, list[dict]]:
 
 
 def _core(c: dict) -> dict:
+    """The core config the inbounds are read from: Marzban has one (`/api/core/config`); PasarGuard has cores of its own (`/api/cores`, each with its config), whose inbounds are put together.
+    (Without this every PasarGuard host was skipped as "the inbound is not in the core config": found on a live 5.4.1 panel.)"""
     try:
+        if c.get("type") == "pasarguard":
+            r = panels.call(c, "GET", "/api/cores")
+            cores = r.get("cores") if isinstance(r, dict) else r
+            return {"inbounds": [ib for k in (cores if isinstance(cores, list) else []) if isinstance(k, dict) and isinstance(k.get("config"), dict) for ib in (k["config"].get("inbounds") or []) if isinstance(ib, dict)]}
+
         return panels.call(c, "GET", "/api/core/config") or {}
     except (panels.PanelError, ValueError):
         return {}
@@ -346,7 +353,7 @@ def create(c: dict, keys: list[str], port: int = 443, alpn: str = "http/1.1", fi
         else:
             for _tag, tw in made:
                 tw["inbound_tag"] = tw.get("inbound_tag") or _tag
-                panels.call(c, "POST", "/api/host", body=tw)
+                panels.call(c, "POST", "/api/host/", body=panels.host_input(tw))        # (with the slash: without it the panel answers 307 and makes nothing)
 
     return {"items": items, "made": len(made), "on": sum(1 for i in items if i["status"] == "made_on"), "off": sum(1 for i in items if i["status"] == "made_off"), "backup": backup}
 

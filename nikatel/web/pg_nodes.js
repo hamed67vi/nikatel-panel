@@ -1,7 +1,7 @@
 /* PasarGuard tab: the nodes of a PasarGuard panel, joined with the servers of this panel (by address). Registers itself in pgTabs (see pg_common.js).
    ONE list: every node of the panel beside the server of ours it runs on (matched by address, on the server side), then the foreign servers that are not a node yet, each with the
    button that makes it one. Everything is a route first (/api/panels/{id}/pg/nodes...); this file only calls them. Uses followStory of app.js for the long action. */
-const pgNodesS = {id: 0, key: "", at: 0, data: null, runs: [], bk: [], q: "", fit: false, fitT: 0};
+const pgNodesS = {id: 0, key: "", at: 0, data: null, runs: [], bk: [], q: "", fit: false, fitT: 0, sel: new Set()};
 const pgNodesGB = 1024 ** 3;
 const pgNodesHere = id => typeof pn !== "undefined" && pn.tab === "nodes" && String(pn.id) === String(id) && !!$("#pn-body");      // the tab on screen is still this one
 const pgNodesNode = id => ((pgNodesS.data || {}).nodes || []).find(n => n.id === +id);
@@ -50,9 +50,9 @@ window.pgNodesStory = async aid => {      // the story of a run, followed until 
   return fin;
 };
 window.pgNodesReload = () => { pgNodesS.data = null; pgLoading($("#pn-body"), "Reading the nodes…"); pgNodesLoad(pgNodesS.id); };
-const pgNodesAfter = async () => {      // after a change: read again now, and once more when the node has had time to connect
-  await pgNodesLoad(pgNodesS.id);
-  setTimeout(() => { if (pgNodesHere(pgNodesS.id)) pgNodesLoad(pgNodesS.id); }, 6000);
+const pgNodesAfter = async () => {      // after a change: read again now, and once more when the node has had time to connect (the Servers page too: it shows the nodes on each server)
+  if (pgNodesHere(pgNodesS.id)) { await pgNodesLoad(pgNodesS.id); setTimeout(() => { if (pgNodesHere(pgNodesS.id)) pgNodesLoad(pgNodesS.id); }, 6000); }
+  if (window.pgSrvLoad) pgSrvLoad().then(() => { if (state.page === "nodes") refresh(); });
 };
 window.pgNodesOpenSrv = id => { if (typeof docOpen === "function") docOpen(id); };      // the window of the server, on the Servers page
 /* a change made from a window: when it worked the window closes and the status bar says so (a refusal stays in the window, with the panel's own reason) */
@@ -64,7 +64,7 @@ const pgNodesBar = v => v == null ? '<span class="mut">—</span>' : `<div class
 const pgNodesRank = n => ({error: 0, connecting: 1, limited: 1, disabled: 2}[n.status] ?? 3);      // what needs a look comes first
 function pgNodesServerCell(n) {
   const s = n.server;
-  if (!s) return `<span class="mut" title="No server of this panel has the address ${esc(n.address)}">${n.hint ? `no server here · <b>${esc(n.hint.name)}</b> has another address` : "no server of ours"}</span>`;
+  if (!s) return `<span class="mut" title="No server of this panel has the address ${esc(n.address)}">${n.hint ? `no server here · <b>${esc(n.hint.name)}</b> has another address` : "no server of ours"}</span> <a class="pg-nodes-link" onclick="pgSrvAddFromNode(${n.id})" title="Add the machine of this node to the servers (the form opens with its name and address)">add to servers</a>`;
   const dot = s.online ? "up" : s.online === false ? "down" : "";
   return `<span class="pg-nodes-srv" title="${esc(s.host)} · ${esc(s.role)}${s.sample_ts ? " · sample " + ago(s.sample_ts) + " ago" : ""}${n.match === "dns" ? " · matched through the DNS" : ""}${s.online === false ? " · " + esc(s.last_error || "offline") : ""}"><span class="st ${dot}"></span><a class="pg-nodes-link" onclick="pgNodesOpenSrv(${s.id})"><b>${esc(s.name)}</b></a><span class="pill">${esc(s.role)}</span>${n.match === "dns" ? '<span class="pill">DNS</span>' : ""}</span>`;
 }
@@ -72,8 +72,8 @@ function pgNodesRow(n) {
   const s = n.server, live = n.live || {};
   const cpu = s && s.cpu != null ? s.cpu : live.cpu, ram = s && s.ram != null ? s.ram : live.ram;      // our own sample first; what the node says about itself when no server of ours matches
   const src = s && s.cpu != null ? "sampled by this panel" : "reported by the node";
-  const more = `<select class="sm pg-nodes-more" onchange="pgNodesMenu(${n.id}, this)" title="More actions on this node"><option value="">More…</option><option value="usage">Usage…</option><option value="cert">Certificate…</option><option value="sync">Resync users</option><option value="reconnect">Restart</option><option value="${n.status === "disabled" ? "enable" : "disable"}">${n.status === "disabled" ? "Enable" : "Disable"}</option><option value="reset">Reset counters</option><option value="update">Update node…</option><option value="core">Update Xray…</option><option value="geo">Update geo files…</option><option value="delete">Delete…</option></select>`;
-  return `<tr class="${pgNodesSt[n.status] ?? ""}"><td class="name"><b>${esc(n.name)}</b> <small class="mut">${esc(n.address)}${n.port !== 62050 ? ":" + n.port : ""}</small></td>
+  const more = `<select class="sm pg-nodes-more" onchange="pgNodesMenu(${n.id}, this)" title="More actions on this node"><option value="">More…</option><option value="usage">Usage…</option><option value="stats">Resources…</option><option value="latency">Outbound latency…</option><option value="cert">Certificate…</option><option value="sync">Resync users</option><option value="reconnect">Restart</option><option value="${n.status === "disabled" ? "enable" : "disable"}">${n.status === "disabled" ? "Enable" : "Disable"}</option><option value="reset">Reset counters</option><option value="update">Update node…</option><option value="core">Update Xray…</option><option value="geo">Update geo files…</option><option value="delete">Delete…</option></select>`;
+  return `<tr class="${pgNodesSt[n.status] ?? ""}"><td class="pg-nodes-ck"><input type="checkbox" class="ck" ${pgNodesS.sel.has(n.id) ? "checked" : ""} onchange="pgNodesSel(${n.id}, this.checked)" aria-label="Select ${esc(n.name)}"></td><td class="name"><b>${esc(n.name)}</b> <small class="mut">${esc(n.address)}${n.port !== 62050 ? ":" + n.port : ""}</small></td>
     <td><span class="st ${pgNodesSt[n.status] ?? ""}" title="${esc(n.message || n.status)}">${esc(n.status || "?")}</span></td><td>${pgNodesServerCell(n)}</td>
     <td title="CPU ${esc(src)}">${pgNodesBar(cpu)}</td><td title="RAM ${esc(src)}">${pgNodesBar(ram)}</td>
     <td class="mut" title="Xray ${esc(n.xray || "?")} · node software ${esc(n.version || "?")}">${esc(n.xray || "—")} <small>${esc(n.version || "")}</small></td>
@@ -97,7 +97,9 @@ function pgNodesRows() {
   const ns = d.nodes.filter(n => nkHit([n.name, n.address, n.status, n.xray, n.version, n.server && n.server.name, n.server && n.server.host, n.server && n.server.role].filter(Boolean).join(" "), q)).sort((a, b) => pgNodesRank(a) - pgNodesRank(b) || a.name.localeCompare(b.name));
   const fs = d.free.filter(s => nkHit([s.name, s.host, s.provider, s.country, s.role].filter(Boolean).join(" "), q));
   const a = $("#pg-nodes-a"), b = $("#pg-nodes-b"); if (!a || !b) return;
-  a.innerHTML = ns.map(pgNodesRow).join("") || `<tr><td colspan="9" class="mut">${d.nodes.length ? "no node matches" : "this panel has no node yet"}</td></tr>`;
+  pgNodesS.sel = new Set([...pgNodesS.sel].filter(i => d.nodes.some(n => n.id === i)));      // a node that is gone is not selected any more
+  a.innerHTML = ns.map(pgNodesRow).join("") || `<tr><td colspan="10" class="mut">${d.nodes.length ? "no node matches" : "this panel has no node yet"}</td></tr>`;
+  pgNodesBulkBar(ns);
   b.innerHTML = fs.map(pgNodesFreeRow).join("") || `<tr><td colspan="5" class="mut">${d.free.length ? "no server matches" : "every foreign server of this panel is a node"}</td></tr>`;
   const nb = $("#pg-nodes-nb"); if (nb) nb.textContent = fs.length;
   pgNodesFit();
@@ -108,10 +110,10 @@ function pgNodesDraw() {
   const t = d.totals, bad = t.nodes - t.connected;
   const left = `<span class="pg-nodes-sum"><span class="pill">${t.nodes} node${t.nodes === 1 ? "" : "s"}</span><span class="pill ${bad ? "err" : "ok"}">${bad ? bad + " not connected" : "all connected"}</span><span class="pill" title="Nodes whose address is the address of a server of this panel">${t.with_server} on our servers</span>${d.min_node_version ? `<span class="pill" title="The oldest node software this panel accepts">min ${esc(d.min_node_version)}</span>` : ""}</span>
     <input id="pg-nodes-q" class="pg-nodes-q" type="search" placeholder="Search nodes and servers" value="${esc(pgNodesS.q)}" oninput="pgNodesQ(this.value)" autocomplete="off" spellcheck="false">`;
-  const right = `<button class="sm" onclick="pgNodesBackups()" title="The nodes saved to files before an edit or a delete">Backups</button><button class="sm" onclick="pgNodesReload()" title="Read the nodes from the panel again">↻</button><button class="sm pri" onclick="pgNodesAdd()" title="Add a node by hand: address, key and certificate">＋ Add node</button>`;
-  const cols = ["16%", "10%", "16%", "8%", "8%", "9%", "11%", "4%", "18%"].map(w => `<col style="width:${w}">`).join(""), fcols = ["34%", "22%", "10%", "10%", ""].map(w => w ? `<col style="width:${w}">` : "<col>").join("");
+  const right = `<span id="pg-nodes-bulk" class="pg-nodes-bulk"></span><select class="sm pg-nodes-wide" onchange="pgNodesWide(this)" title="Things that concern the whole panel"><option value="">Panel…</option><option value="counts">Users online over time…</option><option value="reconnect">Restart every node…</option><option value="clear">Clear usage data…</option></select><button class="sm" onclick="pgNodesBackups()" title="The nodes saved to files before an edit or a delete">Backups</button><button class="sm" onclick="pgNodesReload()" title="Read the nodes from the panel again">↻</button><button class="sm pri" onclick="pgNodesAdd()" title="Add a node by hand: address, key and certificate">＋ Add node</button>`;
+  const cols = ["34px", "15%", "9%", "15%", "8%", "8%", "9%", "11%", "4%", "18%"].map(w => `<col style="width:${w}">`).join(""), fcols = ["34%", "22%", "10%", "10%", ""].map(w => w ? `<col style="width:${w}">` : "<col>").join("");
   pgPaint(box, `${pgBar(left, right)}<div id="pg-nodes-run"></div>${(d.warnings || []).map(w => `<div class="pg-nodes-warn">${esc(w)}</div>`).join("")}
-    <div class="lbox full pg-nodes-box pg-nodes-a"><table class="tbl lift pg-nodes-tbl"><colgroup>${cols}</colgroup><thead><tr><th>Node</th><th>Status</th><th>Our server</th><th>CPU</th><th>RAM</th><th>Xray</th><th>Traffic</th><th>Coef.</th><th></th></tr></thead><tbody id="pg-nodes-a"></tbody></table></div>
+    <div class="lbox full pg-nodes-box pg-nodes-a"><table class="tbl lift pg-nodes-tbl"><colgroup>${cols}</colgroup><thead><tr><th class="pg-nodes-ck"><input type="checkbox" class="ck" id="pg-nodes-all" onchange="pgNodesSelAll(this.checked)" aria-label="Select every node shown"></th><th>Node</th><th>Status</th><th>Our server</th><th>CPU</th><th>RAM</th><th>Xray</th><th>Traffic</th><th>Coef.</th><th></th></tr></thead><tbody id="pg-nodes-a"></tbody></table></div>
     <div class="pg-nodes-h"><b>Servers that are not a node</b><span class="pill" id="pg-nodes-nb">0</span><small class="mut">foreign servers that no node of this PasarGuard panel runs on${t.free - t.candidates ? ` · ${t.free - t.candidates} of them carry a node of another panel (dimmed: a new node would clash with it)` : ""}</small></div>
     <div class="lbox full pg-nodes-box pg-nodes-b"><table class="tbl lift pg-nodes-tbl"><colgroup>${fcols}</colgroup><thead><tr><th>Server</th><th>Where</th><th>CPU</th><th>RAM</th><th></th></tr></thead><tbody id="pg-nodes-b"></tbody></table></div>`);
   pgNodesRun(); pgNodesRows();
@@ -134,6 +136,8 @@ window.pgNodesMenu = async (id, sel) => {
   const v = sel.value; sel.selectedIndex = 0; const n = pgNodesNode(id); if (!v || !n) return;
   const pid = pgNodesS.id, path = `/nodes/${id}`, post = (p, body) => pgApi(pid, path + p, {method: "POST", body: body || {}});
   if (v === "usage") return pgNodesUsage(id);
+  if (v === "stats") return pgNodesStats(id);
+  if (v === "latency") return pgNodesLatency(id);
   if (v === "cert") return pgNodesCert(id);
   if (v === "sync") { if (await gconfirm(`Resync the users of ${n.name}? The panel sends the list of users to the node again. Nothing restarts and nobody is cut; on a big panel it takes a few seconds.`)) pgDo(() => post("/sync"), `Users sent to ${n.name} again`, pgNodesAfter); return; }
   if (v === "reconnect") { if (await gconfirm(`Restart node ${n.name}? The panel stops and starts Xray on it: the users connected through this node drop for a few seconds and reconnect by themselves. Nothing is deleted.`)) pgDo(() => post("/reconnect"), `${n.name} is restarting`, pgNodesAfter); return; }
@@ -275,8 +279,8 @@ window.pgNodesRestore = async i => {
 };
 
 /* ---- the unified flow: make a server of ours a node (install if needed, read the certificate, add to the panel, wait) */
-window.pgNodesMake = async sid => {
-  const s = pgNodesFreeSrv(sid); if (!s) return;
+window.pgNodesMake = async sid => {      // from the Nodes tab (a server of the list below) or from the window of a server (pg_srvnode.js sets pgNodesS.id to the panel it chose)
+  const s = pgNodesFreeSrv(sid) || (state.serversCache || []).find(x => x.id === +sid); if (!s) return;
   showModal(`<b>Make ${esc(s.name)} a node</b> <span class="pill">${esc(s.host)}</span>`, '<div class="loading"><i class="spin"></i><span>Looking at the server (read-only) and at the panel…</span></div>', "wide");
   try { pgNodesMakePaint(sid, await pgApi(pgNodesS.id, "/nodes/make/plan", {method: "POST", body: {server_id: sid}})); } catch (e) { showModal(`<b>Make ${esc(s.name)} a node</b>`, `<div class="err">${esc(e.message)}</div>`, "wide"); }
 };
@@ -316,5 +320,95 @@ window.pgNodesMakeGo = async (e, sid, installed) => {
     const fin = await pgNodesStory(r.action_id);
     if (fin) toast(fin.ok ? `✓ ${body.name} is a node now` : "✕ Not finished: read the last line", fin.ok ? "ok" : "bad");
   } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};
+
+/* ---- several nodes at once, and what concerns the whole panel (the panel's bulk routes; everything that cuts users or cannot be undone asks first, and the server needs the confirm too) */
+window.pgNodesSel = (id, on) => { if (on) pgNodesS.sel.add(id); else pgNodesS.sel.delete(id); pgNodesBulkBar(); };
+window.pgNodesSelAll = on => {
+  const d = pgNodesS.data, q = pgNodesS.q; if (!d) return;
+  d.nodes.filter(n => nkHit([n.name, n.address, n.status, n.xray, n.version, n.server && n.server.name, n.server && n.server.host, n.server && n.server.role].filter(Boolean).join(" "), q)).forEach(n => { if (on) pgNodesS.sel.add(n.id); else pgNodesS.sel.delete(n.id); });
+  document.querySelectorAll("#pg-nodes-a input.ck").forEach(i => { i.checked = on; });
+  pgNodesBulkBar();
+};
+function pgNodesBulkBar(shown) {
+  const el = $("#pg-nodes-bulk"), S = pgNodesS, all = $("#pg-nodes-all"); if (!el) return;
+  const n = S.sel.size, rows = shown || (S.data ? S.data.nodes : []);
+  if (all) { const on = rows.filter(r => S.sel.has(r.id)).length; all.checked = rows.length > 0 && on === rows.length; all.indeterminate = on > 0 && on < rows.length; }
+  el.innerHTML = n ? `<span class="mut">${n} selected</span><button class="sm" onclick="pgNodesBulk('reconnect')" title="Restart Xray on the chosen nodes">Restart</button><button class="sm" onclick="pgNodesBulk('enable')">Enable</button><button class="sm" onclick="pgNodesBulk('disable')">Disable</button><button class="sm" onclick="pgNodesBulk('reset')" title="Set their traffic counters to zero">Reset counters</button><button class="sm" onclick="pgNodesBulk('update')" title="Ask them to update their own software">Update</button><button class="sm danger" onclick="pgNodesBulk('delete')">Delete</button><button class="sm" onclick="pgNodesSelAll(false)" title="Untick everything">Clear</button>` : "";
+}
+const pgNodesBulkText = {
+  reconnect: n => `Restart Xray on ${n}? The panel stops and starts Xray on each: whoever is connected through them drops for a few seconds and reconnects by itself. Nothing is deleted.`,
+  enable: n => `Enable ${n}? The panel connects to them again.`,
+  disable: n => `Disable ${n}? The panel disconnects from them: everybody connected through them is cut until they are enabled again. Users and links stay.`,
+  reset: n => `Set the traffic counters of ${n} to zero? The panel keeps a log row with the old numbers; a node stopped by its data limit connects again.`,
+  update: n => `Ask ${n} to update their own software? Each updates itself and restarts: its users drop for a minute or so. A big batch drops many at once - do a few at a time.`,
+  delete: n => `Delete ${n} from the panel? The panel stops using them and drops their traffic history; whoever is connected through them is cut. The users are not deleted. Every node is saved to a file first: Backups can make them again (new ids, no history). The servers themselves are not touched.`,
+};
+window.pgNodesBulk = async action => {
+  const S = pgNodesS, ids = [...S.sel], nodes = ids.map(pgNodesNode).filter(Boolean); if (!ids.length) return;
+  const what = nodes.length === 1 ? `node ${nodes[0].name}` : `${nodes.length} nodes (${nodes.slice(0, 4).map(n => n.name).join(", ")}${nodes.length > 4 ? ", …" : ""})`;
+  if (action !== "enable" && !await gconfirm(pgNodesBulkText[action](what), {danger: ["disable", "delete", "update"].includes(action)})) return;
+  const r = await pgDo(() => pgApi(S.id, "/nodes/bulk", {method: "POST", body: {action, ids, confirm: true}}), `${action} done for ${nodes.length === 1 ? nodes[0].name : nodes.length + " nodes"}${action === "delete" ? " (saved in Backups)" : ""}`, pgNodesAfter);
+  if (r) { S.sel = new Set(); pgNodesBulkBar(); }
+};
+window.pgNodesWide = async sel => {
+  const v = sel.value; sel.selectedIndex = 0; if (!v) return;
+  if (v === "counts") return pgNodesCounts();
+  if (v === "reconnect") {
+    if (!await gconfirm("Restart Xray on EVERY node of this panel? Everyone connected through any node drops for a few seconds and reconnects by itself. Nothing is deleted.", {danger: true})) return;
+    pgDo(() => pgApi(pgNodesS.id, "/nodes/reconnect-all", {method: "POST", body: {confirm: true}}), "Every node is restarting", pgNodesAfter); return;
+  }
+  if (v === "clear") return pgNodesClear();
+};
+
+/* ---- charts: the curves of a node, the users online over time */
+const pgNodesSpark = (vals, max, cls = "") => {
+  const w = 360, h = 52, n = vals.length, ok = vals.filter(v => v != null), m = max || Math.max(...ok, 1);
+  if (n < 2 || !ok.length) return `<svg class="pg-nodes-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><text x="8" y="30" fill="currentColor" opacity=".5" font-size="11">no data in this time</text></svg>`;
+  const pts = vals.map((v, i) => `${(i / (n - 1) * w).toFixed(1)},${(h - 3 - Math.min(1, (v == null ? 0 : v) / m) * (h - 6)).toFixed(1)}`).join(" ");
+  return `<svg class="pg-nodes-spark ${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+};
+const pgNodesSpans = [["hour", 24, "last 24 hours"], ["hour", 168, "last 7 days, by hour"], ["day", 720, "last 30 days"], ["month", 8760, "last 12 months"]];
+const pgNodesSpanSel = (cur, fn) => `<select onchange="const o = this.value.split(':'); ${fn}(+o[1], o[0])">${pgNodesSpans.map(([p, h, l]) => `<option value="${p}:${h}" ${p === cur[0] && h === cur[1] ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+window.pgNodesStats = async (id, hours = 24, period = "hour") => {
+  const n = pgNodesNode(id); if (!n) return;
+  const draw = body => showModal(`<b>Resources of ${esc(n.name)}</b>`, `<div class="frm-act pg-nodes-tools">${pgNodesSpanSel([period, hours], `pgNodesStats.bind(null, ${id})`)}<span class="sp"></span><small class="mut">as the node itself reports them to the panel</small></div>${body}`, "wide");
+  draw('<div class="loading"><i class="spin"></i><span>Reading the curves…</span></div>');
+  try {
+    const r = await pgApi(pgNodesS.id, `/nodes/${id}/stats?period=${period}&hours=${hours}`), s = r.summary, spd = v => (v == null ? "—" : fmtB(v) + "/s"), pc = v => (v == null ? "—" : v + " %");
+    const row = (label, key, max, fmt, cls) => `<div class="pg-nodes-cv"><span>${label}</span>${pgNodesSpark(r.rows.map(x => x[key]), max, cls)}<small class="mut">highest ${fmt(s[key].max)} · average ${fmt(s[key].avg)}</small></div>`;
+    draw(`<div class="pg-nodes-curves">${row("CPU", "cpu", 100, pc, "cpu")}${row("Memory", "mem", 100, pc, "mem")}${row("Download", "rx", null, spd, "rx")}${row("Upload", "tx", null, spd, "tx")}</div><small class="mut">${r.rows.length} points. The speed is what the node measured at that moment, not a total.</small>`);
+  } catch (e) { draw(`<div class="err">${esc(e.message)}</div>`); }
+};
+window.pgNodesLatency = async id => {
+  const n = pgNodesNode(id); if (!n) return;
+  const draw = body => showModal(`<b>Outbound latency of ${esc(n.name)}</b>`, `<div class="frm-act pg-nodes-tools"><button class="sm" onclick="pgNodesLatency(${id})">↻ Test again</button><span class="sp"></span><small class="mut">the panel asks the node to test its outbounds (a few seconds)</small></div>${body}`, "wide");
+  draw('<div class="loading"><i class="spin"></i><span>The node is testing its outbounds…</span></div>');
+  try {
+    const r = await pgApi(pgNodesS.id, `/nodes/${id}/latency`);
+    draw(`<div class="pg-nodes-tot"><span class="pill ${r.alive === r.total ? "ok" : "warn"}">${r.alive} of ${r.total} alive</span></div><div class="lbox full pg-nodes-ubox"><table class="tbl lift"><colgroup><col style="width:28%"><col style="width:90px"><col style="width:90px"><col><col style="width:90px"></colgroup><thead><tr><th>Outbound</th><th>State</th><th>Delay</th><th>Goes to</th><th>Source</th></tr></thead>
+      <tbody>${r.rows.map(x => `<tr><td class="name">${esc(x.name)}</td><td><span class="st ${x.alive ? "up" : "down"}">${x.alive ? "alive" : "dead"}</span></td><td class="num">${x.alive ? x.ms + " ms" : "—"}</td><td class="mono mut">${esc(x.target || "—")}</td><td class="mut">${esc(x.source)}</td></tr>`).join("") || '<tr><td colspan="5" class="mut">the node tests no outbound</td></tr>'}</tbody></table></div><small class="mut">Only the address of each outbound is shown: its credentials never leave the panel.</small>`);
+  } catch (e) { draw(`<div class="err">${esc(e.message)}</div>`); }
+};
+window.pgNodesCounts = async (metric = "online", hours = 24, period = "hour") => {
+  const draw = body => showModal("<b>Users over time</b>", `<div class="frm-act pg-nodes-tools"><select onchange="pgNodesCounts(this.value, ${hours}, '${period}')">${["online", "expired", "limited"].map(m => `<option ${m === metric ? "selected" : ""}>${m}</option>`).join("")}</select>${pgNodesSpanSel([period, hours], `pgNodesCounts.bind(null, '${metric}')`)}<span class="sp"></span></div>${body}`, "wide");
+  draw('<div class="loading"><i class="spin"></i><span>Reading…</span></div>');
+  try {
+    const r = await pgApi(pgNodesS.id, `/nodes/user-counts?metric=${metric}&period=${period}&hours=${hours}`), vals = r.rows.map(x => x.n);
+    draw(`<div class="pg-nodes-curves"><div class="pg-nodes-cv"><span>${esc(metric)}</span>${pgNodesSpark(vals, null, "cpu")}<small class="mut">highest ${vals.length ? Math.max(...vals) : "—"} · ${r.count} during the period</small></div></div><small class="mut">${r.rows.length} points.</small>`);
+  } catch (e) { draw(`<div class="err">${esc(e.message)}</div>`); }
+};
+window.pgNodesClear = () => {
+  showModal("<b>Clear usage data</b>", `<form class="frm pg-nodes-form" onsubmit="return pgNodesClearGo(event)"><small style="grid-column: 1 / -1" class="err">This removes the traffic history of the panel for good: nothing here can bring it back. The counters of the users and of the nodes stay as they are; only the history behind the charts goes.</small>
+    <label>Table<select name="table"><option value="node_usages">node_usages - the traffic of each node over time</option><option value="node_user_usages">node_user_usages - the traffic of each user on each node</option></select></label>
+    <label>From <small>empty = from the start</small><input name="start" type="date"></label><label>To <small>empty = to now</small><input name="end" type="date"></label>
+    <label style="grid-column: 1 / -1">Type the name of the table to confirm<input name="typed" required autocomplete="off" placeholder="node_usages" spellcheck="false"></label>
+    <div class="frm-act"><button class="danger" type="submit">Clear for good</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide");
+};
+window.pgNodesClearGo = async e => {
+  e.preventDefault(); const f = e.target, body = {table: f.elements.table.value, typed: f.elements.typed.value.trim()};
+  if (f.elements.start.value) body.start = f.elements.start.value; if (f.elements.end.value) body.end = f.elements.end.value;
+  try { await pgApi(pgNodesS.id, "/nodes/clear-usage", {method: "POST", body}); closeModal(); toast(`✓ ${body.table} cleared`, "ok"); } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };

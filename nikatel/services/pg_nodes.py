@@ -678,6 +678,39 @@ def _others(c: dict) -> list[dict]:
     return out
 
 
+def panel_nodes() -> list[dict]:
+    """Every node of EVERY panel of this installation (Marzban and PasarGuard) as the health job of the panels saw it last - no call to any panel - one row each:
+    {panel_id, panel, type, node_id, name, address, status, message}. The Servers page puts them on the servers they run on."""
+    with session() as db:
+        rows = db.execute(select(Panel.id, Panel.name, Panel.type, Panel.nodes).order_by(Panel.id)).all()
+
+    out = []
+
+    for pid, name, typ, nodes in rows:
+        for n in nodes if isinstance(nodes, list) else []:
+            if isinstance(n, dict) and str(n.get("address") or "").strip():
+                out.append({"panel_id": pid, "panel": _text(name, 40), "type": _text(typ, 12), "node_id": n.get("id") if isinstance(n.get("id"), int) else None, "name": _text(n.get("name"), 60),
+                            "address": _text(n.get("address"), 253), "status": _text(n.get("status"), 20).lower(), "message": _text(n.get("message"), 120)})
+
+    return out
+
+
+def by_server(resolver: Resolver | None = None) -> dict[int, list[dict]]:
+    """{server id: the nodes of the panels that run on it}, matched the way the Nodes tab matches (the address of the node is the host of the server, an IP in any spelling, or a name the
+    DNS says points at the other). A server that carries no node is not in the answer. `match` says how the pair was found ("address" or "dns")."""
+    servers, nodes = _servers(), panel_nodes()
+    names = names_to_resolve(nodes, servers)
+    resolved = (resolver or resolve_names)(names) if names else {}
+    pairs, _free = match_servers(nodes, servers, resolved)
+    out: dict[int, list[dict]] = {}
+
+    for n, p in zip(nodes, pairs):
+        if p["server"] is not None:
+            out.setdefault(p["server"]["id"], []).append({**n, "match": p["how"]})
+
+    return out
+
+
 def _match(rows: list[dict], resolver: Resolver | None = None, others: list[dict] | None = None) -> tuple[list[dict], list[dict], dict[int, list[dict]]]:
     """(one {server, how, hint} per row of nodes, the servers no node of THIS panel runs on, the nodes of the other panels by server id) - the plain server dicts, without samples."""
     servers, others = _servers(), others or []

@@ -15,7 +15,7 @@ html body #page .pg-nodes-link { cursor: pointer; color: inherit; } html body #p
 html body #page .pg-nodes-act { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; max-width: 100%; } html body #page .pg-nodes-act button, html body #page .pg-nodes-act select { height: 28px; min-height: 28px; } html body #page .pg-nodes-act select.pg-nodes-more { width: 74px; padding-left: 8px; }
 html body #page .pg-nodes-tbl td:last-child { overflow: visible; }
 html body #page .pg-nodes-tbl tr.pg-nodes-else td { opacity: .72; } html body #page .pg-nodes-tbl tr.pg-nodes-else td .pill { margin: 0 4px 0 0; }
-@media (max-width: 760px) { html body #page .pg-nodes-box, html body #page .pg-nodes-box.pg-nodes-b { max-height: none !important; } html body #page .pg-nodes-q { width: 100%; } html body #page .pg-nodes-act select.pg-nodes-more { width: 110px; } }
+@media (max-width: 760px) and (pointer: coarse) { html body #page .pg-nodes-box, html body #page .pg-nodes-box.pg-nodes-b { max-height: none !important; } html body #page .pg-nodes-q { width: 100%; } html body #page .pg-nodes-act select.pg-nodes-more { width: 110px; } }
 
 /* the windows */
 .pg-nodes-form .pg-nodes-key { flex-basis: 100%; display: flex; gap: 6px; } .pg-nodes-form .pg-nodes-key input { flex: 1; min-width: 0; } .pg-nodes-form .pg-nodes-key button { height: 32px; flex: none; }
@@ -27,3 +27,30 @@ html body .pg-nodes-form textarea { height: auto; min-height: 64px; font-family:
 .pg-nodes-plan { margin: 0 0 10px; } .pg-nodes-steps { margin: 4px 0 8px; padding-left: 22px; font-size: 13px; line-height: 1.6; }
 .pg-nodes-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; } .pg-nodes-note .pill { margin: 0 6px 0 0; } .pg-nodes-amber { color: var(--warn); }
 .pg-nodes-story { height: 300px; }
+
+/* "Add server": the PasarGuard node tick and its four fields (pg_srvnode.js) */
+html body .srv-after .x-pg { display: grid; gap: 8px; margin-top: 8px; } html body .srv-after .x-pg.off { display: none; }
+html body .x-pg .x-pg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+html body .x-pg label { display: grid; gap: 3px; min-width: 0; font-size: 11.5px; color: var(--mut); }
+html body .x-pg select, html body .x-pg input { width: 100%; min-width: 0; height: 34px; min-height: 34px; box-sizing: border-box; }
+html body .x-pg small { line-height: 1.45; }
+/* the PasarGuard card of the Install tab of a server window */
+html body .ins-node .ins-h .pill { margin: 0 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body .ins-node .ins-field select { flex: 1 1 auto; min-width: 0; height: 40px; border-radius: 12px; }
+
+/* ---- the System tab (pg_system.js) */
+html body #page .pg-sys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin: 0 0 10px; }
+html body #page .pg-sys-card { margin: 0; padding: 10px 14px 12px; } html body #page .pg-sys-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; } html body #page .pg-sys-card h3 .sp { flex: 1; }
+html body #page .pg-sys-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 8px; min-height: 28px; font-size: 12.5px; }
+html body #page .pg-sys-row .pbar { min-width: 0; } html body #page .pg-sys-row small { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pg-sys-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; } html body #page .pg-sys-pills .pill { margin: 0; }
+html body #page .pg-sys-ib { max-height: 320px; margin: 0 0 8px; }
+/* ---- several nodes, charts (pg_nodes.js) */
+html body #page .pg-nodes-ck { width: 34px; text-align: center; padding: 0 !important; } html body #page .pg-nodes-ck input.ck { vertical-align: middle; }
+html body #page .pg-nodes-bulk { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; } html body #page .pg-nodes-bulk:empty { display: none; }
+html body #page select.pg-nodes-wide { width: 92px; }
+html body .pg-nodes-curves { display: grid; gap: 10px; margin: 4px 0 10px; }
+html body .pg-nodes-cv { display: grid; grid-template-columns: 90px minmax(0, 1fr) minmax(0, 220px); align-items: center; gap: 12px; font-size: 12.5px; }
+html body .pg-nodes-cv small { text-align: right; } html body .pg-nodes-spark { width: 100%; height: 52px; color: #6fb2ff; border-radius: 8px; background: rgba(255, 255, 255, .03); }
+html body .pg-nodes-spark.cpu { color: #ffb86b; } html body .pg-nodes-spark.mem { color: #b57cff; } html body .pg-nodes-spark.rx { color: #4fd98a; } html body .pg-nodes-spark.tx { color: #6fb2ff; }
+@media (max-width: 760px) { html body .pg-nodes-cv { grid-template-columns: 1fr; gap: 2px; } html body .pg-nodes-cv small { text-align: left; } }

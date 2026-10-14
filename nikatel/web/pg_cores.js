@@ -172,7 +172,7 @@ function pgCoresHeadHtml(d) {
     <span class="mut">${pgCoresPl(d.inbounds.length, "inbound")} · ${pgCoresPl(d.outbounds.length, "outbound")} · ${pgCoresPl(d.rules, "rule")}</span>
     ${ex || fb ? `<span class="mut" title="Excluded: ${esc(c.exclude_inbound_tags.join(", "))}  Fallbacks: ${esc(c.fallbacks_inbound_tags.join(", "))}">${ex} excluded · ${fb} fallback tags</span>` : ""}
     ${d.masked ? `<span class="pill" title="Private keys and passwords stay on the server: they are shown as &lt;secret:…&gt; placeholders and put back when you save">🔒 ${d.masked} hidden</span>` : ""}
-    <span class="sp"></span><button class="sm" onclick="pgCoresReloadAll()" title="Read the cores from the panel again">↻ Reload</button><button class="sm danger" onclick="pgCoresRestart()" title="Restart Xray on every node of this core">Restart nodes…</button></div>`;
+    <span class="sp"></span><button class="sm" onclick="pgCoresReloadAll()" title="Read the cores from the panel again">↻ Reload</button><button class="sm" onclick="pgCoresSettings()" title="The name of the core and its excluded / fallback inbound tags">Settings…</button><button class="sm" onclick="pgCoresDuplicate()" title="Make a new core as a copy of this one">Duplicate…</button><button class="sm danger" onclick="pgCoresRestart()" title="Restart Xray on every node of this core">Restart nodes…</button><button class="sm danger" onclick="pgCoresDelete()" title="Delete this core from the panel (a backup is kept here)">Delete…</button></div>`;
 }
 
 function pgCoresNoticeHtml() {
@@ -229,15 +229,17 @@ function pgCoresEditHtml(d) {
 
 function pgCoresOverHtml(d) {
   const proxy = ["vless", "vmess", "trojan"], uk = d.usage_known;
-  const ib = d.inbounds.map(r => {
+  const ib = d.inbounds.map((r, i) => {
     const bad = r.security === "none" && r.public && proxy.includes(r.protocol);
     return `<tr><td class="name">${esc(r.tag)}</td><td class="mono">${esc(r.port == null ? "—" : r.port)}</td><td>${esc(r.protocol)}</td><td>${esc(r.network)}</td>
       <td><span class="pill ${r.security === "none" ? (bad ? "warn" : "") : "ok"}" title="${bad ? "No TLS or REALITY and open to the outside" : ""}">${esc(r.security)}</span></td><td class="mut">${esc(r.listen || "all addresses")}</td>
-      <td class="num">${r.hosts == null ? "?" : r.hosts}</td><td class="mut">${r.groups == null ? "?" : esc(r.groups.join(", ")) || "—"}</td></tr>`;
+      <td class="num">${r.hosts == null ? "?" : r.hosts}</td><td class="mut">${r.groups == null ? "?" : esc(r.groups.join(", ")) || "—"}</td>
+      <td class="pg-cores-go"><button class="sm" onclick="pgCoresInboundEdit(${i})" title="Edit this inbound as JSON">Edit</button> <button class="sm danger" onclick="pgCoresInboundDelete(${i})" title="Take this inbound out of the config">Delete</button></td></tr>`;
   }).join("");
   const ob = d.outbounds.map(r => `<tr><td class="name">${esc(r.tag)}</td><td>${esc(r.protocol)}</td><td>${esc(r.network)}</td><td class="mono mut">${esc(r.target || "—")}</td></tr>`).join("");
-  return `<div class="lbox full pg-cores-ib"><table class="tbl lift"><colgroup><col><col style="width:70px"><col style="width:110px"><col style="width:90px"><col style="width:90px"><col style="width:120px"><col style="width:60px"><col style="width:22%"></colgroup>
-    <thead><tr><th>Inbound</th><th>Port</th><th>Protocol</th><th>Network</th><th>Security</th><th>Listens on</th><th>Hosts</th><th>Groups</th></tr></thead><tbody>${ib || '<tr><td colspan="8" class="mut">no inbound</td></tr>'}</tbody></table></div>
+  return `<div class="pg-cores-ibbar"><button class="sm pri" onclick="pgCoresInboundAdd()" title="Add an inbound: choose the protocol, the network and the security, and the panel writes the JSON">＋ Add inbound</button><span class="mut">Each change is checked first, shows what it would break (hosts and groups that use an inbound), backs the config up and is read back. Nothing restarts unless you say so.</span></div>
+    <div class="lbox full pg-cores-ib"><table class="tbl lift"><colgroup><col><col style="width:70px"><col style="width:110px"><col style="width:90px"><col style="width:90px"><col style="width:120px"><col style="width:60px"><col style="width:20%"><col style="width:140px"></colgroup>
+    <thead><tr><th>Inbound</th><th>Port</th><th>Protocol</th><th>Network</th><th>Security</th><th>Listens on</th><th>Hosts</th><th>Groups</th><th></th></tr></thead><tbody>${ib || '<tr><td colspan="9" class="mut">no inbound</td></tr>'}</tbody></table></div>
     ${uk.hosts && uk.groups ? "" : '<small class="mut">A “?” means the panel did not answer for its hosts or groups, so who uses an inbound is not known.</small>'}
     <div class="lbox full pg-cores-ob"><table class="tbl lift"><colgroup><col><col style="width:110px"><col style="width:90px"><col style="width:30%"></colgroup>
     <thead><tr><th>Outbound</th><th>Protocol</th><th>Network</th><th>Goes to</th></tr></thead><tbody>${ob || '<tr><td colspan="4" class="mut">no outbound</td></tr>'}</tbody></table></div>`;
@@ -255,7 +257,7 @@ function pgCoresBackupsHtml(d) {
 /* the first bar: one button per core (the open one is blue); the table with dates and counts is one click away, and it is the page itself while no core is open */
 function pgCoresBarHtml() {
   const st = pgCoresSt, chips = st.list.map(c => `<button class="sm ${c.id === st.coreId ? "pri" : ""}" onclick="pgCoresOpen(${c.id})" title="${esc(c.type)} core #${c.id}">${esc(c.name || "(no name)")} <small>#${c.id}</small></button>`).join("");
-  return pgBar(`<b>Cores</b><span class="pill">${st.list.length}</span>${chips}`, st.d ? '<button class="sm" onclick="pgCoresAll()" title="All cores with their dates and counts">All cores…</button>' : "");
+  return pgBar(`<b>Cores</b><span class="pill">${st.list.length}</span>${chips}`, `<button class="sm" onclick="pgCoresDeleted()" title="Cores that are gone from the panel but have a backup here: make one again">Deleted…</button>${st.d ? '<button class="sm" onclick="pgCoresAll()" title="All cores with their dates and counts">All cores…</button>' : ""}<button class="sm pri" onclick="pgCoresNew()" title="Make a new core (a name, a type, a config)">＋ New core</button>`);
 }
 
 window.pgCoresAll = () => showModal("<b>Cores of this panel</b>", pgCoresListHtml(true), "wide");
@@ -470,3 +472,197 @@ window.pgCoresRestore = pgCoresOnce(async (file, restartToo) => {
     await pgCoresAfter(id);
   } catch (e) { toast("✕ " + e.message, "bad"); }
 });
+
+/* ---- a new core, the settings of a core, delete (and make again), and ONE inbound at a time: add (a form, or the JSON), edit (the JSON), delete.
+   Every change goes through the server's dry run first (the checks, who uses an inbound, the diff) and then the same save as the editor (backup, read back, optional restart). */
+const pgCoresTags = s => String(s || "").split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+const pgCoresReloadTo = async coreId => { const st = pgCoresSt; Object.assign(st, {coreId, d: null, draft: null, dry: null, dryFor: "", view: "edit", notice: null, ts: 0}); await pgCoresAfter(st.id); };
+
+window.pgCoresNew = async (pre = {}) => {
+  const st = pgCoresSt;
+  let t; try { t = await pgApi(st.id, "/cores/template?type=xray"); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  st.tpl = t;
+  const copyOpts = st.list.map(c => `<option value="${c.id}" ${c.id === pre.copy ? "selected" : ""}>${esc(c.name || "(no name)")} #${c.id}</option>`).join("");
+  showModal("<b>＋ New core</b>", `<form class="frm pg-cores-form" onsubmit="return pgCoresNewGo(event)">
+    <label>Name<input name="name" required maxlength="256" autocomplete="off" placeholder="Iran core" value="${esc(pre.name || "")}"></label>
+    <label>Type<select name="type" onchange="pgCoresNewSync(this.form)">${t.types.map(x => `<option>${esc(x)}</option>`).join("")}</select></label>
+    <label>Start from<select name="from" onchange="pgCoresNewSync(this.form)"><option value="template" ${pre.copy ? "" : "selected"}>the starting config of the panel</option>${st.list.length ? `<option value="copy" ${pre.copy ? "selected" : ""}>a copy of another core</option>` : ""}<option value="text">my own JSON</option></select></label>
+    <label class="pg-cores-copy">Core to copy<select name="copy_from">${copyOpts}</select></label>
+    <label class="wide pg-cores-text">Config (JSON)<textarea name="text" rows="12" spellcheck="false" oninput="this.dataset.touched = 1"></textarea></label>
+    <label>Excluded inbound tags <small>optional, comma separated: not given to users</small><input name="exclude" autocomplete="off"></label>
+    <label>Fallback inbound tags <small>optional: only reached as a fallback</small><input name="fallbacks" autocomplete="off"></label>
+    <small class="wide mut">A new core runs on no node until you choose it for one (Nodes → Edit). Nothing restarts.</small>
+    <div class="frm-act"><button class="pri" type="submit">Make the core</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide");
+  pgCoresNewSync($("#modal form.pg-cores-form"));
+};
+window.pgCoresNewSync = f => {
+  const from = f.elements.from.value, type = f.elements.type.value, ta = f.elements.text;
+  if (type !== "xray" && from === "template") f.elements.from.value = "text";      // only Xray has a starting config: the other types need their JSON
+  const mode = f.elements.from.value;
+  f.querySelector(".pg-cores-copy").hidden = mode !== "copy";
+  f.querySelector(".pg-cores-text").hidden = mode === "copy" || (mode === "template" && type === "xray");
+  if (mode === "text" && !ta.dataset.touched) ta.value = type === "xray" ? pgCoresSt.tpl.text : "{\n  \n}";
+};
+window.pgCoresDuplicate = () => { const d = pgCoresSt.d; if (d) pgCoresNew({copy: pgCoresSt.coreId, name: (d.core.name || "core") + " copy"}); };
+window.pgCoresNewGo = async e => {
+  e.preventDefault(); const f = e.target, v = k => (f.elements[k] ? f.elements[k].value : ""), mode = v("from"), type = v("type");
+  const body = {name: v("name").trim(), type, exclude_inbound_tags: pgCoresTags(v("exclude")), fallbacks_inbound_tags: pgCoresTags(v("fallbacks"))};
+  if (mode === "copy") body.copy_from = +v("copy_from");
+  else if (mode === "text") { body.text = v("text"); if (!body.text.trim()) { toast("✕ Write or paste the config of the core (JSON)", "bad"); return false; } }
+  try {
+    const out = await pgApi(pgCoresSt.id, "/cores", {method: "POST", body});
+    closeModal(); toast(`✓ Core ${body.name} made (#${out.core.id}): ${pgCoresPl(out.inbounds, "inbound")}; no node runs it yet`, "ok");
+    await pgCoresReloadTo(out.core.id);
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};
+
+window.pgCoresSettings = () => {
+  const d = pgCoresSt.d; if (!d) return;
+  const c = d.core, tags = d.inbounds.map(r => r.tag).filter(Boolean);
+  showModal(`<b>Settings of ${esc(c.name || "the core")}</b>`, `<form class="frm pg-cores-form" onsubmit="return pgCoresSettingsGo(event)">
+    <label class="wide">Name<input name="name" required maxlength="256" value="${esc(c.name)}" autocomplete="off"></label>
+    <label class="wide">Excluded inbound tags <small>comma separated: the panel does not give these inbounds to users (they stay in the config)</small><input name="exclude" list="pg-cores-tags" value="${esc(c.exclude_inbound_tags.join(", "))}" autocomplete="off"></label>
+    <label class="wide">Fallback inbound tags <small>comma separated: inbounds that are only reached as the fallback of another one (hidden from users too)</small><input name="fallbacks" list="pg-cores-tags" value="${esc(c.fallbacks_inbound_tags.join(", "))}" autocomplete="off"></label>
+    <datalist id="pg-cores-tags">${tags.map(t => `<option value="${esc(t)}"></option>`).join("")}</datalist>
+    <small class="wide mut">Saving writes the same config back with the new name and lists. The core is backed up first; nothing restarts.</small>
+    <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide");
+};
+window.pgCoresSettingsGo = async e => {
+  e.preventDefault(); const f = e.target, st = pgCoresSt;
+  try {
+    await pgApi(st.id, `/cores/${st.coreId}/meta`, {method: "PATCH", body: {name: f.elements.name.value.trim(), exclude_inbound_tags: pgCoresTags(f.elements.exclude.value), fallbacks_inbound_tags: pgCoresTags(f.elements.fallbacks.value), base_rev: st.d.rev}});
+    closeModal(); toast("✓ Saved (the old values are in Backups)", "ok"); await pgCoresReloadTo(st.coreId);
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};
+
+/* delete: the server says what goes with the core (nodes, hosts and groups); with warnings the name must be typed */
+window.pgCoresDelete = pgCoresOnce(async () => {
+  const st = pgCoresSt, id = st.id, cid = st.coreId; if (!st.d) return;
+  let ck; try { ck = await pgApi(id, `/cores/${cid}/delete-check`); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  if (!ck.allowed) { toast("✕ " + ck.reason, "bad"); return; }
+  const ws = ck.warnings, name = ck.name || "this core";
+  if (!await gconfirm(`Delete the core “${name}” (${pgCoresPl(ck.inbounds, "inbound")}) from the panel?${ws.length ? `\n\n${pgCoresPl(ws.length, "warning")}:\n${pgCoresWarnText(ws)}` : ""}\n\nThe panel cannot undo it. The whole core is saved here first: Deleted… can make a new core from it (with a new id).`, {danger: true})) return;
+  if (ws.length) { const typed = await gprompt(`Type the name of the core to delete it: ${name}`, ""); if (typed == null || typed.trim() !== name.trim()) { toast("Not deleted: the name did not match"); return; } }
+  try {
+    const out = await pgApi(id, `/cores/${cid}?confirm=true`, {method: "DELETE"});
+    toast(`✓ Core ${name} deleted (backup ${out.backup})`, "ok");
+    Object.assign(st, {list: null, d: null, coreId: 0, draft: null, dry: null, dryFor: "", notice: null}); refresh();
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+});
+
+window.pgCoresDeleted = async () => {
+  const draw = body => showModal("<b>Deleted cores</b>", body, "wide");
+  draw('<div class="loading"><i class="spin"></i><span>Reading…</span></div>');
+  try {
+    const r = await pgApi(pgCoresSt.id, "/cores/deleted"); pgCoresSt.gone = r.cores;
+    draw(`<div class="lbox full pg-cores-list"><table class="tbl lift"><colgroup><col><col style="width:90px"><col style="width:170px"><col style="width:90px"><col style="width:100px"><col style="width:150px"></colgroup>
+      <thead><tr><th>Core</th><th>Type</th><th>Backup of</th><th>Inbounds</th><th>Outbounds</th><th></th></tr></thead><tbody>${r.cores.map((g, i) => `<tr><td class="name"><b>${esc(g.name || "(no name)")}</b> <small class="mut">was #${g.core}</small></td><td><span class="td-type">${esc(g.type)}</span></td><td class="mut">${esc(pgCoresStamp(g.at))}</td><td class="num">${g.inbounds}</td><td class="num">${g.outbounds}</td>
+        <td class="pg-cores-go"><button class="sm pri" onclick="pgCoresRecreate(${i})" title="Make a NEW core from this backup (new id; the nodes must be pointed at it again)">Make it again</button></td></tr>`).join("") || '<tr><td colspan="6" class="mut">no core is gone: a core that is deleted here (or changed here and deleted on the panel) shows up in this list</td></tr>'}</tbody></table></div>
+      <small class="mut">The newest backup of each core that is not on the panel any more. The files are kept here, in a folder only this server can read.</small>`);
+  } catch (e) { draw(`<div class="err">${esc(e.message)}</div>`); }
+};
+window.pgCoresRecreate = async i => {
+  const g = (pgCoresSt.gone || [])[i]; if (!g) return;
+  if (!await gconfirm(`Make a new core “${g.name}” from the backup of ${pgCoresStamp(g.at)}? It gets a new id and runs on no node until you choose it for one.`)) return;
+  try { const out = await pgApi(pgCoresSt.id, `/cores/deleted/${g.core}/${encodeURIComponent(g.file)}/recreate`, {method: "POST"}); closeModal(); toast(`✓ Core ${g.name} made again (#${out.core.id})`, "ok"); await pgCoresReloadTo(out.core.id); }
+  catch (e) { toast("✕ " + e.message, "bad"); }
+};
+
+/* ---- one inbound */
+const pgCoresIbNet = ["tcp", "ws", "grpc", "httpupgrade", "xhttp"], pgCoresIbMode = ["auto", "packet-up", "stream-up", "stream-one"];
+const pgCoresIbOf = i => { const st = pgCoresSt, r = st.d.inbounds[i]; return r ? {row: r, ib: (st.d.config.inbounds || []).find(x => x && x.tag === r.tag)} : {}; };
+window.pgCoresInboundAdd = () => {
+  const o = a => a.map(x => `<option>${esc(x)}</option>`).join("");
+  showModal("<b>＋ Add an inbound</b>", `<div class="tabs" style="margin-bottom:10px"><button class="on" id="pg-ib-t-form" onclick="pgCoresIbMode('form')">Form</button><button id="pg-ib-t-json" onclick="pgCoresIbMode('json')">JSON</button></div>
+    <form class="frm pg-cores-form pg-ib-form" id="pg-ib-form" onsubmit="return false" onchange="pgCoresIbSync()">
+      <label>Protocol<select name="protocol">${o(["vless", "vmess", "trojan", "shadowsocks"])}</select></label><label>Network<select name="network">${o(pgCoresIbNet)}</select></label>
+      <label>Security<select name="security"><option>none</option><option>tls</option><option selected>reality</option></select></label>
+      <label>Port<input name="port" type="number" min="1" max="65535" value="443" required></label><label>Tag <small>empty = made from the choices</small><input name="tag" maxlength="80" autocomplete="off"></label><label>Listen<input name="listen" value="0.0.0.0" autocomplete="off"></label>
+      <label data-net="ws,httpupgrade,xhttp">Path<input name="path" placeholder="/" autocomplete="off"></label><label data-net="ws,httpupgrade,xhttp">Host header<input name="host" autocomplete="off"></label>
+      <label data-net="grpc">Service name<input name="service" autocomplete="off"></label><label data-net="xhttp">xhttp mode<select name="mode">${o(pgCoresIbMode)}</select></label>
+      <label class="wide" data-sec="tls">Certificate file on the node<input name="tls_cert" placeholder="/var/lib/pg-node/certs/ssl_cert.pem" autocomplete="off"></label><label class="wide" data-sec="tls">Key file on the node<input name="tls_key" placeholder="/var/lib/pg-node/certs/ssl_key.pem" autocomplete="off"></label><label data-sec="tls">ALPN<input name="alpn" placeholder="h2,http/1.1" autocomplete="off"></label>
+      <label class="wide" data-sec="reality">The site REALITY imitates<span class="pg-ib-dest"><input name="reality_dest" placeholder="www.example.com:443" autocomplete="off"><button type="button" class="sm" onclick="pgCoresScan()" title="Ask the panel whether this site is a good target: TLS 1.3, h2, x25519">Scan…</button></span></label>
+      <label data-sec="reality">Server names <small>comma separated</small><input name="reality_names" placeholder="www.example.com" autocomplete="off"></label><label data-sec="reality">Short ids <small>empty = one is made</small><input name="reality_short_ids" autocomplete="off"></label>
+      <label class="wide" data-sec="reality">Private key <small>empty = a new pair is made and the public key is shown after; a key you give stays here</small><input name="reality_private_key" type="password" autocomplete="new-password" spellcheck="false"></label>
+      <label class="chk wide"><input type="checkbox" name="sniffing" checked> Sniffing (http, tls, quic)</label></form>
+    <div id="pg-ib-json" hidden><textarea id="pg-ib-ta" class="pg-cores-ta" rows="16" spellcheck="false" placeholder='{"tag": "My inbound", "port": 443, "protocol": "vless", "settings": {"clients": [], "decryption": "none"}, "streamSettings": {...}}'></textarea></div>
+    <div id="pg-ib-res"></div>
+    <div class="frm-act"><button class="sm" onclick="pgCoresIbRun('add', 'preview')">Check it</button><span class="sp"></span><button class="pri" onclick="pgCoresIbRun('add', 'save')">Add the inbound…</button><button class="danger" onclick="pgCoresIbRun('add', 'restart')" title="Add it and restart Xray on the nodes of this core">Add and restart…</button><button onclick="closeModal()">Cancel</button></div>`, "wide");
+  pgCoresIbSync();
+};
+window.pgCoresIbMode = m => { $("#pg-ib-form").hidden = m === "json"; $("#pg-ib-json").hidden = m !== "json"; $("#pg-ib-t-form").classList.toggle("on", m !== "json"); $("#pg-ib-t-json").classList.toggle("on", m === "json"); };
+window.pgCoresIbSync = () => {      // the fields that do not apply to the chosen network / security are hidden (and not sent)
+  const f = $("#pg-ib-form"); if (!f) return;
+  const net = f.elements.network.value, sec = f.elements.security.value;
+  f.querySelectorAll("[data-net]").forEach(l => { const on = l.dataset.net.split(",").includes(net); l.hidden = !on; l.querySelectorAll("input, select").forEach(i => { i.disabled = !on; }); });
+  f.querySelectorAll("[data-sec]").forEach(l => { const on = l.dataset.sec === sec; l.hidden = !on; l.querySelectorAll("input, select, button").forEach(i => { i.disabled = !on; }); });
+  const ss = f.elements.protocol.value === "shadowsocks"; [...f.elements.security.options].forEach(o => { o.disabled = ss && o.value === "reality"; }); if (ss && sec === "reality") f.elements.security.value = "none";
+};
+const pgCoresIbSpec = () => {
+  const f = $("#pg-ib-form"), spec = {};
+  [...f.elements].forEach(el => { if (!el.name || el.disabled) return; spec[el.name] = el.type === "checkbox" ? el.checked : el.type === "number" ? +el.value : el.value.trim(); });
+  Object.keys(spec).forEach(k => { if (spec[k] === "" && k !== "listen") delete spec[k]; });
+  return spec;
+};
+window.pgCoresScan = async () => {
+  const f = $("#pg-ib-form"), target = f.elements.reality_dest.value.trim(); if (!target) { toast("✕ Write the site first", "bad"); return; }
+  const res = $("#pg-ib-res"); res.innerHTML = '<div class="loading"><i class="spin"></i><span>Asking the panel to look at the site (a few seconds)…</span></div>';
+  try {
+    const r = await pgApi(pgCoresSt.id, "/cores/reality-scan", {method: "POST", body: {target}});
+    const yn = (b, t) => `<span class="pill ${b ? "ok" : "warn"}">${b ? "✓" : "✕"} ${t}</span>`;
+    res.innerHTML = `<div class="pg-cores-stat"><b>${esc(r.host || target)}</b>${yn(r.feasible, "usable as a target")}${yn(r.tls13, "TLS 1.3")}${yn(r.h2, "h2")}${yn(r.x25519 !== false, "x25519")}${yn(r.cert_valid, "valid certificate")}${r.latency_ms != null ? `<span class="mut">${r.latency_ms} ms</span>` : ""}</div>${r.reason ? `<div class="mut">${esc(r.reason)}</div>` : ""}${(r.server_names || []).length ? `<div class="mut">Names of its certificate: ${esc(r.server_names.slice(0, 8).join(", "))} <button class="sm" onclick="pgCoresUseNames()">Use them as server names</button></div>` : ""}`;
+    pgCoresSt.scan = r;
+  } catch (e) { res.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+};
+window.pgCoresUseNames = () => { const r = pgCoresSt.scan, f = $("#pg-ib-form"); if (r && f) f.elements.reality_names.value = (r.server_names || []).slice(0, 4).join(", "); };
+
+/* the body of a dry run / an apply for the chosen op: the form, the JSON of an inbound, or just the tag (delete) */
+const pgCoresIbBody = (op, tag) => {
+  if (op === "delete") return {op, tag};
+  const json = $("#pg-ib-json"), jsonMode = json && !json.hidden && $("#pg-ib-ta");
+  if (op === "set" || jsonMode) { const text = $("#pg-ib-ta").value; if (!text.trim()) throw new Error("Write the JSON of the inbound first"); return {op, tag, text}; }
+  return {op, spec: pgCoresIbSpec()};
+};
+const pgCoresIbShow = r => {      // what the dry run says, in the window
+  const res = $("#pg-ib-res"); if (!res) return;
+  res.innerHTML = `<div class="pg-cores-dry"><div class="pg-cores-stat"><b>Check</b>${r.valid ? (r.changed === false ? '<span class="pill">no change</span>' : '<span class="pill ok">✓ the checks pass</span>') : '<span class="pill err">✕ cannot be saved</span>'}${r.warnings.length ? `<span class="pill warn">${pgCoresPl(r.warnings.length, "warning")} · saving needs your OK</span>` : ""}${r.diff ? `<span class="mut">+${r.diff.added} −${r.diff.removed} lines</span>` : ""}</div>
+    ${r.errors.map(e => `<div class="err">${esc(e)}</div>`).join("")}${pgCoresWarnHtml(r.warnings)}${r.inbound ? `<details class="pg-cores-full"><summary>The inbound as it will be stored (secrets hidden)</summary><pre class="pg-cores-pre">${esc(JSON.stringify(r.inbound, null, 2))}</pre></details>` : ""}${r.diff && !r.diff.same ? pgCoresDiffHtml(r.diff) : ""}</div>`;
+};
+/* how: "preview" shows the check; "save" and "restart" go on (the questions of a save, then the write) */
+window.pgCoresIbRun = pgCoresOnce(async (op, how, tag) => {
+  const st = pgCoresSt, id = st.id, cid = st.coreId; let body;
+  try { body = pgCoresIbBody(op, tag); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  let r; try { r = await pgApi(id, `/cores/${cid}/inbounds/dry-run`, {method: "POST", body}); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  pgCoresIbShow(r);
+  if (how === "preview") { toast(r.valid ? "✓ The checks pass" + (r.warnings.length ? ` · ${pgCoresPl(r.warnings.length, "warning")}` : "") : "✕ " + r.errors[0], r.valid ? "ok" : "bad"); return; }
+  if (!r.valid) { toast("✕ " + r.errors[0], "bad"); return; }
+  if (r.changed === false) { toast("Nothing to change"); return; }
+  const restart = how === "restart", ws = r.warnings, verb = {add: "Add this inbound", set: "Save this inbound", delete: "Delete this inbound"}[op];
+  if (!await gconfirm(`${verb}${restart ? " and restart Xray on the nodes" : ""}?\n${pgCoresPl(r.diff.added, "line")} added, ${r.diff.removed} removed. The current config is backed up first.${restart ? "" : "\nThe nodes keep running the old config until they restart."}${ws.length ? `\n\n${pgCoresPl(ws.length, "warning")}:\n${pgCoresWarnText(ws)}` : ""}`, {danger: ws.length > 0 || restart || op === "delete"})) return;
+  if (restart && !await pgCoresSure("the change is saved first")) return;
+  try {
+    const out = await pgApi(id, `/cores/${cid}/inbounds/apply`, {method: "POST", body: {...body, confirm: ws.length > 0 || restart, restart, base_rev: st.d.rev}});
+    closeModal();
+    st.notice = pgCoresNotice(out, op === "add" ? "Inbound added" : op === "set" ? "Inbound saved" : "Inbound deleted");
+    if (out.public_key) st.notice.html += ` <b>REALITY public key:</b> <code class="mono">${esc(out.public_key)}</code> <button class="sm" onclick="navigator.clipboard.writeText('${esc(out.public_key)}').then(() => toast('✓ Copied', 'ok'))">Copy</button> <span class="mut">(the private key stays on the panel)</span>`;
+    toast(out.restarted ? "✓ Done and restarted" : "✓ Done: the nodes use it after their next restart", out.restart_error ? "bad" : "ok");
+    await pgCoresAfter(id);
+  } catch (e) {
+    if (/changed on the panel after you opened/.test(e.message)) { toast("✕ The core was changed on the panel after you opened it: it is read again, make the change again", "bad"); closeModal(); await pgCoresAfter(id); }
+    else toast("✕ " + e.message, "bad");
+  }
+});
+
+window.pgCoresInboundEdit = i => {
+  const {row, ib} = pgCoresIbOf(i); if (!ib) { toast("✕ That inbound is not in the config any more: reload the core", "bad"); return; }
+  showModal(`<b>Edit the inbound ${esc(row.tag)}</b>`, `<small class="mut">The JSON of this inbound; private keys and passwords are shown as &lt;secret:…&gt; placeholders and put back when you save. Change the tag and the hosts and groups that use the old one lose it (the check says so).</small>
+    <textarea id="pg-ib-ta" class="pg-cores-ta" rows="20" spellcheck="false" style="margin-top:8px">${esc(JSON.stringify(ib, null, 2))}</textarea><div id="pg-ib-res"></div>
+    <div class="frm-act"><button class="sm" onclick="pgCoresIbRun('set', 'preview', pgCoresSt.ibTag)">Check it</button><span class="sp"></span><button class="pri" onclick="pgCoresIbRun('set', 'save', pgCoresSt.ibTag)">Save…</button><button class="danger" onclick="pgCoresIbRun('set', 'restart', pgCoresSt.ibTag)">Save and restart…</button><button onclick="closeModal()">Cancel</button></div>`, "wide");
+  pgCoresSt.ibTag = row.tag;
+};
+window.pgCoresInboundDelete = i => {
+  const {row} = pgCoresIbOf(i); if (!row) return;
+  pgCoresIbRun("delete", "save", row.tag);
+};

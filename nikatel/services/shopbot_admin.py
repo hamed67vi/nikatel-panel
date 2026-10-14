@@ -357,7 +357,7 @@ def category_delete(cat_id: int) -> None:
 
 # ------------------------------------------------------------------ the inbounds of a plan, and the accounts already bought with it
 def _managed_panel(server_id: int):
-    """The panel of this control panel (Panels page) that is the same address as the bot server's panel; None when it is not added there."""
+    """The panel of this control panel (Users page) that is the same address as the bot server's panel; None when it is not added there."""
     from urllib.parse import urlparse
 
     from sqlalchemy import select
@@ -420,7 +420,7 @@ def plan_apply_start(plan_id: int) -> dict:
     pid = _managed_panel(int(rows[0]["server_id"]))
 
     if pid is None:
-        raise ValueError("this plan's server is not a panel in Panels: add it there first, then the accounts can be changed")
+        raise ValueError("this plan's server is not a panel in Users: add it there first, then the accounts can be changed")
 
     change = {"inbounds": cfg["inbounds"]} if isinstance(cfg.get("inbounds"), dict) else {"group_ids": cfg["group_ids"]} if isinstance(cfg.get("group_ids"), list) else None
 

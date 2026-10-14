@@ -63,6 +63,14 @@ html body .pg-cores-full { margin: 8px 0 4px; } html body .pg-cores-full summary
 html body .pg-cores-pre { max-height: 320px; overflow: auto; margin: 6px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(5, 8, 20, .45);
   font: 11.5px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); white-space: pre; }
 
+/* new core, settings, one inbound: the windows */
+html body .pg-cores-form [hidden], html body #modal [hidden] { display: none !important; }
+html body .pg-cores-form label.wide, html body .pg-cores-form small.wide { grid-column: 1 / -1; }
+html body .pg-ib-dest { display: flex; gap: 6px; flex-basis: 100%; } html body .pg-ib-dest input { flex: 1 1 auto; min-width: 0; } html body .pg-ib-dest button { flex: none; height: 38px; }
+html body .pg-cores-form textarea, html body #modal textarea.pg-cores-ta { width: 100%; box-sizing: border-box; min-height: 200px; padding: 10px 12px; border-radius: 12px; font: 12px/1.5 var(--mono, ui-monospace, Menlo, Consolas, monospace); tab-size: 2; white-space: pre; resize: vertical; }
+html body #page .pg-cores-ibbar { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; font-size: 12px; line-height: 1.45; } html body #page .pg-cores-ibbar button { flex: none; height: 30px; }
+html body #modal .pg-cores-go button { height: 28px; }
+
 /* a narrow screen: nothing is fitted, the blocks stack and the page scrolls */
 @media (max-width: 1099px) {
   html body #page .pg-cores-list.lbox.full, html body #page .pg-cores-ib.lbox.full, html body #page .pg-cores-ob.lbox.full, html body #page .pg-cores-bk.lbox.full { max-height: none; }

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import panels, pg_nodes
+from ..services import panels, pg_nodes, pg_nodes_extra
 from ..services.panels import PanelError
 from ..ssh import SSHError
 
@@ -155,7 +155,61 @@ def server_cert(panel_id: int, server_id: int):
     return {"ok": True, **_wrap(pg_nodes.server_cert, server_id)}
 
 
+class BulkIn(BaseModel):
+    action: Literal["enable", "disable", "delete", "reconnect", "reset", "update"]
+    ids: list[int] = Field(min_length=1, max_length=pg_nodes_extra.MAX_BULK)
+    confirm: bool = False
+
+
+class ReconnectAllIn(BaseModel):
+    confirm: bool = False
+    core_id: int | None = Field(None, ge=1)
+
+
+class ClearIn(BaseModel):
+    table: Literal["node_user_usages", "node_usages"]
+    typed: str = Field("", max_length=40)
+    start: str | None = Field(None, max_length=40)
+    end: str | None = Field(None, max_length=40)
+
+
+@router.post(P + "/bulk")
+def nodes_bulk(panel_id: int, body: BulkIn):
+    """Do one thing to several nodes at once: enable, disable, delete (every node is saved to a file first), reconnect, reset the counters or update; everything except enable needs confirm true."""
+    return {"ok": True, **_wrap(pg_nodes_extra.bulk, _cred(panel_id), body.action, body.ids, body.confirm)}
+
+
+@router.post(P + "/reconnect-all")
+def nodes_reconnect_all(panel_id: int, body: ReconnectAllIn):
+    """Restart the core on every node of the panel (or of one core) and connect again: customers drop for a moment on all of them, so the body must say confirm true."""
+    return {"ok": True, **_wrap(pg_nodes_extra.reconnect_all, _cred(panel_id), body.confirm, body.core_id)}
+
+
+@router.post(P + "/clear-usage")
+def nodes_clear_usage(panel_id: int, body: ClearIn):
+    """Empty a usage table of the panel (the traffic history per node, or per user and node) for a time range or entirely, for good; the caller must type the name of the table back."""
+    return {"ok": True, **_wrap(pg_nodes_extra.clear_usage, _cred(panel_id), body.table, body.typed, body.start, body.end)}
+
+
+@router.get(P + "/user-counts")
+def nodes_user_counts(panel_id: int, metric: Literal["online", "expired", "limited"] = "online", period: Literal["hour", "day", "month"] = "hour", hours: int = 24, node_id: int | None = None):
+    """How many users were online, expired or limited per hour or day over the last hours, for the whole panel or one node (the curve of the Nodes tab)."""
+    return {"ok": True, **_wrap(pg_nodes_extra.user_counts, _cred(panel_id), metric, period, hours, node_id)}
+
+
 # ---- one node
+@router.get(P + "/{node_id}/stats")
+def node_stats(panel_id: int, node_id: int, period: Literal["hour", "day", "month"] = "hour", hours: int = 24):
+    """The resource curves of one node - CPU and memory percent, speed in and out - per hour or day over the last hours (hours: at most 14 days), with the highest and the average of each."""
+    return {"ok": True, **_wrap(pg_nodes_extra.node_stats, _cred(panel_id), node_id, period, hours)}
+
+
+@router.get(P + "/{node_id}/latency")
+def node_latency(panel_id: int, node_id: int, name: str = "", timeout: int | None = None):
+    """The delay of the outbounds the node tests (the panel asks the node, a few seconds); the links are cut down to scheme, host and port, their credentials never leave."""
+    return {"ok": True, **_wrap(pg_nodes_extra.node_latency, _cred(panel_id), node_id, name, timeout)}
+
+
 @router.get(P + "/{node_id}")
 def node_get(panel_id: int, node_id: int):
     """One node in full (the key and the certificate only as set / not set), the server of ours it runs on, and the numbers it reports about itself."""

@@ -284,5 +284,5 @@ def test_plan_inbounds_are_given_to_the_accounts_already_bought(db, monkeypatch)
 
     assert j["done"] == 2 and j["failed"] == 1 and ("u-1", {"inbounds": {"vless": ["VLESS TCP"]}}) in seen
     monkeypatch.setattr(adm, "_managed_panel", lambda sid: None)
-    with pytest.raises(ValueError, match="Panels"):
+    with pytest.raises(ValueError, match="Users"):
         adm.plan_apply_start(5)
