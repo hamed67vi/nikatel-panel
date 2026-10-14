@@ -2187,7 +2187,7 @@ window.pnTab = t => {      // a tab of the part that is open stays here; a tab t
   pn.tab = t; refresh();
 };
 PAGES.pgpanel = async () => { renderSub(); return PAGES.panels(); };      // the Panel page: the bar of tabs under the header, then the panel you pick and what the tab holds
-window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (!p) return; if (window.pgSrvPanelNodes) pgSrvPanelNodes(p.id); else showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };      // (the nodes of a panel, each beside the server it runs on: pg_srvnode.js)
+window.pnNodesWin = () => { const pl = Array.isArray(state.panelsCache) ? state.panelsCache : (state.panelsCache || {}).panels || [], p = pl.find(x => String(x.id) === pn.id); if (!p) return; if (window.pgSrvPanelNodes) pgSrvPanelNodes(p.id); else showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };      // (the nodes of a panel, each beside the server it runs on: pg_srvnode.js)
 window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* How a panel is connected (docs/panels.md): the panel is given a credential, not a password. PasarGuard has API keys (pg_key_…, header X-Api-Key, their own end date, revocable);

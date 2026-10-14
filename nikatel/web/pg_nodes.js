@@ -129,14 +129,12 @@ function pgNodeMain(sub) {
   const why = (d ? d.message : cur.message) || "", state_ = d ? d.status : cur.status;
   const warn = (why && pgNodeCls(state_) === "bad" ? `<div class="pg-nodes-warn err"><b>${esc(cur.name)}</b>: ${esc(why)}</div>` : "") + (data && data.warnings || []).map(w => `<div class="pg-nodes-warn">${esc(w)}</div>`).join("");      // (what the panel says about a node that is not connected, then what it could not read)
   const traffic = n => `<span class="trf"><i class="ta d">↓</i>${fmtB(n.down)}</span><span class="trf"><i class="ta u">↑</i>${fmtB(n.up)}</span>`;
-  const oldVer = d && data.min_node_version && d.version && d.version.replace(/^v/, "") < data.min_node_version.replace(/^v/, "");      // (a plain text comparison is enough to warn: the panel itself refuses a node below its minimum)
   const b1 = box(SI.cube, "Node", [kv("Panel", chip), kv("Status", stat(d ? d.status : cur.status, d ? d.message : cur.message)),
     kv("Address", d ? `<span class="mono">${esc(d.address)}:${d.port}</span>` : `<span class="mono">${esc(cur.address)}</span>`), kv("API", d ? `port ${d.api_port} <small class="mut">${esc(String(d.connection_type).toUpperCase())}</small>` : wait),
-    kv("Software", d ? `Xray ${esc(d.xray || "?")} <small class="mut">node ${esc(d.version || "?")}</small>${oldVer ? ` <span class="pill warn" title="The panel accepts node software from ${esc(data.min_node_version)} on">old</span>` : ""}` : (cur.xray ? `Xray ${esc(cur.xray)}` : wait)),
-    kv("Core config", d ? esc(core || "#" + d.core_config_id) : wait)]);
+    kv("Xray", d ? esc(d.xray || "?") : (cur.xray ? esc(cur.xray) : wait)), kv("Software", d ? esc(d.version || "?") : wait)]);      // (the node software and the Xray core: two rows, a long value would be cut at its left end)
   const b2 = box(SI.bars, "Traffic", [kv("Since reset", d ? traffic({down: d.downlink, up: d.uplink}) : wait), kv("All time", d ? traffic({down: d.lifetime_downlink, up: d.lifetime_uplink}) : wait),
     kv("Data limit", d ? (d.data_limit ? `${fmtB(d.data_limit)} <small class="mut">${esc(d.reset_strategy === "no_reset" ? "never reset" : "reset every " + d.reset_strategy)}</small>` : "no limit") : wait),
-    kv("Coefficient", d ? `×${+d.coefficient}` : wait), kv("Keep-alive", d ? `${d.keep_alive} s` : wait), kv("Panel accepts", data ? (data.min_node_version ? `node ≥ ${esc(data.min_node_version)}` : none) : wait)]);
+    kv("Coefficient", d ? `×${+d.coefficient}` : wait), kv("Keep-alive", d ? `${d.keep_alive} s` : wait), kv("Core config", d ? esc(core || "#" + d.core_config_id) : wait)]);
   const spd = v => v == null ? none : fmtB(v) + "/s";
   const match = n => n.server ? (n.match === "dns" ? "server, through the DNS" : "server, same address") : '<span class="mut">no server of ours</span>';
   const b3 = box(SI.cpu, "Reported by the node", live ? [rr("CPU", live.cpu, 80, 92, live.cores ? live.cores + (live.cores === 1 ? " core" : " cores") : ""), rr("RAM", live.ram, 80, 90, live.mem_total ? fmtB(live.mem_total) : ""), kv("Speed", `<span class="trf"><i class="ta d">↓</i>${spd(live.rx)}</span><span class="trf"><i class="ta u">↑</i>${spd(live.tx)}</span>`),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.48.2 - The Node view says nothing it does not know
+
+- **Fixed (seen on the real panel):** the Node view marked every node **"old"** because it compared the node's version (0.5.4) with the panel's `min_node_version` setting (v1.0.0), which the real panel keeps while its nodes run 0.5.4 and are connected: the mark and the row "Panel accepts" are gone (that setting is still said in the plan of "Make a node"). The software and the Xray core of a node are two rows now (a long value was cut at its left end: "Xray 26.3.27 node 0.5.4 old"), and the core config moved to the Traffic box.
+- The "Nodes 2 / 2" window of the Panel bar finds its panel whichever way the list of panels was kept.
 ## 1.48.1 - The rest of the tabs of Tunnels, and no panel-supplied name inside a button
 
 - **The tabs of Tunnels that are switched off are in the menu again (the owner: "when we click Tunnels show the rest of the tabs"):** the group of Tunnels shows **Tunnel manager · CDN · Tunnel Doctor** and **Outbound** in grey (switched off for now, like the Shop bot), where 1.47.0 left the grey one out. A click on it does nothing; the groups of Servers, Panel and Settings have no tab that is switched off.
