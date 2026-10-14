@@ -43,6 +43,20 @@ class Server(Base):
     samples: Mapped[list[ServerSample]] = relationship(back_populates="server", cascade="all, delete-orphan")
 
 
+class Profile(Base):
+    """What the Lab page lists (1.49.0): one thing the owner added by choosing what it is - an Iran server, a foreign server or a PasarGuard node. A server profile points at a server of ours, a node profile
+    at a node of a PasarGuard panel; nothing is copied, so the profile only says "this one is on the Lab page" (services/profiles.py)."""
+    __tablename__ = "profiles"
+    __table_args__ = (Index("ix_profiles_server", "server_id"), Index("ix_profiles_node", "panel_id", "node_id"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8))                              # iran | foreign | node
+    server_id: Mapped[int | None] = mapped_column(Integer, nullable=True)     # iran / foreign: the server
+    panel_id: Mapped[int | None] = mapped_column(Integer, nullable=True)      # node: the PasarGuard panel and the id of the node in it
+    node_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[int] = mapped_column(Integer, default=now)
+
+
 class ServerSample(Base):
     __tablename__ = "server_samples"
     __table_args__ = (Index("ix_server_samples_server_ts", "server_id", "ts"),)

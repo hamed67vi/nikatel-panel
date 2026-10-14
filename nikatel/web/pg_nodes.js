@@ -71,7 +71,7 @@ const pgNodeSpan = s => s >= 86400 ? `${Math.floor(s / 86400)} d ${Math.floor(s 
 function pgNodeSubject() {      // what the pane on screen is about: a server (its nodes) or one node that runs on no server of ours
   const el = $("#node-pane"); if (!el) return null;
   if (el.dataset.sid) { const s = (state.serversCache || []).find(x => x.id === +el.dataset.sid); return s ? {el, s, rows: pgSrvOn(s)} : null; }
-  if (el.dataset.out) { const [p, n] = el.dataset.out.split(":").map(Number); return {el, out: true, from: el.dataset.from === "1", rows: (pgSrv.outside || []).filter(x => x.panel_id === p && x.node_id === n)}; }
+  if (el.dataset.out) { const [p, n] = el.dataset.out.split(":").map(Number); return {el, out: true, from: el.dataset.from === "1", rows: [...(pgSrv.outside || []), ...Object.values(pgSrv.nodes || {}).flat()].filter(x => x.panel_id === p && x.node_id === n).slice(0, 1)}; }      // (a node outside our servers, or - in the Lab page, which opens a node profile - one that runs on a server of ours)
   return null;
 }
 const pgNodeCurrent = rows => rows.find(r => pgNodeKey(r) === pgNodeV.key) || rows.find(pgNodeIs) || rows[0] || null;

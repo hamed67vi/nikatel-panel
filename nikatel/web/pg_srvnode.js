@@ -24,6 +24,7 @@ const pgSrvTip = x => `${x.type === "pasarguard" ? "PasarGuard" : "Marzban"} nod
 window.pgSrvChips = s => pgSrvOn(s).map(x => `<span class="mchip ${pgSrvCls(x)}" onclick="event.stopPropagation();pgSrvOpenNode(${s.id}, '${pgSrvKey(x)}')" title="${esc(pgSrvTip(x))} - click to open it">${esc(x.panel)}</span>`).join("");
 window.pgSrvOpenNode = (sid, key) => {      // the window of the server, on its Node view (the node `key` when the server carries more than one)
   if (key) { pgNodeV.key = key; pgNodeV.err = null; }
+  if (window.labOn && labOn()) { if (state.open === sid && $("#modal .srvwin")) wtab("node"); else labOpen(sid, "node"); return; }      // the Lab page opens the window in its own list, on its Node section (lab.js)
   if (state.open === sid && state.page === "nodes" && $("#modal .srvwin")) { wtab("node"); return; }
   if (!(state.serversCache || []).some(x => x.id === sid)) return;
   docOpen(sid); state.wtab = "node";      // (docOpen goes to the Servers page and opens the window; it starts on the Node view)
@@ -225,6 +226,6 @@ window.pgSrvAfterDelete = async (sname, nodes) => {
 window.pgSrvAddFromNode = i => { const x = (pgSrv.outside || [])[i]; if (x) pgSrvAddServer(x.name, x.address); };      // a node outside our servers: its row number (the handler never carries a name that came from a panel)
 window.pgSrvAddServer = (name, address) => {
   state.prefill = {name: String(name || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60), host: String(address || "").replace(/^\[|\]$/g, "")};
-  closeModal(); go("nodes"); state.edit = "new"; state.open = null; refresh();
+  closeModal(); go("nodes", "foreign"); state.edit = "new"; state.open = null; refresh();      // (the form of the Servers list - the archived Foreign tab - works as it did; the Lab adds servers through its own profiles)
   setTimeout(() => { const f = document.querySelector(".srv-form2"); if (f && f.elements.host && f.elements.host.value && typeof srvWhere === "function") srvWhere(f); }, 900);      // where is it (Iran or foreign): found from the address
 };

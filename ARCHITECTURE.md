@@ -23,7 +23,7 @@ nikatel/
   config.py        Settings - the only place that reads the environment (NIKATEL_*)
   log.py           log format, request id, secret masking
   db.py            engine, sessions, numbered migrations (MIGRATIONS, _add_column)
-  models.py        tables: Server (+extra), ServerSample, Tunnel, TunnelCheck, Event, Job, AlertState,
+  models.py        tables: Server (+extra, profile_id), Profile, ServerSample, Tunnel, TunnelCheck, Event, Job, AlertState,
                    Maintenance, Config, ConfigSample, Subscription, Panel, ActionLog, Gateway, RepairCase, ApiToken
   ssh.py           Node, run_script(name, params) over the reviewed SCRIPTS and ACTIONS; run_raw only read-write
   auth.py          one admin, scrypt, signed cookie
@@ -31,6 +31,8 @@ nikatel/
   jobs.py          background loops with their status in the jobs table; stop_all waits for in-flight SSH
   services/        the logic, importable without HTTP
     facts.py         server resources (parse_facts is pure)
+    profiles.py      profiles: named groups of servers (Iran and foreign mixed) with the SSH defaults of a new server, made first on the Lab page (1.49.0); api/profiles.py, web/lab.js
+    uptime.py        the strip of cells that shows how a server looked over the last hours, read from the samples only (build_strip / up_percent are pure); api/servers.py and api/profiles.py serve it
     tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
     builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports; pending rebuilds that survive a
                      restart of the panel; follow_server_rename / follow_server_host (a server's new name or address)

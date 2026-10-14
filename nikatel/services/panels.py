@@ -27,6 +27,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Config, Panel, Subscription
+from . import profiles
 from .events import emit
 
 log = get_logger("panels")
@@ -820,6 +821,7 @@ def remove(panel_id: int) -> None:
 
         if p is not None:
             emit(db, "info", "panels", f"Panel {p.name} removed from the list.", p.name)
+            profiles.drop_panel(db, panel_id)          # (the profiles of its nodes on the Lab page go with it)
             db.delete(p)
 
     _TOKENS.pop(panel_id, None)

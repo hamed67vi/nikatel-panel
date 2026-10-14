@@ -85,7 +85,7 @@ def test_the_node_and_update_files_never_put_a_name_from_a_panel_into_a_handler(
     from a panel, so the buttons of these files carry numbers (ids, the row of a list) and look the name up when they run."""
     bad = []
 
-    for name in ("pg_nodes.js", "pg_srvnode.js", "pg_update.js"):
+    for name in ("pg_nodes.js", "pg_srvnode.js", "pg_update.js", "lab.js"):
         for i, line in enumerate((WEB / name).read_text(encoding="utf-8").splitlines(), 1):
             if any("'${esc(" in m.group(1) for m in re.finditer(r'\bon\w+="([^"]*)"', line)):
                 bad.append(f"{name}:{i}")

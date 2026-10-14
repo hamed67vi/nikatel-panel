@@ -20,6 +20,7 @@ from ..models import (
     Gateway,
     Job,
     Panel,
+    Profile,
     Server,
     ServerSample,
     Tunnel,
@@ -135,12 +136,15 @@ def seed() -> str:
 
         db.flush()
 
+        for s in by_name.values():                        # every server is on the Lab page: its first tab is what a visitor of the demo lands on
+            db.add(Profile(kind=s.role, server_id=s.id))
+
         for i, row in enumerate(SERVERS):
             if row[7] == 0:
                 continue
 
-            for k in range(48 * 6, -1, -1):              # 48 h, one sample every 10 minutes
-                ts = now - k * 600
+            for k in range(48 * 30, -1, -1):             # 48 h, one sample every 2 minutes (what the real panel does: the strips of the Lab page count on it)
+                ts = now - k * 120
                 f = _facts(row, ts, i * 7, 86400 * (9 + i))
                 db.add(ServerSample(server_id=by_name[row[0]].id, ts=ts, cpu=f["cpu"], ram=f["ram"], disk=f["disk"], load1=f["load1"], rx_mbps=f["rx_mbps"], tx_mbps=f["tx_mbps"], conn=f["conn"]))
 
@@ -198,7 +202,7 @@ def seed() -> str:
 
 
 def tick() -> None:
-    """Keeps the numbers moving (every 30 s): the live facts, one sample per ten minutes, the tunnel check time. Nothing leaves this machine."""
+    """Keeps the numbers moving (every 30 s): the live facts, one sample every two minutes, the tunnel check time. Nothing leaves this machine."""
     now = int(time.time())
     rows = {r[0]: (i, r) for i, r in enumerate(SERVERS)}
 
@@ -217,7 +221,7 @@ def tick() -> None:
             s.facts, s.last_seen_at, s.online = f, now, True
             last = db.scalar(select(func.max(ServerSample.ts)).where(ServerSample.server_id == s.id)) or 0
 
-            if now - last >= 600:
+            if now - last >= 110:
                 db.add(ServerSample(server_id=s.id, ts=now, cpu=f["cpu"], ram=f["ram"], disk=f["disk"], load1=f["load1"], rx_mbps=f["rx_mbps"], tx_mbps=f["tx_mbps"], conn=f["conn"]))
 
         for t in db.scalars(select(Tunnel)):

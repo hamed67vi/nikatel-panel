@@ -33,7 +33,7 @@ def test_every_item_of_the_menu_opens_a_page_that_has_a_title():
 
 def test_the_panel_page_has_a_tab_for_each_section_of_pasarguard_in_the_order_of_the_owner():
     assert _tabs("pgpanel") == [("settings", "General"), ("users", "Users"), ("hosts", "Hosts"), ("access", "Access"), ("core", "Core"), ("admins", "Admins")]      # General (the settings of the panel) is the first one: the owner, 2026-10-14
-    assert "PAGES.pgpanel = async () => { renderSub(); return PAGES.panels(); }" in APP
+    assert "PAGES.pgpanel = async () => { if (window.labLockNow && await labLockNow()) return; renderSub(); return PAGES.panels(); }" in APP          # (the lock of the Panel is the first thing it asks)
     assert "settings: SI.cog}" in APP and "cog: '<svg" in APP          # (and its icon is a cog wheel, not the sun of SI.gear)
 
 
@@ -75,6 +75,69 @@ def test_go_takes_the_tab_the_menu_asks_for():
 
 def test_a_tab_that_is_switched_off_is_in_the_menu_grey_and_cannot_be_clicked():
     """The owner asked to see the rest of the tabs of Tunnels: Outbound is switched off (roadmap #92) and shows grey, like the Shop bot, instead of missing from the group."""
-    assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off"])' in APP
+    assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "arch" ? "arch" : false])' in APP
     assert 'class="nav-off" aria-disabled="true"' in APP and 'sub.querySelectorAll("a:not(.nav-off)")' in APP          # (and a click on it does nothing)
     assert re.search(r'\["gateway", "[^"]*Outbound", INFO_GW, "off"\]', APP)
+
+
+def test_the_lab_is_the_first_tab_of_servers_and_the_old_lists_are_archived_but_still_open():
+    """The owner (2026-10-14): "make a test page" with profiles, and "archive the current Servers section". The Lab is the first tab, so Servers opens on it; Foreign and Iran are the
+    same lists as before, marked "arch" (quiet, with a small mark, still clickable) - a tab marked "off" would be grey and dead."""
+    block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
+    tabs = re.findall(r'^  nodes: \[(.*)\],$', block, re.MULTILINE)[0]
+    assert tabs.index('["lab",') < tabs.index('["foreign",') < tabs.index('["iran",')
+    assert re.search(r'\["foreign", "[^\n]*?", "arch"\]', tabs) and re.search(r'\["iran", "[^\n]*?", "arch"\]', tabs)
+    assert 'if (s === "lab" && PAGES.lab) return PAGES.lab();' in APP          # (and the old list when lab.js did not load)
+    assert 'off === "arch" ? " sub-arch" : ""' in APP and 'class="nav-arch"' in APP
+    assert 'go("nodes", s ? s.role : undefined)' in APP          # a shortcut to a server (the dashboard, a diagnosis) opens the tab of its role, never the Lab by mistake
+    assert "go('nodes');state.tab=" not in APP
+
+
+def test_the_section_that_was_called_tunnels_is_called_network_and_starts_with_the_cdn():
+    """The owner (2026-10-14): "this section's name becomes Network", "bring CDN above the Tunnel manager". CDN is the first tab, so a shortcut that used to land on the Tunnel manager by
+    being the first tab must now say which tab it wants (go(page, tab)), else it would draw the CDN first and the tab it wanted second."""
+    assert '<span>Network</span>' in NAV and 'data-short="Network"' in INDEX and "<span>Tunnels</span>" not in NAV
+    assert re.search(r'^  tunnels: \["Network", ', APP, re.MULTILINE)
+    block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
+    tabs = re.findall(r'^  tunnels: \[(.*)\],?(?:      //.*)?$', block, re.MULTILINE)[0]
+    assert tabs.index('["dns", "🌐 CDN"') < tabs.index('["list", "⇄ Tunnel manager"') < tabs.index('["repairs"') < tabs.index('["gateway"')
+    assert not re.search(r"""go\((['"])tunnels\1\)""", APP), "go('tunnels') with no tab opens the CDN: name the tab"
+    assert 'actions: "tunnels/repairs"' in APP
+
+
+def test_the_panel_item_is_grey_until_a_pasarguard_profile_exists_and_says_why_when_it_is_clicked():
+    """The owner (2026-10-14): "until a PasarGuard profile is added the Panel section shows disabled; click it and it says a PasarGuard profile must be added first; for now full compatibility with the
+    PasarGuard panel". The lock is in go() (every way into the Panel passes there), in the Panel page itself (a reload on it) and on the menu (a grey item that still answers a click)."""
+    assert 'if (page === "pgpanel" && window.labLocked && labLocked()) { labLockMsg(); return; }' in APP
+    assert "PAGES.pgpanel = async () => { if (window.labLockNow && await labLockNow()) return;" in APP
+    assert "if (window.labLockSync) labLockSync();" in APP
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    assert "window.labLocked = () => LAB.pg === false" in lab and 'document.getElementById("demo-pill")' in lab          # (the public demo has no PasarGuard panel: its Panel page stays open)
+    assert 'a.classList.toggle("nav-lock", lock)' in lab and "p.kind === \"node\"" in lab
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert "nav a.nav-lock" in css and "pointer-events" not in css.split("nav a.nav-lock", 1)[1].split("}", 1)[0]          # (unlike a switched-off item, a click on it must arrive)
+
+
+def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_of_many_buttons():
+    """The owner (2026-10-14): "the model of the cards and their icons as before, only the contents of the columns new", "the flags as before, for my Iran servers too", "instead of many buttons"
+    (the picture of a single ⋯ menu), "much more compact"."""
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert '<table class="tbl lift srv-tbl joined lab-tbl">' in lab and "${SRV_IC}" in lab and 'class="srv-ic"' in lab          # the table, the server icon and the flag of the old list
+    assert 'cc = s.role === "iran" ? "ir"' in lab and "has-flag" in lab                                                        # Iran has its flag too
+    assert ".lab-root" in css and not re.search(r"^\.lab \{", css, re.MULTILINE)                                              # (".lab" is hidden by the fluid layer on a narrow window)
+    assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "n > 10" in lab         # one menu, two columns when it is long
+    assert "labItem(\"Delete server…\"" in lab and "danger: true" in lab and ".lab-mi.danger" in css                         # the dangerous item is last and red
+    assert 'class="sm abtn' not in lab and "wtools" not in lab                                                                # no row of buttons, no tiles of tools
+    assert "const labKinds = " in lab and "labKinds().length > 1" in lab and "kinds.length > 1 ?" in lab                      # the tabs are not made in advance: a kind has its tab only while a profile of it exists
+    assert ".lab-bar { container: labbar" in css and "flex-wrap: nowrap" in css.split(".lab-bar {", 1)[1].split("}", 1)[0]    # the bar is one row at every width
+    assert [k for k, _ in re.findall(r'\["(overview|node|monitor|tools)", "(\w+)"\]', lab.split("const LAB_SECS", 1)[1].split("\n", 1)[0])] == ["overview", "node", "monitor"]
+
+
+def test_the_lab_files_are_loaded_and_versioned_like_the_others():
+    index, main = INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
+    assert '<script src="/static/lab.js"></script>' in index and '<link rel="stylesheet" href="/static/lab.css">' in index
+    assert index.index("/static/app.js") < index.index("/static/pg_nodes.js") < index.index("/static/lab.js")          # (the Lab uses the helpers of app.js and the Node view of pg_nodes.js)
+    assert '"lab.js"' in main and '"lab.css"' in main
+    lab = (WEB / "lab.js").read_text(encoding="utf-8")
+    assert "PAGES.lab = async () =>" in lab and "window.labOn = " in lab and "window.labWinHtml = " in lab and "window.labWtab = " in lab

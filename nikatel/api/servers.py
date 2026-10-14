@@ -10,6 +10,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Server, ServerSample, Tunnel
+from ..services import profiles, uptime
 from ..services.events import emit
 from ..services.facts import sample_server
 from ..services.nodes import server_conflict
@@ -88,6 +89,16 @@ def get_server(server_id: int):
             raise HTTPException(404, "server not found")
 
         return ServerOut.model_validate(s)
+
+
+@router.get("/servers/{server_id}/uptime")
+def server_uptime(server_id: int, hours: int = Query(24, ge=1, le=uptime.MAX_HOURS), buckets: int = Query(48, ge=6, le=168)):
+    """One strip of cells for the server over the last hours (2 answered, 1 now and then, 0 silent, - not added yet) and the share of the time it was heard; read from the samples, nothing is asked of the server."""
+    with session() as db:
+        if db.get(Server, server_id) is None:
+            raise HTTPException(404, "server not found")
+
+        return {"ok": True, "hours": hours, "buckets": buckets, **uptime.strips(db, [server_id], hours, buckets)[server_id]}
 
 
 @router.get("/servers/{server_id}/samples")
@@ -194,6 +205,7 @@ def delete_server(server_id: int):
             raise HTTPException(409, f"the tunnel {used.name} uses this server; disable the server instead of deleting it")
 
         emit(db, "warn", "servers", f"Server {s.name} removed from the panel (nothing was changed on the server).", s.name)
+        profiles.drop_server(db, server_id)          # (its profile on the Lab page goes with it)
         db.delete(s)
         return {"ok": True}
 
