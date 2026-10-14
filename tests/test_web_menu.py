@@ -113,42 +113,37 @@ def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_t
     assert ".nav-plus" in css and ".nav-ag" not in css and ".nav-ak" not in css
 
 
-def test_a_profile_is_added_in_one_box_that_asks_its_name_and_its_tag_any_unless_he_chooses_one():
-    """The owner (2026-10-14): "first we add a profile; a box opens and asks its name and its tag; the default is any, but a tag with a name of my own can be chosen; Iran and Foreign are suggested"."""
+def test_a_profile_is_added_in_one_box_with_no_tabs_that_asks_its_name_and_its_tag_any_unless_he_chooses_one():
+    """The owner (2026-10-14): "first we add a profile; a box opens and asks its name and its tag; the default is any, but a tag with a name of my own can be chosen; Iran and Foreign are suggested", then "remove
+    these tabs; remove adding several servers at once and Already in the panel; for the tag put only one box, and when the tag PasarGuard is chosen the settings of a PasarGuard node come"."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
-    assert "labChooser" not in lab and "labAddKind" not in lab and "labServerStep" not in lab          # (no choice of three kinds any more: one box)
-    assert 'name="tag" id="lab-tag" list="lab-taglist"' in lab and 'placeholder="Any"' in lab          # the Tag field: empty is Any, a datalist suggests
+    assert "labChooser" not in lab and "labAddKind" not in lab and "labServerStep" not in lab          # (no choice of three kinds)
+    assert "lab-addtabs" not in lab and "labSaveMany" not in lab and "labPickGo" not in lab and "Already in the panel" not in lab and "Several at once" not in lab          # (no tabs, no several-at-once, no already-in-the-panel)
+    assert 'name="tag" id="lab-tag" list="lab-taglist"' in lab and 'placeholder="Any"' in lab          # ONE Tag field: empty is Any, a datalist suggests
     assert '["Iran", "Foreign", ...labTags()]' in lab          # Iran and Foreign are suggested, then every tag there is
-    assert '<label><span>Name</span><input name="name" required' in lab and "${labTagField()}" in lab
-    assert "const labRoleOf = " in lab and 'role: labRoleOf(tag)' in lab and "tag};" in lab          # the tags Iran / Foreign say where a new server is; the tag goes to the API
+    assert 'onchange="labTagPick(this.value)"' in lab and 'window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase() === "pasarguard") labAddNode(); };' in lab          # the tag PasarGuard brings the node's settings
+    assert "const labRoleOf = " in lab and "role: labRoleOf(tag)" in lab and "tag};" in lab          # the tags Iran / Foreign say where a new server is; the tag goes to the API
     assert "window.labSetTag = " in lab and 'Change tag…' in lab and '`/api/profiles/${id}/tag`' in lab          # a tag can be changed from the ⋯ menu
 
 
-def test_the_pasarguard_node_option_is_grey_until_a_pasarguard_panel_is_connected_and_a_click_says_why():
-    """The owner (2026-10-14): "this option is active when we have added a PasarGuard panel". The "A PasarGuard node" tab of the Add profile box is grey while no PasarGuard panel is connected; asking for it
-    says why and leads to connecting one - with the API key, or a username and password, the same screen the locked Panel item leads to - and the option is live as soon as one is connected."""
+def test_the_pasarguard_node_settings_need_a_connected_pasarguard_panel_and_a_click_says_why():
+    """The owner (2026-10-14): "this option is active when we have added a PasarGuard panel". Choosing the tag PasarGuard asks for a PasarGuard panel first when none is connected: it says why and leads to
+    connecting one - with the API key, or a username and password, the same screen the locked Panel item leads to - and once one is connected the node settings come."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert "const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);" in lab
-    assert 'class="${labHasPg() ? "" : "off"}" onclick="labAddNode()"' in lab and 'title="Connect a PasarGuard panel first"' in lab
-    assert "window.labAddNode = () => { if (labHasPg()) labNodePanel(); else labPgFirst(); };" in lab          # (asking for the grey option says why)
+    assert "window.labAddNode = () => { if (labHasPg()) labNodePanel(); else labPgFirst(); };" in lab          # (asking for the node settings without a panel says why)
     assert "window.labConnect = () => labNodePanel(true);" in lab and "state.labOnly = only === true;" in lab          # (only the panel is asked for: no node)
     assert "if (state.labOnly) { state.labOnly = false; closeModal(); refresh(); return false; }" in lab          # (and once it is connected the option is live)
     assert 'if (labOn()) labConnect(); else { LAB.pending = "connect"; go("nodes", "lab"); }' in lab          # (the locked Panel item leads to the same screen)
     assert "state.panelsCache = r; labLockSet(" in lab          # (the background look keeps the list of panels the option reads)
-    assert ".lab-addtabs button.off" in (WEB / "lab.css").read_text(encoding="utf-8")
+    assert "labTagDraft.v = \\'\\'; labAdd()" in lab          # (Back from the node settings does not jump into them again)
 
 
-def test_the_servers_the_panel_already_has_are_not_moved_to_the_lab_by_themselves_they_are_picked_in_add_profile():
-    """The owner (2026-10-14): "I did not say to move the cards, I only said to bring the information of the servers". Nothing puts a server on the page by itself: the box lists the servers the panel
-    already has (name, address, provider) under "Already in the panel", with a search and "Select all"."""
-    lab = (WEB / "lab.js").read_text(encoding="utf-8")
-    assert "const labFree = () => " in lab and "lab-first-note" in lab          # the first page says how many there are
-    assert 'lb("Already in the panel", "In the panel")}<i class="cnt">' in lab and '<label class="lab-all">' in lab and "window.labPickAll = " in lab and "window.labPickFilter = " in lab
-    assert "labSaveMany" in lab and '"/api/servers/add-many"' in lab          # several at once: lines of name and address
-    css = (WEB / "lab.css").read_text(encoding="utf-8")
-    assert ".lab-pick-bar" in css and ".lab-all" in css
+def test_nothing_puts_the_servers_the_panel_already_has_on_the_lab_by_itself():
+    """The owner (2026-10-14): "I did not say to move the cards, I only said to bring the information of the servers"; later he removed the Already in the panel list too. No step of an upgrade puts a SERVER on
+    the page: only the nodes of a connected PasarGuard panel come by themselves."""
     db = (WEB.parent / "db.py").read_text(encoding="utf-8")
-    assert "backfill" not in db and "auto_all" in db          # (no step of an upgrade puts SERVERS there; only the nodes of a connected PasarGuard panel come by themselves)
+    assert "backfill" not in db and "auto_all" in db
 
 
 def test_the_section_that_was_called_tunnels_is_called_network_and_starts_with_the_cdn():

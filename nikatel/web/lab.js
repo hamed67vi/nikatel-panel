@@ -1,5 +1,5 @@
 /* Lab (the owner, 2026-10-14): the servers page, built on profiles. The section of the menu is called Lab; its list of profiles is the page of these servers (the old Foreign and Iran lists are out of the project - a copy of them
-   is kept outside, the owner may want them elsewhere - and nothing moves the servers the panel already has onto the page: Add profile → Already in the panel picks them). Three ideas:
+   is kept outside, the owner may want them elsewhere - and nothing moves the servers the panel already has onto the page). Three ideas:
    - a PROFILE comes first: nothing is on the page until one is added, and the add-profile section has what the owner named: Iran server, Foreign server, PasarGuard node. One list, whatever the kinds,
      with the tabs Any | Iran | Foreign | PasarGuard in place of the Iran / Foreign tabs (a tab of a kind is there only while a profile of that kind is: nobody is made to have a PasarGuard node). A PasarGuard node asks for the API key of its panel (or a username and password) first.
    - the list is quiet: one line per profile - who, what it serves (nodes, tunnels), how it is (one state, a strip of the last 24 hours), its load - and nothing else; the rest is one click away
@@ -14,7 +14,6 @@ const labKebab = (ctx, id, label) => `<button type="button" class="lab-kb" oncli
 window.labOn = () => state.page === "nodes" && sub("nodes") === "lab";
 const labServer = p => (state.serversCache || []).find(s => s.id === p.server_id) || null;
 const labProfileOf = sid => LAB.profiles.find(p => p.server_id === sid) || null;
-const labFree = () => (state.serversCache || []).filter(s => !labProfileOf(s.id)).sort((a, b) => a.name.localeCompare(b.name, undefined, {sensitivity: "base"}));      // the servers the panel already has that are not on the page: nothing moves them there by itself - Add profile → "Already in the panel" lists them
 const labNodeRows = () => [...(typeof pgSrv !== "undefined" ? pgSrv.outside || [] : []), ...Object.values(typeof pgSrv !== "undefined" ? pgSrv.nodes || {} : {}).flat()];
 const labNodeRow = p => labNodeRows().find(x => x.type === "pasarguard" && x.panel_id === p.panel_id && x.node_id === p.node_id) || null;      // what the health job saw (a call to no panel)
 const labNodeData = p => { const c = typeof pgNodesC !== "undefined" ? pgNodesC[p.panel_id] : null; return c && c.data ? (c.data.nodes || []).find(n => n.id === p.node_id) || null : null; };      // what the panel said when it was asked (the load, the speed)
@@ -116,9 +115,8 @@ PAGES.lab = async () => {
   if (LAB.pending) { const k = LAB.pending; LAB.pending = null; if (k === "connect") labConnect(); else if (typeof k === "object") labAdd("new", k); else labAdd(); }      // "Add profile" of the menu, "Add a PasarGuard profile" of the message the Panel item gives, a node outside our servers to add: the add flow opens at once
 };
 function labFirst() {      // no profile yet: nothing else works until one is added
-  const have = labFree().length;
   return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a profile</h2>
-    <p>Everything on this page starts with a profile: its name, its tag - the category it is listed under - and the server it is.</p><div class="lab-pf-act"><button class="pri" onclick="labAdd()">＋ Add profile</button></div>${have ? `<p class="mut lab-first-note">The panel has ${have} server${have === 1 ? "" : "s"} already. Nothing puts them here by itself: their information (name, address, provider) is under <b>Already in the panel</b>, where you pick some - or all - of them.</p>` : ""}</div></div>`;
+    <p>Everything on this page starts with a profile: its name, its tag - the category it is listed under - and the server it is.</p><div class="lab-pf-act"><button class="pri" onclick="labAdd()">＋ Add profile</button></div></div></div>`;
 }
 const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
 /* the categories are tags (the owner, 2026-10-14: "make me three categories: Marzban, PasarGuard, Iran"): they are on the page from the start, any other tag he types joins them, and Any is every profile */
@@ -155,36 +153,25 @@ async function labLoadNodes() {      // the panels of the node profiles are aske
 const labModal = (title, body) => { state.nodeWin = state.nodeWin || {lab: 1}; showModal(title, body, "keep"); };
 const labTagDraft = {v: ""};      // (what was typed in the Tag field stays while the tabs of the box are changed)
 const labRoleOf = tag => { const t = String(tag || "").trim().toLowerCase(); return t === "iran" ? "iran" : t === "foreign" ? "foreign" : ""; };      // (the tags Iran and Foreign say where a new server is; any other tag: the panel finds it from the address)
-const labTagField = () => `<label><span>Tag <small>(the category it is listed under)</small></span><input name="tag" id="lab-tag" list="lab-taglist" maxlength="40" autocomplete="off" placeholder="Any" value="${esc(labTagDraft.v)}" oninput="labTagDraft.v = this.value"><datalist id="lab-taglist">${[...new Set(["Iran", "Foreign", ...labTags()])].map(t => `<option value="${esc(t)}"></option>`).join("")}</datalist></label>`;
 window.labAddNode = () => { if (labHasPg()) labNodePanel(); else labPgFirst(); };      // a node needs a connected PasarGuard panel
 window.labPgFirst = async () => {      // the option of a node is grey while no PasarGuard panel is connected: asking for it says why and leads to connecting one
   const v = await glassChoice("A PasarGuard node belongs to a PasarGuard panel, so the panel comes first: connect it with its API key (or its username and password). This option opens as soon as one is connected.", [{label: "Connect a PasarGuard panel", v: "go", cls: "pri"}]);
   if (v === "go") labConnect();
 };
 window.labConnect = () => labNodePanel(true);      // only the panel: the same screen as the node's first step, and no node is asked for
-const labBack = '<div class="wback"><button type="button" class="sm" onclick="labAdd()">← Back</button></div>';
-window.labAdd = (tab, fill) => {
-  tab = typeof tab === "string" ? tab : "new"; if (fill && fill.tag != null) labTagDraft.v = fill.tag;
-  const free = labFree(), lb = (full, short) => `<span class="lb-f">${full}</span><span class="lb-s">${short}</span>`;      // (a phone shows the short name: the tabs stay one row)
-  const tabs = `<div class="tabs lab-addtabs"><button type="button" class="${tab === "new" ? "on" : ""}" onclick="labAdd('new')">${lb("A new server", "New")}</button><button type="button" class="${tab === "many" ? "on" : ""}" onclick="labAdd('many')">${lb("Several at once", "Several")}</button><button type="button" class="${tab === "have" ? "on" : ""}" onclick="labAdd('have')">${lb("Already in the panel", "In the panel")}<i class="cnt">${free.length}</i></button><button type="button" class="${labHasPg() ? "" : "off"}" onclick="labAddNode()" ${labHasPg() ? "" : 'title="Connect a PasarGuard panel first"'}>${lb("A PasarGuard node", "Node")}</button></div>`;
+const labBack = '<div class="wback"><button type="button" class="sm" onclick="labTagDraft.v = \'\'; labAdd()">← Back</button></div>';
+window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase() === "pasarguard") labAddNode(); };      // choosing the tag PasarGuard brings the settings of a PasarGuard node (its panel, then its nodes)
+window.labAdd = (fill) => {      // ONE box: the name, the tag (one field: Any unless chosen) and the server; with the tag PasarGuard the settings of a node come instead of the server's
+  fill = fill && typeof fill === "object" ? fill : null; if (fill && fill.tag != null) labTagDraft.v = fill.tag;
   const form = `<form class="lab-pf" onsubmit="return labSaveServer(event)" autocomplete="off">
-    <div class="lab-pf-two"><label><span>Name</span><input name="name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" placeholder="de4" title="Letters, digits . _ - (a name is never used twice)" value="${esc((fill || {}).name || "")}"></label>${labTagField()}</div>
+    <div class="lab-pf-two"><label><span>Name</span><input name="name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" placeholder="de4" title="Letters, digits . _ - (a name is never used twice)" value="${esc((fill || {}).name || "")}"></label><label><span>Tag <small>(the category it is listed under)</small></span><input name="tag" id="lab-tag" list="lab-taglist" maxlength="40" autocomplete="off" placeholder="Any" value="${esc(labTagDraft.v)}" oninput="labTagDraft.v = this.value" onchange="labTagPick(this.value)"><datalist id="lab-taglist">${[...new Set(["Iran", "Foreign", ...labTags()])].map(t => `<option value="${esc(t)}"></option>`).join("")}</datalist></label></div>
     <label><span>Address</span><input name="host" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" placeholder="203.0.113.10" value="${esc((fill || {}).host || "")}"></label>
     <div class="lab-pf-two"><label><span>SSH user</span><input name="ssh_user" value="root" maxlength="32"></label><label><span>SSH port</span><input name="ssh_port" type="number" min="1" max="65535" value="22"></label></div>
     <label><span>SSH password <small>(optional)</small></span><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the server"></label>
-    <small class="mut">With a password the panel logs in once, installs its own key and forgets the password. Without one, the panel's key must already be in the server's authorized_keys (Settings shows the key). The tag Iran or Foreign says where the server is; with another tag the panel finds it from the address.</small>
+    <small class="mut">With a password the panel logs in once, installs its own key and forgets the password. Without one, the panel's key must already be in the server's authorized_keys (Settings shows the key). The tag Iran or Foreign says where the server is; with another tag the panel finds it from the address. The tag PasarGuard is for a node of your PasarGuard panel.</small>
     <div class="lab-pf-act"><button class="pri" type="submit">Add profile</button></div></form>`;
-  const many = `<form class="lab-pf" onsubmit="return labSaveMany(event)" autocomplete="off">
-    ${labTagField()}
-    <label><span>One server per line</span><textarea name="lines" required rows="6" spellcheck="false" placeholder="de4 203.0.113.9&#10;nl2 203.0.113.10 root 22"></textarea></label>
-    <small class="mut">name address [user] [port] - the user and the port are optional. The tag Iran means Iran servers; any other tag means servers abroad.</small>
-    <div class="lab-pf-two"><label><span>SSH user</span><input name="ssh_user" value="root" maxlength="32"></label><label><span>SSH port</span><input name="ssh_port" type="number" min="1" max="65535" value="22"></label></div>
-    <label><span>SSH password <small>(the same for all, optional)</small></span><input name="password" type="password" autocomplete="new-password" placeholder="empty = the panel's key is already on the servers"></label>
-    <div class="lab-pf-act"><button class="pri" type="submit">Add the servers</button><small class="mut">With a password the panel logs in to each once, installs its key and forgets it.</small></div></form>`;
-  const have = free.length ? `<div class="lab-pf">${labTagField()}</div><div class="lab-pick-bar"><input type="search" class="lab-pick-q" placeholder="Search…" oninput="labPickFilter(this.value)" autocomplete="off" spellcheck="false"><label class="lab-all"><input type="checkbox" onchange="labPickAll(this.checked)"> Select all</label></div><div class="lab-pick-list">${free.map(s => `<label class="lab-pick-row" data-q="${esc((s.name + " " + s.host + " " + (s.provider || "") + " " + s.role).toLowerCase())}"><input type="checkbox" value="${s.id}" onchange="labPickCount()"><span class="lab-fl">${flagImg(s.role === "iran" ? "IR" : s.country) || ""}</span><b>${esc(s.name)}</b><span class="mono mut">${esc(s.host)}</span><span class="mut">${esc(s.provider || "")}</span></label>`).join("")}</div>
-    <div class="lab-pf-act"><button class="pri" id="lab-pick-go" onclick="labPickGo()" disabled>Add</button><small class="mut">Nothing is done to a server: it only joins the page.</small></div>` : `<div class="lab-empty"><span class="mut">Every server of the panel is on the page already.</span></div>`;
-  labModal("<b>Add a profile</b>", `<div class="lab-pfwin lab-wide">${tabs}${tab === "new" ? form : tab === "many" ? many : have}</div>`);
-  if (tab === "new" || tab === "many") setTimeout(() => { const i = document.querySelector(".lab-pf input[name=name], .lab-pf textarea"); if (i) i.focus(); }, 60);
+  labModal("<b>Add a profile</b>", `<div class="lab-pfwin lab-wide">${form}</div>`);
+  setTimeout(() => { const i = document.querySelector(".lab-pf input[name=name]"); if (i) i.focus(); }, 60);
 };
 window.labAddWith = async (name, host) => {      // a node outside our servers ("Add to servers"): the box opens on a new server with its name and address filled in; where it is (Iran or foreign) is found from the address and put in the tag
   const fill = {tag: "Foreign", name: String(name || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60), host: String(host || "").replace(/^\[|\]$/g, "")};
@@ -197,39 +184,22 @@ window.labSetTag = async id => {      // ⋯ → Change tag…
   try { await api(`/api/profiles/${id}/tag`, {method: "PUT", body: JSON.stringify({tag: v})}); toast("✓ Tag changed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.labPickFilter = v => { document.querySelectorAll(".lab-pick-row").forEach(r => r.classList.toggle("q-hide", !nkHit(r.dataset.q, v))); labPickCount(); };
-window.labPickAll = on => { document.querySelectorAll(".lab-pick-row:not(.q-hide):not(.off) input:not(:disabled)").forEach(i => { i.checked = on; }); labPickCount(); };      // (the rows the search shows)
 window.labPickCount = () => {
   const n = document.querySelectorAll(".lab-pick-row input:checked").length, b = $("#lab-pick-go"), all = document.querySelector(".lab-all input"), open = [...document.querySelectorAll(".lab-pick-row:not(.q-hide):not(.off) input:not(:disabled)")];
   if (b) { b.disabled = !n; b.textContent = n ? `Add ${n} ${b.dataset.noun || "server"}${n === 1 ? "" : "s"}` : "Add"; }
   if (all) all.checked = open.length > 0 && open.every(i => i.checked);      // ("Select all" follows the boxes: it is ticked only while every shown row is)
 };
-window.labPickGo = async () => {      // servers the panel already has: they join the page under the tag; a tag does not change what a server is (its role stays)
-  const ids = [...document.querySelectorAll(".lab-pick-row input:checked")].map(i => +i.value); if (!ids.length) return;
-  const tag = String(($("#lab-tag") || {}).value || "").trim(), by = {iran: [], foreign: []}; for (const id of ids) { const s = (state.serversCache || []).find(x => x.id === id); by[s && s.role === "iran" ? "iran" : "foreign"].push(id); }
-  try { const added = [], skipped = []; for (const [kind, sids] of Object.entries(by)) if (sids.length) { const r = await api("/api/profiles", {method: "POST", body: JSON.stringify({kind, server_ids: sids, tag})}); added.push(...r.added); skipped.push(...r.skipped); }
-    toast("✓ Added: " + added.map(x => x.name).join(", ") + (skipped.length ? ` (${skipped.length} skipped: ${skipped[0].why})` : ""), "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
-};
 window.labSaveServer = async e => {
   e.preventDefault(); const f = new FormData(e.target), v = k => String(f.get(k) || "").trim(), pw = f.get("password") || "", tag = v("tag");
   const body = {name: v("name"), host: v("host"), role: labRoleOf(tag), ssh_user: v("ssh_user") || "root", ssh_port: +v("ssh_port") || 22, provider: "", enabled: true, tag};      // (the tag Iran / Foreign says where it is; any other tag: the panel finds it from the address)
   const have = (state.serversCache || []).find(s => s.host === body.host || s.name.toLowerCase() === body.name.toLowerCase());
-  if (have) { toast(`✕ The panel knows ${have.name} (${have.host}) already: pick it in "Already in the panel"`, "bad"); labAdd("have"); return false; }
+  if (have) { toast(`✕ The panel knows ${have.name} (${have.host}) already`, "bad"); return false; }
   try {
     const saved = await api("/api/servers", {method: "POST", body: JSON.stringify(body)});      // (a server is on the page the moment it is made: the panel gives it its profile, under its tag)
     closeModal(); refresh();      // the new row appears at once; it says "connecting…" while the password login runs
     if (pw) { toast("Server added - connecting with the password…"); try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Added and connected: " + r.hostname, "ok"); } catch (err) { await connectWithPrompt(saved.id, body.name, err.message); } }
     else { try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); } catch (err) { toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); } }
     refresh();
-  } catch (err) { toast("✕ " + err.message, "bad"); }
-  return false;
-};
-window.labSaveMany = async e => {      // several at once: the lines are made servers (and so profiles), each logged in with the same password; what did not work is listed
-  e.preventDefault(); const f = new FormData(e.target), tag = String(f.get("tag") || "").trim(); toast("Adding… (a few seconds per server)");
-  try {
-    const r = await api("/api/servers/add-many", {method: "POST", body: JSON.stringify({role: labRoleOf(tag) || "foreign", tag, lines: f.get("lines"), password: f.get("password") || "", ssh_user: String(f.get("ssh_user") || "root").trim() || "root", ssh_port: +f.get("ssh_port") || 22})});
-    const ok = r.items.filter(i => i.ok).length, all = ok === r.items.length;
-    toast(`${all ? "✓" : "✕"} ${ok} of ${r.items.length} added and connected`, all ? "ok" : "bad"); refresh();
-    if (all) closeModal(); else labModal("<b>Several at once</b>", `<div class="lab-pfwin lab-wide"><div class="sbox srv-after"><h5><i>📋</i>Result</h5>${r.items.map(i => `<div class="ev ${i.ok ? "ok" : "bad"}"><time></time><i></i><small>${esc(i.host)}</small><span><b>${esc(i.name)}</b> - ${i.ok ? "✓ " + esc(i.detail || "connected") : "✕ " + esc(i.error || "")}</span></div>`).join("")}</div><small class="mut">A server that was added but did not log in is on the page already: use its menu (Connect SSH) when its password is known.</small></div>`);
   } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
@@ -324,7 +294,7 @@ window.labCheckOne = async id => {
 };
 window.labRemove = async id => {
   const p = LAB.profiles.find(x => x.id === id); if (!p) return;
-  if (!await gconfirm(`Take ${p.name} off the Lab page? ${p.kind === "node" ? "The node stays in its panel" : "The panel still watches the server and sends its alerts"}; nothing is done to it, and Add profile → Already in the panel puts it back.`)) return;
+  if (!await gconfirm(`Take ${p.name} off the Lab page? ${p.kind === "node" ? "The node stays in its panel" : "The panel still watches the server and sends its alerts"}; nothing is done to it, and the server stays in the panel.`)) return;
   try { await api(`/api/profiles/${id}`, {method: "DELETE"}); toast("✓ Off the page", "ok"); closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.50.1 - The Add profile box has no tabs; the tag PasarGuard brings the node settings
+
+- **The box that adds a profile is one form with no tabs (the owner: "remove these tabs; remove adding several servers at once and Already in the panel").** The tabs *Several at once* and *Already in the panel* are gone (their code too); the Name and the one Tag field stay, with the address and the SSH login of the server below.
+- **Choosing the tag PasarGuard brings the settings of a PasarGuard node (the owner: "for the tag put only one box, and when the tag PasarGuard is chosen the settings of a PasarGuard node come").** The panel first (its address and API key or login, when none is connected - the reason is said), then the nodes of it to pick; Back returns to the form.
 ## 1.50.0 - A profile has a name and a TAG; Marzban, PasarGuard and Iran are the categories
 
 - **One box adds a profile (the owner: "first we add a profile; a box opens and asks its name and its tag - Any unless I choose one, a name of my own is allowed, Iran and Foreign are suggested").** The choice of three kinds is gone: the box has the **Name**, the **Tag** (empty = Any; a list suggests Iran, Foreign and every tag there is) and what the profile is - *A new server* (address, SSH, an optional password), *Several at once*, *Already in the panel* (the servers the panel has, with a search and Select all) and *A PasarGuard node* (grey until a PasarGuard panel is connected). The tag Iran or Foreign says where a new server is; with another tag the panel finds it from the address. A tag is changed from the card's "⋯" menu (**Change tag…**, `PUT /api/profiles/{id}/tag`).
