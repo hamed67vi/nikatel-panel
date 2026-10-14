@@ -10,7 +10,7 @@ html body #page .pg-access-box .tbl td { overflow: hidden; text-overflow: ellips
 html body #page .pg-access-box .tbl td.num { font-variant-numeric: tabular-nums; }
 html body #page .pg-access-box .tbl td.name small { font-weight: 400; }
 html body #page .pg-access-tags { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
-html body #page .pg-access-tags .td-type { flex: none; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pg-access-tags .td-type { flex: 0 1 auto; min-width: 44px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .pg-access-tags small { flex: none; }
 html body #page .pg-access-gone { color: var(--bad); border-color: rgba(255,107,139,.5); }
 html body #page .pg-access-act { white-space: nowrap; text-align: right; } html body #page .pg-access-act button + button { margin-left: 4px; }

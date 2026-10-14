@@ -9,7 +9,9 @@
 
 <link rel="preload" href="/static/fonts/inter-latin-400-800.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
-  <link rel="stylesheet" href="/static/mobile.css" media="(max-width: 760px) and (pointer: coarse)">
+  <link id="css-classic" rel="stylesheet" href="/static/mobile.css" media="(max-width: 760px) and (pointer: coarse)" data-media="(max-width: 760px) and (pointer: coarse)">
+  <link id="css-fluid-phone" rel="stylesheet" href="/static/mobile2.css" media="(max-width: 760px) and (pointer: coarse)" data-media="(max-width: 760px) and (pointer: coarse)">
+  <script src="/static/early.js"></script>
   <link rel="stylesheet" href="/static/pg.css">
   <link rel="stylesheet" href="/static/pg_access.css">
   <link rel="stylesheet" href="/static/pg_nodes.css">
@@ -134,6 +136,7 @@
   <script src="/static/pg_system.js"></script>
   <script src="/static/pg_users.js"></script>
   <script src="/static/pg_hosts.js"></script>
+  <script src="/static/fluid.js"></script>
   <script src="/static/pg_usage.js"></script>
 </body>
 </html>

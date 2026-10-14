@@ -72,6 +72,7 @@ function pgAccessFit(root) {
 }
 let pgAccessResizeT = 0;
 window.addEventListener("resize", () => { clearTimeout(pgAccessResizeT); pgAccessResizeT = setTimeout(() => { const el = $("#pg-access"); if (el) pgAccessFit(el); }, 150); });
+document.addEventListener("nkfit", e => { const el = e.target.closest && e.target.closest("#pg-access"); if (el) pgAccessFit(el); });      // the fluid layer gave the columns new widths: the pills are counted again
 /* keep the scroll position of the list box when its rows are drawn again */
 function pgAccessFill(el, html) {
   const sc = el.querySelector(".lbox"), top = sc ? sc.scrollTop : 0;
