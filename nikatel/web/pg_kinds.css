@@ -10,3 +10,6 @@ html body .pg-kind-step { display: flex; align-items: flex-start; gap: 10px; pad
 html body .pg-kind-step > i { flex: none; width: 18px; font-style: normal; font-weight: 700; } html body .pg-kind-step.ok > i { color: #4fd98a; } html body .pg-kind-step.bad > i { color: #ff7a8c; } html body .pg-kind-step.bad { border-color: rgba(255,122,140,.5); }
 html body .pg-kind-warn { margin-top: 3px; font-size: 12px; color: var(--warn, #ffc44d); }
 html body .pg-kind-chk { margin: 5px 0; font-size: 12.5px; } html body .pg-kind-chk.ok { color: #4fd98a; } html body .pg-kind-chk.bad { color: #ff7a8c; }
+html body .pg-kind-lead { margin: 0 0 10px; font-size: 12.5px; color: var(--mut); }
+html body .pg-kind-adv { margin: 4px 0 8px; } html body .pg-kind-adv > summary { margin: 4px 0 8px; font-size: 12px; color: var(--mut); cursor: pointer; }
+html body .pg-kind-notes { margin: 8px 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.04); font-size: 12px; color: var(--mut); } html body .pg-kind-notes b { color: #cfe3ff; }

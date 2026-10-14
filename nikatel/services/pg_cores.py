@@ -1007,6 +1007,7 @@ PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks")     # what the inbound b
 NETWORKS = ("tcp", "ws", "grpc", "httpupgrade", "xhttp")
 SECURITIES = ("none", "tls", "reality")
 XHTTP_MODES = ("auto", "packet-up", "stream-up", "stream-one")
+FLOWS = ("xtls-rprx-vision",)
 _DEFAULT_XRAY = {      # the config a 5.4 panel starts with (read from a real one): one Shadowsocks inbound, DIRECT and BLOCK, private addresses blocked
     "policy": {"levels": {"0": {"statsUserOnline": True}}},
     "log": {"loglevel": "warning"},
@@ -1382,9 +1383,20 @@ def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = Fal
         raise ValueError("a tag cannot hold a comma or <=>")
 
     settings: dict = {"clients": []}
+    flow = str(s.get("flow") or "").strip()
+
+    if flow:
+        if proto != "vless" or flow not in FLOWS:
+            raise ValueError(f"the flow is one of {', '.join(FLOWS)} and only a vless inbound has one")
+
+        if network != "tcp" or security == "none":
+            raise ValueError(f"the flow {flow} needs a TCP inbound with TLS or REALITY")
 
     if proto == "vless":
         settings["decryption"] = "none"
+
+        if flow:
+            settings["flow"] = flow                                    # (PasarGuard reads the flow of the links from the inbound)
     elif proto == "shadowsocks":
         settings["network"] = "tcp,udp"
 
@@ -1416,11 +1428,16 @@ def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = Fal
 
     if security == "tls":
         cert, kf = str(s.get("tls_cert") or "").strip(), str(s.get("tls_key") or "").strip()
+        pem_c, pem_k = str(s.get("tls_cert_pem") or "").strip(), str(s.get("tls_key_pem") or "").strip()
 
-        if not cert or not kf:
+        if pem_c and pem_k:                                            # a certificate written into the config itself (the lines of its PEM): nothing to put on the nodes
+            one = {"certificate": pem_c.splitlines(), "key": pem_k.splitlines()}
+        elif cert and kf:
+            one = {"certificateFile": cert, "keyFile": kf}
+        else:
             raise ValueError("TLS needs the path of the certificate and of its key on the node (for example /var/lib/pg-node/certs/ssl_cert.pem)")
 
-        tls: dict = {"certificates": [{"certificateFile": cert, "keyFile": kf}], "minVersion": "1.2"}
+        tls: dict = {"certificates": [one], "minVersion": "1.2"}
         alpn = _words(s.get("alpn"))
 
         if alpn:
@@ -1453,6 +1470,13 @@ def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = Fal
 
         pub = keys["public_key"]
         stream["realitySettings"] = {"show": False, "dest": dest if ":" in dest else dest + ":443", "xver": 0, "serverNames": names, "privateKey": keys["private_key"], "shortIds": ids}
+        spx = str(s.get("reality_spx") or "").strip()
+
+        if spx:
+            if not spx.startswith("/") or len(spx) > 200 or any(ord(ch) < 33 for ch in spx):
+                raise ValueError("the SpiderX path starts with a slash and has no space (for example /api)")
+
+            stream["realitySettings"]["spiderX"] = spx                # (the panel puts it into the links as spx)
 
     inbound: dict = {"tag": tag, "listen": str(s.get("listen") or "0.0.0.0").strip(), "port": port, "protocol": proto, "settings": settings, "streamSettings": stream}
 

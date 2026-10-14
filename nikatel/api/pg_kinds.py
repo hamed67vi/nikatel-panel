@@ -38,7 +38,7 @@ def _cred(panel_id: int) -> dict:
 
 class KindIn(BaseModel):
     kind: str = Field(max_length=40)
-    name: str = Field(min_length=3, max_length=64)
+    name: str = Field("", max_length=64)
     address: list[str] | str = Field(default="", max_length=2000)
     port: int | str | None = None
     host_port: int | str | None = None
@@ -46,6 +46,9 @@ class KindIn(BaseModel):
     group_mode: str = Field("new", max_length=10)
     group_id: int | None = None
     group_name: str = Field("", max_length=64)
+    template: bool = False
+    tpl_gb: float | str | None = None
+    tpl_days: float | str | None = None
     link_name: str = Field("", max_length=256)
     path: str = Field("", max_length=1024)
     service: str = Field("", max_length=200)
@@ -56,6 +59,8 @@ class KindIn(BaseModel):
     reality_dest: str = Field("", max_length=255)
     reality_names: str = Field("", max_length=1000)
     reality_short_ids: str = Field("", max_length=400)
+    reality_spx: str = Field("", max_length=200)
+    fingerprint: str = Field("", max_length=20)
 
 
 class MakeIn(KindIn):

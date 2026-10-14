@@ -723,7 +723,7 @@ function serverGridHtml(s) {
   const sys = box(SI.server, "System", [kv("Host", `<b>${esc(f.hostname || x.hostname || "—")}</b>`), kv("Kernel", `<span class="mono">${esc(f.kernel || "—")}</span>`), kv("Uptime", f.uptime ? Math.round(f.uptime / 86400) + " d" : "—"),
     kv("Load", f.load1 != null ? f.load1 + " / " + f.load5 + " / " + f.load15 : "—"), kv("Top process", esc(f.top || "—")), kv("Connections", f.conn != null ? f.conn : "—")]);
   const res = box(SI.bars, "Resources", [rr("CPU", f.cpu, 80, 92, f.cores ? f.cores + (f.cores === 1 ? " core" : " cores") : "", "cpu"), rr("RAM", f.ram, 80, 90, f.ram_used_mb != null ? mb(f.ram_used_mb) + " / " + mb(f.ram_total_mb) : "", "ram"), rr("Swap", f.swap, 50, 80, f.swap_total_mb != null ? mb(f.swap_used_mb) + " / " + mb(f.swap_total_mb) : "", "swap"),
-    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "", "disk"), rt("Traffic", f.rx_mbps != null ? `<span class="trf"><i class="ta d">↓</i>${f.rx_mbps}</span><span class="trf"><i class="ta u">↑</i>${f.tx_mbps}</span>` : "—"), rt("Last sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
+    rr("Disk", f.disk, 85, 95, f.disk_used_gb != null ? f.disk_used_gb + " / " + f.disk_total_gb + " GB" : "", "disk"), rt("Traffic", f.rx_mbps != null ? `<span class="trf"><i class="ta d">↓</i>${typeof labRate === "function" ? labRate(f.rx_mbps) : f.rx_mbps}</span><span class="trf"><i class="ta u">↑</i>${typeof labRate === "function" ? labRate(f.tx_mbps) : f.tx_mbps}</span>` : "—"), rt("Last sample", s.last_seen_at ? ago(s.last_seen_at) + " ago" : "never", "sample")]);
   const acc = box(SI.key, "Access & status", [kv("SSH", `<span class="mono">${esc(s.ssh_user)}@${esc(s.host)}:${s.ssh_port}</span><a class="cp" title="Copy" onclick="copyText('${esc(s.ssh_user)}@${esc(s.host)}')">${CP}</a>`), kv("Provider", provider),
     s.role === "foreign" ? kv("Country", `<b class="cty">${esc(s.country || "—")}</b> ${esc(geo.city || "")}`) : kv("Site", site),
     s.role === "foreign" ? kv("Filtering", fl ? `<span class="flt-tip" title="${esc((fl.nodes || []).map(n => (n.pending ? "…" : n.ok + "/" + n.total) + " " + n.city + (n.avg_ms != null ? " " + n.avg_ms + " ms" : "")).join(", "))}"><b class="${lv[0]}">${lv[1]}</b> <small class="mut">${ago(fl.checked_at)} ago</small></span>` : '<span class="mut">not checked</span>', "flt") : kv("Status", s.enabled === false ? '<i class="dotc"></i><span class="mut">disabled</span>' : s.online ? '<i class="dotc ok"></i><b>online</b>' : '<i class="dotc bad"></i><b class="err">offline</b>'),
@@ -2193,8 +2193,13 @@ const pnBar = (list, cur, row2, mode = "manage") => {      // mode "pick": only 
   const add = list.length ? `<button type="button" class="cta cta-server ico pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel" aria-label="Add panel"><i class="cta-ic">＋</i></button>` : `<button type="button" class="cta cta-server pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i>Add panel</button>`;      // the same round blue plus as "Add server"; the first one has a name ("Add panel"); once a panel is there it is only a plus
   return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one">${chipsBox}${add}<span class="sp"></span><div class="pn-facts">${row2}</div></div></div>`;
 };
-/* outside General the strip a tab paints (its tab buttons, search, filters, buttons: .pn-bars in #pn-body) is moved into the room beside the panels, so the top is ONE row (the owner, 2026-10-15) */
-function pnFuse() { const slot = $("#pn-ctl"), bars = $("#pn-body > .pn-bars"); if (!slot || !bars) return; slot.replaceChildren(...bars.childNodes); bars.remove(); }
+/* outside General what a tab paints at its top - the strip of its tab buttons (.pn-bars) and its own bar of search, filters and buttons (.pg-bar) - is moved into the room beside the panels, so the top is ONE row (the owner, 2026-10-15) */
+function pnFuse() {
+  const slot = $("#pn-ctl"), body = $("#pn-body"); if (!slot || !body) return;
+  const bars = body.querySelector(":scope > .pn-bars"), tool = body.querySelector(".pg-bar:not(.pg-usage .pg-bar)");
+  if (bars) { slot.replaceChildren(...bars.childNodes); bars.remove(); }
+  if (tool) { slot.querySelectorAll(":scope > .pg-bar").forEach(x => x.remove()); slot.append(tool); }
+}
 function pnFuseWatch() { const body = $("#pn-body"); if (!body || !$("#pn-ctl")) return; new MutationObserver(pnFuse).observe(body, {childList: true}); pnFuse(); }
 window.pnFuse = pnFuse;const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
 const pa = {q: "", data: null, seq: 0};

@@ -2,11 +2,11 @@
    is kept outside, the owner may want them elsewhere - and nothing moves the servers the panel already has onto the page). Three ideas:
    - a PROFILE comes first: nothing is on the page until one is added, and the add-profile section has what the owner named: Iran server, Foreign server, PasarGuard node. One list, whatever the kinds,
      with the tabs Any | Iran | Foreign | PasarGuard in place of the Iran / Foreign tabs (a tab of a kind is there only while a profile of that kind is: nobody is made to have a PasarGuard node). A PasarGuard node asks for the API key of its panel (or a username and password) first.
-   - the list is quiet: one line per profile - who, what it serves (nodes, tunnels), how it is (one state, a strip of the last 24 hours), its load - and nothing else; the rest is one click away
+   - the list is quiet: one line per profile - who, what it serves (nodes, tunnels), its IP, its load - and nothing else; the rest is one click away
    - the window of a server has four sections: Overview, Node (everything PasarGuard can do to the node that runs here), Monitor (charts and the strip of the last days) and Tools; a node profile opens the Node view
-   Routes used: GET/POST /api/profiles, DELETE /api/profiles/{id}, GET /api/profiles/strips, GET /api/servers/{id}/uptime, POST /api/servers, POST /api/panels, and the node routes of pg_nodes.js.
+   Routes used: GET/POST /api/profiles, DELETE /api/profiles/{id}, GET /api/servers/{id}/uptime, POST /api/servers, POST /api/panels, and the node routes of pg_nodes.js.
    Uses the helpers of app.js (api, esc, toast, state, showModal, srvModal, serverGridHtml, serverPartHtml, installHtml, loadServerCharts, srvDiagnose ...) and pg_srvnode.js / pg_nodes.js. */
-const LAB = {kind: localStorage.getItem("nk.lab.k") || "any", profiles: [], strips: {}, tags: []};
+const LAB = {kind: localStorage.getItem("nk.lab.k") || "any", profiles: [], tags: []};
 // (the categories are TAGS now: Marzban, PasarGuard, Iran from the start and every other tag the owner types; "any" is no tag - see labTags)      // ("Any": every kind at once - the owner chose the name: any kind of server can be added)
 const LAB_SECS = [["overview", "Overview"], ["node", "Node"], ["monitor", "Monitor"]];      // (what can be done is in the "⋯" menu, not in a section of buttons)
 const LAB_DOTS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
@@ -17,7 +17,8 @@ const labProfileOf = sid => LAB.profiles.find(p => p.server_id === sid) || null;
 const labNodeRows = () => [...(typeof pgSrv !== "undefined" ? pgSrv.outside || [] : []), ...Object.values(typeof pgSrv !== "undefined" ? pgSrv.nodes || {} : {}).flat()];
 const labNodeRow = p => labNodeRows().find(x => x.type === "pasarguard" && x.panel_id === p.panel_id && x.node_id === p.node_id) || null;      // what the health job saw (a call to no panel)
 const labNodeData = p => { const c = typeof pgNodesC !== "undefined" ? pgNodesC[p.panel_id] : null; return c && c.data ? (c.data.nodes || []).find(n => n.id === p.node_id) || null : null; };      // what the panel said when it was asked (the load, the speed)
-const labMbps = b => b == null ? "—" : (b * 8 / 1e6).toFixed(1);
+const labRate = v => v == null ? "—" : v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);      // Mbit/s: two decimals under 10, one under 100, none above (the owner: show the numbers right)
+const labMbps = b => b == null ? "—" : labRate(b * 8 / 1e6);
 
 /* ---------------------------------------------------------------- what is wrong with a server, as a short list (the worst first) */
 function labIssues(s) {
@@ -45,20 +46,6 @@ function labNodeInfo(p) {      // a PasarGuard node profile: what the health job
 }
 const labTone = p => p.kind === "node" ? labNodeInfo(p).tone : (s => s ? labSrvTone(s) : "bad")(labServer(p));
 const labRank = p => ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[labTone(p)];
-function labStateHtml(s) {
-  const b = srvBusy(s); if (b) return `<span class="lab-st busy" title="${esc(b.what + (b.detail ? ": " + b.detail : ""))}"><i class="spin"></i>${esc(b.what)}…</span>`;
-  if (!s.enabled) return '<span class="lab-st off" title="Disabled: the panel does not check it and gives no alerts"><i></i>Disabled</span>';
-  if (s.online == null) return '<span class="lab-st off" title="The panel has not looked at it yet"><i></i>Not checked yet</span>';
-  const is = labIssues(s).filter(i => !i.gre); if (!is.length) return `<span class="lab-st ok" title="Answers over SSH${s.last_seen_at ? ", last seen " + ago(s.last_seen_at) + " ago" : ""}"><i></i>Online</span>`;
-  return `<span class="lab-st ${is.some(i => i.sev === "bad") ? "bad" : "warn"}" title="${esc(is.map(i => i.tip).join("\n"))}"><i></i>${esc(is[0].txt)}${is.length > 1 ? `<em>+${is.length - 1}</em>` : ""}</span>`;
-}
-function labGreTag(s) {      // a small tag for the GRE links of a server: green when they answer, yellow when some do not, red when none does (the owner: the GRE tag smaller, green when it is well)
-  const mine = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre")), g = (s.extra || {}).gre;
-  if (!s.enabled || s.online === false || !mine.length) return "";
-  const up = mine.filter(t => t.state === "up").length, ok = up === mine.length, none = up === 0;
-  return `<span class="lab-gre ${ok ? "ok" : none ? "bad" : "warn"}" title="${esc(mine.map(t => t.name + ": " + t.state).join("\n"))}">GRE</span>`;
-}
-const labCells = (strip, tip) => `<span class="lab-strip" title="${esc(tip)}">${[...(strip || "")].map(c => `<i class="c${c === "-" ? "n" : c}"></i>`).join("")}</span>`;
 const labBar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</b>`;
 const labNum = (v, warn, bad) => v == null ? "—" : `<span class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</span>`;
 
@@ -71,15 +58,15 @@ function labServes(s) {      // what the server serves: the nodes that run on it
 }
 function labServerRow(p) {
   const s = labServer(p); if (!s) return labGoneRow(p);
-  const f = s.facts || {}, tone = labSrvTone(s), st = LAB.strips[s.id], on = s.enabled, cc = s.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toLowerCase() : "";
+  const f = s.facts || {}, tone = labSrvTone(s), on = s.enabled, cc = s.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toLowerCase() : "";
   const q = [p.label, s.name, s.host, s.provider, s.role, s.country, f.hostname, ((s.extra || {}).geo || {}).provider, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase();
   /* the card of a row and its icons are the ones of the old Servers list (srv-tbl: the flag over the name, the server with its two lights); what is IN the columns is the new design */
   return `<tr class="${labTrCls(tone, on, s.online)} clk" data-id="${p.id}" data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
-    <td class="name ${cc ? "has-flag" : ""}" ${cc ? `style="--flag:url(/flags/${cc}.png)" title="${cc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="${!on ? "disabled" : s.online ? "online" : s.online === false ? "offline" : "not checked yet"}">${SRV_IC}</i><div class="lab-nm"><b>${esc(s.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</b><small class="mono" title="${esc(s.host)}">${esc(s.host)}${s.provider ? " · " + esc(s.provider) : ""}</small></div></div></td>
+    <td class="name ${cc ? "has-flag" : ""}" ${cc ? `style="--flag:url(/flags/${cc}.png)" title="${cc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="${!on ? "disabled" : s.online ? "online" : s.online === false ? "offline" : "not checked yet"}">${SRV_IC}</i><div class="lab-nm"><b>${esc(s.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</b>${s.provider ? `<small title="${esc(s.provider)}">${esc(s.provider)}</small>` : ""}</div></div></td>
     <td class="lab-serves">${labServes(s)}</td>
-    <td><div class="lab-stw">${labStateHtml(s)}${labGreTag(s)}${on && st ? labCells(st.strip, `Last 24 hours, heard over SSH ${st.up == null ? "—" : st.up + " %"} of the time (one cell = one hour)`) : ""}</div></td>
+    <td class="lab-ip mono" title="${esc(s.host)}">${esc(s.host)}</td>
     <td>${on && s.online !== false && f.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(f.cpu, 80, 92)}</span><small>RAM ${labNum(f.ram, 85, 92)} · Disk ${labNum(f.disk, 85, 95)}</small></div>` : '<span class="mut">—</span>'}</td>
-    <td class="lab-trf">${on && f.rx_mbps != null ? `<span class="trf"><i class="ta d">↓</i>${f.rx_mbps}</span><span class="trf"><i class="ta u">↑</i>${f.tx_mbps}</span>` : '<span class="mut">—</span>'}</td>
+    <td class="lab-trf">${on && f.rx_mbps != null ? `<span class="trf"><i class="ta d">↓</i>${labRate(f.rx_mbps)}</span><span class="trf"><i class="ta u">↑</i>${labRate(f.tx_mbps)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + s.name)}</div></td></tr>`;
 }
 const labTrCls = (tone, on, online) => (!on ? "srv-off" : online ? "up" : online === false ? "down" : "") + " " + ({bad: "sev-red", warn: "sev-yellow", busy: "sev-blue"})[tone];      // (the classes the old list gave its rows: they colour the icon and the edge of the card)
@@ -91,24 +78,23 @@ function labNodeRowHtml(p) {
   const ncc = srv ? (srv.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(srv.country || "") ? srv.country.toLowerCase() : "") : "";      // (the location of the server it runs on, as on the old cards: the flag - in every profile)
   const q = ["pasarguard node", p.name, p.address, p.panel, I.st, srv && srv.name].filter(Boolean).join(" ").toLowerCase();
   return `<tr class="${labTrCls(I.tone, I.tone !== "off", I.tone === "ok" ? true : I.tone === "bad" ? false : null)} clk" data-id="${p.id}" data-q="${esc(q)}" onclick="labOpen(${p.id})" title="Click for the node">
-    <td class="name ${ncc ? "has-flag" : ""}" ${ncc ? `style="--flag:url(/flags/${ncc}.png)" title="${ncc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="PasarGuard node">${labLogo("PasarGuard")}</i><div class="lab-nm"><b>${esc(p.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}</b><small class="mono" title="${esc(addr)}">${esc(addr)}${esc(ver)}</small></div></div></td>
+    <td class="name ${ncc ? "has-flag" : ""}" ${ncc ? `style="--flag:url(/flags/${ncc}.png)" title="${ncc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="PasarGuard node">${labLogo("PasarGuard")}</i><div class="lab-nm"><b>${esc(p.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}</b>${ver ? `<small>${esc(ver.replace(/^ · /, ""))}</small>` : ""}</div></div></td>
     <td class="lab-serves"><span class="mchip ${I.tone === "ok" ? "ok" : I.tone === "bad" ? "bad" : ""}" onclick="event.stopPropagation();pgSrvOpenPanel(${p.panel_id}, 1)" title="The panel ${esc(p.panel)}: click to open it">${esc(p.panel)}</span>${srv ? `<span class="mchip" title="It runs on the server ${esc(srv.name)}">on ${esc(srv.name)}</span>` : ""}</td>
-    <td><div class="lab-stw"><span class="lab-st ${I.tone}" title="${esc(I.msg || stTxt)}"><i></i>${esc(stTxt)}</span>${I.d && I.d.xray ? `<small class="mut lab-sub">Xray ${esc(I.d.xray)}</small>` : ""}</div></td>
+    <td class="lab-ip mono" title="${esc(I.msg || stTxt)}">${esc(addr) || "—"}</td>
     <td>${live && live.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(live.cpu, 80, 92)}</span><small>RAM ${labNum(live.ram, 85, 92)}${live.cores ? " · " + live.cores + (live.cores === 1 ? " core" : " cores") : ""}</small></div>` : '<span class="mut">—</span>'}</td>
     <td class="lab-trf">${live && live.rx != null ? `<span class="trf"><i class="ta d">↓</i>${labMbps(live.rx)}</span><span class="trf"><i class="ta u">↑</i>${labMbps(live.tx)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 }
-const labGoneRow = p => `<tr class="down sev-red clk" data-id="${p.id}" data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td><div class="lab-stw"><span class="lab-st bad"><i></i>Gone</span></div></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
+const labGoneRow = p => `<tr class="down sev-red clk" data-id="${p.id}" data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 const labRowOf = p => p.kind === "node" ? labNodeRowHtml(p) : labServerRow(p);
 
 /* ---------------------------------------------------------------- the page */
 PAGES.lab = async () => {
-  const [pr, list, tl, pnl, st] = await Promise.all([api("/api/profiles"), api("/api/servers"), api("/api/tunnels").catch(() => []), api("/api/panels").catch(() => null), api("/api/profiles/strips?hours=24&buckets=24").catch(() => null)]);
+  const [pr, list, tl, pnl] = await Promise.all([api("/api/profiles"), api("/api/servers"), api("/api/tunnels").catch(() => []), api("/api/panels").catch(() => null)]);
   state.serversCache = list; state.tunnelsCache = tl; state.panelsCache = pnl || state.panelsCache || {panels: []}; LAB.profiles = pr.profiles; LAB.tags = pr.tags || [];
   if (window.pgSrvLoad) await pgSrvLoad();
   if (!labOn()) return;      // another tab or page was chosen while this one was reading: it is not drawn over it
   if (pnl) labLockSet((pnl.panels || []).length > 0);      // (the Panel item is open while a panel is connected; a failed read changes nothing)
-  LAB.strips = {}; if (st) for (const [k, v] of Object.entries(st.servers || {})) LAB.strips[+k] = v;
   LAB.kind = labKindNow();
   const openSrv = list.find(s => s.id === state.open);      // (any server: a shortcut of the dashboard or a diagnosis opens one that was taken off the page too)
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the Lab or of a node is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };
@@ -147,8 +133,8 @@ const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind
 function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }function labListInner(shown) {
   if (!shown.length) return `<div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button></div>`;
   const rows = shown.slice().sort((a, b) => labRank(a) - labRank(b) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, undefined, {sensitivity: "base"}));
-  return `<table class="tbl lift srv-tbl joined lab-tbl"><colgroup><col style="width:27%"><col style="width:16%"><col style="width:21%"><col style="width:17%"><col style="width:12%"><col style="width:7%"></colgroup>
-    <thead><tr><th>Profile</th><th data-prio="3">Serves</th><th data-prio="1">State · last 24 h</th><th data-prio="2">Load</th><th data-prio="4">Traffic Mb/s</th><th></th></tr></thead><tbody>${rows.map(labRowOf).join("")}</tbody></table>`;      // (the table of the old Servers list: its cards, its icons, and the fluid layer that drops the less important columns when the box is narrow)
+  return `<table class="tbl lift srv-tbl joined lab-tbl"><colgroup><col style="width:30%"><col style="width:16%"><col style="width:17%"><col style="width:17%"><col style="width:13%"><col style="width:7%"></colgroup>
+    <thead><tr><th>Profile</th><th data-prio="3">Serves</th><th data-prio="1">IP</th><th data-prio="2">Load</th><th data-prio="4" title="Megabits per second on the network card of the default route, over three seconds">Traffic Mbit/s</th><th></th></tr></thead><tbody>${rows.map(labRowOf).join("")}</tbody></table>`;      // (the table of the old Servers list: its cards, its icons, and the fluid layer that drops the less important columns when the box is narrow)
 }
 function labPage() {
   const all = LAB.profiles, shown = labShown(), srvs = shown.filter(p => p.kind !== "node").map(labServer).filter(Boolean), nodes = shown.filter(p => p.kind === "node");

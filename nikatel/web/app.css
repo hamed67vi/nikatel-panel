@@ -4814,8 +4814,8 @@ html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x:hover,
    and under it ONE row with the tab buttons and the range of the Usage tab. Every bar is a card of its own (nothing is joined to a strip any more). */
 html body #page .pn-top { margin-bottom: 8px !important; border-radius: 14px !important; border-bottom-color: var(--line) !important; box-shadow: none !important; }
 html body #page #pn-body > .pn-bars { margin: 0 0 8px; border-top: 1px solid transparent; border-radius: 14px; }
-html body #page .pn-bar.pn-pick .pn-one { flex-wrap: nowrap; }
-html body #page .pn-ctl { display: flex; flex: 1 1 0; align-items: center; gap: 8px; min-width: 0; margin-left: 2px; padding-left: 12px; border-left: 1px solid var(--line); }
+html body #page .pn-bar.pn-pick .pn-one { flex-wrap: nowrap; } html body #page .pn-bar.pn-pick .pn-chips { flex: 0 0 auto; min-width: 0; max-width: 46%; }      /* the panels keep their size, what the tab has wraps under them */
+html body #page .pn-ctl { display: flex; flex: 1 1 0; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; margin-left: 2px; padding-left: 12px; border-left: 1px solid var(--line); }      /* what does not fit in the row wraps under it: nothing is cut off */
 html body #page .pn-ctl:empty { display: none; }
 html body #page .pn-ctl > .toolbar { display: contents !important; }
 html body #page .pn-ctl .sp { flex: 1 1 0; min-width: 0; }

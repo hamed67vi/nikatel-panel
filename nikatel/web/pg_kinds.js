@@ -1,9 +1,10 @@
-/* PasarGuard: ONE window makes a whole KIND of account (the owner, 2026-10-15: "we only choose the kind of the account and the panel builds it").
-   What was three jobs in three tabs - an inbound in Core, a group in Access, a host in Hosts - is one form here: pick the kind, give a name and an address, press Check (nothing is written: the three steps are
-   checked together), then Make it (the server does the three in order, reads each back, and takes the earlier ones back when one fails). Registers nothing in pgTabs: the button of the window sits in the bars
-   of Access, Hosts and Core (pgKindBtn). Uses pg_common.js (pgApi), app.js (showModal, gconfirm, toast, esc, pn, refresh) and the cached state of pg_cores.js / pg_access.js to draw those tabs again. */
+/* PasarGuard: ONE window makes a whole KIND of account (the owner, 2026-10-15: "we only choose the kind of the account and the panel builds it" - "I only give the protocol, you do the rest").
+   What was three jobs in three tabs - an inbound in Core, a group in Access, a host in Hosts - is one choice here: pick the protocol and press Make it. The name, the address, the port, the path, the keys,
+   the certificate, the group, the host and a user template are chosen by the server (the details are folded away: open them to change something). Check shows the steps and what was chosen (nothing is
+   written); Make it does them in order, reads each back, and takes the earlier ones back when one fails. Registers nothing in pgTabs: the button of the window sits in the bars of Access, Hosts and Core
+   (pgKindBtn). Uses pg_common.js (pgApi), app.js (showModal, gconfirm, toast, esc, pn, refresh) and the cached state of pg_cores.js / pg_access.js to draw those tabs again. */
 const pgKind = {id: 0, o: null, k: "", res: null};
-window.pgKindBtn = () => pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgKindNew()" title="Make a whole kind of account in one step: the inbound, the group and the host together">＋ Account type</button>`;
+window.pgKindBtn = () => pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgKindNew()" title="Make a whole kind of account in one step: choose the protocol, the panel makes the inbound, the group, the host and a user template">＋ Account type</button>`;
 const pgKindRand = () => Math.random().toString(36).slice(2, 8);
 const pgKindOf = id => ((pgKind.o || {}).kinds || []).find(k => k.id === id) || {};
 window.pgKindNew = async () => {
@@ -17,36 +18,42 @@ window.pgKindNew = async () => {
 function pgKindDraw() {
   const o = pgKind.o, opt = (v, t, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(t)}</option>`, tls = o.tls || {};
   const chips = o.kinds.map(k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}"><b>${esc(k.title)}</b><small>${esc(k.note)}</small></button>`).join("");
-  showModal("<b>＋ Account type</b>", `<div class="pg-kind-chips">${chips}</div>
-    <form class="frm pg-cores-form pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
-      <label>Name <small>the inbound, the group and the link are named from it</small><input name="name" maxlength="64" placeholder="Reality home" autocomplete="off" required></label>
-      <label>Address <small>domain or IP in the link</small><input name="address" list="pg-kind-addr" placeholder="${esc(o.addresses[0] || "cdn.example.com")}" autocomplete="off" required><datalist id="pg-kind-addr">${o.addresses.map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
-      <label>Port <small id="pg-kind-portnote"></small><input name="port" type="number" min="1" max="65535" required></label>
+  showModal("<b>＋ Account type</b>", `<p class="pg-kind-lead">Choose the protocol. The panel does the rest: the inbound, the group, the host and a user template - the name, the address, the port and the keys are chosen for you.</p>
+    <div class="pg-kind-chips">${chips}</div>
+    <form class="frm pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
+    <details class="pg-kind-adv"><summary>Details - all of them are chosen for you; open to change something</summary><div class="pg-cores-form">
+      <label>Name <small>the inbound, the group and the link are named from it</small><input name="name" maxlength="64" placeholder="chosen for you" autocomplete="off"></label>
+      <label>Address <small>domain or IP in the link</small><input name="address" list="pg-kind-addr" placeholder="${esc(o.addresses[0] ? "the first node: " + o.addresses[0] : "write it")}" autocomplete="off"><datalist id="pg-kind-addr">${o.addresses.map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
+      <label>Port <small id="pg-kind-portnote"></small><input name="port" type="number" min="1" max="65535"></label>
       <label>Group <small>who gets it</small><select name="group">${opt("new", "A new group, named like this", true)}${o.groups.map(g => opt("g" + g.id, `Add to “${g.name}” (${g.tags.length} inbound${g.tags.length === 1 ? "" : "s"})`)).join("")}${opt("none", "No group (nobody gets it yet)")}</select></label>
+      <label class="chk wide"><input type="checkbox" name="template" checked> Also make a user template <small>so a new user of this kind is one choice (Users → More… → New user from a template)</small></label>
+      <label data-tpl>Data limit, GB <small>0 = unlimited</small><input name="tpl_gb" type="number" min="0" step="any" value="50"></label><label data-tpl>Days <small>0 = no end</small><input name="tpl_days" type="number" min="0" value="30"></label>
       <label data-need="path">Path <small>of the WebSocket</small><input name="path" value="${esc(pgKind.path)}" autocomplete="off"></label>
       <label data-need="service">Service name <small>of gRPC</small><input name="service" value="${esc(pgKind.svc)}" autocomplete="off"></label>
       <label class="wide" data-need="tls">Certificate and key <small>${tls.guess ? "a guess: no TLS inbound of this panel to copy it from - they must exist on every node" : "the files the TLS inbounds of this panel use"}</small><span class="pg-kind-two"><input name="tls_cert" value="${esc(tls.cert || "")}" autocomplete="off" spellcheck="false"><input name="tls_key" value="${esc(tls.key || "")}" autocomplete="off" spellcheck="false"></span></label>
-      <label class="wide" data-need="reality">The site REALITY imitates<span class="pg-ib-dest"><input name="reality_dest" value="${esc((o.reality || {}).dest || "")}" placeholder="www.example.com:443" autocomplete="off"><button type="button" class="sm" onclick="pgKindScan()" title="Ask the panel whether this site is a good target: TLS 1.3, h2, x25519">Scan…</button></span></label>
+      <label class="wide" data-need="tls pin">SNI <small>the name the network sees; empty = chosen for you (a domain of your own links when the certificate is the panel's own, else the address)</small><input name="sni" list="pg-kind-snis" placeholder="chosen for you" autocomplete="off"><datalist id="pg-kind-snis">${(o.snis || []).map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
+      <label class="wide" data-need="reality">The site REALITY imitates <small>empty = the panel's own REALITY site, else the first usual site it finds usable</small><span class="pg-ib-dest"><input name="reality_dest" value="${esc((o.reality || {}).dest || "")}" placeholder="chosen for you" autocomplete="off"><button type="button" class="sm" onclick="pgKindScan()" title="Ask the panel whether this site is a good target: TLS 1.3, h2, x25519">Scan…</button></span></label>
+      <label data-need="spx">SpiderX path <small>empty = none (a link may carry /api)</small><input name="reality_spx" placeholder="/" autocomplete="off"></label>
+      <label data-sec="fp">Fingerprint <small>of the client, in the link</small><select name="fingerprint"><option value="">default</option>${(o.fingerprints || []).map(x => opt(x, x)).join("")}</select></label>
       ${o.cores.length > 1 ? `<label>Core<select name="core_id">${o.cores.map((c, i) => opt(c.id, `${c.name} (#${c.id})`, i === 0)).join("")}</select></label>` : `<input type="hidden" name="core_id" value="${o.cores[0] ? o.cores[0].id : ""}">`}
-      <details class="wide pg-kind-more"><summary>More: the name of the link, the port in the link, SNI, Host header, REALITY names</summary><div class="pg-cores-form">
-        <label class="wide">Name of the link <small>what the user sees; {USERNAME} is replaced by the panel</small><input name="link_name" maxlength="256" placeholder="Reality home ({USERNAME})" autocomplete="off"></label>
-        <label>Port in the link <small>empty = the port of the inbound (a CDN may show another)</small><input name="host_port" type="number" min="1" max="65535" autocomplete="off"></label>
-        <label data-need="tls">SNI <small>empty = the address</small><input name="sni" autocomplete="off"></label>
-        <label data-need="path">Host header <small>empty = the address</small><input name="host_header" autocomplete="off"></label>
-        <label data-need="reality">Server names <small>comma separated; empty = the site</small><input name="reality_names" autocomplete="off"></label>
-        <label data-need="reality">Short ids <small>empty = one is made</small><input name="reality_short_ids" autocomplete="off"></label></div></details>
-      <label class="chk wide"><input type="checkbox" name="restart"> Restart Xray on the nodes of the core now <small>(cuts their customers for a moment; without it the nodes use the new inbound after their next restart)</small></label></form>
+      <label class="wide">Name of the link <small>what the user sees; {USERNAME} is replaced by the panel</small><input name="link_name" maxlength="256" placeholder="the name, then ({USERNAME})" autocomplete="off"></label>
+      <label>Port in the link <small>empty = the port of the inbound (a CDN may show another)</small><input name="host_port" type="number" min="1" max="65535" autocomplete="off"></label>
+      <label data-need="path">Host header <small>empty = the address</small><input name="host_header" autocomplete="off"></label>
+      <label data-need="reality">Server names <small>comma separated; empty = the site</small><input name="reality_names" autocomplete="off"></label>
+      <label data-need="reality">Short ids <small>empty = one is made</small><input name="reality_short_ids" autocomplete="off"></label>
+      <label class="chk wide"><input type="checkbox" name="restart"> Restart Xray on the nodes of the core now <small>(cuts their customers for a moment; without it the nodes use the new inbound after their next restart)</small></label></div></details></form>
     <div id="pg-kind-res"></div>
-    <div class="frm-act"><button class="sm" onclick="pgKindCheck()" title="Check the three steps together; nothing is written">Check</button><span class="sp"></span><button class="pri" id="pg-kind-go" onclick="pgKindMake()">Make it…</button><button onclick="closeModal()">Cancel</button></div>`, "wide");
+    <div class="frm-act"><button class="sm" onclick="pgKindCheck()" title="Check the steps and see what is chosen for you; nothing is written">Check</button><span class="sp"></span><button class="pri" id="pg-kind-go" onclick="pgKindMake()">Make it…</button><button onclick="closeModal()">Cancel</button></div>`, "wide");
 }
 window.pgKindPick = k => {
   const f = $("#pg-kind-form"); if (!f) return;
   pgKind.k = k; pgKind.res = null;
   document.querySelectorAll(".pg-kind-chip").forEach(b => b.classList.toggle("on", b.dataset.k === k));
   const kd = pgKindOf(k);
-  f.querySelectorAll("[data-need]").forEach(l => { const on = kd.needs.includes(l.dataset.need); l.hidden = !on; l.querySelectorAll("input, select, button").forEach(i => { i.disabled = !on; }); });
-  pgKindPort();
-  const n = f.elements.name; if (!n.value.trim()) n.placeholder = kd.title.replace(/ · /g, " ");
+  f.querySelectorAll("[data-need]").forEach(l => { const on = l.dataset.need.split(" ").some(n => kd.needs.includes(n)); l.hidden = !on; l.querySelectorAll("input, select, button").forEach(i => { i.disabled = !on; }); });
+  f.querySelectorAll("[data-sec]").forEach(l => { const on = kd.security !== "none"; l.hidden = !on; l.querySelectorAll("select, input").forEach(i => { i.disabled = !on; }); });
+  f.querySelectorAll("[data-auto]").forEach(i => { i.value = ""; delete i.dataset.auto; });      // what the last check chose for another kind goes: this kind is chosen again
+  pgKindPort(); pgKindTplSync();
   const r = $("#pg-kind-res"); if (r) r.innerHTML = "";
 };
 const pgKindPort = (keep) => {      // the first usual port of the kind that no inbound of the chosen core uses (not touched when the owner typed one: keep)
@@ -54,10 +61,26 @@ const pgKindPort = (keep) => {      // the first usual port of the kind that no 
   if (!keep) f.elements.port.value = kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];
   $("#pg-kind-portnote").textContent = core.ports.includes(+f.elements.port.value) ? "in use in this core" : "free in this core";
 };
-window.pgKindStale = ev => { pgKind.res = null; if (!$("#pg-kind-form")) return; pgKindPort(!(ev && ev.target && ev.target.name === "core_id")); };const pgKindBody = () => {
+const pgKindTplSync = () => {      // a template gives a group: with no group there is none; its two numbers show only while it is wanted
+  const f = $("#pg-kind-form"), none = f.elements.group.value === "none";
+  if (none) f.elements.template.checked = false;
+  f.elements.template.disabled = none;
+  f.querySelectorAll("[data-tpl]").forEach(l => { l.hidden = !f.elements.template.checked; l.querySelectorAll("input").forEach(i => { i.disabled = l.hidden; }); });
+};
+window.pgKindStale = ev => {
+  pgKind.res = null; if (!$("#pg-kind-form")) return;
+  if (ev && ev.target && ev.target.dataset) delete ev.target.dataset.auto;      // a value the owner touched is his, not the one chosen for him
+  pgKindPort(!(ev && ev.target && ev.target.name === "core_id")); pgKindTplSync();
+};
+const pgKindFill = auto => {      // what the server chose is put into the details, so the owner sees it (and can change it); it is marked, so another kind clears it again
+  const f = $("#pg-kind-form");
+  Object.entries(auto || {}).forEach(([key, v]) => { const el = f.elements[key]; if (!el || el.disabled || key === "port" || (el.value && !el.dataset.auto)) return; el.value = v; el.dataset.auto = "1"; });
+};
+const pgKindBody = () => {
   const f = $("#pg-kind-form"), b = {kind: pgKind.k}, g = f.elements.group.value;
-  [...f.elements].forEach(el => { if (!el.name || el.disabled || el.name === "group" || el.name === "restart") return; const v = el.type === "number" ? (el.value === "" ? "" : +el.value) : el.value.trim(); if (v !== "") b[el.name] = v; });
+  [...f.elements].forEach(el => { if (!el.name || el.disabled || ["group", "restart", "template"].includes(el.name)) return; const v = el.type === "number" ? (el.value === "" ? "" : +el.value) : el.value.trim(); if (v !== "") b[el.name] = v; });
   b.group_mode = g === "new" ? "new" : g === "none" ? "none" : "existing"; if (g.startsWith("g")) b.group_id = +g.slice(1);
+  b.template = f.elements.template.checked;
   return b;
 };
 window.pgKindScan = async () => {
@@ -69,11 +92,12 @@ window.pgKindScan = async () => {
   } catch (e) { res.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 };
 const pgKindStepsHtml = p => `<div class="pg-kind-steps">${p.steps.map((s, i) => `<div class="pg-kind-step ${s.ok ? "ok" : "bad"}"><i>${s.ok ? "✓" : "✕"}</i><div><b>${i + 1}. ${esc(s.title)}</b>${s.errors.map(e => `<div class="err">${esc(e)}</div>`).join("")}${s.warnings.map(w => `<div class="pg-kind-warn">⚠ ${esc(w)}</div>`).join("")}</div></div>`).join("")}</div>
+  ${(p.notes || []).length ? `<div class="pg-kind-notes"><b>Chosen for you:</b>${p.notes.map(n => `<div>• ${esc(n)}</div>`).join("")}</div>` : ""}
   ${p.inbound ? `<details class="pg-cores-full"><summary>The inbound as it will be stored (secrets hidden)</summary><pre class="pg-cores-pre">${esc(JSON.stringify(p.inbound, null, 2))}</pre></details>` : ""}`;
 window.pgKindCheck = async () => {
-  const res = $("#pg-kind-res"), f = $("#pg-kind-form"); if (!f.reportValidity()) return null;
-  res.innerHTML = '<div class="loading"><i class="spin"></i><span>Checking the three steps…</span></div>';
-  try { const p = await pgApi(pgKind.id, "/kinds/plan", {method: "POST", body: pgKindBody()}); res.innerHTML = pgKindStepsHtml(p); toast(p.valid ? "✓ The three steps pass" : "✕ " + (p.steps.find(s => !s.ok).errors[0] || "a step does not pass"), p.valid ? "ok" : "bad"); return p; }
+  const res = $("#pg-kind-res"); if (!$("#pg-kind-form")) return null;
+  res.innerHTML = '<div class="loading"><i class="spin"></i><span>Checking the steps…</span></div>';
+  try { const p = await pgApi(pgKind.id, "/kinds/plan", {method: "POST", body: pgKindBody()}); pgKindFill(p.auto); res.innerHTML = pgKindStepsHtml(p); toast(p.valid ? "✓ The steps pass" : "✕ " + (p.steps.find(s => !s.ok).errors[0] || "a step does not pass"), p.valid ? "ok" : "bad"); return p; }
   catch (e) { res.innerHTML = `<div class="err">${esc(e.message)}</div>`; return null; }
 };
 window.pgKindMake = async () => {
@@ -94,10 +118,12 @@ function pgKindDone(out) {
   showModal(`<b>${ok ? "✓" : "⚠"} Account type made</b>`, `<div class="pg-kind-steps">
       <div class="pg-kind-step ok"><i>✓</i><div><b>Core:</b> the inbound <b>${esc(out.tag)}</b> is in the core (backup <span class="mono">${esc(out.core.backup)}</span>)</div></div>
       ${out.group ? `<div class="pg-kind-step ok"><i>✓</i><div><b>Access:</b> the group <b>${esc(out.group.name)}</b> ${out.group.created ? "is new and holds it" : "holds it now"}</div></div>` : ""}
+      ${out.template ? `<div class="pg-kind-step ok"><i>✓</i><div><b>Access:</b> the user template <b>${esc(out.template.name)}</b> (${out.template.data_limit_gb ? out.template.data_limit_gb + " GB" : "unlimited data"}, ${out.template.expire_days ? out.template.expire_days + " days" : "no end"}) gives the group</div></div>` : ""}
       <div class="pg-kind-step ok"><i>✓</i><div><b>Hosts:</b> the link <b>${esc(out.host.remark)}</b> points at ${esc(out.host.address.join(", "))}${out.host.port ? ":" + out.host.port : ""}</div></div></div>
+    ${(out.notes || []).length ? `<div class="pg-kind-notes"><b>Chosen for you:</b>${out.notes.map(n => `<div>• ${esc(n)}</div>`).join("")}</div>` : ""}
     ${out.checks.map(c => `<div class="pg-kind-chk ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✕"} ${esc(c.what)} <span class="mut">(read back from the panel)</span></div>`).join("")}
     ${out.core.public_key ? `<div class="pg-kind-chk">REALITY public key <code class="mono">${esc(out.core.public_key)}</code> <button class="sm" onclick="navigator.clipboard.writeText('${esc(out.core.public_key)}').then(() => toast('✓ Copied', 'ok'))">Copy</button> <span class="mut">(the private key stays on the panel)</span></div>` : ""}
     <div class="pg-kind-chk ${out.restarted ? "ok" : out.restart_error ? "bad" : ""}">${out.restarted ? "✓ Xray was restarted on the nodes: it works now." : out.restart_error ? `✕ Saved, but the restart failed: ${esc(out.restart_error)}` : "The nodes use it after their next restart (Core → Restart nodes…)."}</div>
-    ${out.group ? '<div class="pg-kind-chk mut">Next: make a user (Users → ＋ New user) and give them the group, or put the group in a template.</div>' : '<div class="pg-kind-chk mut">No group holds it yet: nobody gets this link until a group does (Access).</div>'}
+    ${out.template ? `<div class="pg-kind-chk mut">Next: a user of this kind is one choice - Users → More… → New user from a template → <b>${esc(out.template.name)}</b>.</div>` : out.group ? '<div class="pg-kind-chk mut">Next: make a user and give them the group (Users → More… → Apply a template…, or Access → Groups).</div>' : '<div class="pg-kind-chk mut">No group holds it yet: nobody gets this link until a group does (Access).</div>'}
     <div class="frm-act"><span class="sp"></span><button class="pri" onclick="closeModal();refresh()">Done</button></div>`, "wide");
 }

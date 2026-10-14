@@ -45,10 +45,10 @@ SCRIPTS: dict[str, tuple[str, Mapping[str, str]]] = {
     "cpu_spread": (r"""IF=$(ip -o -4 route show default 2>/dev/null | awk '{print $5}' | head -1); echo "IF $IF"
 echo "CORES $(nproc)"
 for q in /sys/class/net/$IF/queues/rx-*; do [ -d "$q" ] && echo "RXQ $(basename $q) $(cat $q/rps_cpus 2>/dev/null | tr -d ',')"; done
-awk '/^cpu[0-9]/{print "S1", $1, $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat
+awk '/^cpu[0-9]/{printf "S1 %s %.0f %.0f\n", $1, $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat
 grep NET_RX /proc/softirqs | sed 's/^ *NET_RX: */N1 /'
 sleep 2
-awk '/^cpu[0-9]/{print "S2", $1, $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat
+awk '/^cpu[0-9]/{printf "S2 %s %.0f %.0f\n", $1, $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat
 grep NET_RX /proc/softirqs | sed 's/^ *NET_RX: */N2 /'
 echo "UNIT $(systemctl is-enabled nikatel-rps.service 2>/dev/null || echo no)"
 """, {}),
@@ -66,7 +66,7 @@ echo "MTUPROBE $(sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null)"
 echo "CT $(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null || echo -1) $(cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || echo -1)"
 echo "TUNED $([ -f /etc/sysctl.d/99-nikatel-tunnel.conf ] && echo yes || echo no)"
 echo "MEM $(awk '/MemAvailable/{print $2}' /proc/meminfo) $(awk '/MemTotal/{print $2}' /proc/meminfo) $(awk '/SwapTotal/{t=$2}/SwapFree/{f=$2}END{print t-f}' /proc/meminfo)"
-st() { awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8+$9, $9}' /proc/stat; }
+st() { awk 'NR==1{printf "%.0f %.0f\n", $2+$3+$4+$5+$6+$7+$8+$9, $9}' /proc/stat; }
 tcpc() { awk '/^Tcp:/{if(h){print $12, $13}; h=1}' /proc/net/snmp; }
 ifs() { for f in rx_packets tx_packets rx_errors tx_errors rx_dropped tx_dropped; do printf '%s ' "$(cat /sys/class/net/$IF/statistics/$f 2>/dev/null || echo 0)"; done; echo; }
 echo "ST1 $(st)"; echo "TCP1 $(tcpc)"; echo "IF1 $(ifs)"
@@ -75,15 +75,21 @@ echo "ST2 $(st)"; echo "TCP2 $(tcpc)"; echo "IF2 $(ifs)"
 """, {}),
 
     # resources of a server, one second of CPU and network counters
-    "facts": (r"""s1=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
-r1=$(awk 'NR>2 && $1!~/^(lo|docker|veth|br-)/{gsub(":"," ");rx+=$2;tx+=$10}END{print rx+0,tx+0}' /proc/net/dev)
+    # (1.53.2: every counter is printed with printf "%.0f": mawk - the awk of many Ubuntu servers - prints a big number with six digits ("2.91282e+10"), so the rates came out in steps of 1 MB or 10 MB over three
+    # seconds and the CPU windows of a long-running server in steps of minutes; and the network counters are the ones of the card of the default route, not the sum of every interface (a GRE link or a tunnel
+    # interface counts the same bytes a second time))
+    "facts": (r"""IF=$(ip -o -4 route show default 2>/dev/null | awk '{print $5}' | head -1)
+cpu() { awk 'NR==1{printf "%.0f %.0f\n", $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat; }
+net() { if [ -n "$IF" ] && [ -r /sys/class/net/$IF/statistics/rx_bytes ]; then echo "$(cat /sys/class/net/$IF/statistics/rx_bytes) $(cat /sys/class/net/$IF/statistics/tx_bytes)"; else awk 'NR>2 && $1!~/^(lo|docker|veth|br-|gre|gretap|erspan|tun|tap|wg|sit|ip6tnl)/{gsub(":"," ");rx+=$2;tx+=$10}END{printf "%.0f %.0f\n", rx, tx}' /proc/net/dev; fi; }
+s1=$(cpu)
+r1=$(net)
 sleep 1
-s2=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
+s2=$(cpu)
 sleep 1
-s3=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
+s3=$(cpu)
 sleep 1
-s4=$(awk 'NR==1{print $2+$3+$4+$5+$6+$7+$8, $5+$6}' /proc/stat)
-r2=$(awk 'NR>2 && $1!~/^(lo|docker|veth|br-)/{gsub(":"," ");rx+=$2;tx+=$10}END{print rx+0,tx+0}' /proc/net/dev)
+s4=$(cpu)
+r2=$(net)
 echo "CPU=$s1 $s2"
 echo "CPU2=$s2 $s3"
 echo "CPU3=$s3 $s4"

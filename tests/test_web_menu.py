@@ -224,6 +224,7 @@ def test_the_top_of_the_panel_page_is_one_row_that_only_switches_and_general_add
     assert '${pick ? "" : `<button type="button" class="dns-x" onclick="pnDel(' in bar                                          # and the cross that removes a panel is drawn only outside it
     facts = APP.split("const facts = ", 1)[1].split("pnBar(list, p.id", 1)[0]
     assert "pnEditWin()" in facts and "pnCheck(" in facts and 'manage ? facts : "", manage ? "manage" : "pick"' in APP          # Check now and Edit: General only    assert "function pnFuse()" in APP and "slot.replaceChildren(...bars.childNodes)" in APP and "pnFuseWatch();" in APP
+    assert 'body.querySelector(".pg-bar:not(.pg-usage .pg-bar)")' in APP and "slot.append(tool)" in APP                 # the own bar of Access, Core, Admins and Hosts goes up too (not the range bar of Usage)
     assert "pnFuse();" in APP.split("async function pnUsersLoad", 1)[1].split("async function pnHostsLoad", 1)[0]    # the list is measured after the controls moved up
     assert "pnFuse();" in APP.split("async function pnHostsLoad", 1)[1].split("window.hpCount", 1)[0]
     common = _web("pg_common.js")
@@ -246,3 +247,16 @@ def test_one_window_makes_a_whole_kind_of_account_and_the_three_tabs_open_it():
     main = (WEB.parent / "main.py").read_text(encoding="utf-8")
     assert '"pg_kinds.js"' in main and '"pg_kinds.css"' in main
     assert 'html body #modal .pg-kind-chip.on' in _web("pg_kinds.css")
+    assert 'name="template" checked' in js and "const pgKindTplSync" in js and "b.template = f.elements.template.checked" in js       # the user template is a tick of the same window
+    assert "Choose the protocol. The panel does the rest" in js and "<details class=\"pg-kind-adv\">" in js and "const pgKindFill = auto =>" in js and "Chosen for you:" in js      # (1.53.2) only the protocol is asked: the details are folded and filled with what was chosen
+    assert "required" not in js.split("pgKindDraw() {", 1)[1].split("window.pgKindPick", 1)[0]
+
+
+def test_the_list_of_servers_has_an_ip_column_in_place_of_the_state_column_and_shows_the_traffic_right():
+    """The owner, 2026-10-15: "remove this column" (State · last 24 h), "a column with the IP of the servers instead", "show the numbers of the traffic right"."""
+    lab = _web("lab.js")
+    assert "State · last 24 h" not in lab and "labStateHtml" not in lab and "labGreTag" not in lab and "labCells" not in lab and "LAB.strips" not in lab
+    assert '<th data-prio="1">IP</th>' in lab and 'class="lab-ip mono" title="${esc(s.host)}">${esc(s.host)}</td>' in lab
+    assert "/api/profiles/strips" not in lab                                                         # the list does not ask for the strips any more
+    assert lab.count('<col style="width:') == 6 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
+    assert ".lab-ip {" in _web("lab.css")
