@@ -4,9 +4,9 @@
    Uses the helpers of app.js: $, api, esc, toast, showModal, closeModal, gconfirm, gprompt, refresh, fmtB, gb, ago, nkHit, pn (state), pnTabs(). */
 window.pgTabs = window.pgTabs || {};
 const pgBars = () => `<div class="pn-bars">${pnTabs()}</div>`;
-window.pgPaint = (box, html) => { box.innerHTML = pgBars() + html; };                                                                   // the tab bar, then the content of the tab
-window.pgLoading = (box, text = "Loading…") => { box.innerHTML = pgBars() + `<div class="loading"><i class="spin"></i><span>${esc(text)}</span></div>`; };
-window.pgError = (box, e) => { box.innerHTML = pgBars() + `<div class="err">${esc((e && e.message) || String(e))}</div>`; };
+window.pgPaint = (box, html) => { box.innerHTML = (pn.tab === "usage" ? "" : pgBars()) + html; if (window.pnFuse) pnFuse(); };      // (the Usage tab carries its tab buttons in its own bar: pgUsageBarHtml)                                                                   // the tab bar, then the content of the tab
+window.pgLoading = (box, text = "Loading…") => { box.innerHTML = pgBars() + `<div class="loading"><i class="spin"></i><span>${esc(text)}</span></div>`; if (window.pnFuse) pnFuse(); };
+window.pgError = (box, e) => { box.innerHTML = pgBars() + `<div class="err">${esc((e && e.message) || String(e))}</div>`; if (window.pnFuse) pnFuse(); };
 /* /api/panels/{id}/pg/<path>: `opts.body` may be an object */
 window.pgApi = (id, path, opts = {}) => api(`/api/panels/${id}/pg${path}`, opts.body && typeof opts.body !== "string" ? {...opts, body: JSON.stringify(opts.body)} : opts);
 /* the switch of the panel (a blue pill with a white knob when on) */

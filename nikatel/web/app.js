@@ -2052,20 +2052,24 @@ const PG_SUBS = {users: ["users"], hosts: ["hosts"], access: ["groups", "templat
 const PG_SUB_OF = {}; Object.entries(PG_SUBS).forEach(([s, tabs]) => tabs.forEach(t => { PG_SUB_OF[t] = s; }));
 const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
 const pnIsUsers = () => (state.page === "pgpanel" && sub("pgpanel") === "users") || (state.page === "configs" && sub("configs") === "panels");
+const pnManage = () => state.page !== "pgpanel" || sub("pgpanel") === "settings";      // General is where a panel is added, edited and removed (the owner, 2026-10-15); every other tab only SWITCHES between the PasarGuard panels, in ONE row with what the tab has
 const pnShow = tabs => { if (pn.want && tabs.includes(pn.want)) pn.tab = pn.want; else if (!tabs.includes(pn.tab)) pn.tab = tabs[0]; pn.want = null; };
 PAGES.panels = async () => {
-  const list = (await api("/api/panels")).panels; state.panelsCache = list;
+  const every = (await api("/api/panels")).panels; state.panelsCache = every;
   pnShow(pnPageTabs());
+  const manage = pnManage(), list = manage ? every : every.filter(x => x.type === "pasarguard");      // outside General the bar switches between the PasarGuard panels only
   if (pn.id === "*" && list.length > 1 && pnIsUsers()) return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
   if (pn.id === "*") pn.id = "";
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
   const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
-  if (!list.length) { $("#page").innerHTML = pnBar([], "", "") + '<div class="empty">No panel yet. Add one with its API key or access token.</div>'; return; }
+  if (!list.length) { $("#page").innerHTML = manage ? pnBar([], "", "") + '<div class="empty">No panel yet. Add one with its API key or access token.</div>' : '<div class="empty">No PasarGuard panel is connected yet.<br><button class="sm pri" onclick="go(\'pgpanel\', \'settings\')">Open General to add one</button></div>'; return; }
   const p = sel, s = p.stats || {};
   const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
-  $("#page").innerHTML = pnBar(list, p.id, `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span><button class="pn-b-chk" onclick="pnCheck(${p.id})" title="Ask the panel now"><i class="ic">↻</i><span class="bt">Check now</span></button><button class="pn-b-edit" onclick="pnEditWin()" title="Name, address, key or token, TLS check"><i class="ic">✎</i><span class="bt">Edit</span></button>`) + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
+  const facts = `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span><button class="pn-b-chk" onclick="pnCheck(${p.id})" title="Ask the panel now"><i class="ic">↻</i><span class="bt">Check now</span></button><button class="pn-b-edit" onclick="pnEditWin()" title="Name, address, key or token, TLS check"><i class="ic">✎</i><span class="bt">Edit</span></button>`;
+  $("#page").innerHTML = pnBar(list, p.id, manage ? facts : "", manage ? "manage" : "pick") + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
+  pnFuseWatch();
   const tdef = window.pgTabs && window.pgTabs[pn.tab], here = $("#pn-body");
   if (here && tdef && tdef.types && !tdef.types.includes(p.type)) { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="empty">${esc(tdef.label)} is a part of PasarGuard panels; ${esc(p.name)} is a ${esc(p.type)} panel. Pick a PasarGuard panel in the bar above.</div>`; return; }
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
@@ -2181,14 +2185,18 @@ window.pnNodeLogs = async (id, nid) => { const pl = Array.isArray(state.panelsCa
 
 /* ---- All panels: one account = the same person on every panel (same username, or a link made by hand); every panel is asked through its API when you look */
 /* the bar on top of the Panels pages is the one of the CDN page: a row of chips (one per panel, "All panels", and the dashed "＋ Add panel" chip) and a row of facts and buttons */
-const pnBar = (list, cur, row2) => {
-  const dot = p => p.status === "up" ? "ok" : p.status === "down" ? "bad" : "";
-  const chips = list.map(p => `<span class="dns-cw"><button type="button" class="dns-chip ${String(p.id) === String(cur) ? "on" : ""}" onclick="pnPick('${p.id}')" title="${esc(p.url || "")}${p.status === "down" ? " · down" : ""}"><i class="dot ${dot(p)}"></i><b>${esc(p.name)}</b><small>${esc(p.type)}</small></button><button type="button" class="dns-x" onclick="pnDel(${p.id}, '${esc(p.name)}')" title="Remove the panel ${esc(p.name)} from this list (nothing changes on the panel itself)" aria-label="Remove ${esc(p.name)}">${X_SVG}</button></span>`).join("");      // each panel box has a faint cross: it takes the panel off the list (after a confirmation)
-  const all = "";      // the "All panels" chip was taken away (2026-10-14); the page of the accounts over every panel is still in the code (pnPick("*"))
+const pnBar = (list, cur, row2, mode = "manage") => {      // mode "pick": only switches between the panels, and the room beside them (#pn-ctl) holds what the tab has (pnFuse); "manage" (General): + add, x remove, the facts and the buttons
+  const pick = mode === "pick", dot = p => p.status === "up" ? "ok" : p.status === "down" ? "bad" : "";
+  const chips = list.map(p => `<span class="dns-cw"><button type="button" class="dns-chip ${String(p.id) === String(cur) ? "on" : ""}" onclick="pnPick('${p.id}')" title="${esc(p.url || "")}${p.status === "down" ? " · down" : ""}"><i class="dot ${dot(p)}"></i><b>${esc(p.name)}</b><small>${esc(p.type)}</small></button>${pick ? "" : `<button type="button" class="dns-x" onclick="pnDel(${p.id}, '${esc(p.name)}')" title="Remove the panel ${esc(p.name)} from this list (nothing changes on the panel itself)" aria-label="Remove ${esc(p.name)}">${X_SVG}</button>`}</span>`).join("");      // in General each panel box has a faint cross: it takes the panel off the list (after a confirmation)
+  const chipsBox = `<div class="pn-chips${list.length > 6 ? " many" : ""}" style="--n:${list.length}">${chips}</div>`;
+  if (pick) return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar pn-pick"><div class="dns-r dns-accbar pn-one">${chipsBox}<div id="pn-ctl" class="pn-ctl"></div></div></div>`;
   const add = list.length ? `<button type="button" class="cta cta-server ico pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel" aria-label="Add panel"><i class="cta-ic">＋</i></button>` : `<button type="button" class="cta cta-server pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i>Add panel</button>`;      // the same round blue plus as "Add server"; the first one has a name ("Add panel"); once a panel is there it is only a plus
-  return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one"><span class="dns-lab">Panels</span><div class="pn-chips${list.length > 6 ? " many" : ""}" style="--n:${list.length}">${all}${chips}</div>${add}<span class="sp"></span><div class="pn-facts">${row2}</div></div></div>`;
+  return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one">${chipsBox}${add}<span class="sp"></span><div class="pn-facts">${row2}</div></div></div>`;
 };
-const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
+/* outside General the strip a tab paints (its tab buttons, search, filters, buttons: .pn-bars in #pn-body) is moved into the room beside the panels, so the top is ONE row (the owner, 2026-10-15) */
+function pnFuse() { const slot = $("#pn-ctl"), bars = $("#pn-body > .pn-bars"); if (!slot || !bars) return; slot.replaceChildren(...bars.childNodes); bars.remove(); }
+function pnFuseWatch() { const body = $("#pn-body"); if (!body || !$("#pn-ctl")) return; new MutationObserver(pnFuse).observe(body, {childList: true}); pnFuse(); }
+window.pnFuse = pnFuse;const pnSelect = (list, cur) => `<select onchange="pnPick(this.value)">${list.length > 1 ? `<option value="*" ${cur === "*" ? "selected" : ""}>★ All panels</option>` : ""}${list.map(x => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(x.name)} — ${x.type}</option>`).join("")}</select>`;
 const pa = {q: "", data: null, seq: 0};
 function pnAllRender(list) {
   $("#page").innerHTML = pnBar(list, "*", `<span class="dns-stats"><span class="dns-stat">Panels <b>${list.length}</b></span></span><button class="sm pri" onclick="paNew()" title="Make the same new user on several panels at once">＋ New account</button><div class="toolbar pn-sb"><input id="pa-q" type="search" placeholder="Search a user on every panel…" value="${esc(pa.q)}" oninput="paQ(this.value)" autocomplete="off" spellcheck="false"></div>`) + `    <div id="pa-body"><div class="loading"><i class="spin"></i><span>Asking every panel…</span></div></div>`;
@@ -2294,6 +2302,7 @@ async function pnUsersLoad(id) {
         <td class="trf">${pnTraffic(x)}</td><td>${expPill(x)}</td></tr>
 `).join("") || '<tr><td colspan="5" class="mut">nobody matches</td></tr>'}</tbody></table></div>
 `;
+  pnFuse();
   const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot(pnPager(u.total, ps));
   pnLiveStart(id);
   pn.curPS = ps; pnFit(ps); pnFitSoon(ps);       // after the list was put into its box
@@ -2322,7 +2331,7 @@ async function pnLiveTick(id) {
 }
 const pnRow = {h: 46, done: true};
 const mainBottom = () => { const m = document.querySelector(".main"); return m ? Math.min(innerHeight, m.getBoundingClientRect().bottom) : innerHeight; };
-const pnPS = () => { if (isPhone()) return 10; const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - 56 - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
+const pnPS = () => { if (isPhone()) return 10; const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - ($("#pn-ctl") ? 0 : 56) - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
 /* the list box is one fixed box from its top down to the pager, which sits on the bottom edge: the rows are stretched to fill it exactly, so nothing scrolls and no empty strip is left */
 function pnFitSoon(ps, n = 0) { clearTimeout(pnFitSoon.t); pnFitSoon.t = setTimeout(() => { if (document.querySelector("#pn-body .usr-tbl") && !document.querySelector("#pn-body .lbox") && n < 20) return pnFitSoon(ps, n + 1); pnFit(ps); }, n ? 60 : 30); }      // waits until the list sits in its box
 function pnFit(ps) {
@@ -2343,7 +2352,8 @@ let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = se
 const pnType = () => ((state.panelsCache || []).find(p => String(p.id) === pn.id) || {}).type || "";
 /* the tabs of the panel: Users, Hosts, then every tab a pg_*.js file registered in pgTabs for this type of panel (PasarGuard: groups, templates, nodes, cores, admins, settings, usage) */
 const pnExtraTabs = () => Object.entries(window.pgTabs || {}).filter(([, t]) => !t.types || t.types.includes(pnType())).sort((a, b) => (a[1].order || 99) - (b[1].order || 99)).map(([k, t]) => [k, t.label]);
-const pnTabs = () => { const mine = pnPageTabs(), list = [["users", "Users"], ["hosts", "Hosts"], ...pnExtraTabs()].filter(([t]) => mine.includes(t)).sort((a, b) => mine.indexOf(a[0]) - mine.indexOf(b[0])); return list.length > 1 ? `<div class="toolbar pn-tabs"><div class="tabs">${list.map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>` : ""; };      // only the tabs of the page that is open; a page with one tab has no strip
+const pnTabBtns = () => { const mine = pnPageTabs(), list = [["users", "Users"], ["hosts", "Hosts"], ...pnExtraTabs()].filter(([t]) => mine.includes(t)).sort((a, b) => mine.indexOf(a[0]) - mine.indexOf(b[0])); return list.length > 1 ? `<div class="tabs">${list.map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div>` : ""; };
+const pnTabs = () => { const b = pnTabBtns(); return b ? `<div class="toolbar pn-tabs">${b}</div>` : ""; };      // only the tabs of the page that is open; a page with one tab has no strip
 const pnFoot = mid => mid;
 function pnPager(total, ps, off = pn.uoff, fn = "pnGo") {
   const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), last = pages - 1;
@@ -2439,7 +2449,7 @@ async function pnHostsLoad(id) {
       <span class="hp-tags">${tg.slice(0, 3).map(t => `<span class="td-type" title="Inbound">${esc(t)}</span>`).join("")}${tg.length > 3 ? `<small class="mut" title="${esc(tg.slice(3).join(", "))}">+${tg.length - 3}</small>` : ""}</span></summary><div class="hp-rows">${g.map(hostRow).join("")}</div></details>`; };  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-hq" type="search" placeholder="Search remark, address, port…" value="${esc(pn.hq || "")}" oninput="pnHQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select onchange="pn.hinb=this.value;refresh()" title="Show the hosts of one inbound">${[`<option value="">all inbounds · ${pn.hosts.length}</option>`].concat(Object.keys(tags).sort().map(t => `<option value="${esc(t)}" ${pn.hinb === t ? "selected" : ""}>${esc(t)} · ${tags[t]}</option>`)).join("")}</select><select onchange="pn.hstate=this.value;refresh()">${[["", "all states"], ["on", "on"], ["off", "disabled"]].map(([v, l]) => `<option value="${v}" ${pn.hstate === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="mut pn-cnt">${rows.length} hosts · ${ports.length} ports</span><button class="sm" onclick="pnReload()" title="Read the hosts from the panel again">↻</button><span class="sp"></span>
       <span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, false)" title="Switch the ticked hosts on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnHostsToggle(${id}, true)" title="Switch the ticked hosts off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnHostTls(${id})" title="A TLS copy (port 443) of each ticked plain WebSocket host, tested first">🔒 TLS copies…</button></span>${window.pgHostsMenu ? pgHostsMenu(id) : ""}</div></div>
     <div class="hp-list">${ports.map(group).join("") || '<div class="mut" style="padding:16px">no host matches</div>'}</div>`;
-  box.querySelectorAll(".hp").forEach(hpCount);
+  pnFuse(); box.querySelectorAll(".hp").forEach(hpCount);
   const hl = box.querySelector(".hp-list"); if (hl) hl.style.maxHeight = Math.max(160, innerHeight - hl.getBoundingClientRect().top - 74) + "px";   // the list ends above the bottom strip: only it scrolls
   const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot("");
   const sq = $("#pn-hq"); if (sq && pn.hq) { sq.focus(); sq.setSelectionRange(sq.value.length, sq.value.length); }

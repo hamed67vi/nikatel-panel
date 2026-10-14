@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.53.0 - One step makes a whole kind of account, the top of the Panel page is one row
+
+- **＋ Account type (the owner: "to make an account we only choose its kind and the panel builds it"):** a button in Access, Hosts and Core opens ONE window. Pick one of eight kinds (VLESS REALITY, VLESS WebSocket with and without TLS, VLESS gRPC, Trojan over WebSocket or TCP, VMess, Shadowsocks), write a name and an address, press **Check** (the three steps are checked together, nothing is written) and then **Make it**: the inbound goes into the core (backed up first), the group holds it (a new one, or one that is there) and the host points at the address. Each piece is read back from the panel; if a step fails the earlier ones are taken back; a core that already listens on the port, a certificate the panel cannot read and a link to an IP behind TLS are said in plain words. Tested for real on the throw-away PasarGuard 5.4.1: all eight kinds were made, a test user got the groups and his subscription held all eight links, then everything was removed and the core was as before.
+- **The top of the Panel page is ONE row (the owner):** outside General the bar only switches between the PasarGuard panels, and in the same row come the tab buttons, the search, the filters and the buttons of the tab (Users: search, statuses, Enable / Disable / Days, More…; Hosts: search, inbound, state, count, buttons). Adding, editing and removing a panel is General's alone; General is compact too - its tab buttons and the range of Usage share one row, Check now and Edit are icons.
+
 ## 1.52.2 - Usage fixed, the CI no longer eats the free minutes
 
 - **Usage (Panel → General) is repaired:** in 1.52.1 the cards of the new one-screen layout collapsed to their titles. They fill the three columns now, and the tab leaves room at the bottom so the page does not scroll.

@@ -102,7 +102,7 @@ function pgAccessGroupsDraw(box) {
   const S = pgAccess;
   pgPaint(box, `<div id="pg-access" class="pg-access">${pgBar(
     `<input id="pg-access-gq" type="search" placeholder="Search name or inbound…" value="${esc(S.gq)}" oninput="pgAccessGQ(this.value)" autocomplete="off" spellcheck="false"><span class="mut pn-cnt" id="pg-access-gcnt"></span><button class="sm" onclick="pgAccessReload()" title="Read the groups from the panel again">↻</button>`,
-    `<span id="pg-access-gbulk" class="pg-access-bulk"></span><button class="sm" onclick="pgAccessBackups()" title="What was saved before each change, and the way back">Backups…</button><button class="sm pri" onclick="pgAccessGroupForm(0)">＋ New group</button>`)}
+    `<span id="pg-access-gbulk" class="pg-access-bulk"></span><button class="sm" onclick="pgAccessBackups()" title="What was saved before each change, and the way back">Backups…</button>${window.pgKindBtn ? pgKindBtn() : ""}<button class="sm pri" onclick="pgAccessGroupForm(0)">＋ New group</button>`)}
     ${S.g.warn ? `<div class="mut pg-access-warn">${esc(S.g.warn)}</div>` : ""}<div id="pg-access-glist"></div></div>`);
   pgAccessGroupsList();
 }

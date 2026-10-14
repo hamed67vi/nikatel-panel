@@ -4809,3 +4809,22 @@ html body #page button.dns-x svg, html body #page button.row-x svg { width: 10px
 html body #page .dns-bar .dns-r .dns-cw > button.dns-x:hover, html body #page .dns-bar .dns-r .dns-cw > button.dns-x:focus-visible, html body #page .srv-tbl .td-act > button.row-x:hover, html body #page .srv-tbl .td-act > button.row-x:focus-visible { color: #ff7a8c !important; background: rgba(255,122,140,.16) !important; outline: none; }
 html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x, html[data-mode="light"] body #page .srv-tbl .td-act > button.row-x { color: rgba(30,50,100,.3) !important; }
 html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x:hover, html[data-mode="light"] body #page .srv-tbl .td-act > button.row-x:hover { color: #d4304a !important; background: rgba(212,48,74,.12) !important; }
+/* 1.53.0 - the top of the Panel page (the owner, 2026-10-15: "everything in ONE row; only switch between the PasarGuard panels; edit and add only from General; rebuild it compact").
+   Outside General it is ONE bar: the PasarGuard panels, then - in the same row - what the tab has (its tab buttons, search, filters, buttons: pnFuse moves them into #pn-ctl). In General: the bar of the panel (chips, +, facts, icon buttons)
+   and under it ONE row with the tab buttons and the range of the Usage tab. Every bar is a card of its own (nothing is joined to a strip any more). */
+html body #page .pn-top { margin-bottom: 8px !important; border-radius: 14px !important; border-bottom-color: var(--line) !important; box-shadow: none !important; }
+html body #page #pn-body > .pn-bars { margin: 0 0 8px; border-top: 1px solid transparent; border-radius: 14px; }
+html body #page .pn-bar.pn-pick .pn-one { flex-wrap: nowrap; }
+html body #page .pn-ctl { display: flex; flex: 1 1 0; align-items: center; gap: 8px; min-width: 0; margin-left: 2px; padding-left: 12px; border-left: 1px solid var(--line); }
+html body #page .pn-ctl:empty { display: none; }
+html body #page .pn-ctl > .toolbar { display: contents !important; }
+html body #page .pn-ctl .sp { flex: 1 1 0; min-width: 0; }
+html body #page .pn-ctl .tabs { background: none; border: 0; box-shadow: none; padding: 0; margin: 0; flex: none; } html body #page .pn-ctl .tabs button { height: 28px; }
+html body #page .pn-ctl select, html body #page .pn-ctl input[type=search], html body #page .pn-ctl .pn-actbtn, html body #page .pn-ctl .sm { height: 30px; font-size: 12.5px; }
+html body #page .pn-ctl select { flex: 0 1 auto; min-width: 0; max-width: 100%; } html body #page .pn-ctl .pn-st-sel { min-width: 110px; }
+html body #page .pn-ctl input[type=search], html body #page .pn-ctl #pn-uq, html body #page .pn-ctl #pn-hq { flex: 1 1 150px; width: auto; min-width: 90px; max-width: 300px; }
+html body #page .pn-ctl .pn-cnt { min-width: 0; }
+html body #page .pg-usage-sep { flex: none; width: 1px; height: 20px; margin: 0 2px; background: var(--line); }
+html body #page .pg-usage .pg-bar .tabs { background: none; border: 0; box-shadow: none; padding: 0; margin: 0; flex: none; } html body #page .pg-usage .pg-bar .tabs button { height: 28px; }
+html body #page .pn-facts button .bt { display: none; } html body #page .pn-facts button { padding: 0 10px; }
+html[data-fluid] body #page .pn-ctl { flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; padding-left: 0; border-left: 0; }

@@ -23,6 +23,7 @@ from . import (
     pg_client_templates,
     pg_cores,
     pg_hosts,
+    pg_kinds,
     pg_nodes,
     pg_roles,
     pg_system,
@@ -45,5 +46,5 @@ from . import tokens as tokens_api
 
 router = APIRouter(prefix="/api")
 
-for mod in (auth, system, servers, profiles_api, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license, balance, dns, analyst_api, tokens_api, checkall_api, best_api, doctor_api, accounts_api, outbound_api, pg_access, pg_nodes, pg_cores, pg_admin, pg_roles, pg_client_templates, pg_system, pg_usage, pg_users, pg_hosts, pg_update):
+for mod in (auth, system, servers, profiles_api, nodes, tunnels, events, jobs, alerts, actions, gateway, configs, panels, shopbot, ai, engines, autopilot, radar, failover, license, balance, dns, analyst_api, tokens_api, checkall_api, best_api, doctor_api, accounts_api, outbound_api, pg_access, pg_nodes, pg_cores, pg_admin, pg_roles, pg_client_templates, pg_system, pg_usage, pg_users, pg_hosts, pg_kinds, pg_update):
     router.include_router(mod.router)

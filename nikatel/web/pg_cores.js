@@ -271,7 +271,7 @@ function pgCoresBackupsHtml(d) {
 /* the first bar: one button per core (the open one is blue); the table with dates and counts is one click away, and it is the page itself while no core is open */
 function pgCoresBarHtml() {
   const st = pgCoresSt, chips = st.list.map(c => `<button class="sm ${c.id === st.coreId ? "pri" : ""}" onclick="pgCoresOpen(${c.id})" title="${esc(c.type)} core #${c.id}">${esc(c.name || "(no name)")} <small>#${c.id}</small></button>`).join("");
-  return pgBar(`<b>Cores</b><span class="pill">${st.list.length}</span>${chips}`, `<button class="sm" onclick="pgCoresDeleted()" title="Cores that are gone from the panel but have a backup here: make one again">Deleted…</button>${st.d ? '<button class="sm" onclick="pgCoresAll()" title="All cores with their dates and counts">All cores…</button>' : ""}<button class="sm pri" onclick="pgCoresNew()" title="Make a new core (a name, a type, a config)">＋ New core</button>`);
+  return pgBar(`<b>Cores</b><span class="pill">${st.list.length}</span>${chips}`, `<button class="sm" onclick="pgCoresDeleted()" title="Cores that are gone from the panel but have a backup here: make one again">Deleted…</button>${st.d ? '<button class="sm" onclick="pgCoresAll()" title="All cores with their dates and counts">All cores…</button>' : ""}${window.pgKindBtn ? pgKindBtn() : ""}<button class="sm pri" onclick="pgCoresNew()" title="Make a new core (a name, a type, a config)">＋ New core</button>`);
 }
 
 window.pgCoresAll = () => { showModal("<b>Cores of this panel</b>", pgCoresListHtml(true), "wide"); pgCoresSelSync(); };

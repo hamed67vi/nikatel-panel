@@ -208,3 +208,41 @@ def test_the_lab_names_the_button_add_server_has_a_plus_beside_the_tabs_and_the_
     assert (WEB / "logos" / "pasarguard.png").is_file() and (WEB / "logos" / "marzban.png").is_file() and "const labLogo = " in lab and "labLogo(k)" in lab and "labLogo(t)" in lab and ".lab-logo" in css
     assert "const I = d => `<svg" in lab and 'class="lab-mic"' in lab and ".lab-menu.flat" in css and 'it("Delete the node…"' in lab          # the node menu: one column, an icon before each item, a line between the groups
     assert "window.labRenameTag = " in lab and "window.labDeleteTag = " in lab and "ncc ? \"has-flag\"" in lab          # a profile can be renamed and deleted from beside the tabs; every row shows the flag of its server
+
+
+def _web(name: str) -> str:
+    return (WEB / name).read_text(encoding="utf-8")
+
+
+def test_the_top_of_the_panel_page_is_one_row_that_only_switches_and_general_adds_edits_and_removes():
+    """The owner, 2026-10-15: "in Users put all of it in one row; here only switch between the PasarGuard panels; edit and add only from General"."""
+    assert 'const pnManage = () => state.page !== "pgpanel" || sub("pgpanel") === "settings";' in APP
+    assert 'list = manage ? every : every.filter(x => x.type === "pasarguard")' in APP                      # outside General: the PasarGuard panels only
+    bar = APP.split("const pnBar = (list, cur, row2, mode = ", 1)[1].split("/* outside General the strip", 1)[0]
+    before_add = bar.split("const add = ", 1)[0]
+    assert 'if (pick) return' in before_add and 'id="pn-ctl"' in before_add and "pnAddWin" not in before_add                    # the bar that only switches is returned before the + button is even built
+    assert '${pick ? "" : `<button type="button" class="dns-x" onclick="pnDel(' in bar                                          # and the cross that removes a panel is drawn only outside it
+    facts = APP.split("const facts = ", 1)[1].split("pnBar(list, p.id", 1)[0]
+    assert "pnEditWin()" in facts and "pnCheck(" in facts and 'manage ? facts : "", manage ? "manage" : "pick"' in APP          # Check now and Edit: General only    assert "function pnFuse()" in APP and "slot.replaceChildren(...bars.childNodes)" in APP and "pnFuseWatch();" in APP
+    assert "pnFuse();" in APP.split("async function pnUsersLoad", 1)[1].split("async function pnHostsLoad", 1)[0]    # the list is measured after the controls moved up
+    assert "pnFuse();" in APP.split("async function pnHostsLoad", 1)[1].split("window.hpCount", 1)[0]
+    common = _web("pg_common.js")
+    assert common.count("pnFuse()") == 3 and 'pn.tab === "usage" ? "" : pgBars()' in common                      # every paint of a tab moves its strip up; Usage carries its tab buttons in its own bar
+    assert "${pnTabBtns()}<i class=\"pg-usage-sep\"></i>" in _web("pg_usage.js")
+    css = _web("app.css")
+    assert "html body #page .pn-ctl > .toolbar { display: contents !important; }" in css and "html body #page .pn-bar.pn-pick .pn-one { flex-wrap: nowrap; }" in css
+    assert "html body #page .pn-facts button .bt { display: none; }" in css                                           # the buttons of General are icons
+
+
+def test_one_window_makes_a_whole_kind_of_account_and_the_three_tabs_open_it():
+    """The owner, 2026-10-15: "to make an account we only choose its kind and the panel builds it": the inbound (Core), the group (Access) and the host (Hosts) in one step."""
+    js = _web("pg_kinds.js")
+    for fn in ("pgKindNew", "pgKindPick", "pgKindCheck", "pgKindMake", "pgKindScan", "pgKindBtn"):
+        assert f"window.{fn} = " in js, fn
+    assert 'pgApi(id, "/kinds")' in js and '"/kinds/plan"' in js and '"/kinds/make"' in js and "confirm: restart || p.needs_confirm" in js
+    for tab in ("pg_access.js", "pg_cores.js", "pg_hosts.js"):
+        assert "pgKindBtn()" in _web(tab), tab
+    assert '<script src="/static/pg_kinds.js"></script>' in INDEX and '<link rel="stylesheet" href="/static/pg_kinds.css">' in INDEX
+    main = (WEB.parent / "main.py").read_text(encoding="utf-8")
+    assert '"pg_kinds.js"' in main and '"pg_kinds.css"' in main
+    assert 'html body #modal .pg-kind-chip.on' in _web("pg_kinds.css")

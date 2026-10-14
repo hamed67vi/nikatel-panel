@@ -16,7 +16,7 @@ const pgHAdv = [
 ];
 const pgHSt = ["active", "disabled", "limited", "expired", "on_hold"];
 
-window.pgHostsMenu = () => pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgHostOpen(+pn.id, 0)" title="Make a new host">＋ New host</button><button class="sm" onclick="pgHostBackups()" title="Hosts saved here before a change or a delete">Backups</button>`;
+window.pgHostsMenu = () => pnType() !== "pasarguard" ? "" : `${window.pgKindBtn ? pgKindBtn() : ""}<button class="sm pri" onclick="pgHostOpen(+pn.id, 0)" title="Make a new host">＋ New host</button><button class="sm" onclick="pgHostBackups()" title="Hosts saved here before a change or a delete">Backups</button>`;
 
 window.pgHostOpen = async (id, hid) => {
   let d; try { d = await pgApi(id, hid ? `/hosts/${hid}` : "/hosts/new"); } catch (e) { toast("✕ " + e.message, "bad"); return; }

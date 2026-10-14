@@ -115,7 +115,7 @@ function pgUsageBarHtml() {
   const dates = s.preset === "custom"
     ? `${day("pg-usage-from", s.from)}<span class="mut">→</span>${day("pg-usage-to", s.to)}`
     : cur ? `<span class="pg-usage-dates mono">${esc(cur.from)} <small>${esc(cur.from_j)}</small> <span class="mut">→</span> ${esc(cur.to)} <small>${esc(cur.to_j)}</small></span><span class="pill">${cur.days} day${cur.days === 1 ? "" : "s"}</span>` : "";
-  return pgBar(`${sel}${dates}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
+  return pgBar(`${pnTabBtns()}<i class="pg-usage-sep"></i>${sel}${dates}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
 }
 function pgUsageDrawAge() {
   const a = $("#pg-usage-age"), s = pgUsageState; if (!a) return;
