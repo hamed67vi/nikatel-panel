@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.46.1 - The left menu follows PasarGuard: Users, Hosts, Access, Core and Admins are under Panel
+
+- **The sections of the panel are one group, like in the sidebar of PasarGuard itself (the owner's request, with a screenshot of PasarGuard's Nodes group):** **Panel** is the head - it opens the Panel page (usage, system and the settings of the panel) - and **Users, Hosts, Access, Core, Admins** hang under it on a thin line. The little arrow at the right of Panel opens and closes the group (the choice is kept in the browser); opening any of the sections opens the group by itself, and while the group is closed the head shows that the open page is one of its sections. In the rail (a window under 1180 px) the six are icons in one quiet box, and every item of the menu has its name as a tooltip now (the rail had none); on a phone the bottom bar is the same flat row as before. The label "PasarGuard" over the old list is gone. Checked in a wide window, the rail, a phone, the light theme and Persian (right to left).
+- A new static test reads the left menu and the titles of the pages: every item of the menu has a title, and the group holds exactly the sections above.
+
 ## 1.46.0 - The last routes of PasarGuard, and a check of the architecture
 
 - **Every route of PasarGuard that had no button has one now (roadmap #99 is closed; the owner asked for the panel to be in step with PasarGuard):**

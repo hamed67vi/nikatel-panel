@@ -129,7 +129,8 @@ docs/              operations, development, logging, roadmap, adr/
 
 ## 2b. The UI, page by page
 
-The left menu (`web/index.html`): **Dashboard · Servers · Tunnels**, a **PasarGuard** group (**Users · Hosts · Access · Core · Admins · Panel**), Shop bot (switched off) and
+The left menu (`web/index.html`): **Dashboard · Servers · Tunnels**, the **Panel** group - the head is the Panel page and **Users · Hosts · Access · Core · Admins** hang under it, like the
+sidebar of PasarGuard (`#nav-g`; the arrow `#nav-tg` opens and closes it, `navGroup` / `navGroupOf` in app.js; the rail and the phone draw it flat, see app.css) - Shop bot (switched off) and
 **Settings**. `PAGES.<name>` draws a page, `SUB` holds the tabs of a page (the bar under the header), `NAV_ALIAS` keeps the old page names working.
 
 * **Dashboard** - health rows, Problems box (live state, Fix with AI, Fix all), activity feed with
@@ -140,7 +141,7 @@ The left menu (`web/index.html`): **Dashboard · Servers · Tunnels**, a **Pasar
   test over several engines and transports, Advanced for the transports), Core update, Tunnel Doctor
   (attention list, live repair stories, history), DNS · IP switch (ArvanCloud records, Point, failover plans,
   the DNS change log with Restore).
-* **The PasarGuard group** (Marzban panels have Users, Hosts and Usage only) - every page draws the bar of the panels (`pnBar`: which panel) and its tab(s); a tab is a `pgTabs`
+* **The Panel group** (Marzban panels have Users, Hosts and Usage only) - every page draws the bar of the panels (`pnBar`: which panel) and its tab(s); a tab is a `pgTabs`
   entry of a `web/pg_*.js` file and a route first (`/api/panels/{id}/pg/…`). `PG_PAGES` (app.js) says which tab belongs to which page, `pnTab(t)` opens the page that owns a tab:
   **Users** (users, accounts over every panel) · **Hosts** · **Access** (Groups, Templates, client templates) · **Core** · **Admins** (admins, API keys, roles) · **Panel** (Usage, System,
   Settings). The Nodes tab is a tab of Servers. Configs (the probe's client configs) are switched off.

@@ -214,6 +214,7 @@ const TITLE_ANIM = {
   }   // what the page we leave still waits for is dropped; the new page starts at the top
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
+  navGroupOf(page);
   const navOn = $("#nav a.on"); if (navOn && isPhone()) navOn.scrollIntoView({inline: "center", block: "nearest"});      // the bottom bar of a phone scrolls: the item of the open page stays in view
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
   if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
@@ -265,7 +266,26 @@ PAGES.serverDoctor = async () => {
   state.tab = s;
   return PAGES.servers(false);
 };
-document.querySelectorAll("#nav a").forEach(a => a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page); });
+document.querySelectorAll("#nav a").forEach(a => { a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page); }; if (!a.title) a.title = a.querySelector("span").textContent.trim(); });      // (the title is what the rail of icons shows on hover)
+/* the PasarGuard group of the left menu (the owner, 2026-10-14: like the sidebar of PasarGuard): "Panel" is the head, Users / Hosts / Access / Core / Admins hang under it. The little arrow opens and closes
+   the group (the choice is kept in this browser); a page of the group opens it by itself, and while it is closed the head shows that the open page is one of its sections. The rail and the phone draw it flat (CSS). */
+const NAV_GROUP = ["pgpanel", "configs", "pghosts", "pgaccess", "pgcore", "pgadmins"];
+function navGroup(open, keep) {
+  const g = $("#nav-g"), b = $("#nav-tg"); if (!g || !b) return;
+  g.dataset.open = open ? "1" : "0"; b.setAttribute("aria-expanded", open ? "true" : "false");
+  if (keep) { try { localStorage.setItem("nk.nav.g", open ? "1" : "0"); } catch (e) { /* kept for this visit only */ } }
+}
+function navGroupOf(page) {
+  const g = $("#nav-g"); if (!g) return;
+  const inside = NAV_GROUP.includes(page);
+  g.classList.toggle("has-on", inside && page !== "pgpanel");
+  if (inside && g.dataset.open !== "1") navGroup(true, false);
+}
+(() => {
+  let was = "1"; try { was = localStorage.getItem("nk.nav.g") || "1"; } catch (e) { /* the default: open */ }
+  navGroup(was !== "0", false);
+  const b = $("#nav-tg"); if (b) b.onclick = () => navGroup($("#nav-g").dataset.open !== "1", true);
+})();
 
 
 /* every list (a table or the config cards) sits in a box of a fixed height with its own scrollbar and a header that stays on top; done once for whatever a page draws, also what loads later */

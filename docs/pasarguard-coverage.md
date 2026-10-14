@@ -5,8 +5,8 @@ OpenAPI document and the panel's own sources, by running every write against a t
 which runs the tests with a recorder on every call to a panel and lists the operations that no test sends (below). A route that is "deprecated, removed in 6.0" (the `by-username`
 ones) is not used: the `by-id` routes are.
 
-Where each part lives (since 1.45.0): the **PasarGuard** group of the left menu - **Users** (Users) · **Hosts** · **Access** (Groups, Templates) · **Core** · **Admins** (Admins, API keys, Roles) ·
-**Panel** (Usage, System, Settings) - and **Servers → Nodes**; every page has the bar of the panels on top. Every tab is a route first (`/api/panels/{id}/pg/…`, see [api.md](api.md));
+Where each part lives (since 1.45.0, grouped like the sidebar of PasarGuard since 1.46.1): the **Panel** group of the left menu - the head **Panel** (Usage, System, Settings) with **Users** ·
+**Hosts** · **Access** (Groups, Templates) · **Core** · **Admins** (Admins, API keys, Roles) under it - and **Servers → Nodes**; every page has the bar of the panels on top. Every tab is a route first (`/api/panels/{id}/pg/…`, see [api.md](api.md));
 the code is `nikatel/services/pg_*.py`, `nikatel/api/pg_*.py`, `nikatel/web/pg_*.js`.
 
 ## What is covered
