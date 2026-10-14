@@ -4720,3 +4720,9 @@ html body #page .pn-acts { display: inline-flex; gap: 6px; align-items: center; 
 html body #page .pn-bar .dns-chip small { display: none; } html body #page .pn-bar .dns-r.pn-one { gap: 8px; } html body #page .pn-bar .dns-stat { padding: 0 8px; }
 html body #page .pn-acts { display: none; } html body #page .pn-sel.on ~ .pn-acts { display: inline-flex; }      /* the buttons that act on the ticked rows appear as soon as one is ticked */
 html body #page #pn-uq, html body #page #pn-hq { width: 190px; min-width: 0; } html body #page .pn-st-sel { min-width: 120px; }
+/* the switches also follow the real state of their box (a list that ticks its boxes by script needs no class): the same look as the Outbound page */
+html body #page .ob2-sw:has(input:checked) i { background: linear-gradient(180deg, #2f9dff, #0a7cf5) !important; box-shadow: 0 0 0 1px rgba(10,124,245,.55), 0 0 9px rgba(10,132,255,.42); }
+html body #page .ob2-sw:has(input:checked) i::after { transform: translateX(18px); }
+html body #page .ob2-sw:has(input:disabled) { opacity: .45; }
+html body #page .usr-tbl .ob2-sw, html body #page .hp-row .ob2-sw, html body #page .hp .ob2-sw { vertical-align: middle; }
+html body #page .hp-row > .ob2-sw { margin-right: 6px; } html body #page summary > .ob2-sw { margin-right: 8px; }

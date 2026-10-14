@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.2 - Switches in the Users and Hosts lists
+
+- The square tick boxes of the Users list (every row and the "select all" of the header) and of the Hosts list (every host and the master of a port) are the same switch as on the Outbound page: a blue pill with a white knob when on, a dark slate pill when off. What they do is the same: the buttons Enable, Disable, "＋ Days…" and "🔒 TLS copies…" light up as soon as something is on.
+
 ## 1.41.1 - Two bugs of the Doctor's moves found by the real test; the Users list lives
 
 - **Found by the real test of the Doctor (an Iran server, a foreign server and a second Iran server, a real ArvanCloud record, a real tunnel moved there and back):**
