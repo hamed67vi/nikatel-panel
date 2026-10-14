@@ -1,6 +1,7 @@
 """The left menu is plain HTML (web/index.html) plus the groups that app.js builds from the tabs of a page (navBuild: Servers, Tunnels, Panel and Settings), and the title of every page is set in
 app.js (INFO.<page> = [...]): a typo in a data-page makes an item that opens the dashboard and no browser test of ours would notice, so the files are read here. The Panel page (the owner's wish,
-1.47.0: "when we click Panel, show everything as tabs") has a tab for each section of PasarGuard - Users, Hosts, Access, Core, Admins, Panel settings - and every tab of a pg_*.js file has a place in it."""
+1.47.0: "when we click Panel, show everything as tabs") has a tab for each section of PasarGuard - General, Users, Hosts, Access, Core, Admins - and every tab of a pg_*.js file has a place in it.
+The nodes of a PasarGuard panel are not a tab of the Panel page nor of Servers any more (1.48.0): they are in the window of the server they run on."""
 import re
 from pathlib import Path
 
@@ -31,8 +32,14 @@ def test_every_item_of_the_menu_opens_a_page_that_has_a_title():
 
 
 def test_the_panel_page_has_a_tab_for_each_section_of_pasarguard_in_the_order_of_the_owner():
-    assert _tabs("pgpanel") == [("users", "Users"), ("hosts", "Hosts"), ("access", "Access"), ("core", "Core"), ("admins", "Admins"), ("settings", "Panel settings")]
+    assert _tabs("pgpanel") == [("settings", "General"), ("users", "Users"), ("hosts", "Hosts"), ("access", "Access"), ("core", "Core"), ("admins", "Admins")]      # General (the settings of the panel) is the first one: the owner, 2026-10-14
     assert "PAGES.pgpanel = async () => { renderSub(); return PAGES.panels(); }" in APP
+    assert "settings: SI.cog}" in APP and "cog: '<svg" in APP          # (and its icon is a cog wheel, not the sun of SI.gear)
+
+
+def test_the_servers_page_has_no_nodes_tab_any_more_the_nodes_are_in_the_server_window():
+    block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
+    assert "pgnodes" not in block and "pgTabs.nodes" not in "".join(f.read_text(encoding="utf-8") for f in WEB.glob("pg_*.js"))
 
 
 def test_the_old_pages_of_the_sections_still_open_their_tab():
@@ -45,7 +52,7 @@ def test_the_old_pages_of_the_sections_still_open_their_tab():
 def test_every_tab_a_pg_file_registers_has_a_place_on_the_panel_page_or_in_servers():
     subs = re.search(r"const PG_SUBS = \{(.*?)\};", APP, re.DOTALL)
     assert subs, "app.js has no PG_SUBS"
-    placed = set(re.findall(r'"([a-z]+)"', subs.group(1))) | {"nodes"}          # the Nodes tab is a tab of Servers
+    placed = set(re.findall(r'"([a-z]+)"', subs.group(1)))
     registered = set()
 
     for f in WEB.glob("pg_*.js"):

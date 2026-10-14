@@ -243,7 +243,16 @@ elif [ -f $d/$n.fail ]; then echo "STATE failed"; tail -n 12 $d/$n.log 2>/dev/nu
 elif pgrep -f "nikatel-install/$n.sh" >/dev/null 2>&1; then echo "STATE running"; tail -n 2 $d/$n.log 2>/dev/null; tail -n 1 $d/mz-install.log 2>/dev/null
 else echo "STATE none"; fi
 exit 0
-""", {"NAME": r"^(btblock|mznode|pgnode|osupdate)$"}),
+""", {"NAME": r"^(btblock|mznode|pgnode|osupdate|pgpanel)$"}),
+
+    # the machine that runs a PasarGuard PANEL, before it is updated (services/pg_update.py): is the official command there, does it have a backup command, how many PasarGuard containers run, free space. Read-only.
+    "pgpanel_info": (r"""if command -v pasarguard >/dev/null 2>&1; then echo "CLI yes"; else echo "CLI no"; fi
+if command -v pasarguard >/dev/null 2>&1 && pasarguard help 2>&1 | grep -qw backup; then echo "BACKUP yes"; else echo "BACKUP no"; fi
+if [ -d /opt/pasarguard ]; then echo "DIR /opt/pasarguard"; else echo "DIR none"; fi
+echo "DOCKER $(docker ps --format '{{.Names}}' 2>/dev/null | grep -ci pasarguard)"
+echo "DF $(df -P /var/lib 2>/dev/null | awk 'NR==2{print $4}')"
+exit 0
+""", {}),
 
     # the PUBLIC certificate of a PasarGuard node (never a key): the operator pastes it into the PasarGuard panel. Read-only.
     "pgnode_cert": (r"""for f in $(find / -xdev -maxdepth 6 -type f \( -path '*pg-node*' -o -path '*pasarguard*' \) \( -name '*cert*' -o -name '*.crt' -o -name '*.pem' \) ! -iname '*key*' 2>/dev/null | head -20); do
@@ -1188,6 +1197,33 @@ EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/osupdate.sh > /var/lib/nikatel-install/osupdate.log 2>&1 && touch /var/lib/nikatel-install/osupdate.ok || touch /var/lib/nikatel-install/osupdate.fail' >/dev/null 2>&1 &
 echo STARTED
 """, {}),
+
+    # update a PasarGuard PANEL with its own command, the way the owner would type it over SSH (services/pg_update.py follows it): a backup first when @BACKUP@ is 1 and the command has one (a backup that
+    # fails stops everything BEFORE anything is changed), then `pasarguard update` (pull the new images, restart). Every command has a time limit and no stdin, so nothing can wait for a key.
+    # Detached, like the installs above: the update goes on if the panel that started it restarts.
+    "install_pgpanel_update": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
+[ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
+command -v pasarguard >/dev/null 2>&1 || { echo NO_CLI; exit 1; }
+if pgrep -f 'nikatel-install/pgpanel.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
+rm -f $d/pgpanel.ok $d/pgpanel.fail $d/pgpanel.out
+cat > $d/pgpanel.sh <<'EOS'
+set -e
+if [ "@BACKUP@" = "1" ]; then
+  if pasarguard help 2>&1 | grep -qw backup; then
+    echo "backup: running the pasarguard backup command"
+    timeout 600 pasarguard backup < /dev/null || { echo "BACKUP_FAILED: the backup did not work, nothing was updated"; exit 1; }
+    echo "backup: done"
+  else
+    echo "backup: this pasarguard command has no backup; skipped"
+  fi
+fi
+echo "update: running pasarguard update"
+timeout 1500 pasarguard update < /dev/null
+echo "PGPANEL_OK the update command finished" > /var/lib/nikatel-install/pgpanel.out
+EOS
+nohup setsid bash -c 'bash /var/lib/nikatel-install/pgpanel.sh > /var/lib/nikatel-install/pgpanel.log 2>&1 && touch /var/lib/nikatel-install/pgpanel.ok || touch /var/lib/nikatel-install/pgpanel.fail' >/dev/null 2>&1 &
+echo STARTED
+""", {"BACKUP": r"^[01]$"}),
 
     # change the login password of the SSH user (the payload is base64 of "user:password"; it never appears in the logs). The panel logs in with its key, so it is not affected.
     "set_password": (r"""set -e; u=$(echo '@B64@' | base64 -d | cut -d: -f1); [ "$u" = '@USER@' ] || { echo BAD_USER; exit 1; }

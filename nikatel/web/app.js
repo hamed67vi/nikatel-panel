@@ -170,18 +170,18 @@ const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched o
 const CONFIGS_UI = false;      // the Configs list is switched off and hidden (no tab, no card, no problem rows) until the project grows (the owner, 2026-10-14, roadmap #98); the probe and the routes keep running; set true to bring it back
 Object.assign(NAV_ALIAS, CONFIGS_UI ? {panels: "configs"} : {panels: "pgpanel/users", configs: "pgpanel/users"});      // (the Users of the panels are the first tab of the Panel page while the Configs list is off)
 const SUB = {
-  nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["pgnodes", "<i class=\"tic tic-node\"></i>Nodes", "The PasarGuard nodes of the panel you pick: connected or not, the server each one runs on (Make a node turns a server of the list into one), their usage."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
+  nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
   configs: [...(CONFIGS_UI ? [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."]] : []), ["panels", "🧩 Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."]],      // the page is called Users; with the Configs tab off it has one tab, so the tab bar is not drawn
 };
 /* the Panel page (1.47.0, the owner: "when we click Panel, show everything as tabs"): ONE page for the panel you pick, with a tab for each section of PasarGuard that was a page of its own (what PG_SUBS says about the tabs inside each) */
 SUB.pgpanel = [
+  ["settings", "General", "The panel you pick as a whole: its usage, its system, its settings."],      // (the first tab, 2026-10-14: it was "Panel settings", the last one)
   ["users", "Users", "The users of the panel you pick: search, status, edit, bulk actions and the tools of the More… menu. Pick a panel in the bar."],
   ["hosts", "Hosts", "The address, port and TLS of every link in the subscriptions of the PasarGuard panel you pick."],
   ["access", "Access", "Groups (which inbounds a user gets) and templates (the recipe of a new user) of the panel you pick."],
   ["core", "Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
   ["admins", "Admins", "The admins of the panel you pick, their roles and their API keys."],
-  ["settings", "Panel settings", "Usage, system and settings of the panel you pick."],
 ];
 const subBarOn = page => !!SUB[page] && SUB[page].length > 1;      // a page with a single tab has no tab bar
 state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
@@ -272,14 +272,13 @@ PAGES.serverDoctor = async () => {
   renderSub();
   const s = sub("nodes");
   if (s === "doctor") return PAGES.serverDoctor();
-  if (s === "pgnodes") return PAGES.panels();      // the PasarGuard nodes beside the servers (1.45.0): the panel bar and the Nodes view
   state.tab = s;
   return PAGES.servers(false);
 };
 document.querySelectorAll("#nav a").forEach(a => { a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page, a.dataset.sub); }; });
 /* the groups of the left menu (the owner, 2026-10-14: like the sidebar of PasarGuard). A group is a head (a page) with a list of sections under it. The little arrow at the right of the head opens and closes
    the list (what was chosen is kept in this browser), the head opens its page AND the list, and a page of a group opens it by itself (and it closes again when another page is opened). The sections of a group are the
-   tabs the page already has (Servers: Foreign, Iran...; Tunnels; Panel: Users, Hosts, Access, Core, Admins, Panel settings; Settings), made by navBuild at the end of this file. The rail and the phone draw a group as
+   tabs the page already has (Servers: Foreign, Iran...; Tunnels; Panel: General, Users, Hosts, Access, Core, Admins; Settings), made by navBuild at the end of this file. The rail and the phone draw a group as
    its head alone (the tabs are in the bar under the header there); while a group is open in a wide window its tabs are in the menu and the bar is not drawn (app.css). */
 const navPlain = t => String(t).replace(/<[^>]*>/g, "").replace(/^[^\p{L}\p{N}]+/u, "").trim();      // the name of a tab without its icon
 const navOpenMap = () => { try { const m = JSON.parse(localStorage.getItem("nk.nav.g") || "{}"); return m && typeof m === "object" ? m : {}; } catch (e) { return {}; } };
@@ -307,10 +306,10 @@ function navMark(openIt) {      // which items are the open page (and tab); `ope
 }
 function navTabs() {      // the tabs that hang under their page: [key, name, icon]
   const globe = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3.4 3.2 14.6 0 18M12 3c-3.2 3.4-3.2 14.6 0 18"/></svg>';
-  const ic = {foreign: globe, iran: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2.2 3.6L16 11H5"/></svg>', pgnodes: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.4"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/></svg>',
+  const ic = {foreign: globe, iran: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2.2 3.6L16 11H5"/></svg>',
     list: SI.swap, dns: SI.cloud, repairs: SI.pulse,
     users: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16M3 9.5h18"/></svg>', hosts: globe, access: '<svg viewBox="0 0 24 24"><path d="M12 3.5l8.5 4.7L12 13 3.5 8.2z"/><path d="M3.5 12.2L12 17l8.5-4.8M3.5 16.2L12 21l8.5-4.8"/></svg>',
-    core: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.gear};      // (the tab of the Panel page that is called settings is the settings of the panel)
+    core: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.cog};      // (the tab of the Panel page that is called settings is General: the settings of the panel)
   const of = page => (SUB[page] || []).filter(t => t[3] !== "off").map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc]);
   return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};
 }
@@ -406,7 +405,7 @@ async function refresh() {
   }
 }
 let lastTick = Date.now();
-setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
+setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 /* a window that is drawn again changes only what is different, in place: a value that changed is rewritten where it stands, everything else is not touched - so nothing blinks or jumps when Health, Quality, a check ... end */
 function morphNode(a, b) {
@@ -437,7 +436,7 @@ function showModal(title, body, cls = "", acts = "") {
   const still = cur ? " style=\"animation:none\"" : "";      // another window in place of this one (details ↔ edit form): it is already on screen, so it does not fly in again
   m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this && !this.querySelector('.modal.keep'))closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="hmsg"></div><div class="modal-body">${body}</div></div></div>`;
 }
-function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; }
+function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; state.nodeWin = null; }      // (state.nodeWin: a window of the nodes that is not a server's is open - the Servers page does not close it, see pg_nodes.js)
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
 function glassAsk(text, {input = false, value = "", danger, password = false} = {}) {
@@ -675,6 +674,8 @@ PAGES.servers = async () => {
   state.panelsCache = pnl;
   if (!fast && window.pgSrvLoad) await pgSrvLoad();
   const chips = s => window.pgSrvChips ? pgSrvChips(s) : "";
+  if (window.pgSrvPrune) pgSrvPrune(list);      // a server that is gone is not ticked any more
+  const ticks = !!(window.pgSrvTicks && pgSrvTicks()), ck = s => ticks ? pgSrvCk(s) : "";      // a tick in front of every server once one of them carries a PasarGuard node (for the Nodes… menu)
   const pbar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<div class="pbar"><span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b>${v}%</b></div>`;
   const foreignTab = state.tab === "foreign";
   if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (state.page === "nodes") refresh(); }, 3000); }
@@ -703,7 +704,7 @@ PAGES.servers = async () => {
     const f = s.facts || {}, flt = (s.extra || {}).iran_filter, blocked = flt && (flt.level === "filtered" || flt.level === "blocked");
     const cls = (!s.enabled ? "srv-off" : s.online ? "up" : s.online === false ? "down" : "") + " " + srvSev(s);
     return `<tr class="${cls} clk" data-id="${s.id}" onclick="toggleDetail(${s.id})" data-q="${esc([s.name, s.host, s.provider, s.role, s.country, (s.facts || {}).hostname, ((s.extra || {}).geo || {}).provider, ((s.extra || {}).geo || {}).domain, ((s.extra || {}).geo || {}).asn, ((s.extra || {}).geo || {}).city, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase())}" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
-      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}><i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</td>
+      <td class="name ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? "has-flag" : ""}" ${s.role === "foreign" && /^[A-Za-z]{2}$/.test(s.country || "") ? `style="--flag:url(/flags/${s.country.toLowerCase()}.png)" title="${s.country.toUpperCase()}"` : ""}>${ck(s)}<i class="srv-ic" title="${s.enabled ? (s.online ? "online" : s.online === false ? "offline" : "not checked yet") : "disabled"}">${SRV_IC}</i>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</td>
       <td>${!s.enabled ? '<span class="st dis">disabled</span>' : `<span class="st ${s.online ? "online" : s.online === false ? "offline" : ""}">${s.online ? "online" : s.online === false ? "offline" : "—"}</span>`}</td>
       <td class="pcell">${chips(s) || '<span class="mut">—</span>'}</td>
       <td class="mono ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(s.host)}')" title="Click to copy the address">${esc(s.host)}</td>
@@ -711,12 +712,11 @@ PAGES.servers = async () => {
       ${s.enabled ? `<td>${pbar(f.ram, 80, 90)}</td><td>${pbar(f.cpu, 80, 92)}</td><td>${pbar(f.disk, 85, 95)}</td>` : `<td colspan="3" class="off-note" title="Disabled: the panel does not check it, sends no alerts for it and does not count it in the totals"><span class="off-chip"><i>⏾</i>Disabled · not checked, no alerts</span></td>`}
       <td><div class="td-act">${noLogin(s) ? `<button class="sm pri" onclick="event.stopPropagation();serverPassword(${s.id}, '${esc(s.name)}', '${esc(s.last_error.replace(/^SSH login failed: /, ""))}')" title="The panel cannot log in to this server: enter its SSH password and the panel installs its key">🔑 Password</button>` : ""}<button type="button" class="row-x" onclick="event.stopPropagation();deleteServer(${s.id}, '${esc(s.name)}')" title="Remove ${esc(s.name)} from the panel (nothing changes on the server)" aria-label="Remove ${esc(s.name)}">${X_SVG}</button></div></td></tr>`;      // the faint cross at the end of a server's box: it asks first, then takes the server off the panel
   };  const openSrv = list.find(s => s.id === state.open);
-  const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
+  const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.edit === "new" || state.edit === "many") addModal(); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the nodes (not a server's) is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };      // a window that fails to draw never takes the list with it
   const ca = state.ca || {running: false};
   const caBtn = ca.running ? `<span class="ca-run"><button class="sm" disabled><i class="spin"></i>Checking ${ca.done || 0}/${ca.total || "…"}</button><a class="ca-stop" onclick="caStop()" title="Stop: the servers being checked now finish, no new one starts">${ca.stopping ? "stopping…" : "Stop"}</a></span>` : `<button onclick="caStart()" title="Checks every server: does it answer, does GRE work to it, is it filtered in Iran. It runs on the panel: reloading the page does not stop it."><i class="ic">✓</i><span class="bt">Check all</span></button>`;
   pageTarget().innerHTML = `<div class="toolbar joined srv-bar"><div class="sb-r1">
-      <button class="cta cta-server ico lbl" onclick="newServer()" title="Add a server: one, or several at once with one password" aria-label="Add server"><i class="cta-ic">＋</i><span class="bt">Add server</span></button><i class="sep"></i>${caBtn}<i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user"><i class="ic">🔑</i><span class="bt">Download my SSH key</span></a>
-      
+      <button class="cta cta-server ico lbl" onclick="newServer()" title="Add a server: one, or several at once with one password" aria-label="Add server"><i class="cta-ic">＋</i><span class="bt">Add server</span></button><i class="sep"></i>${caBtn}<i class="sep"></i><a class="btn tbtn" href="/api/nodes/user-key" download="nikatel_user" title="Download your own private key for PuTTY / ssh / MobaXterm - keep it at %USERPROFILE%\\.ssh\\nikatel_user"><i class="ic">🔑</i><span class="bt">Download my SSH key</span></a>${window.pgSrvMenu && pgSrvPanels().length ? `<i class="sep"></i>${pgSrvMenu()}` : ""}
       <span class="tcount pstat nd-stats"><span class="tc ${online < live.length ? "bad" : "ok"}" title="${live.length - online ? (live.length - online) + " not answering" : "every server answers"}${nOff ? " · " + nOff + " disabled" : ""}"><span class="lab">Online </span><b>${online} / ${live.length}</b></span><span class="tc bad" title="Offline, or CPU > 85 %, RAM > 90 %, disk > 85 %"><span class="lab">Problems </span><b>${nProb}</b></span><span class="tc ${(avg("cpu") ?? 0) >= 80 ? "bad" : (avg("cpu") ?? 0) >= 60 ? "warn" : "ok"}" title="Average CPU of the servers: under 60 % green, under 80 % yellow, above red · ram ${avg("ram") ?? "—"}% · disk ${avg("disk") ?? "—"}%"><span class="lab">Load </span><b>${avg("cpu") ?? "—"}%</b> <small class="lab">cpu</small></span><span class="tc info opt3" title="Sum of ↓ and ↑ over all ${state.tab} servers">Traffic <b>${sumNet.toFixed(0)} Mb/s</b></span></span></div>
       <div class="sb-r2"><div class="tabs srv-tabs">${[["all", "All"], ["online", "Online"], ["problems", "Problems"], ["disabled", "Disabled"]].map(([k, l]) => `<button class="${mt === k ? "on" : ""}" onclick="state.mtab='${k}';refresh()">${l}<i class="cnt">${mine.filter(MT[k]).length}</i></button>`).join("")}</div><span class="sp"></span>${searchSeg()}</div></div>
     <table class="tbl lift srv-tbl joined ${fast ? "fx-in" : ""}"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:11%"><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:5%"></colgroup>
@@ -747,6 +747,7 @@ const ibox = (icon, title, rows) => `<div class="ibox"><h5><i>${icon}</i>${title
 /* a server window, built from scratch: ONE bar with every button, tight boxes with the same number of rows (nothing hollow), a line of tunnels, a line of the last results, the charts.
    Console, Edit and Delete are in the window header. The console is the only other view, with a Back link. */
 function serverDetailHtml(s) {
+  if (state.wtab === "node" && window.pgNodeHost) return pgNodeHost(s);      // the Node view (pg_nodes.js): what the panel knows about the node of this server and everything that can be done to it
   if (state.wtab === "console") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + serverPartHtml(s, "console");
   if (state.wtab === "install") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + installHtml(s);
   return serverBar(s) + (window.pgSrvLine ? pgSrvLine(s) : "") + serverGridHtml(s) + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>`;
@@ -759,6 +760,7 @@ function serverBar(s) {
   const groups = [
     [b("⇄", "GRE test", "Do its GRE links answer?", `greCheck(${s.id})`)],
     [...(s.role === "foreign" ? [b("🛰", "Filtering", "Is this server filtered in Iran? Pings from your Iran servers + check-host.net", `srvFilter(${s.id})`)] : []),
+      ...(window.pgNodeHost && ((window.pgSrvOn && pgSrvOn(s).length) || (s.role === "foreign" && window.pgSrvPanels && pgSrvPanels().length)) ? [b(SI.cube, "Node", "The node of a Marzban or PasarGuard panel that runs here: its state, log, usage, certificate, restart, update ... (or make this server a node)", `wtab('node')`, "", true)] : []),
       b("📦", "Install", "Install a Marzban or PasarGuard node or the Abuse-Defender, or update the server", `wtab('install')`)],
     [b("🔐", "Change password", "Set a new SSH login password on the server (or a strong generated one)", `srvPassword(${s.id}, '${nm}')`),
      `<select class="sm abtn abtn-open" title="Open this server in a program on your computer" onchange="if(this.value){srvOpen(${s.id}, this.value);this.selectedIndex=0}"><option value="">🖥 Open in…</option><option value="ssh">Windows ssh</option><option value="putty">PuTTY</option><option value="mobaxterm">MobaXterm</option></select>`,
@@ -837,7 +839,7 @@ window.wtab = k => {
   state.wtab = k;
   const body = $("#modal .modal-body");
   if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { const mdl = body.closest(".modal"); if (mdl) { const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // the window never gets shorter while its tabs change, so Console → Back does not jump
-    body.innerHTML =`<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console" && k !== "install") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
+    body.innerHTML =`<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console" && k !== "install" && k !== "node") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
   if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); loadTunnelCharts(t.id); return; } }
   if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; cfLoadChart(c.id); return; } }
   refresh();
@@ -2139,7 +2141,7 @@ const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).t
    for the part that is open. */
 const PG_SUBS = {users: ["users"], hosts: ["hosts"], access: ["groups", "templates"], core: ["cores"], admins: ["admins"], settings: ["usage", "system", "settings"]};
 const PG_SUB_OF = {}; Object.entries(PG_SUBS).forEach(([s, tabs]) => tabs.forEach(t => { PG_SUB_OF[t] = s; }));
-const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : state.page === "nodes" ? ["nodes"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
+const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
 const pnIsUsers = () => (state.page === "pgpanel" && sub("pgpanel") === "users") || (state.page === "configs" && sub("configs") === "panels");
 const pnShow = tabs => { if (pn.want && tabs.includes(pn.want)) pn.tab = pn.want; else if (!tabs.includes(pn.tab)) pn.tab = tabs[0]; pn.want = null; };
 PAGES.panels = async () => {
@@ -2156,7 +2158,6 @@ PAGES.panels = async () => {
   $("#page").innerHTML = pnBar(list, p.id, `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span><button class="pn-b-chk" onclick="pnCheck(${p.id})" title="Ask the panel now"><i class="ic">↻</i><span class="bt">Check now</span></button><button class="pn-b-edit" onclick="pnEditWin()" title="Name, address, key or token, TLS check"><i class="ic">✎</i><span class="bt">Edit</span></button>`) + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   const tdef = window.pgTabs && window.pgTabs[pn.tab], here = $("#pn-body");
-  if (here && pn.tab === "nodes" && p.type !== "pasarguard") { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="card"><h3>Nodes of ${esc(p.name)}</h3>${pnNodesHtml(p)}</div>`; return; }      // a Marzban panel: its nodes as they are read, no more
   if (here && tdef && tdef.types && !tdef.types.includes(p.type)) { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="empty">${esc(tdef.label)} is a part of PasarGuard panels; ${esc(p.name)} is a ${esc(p.type)} panel. Pick a PasarGuard panel in the bar above.</div>`; return; }
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
@@ -2179,15 +2180,14 @@ function pnNodesHtml(p) {
     ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
 }
 window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };      // (another panel: the page and its tab stay)
-window.pnTab = t => {      // a tab of the part that is open stays here; a tab that belongs to another tab of the Panel page (or to Servers) opens that
+window.pnTab = t => {      // a tab of the part that is open stays here; a tab that belongs to another tab of the Panel page opens that
   pn.user = null; pn.hostEdit = null;
   if (pnPageTabs().includes(t)) { pn.tab = t; refresh(); return; }
-  if (t === "nodes") { pn.want = t; go("nodes", "pgnodes"); return; }
   if (PG_SUB_OF[t]) { pn.want = t; go("pgpanel", PG_SUB_OF[t]); return; }
   pn.tab = t; refresh();
 };
 PAGES.pgpanel = async () => { renderSub(); return PAGES.panels(); };      // the Panel page: the bar of tabs under the header, then the panel you pick and what the tab holds
-window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (p) showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };
+window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (!p) return; if (window.pgSrvPanelNodes) pgSrvPanelNodes(p.id); else showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };      // (the nodes of a panel, each beside the server it runs on: pg_srvnode.js)
 window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
 /* How a panel is connected (docs/panels.md): the panel is given a credential, not a password. PasarGuard has API keys (pg_key_…, header X-Api-Key, their own end date, revocable);
@@ -3714,6 +3714,7 @@ const SI = {   // line icons
   paint: '<svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.6 0-.9-.6-1.2-.6-2 0-.9.7-1.4 1.6-1.4h1.7a4 4 0 0 0 4-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1"/><circle cx="10.5" cy="7.5" r="1.1"/><circle cx="15" cy="7.5" r="1.1"/></svg>',
   cpu: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>',
+  cog: '<svg viewBox="0 0 24 24"><path d="M10.21 5.34L10.55 2.81L13.45 2.81L13.79 5.34A6.9 6.9 0 0 1 15.45 6.02L17.47 4.48L19.52 6.53L17.98 8.55A6.9 6.9 0 0 1 18.66 10.21L21.19 10.55L21.19 13.45L18.66 13.79A6.9 6.9 0 0 1 17.98 15.45L19.52 17.47L17.47 19.52L15.45 17.98A6.9 6.9 0 0 1 13.79 18.66L13.45 21.19L10.55 21.19L10.21 18.66A6.9 6.9 0 0 1 8.55 17.98L6.53 19.52L4.48 17.47L6.02 15.45A6.9 6.9 0 0 1 5.34 13.79L2.81 13.45L2.81 10.55L5.34 10.21A6.9 6.9 0 0 1 6.02 8.55L4.48 6.53L6.53 4.48L8.55 6.02A6.9 6.9 0 0 1 10.21 5.34Z"/><circle cx="12" cy="12" r="2.7"/></svg>',      // a cog wheel (eight teeth): the General tab of the Panel page
   shield: on => `<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6z"/>${on ? '<path d="M8.6 12.2l2.4 2.4 4.4-4.6"/>' : '<path d="M12 8.2v4.4M12 15.6v.4"/>'}</svg>`,
   db: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>',
   cloud: '<svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5 4 4 0 0 1 17.5 18"/><path d="M12 12v8M9 15l3-3 3 3"/></svg>',
@@ -3863,9 +3864,10 @@ PAGES.settings = async () => {
   /* security: filled by secLoad */
   const security = sFrame("Security", "How the panel is protected, and your password.", '<span class="pill" id="sec-pill">…</span>', '<div id="sec-box"><div class="mut">loading…</div></div>');
 
-  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${about}</div>`;
+  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${window.pgUpdCard ? pgUpdCard() : ""}${about}</div>`;
   settingsTabs();
   if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); }
+  if (state.stab === "pgupd" && window.pgUpdLoad) pgUpdLoad();
   if ($("#sec-box")) secLoad();
 };/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
 const sec = {setup: null, codes: null};
@@ -3956,7 +3958,7 @@ window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOO
 window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
-const TAB_SVG = {account: SI.shield(false), alerts: SI.bell, backup: SI.save, probe: SI.bolt, ai: SI.bot, bot: SI.cart, look: SI.paint, update: SI.arrowUp};      // the tabs whose emoji is drawn as a line icon
+const TAB_SVG = {account: SI.shield(false), alerts: SI.bell, backup: SI.save, probe: SI.bolt, ai: SI.bot, bot: SI.cart, look: SI.paint, pgupd: SI.box, update: SI.arrowUp};      // the tabs whose emoji is drawn as a line icon
 const SET_TABS = {
   account: ["🛡 Security", "Two-step sign-in, recovery codes, the secret entry path and your password.", ["Security"]],
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the rules, the daily report and maintenance windows.", ["Alerts"]],
@@ -3965,6 +3967,7 @@ const SET_TABS = {
   ai: ["🤖 AI", "The AI assistant that explains problems and helps the Tunnel Doctor.", ["AI assistant"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
+  pgupd: ["🧩 PasarGuard", "Update the PasarGuard panels and their nodes: the newest releases, what each one runs, one click.", ["PasarGuard"]],
   update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, and the settings the service runs with.", ["About & update"]],
 };
 function settingsTabs() {

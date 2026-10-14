@@ -20,10 +20,10 @@ from .events import emit
 
 log = get_logger("extras")
 ITEMS = ("btblock", "marzban_node", "pasarguard_node", "os_update")
-LABEL = {"btblock": "torrent block", "marzban_node": "Marzban node", "pasarguard_node": "PasarGuard node", "os_update": "system update"}
-KEY = {"btblock": "btblock", "marzban_node": "mznode", "pasarguard_node": "pgnode", "os_update": "osupdate"}          # the name of the install on the server
-ACTION = {"btblock": "install_btblock", "marzban_node": "install_marzban_node", "pasarguard_node": "install_pasarguard_node", "os_update": "install_os_update"}
-LIMIT = {"btblock": 2700, "marzban_node": 1500, "pasarguard_node": 1200, "os_update": 2700}                   # seconds the panel waits for each
+LABEL = {"btblock": "torrent block", "marzban_node": "Marzban node", "pasarguard_node": "PasarGuard node", "os_update": "system update", "pasarguard_panel": "PasarGuard panel update"}      # (the last is not an install: services/pg_update.py runs it with _run_item, it is not in ITEMS)
+KEY = {"btblock": "btblock", "marzban_node": "mznode", "pasarguard_node": "pgnode", "os_update": "osupdate", "pasarguard_panel": "pgpanel"}          # the name of the install on the server
+ACTION = {"btblock": "install_btblock", "marzban_node": "install_marzban_node", "pasarguard_node": "install_pasarguard_node", "os_update": "install_os_update", "pasarguard_panel": "install_pgpanel_update"}
+LIMIT = {"btblock": 2700, "marzban_node": 1500, "pasarguard_node": 1200, "os_update": 2700, "pasarguard_panel": 2400}                   # seconds the panel waits for each
 POLL = 10
 
 
@@ -57,7 +57,7 @@ def parse_status(out: str) -> tuple[str, str]:
 
 def _start_action(node: Node, item: str, cert: str) -> str:
     """Start the detached install; the first word of the answer: STARTED, ALREADY_RUNNING, MZNODE_EXISTS, BAD_CERT, NOT_ROOT or an error."""
-    params = {"B64": base64.b64encode(cert.encode()).decode()} if item == "marzban_node" else {"KEY": cert} if item == "pasarguard_node" else {}      # for a PasarGuard node `cert` carries the API key of the panel
+    params = {"B64": base64.b64encode(cert.encode()).decode()} if item == "marzban_node" else {"KEY": cert} if item == "pasarguard_node" else {"BACKUP": cert} if item == "pasarguard_panel" else {}      # for a PasarGuard node `cert` carries the API key of the panel, for the update of a PasarGuard panel 1 or 0 (a backup first)
     return run_action(node, ACTION[item], params, timeout=60).strip()
 
 
@@ -102,6 +102,8 @@ def _result(aid: int, item: str, state: str, text: str, ip: str) -> bool:
             autopilot._say(aid, f"PasarGuard node: installed. Next: in this server's Install view press Show certificate, copy it into the PasarGuard panel (Nodes, address {ip}) and set the node there.")
         elif item == "os_update":
             autopilot._say(aid, "System update: " + (text.replace("OSUPDATE_OK ", "") or "done") + ".")
+        elif item == "pasarguard_panel":
+            autopilot._say(aid, "PasarGuard panel: " + (text.replace("PGPANEL_OK ", "") or "the update command finished") + ".")
         else:
             autopilot._say(aid, "Torrent block: installed (" + (text.replace("BT_OK ", "").replace("_", " ") or "done") + "); cron refreshes the rules every day.")
 
@@ -128,7 +130,7 @@ def _run_item(aid: int, node: Node, ip: str, item: str, cert: str, resume: bool 
             autopilot._say(aid, f"{LABEL[item]}: the panel was restarted; the install kept running, following it again…")
             return _result(aid, item, *_poll(aid, node, item), ip)
 
-    autopilot._say(aid, f"{LABEL[item]}: starting" + {"marzban_node": " (Docker, the node image and its service; a few minutes)…", "pasarguard_node": " (the official installer, Docker and the node; a few minutes)…", "os_update": " (apt update and upgrade; the server is not rebooted; a few minutes)…"}.get(item, " (a tracker list and thousands of rules; a few minutes)…"))
+    autopilot._say(aid, f"{LABEL[item]}: starting" + {"marzban_node": " (Docker, the node image and its service; a few minutes)…", "pasarguard_node": " (the official installer, Docker and the node; a few minutes)…", "os_update": " (apt update and upgrade; the server is not rebooted; a few minutes)…", "pasarguard_panel": " (the pasarguard command on the server: backup, then update; a few minutes)…"}.get(item, " (a tracker list and thousands of rules; a few minutes)…"))
 
     try:
         out = _start_action(node, item, cert)
@@ -147,7 +149,7 @@ def _run_item(aid: int, node: Node, ip: str, item: str, cert: str, resume: bool 
         return True
 
     if word not in ("STARTED", "ALREADY_RUNNING"):
-        why = {"BAD_CERT": "the certificate is not valid", "NOT_ROOT": "the SSH user is not root", "NO_APT": "this server does not use apt (Debian / Ubuntu)"}.get(word, out[-160:] or "no answer")
+        why = {"BAD_CERT": "the certificate is not valid", "NOT_ROOT": "the SSH user is not root", "NO_APT": "this server does not use apt (Debian / Ubuntu)", "NO_CLI": "the pasarguard command is not on this server"}.get(word, out[-160:] or "no answer")
         autopilot._say(aid, f"{LABEL[item]}: not started - {why}")
         return False
 

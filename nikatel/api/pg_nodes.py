@@ -106,7 +106,7 @@ class RegisterIn(MakeIn):
 # ---- the list and the one-time reads (static paths first: {node_id} would swallow them)
 @router.get(P)
 def nodes_list(panel_id: int):
-    """Every node of the panel with the server of ours it runs on (matched by address), the foreign servers that are not a node yet, the minimum node version and the core configs (a few reads of the panel)."""
+    """Every node of the panel with the server of ours it runs on (matched by address), the foreign servers that are no node yet, the minimum node version and the core configs; also refreshes the copy the Servers page shows."""
     return {"ok": True, **_wrap(pg_nodes.overview, _cred(panel_id))}
 
 
@@ -193,7 +193,7 @@ def nodes_clear_usage(panel_id: int, body: ClearIn):
 
 @router.get(P + "/user-counts")
 def nodes_user_counts(panel_id: int, metric: Literal["online", "expired", "limited"] = "online", period: Literal["hour", "day", "month"] = "hour", hours: int = 24, node_id: int | None = None):
-    """How many users were online, expired or limited per hour or day over the last hours, for the whole panel or one node (the curve of the Nodes tab)."""
+    """How many users were online, expired or limited per hour or day over the last hours, for the whole panel or one node (the curve of the Nodes… menu of the Servers page)."""
     return {"ok": True, **_wrap(pg_nodes_extra.user_counts, _cred(panel_id), metric, period, hours, node_id)}
 
 

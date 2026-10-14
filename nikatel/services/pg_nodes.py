@@ -3,6 +3,9 @@
 WHY one list. A PasarGuard node IS one of our foreign servers: the Install view puts the node on it over SSH. The PasarGuard panel knows the node by a name and an
 address, this panel knows the server by a name, a host and its samples. Showing them apart makes the operator match them by eye, so every node row here carries the
 server it runs on (matched by address, see `match_servers`), and the foreign servers that are not a node yet are listed beside them with the one action that makes them one.
+Since 1.48.0 the page is ONE list as well: the Servers page lists the servers, the node of each (`placement`: from the health job's copy of every panel's nodes, no call to a
+panel) is part of its row, and the window of the server has the Node view that `overview` / `node_get` and the actions below serve. The nodes that run on no server of ours are
+`placement`'s second answer. Reading the list of a panel (`overview`) also refreshes that copy (`keep_cache`).
 
 What the real panel offers (PasarGuard 5.4, every route read or probed on 2026-10-14 - a GET on a route that takes only POST / PUT / DELETE answers 405 when it exists):
   GET /api/nodes, /api/node/{id}, /api/node/settings, /api/nodes/realtime_stats, /api/node/usage, /api/cores/simple and GET /api/node/{id}/logs (server-sent events);
@@ -680,7 +683,7 @@ def _others(c: dict) -> list[dict]:
 
 def panel_nodes() -> list[dict]:
     """Every node of EVERY panel of this installation (Marzban and PasarGuard) as the health job of the panels saw it last - no call to any panel - one row each:
-    {panel_id, panel, type, node_id, name, address, status, message}. The Servers page puts them on the servers they run on."""
+    {panel_id, panel, type, node_id, name, address, status, xray, message}. The Servers page puts them on the servers they run on."""
     with session() as db:
         rows = db.execute(select(Panel.id, Panel.name, Panel.type, Panel.nodes).order_by(Panel.id)).all()
 
@@ -690,25 +693,35 @@ def panel_nodes() -> list[dict]:
         for n in nodes if isinstance(nodes, list) else []:
             if isinstance(n, dict) and str(n.get("address") or "").strip():
                 out.append({"panel_id": pid, "panel": _text(name, 40), "type": _text(typ, 12), "node_id": n.get("id") if isinstance(n.get("id"), int) else None, "name": _text(n.get("name"), 60),
-                            "address": _text(n.get("address"), 253), "status": _text(n.get("status"), 20).lower(), "message": _text(n.get("message"), 120)})
+                            "address": _text(n.get("address"), 253), "status": _text(n.get("status"), 20).lower(), "xray": _text(n.get("xray"), 24), "message": _text(n.get("message"), 120)})
 
     return out
 
 
-def by_server(resolver: Resolver | None = None) -> dict[int, list[dict]]:
-    """{server id: the nodes of the panels that run on it}, matched the way the Nodes tab matches (the address of the node is the host of the server, an IP in any spelling, or a name the
-    DNS says points at the other). A server that carries no node is not in the answer. `match` says how the pair was found ("address" or "dns")."""
+def placement(resolver: Resolver | None = None) -> tuple[dict[int, list[dict]], list[dict]]:
+    """Every node of every panel put where it runs, matched the way `match_servers` matches (the address of the node is the host of the server, an IP in any spelling, or a name the DNS says
+    points at the other): ({server id: [the rows of the nodes on it, `match` = "address" or "dns"]}, [the rows of the nodes that run on NO server of ours, with `hint`: a server that has the
+    same NAME but another address, or None]). A server that carries no node is not in the first. One server, one list: the Servers page shows the node with its server."""
     servers, nodes = _servers(), panel_nodes()
     names = names_to_resolve(nodes, servers)
     resolved = (resolver or resolve_names)(names) if names else {}
     pairs, _free = match_servers(nodes, servers, resolved)
-    out: dict[int, list[dict]] = {}
+    on: dict[int, list[dict]] = {}
+    out: list[dict] = []
 
     for n, p in zip(nodes, pairs):
         if p["server"] is not None:
-            out.setdefault(p["server"]["id"], []).append({**n, "match": p["how"]})
+            on.setdefault(p["server"]["id"], []).append({**n, "match": p["how"]})
+        else:
+            h = p["hint"]
+            out.append({**n, "match": "", "hint": {"id": h["id"], "name": h["name"]} if h else None})
 
-    return out
+    return on, out
+
+
+def by_server(resolver: Resolver | None = None) -> dict[int, list[dict]]:
+    """{server id: the nodes of the panels that run on it} (see `placement`). A server that carries no node is not in the answer."""
+    return placement(resolver)[0]
 
 
 def _match(rows: list[dict], resolver: Resolver | None = None, others: list[dict] | None = None) -> tuple[list[dict], list[dict], dict[int, list[dict]]]:
@@ -741,10 +754,26 @@ def _join(rows: list[dict], resolver: Resolver | None = None, others: list[dict]
     return out, sorted((row(s) for s in free), key=lambda r: (bool(r["elsewhere"]), str(r["name"]).casefold()))
 
 
+def keep_cache(c: dict, raw: list[dict]) -> None:
+    """The nodes just read are also what the health job keeps for the Servers page (`Panel.nodes`: the chips of the server rows and the Node view start from it). A window that changes a node reads
+    the list again at once, so the page shows the new state and not the one from two minutes ago. A node that is fine has no failed check; one that is not keeps the count it had."""
+    nodes = panels.parse_nodes(raw)
+
+    with session() as db:
+        p = db.get(Panel, int(c.get("id") or 0))
+
+        if p is None:
+            return
+
+        old = {str(n.get("id")): n for n in (p.nodes or []) if isinstance(n, dict)}
+        p.nodes = [dict(n, fails=0 if n["status"] in panels.NODE_OK else int((old.get(str(n.get("id"))) or {}).get("fails", 0))) for n in nodes]
+
+
 def overview(c: dict, resolver: Resolver | None = None) -> dict:
-    """The Nodes tab in one answer: every node of the panel with the server of ours it runs on, the foreign servers that are not a node of it (and which of those are nodes of another panel), the
-    minimum node version, the core configs."""
+    """Every node of the panel in one answer, for the Node view of the Servers page: each node with the server of ours it runs on, the foreign servers that are not a node of it (and which of those
+    are nodes of another panel), the minimum node version, the core configs. The list read is kept as the copy the Servers page shows (`keep_cache`)."""
     raw = _nodes_raw(c)
+    keep_cache(c, raw)
     warnings: list[str] = []
     live = _live_all(c, warnings)
     rows = [public_node(n) for n in raw]

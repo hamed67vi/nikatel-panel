@@ -1,4 +1,4 @@
-"""The rest of the node API in the Nodes tab: actions on several nodes, the resource curves, the outbound latency, the user counts, restart of every node, and emptying the usage tables.
+"""The rest of the node API (the Nodes… menu and the Node view): actions on several nodes, the resource curves, the outbound latency, the user counts, restart of every node, and emptying the usage tables.
 A fake PasarGuard 5.4 panel stands in; no test reaches a real one."""
 import copy
 import re

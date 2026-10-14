@@ -1,0 +1,98 @@
+/* Settings → PasarGuard (the owner, 2026-10-14: "add the update of the nodes and of PasarGuard itself to Settings"). ONE card of Settings: the newest releases of PasarGuard, its node and Xray (GitHub, kept an hour
+   by the panel), every PasarGuard panel with the version it runs and the server that runs it, and every node with its software and Xray - each marked when it is behind. Nothing is automatic: an update is a
+   click and a question. Nodes are updated ONE AT A TIME (each must be connected again with the new version before the next; one that does not come back stops the run), the panel itself on its own server
+   with the official command (a backup first, the name of the panel typed back). Both are actions of the panel with a story that this file follows.
+   Routes used: GET /api/pg-updates, GET /api/pg-updates/panels/{id}/plan, POST /api/pg-updates/panels/{id}, POST /api/pg-updates/nodes, GET /api/actions/{id}.
+   Uses the helpers of app.js: $, api, esc, toast, showModal, closeModal, gconfirm, gprompt, followStory, go, state, SI, sFrame, sHero, sGrp, sItem, sWide. */
+const pgu = {data: null, at: 0};
+window.pgUpdCard = () => sFrame("PasarGuard", "Update the PasarGuard panels and their nodes: the newest releases, what each one runs, one click.", '<span class="pill" id="pgu-pill">…</span>', '<div id="pgu-box"><div class="mut" style="padding:8px 4px">reading the panels and GitHub…</div></div>');
+
+const pguShort = v => String(v || "").replace(/^v/, "");
+const pguVer = (now, latest, behind) => behind === true ? `<span class="pgu-v warn" title="${esc(`runs ${now || "?"}, the newest is ${latest}`)}">${esc(pguShort(now) || "?")} <i>→</i> <b>${esc(pguShort(latest))}</b></span>`
+  : behind === false ? `<span class="pgu-v ok" title="the newest release">${esc(pguShort(now))}</span>` : `<span class="pgu-v mut" title="${now ? "the newest release is not known (GitHub did not answer)" : "the node reports no version (it is not connected)"}">${esc(pguShort(now) || "—")}</span>`;
+const pguDot = st => `<i class="dotc ${st === "connected" ? "ok" : st === "disabled" || st === "connecting" ? "" : "bad"}"></i>`;
+
+function pgUpdHtml(d) {
+  const L = d.latest || {}, lv = k => (L[k] && L[k].version) || "", bad = Object.entries(L).filter(([, v]) => v && v.error).map(([k, v]) => `${k}: ${v.error}`);
+  const nodes = d.nodes || [], panels = d.panels || [];
+  const swN = nodes.filter(n => n.behind === true && n.status === "connected"), xrN = nodes.filter(n => n.xray_behind === true && n.status === "connected");
+  const total = panels.filter(p => p.behind === true).length + nodes.filter(n => n.behind === true || n.xray_behind === true).length;
+  const unknown = nodes.filter(n => n.behind === null).length + panels.filter(p => p.behind === null && !p.error).length;      // a node that reports no version (it is not connected) is not "up to date": nothing is known about it
+  const hero = sHero(total ? "s1" : unknown ? "s2" : "s3", SI.arrowUp, total ? `${total} update${total === 1 ? "" : "s"} available` : unknown ? "Nothing is known to be behind" : "Everything is up to date",
+    `Newest on GitHub: PasarGuard ${esc(lv("panel") || "?")} · node ${esc(lv("node") || "?")} · Xray ${esc(lv("xray") || "?")}${unknown ? ` · ${unknown} report${unknown === 1 ? "s" : ""} no version` : ""}${bad.length ? ` · <span class="err">GitHub did not answer for ${esc(bad.join("; "))}</span>` : ""}`,
+    '<button class="sm" onclick="pgUpdLoad(true)" title="Ask GitHub again (it is asked once an hour otherwise) and read the panels">↻ Check</button>');
+  const prow = p => {
+    const can = p.behind !== false && p.host && !d.read_only && !p.error, why = d.read_only ? "The panel is read-only (NIKATEL_READ_ONLY)" : p.error ? p.error : !p.host ? "The server that runs this panel is not in the Servers list" : p.behind === false ? "This panel is the newest" : "Update this panel on its server";
+    return sItem({ok: p.behind === false ? true : undefined, icon: SI.cube, title: esc(p.name), pill: p.error ? `<span class="pill err" title="${esc(p.error)}">not read</span>` : `<span class="pill ${p.behind === true ? "warn" : p.behind === false ? "ok" : ""}">${pguVer(p.version, p.latest, p.behind)}</span>`,
+      desc: p.host ? `runs on <b>${esc(p.host.name)}</b>${p.host.online === false ? ' <span class="err">(does not answer)</span>' : ""} · <span class="mono">${esc(p.url)}</span>` : `its server (${esc(p.host_name)}) is not in the Servers list - <a class="ue-link" onclick="pgUpdAddHost(${p.id})">add it</a> and this panel can update it over SSH`,
+      acts: `<button class="sm ${can && p.behind ? "pri" : ""}" ${can ? "" : "disabled"} onclick="pgUpdPanel(${p.id})" title="${esc(why)}">Update…</button>`});
+  };
+  const nrow = n => `<div class="pgu-row ${n.status === "connected" ? "" : "off"}"><span class="pgu-n" title="${esc(n.address)}">${pguDot(n.status)}<b>${esc(n.name)}</b><small class="mut">${esc(n.panel)}</small></span>
+      <span class="pgu-s mut" title="${n.server ? "runs on " + esc(n.server.name) : "no server of ours has this address"}">${n.server ? esc(n.server.name) : esc(n.address)}</span>
+      <span class="pgu-c" title="the software of the node">${pguVer(n.version, lv("node"), n.behind)}</span><span class="pgu-c" title="the Xray core on the node">${pguVer(n.xray, lv("xray"), n.xray_behind)}</span>
+      <span class="pgu-a"><button class="sm" ${n.behind === true && n.status === "connected" ? "" : "disabled"} onclick="pgUpdNodes([[${n.panel_id}, ${n.node_id}, 'node']])" title="Update the software of this node (it restarts: its users drop for a moment)">Update</button><button class="sm" ${n.xray_behind === true && n.status === "connected" ? "" : "disabled"} onclick="pgUpdNodes([[${n.panel_id}, ${n.node_id}, 'core']])" title="Update Xray on this node (it restarts the core: its users drop for a moment)">Xray</button></span></div>`;
+  const nodesHtml = nodes.length ? `<div class="pgu-tbl"><div class="pgu-row pgu-hd"><span>Node</span><span>Server</span><span>Software</span><span>Xray</span><span></span></div>${nodes.map(nrow).join("")}</div>` : '<div class="pgu-none mut">No node is registered in a PasarGuard panel.</div>';
+  const acts = (swN.length ? `<button class="sm pri" onclick="pgUpdAll('node')" title="Update the software of every connected node that is behind, one at a time">Update ${swN.length} node${swN.length === 1 ? "" : "s"}…</button>` : "") + (xrN.length ? `<button class="sm" onclick="pgUpdAll('core')" title="Update Xray on every connected node that is behind, one at a time">Xray on ${xrN.length} node${xrN.length === 1 ? "" : "s"}…</button>` : "");      // (the buttons are there only when there is something to update)
+  return hero + sGrp({icon: SI.server, title: "Panels", desc: "a panel is updated on the server that runs it, with its own command", cls: "x flat", rows: panels.map(prow).join("") || sWide('<span class="mut">No PasarGuard panel yet: add one on the Panel page.</span>')})
+    + sGrp({icon: SI.box, title: `Nodes (${nodes.length})`, desc: "updated one at a time: each must be connected again with its new version before the next", cls: "x flat", rows: sWide(nodesHtml), acts});
+}
+window.pgUpdLoad = async force => {
+  const box = $("#pgu-box"); if (!box) return;
+  if (!pgu.data) box.innerHTML = '<div class="loading"><i class="spin"></i><span>Reading the panels and GitHub…</span></div>';
+  try {
+    pgu.data = await api(`/api/pg-updates${force ? "?force=true" : ""}`); pgu.at = Date.now();
+    const b = $("#pgu-box"); if (!b) return; b.innerHTML = pgUpdHtml(pgu.data);
+    const left = (pgu.data.panels || []).filter(p => p.behind === true).length + (pgu.data.nodes || []).filter(n => n.behind === true || n.xray_behind === true).length, pill = $("#pgu-pill");
+    if (pill) { pill.textContent = left ? `${left} behind` : "up to date"; pill.className = "pill " + (left ? "warn" : "ok"); }
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+};
+window.pgUpdAddHost = pid => { const p = ((pgu.data || {}).panels || []).find(x => x.id === pid); if (p) pgSrvAddFromNode(0, null, p.host_name, p.name); };      // the Add server form with the address of the panel filled in
+
+/* ---- the story of an update: a window that follows the action until it is done (it keeps running when the window is closed) */
+const pgUpdFollow = async (title, aid, polls) => {
+  showModal(`<b>${esc(title)}</b>`, '<div id="pgu-story" class="fix pg-nodes-story"><div class="fx-line run"><i></i>Starting…</div></div><div class="frm-act"><small class="mut">It keeps running if you close this window; its story is kept in the history of the Tunnel Doctor.</small><span class="sp"></span><button class="sm" onclick="closeModal()">Close</button></div>', "wide");
+  const fin = await followStory(aid, $("#pgu-story"), polls);
+  toast(fin && fin.ok ? "✓ Done" : "✕ Not finished: read the last line of the story", fin && fin.ok ? "ok" : "bad");
+  pgUpdLoad(true);
+  return fin;
+};
+
+/* ---- nodes: items are [panel id, node id, "node" | "core"] */
+window.pgUpdNodes = async items => {
+  const all = (pgu.data && pgu.data.nodes) || [], find = it => all.find(n => n.panel_id === it[0] && n.node_id === it[1]) || {name: "#" + it[1]};
+  const names = items.map(it => find(it).name), what = items[0][2] === "node" ? "the software" : "Xray";
+  const many = items.length > 1, text = `Update ${what} of ${many ? items.length + " nodes (" + names.slice(0, 5).join(", ") + (items.length > 5 ? ", …" : "") + "), one at a time" : "node " + names[0]}? Each node restarts and the users connected through it drop for a moment. ${many ? "The next node starts only when the one before is connected again with the new version, and a node that does not come back stops the run (the nodes after it stay as they are). " : ""}It takes a minute or two per node.`;
+  if (!await gconfirm(text, {danger: true})) return;
+  try {
+    const r = await api("/api/pg-updates/nodes", {method: "POST", body: JSON.stringify({items: items.map(([panel_id, node_id, w]) => ({panel_id, node_id, what: w}))})});
+    pgUpdFollow(items.length === 1 ? `Updating ${names[0]}` : `Updating ${items.length} nodes, one at a time`, r.action_id, 3000);
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.pgUpdAll = what => {
+  const list = ((pgu.data && pgu.data.nodes) || []).filter(n => n.status === "connected" && (what === "node" ? n.behind === true : n.xray_behind === true));
+  if (list.length) pgUpdNodes(list.map(n => [n.panel_id, n.node_id, what]));
+};
+
+/* ---- the panel itself: the plan first (what it will do, what stands in the way), then the name typed back */
+window.pgUpdPanel = async pid => {
+  showModal("<b>Update a PasarGuard panel</b>", '<div class="loading"><i class="spin"></i><span>Looking at the panel and its server…</span></div>', "wide");
+  try {
+    const r = await api(`/api/pg-updates/panels/${pid}/plan`), p = r.panel;
+    showModal(`<b>Update ${esc(p.name)}</b> <span class="pill">${esc(pguShort(p.version) || "?")} → ${esc(pguShort(r.latest) || "newest")}</span>`, `
+      <div class="sbox pg-nodes-plan"><h5><i>🧭</i>What this does${r.host ? ` on ${esc(r.host.name)}` : ""}</h5><ol class="pg-nodes-steps">${r.steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol>
+        <div class="pg-nodes-note">The panel is away for a minute or two; its nodes keep serving the users that are connected. It is the command you would type over SSH - <b>pasarguard update</b> - and nothing else.</div>
+        ${r.problems.map(x => `<div class="err pg-nodes-note">✕ ${esc(x)}</div>`).join("")}</div>
+      <form class="frm pg-nodes-form" onsubmit="return pgUpdPanelGo(event, ${pid})">
+        <label class="chk" style="grid-column: 1 / -1"><input name="backup" type="checkbox" checked> Back up first (the <b>pasarguard backup</b> command, when it has one - a backup that fails stops everything before anything is changed)</label>
+        <label style="grid-column: 1 / -1">Type the name of the panel to confirm <small>(${esc(p.name)})</small><input name="typed" required autocomplete="off" spellcheck="false" placeholder="${esc(p.name)}" ${r.problems.length ? "disabled" : ""}></label>
+        <div class="frm-act"><button class="danger" type="submit" ${r.problems.length ? "disabled" : ""}>Update the panel</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide");
+  } catch (e) { showModal("<b>Update a PasarGuard panel</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); }
+};
+window.pgUpdPanelGo = async (e, pid) => {
+  e.preventDefault(); const f = e.target, name = (((pgu.data || {}).panels || []).find(x => x.id === pid) || {}).name || "the panel";
+  try {
+    const r = await api(`/api/pg-updates/panels/${pid}`, {method: "POST", body: JSON.stringify({backup: f.elements.backup.checked, typed: f.elements.typed.value.trim()})});
+    pgUpdFollow(`Updating the panel ${name}`, r.action_id, 1600);
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
+};

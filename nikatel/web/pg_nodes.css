@@ -1,32 +1,49 @@
-/* PasarGuard tab: the nodes of a PasarGuard panel, joined with the servers of this panel (by address). Every class starts with .pg-nodes- */
-html body #page .pg-nodes-sum { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; } html body #page .pg-nodes-sum .pill { margin: 0; height: 22px; display: inline-flex; align-items: center; }
-html body #page .pg-nodes-q { width: 260px; }
-html body #page .pg-nodes-run { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 4px 12px; min-height: 34px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-size: 12.5px; } html body #page .pg-nodes-run.ok { border-color: rgba(61,220,151,.4); } html body #page .pg-nodes-run.bad { border-color: rgba(255,107,139,.45); } html body #page .pg-nodes-run span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pg-nodes-run button { height: 26px; min-height: 26px; } html body #page .pg-nodes-run .spin { width: 14px; height: 14px; flex: none; }
-html body #page .pg-nodes-warn { margin: 0 0 8px; padding: 6px 12px; border-radius: 10px; font-size: 12px; color: var(--warn); border: 1px solid rgba(255,200,70,.35); background: rgba(255,200,70,.06); }
-html body #page .pg-nodes-h { display: flex; align-items: center; gap: 8px; margin: 2px 2px 6px; font-size: 11px; letter-spacing: .9px; text-transform: uppercase; color: var(--mut); } html body #page .pg-nodes-h b { color: var(--text); letter-spacing: .6px; } html body #page .pg-nodes-h .pill { margin: 0; height: 18px; display: inline-flex; align-items: center; } html body #page .pg-nodes-h small { text-transform: none; letter-spacing: 0; font-size: 11.5px; }
-/* two boxes share the height of the window (the script sets --pg-nodes-h; the page's own fitting would make each box end at the bottom of the window, hence !important), each scrolls inside */
-html body #page .pg-nodes-box { margin: 0 0 8px; min-height: 96px; max-height: var(--pg-nodes-h, calc((100vh - 400px) * .6)) !important; }
-html body #page .pg-nodes-box.pg-nodes-b { max-height: var(--pg-nodes-h, calc((100vh - 400px) * .4)) !important; }
-html body #page .pg-nodes-tbl td { padding: 0 8px; height: 36px; } html body #page .pg-nodes-tbl th { padding: 0 8px 2px; }
-html body #page .pg-nodes-tbl td small { font-weight: 400; }
-html body #page .pg-nodes-tbl .pbar { gap: 5px; } html body #page .pg-nodes-tbl .pbar .bar { flex: 0 1 34px; min-width: 14px; } html body #page .pg-nodes-tbl .pbar b { min-width: 32px; font-size: 12px; text-align: left; }
-html body #page .pg-nodes-srv { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; } html body #page .pg-nodes-srv b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pg-nodes-srv .pill { margin: 0; flex: none; }
-html body #page .pg-nodes-link { cursor: pointer; color: inherit; } html body #page .pg-nodes-link:hover b { color: var(--acc-2); text-decoration: underline; }
-html body #page .pg-nodes-act { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; max-width: 100%; } html body #page .pg-nodes-act button, html body #page .pg-nodes-act select { height: 28px; min-height: 28px; } html body #page .pg-nodes-act select.pg-nodes-more { width: 74px; padding-left: 8px; }
-html body #page .pg-nodes-tbl td:last-child { overflow: visible; }
-html body #page .pg-nodes-tbl tr.pg-nodes-else td { opacity: .72; } html body #page .pg-nodes-tbl tr.pg-nodes-else td .pill { margin: 0 4px 0 0; }
-@media (max-width: 760px) and (pointer: coarse) { html body #page .pg-nodes-box, html body #page .pg-nodes-box.pg-nodes-b { max-height: none !important; } html body #page .pg-nodes-q { width: 100%; } html body #page .pg-nodes-act select.pg-nodes-more { width: 110px; } }
+/* PasarGuard nodes inside the window of a server (pg_nodes.js, pg_srvnode.js). Classes: .np-* the Node view, .pg-nodes-* its windows, .srv-* the ticks and the Nodes... menu of the Servers list */
 
-/* the windows */
+/* ---- the Node view: the pane inside a server window (or the window of a node outside our servers). It uses the boxes and the bar of the server window (.sgrid .sbox .kv2 .rrow .sbar .abtn) */
+html body #modal .np .np-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+html body #modal .np .np-chip { height: 30px; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 15px; font-size: 12.5px; }
+html body #modal .np .np-chip small { color: var(--mut); font-size: 11.5px; } html body #modal .np .np-chip .dotc { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5b667c; }
+html body #modal .np .np-chip .dotc.ok { background: #30d158; box-shadow: 0 0 7px rgba(48,209,88,.5); } html body #modal .np .np-chip .dotc.bad { background: #ff453a; box-shadow: 0 0 7px rgba(255,69,58,.5); }
+html body #modal .np .np-chip.on { border-color: rgba(47,139,255,.6); background: rgba(47,139,255,.16); color: var(--text); }
+html body #modal .np .sgrid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html body #modal .np .kv2 .dotc { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5b667c; align-self: center; } html body #modal .np .kv2 .dotc.ok { background: #30d158; box-shadow: 0 0 7px rgba(48,209,88,.5); } html body #modal .np .kv2 .dotc.bad { background: #ff453a; box-shadow: 0 0 7px rgba(255,69,58,.5); }
+html body #modal .np .kv2 > div .pill { margin: 0; height: 18px; display: inline-flex; align-items: center; }
+html body #modal .np .np-empty { padding: 4px 2px 8px; font-size: 13px; line-height: 1.55; } html body #modal .np .np-empty.mut { color: var(--mut); }
+html body #modal .np .np-make { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; } html body #modal .np .np-make select { height: 32px; min-width: 150px; } html body #modal .np .np-make .sm { height: 32px; }
+html body #modal .np .np-back { display: flex; align-items: center; gap: 10px; } html body #modal .np .np-t { font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #modal .np .np-bar { margin-bottom: 0; gap: 6px !important; } html body #modal .np .np-bar .sg { gap: 6px !important; }
+html body #modal .np .np-bar .abtn, html body #modal .np .np-bar select.abtn-open { height: 32px; padding: 0 10px; font-size: 12.5px; gap: 6px; }
+html body #modal .np .np-bar .abtn .bi svg { width: 14px; height: 14px; } html body #modal .np .np-bar select.np-more { width: 96px !important; min-width: 0 !important; height: 32px !important; min-height: 32px !important; padding: 0 10px; }
+html body #modal .np .np-st { display: inline-flex; align-items: center; gap: 6px; }
+html body #modal .np .np-bar .abtn:disabled, html body #modal .np .np-bar select:disabled { opacity: .4; }
+html body #modal .pg-nodes-run { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 4px 12px; min-height: 34px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-size: 12.5px; } html body #modal .pg-nodes-run.ok { border-color: rgba(61,220,151,.4); } html body #modal .pg-nodes-run.bad { border-color: rgba(255,107,139,.45); } html body #modal .pg-nodes-run span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #modal .pg-nodes-run button { height: 26px; min-height: 26px; } html body #modal .pg-nodes-run .spin { width: 14px; height: 14px; flex: none; }
+html body #modal .pg-nodes-warn { margin: 0 0 8px; padding: 6px 12px; border-radius: 10px; font-size: 12px; color: var(--warn); border: 1px solid rgba(255,200,70,.35); background: rgba(255,200,70,.06); } html body #modal .pg-nodes-warn.err { color: var(--bad); border-color: rgba(255,107,139,.4); background: rgba(255,107,139,.06); }
+@media (max-width: 900px) { html body #modal .np .sgrid.two { grid-template-columns: 1fr; } }
+
+/* ---- the Servers list: a tick in front of the name once a server carries a PasarGuard node, the Nodes... menu, the chip of the nodes outside our servers */
+html body #page .srv-tbl td.name input.srv-ck { margin: 0 8px 0 0; vertical-align: middle; flex: none; } html body #page .srv-tbl td.name input.srv-ck:disabled { opacity: .3; }
+html body #page .srv-nodes { display: inline-flex; align-items: center; flex: none; }
+html body #page .srv-nodes select.srv-nodes-sel { width: 104px !important; min-width: 104px !important; height: 38px; min-height: 38px; padding-left: 12px; border-radius: 12px; }      /* (the size of the buttons of its row; !important: the phone layer makes every select as wide as its box) */
+html body #page .srv-nodes select.srv-nodes-sel.warn { border-color: rgba(255,200,70,.55); color: var(--warn); }      /* amber: a node of a panel runs on a machine that is not in the list (the menu says which) */
+
+/* ---- the windows (a log, the usage, a form ... inside the Node view, or a window of their own) */
 .pg-nodes-form .pg-nodes-key { flex-basis: 100%; display: flex; gap: 6px; } .pg-nodes-form .pg-nodes-key input { flex: 1; min-width: 0; } .pg-nodes-form .pg-nodes-key button { height: 32px; flex: none; }
 html body .pg-nodes-form textarea { height: auto; min-height: 64px; font-family: var(--mono); font-size: 11.5px; line-height: 1.4; }
 .pg-nodes-tools { margin: 0 0 8px; align-items: center; } .pg-nodes-tools select, .pg-nodes-tools button { height: 30px; }
-.pg-nodes-log { max-height: calc(100vh - 260px); overflow: auto; margin: 0; font-size: 11.5px; line-height: 1.45; word-break: break-all; }
+.pg-nodes-log { max-height: calc(100vh - 300px); overflow: auto; margin: 0; font-size: 11.5px; line-height: 1.45; word-break: break-all; }
 .pg-nodes-tot { display: flex; gap: 6px; margin: 0 0 8px; } .pg-nodes-tot .pill { margin: 0; }
-.pg-nodes-ubox { max-height: calc(100vh - 330px); min-height: 120px; overflow: auto; margin: 0 0 8px; }
+.pg-nodes-ubox { max-height: calc(100vh - 360px); min-height: 120px; overflow: auto; margin: 0 0 8px; }
+html body #modal td.pg-nodes-act { text-align: right; white-space: nowrap; } html body #modal td.pg-nodes-act .sm { height: 28px; margin-left: 6px; } html body #modal td.pg-nodes-act .mut { margin-left: 8px; }
+html body #modal .pg-out-tbl td { padding: 6px 8px; } html body #modal .pg-out-tbl td small { font-weight: 400; } html body #modal .pg-out-tbl .dotc { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #5b667c; margin-right: 2px; } html body #modal .pg-out-tbl .dotc.ok { background: #30d158; } html body #modal .pg-out-tbl .dotc.bad { background: #ff453a; }
 .pg-nodes-plan { margin: 0 0 10px; } .pg-nodes-steps { margin: 4px 0 8px; padding-left: 22px; font-size: 13px; line-height: 1.6; }
 .pg-nodes-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; } .pg-nodes-note .pill { margin: 0 6px 0 0; } .pg-nodes-amber { color: var(--warn); }
 .pg-nodes-story { height: 300px; }
+html body .pg-nodes-curves { display: grid; gap: 10px; margin: 4px 0 10px; }
+html body .pg-nodes-cv { display: grid; grid-template-columns: 90px minmax(0, 1fr) minmax(0, 220px); align-items: center; gap: 12px; font-size: 12.5px; }
+html body .pg-nodes-cv small { text-align: right; } html body .pg-nodes-spark { width: 100%; height: 52px; color: #6fb2ff; border-radius: 8px; background: rgba(255, 255, 255, .03); }
+html body .pg-nodes-spark.cpu { color: #ffb86b; } html body .pg-nodes-spark.mem { color: #b57cff; } html body .pg-nodes-spark.rx { color: #4fd98a; } html body .pg-nodes-spark.tx { color: #6fb2ff; }
+@media (max-width: 760px) { html body .pg-nodes-cv { grid-template-columns: 1fr; gap: 2px; } html body .pg-nodes-cv small { text-align: left; } }
 
 /* "Add server": the PasarGuard node tick and its four fields (pg_srvnode.js) */
 html body .srv-after .x-pg { display: grid; gap: 8px; margin-top: 8px; } html body .srv-after .x-pg.off { display: none; }
@@ -45,12 +62,16 @@ html body #page .pg-sys-row { display: grid; grid-template-columns: 84px minmax(
 html body #page .pg-sys-row .pbar { min-width: 0; } html body #page .pg-sys-row small { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .pg-sys-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; } html body #page .pg-sys-pills .pill { margin: 0; }
 html body #page .pg-sys-ib { max-height: 320px; margin: 0 0 8px; }
-/* ---- several nodes, charts (pg_nodes.js) */
-html body #page .pg-nodes-ck { width: 34px; text-align: center; padding: 0 !important; } html body #page .pg-nodes-ck input.ck { vertical-align: middle; }
-html body #page .pg-nodes-bulk { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; } html body #page .pg-nodes-bulk:empty { display: none; }
-html body #page select.pg-nodes-wide { width: 92px; }
-html body .pg-nodes-curves { display: grid; gap: 10px; margin: 4px 0 10px; }
-html body .pg-nodes-cv { display: grid; grid-template-columns: 90px minmax(0, 1fr) minmax(0, 220px); align-items: center; gap: 12px; font-size: 12.5px; }
-html body .pg-nodes-cv small { text-align: right; } html body .pg-nodes-spark { width: 100%; height: 52px; color: #6fb2ff; border-radius: 8px; background: rgba(255, 255, 255, .03); }
-html body .pg-nodes-spark.cpu { color: #ffb86b; } html body .pg-nodes-spark.mem { color: #b57cff; } html body .pg-nodes-spark.rx { color: #4fd98a; } html body .pg-nodes-spark.tx { color: #6fb2ff; }
-@media (max-width: 760px) { html body .pg-nodes-cv { grid-template-columns: 1fr; gap: 2px; } html body .pg-nodes-cv small { text-align: left; } }
+
+/* ---- Settings → PasarGuard (pg_update.js): the nodes with the version they run and the newest one, one row each (a grid, not a table: it keeps its row and drops a column by the width of its box) */
+html body #page .pgu-tbl { display: grid; width: 100%; container-type: inline-size; }
+html body #page .pgu-row { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 36px; padding: 0 6px; border-top: 1px solid rgba(255,255,255,.06); font-size: 12.5px; }
+html body #page .pgu-row.pgu-hd { min-height: 28px; border-top: 0; color: var(--mut); font-size: 10.5px; font-weight: 800; letter-spacing: .9px; text-transform: uppercase; }
+html body #page .pgu-row.off { opacity: .72; } html body #page .pgu-none { padding: 6px 4px; }
+html body #page .pgu-n { display: flex; align-items: center; gap: 7px; min-width: 0; } html body #page .pgu-n b, html body #page .pgu-n small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pgu-n small { flex: 0 1 auto; }
+html body #page .pgu-n .dotc { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5b667c; } html body #page .pgu-n .dotc.ok { background: #30d158; box-shadow: 0 0 7px rgba(48,209,88,.5); } html body #page .pgu-n .dotc.bad { background: #ff453a; box-shadow: 0 0 7px rgba(255,69,58,.5); }
+html body #page .pgu-s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pgu-v { white-space: nowrap; } html body #page .pgu-v i { font-style: normal; opacity: .6; } html body #page .pgu-v.warn b { color: var(--warn); } html body #page .pgu-v.ok { color: var(--ok); }
+html body #page .pgu-a { display: inline-flex; gap: 6px; justify-content: flex-end; } html body #page .pgu-a .sm { height: 28px; }
+@container (max-width: 640px) { html body #page .pgu-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) auto; } html body #page .pgu-row > :nth-child(2) { display: none; } }
+@container (max-width: 430px) { html body #page .pgu-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto; } html body #page .pgu-row > :nth-child(4) { display: none; } }

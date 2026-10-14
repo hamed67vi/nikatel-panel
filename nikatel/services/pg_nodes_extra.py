@@ -1,4 +1,4 @@
-"""PasarGuard: what the Nodes tab still lacked of the node API of a 5.4.1 panel (the owner asked for every section of the panel, 2026-10-14): actions on SEVERAL nodes at once,
+"""PasarGuard: what the node views still lacked of the node API of a 5.4.1 panel (the owner asked for every section of the panel, 2026-10-14): actions on SEVERAL nodes at once,
 the resource curves of a node (CPU, memory, speed), the latency of the outbounds a node tests, the count of online / expired / limited users over time, a restart of every node, and the
 maintenance that empties the usage tables. Built on pg_nodes (the node as a row, the backups of a node, the sentence in the events).
 

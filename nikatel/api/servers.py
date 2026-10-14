@@ -63,11 +63,11 @@ def list_servers(role: str | None = None):
 
 @router.get("/servers/panel-nodes")
 def server_panel_nodes():
-    """For every server of ours, the nodes of the panels (Marzban and PasarGuard) that run on it, as the health job saw them last: {"servers": {server id: [{panel_id, panel, type, node_id, name, address,
-    status, message, match}]}}. Matched by address, or through the DNS when one side is a name; a server that carries no node is not listed. No call to any panel is made."""
+    """For every server the nodes of the panels (Marzban and PasarGuard) that run on it, and `outside`: the nodes that run on no server of ours (with `hint`); as the health job saw them, no call to a panel."""
     from ..services import pg_nodes
 
-    return {"ok": True, "servers": {str(k): v for k, v in pg_nodes.by_server().items()}}
+    on, out = pg_nodes.placement()
+    return {"ok": True, "servers": {str(k): v for k, v in on.items()}, "outside": out}
 
 
 @router.get("/servers/where")

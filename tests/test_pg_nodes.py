@@ -1,4 +1,4 @@
-"""PasarGuard Nodes tab: the join with our servers, the pure helpers, every action against a fake panel, the backups, the unified flow "make this server a node", the API (roadmap #94)."""
+"""PasarGuard nodes: the join with our servers (the Node view of a server window), the pure helpers, every action against a fake panel, the backups, the unified flow "make this server a node", the API (roadmap #94)."""
 import ipaddress
 import json
 import os
@@ -48,7 +48,7 @@ NO_CERT = "no certificate found: install the PasarGuard node first (or it has no
 
 
 class FakePG:
-    """The parts of the PasarGuard API the Nodes tab uses, with the behaviours that matter: a PUT that forgets api_port writes 62051, a PUT starts the core again, a delete drops the node."""
+    """The parts of the PasarGuard API the node views use, with the behaviours that matter: a PUT that forgets api_port writes 62051, a PUT starts the core again, a delete drops the node."""
 
     def __init__(self):
         self.nodes: dict[int, dict] = {}
@@ -1144,11 +1144,29 @@ def test_the_dns_matches_a_node_that_has_a_name_to_the_server_with_the_ip(world,
     assert list(got) == [s] and got[s][0]["match"] == "dns"
 
 
+def test_a_node_that_runs_on_no_server_of_ours_is_listed_outside_with_a_hint(world):
+    add_server("fr1", "203.0.113.10")
+    add_server("same-name", "203.0.113.50")
+    pa = add_panel_with_nodes("pasarguard", "alpha", [{"id": 1, "name": "n1", "address": "203.0.113.10", "status": "connected", "xray": "26.3.27"},
+                                                       {"id": 2, "name": "far", "address": "198.51.100.9", "status": "error", "message": "refused", "xray": "26.3.27"},
+                                                       {"id": 3, "name": "Same-Name", "address": "203.0.113.99", "status": "connected"}])
+    pm = add_panel_with_nodes("marzban", "beta", [{"id": 7, "name": "m-far", "address": "198.51.100.77", "status": "connected"}])
+    on, out = pg_nodes.placement()
+    assert [r["name"] for rows in on.values() for r in rows] == ["n1"] and on[next(iter(on))][0]["xray"] == "26.3.27"
+    assert [(r["panel_id"], r["type"], r["node_id"], r["name"], r["match"]) for r in out] == [(pa, "pasarguard", 2, "far", ""), (pa, "pasarguard", 3, "Same-Name", ""), (pm, "marzban", 7, "m-far", "")]
+    far, same, marz = out
+    assert far["hint"] is None and far["status"] == "error" and far["message"] == "refused" and far["address"] == "198.51.100.9"
+    assert same["hint"]["name"] == "same-name"                                                                  # a hint, never a match: the address is another one
+    assert marz["hint"] is None and "api_key" not in json.dumps(out)
+    assert pg_nodes.by_server() == on
+
+
 def test_the_api_gives_the_servers_page_its_nodes_without_asking_any_panel(client, world):
     s = add_server("fr1", "203.0.113.10")
-    add_panel_with_nodes("pasarguard", "alpha", [{"id": 1, "name": "n1", "address": "203.0.113.10", "status": "connected"}])
+    add_panel_with_nodes("pasarguard", "alpha", [{"id": 1, "name": "n1", "address": "203.0.113.10", "status": "connected"}, {"id": 2, "name": "far", "address": "198.51.100.9", "status": "connected"}])
     j = client.get("/api/servers/panel-nodes").json()
     assert j["ok"] is True and list(j["servers"]) == [str(s)] and j["servers"][str(s)][0]["name"] == "n1" and world.pg.calls == []      # the health job already knows: no call to a panel
+    assert [r["name"] for r in j["outside"]] == ["far"] and j["outside"][0]["node_id"] == 2 and j["outside"][0]["hint"] is None
 
 
 # ------------------------------------------------------------------ the API
@@ -1164,6 +1182,34 @@ def test_the_api_lists_nodes_and_refuses_what_is_not_a_pasarguard_panel(client, 
     world.pg.fail = {"/api/nodes": 500}
     r = client.get(f"/api/panels/{pid}/pg/nodes")
     assert r.status_code == 502 and r.json()["code"] == "upstream_failed" and "500" in r.json()["error"]            # the panel is down: a sentence, not a crash
+
+
+def test_reading_the_nodes_also_refreshes_the_copy_the_servers_page_shows(client, world, pid):
+    s = add_server("node-a", "203.0.113.10")
+    assert client.get("/api/servers/panel-nodes").json()["servers"] == {}                                      # the health job has not run yet: the copy is empty
+    n1 = world.pg.add("nd-one", "203.0.113.10", status="error", message="refused")
+    world.pg.add("nd-far", "198.51.100.9")
+    client.get(f"/api/panels/{pid}/pg/nodes")
+    j = client.get("/api/servers/panel-nodes").json()
+    assert [(r["name"], r["status"], r["xray"], r["message"]) for r in j["servers"][str(s)]] == [("nd-one", "error", "26.3.27", "refused")] and [r["name"] for r in j["outside"]] == ["nd-far"]
+    def fails():
+        with session() as db:
+            return {n["name"]: n["fails"] for n in db.get(Panel, pid).nodes}
+
+    assert fails() == {"nd-one": 0, "nd-far": 0}                                                             # no failed check is made up by a read
+    with session() as db:
+        p = db.get(Panel, pid)
+        p.nodes = [dict(n, fails=3) for n in p.nodes]                                                         # the health job counted three failed checks
+    del world.pg.nodes[n1]                                                                                    # deleted in the panel: the next read drops it from the copy at once
+    world.pg.add("nd-bad", "203.0.113.10", status="error")
+    client.get(f"/api/panels/{pid}/pg/nodes")
+    assert fails() == {"nd-far": 0, "nd-bad": 0}                                                              # "nd-far" is connected, "nd-bad" is new: no history
+    assert [r["name"] for r in client.get("/api/servers/panel-nodes").json()["servers"][str(s)]] == ["nd-bad"]
+    with session() as db:
+        p = db.get(Panel, pid)
+        p.nodes = [dict(n, fails=3) for n in p.nodes]
+    client.get(f"/api/panels/{pid}/pg/nodes")
+    assert fails() == {"nd-far": 0, "nd-bad": 3}                                                              # a node that stays broken keeps the count the job made
 
 
 def test_the_api_needs_a_sign_in(client, pid):

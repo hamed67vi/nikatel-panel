@@ -63,7 +63,7 @@ select option { background: #0f1430; color: var(--text); }
 .login-box .brand { justify-content: center; }
 
 /* ---- layout */
-.app { display: grid; grid-template-columns: 218px 1fr; height: 100%; gap: 14px; padding: 14px; }
+.app { display: grid; grid-template-columns: 246px 1fr; height: 100%; gap: 14px; padding: 14px; }      /* (the menu: 218 px until 1.47.0 - the end of "Tunnel manager" was cut by its edge; the owner asked for a longer one, 2026-10-14) */
 .side { border-radius: 22px; padding: 16px 12px; display: flex; flex-direction: column; gap: 16px; }
 /* the menu: an icon in its own column, the name, a count on the right; the open page has a glowing bar on its left */
 nav { display: grid; gap: 4px; }
@@ -4435,6 +4435,7 @@ nav#nav .nav-g, nav#nav .nav-gh, nav#nav .nav-sub { display: contents; } nav#nav
 nav#nav .nav-g .nav-sub { display: none; }      /* (the tabs of a page are in the bar under the header, except in a wide window) */
 @media (min-width: 1181px) {
   html[data-fluid][data-navsub="1"] #subnav { display: none; }      /* the open page has its tabs in the menu */
+  html[data-fluid] nav#nav, html[data-fluid] nav#nav .nav-g { grid-template-columns: minmax(0, 1fr); }      /* the column is as wide as the menu, never as wide as its longest label (the menu was one track of 214 px in a box of 192: the end of "Tunnel manager" was cut by the edge) */
   html[data-fluid] nav#nav .nav-g { display: grid; gap: 4px; }
   html[data-fluid] nav#nav .nav-gh { display: block; position: relative; }
   html[data-fluid] body nav#nav .nav-gh > a { padding-right: 44px; }
@@ -4444,11 +4445,11 @@ nav#nav .nav-g .nav-sub { display: none; }      /* (the tabs of a page are in th
   html[data-fluid] nav#nav .nav-g[data-open="1"] .nav-tg::before { transform: translateY(-2px) rotate(135deg); }
   html[data-fluid] nav#nav .nav-tg:hover { background: rgba(255,255,255,.08); color: var(--text); } html[data-fluid] nav#nav .nav-tg:hover::before { opacity: 1; }
   html[data-fluid] nav#nav .nav-tg:focus-visible { outline: 2px solid rgba(47,139,255,.7); outline-offset: 1px; }
-  html[data-fluid] nav#nav .nav-g .nav-sub { display: grid; gap: 2px; margin: 0 0 2px 22px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.14); }
+  html[data-fluid] nav#nav .nav-g .nav-sub { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 2px 16px; padding-left: 6px; border-left: 1px solid rgba(255,255,255,.14); }
   html[data-fluid] nav#nav .nav-g[data-open="0"] .nav-sub { display: none; }
-  html[data-fluid] body nav#nav .nav-sub a { height: 40px; padding: 0 12px 0 10px; gap: 12px; font-size: 14px; border-radius: 12px; }
+  html[data-fluid] body nav#nav .nav-sub a { height: 40px; min-width: 0; padding: 0 8px; gap: 8px; font-size: 13.5px; border-radius: 12px; }
   html[data-fluid] body nav#nav .nav-sub a::after { content: none !important; display: none !important; }      /* a section has no chevron: only the head opens something */
-  html[data-fluid] nav#nav .nav-sub a .ic svg { width: 19px; height: 19px; }
+  html[data-fluid] nav#nav .nav-sub a .ic { flex: none; width: 22px; height: 22px; } html[data-fluid] nav#nav .nav-sub a .ic svg { width: 19px; height: 19px; }
   html[data-fluid] nav#nav .nav-g.has-on > .nav-gh > a:not(.on) { color: var(--text); background: rgba(255,255,255,.05); }      /* the open page is one of the sections: the head says so while the group is closed */
   html[data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on { color: var(--text); border-color: transparent; background: rgba(255,255,255,.05); box-shadow: none; }      /* the head of a "tabs" group while one of its tabs is the open one: the tab is the blue one */
   html[data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on::before { display: none; }
@@ -4458,17 +4459,15 @@ nav#nav .nav-g .nav-sub { display: none; }      /* (the tabs of a page are in th
   html[data-mode="light"][data-fluid] nav#nav .nav-g.has-on > .nav-gh > a:not(.on), html[data-mode="light"][data-fluid] body nav#nav .nav-g.has-on[data-open="1"] > .nav-gh > a.on { background: rgba(30,50,100,.06); }
   html[dir="rtl"][data-fluid] nav#nav .nav-tg { right: auto; left: 7px; }
   html[dir="rtl"][data-fluid] body nav#nav .nav-gh > a { padding-right: 14px; padding-left: 44px; }
-  html[dir="rtl"][data-fluid] nav#nav .nav-g .nav-sub { margin: 0 22px 2px 0; padding: 0 8px 0 0; border-left: 0; border-right: 1px solid rgba(255,255,255,.14); }
+  html[dir="rtl"][data-fluid] nav#nav .nav-g .nav-sub { margin: 0 16px 2px 0; padding: 0 6px 0 0; border-left: 0; border-right: 1px solid rgba(255,255,255,.14); }
 }
 @media (max-width: 760px) and (pointer: coarse) {
   #nav { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; } #nav::-webkit-scrollbar { display: none; }
   #nav a { flex: 0 0 auto; min-width: 64px; }
 }
-/* the badge of the Nodes tab of Servers: a round green badge with a node (four short lines around a centre) */
-.tic-node { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='g' cx='35%25' cy='30%25' r='80%25'%3E%3Cstop offset='0' stop-color='%236ee7c8'/%3E%3Cstop offset='1' stop-color='%230f7d6b'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.9' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 5.5v3.4M12 15.1v3.4M5.5 12h3.4M15.1 12h3.4'/%3E%3Ccircle cx='12' cy='12' r='2.4'/%3E%3C/g%3E%3C/svg%3E"); }
 /* a page of the PasarGuard group has one tab: the strip is not drawn, an empty bar takes no room */
 .pn-bars:empty { display: none; }
-/* the line of PasarGuard nodes under the buttons of a server window: one row for every node (the panel, its state, a button to the Nodes tab), or the offer to make the server one */
+/* the line of PasarGuard nodes under the buttons of a server window: one row for every node (the panel, its state, a button to the Node view), or the offer to make the server one */
 .pg-nline { display: grid; gap: 6px; margin: 0 0 8px; }
 .pg-nl { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; padding: 6px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.03); font-size: 12.5px; }
 .pg-nl > * { flex: none; } .pg-nl > small { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pg-nl > .sp { flex: 1 1 0; min-width: 0; } .pg-nl > .mchip { flex: 0 1 auto; min-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

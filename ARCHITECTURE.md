@@ -82,6 +82,7 @@ nikatel/
     pg_access.py     PasarGuard groups and user templates (roadmap #94), api/pg_access.py, web/pg_access.js
     pg_nodes.py      PasarGuard nodes joined with the servers of this panel by address (add / install a node from the Add server form, web/pg_srvnode.js), api/pg_nodes.py, web/pg_nodes.js
     pg_nodes_extra.py  PasarGuard nodes, the rest of the API: bulk enable / disable / reset / reconnect / delete, usage and latency curves, user counts, clearing usage; routes in api/pg_nodes.py
+    pg_update.py     PasarGuard updates (Settings → PasarGuard, roadmap #103): the newest releases from GitHub, what every panel and node runs, nodes updated ONE AT A TIME (a node that does not come back stops the run), the panel itself on its own server with `pasarguard backup` + `pasarguard update` over SSH (a detached action of ssh.py, followed by extras._run_item); api/pg_update.py, web/pg_update.js
     pg_cores.py      PasarGuard cores (Xray configs): make / duplicate / delete (also several at once), inbound add / change / delete with a REALITY builder, dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
     pg_admin.py      PasarGuard admins (also several at once through the panel's bulk calls), API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
     pg_roles.py      PasarGuard admin roles (permissions, limits, access, device rules) with backups and restore, api/pg_roles.py, web/pg_roles.js
@@ -137,15 +138,18 @@ page, `go(page, tab)` opens a page on a tab, `NAV_ALIAS` keeps the old page name
 * **Dashboard** - health rows, Problems box (live state, Fix with AI, Fix all), activity feed with
   categories; auto-refresh.
 * **Servers** - Foreign · Iran · **Nodes** (the PasarGuard nodes of the picked panel beside our servers). More / Edit / Delete on every row; the window of a server has its buttons
-  (console, install, connect, reboot, Abuse-Defender, geo), the line of its nodes, three boxes (System, Resources, Access & status) and the charts.
+  (console, install, connect, reboot, Abuse-Defender, geo), the line of its nodes (with the **Node** view for them, 1.48.0), three boxes (System, Resources, Access & status) and the charts.
 * **Tunnels** - List (More window with quality and ports, Health / Restart / Rebuild), Create, Test (pair
   test over several engines and transports, Advanced for the transports), Core update, Tunnel Doctor
   (attention list, live repair stories, history), DNS · IP switch (ArvanCloud records, Point, failover plans,
   the DNS change log with Restore).
 * **Panel** (Marzban panels have Users, Hosts and Usage only) - ONE page with a tab for each section of PasarGuard (`SUB.pgpanel`): **Users** (users, accounts over every panel) · **Hosts** ·
-  **Access** (Groups, Templates, client templates) · **Core** · **Admins** (admins, API keys, roles) · **Panel settings** (Usage, System, Settings). Every tab draws the bar of the panels (`pnBar`:
+  **Access** (Groups, Templates, client templates) · **Core** · **Admins** (admins, API keys, roles), and **General** as the FIRST tab (Usage, System, Settings; the owner, 2026-10-14). Every tab draws the bar of the panels (`pnBar`:
   which panel) and its own tab(s); those are `pgTabs` entries of the `web/pg_*.js` files, each a route first (`/api/panels/{id}/pg/…`). `PG_SUBS` (app.js) says which `pgTabs` each tab holds,
-  `pnTab(t)` opens the tab that holds one (a test fails when a registered tab has no place). The Nodes tab is a tab of Servers. Configs (the probe's client configs) are switched off.
+  `pnTab(t)` opens the tab that holds one (a test fails when a registered tab has no place). **The nodes of a PasarGuard panel are not a tab** (1.48.0): a node and the server it runs on are one row of Servers -
+  `pg_nodes.js` is the **Node view** of a server window (and of the window of a node that runs on no server of ours), `pg_srvnode.js` the chips, the ticks, the Nodes… menu and the Add server tick;
+  the page asks `GET /api/servers/panel-nodes` (the health job's copy of every panel's nodes, placed on the servers by `pg_nodes.placement`) and the Node view `GET /api/panels/{id}/pg/nodes`
+  (which also refreshes that copy). Configs (the probe's client configs) are switched off.
 * **Shop bot** - Overview · Payments · Orders · Users · Plans · Categories · Servers · Discounts ·
   Gift codes · Broadcast · Tickets · Texts · Settings · Tools (Mini App, backups, apps, top-ups, tables,
   SQL, stats, webhook, commands, restart, dump, logs, import).
