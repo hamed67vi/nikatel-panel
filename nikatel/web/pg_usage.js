@@ -324,7 +324,7 @@ const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-u
     <div class="pg-usage-col"><div id="pg-usage-top"></div><div class="card pg-usage-card pg-usage-look"><h3>Usage of an admin or a user</h3><div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div></div></div></div></div>`;      // (one screen: the range and its nodes | users over time and apps | the top users and the lookup - no scrolling on a desktop window; a narrow one stacks them)
 function pgUsageFit() {      // the tab is as tall as what is left of the window, so nothing needs to scroll
   const el = $("#pg-usage"); if (!el) return;
-  el.style.height = matchMedia("(min-width: 1100px) and (min-height: 560px)").matches ? Math.max(440, innerHeight - el.getBoundingClientRect().top - 12) + "px" : "";
+  el.style.height = matchMedia("(min-width: 1100px) and (min-height: 560px)").matches ? Math.max(440, innerHeight - el.getBoundingClientRect().top - 40) + "px" : "";
 }
 if (typeof window.addEventListener === "function") window.addEventListener("resize", () => pgUsageFit());async function pgUsageLoadRanges() {
   const s = pgUsageState, id = s.id, r = await pgApi(id, "/usage/ranges");          // the dates of the presets: no question to the panel, so it is cheap

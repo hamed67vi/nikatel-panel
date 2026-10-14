@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.52.2 - Usage fixed, the CI no longer eats the free minutes
+
+- **Usage (Panel → General) is repaired:** in 1.52.1 the cards of the new one-screen layout collapsed to their titles. They fill the three columns now, and the tab leaves room at the bottom so the page does not scroll.
+- **GitHub Actions minutes (the owner: "do whatever, the limit must not fill"):** the CI workflow ran on every push and every pull request, three jobs each (90 % of the 2,000 free minutes of the private repository were gone). It runs by hand only now (Actions → ci → Run workflow); the same checks run on the server before every release. Public repositories have unlimited minutes: put the triggers back then.
+
 ## 1.52.1 - Usage in one screen, a server without tunnels is green
 
 - **Panel → General → Usage is rebuilt (the owner: "compact it all, tidy and unified, so tight that nothing needs a scroll").** On a desktop window the tab is ONE screen: the bar, one row of counters, then three columns that share the height - the usage of the range with its nodes, users over time with the subscription apps, the top users with the lookup. A narrow window stacks them as before.

@@ -34,7 +34,7 @@ html body #page .pg-usage-pair { grid-template-columns: minmax(0, 1fr); }
 /* the rebuild (the owner: "compact it all, tidy and unified, so tight that nothing needs a scroll"): on a desktop window the tab is ONE screen - the bar, ONE row of counters, then three columns of cards that share the height */
 html body #page .pg-usage-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; align-items: stretch; }
 html body #page .pg-usage-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
-html body #page .pg-usage-col > div { display: flex; flex-direction: column; min-height: 0; min-width: 0; } html body #page .pg-usage-col > div > .card, html body #page .pg-usage-col > .card { flex: 1 1 0; }
+html body #page .pg-usage-col > div { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; min-width: 0; } html body #page .pg-usage-col > div > .card, html body #page .pg-usage-col > .card { flex: 1 1 0; min-height: 0; }
 html body #page .pg-usage-pair { grid-template-columns: none; }
 @media (min-width: 1100px) and (min-height: 560px) {
   html body #page .pg-usage { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; overflow: hidden; }
@@ -45,12 +45,12 @@ html body #page .pg-usage-pair { grid-template-columns: none; }
   html body #page .pg-usage-grid { min-height: 0; }
   html body #page .pg-usage-card { padding: 8px 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; } html body #page .pg-usage-card h3 { margin: 0 0 4px; font-size: 12px; }
   html body #page .pg-usage-head { margin: 0 0 3px; } html body #page .pg-usage-big { font-size: 18px; } html body #page .pg-usage-head > span.mut { font-size: 11px; }
-  html body #page .pg-usage-chart { margin: 0 0 4px; flex: none; } html body #page .pg-usage-svg { max-height: 96px; }
+  html body #page .pg-usage-chart { margin: 0 0 4px; flex: none; } html body #page .pg-usage-svg { max-height: 78px; }
   html body #page .pg-usage-row { margin: 0 0 4px; gap: 6px; } html body #page .pg-usage-row select, html body #page .pg-usage-row input, html body #page .pg-usage-row button { height: 26px; font-size: 12px; }
   html body #page .pg-usage-nodes, html body #page .pg-usage-topbox { height: auto; max-height: none; flex: 1 1 0; min-height: 0; overflow: hidden; }
   html body #page .pg-usage-card .tbl th, html body #page .pg-usage-card .tbl td { padding: 3px 8px; font-size: 11.5px; line-height: 1.25; }
   html body #page .pg-usage-share { width: 56px; }
   html body #page .pg-usage-x { display: none; }
-  html body #page .pg-usage-look { flex: 0 0 auto !important; } html body #page .pg-usage-hint { padding: 4px 2px; font-size: 11.5px; }
+  html body #page .pg-usage-col > .pg-usage-look { flex: 0 0 auto !important; } html body #page .pg-usage-hint { padding: 4px 2px; font-size: 11.5px; }
   html body #page .pg-usage-look .pg-usage-nodes { max-height: 120px; flex: none; }
 }
