@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.43.2 - The Add server button has its name
+
+- The round blue ＋ of the **Servers** page says **Add server** beside the plus while there is room (a window wider than 1000 px); in a narrower window it is the round plus alone again, as before. The other add buttons (Add panel, Add account) stay the plain round plus.
+
 ## 1.43.1 - The phone is a phone again
 
 - **Fixed (a mistake of 1.43.0):** the new `fluid.css` (the narrow-window layer that is still being built) was meant for windows that are not phones, but its first rule, `min-width: 560px` on the page, was not fenced: on a phone the page was laid out 560 px wide and shown small. The whole file now applies only to "not a phone" (a touch screen up to 760 px keeps `mobile.css` alone, as before 1.43.0). Found by measuring the phone layout (375 px) page by page.

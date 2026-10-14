@@ -68,3 +68,11 @@ html body #page .pn-chips.many .dns-cw:hover .dns-x { display: inline-grid !impo
   html body .head p#subtitle { display: none; }
   html body .main { padding: 2px 4px 14px 2px; }
 }
+
+/* ---- the Add server button of the Servers page has its name while there is room; under 1000 px it is the round plus again (1.43.2) */
+html body #page .sb-r1 > button.cta.ico.lbl { width: auto; min-width: 0; padding: 0 16px 0 7px; gap: 8px; justify-content: flex-start; }
+html body #page .sb-r1 > button.cta.ico.lbl .bt { white-space: nowrap; }
+@media (max-width: 1000px) {
+  html body #page .sb-r1 > button.cta.ico.lbl { width: 38px; min-width: 38px; padding: 0; gap: 0; justify-content: center; }
+  html body #page .sb-r1 > button.cta.ico.lbl .bt { display: none; }
+}
