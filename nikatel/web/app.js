@@ -1433,7 +1433,6 @@ window.startTest = async e => {
     }
   } catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; } finally { bkRun(null); }
 };
-window.newTunnel = () => { state.edit = "newtunnel"; state.open = null; refresh(); };
 window.startBuild = async e => {
   e.preventDefault();
   const form = e.target, f = new FormData(form), body = bkBody(f);

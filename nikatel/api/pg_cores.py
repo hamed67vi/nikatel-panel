@@ -139,6 +139,17 @@ def core_create(panel_id: int, body: CreateIn):
     return {"ok": True, **_wrap(pg_cores.create, _cred(panel_id), body.name, body.type, body.text, body.config, body.exclude_inbound_tags, body.fallbacks_inbound_tags, body.copy_from)}
 
 
+class BulkDeleteIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=pg_cores.MAX_BULK_CORES)
+    confirm: bool = False
+
+
+@router.post("/panels/{panel_id}/pg/cores/bulk-delete")
+def cores_delete_many(panel_id: int, body: BulkDeleteIn):
+    """Delete several cores in one call (never the first one; all or none): the refusal lists what they take with it, confirm=true goes on, and each core is backed up here first."""
+    return {"ok": True, **_wrap(pg_cores.delete_many, _cred(panel_id), body.ids, body.confirm)}
+
+
 @router.get("/panels/{panel_id}/pg/cores/{core_id}")
 def core_get(panel_id: int, core_id: int):
     """One core: its config with every secret replaced by a placeholder (as an object and as text), the inbounds with the hosts and groups that use each, the outbounds, a revision to send back with a save, and its backups."""

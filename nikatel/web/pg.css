@@ -1,3 +1,6 @@
 /* Shared look of the PasarGuard tabs. A tab file adds its own classes (.pg-<area>-*) in its own pg_<area>.css. */
 html body #page .pg-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; margin: 0 0 10px; min-height: 46px; } html body #page .pg-bar .sp { flex: 1; } html body #page .pg-bar button, html body #page .pg-bar select, html body #page .pg-bar input { height: 32px; }
 html body #page .pg-empty { padding: 22px 12px; text-align: center; font-size: 13px; }
+/* a column of tick boxes (the first column of a list you can act on in bulk) and the bar that appears while something is ticked */
+html body :is(#page, #modal) .pg-ck { width: 34px; text-align: center; padding: 0 !important; } html body :is(#page, #modal) .pg-ck input.ck { vertical-align: middle; }
+html body :is(#page, #modal) .pg-selbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 8px; min-height: 30px; } html body :is(#page, #modal) .pg-selbar[hidden] { display: none; } html body :is(#page, #modal) .pg-selbar button { height: 30px; }

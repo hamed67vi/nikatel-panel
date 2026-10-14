@@ -1,4 +1,3 @@
-import threading
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,66 +6,12 @@ from pydantic import BaseModel, Field
 from ..auth import current_user
 from ..config import get_settings
 from ..log import get_logger
-from ..services import dnsprov, failover, license
+from ..services import dnscache, dnsprov, failover, license
 
 log = get_logger("dns")
 router = APIRouter(tags=["dns"], dependencies=[Depends(current_user)])
-_CACHE: dict = {"at": 0.0, "rows": [], "accounts": [], "refreshing": False}
-_REFRESH_LOCK = threading.Lock()
-CACHE_SECONDS = 60
-
-
-def _read_all() -> None:
-    """Read the records of every account (one that fails does not hide the others) into the cache."""
-    rows, accs = [], []
-
-    for a in dnsprov.accounts():
-        info = {"id": a.id, "name": a.name, "provider": a.provider, "ok": True, "error": "", "domains": [], "ttls": [[v, t] for v, t in dnsprov.provider_of(a).ttls]}
-        n = 0
-
-        try:
-            prov = dnsprov.provider_of(a)
-
-            for d in prov.domains():
-                got = prov.records(d)
-                n += len(got)
-                info["domains"].append(d)
-                rows.extend(got)
-        except (RuntimeError, ValueError) as e:
-            info["ok"], info["error"] = False, str(e)[:200]
-        else:
-            dnsprov._set_status(a.id, {"ok": True, "domains": len(info["domains"]), "records": n})
-
-        accs.append(info)
-
-    _CACHE.update(at=time.time(), rows=rows, accounts=accs)
-
-
-def warm() -> None:
-    """At start: read the accounts once in the background, so the first open of the DNS page is served from the cache too."""
-    try:
-        if dnsprov.accounts():
-            _refresh_in_background()
-    except Exception:
-        log.exception("DNS warm-up skipped")
-
-
-def _refresh_in_background() -> None:
-    with _REFRESH_LOCK:
-        if _CACHE["refreshing"]:
-            return
-
-        _CACHE["refreshing"] = True
-
-    def work() -> None:
-        try:
-            _read_all()
-        except Exception:
-            log.exception("the DNS records could not be renewed in the background")
-        finally:
-            _CACHE["refreshing"] = False
-
-    threading.Thread(target=work, name="dns-refresh", daemon=True).start()
+_CACHE = dnscache.CACHE                 # the one copy of the records (services/dnscache.py): the same dict, so what reads it here and there sees the same
+CACHE_SECONDS = dnscache.SECONDS
 
 
 def _writable():
@@ -119,7 +64,7 @@ def accounts_add(body: AccountIn):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
-    _CACHE["at"] = 0.0
+    dnscache.forget()
     return {"ok": True, "account": dnsprov.public(a)}
 
 
@@ -135,7 +80,7 @@ def accounts_edit(account_id: str, body: AccountEdit):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
-    _CACHE["at"] = 0.0
+    dnscache.forget()
     return {"ok": True, "account": dnsprov.public(a)}
 
 
@@ -149,7 +94,7 @@ def accounts_remove(account_id: str):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    _CACHE["at"] = 0.0
+    dnscache.forget()
     return {"ok": True}
 
 
@@ -175,9 +120,9 @@ def records_list(fresh: bool = False):
     """The records of every account (all types; read only). The first read and `fresh` ask the accounts now (seconds); otherwise the page gets what was
     read last at once, and a read older than a minute is renewed in the background (`refreshing` says so; ask again in a few seconds)."""
     if fresh or not _CACHE["at"]:
-        _read_all()
+        dnscache.read_all()
     elif time.time() - _CACHE["at"] > CACHE_SECONDS:
-        _refresh_in_background()
+        dnscache.refresh_in_background()
 
     return {"ok": True, "records": _CACHE["rows"], "accounts": _CACHE["accounts"], "cached_at": int(_CACHE["at"]), "refreshing": bool(_CACHE["refreshing"])}
 
@@ -198,7 +143,7 @@ def record_create(body: RecordIn):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
-    _CACHE["at"] = 0.0
+    dnscache.forget()
     failover.log_manual("create", body.domain, row["fqdn"], row["id"], "", row["value"], None, body.account)
     return {"ok": True, "id": row["id"]}
 
@@ -234,7 +179,7 @@ def record_edit(account: str, domain: str, record_id: str, body: RecordIn):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
-    _CACHE["at"] = 0.0
+    dnscache.forget()
     failover.log_manual("edit", domain, r["after"]["fqdn"], record_id, r["before_row"]["value"], r["after"]["value"], r["before"], account)
     return {"ok": True}
 
@@ -251,6 +196,6 @@ def record_delete(account: str, domain: str, record_id: str):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
-    _CACHE["at"] = 0.0
+    dnscache.forget()
     failover.log_manual("delete", domain, r["before_row"]["fqdn"], record_id, r["before_row"]["value"], "", r["before"], account)
     return {"ok": True}

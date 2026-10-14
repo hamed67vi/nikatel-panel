@@ -158,6 +158,7 @@ class Fake:
         return [
             ("GET", r"/api/admin", self.get_me), ("GET", r"/api/admins", self.list_admins), ("GET", r"/api/admins/simple", self.simple_admins),
             ("GET", r"/api/admin-roles/simple", self.get_roles), ("POST", r"/api/admin", self.create_admin), ("POST", r"/api/admins", self.not_allowed), ("POST", r"/api/admins/bulk/delete", self.bulk_delete),
+            ("POST", r"/api/admins/bulk/(enable|disable|reset)", self.bulk_admins), ("POST", r"/api/admins/bulk/users/(activate|disable)", self.bulk_users), ("DELETE", r"/api/admins/bulk/users", self.bulk_users_delete),
             ("PUT", r"/api/admin/by-id/(\d+)", self.put_admin), ("PUT", r"/api/admin/([^/]+)", self.put_admin), ("DELETE", r"/api/admin/by-id/(\d+)", self.del_admin),
             ("DELETE", r"/api/admin/([^/]+)", self.del_admin), ("POST", r"/api/admin/by-id/(\d+)/reset", self.reset_admin), ("POST", r"/api/admin/([^/]+)/reset", self.reset_admin),
             ("POST", r"/api/admin/by-id/(\d+)/users/(disable|activate)", self.users_action), ("POST", r"/api/admin/([^/]+)/users/(disable|activate)", self.users_action),
@@ -270,6 +271,29 @@ class Fake:
             del self.admins[a["id"]]
 
         return {"admins": [a["username"] for a in gone], "count": len(gone)}
+
+    def bulk_admins(self, action, q, body):
+        rows = [self.one(i) for i in body["ids"]]
+
+        for a in rows:
+            if action == "reset":
+                a["used_traffic"] = 0
+            else:
+                a["status"], a["is_disabled"] = ("active" if action == "enable" else "disabled"), action == "disable"
+
+        return {"admins": [a["username"] for a in rows], "count": len(rows)}
+
+    def bulk_users(self, action, q, body):
+        rows = [self.one(i) for i in body["ids"]]
+        return {"admins": [a["username"] for a in rows], "count": len(rows)}
+
+    def bulk_users_delete(self, q, body):
+        rows = [self.one(i) for i in body["ids"]]
+
+        for a in rows:
+            a["total_users"] = 0
+
+        return {"admins": [a["username"] for a in rows], "count": len(rows)}
 
     def reset_admin(self, ref, q, body):
         a = self.one(ref)
@@ -1101,6 +1125,53 @@ def test_delete_several_keys_all_or_none(fake):
     assert r["deleted"] == ["a", "c"] and r["count"] == 2 and set(fake.keys) == {2} and r["records"] == 2
 
 
+def test_one_action_for_several_admins_in_one_call(fake):
+    out = pa.admins_bulk(C, "disable", [3, 2, 3])                                                                  # a double is one
+    assert out == {"action": "disable", "admins": ["alice", "bob"], "count": 2, "records": 0} and ("POST", "/api/admins/bulk/disable", {"ids": [2, 3]}) in fake.calls
+    assert fake.admins[2]["status"] == "disabled" and fake.admins[3]["status"] == "disabled" and fake.admins[1]["status"] == "active"
+    assert pa.admins_bulk(C, "enable", [2, 3])["count"] == 2 and fake.admins[2]["status"] == "active"
+    pa.admins_bulk(C, "reset", [2])
+    assert fake.admins[2]["used_traffic"] == 0 and ("POST", "/api/admins/bulk/reset", {"ids": [2]}) in fake.calls
+    assert pa.admins_bulk(C, "users_disable", [2, 3])["admins"] == ["alice", "bob"] and ("POST", "/api/admins/bulk/users/disable", {"ids": [2, 3]}) in fake.calls
+    assert pa.admins_bulk(C, "users_activate", [2])["count"] == 1 and ("POST", "/api/admins/bulk/users/activate", {"ids": [2]}) in fake.calls
+
+
+def test_deleting_all_the_users_of_several_admins_needs_the_word_and_leaves_a_record_of_each(fake):
+    for word in ("", "yes", None):
+        with pytest.raises(ValueError, match="type delete"):
+            pa.admins_bulk(C, "users_delete", [2, 3], word)
+
+    assert fake.admins[2]["total_users"] == 5 and not [1 for m, p, b in fake.calls if m == "DELETE"]
+    out = pa.admins_bulk(C, "users_delete", [2, 3], " Delete ")
+    assert out["count"] == 2 and out["records"] == 2 and fake.admins[2]["total_users"] == 0 and ("DELETE", "/api/admins/bulk/users", {"ids": [2, 3]}) in fake.calls
+    assert pa._found_backups("panel901-admin-alice") and pa._found_backups("panel901-admin-bob")                    # a record of each before it happened
+
+
+def test_a_bulk_action_for_admins_refuses_what_could_lock_the_panel_out_or_does_not_exist(fake):
+    with pytest.raises(ValueError, match="signed in as"):
+        pa.admins_bulk(C, "disable", [1, 2])                                                                        # 1 is the admin this panel logs in as
+
+    assert pa.admins_bulk(C, "reset", [1, 2])["count"] == 2                                                         # resetting its usage is harmless
+    calls = len(fake.calls)
+
+    for action, ids, why in (("fly", [2], "action is one of"), ("disable", [], "1 to 100"), ("disable", list(range(1, 102)), "1 to 100"), ("enable", [2, 9], "no admin 9")):
+        with pytest.raises(ValueError, match=why):
+            pa.admins_bulk(C, action, ids)
+
+    assert not [1 for m, p, b in fake.calls[calls:] if "/bulk/" in p]                                               # nothing was sent for any of them
+
+
+def test_the_admins_bulk_route(client, fake, panel_row):
+    pid, _mid = panel_row
+    base = f"/api/panels/{pid}/pg/admins/bulk"
+    r = client.post(base, json={"action": "disable", "ids": [2, 3]})
+    assert r.status_code == 200 and r.json()["admins"] == ["alice", "bob"] and r.json()["count"] == 2
+    assert client.post(base, json={"action": "users_delete", "ids": [2]}).status_code == 400                        # the word is missing
+    assert client.post(base, json={"action": "users_delete", "ids": [2], "confirm": "delete"}).json()["count"] == 1
+    assert client.post(base, json={"action": "explode", "ids": [2]}).status_code == 422 and client.post(base, json={"action": "enable", "ids": []}).status_code == 422
+    assert client.post(base, json={"action": "disable", "ids": [1]}).status_code == 400
+
+
 # ------------------------------------------------------------------ the settings
 def test_the_settings_for_the_browser_hold_no_secret_at_all(fake):
     r = pa.settings_get(C)
@@ -1452,7 +1523,7 @@ def test_the_settings_routes(client, fake, panel_row):
 def test_every_route_of_this_tab_has_a_one_sentence_description(client):
     spec = client.app.openapi()
     mine = {(m, p): op for p, ops in spec["paths"].items() if "/pg/admin" in p or "/pg/settings" in p for m, op in ops.items()}
-    assert len(mine) == 21
+    assert len(mine) == 22
 
     for key, op in mine.items():
         desc = (op.get("description") or "").strip()

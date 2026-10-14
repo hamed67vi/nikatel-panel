@@ -161,6 +161,12 @@ def test_several_nodes_are_handled_with_one_call_and_the_ok_where_users_are_cut(
     assert len(fake.writes()) == 1                                                                                           # a missing node stopped the whole call before it did anything
 
 
+def test_every_bulk_action_goes_to_its_own_route_of_the_panel(fake):
+    for action in ("enable", "disable", "reset", "reconnect", "update"):
+        nx.bulk(C, action, [2, 1], True)
+        assert fake.writes()[-1][:3] == ("POST", f"/api/nodes/bulk/{action}", {"ids": [2, 1]})                               # (delete has its own test: it saves the nodes first)
+
+
 def test_a_bulk_delete_saves_every_node_first_without_leaking_its_key(fake):
     out = nx.bulk(C, "delete", [1, 3], True)
     assert out["nodes"] == ["n1", "n3"] and len(out["backups"]) == 2 and all(b.startswith("nodes-p5-") and b.endswith("-delete.json") for b in out["backups"])

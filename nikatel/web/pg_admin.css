@@ -9,7 +9,8 @@ html body #page .pg-admin-seg button.dirty::after { content: "•"; margin-left:
 html body #page .pg-admin-q { width: 200px; flex: none; }
 html body #page .pg-bar .pg-admin-cnt { display: inline-flex; align-items: center; flex-wrap: wrap; }
 html body #page .pg-bar .pg-admin-cnt .pill { margin: 0 5px 0 0; }
-html body #page .pg-admin-kdel[hidden] { display: none; }
+html body #page .pg-admin-kdel[hidden], html body #page .pg-admin-bulk[hidden] { display: none; }
+html body #page select.pg-admin-bulk { width: auto; max-width: 190px; }
 
 /* ---- the lists */
 html body #page .pg-admin-box { margin-bottom: 6px; }
@@ -174,6 +175,10 @@ html body #modal .pgu .pgu-tbl { width: 100%; table-layout: fixed; }
 html body #modal .pgu .pgu-tbl th, html body #modal .pgu .pgu-tbl td { padding: 3px 8px; font-size: 12.5px; }
 html body #modal .pgu .pgu-tbl td.name { text-align: left; }
 html body #modal .pgu .pgu-foot { display: flex; justify-content: flex-end; padding-top: 6px; }
+html body #modal .pgu .pgu-fmtbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 6px; } html body #modal .pgu .pgu-fmtbar .sp { flex: 1; }
+html body #modal .pgu .pgu-fmtbar label { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mut); } html body #modal .pgu .pgu-fmtbar select { height: 28px; width: 170px; font-size: 12.5px; } html body #modal .pgu .pgu-fmtbar button { height: 28px; }
+html body #modal .pgu .pgu-fmtta { width: 100%; box-sizing: border-box; height: 100px; padding: 8px 10px; border-radius: 10px; font: 12px/1.45 var(--mono, ui-monospace, Menlo, Consolas, monospace); white-space: pre; resize: vertical; }
+html body #modal .pgu .pgu-fmtnote { padding: 8px 2px; font-size: 12.5px; }
 html body #modal .pgu-tool .pgu-p { margin: 0 0 8px; font-size: 12.5px; }
 html body #modal .pgu-tool .pgu-chips { display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: flex-end; }
 html body #modal .pgu-tool .pgu-two { display: inline-flex; align-items: center; gap: 8px; }

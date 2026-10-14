@@ -30,8 +30,7 @@ def fresh_db():
 
     db.init_db()
 
-    from nikatel import auth
-    from nikatel.services import gate
+    from nikatel import auth, gate
 
     auth._FAILS.clear()
     auth._RESET.clear()

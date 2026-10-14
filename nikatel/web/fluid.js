@@ -1,6 +1,6 @@
 /* The fluid layer's one script (1.44.0): a table keeps its columns as its box gets narrower - they shrink and cut their text - and when even that is not enough the LESS important columns
    drop out, the most important last (the first column, the status and the buttons at the end never). Nothing is turned into cards. It looks at the BOX the table sits in (not at the window), so
-   the same table is right in the page, in a window, with the side bar as a rail or as a menu. The importance of a column comes from its header text (PRIO below, higher = drops out earlier);
+   the same table is right in the page, in a window, with the side bar as a rail or as a menu. The importance of a column comes from its header text (PRIO below, higher = drops out earlier) or from a data-prio attribute of the header;
    a header that is empty or holds a tick box is a column of switches or buttons and stays. A column has a least width (MINW, or what its buttons need): when the box cannot hold the least
    widths of all columns, the most droppable column goes and the sum is made again; then every column is given its wished width (the one in the colgroup), and when that is too much the columns
    shrink towards their least. `colspan` cells (a note over three columns) are narrowed to the columns that are still there. Runs after a table is drawn and when a box changes its size; does
@@ -74,7 +74,7 @@
     var n = heads.length;
 
     return heads.map(function (th, i) {
-      var t = norm(th.textContent), car = cols[i] || th, w, kind, v, tool, act, d;
+      var t = norm(th.textContent), car = cols[i] || th, w, kind, v, tool, act, d, dp;
 
       if (car.__w0 === undefined) car.__w0 = car.style.width;
 
@@ -83,7 +83,8 @@
       v = num(w);
       tool = !!th.querySelector("input,button");
       act = i === n - 1 && (!t || t === "actions") && !th.querySelector("input");
-      d = {i: i, car: car, w0: w, kind: kind, act: act, p: i === 0 || tool || !t ? 0 : (PRIO[t] !== undefined ? PRIO[t] : 3),
+      dp = th.getAttribute("data-prio");      // a header can say its own importance (a table whose first column is a tick box: the name column is then the second one)
+      d = {i: i, car: car, w0: w, kind: kind, act: act, p: i === 0 || tool || !t ? 0 : (dp !== null && dp !== "" ? num(dp) : PRIO[t] !== undefined ? PRIO[t] : 3),
         want: kind === "px" ? v : kind === "pct" ? v / 100 * avail : 0, min: 0};
 
       if (act) d.min = Math.max(natural(tbl, i), kind === "px" ? Math.min(v, 40) : 40);

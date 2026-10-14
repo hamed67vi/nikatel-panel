@@ -632,6 +632,45 @@ def admin_delete(c: dict, admin_id: int, users: str = "keep", confirm: str = "")
     return out
 
 
+BULK_ADMIN = {"enable": ("POST", "/api/admins/bulk/enable"), "disable": ("POST", "/api/admins/bulk/disable"), "reset": ("POST", "/api/admins/bulk/reset"),
+              "users_activate": ("POST", "/api/admins/bulk/users/activate"), "users_disable": ("POST", "/api/admins/bulk/users/disable"), "users_delete": ("DELETE", "/api/admins/bulk/users")}
+
+
+def admins_bulk(c: dict, action: str, ids: list[int], confirm: str = "") -> dict:
+    """The same action for several admins in ONE call (the panel's own bulk routes, all or none): enable, disable (never the admin Nikatel is signed in as), reset the usage, switch every
+    active user of them off (users_disable) or every disabled one on (users_activate), delete every user of them (users_delete: `confirm` must be the word delete, and a record of each
+    admin is saved first)."""
+    spec = BULK_ADMIN.get(action)
+
+    if spec is None:
+        raise ValueError("the action is one of: " + ", ".join(BULK_ADMIN))
+
+    want = sorted({int(i) for i in ids})
+
+    if not 1 <= len(want) <= 100:
+        raise ValueError("pick 1 to 100 admins")
+
+    raw, _head = _all_admins(c)
+    mine = _login_name(c)
+    rows = {a.get("id"): admin_row(a, mine) for a in raw}
+    missing = [i for i in want if i not in rows]
+
+    if missing:
+        raise ValueError("there is no admin " + ", ".join(str(i) for i in missing))
+
+    if action == "disable" and any(rows[i]["me"] for i in want):
+        raise ValueError("one of them is the admin Nikatel is signed in as: switching it off would lock this panel out")
+
+    if action == "users_delete" and str(confirm or "").strip().lower() != "delete":
+        raise ValueError("type delete to confirm deleting every user of these admins")
+
+    records = [_snapshot(c, rows[i], f"before {action.replace('_', ' ')} (several admins at once)") for i in want] if action == "users_delete" else []
+    r = _dict(_call(c, spec[0], spec[1], body={"ids": want}))
+    names = [str(n) for n in _list(r.get("admins"))] or [rows[i]["username"] for i in want]
+    audit(c, f"{action.replace('_', ' ')} done for {len(names)} admins ({', '.join(names[:5])}{', …' if len(names) > 5 else ''})", "bad" if action == "users_delete" else "warn" if action in ("disable", "users_disable") else "info")
+    return {"action": action, "admins": names, "count": r.get("count", len(want)) if isinstance(r.get("count"), int) else len(want), "records": len(records)}
+
+
 def _remove_admin(c: dict, a: dict) -> None:
     """The bulk route first: it is the one that explicitly detaches the users and clears the usage log of the admin; older panels only have the single one."""
     try:

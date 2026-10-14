@@ -93,6 +93,18 @@ def admins_list(panel_id: int):
     return {"ok": True, **_wrap(pg_admin.admins_list, _cred(panel_id))}
 
 
+class AdminsBulkIn(BaseModel):
+    action: str = Field(pattern=r"^(enable|disable|reset|users_activate|users_disable|users_delete)$")
+    ids: list[int] = Field(min_length=1, max_length=100)
+    confirm: str = Field("", max_length=16)
+
+
+@router.post("/panels/{panel_id}/pg/admins/bulk")
+def admins_bulk(panel_id: int, body: AdminsBulkIn):
+    """One action for several admins in one call (all or none): enable, disable, reset the usage, switch their users off or on, or delete all their users (confirm must be the word delete)."""
+    return {"ok": True, **_wrap(pg_admin.admins_bulk, _cred(panel_id), body.action, body.ids, body.confirm)}
+
+
 @router.post("/panels/{panel_id}/pg/admins")
 def admin_create(panel_id: int, body: AdminIn):
     """Make a new admin (a role, a password that follows the panel's rules, optional limits and contacts); the password is sent to the panel and kept nowhere."""

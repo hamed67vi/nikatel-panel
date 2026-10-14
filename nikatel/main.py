@@ -182,9 +182,9 @@ async def _lifespan(app: FastAPI):
         _register_jobs()
         jobs.start_all()
 
-        from .api import dns as dns_api
+        from .services import dnscache
 
-        dns_api.warm()                         # the records of the DNS accounts are read once now, so the first open of the DNS page does not wait
+        dnscache.warm()                        # the records of the DNS accounts are read once now, so the first open of the DNS page does not wait
 
         def resume() -> None:
             """What a restart interrupted is picked up again - in the background: it talks to servers for seconds, and the panel must answer /api/health at once."""
@@ -219,7 +219,7 @@ def create_app(run_jobs: bool = True) -> FastAPI:
         t0 = time.time()
 
         try:
-            from .services import gate
+            from . import gate
 
             entry = gate.entry_path()
             p = request.url.path
@@ -382,7 +382,7 @@ def cli(argv: list[str] | None = None) -> int:
         return 0
 
     if a.cmd == "entry-path":
-        from .services import gate
+        from . import gate
         from .services import settings as st
 
         init_db()

@@ -60,6 +60,17 @@ def template_create(panel_id: int, body: CreateIn):
     return {"ok": True, "template": _wrap(ct.template_create, _cred(panel_id), body.name, body.template_type, body.content, body.is_default)}
 
 
+class BulkDeleteIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=ct.MAX_BULK)
+    confirm: bool = False
+
+
+@router.post(P + "/bulk-delete")
+def templates_delete(panel_id: int, body: BulkDeleteIn):
+    """Delete several client templates in one call (all or none): never a system template, every type keeps one, each is saved to a file first; the body must say confirm true."""
+    return {"ok": True, **_wrap(ct.templates_delete, _cred(panel_id), body.ids, body.confirm)}
+
+
 @router.get(P + "/backups")
 def templates_backups(panel_id: int):
     """The files kept here before a change or a delete of a client template of this panel, newest first."""

@@ -103,6 +103,19 @@ def users_shift(panel_id: int, body: ShiftIn):
     return {"ok": True, **_wrap(pg_users.shift, _cred(panel_id), body.what, body.amount, body.filters, body.dry_run, body.confirm)}
 
 
+class ProxyMethodIn(BaseModel):
+    method: str = Field(max_length=40)
+    filters: dict = Field(default_factory=dict)
+    dry_run: bool = True
+    confirm: bool = False
+
+
+@router.post(T + "/proxy-method")
+def users_proxy_method(panel_id: int, body: ProxyMethodIn):
+    """Set the shadowsocks method (cipher) of every user a filter matches: the dry run only counts them, the real run needs confirm."""
+    return {"ok": True, **_wrap(pg_users.proxy_method, _cred(panel_id), body.method, body.filters, body.dry_run, body.confirm)}
+
+
 @router.get(T + "/expired")
 def users_expired(panel_id: int, target: str = "expired", admin: str | None = None, before_day: str | None = None, after_day: str | None = None):
     """List the users that are expired, limited, on hold or disabled (by the target), for an admin and a range of dates."""
@@ -168,6 +181,12 @@ def user_devices_reset(panel_id: int, username: str):
 def user_sub_updates(panel_id: int, username: str, offset: int = 0, limit: int = 10):
     """The last times a user's subscription link was fetched: when, by which app, from which address."""
     return {"ok": True, **_wrap(pg_users.sub_updates, _cred(panel_id), username, offset, limit)}
+
+
+@router.get(U + "/subscription")
+def user_subscription(panel_id: int, username: str, format: str = "links"):
+    """The subscription of a user in one client format as the panel renders it (links, links_base64, xray, sing_box, clash, clash_meta, outline: text; wireguard: a zip, size only)."""
+    return {"ok": True, **_wrap(pg_users.subscription, _cred(panel_id), username, format)}
 
 
 @router.get(U + "/online")

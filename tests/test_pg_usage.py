@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import shutil
 import subprocess
 import threading
@@ -289,18 +290,31 @@ class Fake:
         if path == "/api/nodes/simple":
             return {"nodes": [{"id": 33, "name": "node-a", "status": "connected"}, {"id": 34, "name": "node-b", "status": "connected"}], "total": 2}
 
-        if path == "/api/users/usage" or (path.startswith("/api/admin/") and path.endswith("/usage")) or (path.startswith("/api/user/") and path.endswith("/usage")):
-            who = path.split("/")[3] if path != "/api/users/usage" else ""
+        if path == "/api/users/simple":                                              # the ids of names: only user-a exists
+            return {"users": [{"id": 7, "username": "user-a"}] if q.get("usernames") == "user-a" else [], "total": 1}
 
-            if path.startswith("/api/admin/") and who != "admin-a":
+        by_id = re.fullmatch(r"/api/(admin|user)/by-id/(\d+)/usage", path)
+
+        if path == "/api/users/usage" or by_id:
+            if by_id and by_id.group(1) == "admin" and by_id.group(2) != "1":
                 raise PanelError("HTTP 404: Admin not found", 404)
 
-            if path.startswith("/api/user/") and who != "user-a":
+            if by_id and by_id.group(1) == "user" and by_id.group(2) != "7":
                 raise PanelError("HTTP 404: User not found", 404)
 
             assert q["period"] == "hour" and q["group_by_node"] == "true"
             hrs = self.hours(q)
             return {"period": "hour", "start": q["start"], "end": q["end"], "stats": {"33": [row(h, GB) for h in hrs], "34": [row(h, 2 * GB) for h in hrs]}}
+
+        counts = re.fullmatch(r"/api/users/counts/(online|expired|limited)", path)
+
+        if counts:
+            return {"period": q["period"], "start": q["start"], "end": q["end"], "metric": counts.group(1), "count_during_period": 5,
+                    "stats": {"-1": [{"period_start": "2026-10-13T20:30:00Z", "count": 3}, {"period_start": "2026-10-14T20:30:00Z", "count": 4}], "33": [{"period_start": "2026-10-13T20:30:00Z", "count": 2}]}}
+
+        if path == "/api/users/sub_update/chart":
+            return {"period": "day", "start": q["start"], "end": q["end"], "total": 30, "stats": [],
+                    "segments": [{"name": "v2rayNG", "count": 10, "percentage": 33.33}, {"name": "Happ", "count": 20, "percentage": 66.67}]}
 
         if path == "/api/node/usage":
             hrs = self.hours(self.last_query)
@@ -436,17 +450,18 @@ def test_admin_and_user_lookups(pg):
     a = pg_usage.admin_usage(PG, "admin-a", "custom", "2026-10-01", "2026-10-03", NOW)
     assert a["scope"] == "admin" and a["name"] == "admin-a" and a["total"]["gb"] == 216.0 and [r["name"] for r in a["by_node"]] == ["node-b", "node-a"]
     assert "up_gb" not in a["by_node"][0]                                          # the nodes' own traffic belongs to the whole panel only
-    assert any(p.startswith("/api/admin/admin-a/usage") for _m, p, _t in pg.calls)
+    assert any(p.startswith("/api/admin/by-id/1/usage") for _m, p, _t in pg.calls)                    # by id: the by-username routes are deprecated (removed in 6.0)
     u = pg_usage.user_usage(PG, "user-a", "last7", now=NOW)
-    assert u["scope"] == "user" and u["total"]["gb"] > 0 and any(p.startswith("/api/user/user-a/usage") for _m, p, _t in pg.calls)
+    assert u["scope"] == "user" and u["total"]["gb"] > 0 and any(p.startswith("/api/user/by-id/7/usage") for _m, p, _t in pg.calls)
+    assert not any(re.match(r"/api/(admin|user)/(?!by-id)[^/]+/usage", p) for _m, p, _t in pg.calls)
     only_gets(pg)
 
 
 def test_lookups_refuse_unknown_names_and_bad_names(pg):
-    with pytest.raises(ValueError, match="no admin named nobody"):
+    with pytest.raises(ValueError, match="no admin called nobody"):
         pg_usage.admin_usage(PG, "nobody", "last7", now=NOW)
 
-    with pytest.raises(ValueError, match="no user named ghost"):
+    with pytest.raises(ValueError, match="no user called ghost"):
         pg_usage.user_usage(PG, "ghost", "last7", now=NOW)
 
     for bad in ("", "a b", "../x", "x" * 65, "a/b", "a?b=1"):
@@ -454,6 +469,61 @@ def test_lookups_refuse_unknown_names_and_bad_names(pg):
             pg_usage.admin_usage(PG, bad, "last7", now=NOW)
 
     assert not any("x" * 65 in p or ".." in p for _m, p, _t in pg.calls)           # a bad name never reaches the panel
+
+
+def test_the_users_counts_over_time(pg):
+    c = pg_usage.counts(PG, "online", "last7", now=NOW)
+    assert c["metric"] == "online" and c["period"] == "day" and c["count"] == 5 and c["max"] == 4
+    assert [(p["t"], p["count"]) for p in c["series"]] == [("2026-10-13T20:30:00Z", 3), ("2026-10-14T20:30:00Z", 4)]       # two keys at one moment: the bigger one, never the sum
+    sent = next(p for _m, p, _t in pg.calls if p.startswith("/api/users/counts/online"))
+    assert "period=day" in sent and "start=" in sent and "admin=" not in sent
+    assert pg_usage.counts(PG, "limited", "today", now=at(2026, 10, 14, 5, 0))["period"] == "hour"                       # a range of two days or less is hourly
+    pg_usage.counts(PG, "expired", "last7", admin="admin-a", now=NOW)
+    assert any("admin=admin-a" in p for _m, p, _t in pg.calls if p.startswith("/api/users/counts/expired"))
+    n = len(pg.calls)
+    assert pg_usage.counts(PG, "online", "last7", now=NOW)["cached"] is True and len(pg.calls) == n
+    only_gets(pg)
+
+    for bad in ("frozen", "", "online/x", "ONLINE"):
+        with pytest.raises(ValueError, match="the metric is one of"):
+            pg_usage.counts(PG, bad, "last7", now=NOW)
+
+    with pytest.raises(ValueError, match="admin name"):
+        pg_usage.counts(PG, "online", "last7", admin="a b", now=NOW)
+
+    with pytest.raises(ValueError, match="part of PasarGuard"):
+        pg_usage.counts(MZ, "online", "last7", now=NOW)
+
+
+def test_the_subscription_apps(pg):
+    a = pg_usage.sub_apps(PG, "last30", now=NOW)
+    assert a["total"] == 30 and [(x["name"], x["count"], x["percent"]) for x in a["apps"]] == [("Happ", 20, 66.7), ("v2rayNG", 10, 33.3)]      # the biggest first
+    assert not any("user_id=" in p or "admin_id=" in p for _m, p, _t in pg.calls if p.startswith("/api/users/sub_update/chart"))
+    pg_usage.sub_apps(PG, "last7", user="user-a", now=NOW)
+    assert any("user_id=7" in p for _m, p, _t in pg.calls if p.startswith("/api/users/sub_update/chart"))                    # the id of the name is looked up
+    pg_usage.sub_apps(PG, "last7", admin="admin-a", now=NOW)
+    assert any("admin_id=1" in p for _m, p, _t in pg.calls if p.startswith("/api/users/sub_update/chart"))
+    only_gets(pg)
+
+    with pytest.raises(ValueError, match="not both"):
+        pg_usage.sub_apps(PG, "last7", user="user-a", admin="admin-a", now=NOW)
+
+    with pytest.raises(ValueError, match="no user called ghost"):
+        pg_usage.sub_apps(PG, "last7", user="ghost", now=NOW)
+
+    with pytest.raises(ValueError, match="part of PasarGuard"):
+        pg_usage.sub_apps(MZ, "last7", now=NOW)
+
+
+def test_the_new_usage_routes(client, pg, pg_id):
+    base = f"/api/panels/{pg_id}/pg/usage"
+    r = client.get(base + "/counts", params={"metric": "limited", "preset": "last7"})
+    assert r.status_code == 200 and r.json()["metric"] == "limited" and r.json()["series"]
+    assert client.get(base + "/counts", params={"metric": "frozen"}).status_code == 422
+    assert client.get(base + "/counts", params={"metric": "online", "preset": "custom"}).status_code == 400
+    r = client.get(base + "/sub-apps", params={"preset": "last7", "user": "user-a"})
+    assert r.status_code == 200 and r.json()["apps"][0]["name"] == "Happ" and r.json()["user"] == "user-a"
+    assert client.get(base + "/sub-apps", params={"user": "user-a", "admin": "admin-a"}).status_code == 400
 
 
 def test_panel_errors_other_than_404_pass_through(pg):
@@ -725,7 +795,7 @@ def test_routes_refuse_bad_input(client, pg, pg_id):
     assert client.get(base + "/top-users", params={"sort": "username"}).status_code == 400
     assert client.get(base + "/admin/a b").status_code == 400
     assert client.get(base + "/admin/nobody").status_code == 400                                                # the panel's 404 becomes a clear refusal
-    assert client.get(base + "/user/ghost").json()["error"] == "the panel has no user named ghost"
+    assert client.get(base + "/user/ghost").json()["error"] == "no user called ghost on this panel"
     assert client.get("/api/panels/9999/pg/usage/overview").status_code == 400                                  # no such panel
     assert not [c for c in pg.calls if "ghost" in c[1] and c[0] != "GET"]
 
@@ -748,7 +818,7 @@ def test_routes_need_a_signed_in_user(client, pg, pg_id):
 def test_the_tab_is_read_only_and_every_route_is_described():
     methods = {m for r in api_mod.router.routes for m in r.methods}
     assert methods == {"GET"}
-    assert len(api_mod.router.routes) == 8
+    assert len(api_mod.router.routes) == 10
 
     for r in api_mod.router.routes:
         doc = (r.endpoint.__doc__ or "").strip()

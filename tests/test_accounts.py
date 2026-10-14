@@ -209,7 +209,7 @@ def test_a_link_token_is_signed_and_a_reset_kills_the_old_ones(two_panels):
 
 
 def test_the_merged_subscription_is_public_but_nothing_else_is(client, two_panels, monkeypatch):
-    from nikatel.services import gate
+    from nikatel import gate
 
     ids = two_panels
     feed = {ids["a"]: (base64.b64encode(b"vless://a1#a\nvless://shared#x").decode(), "upload=1; download=2; total=100; expire=2000"),

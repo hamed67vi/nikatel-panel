@@ -4,8 +4,8 @@ Nothing here writes to a panel. The two panel types answer usage in different sh
 no series), so the answers are normalised into one shape: {range, total, by_node, series}. Days are Tehran days (UTC+3:30, no daylight saving since 2022: a Tehran
 day starts at 20:30 UTC of the day before), and the Jalali calendar is computed here in pure Python (the same algorithm lives in pg_usage.js).
 
-What was verified against the real panels (read only): PasarGuard `GET /api/system`, `/api/users/usage` and `/api/admin/<name>/usage` and `/api/user/<name>/usage`
-(`period`, `start`, `end`, `group_by_node`), `/api/node/usage`, `/api/nodes/simple`, `/api/admins/simple`, `/api/users?limit&sort&admin`; Marzban `GET /api/system`,
+What was verified against the real panels (read only): PasarGuard `GET /api/system`, `/api/users/usage` and `/api/admin/by-id/<id>/usage` and `/api/user/by-id/<id>/usage`
+(`period`, `start`, `end`, `group_by_node`; the ids are looked up: the by-username routes are deprecated), `/api/users/counts/<metric>`, `/api/users/sub_update/chart`, `/api/node/usage`, `/api/nodes/simple`, `/api/admins/simple`, `/api/users?limit&sort&admin`; Marzban `GET /api/system`,
 `/api/users/usage?start&end&admin=`, `/api/admin/usage/<name>`, `/api/user/<name>/usage`, `/api/admins`, `/api/users?limit&sort&admin`. The usage of ALL users of the big
 Marzban panel is not asked at all (it times out on thousands of users): Marzban always needs an admin name."""
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Any, TypeVar
 from urllib.parse import quote, urlencode
 
 from ..log import get_logger
-from . import panels
+from . import panels, pg_users
 from .panels import PanelError
 
 log = get_logger("pg_usage")
@@ -592,7 +592,12 @@ def _fetch_usage(c: dict, typ: str, scope: str, name: str, span: Span) -> dict:
     notes: list[str] = []
 
     if typ == "pasarguard":
-        base = {"all": "/api/users/usage", "admin": f"/api/admin/{quote(name, safe='')}/usage", "user": f"/api/user/{quote(name, safe='')}/usage"}[scope]
+        if scope == "user":
+            base = f"/api/user/by-id/{pg_users._id_of(c, name)}/usage"                        # the by-username routes are deprecated (removed in 6.0): the id is looked up
+        elif scope == "admin":
+            base = f"/api/admin/by-id/{pg_users._admin_ids(c, [name])[0]}/usage"
+        else:
+            base = "/api/users/usage"
 
         try:
             raw = _get(c, base + "?" + _query(span, typ), 60)
@@ -691,6 +696,80 @@ def _admin_lifetime_gb(c: dict, name: str) -> float | None:
 def user_usage(c: dict, username: str, preset: str = "last7", frm: str = "", to: str = "", now: dt.datetime | None = None) -> dict:
     """The usage of one user in a range, by node."""
     return _usage(c, "user", _name(username, "a username"), preset, frm, to, now)
+
+
+COUNT_METRICS = ("online", "expired", "limited")
+
+
+def parse_counts(raw) -> tuple[int, list[dict]]:
+    """(the count the panel gives for the whole range, [{t, count}] by period). The panel's `stats` is {key: [{period_start, count}]}; when it lists more than one key the points of
+    the same moment are not added (the same user could be counted on two nodes): the bigger one is kept."""
+    if not isinstance(raw, dict):
+        return 0, []
+
+    per: dict[str, int] = {}
+
+    for rows in (raw.get("stats") if isinstance(raw.get("stats"), dict) else {}).values():
+        for r in rows if isinstance(rows, list) else []:
+            if isinstance(r, dict) and isinstance(r.get("period_start"), str):
+                per[r["period_start"]] = max(per.get(r["period_start"], 0), _num(r.get("count")))
+
+    return _num(raw.get("count_during_period")), [{"t": k, "count": v} for k, v in sorted(per.items())]
+
+
+def counts(c: dict, metric: str, preset: str = "last7", frm: str = "", to: str = "", admin: str = "", now: dt.datetime | None = None) -> dict:
+    """How many users were ONLINE, how many became EXPIRED and how many LIMITED over time (`GET /api/users/counts/{metric}`), per hour for a range of two days or less and per day
+    otherwise; the users of one admin when `admin` is given. PasarGuard only."""
+    if _check_type(c) != "pasarguard":
+        raise ValueError("the user counts over time are a part of PasarGuard panels")
+
+    if metric not in COUNT_METRICS:
+        raise ValueError("the metric is one of: " + ", ".join(COUNT_METRICS))
+
+    now = _utc(now)
+    span = resolve_range(preset, frm, to, now)
+    period = "hour" if span.days <= 2 else "day"
+    who = _name(admin, "an admin name") if admin else ""
+    q = [("period", period), ("start", iso_z(span.start)), ("end", iso_z(span.end))] + ([("admin", who)] if who else [])
+    past = span.end <= now - dt.timedelta(hours=2)
+
+    def ask() -> dict:
+        total, series = parse_counts(_get(c, f"/api/users/counts/{metric}?" + urlencode(q), 60))
+        return {"metric": metric, "period": period, "range": span.to_dict(), "admin": who, "count": total, "series": series, "max": max((p["count"] for p in series), default=0)}
+
+    value, age = _cached(("counts", c["id"], metric, who, period, span.first.isoformat(), span.last.isoformat()), PAST_TTL if past else RANGE_TTL, ask)
+    return {**value, **_meta(age)}
+
+
+def sub_apps(c: dict, preset: str = "last7", frm: str = "", to: str = "", user: str = "", admin: str = "", now: dt.datetime | None = None) -> dict:
+    """Which apps fetch the subscription: the share of every client (its User-Agent name) over a range, for everybody, one user or the users of one admin
+    (`GET /api/users/sub_update/chart`). PasarGuard only."""
+    if _check_type(c) != "pasarguard":
+        raise ValueError("the subscription apps are a part of PasarGuard panels")
+
+    now = _utc(now)
+    span = resolve_range(preset, frm, to, now)
+    q = [("period", "day"), ("start", iso_z(span.start)), ("end", iso_z(span.end))]
+    uname, aname = (_name(user, "a username") if user else ""), (_name(admin, "an admin name") if admin else "")
+
+    if uname and aname:
+        raise ValueError("ask for one user or for one admin, not both")
+
+    if uname:
+        q.append(("user_id", str(pg_users._id_of(c, uname))))
+    elif aname:
+        q.append(("admin_id", str(pg_users._admin_ids(c, [aname])[0])))
+
+    past = span.end <= now - dt.timedelta(hours=2)
+
+    def ask() -> dict:
+        raw = _get(c, "/api/users/sub_update/chart?" + urlencode(q), 60)
+        raw = raw if isinstance(raw, dict) else {}
+        segs = [{"name": str(s.get("name") or "")[:80], "count": _num(s.get("count")), "percent": round(float(s.get("percentage") or 0), 1)} for s in (raw.get("segments") if isinstance(raw.get("segments"), list) else []) if isinstance(s, dict)]
+        return {"range": span.to_dict(), "user": uname, "admin": aname, "total": _num(raw.get("total")), "apps": sorted(segs, key=lambda s: -s["count"])[:30]}
+
+    value, age = _cached(("subapps", c["id"], uname, aname, span.first.isoformat(), span.last.isoformat()), PAST_TTL if past else RANGE_TTL, ask)
+    return {**value, **_meta(age)}
 
 
 def top_row(u: dict) -> dict:

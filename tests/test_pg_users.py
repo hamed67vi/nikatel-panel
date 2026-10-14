@@ -190,12 +190,15 @@ class Fake:
 
             return {"users": names, "count": len(names)}
 
-        if what in ("expire", "data_limit"):
+        if what in ("expire", "data_limit", "proxy_settings"):
             hit = [x for x in self.users.values() if (not body.get("status") or x["status"] in body["status"]) and (not body.get("users") or x["id"] in body["users"])
                    and (not body.get("admins") or x["admin"]["id"] in body["admins"]) and (not body.get("group_ids") or set(body["group_ids"]) & set(x["group_ids"]))]
 
             if body["dry_run"]:
                 return {"dry_run": True, "affected_users": len(hit)}
+
+            for x in hit if what == "proxy_settings" else []:
+                x["ss_method"] = body["method"]
 
             return {"detail": f"operation has been successfuly done on {len(hit)} users"}
 
@@ -420,6 +423,12 @@ def test_the_bulk_routes_take_ids_looked_up_from_the_names(fake):
     assert fake.writes()[-1][:3] == ("POST", "/api/users/bulk/apply_template", {"user_template_id": 2, "ids": [2, 3]})
 
 
+def test_every_bulk_action_goes_to_its_own_route_of_the_panel(fake):
+    for what in ("enable", "disable", "reset", "revoke_sub"):
+        out = pg_users.bulk(C, what, ["alice", "bob"], confirm=True)
+        assert out == {"action": what, "count": 2, "users": ["alice", "bob"]} and fake.writes()[-1][:3] == ("POST", f"/api/users/bulk/{what}", {"ids": [1, 2]})
+
+
 def test_the_bulk_actions_that_cannot_be_undone_need_a_confirm(fake):
     for what in ("delete", "revoke_sub", "reset"):
         with pytest.raises(ValueError, match="confirm"):
@@ -472,6 +481,66 @@ def test_a_shift_needs_a_filter_an_amount_and_known_names(fake):
             pg_users.shift(C, what, amount, filters)
 
     assert fake.writes() == []
+
+
+def test_the_shadowsocks_method_of_many_users_is_counted_first_and_done_with_a_confirm(fake):
+    dry = pg_users.proxy_method(C, "chacha20-ietf-poly1305", {"status": ["active"], "admins": ["boss"]})
+    assert dry == {"method": "chacha20-ietf-poly1305", "dry_run": True, "count": 1}
+    _m, p, b, _ = fake.writes()[-1]
+    assert p == "/api/users/bulk/proxy_settings" and b == {"dry_run": True, "status": ["active"], "admins": [1], "method": "chacha20-ietf-poly1305"}
+
+    with pytest.raises(ValueError, match="confirm"):
+        pg_users.proxy_method(C, "aes-128-gcm", {"status": ["active"]}, dry_run=False)
+
+    assert fake.writes()[-1][2]["dry_run"] is True                                                                            # nothing real was sent
+    done = pg_users.proxy_method(C, "aes-256-gcm", {"usernames": ["alice", "bob"]}, dry_run=False, confirm=True)
+    assert done == {"method": "aes-256-gcm", "dry_run": False, "count": 2} and fake.users[1]["ss_method"] == "aes-256-gcm" and fake.users[2]["ss_method"] == "aes-256-gcm"
+    assert "ss_method" not in fake.users[3]
+
+    for method, filters, why in (("rc4", {"status": ["active"]}, "method is one of"), ("aes-128-gcm", {}, "choose whom"), ("aes-128-gcm", {"admins": ["ghost"]}, "no admin called ghost")):
+        with pytest.raises(ValueError, match=why):
+            pg_users.proxy_method(C, method, filters)
+
+
+def test_the_subscription_of_a_user_in_one_format(fake, monkeypatch):
+    seen = []
+
+    def raw(c, method, path, timeout=30):
+        seen.append((method, path))
+
+        if path.endswith("/clash"):
+            return "text/yaml; charset=utf-8", b"mode: rule\nproxies: []\n"
+
+        if path.endswith("/wireguard"):
+            return "application/zip", b"PK\x05\x06" + b"\x00" * 18
+
+        if path.endswith("/outline"):
+            raise PanelError("HTTP 406: Client not supported", 406)
+
+        if path.endswith("/xray"):
+            return "application/json", ("[" + "x" * 500_000 + "]").encode()
+
+        return "text/plain; charset=utf-8", b""
+
+    monkeypatch.setattr(panels, "call_raw", raw)
+    r = pg_users.subscription(C, "alice", "clash")
+    assert r == {"format": "clash", "type": "text/yaml", "size": 23, "binary": False, "text": "mode: rule\nproxies: []\n", "truncated": False, "empty": False}
+    assert seen == [("GET", "/api/user/1/subscription/clash")]                                                                # by the id of the name
+    z = pg_users.subscription(C, "alice", "wireguard")
+    assert z["binary"] is True and z["text"] == "" and z["size"] == 22 and z["empty"] is True                               # a zip: only its size
+    big = pg_users.subscription(C, "alice", "xray")
+    assert big["truncated"] is True and len(big["text"]) == pg_users.MAX_SUB_TEXT and big["size"] == 500_002
+    assert pg_users.subscription(C, "alice", "links")["empty"] is True and fake.writes() == []
+
+    with pytest.raises(ValueError, match="does not render"):                                                                 # a panel that answers 406 for a listed format
+        pg_users.subscription(C, "alice", "outline")
+
+    for fmt in ("block", "html", ""):                                                                                         # (`block` is in the panel's list but never renders)
+        with pytest.raises(ValueError, match="format is one of"):
+            pg_users.subscription(C, "alice", fmt)
+
+    with pytest.raises(ValueError, match="no user called ghost"):
+        pg_users.subscription(C, "ghost", "clash")
 
 
 def test_the_cleanup_lists_first_and_deletes_only_with_the_state_typed(fake):
@@ -563,6 +632,17 @@ def test_the_api_does_several_users_at_once(client, fake, pid):
     assert client.post(t + "/from-template", json={"template_id": 2, "username": "newbie"}).json()["user"]["username"] == "newbie"
     assert client.post(t + "/bulk-from-template", json={"template_id": 2, "count": 4}).json()["created"] == 4 and client.post(t + "/bulk-from-template", json={"template_id": 2, "count": 4, "strategy": "x"}).status_code == 400
     assert client.post(t + "/from-template", json={"template_id": 9, "username": "newbie2"}).status_code == 404                  # the panel's own 404
+    assert client.post(t + "/proxy-method", json={"method": "aes-128-gcm", "filters": {"status": ["active"]}}).json() == {"ok": True, "method": "aes-128-gcm", "dry_run": True, "count": 2}      # alice and the user made above
+    assert client.post(t + "/proxy-method", json={"method": "aes-128-gcm", "filters": {"status": ["active"]}, "dry_run": False}).status_code == 400          # no confirm
+    assert client.post(t + "/proxy-method", json={"method": "rc4", "filters": {"status": ["active"]}}).status_code == 400
+
+
+def test_the_api_gives_the_subscription_in_a_format(client, fake, pid, monkeypatch):
+    monkeypatch.setattr(panels, "call_raw", lambda c, m, p, timeout=30: ("text/yaml", b"mode: rule\n"))
+    base = f"/api/panels/{pid}/pg/user/alice/subscription"
+    r = client.get(base, params={"format": "clash"})
+    assert r.status_code == 200 and r.json()["text"] == "mode: rule\n" and r.json()["type"] == "text/yaml"
+    assert client.get(base, params={"format": "block"}).status_code == 400 and client.get(f"/api/panels/{pid}/pg/user/ghost/subscription").status_code == 400
 
 
 def test_a_user_called_expired_is_still_a_user(client, fake, pid):
@@ -586,5 +666,5 @@ def test_the_api_is_for_signed_in_owners_of_pasarguard_panels_only(client, fake,
 def test_every_route_of_the_users_has_a_short_description(client):
     spec = client.app.openapi()
     mine = {(m, p): op for p, ops in spec["paths"].items() if "/pg/user/" in p or "/pg/user-tools/" in p for m, op in ops.items()}
-    assert len(mine) == 15
+    assert len(mine) == 17
     assert all(0 < len((op.get("description") or "").split("\n")[0]) <= 300 for op in mine.values())

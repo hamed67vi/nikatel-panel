@@ -89,32 +89,38 @@ function pgAdminPaintAdmins(box) {
   const S = pgAdminS, A = S.A, me = A.me || {}, n = st => A.admins.filter(a => a.status === st).length, pill = (c, l, k = "") => `<span class="pill ${k}">${c} ${l}</span>`;
   const left = pgAdminViewSeg() + `<input type="search" class="pg-admin-q" placeholder="Search admin…" value="${esc(S.q)}" oninput="pgAdminQ(this.value)" autocomplete="off" spellcheck="false">`
     + `<span class="pg-admin-cnt">${pill(A.admins.length, "admins")}${pill(n("active"), "active", "ok")}${n("disabled") ? pill(n("disabled"), "off", "warn") : ""}${n("limited") ? pill(n("limited"), "limited", "err") : ""}</span>`;
-  const right = `<button class="sm" onclick="pgAdminReload()" title="Read the admins from the panel again">↻</button><button class="sm pri" onclick="pgAdminEdit(0)">＋ Add admin</button>`;
+  const ns = pgAdminTicked().length, bulk = `<select class="sm pg-admin-bulk" id="pg-admin-bulk" ${ns ? "" : "hidden"} onchange="pgAdminBulk(this)" title="One action for every ticked admin, done in one call (all of them or none)">${pgAdminBulkOpts(ns)}</select>`;
+  const right = `${bulk}<button class="sm" onclick="pgAdminReload()" title="Read the admins from the panel again">↻</button><button class="sm pri" onclick="pgAdminEdit(0)">＋ Add admin</button>`;
   pgPaint(box, pgBar(left, right) + `<div class="lbox full pg-admin-box" id="pg-admin-list">${pgAdminTable()}</div>
     <small class="mut pg-admin-note2">Nikatel is signed in to this panel as <b>${esc(me.username || "?")}</b>${me.role && me.role.name ? " (" + esc(me.role.name) + ")" : ""}: that admin can not be switched off, deleted or given a new password from here.${A.truncated ? " The panel has more admins than are listed." : ""}</small>`);
+  pgAdminBulkSync();
   const q = $(".pg-admin-q"); if (q && S.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
-function pgAdminTable() {
+function pgAdminRows() {
   const S = pgAdminS, rows = S.A.admins.filter(a => nkHit([a.username, a.role.name, a.status, a.note, a.telegram_id].join(" "), S.q));
   const by = {name: a => a.username.toLowerCase(), users: a => -a.users, usage: a => -(a.limit ? a.used / a.limit : 0)}[S.sort] || (a => a.username.toLowerCase());
-  rows.sort((x, y) => (by(x) < by(y) ? -1 : by(x) > by(y) ? 1 : 0));
-  const th = (k, l, extra = "") => `<th class="pg-admin-th ${S.sort === k ? "on" : ""}" onclick="pgAdminSort('${k}')" title="Order the list by this">${l}${S.sort === k ? " ▾" : ""}${extra}</th>`;
-  return `<table class="tbl lift pg-admin-tbl"><colgroup><col style="width:27%"><col style="width:150px"><col style="width:64px"><col><col style="width:200px"></colgroup>
-    <thead><tr>${th("name", "Admin")}<th>Status</th>${th("users", "Users")}${th("usage", "Traffic", " <small>used · left · limit</small>")}<th></th></tr></thead>
-    <tbody>${rows.map(pgAdminRow).join("") || `<tr><td colspan="5" class="mut">${S.A.admins.length ? "no admin matches" : "this panel has no admin"}</td></tr>`}</tbody></table>`;
+  return rows.sort((x, y) => (by(x) < by(y) ? -1 : by(x) > by(y) ? 1 : 0));
+}
+function pgAdminTable() {
+  const S = pgAdminS, rows = pgAdminRows(), all = rows.length > 0 && rows.every(a => S.sel.has(a.id));
+  const th = (k, l, extra = "", attrs = "") => `<th class="pg-admin-th ${S.sort === k ? "on" : ""}" ${attrs} onclick="pgAdminSort('${k}')" title="Order the list by this">${l}${S.sort === k ? " ▾" : ""}${extra}</th>`;
+  return `<table class="tbl lift pg-admin-tbl"><colgroup><col style="width:34px"><col style="width:27%"><col style="width:150px"><col style="width:64px"><col><col style="width:200px"></colgroup>
+    <thead><tr><th class="pg-ck"><input type="checkbox" class="ck" id="pg-admin-all" ${all ? "checked" : ""} ${rows.length ? "" : "disabled"} onchange="pgAdminSelAll(this.checked)" aria-label="Tick every admin in the list" title="Tick every admin in the list"></th>${th("name", "Admin", "", 'data-prio="0"')}<th>Status</th>${th("users", "Users")}${th("usage", "Traffic", " <small>used · left · limit</small>")}<th></th></tr></thead>
+    <tbody>${rows.map(pgAdminRow).join("") || `<tr><td colspan="6" class="mut">${S.A.admins.length ? "no admin matches" : "this panel has no admin"}</td></tr>`}</tbody></table>`;
 }
 function pgAdminRow(a) {
   const off = a.status === "disabled";
   const sub = [a.note, a.telegram_id ? "telegram " + a.telegram_id : "", a.has_discord ? "discord" : ""].filter(Boolean).join(" · ");
   const more = [["password", "Change password…", !a.me], ["reset", "Reset usage", true], ["udis", "Switch its users off…", true], ["uact", "Switch its users on…", true], ["udel", "Delete its users…", true], ["del", "Delete admin…", !a.me && !a.is_owner]].filter(x => x[2]);
-  return `<tr class="${a.status === "active" ? "up" : off ? "" : "down"}"><td class="name"><div class="pg-admin-nm"><b class="pg-admin-link" onclick="pgAdminEdit(${a.id})" title="Edit this admin">${esc(a.username)}</b>
+  return `<tr class="${a.status === "active" ? "up" : off ? "" : "down"}"><td class="pg-ck"><input type="checkbox" class="ck pg-admin-achk" value="${a.id}" ${pgAdminS.sel.has(a.id) ? "checked" : ""} onchange="pgAdminSel(this)" aria-label="Tick ${esc(a.username)}"></td>
+    <td class="name"><div class="pg-admin-nm"><b class="pg-admin-link" onclick="pgAdminEdit(${a.id})" title="Edit this admin">${esc(a.username)}</b>
       ${a.is_owner ? '<span class="pill pg-admin-own">owner</span>' : `<span class="pill">${esc(a.role.name || "no role")}</span>`}${a.me ? '<span class="pill ok" title="Nikatel is signed in to the panel as this admin">you</span>' : ""}</div>${sub ? `<small class="mut ell" title="${esc(sub)}">${esc(sub)}</small>` : ""}</td>
     <td><span class="pg-admin-stat">${pgSw(!off, `pgAdminToggle(${a.id}, this.checked)`, a.me || a.is_owner ? 'disabled title="This admin can not be switched off from here"' : "")}<span class="spill ${esc(a.status)}">${esc(a.status)}</span></span></td>
     <td class="pg-admin-num">${a.users}</td><td class="trf" title="${a.lifetime == null ? "" : "Lifetime total: " + fmtB(a.lifetime)}">${pnTraffic(a)}</td>
     <td class="pg-admin-acts"><button class="sm" onclick="pgAdminEdit(${a.id})">Edit</button><button class="sm" onclick="pgAdminUsage(${a.id})">Usage</button>
       <select class="sm pg-admin-menu" onchange="pgAdminMenu(${a.id}, this)" title="More"><option value="">More</option>${more.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></td></tr>`;
 }
-const pgAdminDrawList = () => { const el = $("#pg-admin-list"); if (el) el.innerHTML = pgAdminTable(); };
+const pgAdminDrawList = () => { const el = $("#pg-admin-list"); if (el) { el.innerHTML = pgAdminTable(); pgAdminBulkSync(); } };
 window.pgAdminQ = v => { pgAdminS.q = v.trim(); pgAdminDrawList(); };
 window.pgAdminSort = k => { pgAdminS.sort = k; pgAdminDrawList(); };
 
@@ -140,6 +146,45 @@ window.pgAdminMenu = async (id, sel) => {
     const t = await gprompt(`Delete ALL ${a.users} users of ${a.username} for good? They are removed from the panel and from its nodes. Type ${a.username} to confirm.`, "");
     if (t !== null) run("/users/delete", `the users of ${a.username} are deleted`, {method: "POST", body: JSON.stringify({confirm: t.trim()})});
   }
+};
+
+/* ---- several admins at once: a tick box in the first column and one menu in the bar; the panel does the action for all of them in one call (all or none) */
+const pgAdminTicked = () => [...pgAdminS.sel].filter(pgAdminFind);                   // (an admin that was deleted since it was ticked does not count)
+const pgAdminBulkOpts = n => `<option value="">With the ${n} ticked…</option><option value="enable">Switch them on</option><option value="disable">Switch them off…</option><option value="reset">Reset their usage…</option>`
+  + `<option value="users_disable">Switch their users off…</option><option value="users_activate">Switch their users on…</option><option value="users_delete">Delete their users…</option>`;
+function pgAdminBulkSync() {
+  const n = pgAdminTicked().length, m = $("#pg-admin-bulk"), all = $("#pg-admin-all");
+  if (m) { m.hidden = !n; if (m.options.length) m.options[0].textContent = `With the ${n} ticked…`; }
+  if (all) { const ids = pgAdminRows().map(a => a.id), k = ids.filter(i => pgAdminS.sel.has(i)).length; all.checked = k > 0 && k === ids.length; all.indeterminate = k > 0 && k < ids.length; }
+}
+window.pgAdminSel = el => { const S = pgAdminS, id = +el.value; if (el.checked) S.sel.add(id); else S.sel.delete(id); pgAdminBulkSync(); };
+window.pgAdminSelAll = on => { const S = pgAdminS; pgAdminRows().forEach(a => { if (on) S.sel.add(a.id); else S.sel.delete(a.id); }); pgAdminDrawList(); };
+window.pgAdminBulk = async sel => {
+  const S = pgAdminS, v = sel.value, ids = pgAdminTicked(); sel.selectedIndex = 0; if (!v || !ids.length) return;
+  const rows = ids.map(pgAdminFind), n = ids.length, names = rows.map(a => a.username), users = rows.reduce((s, a) => s + (a.users || 0), 0);
+  const who = `${n} admin${n === 1 ? "" : "s"} (${names.slice(0, 5).join(", ")}${n > 5 ? ", …" : ""})`, body = {action: v, ids};
+  const done = {enable: "switched on", disable: "switched off", reset: "usage is zero for", users_disable: "users switched off for", users_activate: "users switched on for", users_delete: "users deleted for"}[v];
+  if (v === "disable") {
+    const me = rows.find(a => a.me); if (me) { toast(`✕ Nikatel is signed in as ${me.username}: untick it first, it can not be switched off`, "bad"); return; }
+    if (!await gconfirm(`Switch off ${who}? They can not sign in to the panel.`, {danger: true})) return;
+  } else if (v === "enable") {
+    if (!await gconfirm(`Switch on ${who}?`)) return;
+  } else if (v === "reset") {
+    if (!await gconfirm(`Reset the used traffic of ${who} to zero? A limited admin becomes active again; its lifetime total keeps the old figure.`)) return;
+  } else if (v === "users_disable") {
+    if (!await gconfirm(`Switch off all the active users of ${who} (${users} users in all)? They lose access at once.`, {danger: true})) return;
+  } else if (v === "users_activate") {
+    if (!await gconfirm(`Switch on EVERY disabled user of ${who}? That includes the users that were switched off on purpose.`, {danger: true})) return;
+  } else if (v === "users_delete") {
+    const t = await gprompt(`Delete ALL ${users} users of ${who} for good? They are removed from the panel and from its nodes; a record of each admin is saved first. Type delete to confirm.`, "");
+    if (t === null) return;
+    body.confirm = t.trim();
+  }
+  const r = await pgDo(() => pgApi(S.id, "/admins/bulk", {method: "POST", body}), "");
+  if (!r) return;
+  toast(`✓ ${done} ${r.count} admin${r.count === 1 ? "" : "s"}${r.records ? " · " + r.records + " record" + (r.records === 1 ? "" : "s") + " saved" : ""}`, "ok");
+  S.sel = new Set();
+  await pgAdminReload();
 };
 
 /* ---- add / edit */
@@ -271,9 +316,9 @@ function pgAdminKeysTable() {
   const S = pgAdminS, rows = S.K.keys.filter(k => nkHit([k.name, k.note, k.admin, k.trimmed, k.status].join(" "), S.kq)), used = S.K.keys.some(k => k.last_used);
   const perm = k => k.inherit ? '<span class="pill" title="It can do whatever its admin can">admin\'s rights</span>'
     : `<span class="pill ok" title="${esc(Object.entries(k.permissions).map(([r, acts]) => [r, Object.entries(acts).filter(x => x[1] !== "no").map(x => x[0] + (x[1] === "yes" ? "" : " (" + x[1] + ")"))]).filter(x => x[1].length).map(x => pgAdminLabel(x[0]) + ": " + x[1].join(", ")).join("\n"))}">own · ${k.granted}</span>`;
-  return `<table class="tbl lift pg-admin-tbl"><colgroup><col style="width:46px"><col style="width:24%"><col style="width:12%"><col style="width:11%"><col style="width:14%"><col>${used ? '<col style="width:9%">' : ""}<col style="width:164px"></colgroup>
-    <thead><tr><th></th><th>Key</th><th>Admin</th><th>Status</th><th>Expires</th><th>Rights</th>${used ? "<th>Last used</th>" : ""}<th></th></tr></thead>
-    <tbody>${rows.map(k => `<tr class="${k.status === "active" ? "up" : k.status === "disabled" ? "" : "down"}"><td>${pgSw(S.sel.has(k.id), "pgAdminKSel(this)", `class="pg-admin-kchk" value="${k.id}" ${k.connected ? "disabled" : ""}`)}</td>
+  return `<table class="tbl lift pg-admin-tbl"><colgroup><col style="width:34px"><col style="width:24%"><col style="width:12%"><col style="width:11%"><col style="width:14%"><col>${used ? '<col style="width:9%">' : ""}<col style="width:164px"></colgroup>
+    <thead><tr><th class="pg-ck"></th><th data-prio="0">Key</th><th>Admin</th><th>Status</th><th>Expires</th><th>Rights</th>${used ? "<th>Last used</th>" : ""}<th></th></tr></thead>
+    <tbody>${rows.map(k => `<tr class="${k.status === "active" ? "up" : k.status === "disabled" ? "" : "down"}"><td class="pg-ck"><input type="checkbox" class="ck pg-admin-kchk" value="${k.id}" ${S.sel.has(k.id) ? "checked" : ""} ${k.connected ? "disabled" : ""} onchange="pgAdminKSel(this)" aria-label="Tick ${esc(k.name)}"></td>
       <td class="name"><div class="pg-admin-nm"><b class="pg-admin-link" onclick="pgAdminKeyEdit(${k.id})" title="Edit this key">${esc(k.name)}</b>${k.connected ? '<span class="pill ok" title="Nikatel is connected to this panel with this key">used by Nikatel</span>' : ""}</div>
         <small class="mut ell" title="${esc(k.note)}"><code>${esc(k.trimmed)}</code>${k.note ? " · " + esc(k.note) : ""}</small></td>
       <td>${esc(k.admin || "#" + k.admin_id)}</td><td><span class="spill ${esc(k.status)}">${esc(k.status)}</span></td><td>${pgAdminExp(k)}</td><td>${perm(k)}</td>${used ? `<td class="mut">${k.last_used ? esc(String(k.last_used).slice(0, 10)) : "—"}</td>` : ""}

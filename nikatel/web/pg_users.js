@@ -1,9 +1,9 @@
 /* PasarGuard Users: the window of ONE user (app.js hands over to pgUserOpen for a PasarGuard panel) and the tools of the Users list (the "More…" menu).
    The window: usage, the account (status, data limit, reset, end date or ON HOLD days, devices limit, owner, note), the groups, the NEXT PLAN, and the activity (devices, the last
-   fetches of the subscription, where the user is online now). Only what differs is sent; a next plan the user has goes back with every save (the panel deletes it otherwise).
-   The tools: for the ticked users (owner, template, reset, new links, delete) and for many (shift end dates or data limits by a filter - counted first -, clean up expired / limited /
+   fetches of the subscription, what the subscription answers in each format, where the user is online now). Only what differs is sent; a next plan the user has goes back with every save (the panel deletes it otherwise).
+   The tools: for the ticked users (owner, template, reset, new links, delete) and for many (shift end dates or data limits, or set the Shadowsocks method, by a filter - counted first -, clean up expired / limited /
    on hold / disabled users, new users from a template). Everything goes through /api/panels/{id}/pg/user and /pg/user-tools. */
-const pgU = {id: 0, d: null, act: "devices", cache: {}};
+const pgU = {id: 0, d: null, act: "devices", cache: {}, fmt: "links"};
 const pgUMs = v => typeof v === "number" ? v * 1000 : Date.parse(v || "") || 0;
 const pgUAgo = v => { const t = pgUMs(v); return t ? ago(t / 1000) + " ago" : "never"; };
 const pgUWhen = v => { const t = pgUMs(v); return t ? new Date(t).toLocaleString([], {dateStyle: "medium", timeStyle: "short"}) : "—"; };
@@ -56,7 +56,7 @@ function pgUserShow() {
     + fld("Duration", `<input name="np_days" type="number" step="1" min="0" value="${np.expire_days ?? ""}" placeholder="days, empty = no end"><em>days</em>`, "pgu-f-npd", !!np.template_id)
     + `<div class="kv2 kf"><span>Add the rest</span>${pgSw(!!np.add_remaining, "", 'name="np_add" title="Add what is left of the current data to the new plan"')}</div>`
     + `<small class="mut">Starts by itself when the user runs out of data or time (or with “Start next plan”). Everything empty = no next plan.</small>`, "pgu-plan");
-  const act = `<div class="sbox pgu-act pgu-row"><h5><i>📡</i>Activity<span class="sp"></span><span class="pg-admin-seg">${[["devices", "Devices"], ["subs", "Subscription"], ["online", "Online now"]].map(([k, l]) => `<button type="button" class="${pgU.act === k ? "on" : ""}" data-k="${k}" onclick="pgUserAct('${k}')">${l}</button>`).join("")}</span></h5><div id="pgu-actbody"></div></div>`;
+  const act = `<div class="sbox pgu-act pgu-row"><h5><i>📡</i>Activity<span class="sp"></span><span class="pg-admin-seg">${[["devices", "Devices"], ["subs", "Subscription"], ["format", "Formats"], ["online", "Online now"]].map(([k, l]) => `<button type="button" class="${pgU.act === k ? "on" : ""}" data-k="${k}" onclick="pgUserAct('${k}')">${l}</button>`).join("")}</span></h5><div id="pgu-actbody"></div></div>`;
   showModal(`<span class="st ${u.status === "active" ? "online" : u.status === "disabled" ? "" : "offline"}"></span><b>${nm}</b> <span class="pill">${esc(String(u.status).replace("_", " "))}</span>${u.admin ? ` <span class="pill" title="The admin that owns this user">${esc(u.admin)}</span>` : ""}`,
     `${bar}<form class="frm ue-form" onsubmit="return pgUserSave(event)"><div class="sgrid ue-grid two">${account}<div class="pgu-col">${usage}${plan}</div></div>${groups}${act}
     <div class="frm-act ue-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide ue pgu");
@@ -105,6 +105,7 @@ const pgUDevRow = d => [d.model, d.os && (d.os + (d.version ? " " + d.version : 
 window.pgUserAct = async k => {
   pgU.act = k; document.querySelectorAll("#modal .pgu-act .pg-admin-seg button").forEach(x => x.classList.toggle("on", x.dataset.k === k));
   const box = $("#pgu-actbody"); if (!box) return;
+  if (k === "format") { box.innerHTML = pgUFmtHtml(); return pgUserFmtLoad(pgU.fmt); }
   const path = {devices: "devices", subs: "sub-updates", online: "online"}[k];
   if (!pgU.cache[k]) {
     box.innerHTML = '<div class="loading"><i class="spin"></i><span>Reading…</span></div>';
@@ -119,6 +120,25 @@ window.pgUserAct = async k => {
     + (r.count > r.updates.length ? `<small class="mut">The last ${r.updates.length} of ${r.count} fetches.</small>` : "");
   else box.innerHTML = tb([["Node"], ["Address", "180px"], ["Connections", "110px"]], r.online.map(x => `<tr><td class="name">${esc(x.node)}</td><td class="mono">${esc(x.ip)}</td><td class="mut">${x.connections}</td></tr>`).join(""), "not connected to any node right now");
 };
+/* "Formats": what the subscription of this user answers in each client format, as the panel renders it (to see why a link does not work in one app, or to copy the config by hand) */
+const pgUFormats = [["links", "Links"], ["links_base64", "Links (base64)"], ["xray", "Xray JSON"], ["sing_box", "sing-box JSON"], ["clash", "Clash"], ["clash_meta", "Clash Meta"], ["outline", "Outline"], ["wireguard", "WireGuard (zip)"]];
+const pgUFmtHtml = () => `<div class="pgu-fmtbar"><label>Show as<select onchange="pgUserFmtLoad(this.value)">${pgUFormats.map(([v, l]) => `<option value="${v}" ${v === pgU.fmt ? "selected" : ""}>${l}</option>`).join("")}</select></label><span class="mut" id="pgu-fmtinfo"></span><span class="sp"></span><button type="button" class="sm" id="pgu-fmtcopy" disabled onclick="pgUserFmtCopy(this)">Copy</button></div><div id="pgu-fmtbody"></div>`;
+window.pgUserFmtLoad = async f => {
+  pgU.fmt = f; const body = $("#pgu-fmtbody"), info = $("#pgu-fmtinfo"), cp = $("#pgu-fmtcopy"); if (!body) return;
+  const key = "fmt:" + f;
+  if (!pgU.cache[key]) {
+    body.innerHTML = '<div class="loading"><i class="spin"></i><span>Asking the panel…</span></div>'; info.textContent = ""; cp.disabled = true;
+    try { pgU.cache[key] = await pgApi(pgU.id, `/user/${pgUEnc()}/subscription?format=${encodeURIComponent(f)}`); }
+    catch (e) { if (pgU.fmt === f && body.isConnected) body.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  }
+  if (pgU.fmt !== f || !body.isConnected) return;
+  const r = pgU.cache[key], bytes = r.size.toLocaleString() + " bytes";
+  info.textContent = r.binary ? bytes + " · zip file" : `${bytes} · ${r.type}${r.truncated ? " · cut" : ""}`;
+  cp.disabled = r.binary || r.empty;
+  body.innerHTML = r.binary ? `<div class="mut pgu-fmtnote">WireGuard is answered as a zip file (${bytes}${r.empty ? "; empty: this user has no WireGuard config" : ""}). A browser downloads it from the subscription link of the user.</div>`
+    : r.empty ? '<div class="mut pgu-fmtnote">The panel answers this format with nothing: the user has no config of this kind.</div>' : `<textarea class="pgu-fmtta" readonly spellcheck="false">${esc(r.text)}</textarea>`;
+};
+window.pgUserFmtCopy = btn => { const r = pgU.cache["fmt:" + pgU.fmt]; if (r && r.text) copyFrom(btn, r.text); };
 window.pgUserDev = async i => {
   const d = (pgU.cache.devices || {}).devices[i]; if (!d) return;
   if (!await gconfirm(`Remove the device “${pgUDevRow(d)}” of ${pgU.d.user.username}? It can connect again (and then counts as a new device).`, {danger: true})) return;
@@ -132,7 +152,7 @@ window.pgUserDevAll = async () => {
 /* ---------------------------------------------------------------- the tools of the Users list */
 window.pgUsersMenu = () => pnType() !== "pasarguard" ? "" : `<select class="sm pgu-tools" title="More things to do with users" onchange="pgUsersTool(this)"><option value="">More…</option>
   <optgroup label="The ticked users"><option value="owner">Set owner…</option><option value="template">Apply a template…</option><option value="reset">Reset usage…</option><option value="revoke">New subscription links…</option><option value="delete">Delete…</option></optgroup>
-  <optgroup label="Many users"><option value="expire">Shift end dates…</option><option value="data">Shift data limits…</option><option value="clean">Clean up expired…</option></optgroup>
+  <optgroup label="Many users"><option value="expire">Shift end dates…</option><option value="data">Shift data limits…</option><option value="ssmethod">Shadowsocks method…</option><option value="clean">Clean up expired…</option></optgroup>
   <optgroup label="New users"><option value="new1">New user from a template…</option><option value="newn">Many users from a template…</option></optgroup></select>`;
 const pgUTicked = () => [...document.querySelectorAll(".pn-uchk:checked")].map(x => x.value);
 const pgUOpts = async () => (pgUOpts.c && pgUOpts.c.id === pn.id && Date.now() - pgUOpts.c.at < 20000) ? pgUOpts.c.d : (pgUOpts.c = {id: pn.id, at: Date.now(), d: await pgApi(+pn.id, "/user-tools/options")}).d;
@@ -140,7 +160,7 @@ const pgUList = names => names.slice(0, 3).join(", ") + (names.length > 3 ? ` an
 window.pgUsersTool = async sel => {
   const v = sel.value; sel.selectedIndex = 0; if (!v) return;
   const id = +pn.id;
-  if (["expire", "data"].includes(v)) return pgShiftOpen(v);
+  if (["expire", "data", "ssmethod"].includes(v)) return pgShiftOpen(v);
   if (v === "clean") return pgCleanOpen();
   if (v === "new1" || v === "newn") return pgNewOpen(v === "newn");
   const names = pgUTicked(); if (!names.length) { toast("Tick some users first", "bad"); return; }
@@ -163,16 +183,21 @@ window.pgUPick = (title, text, list, okText, onOk) => {
 };
 window.pgUPickGo = e => { e.preventDefault(); const v = e.target.elements.v.value, cb = pgUPick.cb; closeModal(); if (cb) cb(v); return false; };
 
-/* shift the end dates or the data limits of many users: counted first, done after a confirm */
+/* shift the end dates or the data limits of many users, or set their Shadowsocks method: counted first, done after a confirm (the same "Who" for all three) */
 const pgUStat = ["active", "disabled", "limited", "expired", "on_hold"];
+const pgSsMethods = ["aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-poly1305"];      // twin of pg_users.SS_METHODS
 window.pgShiftOpen = async kind => {
   let o; try { o = await pgUOpts(); } catch (e) { toast("✕ " + e.message, "bad"); return; }
-  const days = kind === "expire", names = pgUTicked(), fld = (l, inner) => `<label class="kv2 kf"><span>${l}</span>${inner}</label>`;
+  const ss = kind === "ssmethod", days = kind === "expire", names = pgUTicked(), fld = (l, inner) => `<label class="kv2 kf"><span>${l}</span>${inner}</label>`;
   pgShift.kind = kind; pgShift.names = names; pgShift.n = null;
-  showModal(`<b>${days ? "Shift end dates" : "Shift data limits"}</b>`, `<form class="pg-admin-form2 pgu-shift" oninput="pgShiftDirty()" onchange="pgShiftDirty()" onsubmit="return pgShiftCount(event)">
-    <div class="sbox"><h5><i>${days ? "📅" : "📦"}</i>${days ? "Add days to the end date" : "Add GB to the data limit"}</h5>
+  const first = ss ? `<div class="sbox"><h5><i>🔐</i>Cipher of the Shadowsocks config</h5>
+      ${fld("Method", `<select name="method">${pgSsMethods.map(m => `<option ${m === "chacha20-ietf-poly1305" ? "selected" : ""}>${m}</option>`).join("")}</select>`)}
+      <small class="mut">Only users that have a Shadowsocks config are touched. Each keeps its own password; only the method changes, and a client takes the new one when it fetches its subscription again.</small></div>`
+    : `<div class="sbox"><h5><i>${days ? "📅" : "📦"}</i>${days ? "Add days to the end date" : "Add GB to the data limit"}</h5>
       ${fld("Amount", `<input name="amount" type="number" step="${days ? 1 : 0.5}" required placeholder="${days ? "30, or -7 to take away" : "10, or -5 to take away"}"><em>${days ? "days" : "GB"}</em>`)}
-      <small class="mut">${days ? "Users with no end date are not touched." : "Users with an unlimited data limit are not touched."} The panel adds the number to every user the choices below match.</small></div>
+      <small class="mut">${days ? "Users with no end date are not touched." : "Users with an unlimited data limit are not touched."} The panel adds the number to every user the choices below match.</small></div>`;
+  showModal(`<b>${ss ? "Shadowsocks method" : days ? "Shift end dates" : "Shift data limits"}</b>`, `<form class="pg-admin-form2 pgu-shift" oninput="pgShiftDirty()" onchange="pgShiftDirty()" onsubmit="return pgShiftCount(event)">
+    ${first}
     <div class="sbox"><h5><i>🎯</i>Who</h5>
       <div class="kv2 kf"><span>Status</span><div class="pgu-chips">${pgUStat.map(s => `<label class="chk"><input type="checkbox" name="st" value="${s}"><span>${s.replace("_", " ")}</span></label>`).join("")}</div></div>
       <div class="kv2 kf"><span>Groups</span><div class="pgu-groups">${o.groups.map(g => `<label class="chk"><input type="checkbox" name="grp" value="${g.id}"><span>${esc(g.name)}</span></label>`).join("") || '<span class="mut">no group</span>'}</div></div>
@@ -188,20 +213,23 @@ function pgShiftBody(form, dry) {
   const f = form.elements, filters = {}, st = [...form.querySelectorAll('input[name="st"]:checked')].map(x => x.value), gr = [...form.querySelectorAll('input[name="grp"]:checked')].map(x => +x.value);
   if (st.length) filters.status = st; if (gr.length) filters.group_ids = gr; if (f.admin.value) filters.admins = [f.admin.value]; if (f.after.value) filters.expire_after_day = f.after.value; if (f.before.value) filters.expire_before_day = f.before.value;
   if (f.only && f.only.checked) filters.usernames = pgShift.names;
+  if (pgShift.kind === "ssmethod") return {method: f.method.value, filters, dry_run: dry, confirm: !dry};
   return {what: pgShift.kind, amount: +f.amount.value, filters, dry_run: dry, confirm: !dry};
 }
+const pgShiftPath = () => pgShift.kind === "ssmethod" ? "/user-tools/proxy-method" : "/user-tools/shift";
 window.pgShiftDirty = () => { pgShift.n = null; const go = $("#pgu-go"), r = $("#pgu-res"); if (go) go.disabled = true; if (r) r.innerHTML = ""; };
 window.pgShiftCount = async e => {
   e.preventDefault(); const r = $("#pgu-res"), body = pgShiftBody(e.target, true), btn = e.target.querySelector("button[type=submit]"); btn.disabled = true;
-  try { const j = await pgApi(+pn.id, "/user-tools/shift", {method: "POST", body}); pgShift.n = j.count; pgShift.body = body; r.innerHTML = `<div class="pgu-count ${j.count ? "" : "none"}"><b>${j.count ?? "?"}</b> user${j.count === 1 ? "" : "s"} match${j.count === 1 ? "es" : ""}${j.count ? "" : ": nothing would change"}</div>`; $("#pgu-go").disabled = !j.count; }
+  try { const j = await pgApi(+pn.id, pgShiftPath(), {method: "POST", body}); pgShift.n = j.count; pgShift.body = body; r.innerHTML = `<div class="pgu-count ${j.count ? "" : "none"}"><b>${j.count ?? "?"}</b> user${j.count === 1 ? "" : "s"} match${j.count === 1 ? "es" : ""}${j.count ? "" : ": nothing would change"}</div>`; $("#pgu-go").disabled = !j.count; }
   catch (err) { r.innerHTML = `<div class="err">${esc(err.message)}</div>`; }
   btn.disabled = false; return false;
 };
 window.pgShiftGo = async () => {
   const b = pgShift.body, n = pgShift.n; if (!b || !n) return;
-  const what = pgShift.kind === "expire" ? `${b.amount > 0 ? "add" : "take away"} ${Math.abs(b.amount)} day${Math.abs(b.amount) === 1 ? "" : "s"} ${b.amount > 0 ? "to" : "from"} the end date` : `${b.amount > 0 ? "add" : "take away"} ${Math.abs(b.amount)} GB ${b.amount > 0 ? "to" : "from"} the data limit`;
-  if (!await gconfirm(`${what[0].toUpperCase() + what.slice(1)} of ${n} user${n === 1 ? "" : "s"}? The panel cannot undo it (do the opposite amount to go back).`, {danger: true})) return;
-  try { const j = await pgApi(+pn.id, "/user-tools/shift", {method: "POST", body: {...b, dry_run: false, confirm: true}}); toast(`✓ Done for ${j.count ?? n} user${(j.count ?? n) === 1 ? "" : "s"}`, "ok"); pn.users = null; closeModal(); refresh(); }
+  const ss = pgShift.kind === "ssmethod", what = ss ? "" : pgShift.kind === "expire" ? `${b.amount > 0 ? "add" : "take away"} ${Math.abs(b.amount)} day${Math.abs(b.amount) === 1 ? "" : "s"} ${b.amount > 0 ? "to" : "from"} the end date` : `${b.amount > 0 ? "add" : "take away"} ${Math.abs(b.amount)} GB ${b.amount > 0 ? "to" : "from"} the data limit`;
+  if (!await gconfirm(ss ? `Set the Shadowsocks method of ${n} user${n === 1 ? "" : "s"} to ${b.method}? Each keeps its own password; every client has to take its subscription again to get the new method. The panel cannot undo it (set the old method again to go back).`
+    : `${what[0].toUpperCase() + what.slice(1)} of ${n} user${n === 1 ? "" : "s"}? The panel cannot undo it (do the opposite amount to go back).`, {danger: true})) return;
+  try { const j = await pgApi(+pn.id, pgShiftPath(), {method: "POST", body: {...b, dry_run: false, confirm: true}}); toast(`✓ Done for ${j.count ?? n} user${(j.count ?? n) === 1 ? "" : "s"}`, "ok"); pn.users = null; closeModal(); refresh(); }
   catch (e) { toast("✕ " + e.message, "bad"); }
 };
 

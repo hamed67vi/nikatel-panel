@@ -59,26 +59,29 @@ function pgUsageSortRows(rows, key, dir) {
     return d * ((Number(x) || 0) - (Number(y) || 0));
   });
 }
-/* the SVG text of a small bar chart; series = [{label, gb, jalali}]; every bar has a tooltip; no library */
+/* the SVG text of a small bar chart; series = [{label, gb, jalali}] (`gb` is the value, whatever it counts); every bar has a tooltip; no library.
+   o.valueText(v) writes a value for the tooltip, o.maxText(max) the note in the corner and o.none the note of a chart with nothing in it (the defaults are for GB) */
 function pgUsageBarsSvg(series, o = {}) {
   const W = o.width || 640, H = o.height || 150, L = 8, R = 8, T = 18, B = 20;
   const pts = (Array.isArray(series) ? series : []).filter(p => p && Number.isFinite(+p.gb));
+  const vt = typeof o.valueText === "function" ? o.valueText : v => v.toFixed(2) + " GB", mt = typeof o.maxText === "function" ? o.maxText : m => "max " + pgUsageGbText(m), none = o.none || "no traffic in this range";
   const head = `<svg class="pg-usage-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="usage per ${esc(o.unit || "day")}">`;
   if (!pts.length) return `${head}<text class="pg-usage-ax" x="${W / 2}" y="${H / 2}" text-anchor="middle">No data</text></svg>`;
   const max = Math.max(0, ...pts.map(p => +p.gb)), pw = W - L - R, ph = H - T - B, step = pw / pts.length, bw = Math.max(1, step * 0.74), every = Math.ceil(pts.length / 8);
   const bars = pts.map((p, i) => {
     const v = +p.gb, h = max > 0 && v > 0 ? Math.max(1, v / max * ph) : 0, x0 = L + i * step, x = x0 + (step - bw) / 2;
-    const tip = `${p.label}${p.jalali ? " · " + p.jalali : ""}: ${v.toFixed(2)} GB`;
+    const tip = `${p.label}${p.jalali ? " · " + p.jalali : ""}: ${vt(v)}`;
     return `<g><title>${esc(tip)}</title><rect class="pg-usage-hit" x="${x0.toFixed(1)}" y="${T}" width="${step.toFixed(1)}" height="${ph}"/>${h ? `<rect class="pg-usage-bar${v === max ? " top" : ""}" x="${x.toFixed(1)}" y="${(T + ph - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2"/>` : ""}</g>`;
   }).join("");
   const labels = pts.map((p, i) => i % every === 0 ? `<text class="pg-usage-ax" x="${(L + i * step + step / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(p.label)}</text>` : "").join("");
-  return `${head}<line class="pg-usage-line" x1="${L}" y1="${T + ph}" x2="${W - R}" y2="${T + ph}"/><text class="pg-usage-ax" x="${L}" y="11">${max > 0 ? "max " + esc(pgUsageGbText(max)) : "no traffic in this range"}</text>${bars}${labels}</svg>`;
+  return `${head}<line class="pg-usage-line" x1="${L}" y1="${T + ph}" x2="${W - R}" y2="${T + ph}"/><text class="pg-usage-ax" x="${L}" y="11">${max > 0 ? esc(mt(max)) : esc(none)}</text>${bars}${labels}</svg>`;
 }
 
 /* ---- state: what the tab knows. The Panels page draws itself again every 15 s and calls render() each time: render paints from this state AT ONCE (no "loading" flash, the
    scroll position stays) and asks the server only for what is older than the server's own cache (counters 15 s, ranges and top users 30 s). */
 const pgUsageState = {id: 0, type: "pasarguard", ranges: null, rangesAt: 0, preset: "last7", from: "", to: "", ov: null, ovAt: 0, range: null, rangeKey: "", rangeAt: 0, top: null, topKey: "", topAt: 0, admins: null,
-  look: null, lookBusy: false, lookErr: "", lookStale: false, kind: "admin", name: "", topSort: "used_traffic", topAdmin: "", err: {}, scroll: {}, sort: {range: {key: "gb", dir: -1}, look: {key: "gb", dir: -1}}};
+  look: null, lookBusy: false, lookErr: "", lookStale: false, kind: "admin", name: "", topSort: "used_traffic", topAdmin: "", err: {}, scroll: {}, sort: {range: {key: "gb", dir: -1}, look: {key: "gb", dir: -1}},
+  counts: null, countsKey: "", countsAt: 0, metric: "online", countsAdmin: "", apps: null, appsKey: "", appsAt: 0, appsAdmin: ""};
 const pgUsageTok = {};            // one counter per kind of question: a newer question drops the answer of an older one
 const pgUsageMemo = new WeakMap();
 const pgUsageIsPg = () => pgUsageState.type === "pasarguard";
@@ -96,7 +99,8 @@ function pgUsagePut(sel, html) {
 function pgUsageReset(id, type) {
   const s = pgUsageState;
   Object.assign(s, {id, type, ov: null, ovAt: 0, range: null, rangeKey: "", rangeAt: 0, top: null, topKey: "", topAt: 0, admins: null, look: null, lookBusy: false, lookErr: "", lookStale: false,
-    kind: "admin", name: "", topSort: "used_traffic", topAdmin: "", err: {}, scroll: {}, preset: type === "marzban" ? "last30" : "last7"});      // a month is the useful default for an admin's usage on Marzban
+    kind: "admin", name: "", topSort: "used_traffic", topAdmin: "", err: {}, scroll: {}, preset: type === "marzban" ? "last30" : "last7",      // a month is the useful default for an admin's usage on Marzban
+    counts: null, countsKey: "", countsAt: 0, metric: "online", countsAdmin: "", apps: null, appsKey: "", appsAt: 0, appsAdmin: ""});
   Object.keys(pgUsageTok).forEach(k => pgUsageTok[k]++);        // what is still on its way for the old panel is dropped
 }
 
@@ -122,7 +126,7 @@ window.pgUsagePreset = v => {
   const s = pgUsageState;
   if (v === "custom" && (!s.from || !s.to)) { const p = pgUsagePresetInfo("last7") || {}; s.from = p.from || ""; s.to = p.to || ""; }
   s.preset = v;
-  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawAge(); pgUsageDrawRange(); pgUsageKick(false); pgUsageRelook();
+  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawAge(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
 };
 window.pgUsageDates = () => {
   const f = $("#pg-usage-from"), t = $("#pg-usage-to"), s = pgUsageState; if (!f || !t) return;
@@ -130,7 +134,7 @@ window.pgUsageDates = () => {
   if (!f.value || !t.value) return;
   if (f.value > t.value) { toast("✕ The first day is after the last day", "bad"); return; }
   s.from = f.value; s.to = t.value;
-  pgUsageDrawRange(); pgUsageKick(false); pgUsageRelook();
+  pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
 };
 
 /* ---- the counters */
@@ -223,8 +227,54 @@ async function pgUsageLoadAdmins() {
   if (s.id !== id || mine !== pgUsageTok.admins) return;
   s.admins = list;
   const dl = $("#pg-usage-admins"); if (dl) dl.innerHTML = list.map(a => `<option value="${esc(a)}"></option>`).join("");
-  pgUsageDrawTop();
+  pgUsageDrawTop(); pgUsageDrawPair();
 }
+
+/* ---- users over time (online / expired / limited) and the apps that fetch the subscription: two cards side by side, PasarGuard only */
+const pgUsageMetrics = [["online", "Online"], ["expired", "Expired"], ["limited", "Limited"]];
+const pgUsageCountsKey = () => `${pgUsageState.metric}|${pgUsageState.countsAdmin}|${pgUsageQuery()}`;
+const pgUsageAppsKey = () => `${pgUsageState.appsAdmin}|${pgUsageQuery()}`;
+const pgUsageEnded = d => !!d && !!d.range && Date.parse(d.range.end) < Date.now() - 7200000;          // a range that ended long ago does not change: it is not asked again
+const pgUsageAdminOpts = (cur, first) => `<option value="">${first}</option>` + (pgUsageState.admins || []).map(a => `<option value="${esc(a)}" ${cur === a ? "selected" : ""}>${esc(a)}</option>`).join("");
+function pgUsageCountsHtml(d, busy) {
+  const s = pgUsageState, unit = d.period === "hour" ? "hour" : "day", n = v => Number(v).toLocaleString("en-US");
+  const seg = pgUsageMetrics.map(([k, l]) => `<button type="button" class="${s.metric === k ? "on" : ""}" onclick="pgUsageMetric('${k}')">${l}</button>`).join("");
+  const pts = d.series.map(p => { const tz = pgUsageTehran(p.t), hm = tz.slice(11, 16); return {label: unit === "hour" ? hm : tz.slice(5, 10), jalali: pgUsageJalaliOf(tz.slice(0, 10)) + (unit === "hour" ? " " + hm : ""), gb: p.count}; });
+  const what = {online: "users were online", expired: "users expired", limited: "users ran out of data"}[d.metric] || "users";
+  return `<div class="card pg-usage-card ${busy ? "pg-usage-busy" : ""}"><h3>Users over time <span class="sp"></span><small class="mut">per ${unit}, Tehran time${d.cached && d.age_s >= 1 ? " · cached " + Math.round(d.age_s) + " s" : ""}</small></h3>
+    <div class="pg-usage-row"><span class="pg-admin-seg">${seg}</span><select onchange="pgUsageCountsAdmin(this.value)" title="Count the users of one admin only">${pgUsageAdminOpts(s.countsAdmin, "All admins")}</select></div>
+    <div class="pg-usage-head"><span class="pg-usage-big">${n(d.count)}</span><span class="mut">${esc(what)} · ${esc(d.range.from)} <small>${esc(d.range.from_j)}</small> → ${esc(d.range.to)} <small>${esc(d.range.to_j)}</small></span></div>
+    <div class="pg-usage-chart">${pgUsageBarsSvg(pts, {unit, valueText: v => n(v) + (v === 1 ? " user" : " users"), maxText: m => "peak " + n(m), none: "none in this range"})}</div></div>`;
+}
+function pgUsageAppsHtml(d, busy) {
+  const s = pgUsageState, n = v => Number(v).toLocaleString("en-US");
+  const rows = d.apps.map(a => `<tr><td class="name"><div class="ell" title="${esc(a.name)}">${esc(a.name || "unknown app")}</div></td><td class="pg-usage-nw"><span class="pg-usage-share" title="${a.percent}%"><i style="width:${Math.min(100, a.percent)}%"></i></span> <small class="mut">${a.percent}%</small></td><td class="pg-usage-num">${n(a.count)}</td></tr>`).join("");
+  return `<div class="card pg-usage-card ${busy ? "pg-usage-busy" : ""}"><h3>Subscription apps <span class="sp"></span><small class="mut">fetches of the subscription link${d.cached && d.age_s >= 1 ? " · cached " + Math.round(d.age_s) + " s" : ""}</small></h3>
+    <div class="pg-usage-row"><select onchange="pgUsageAppsAdmin(this.value)" title="Whose fetches are counted">${pgUsageAdminOpts(s.appsAdmin, "All users")}</select></div>
+    <div class="pg-usage-head"><span class="pg-usage-big">${n(d.total)}</span><span class="mut">fetches · ${esc(d.range.from)} <small>${esc(d.range.from_j)}</small> → ${esc(d.range.to)} <small>${esc(d.range.to_j)}</small></span></div>
+    <div class="lbox full pg-usage-nodes"><table class="tbl lift"><colgroup><col><col style="width:130px"><col style="width:86px"></colgroup><thead><tr><th data-prio="0">App</th><th>Share</th><th>Fetches</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="mut">No fetch in this range</td></tr>'}</tbody></table></div></div>`;
+}
+function pgUsageDrawPair() {
+  const s = pgUsageState, pair = $("#pg-usage-pair"); if (!pair) return;
+  pair.hidden = !pgUsageIsPg(); if (pair.hidden) return;
+  pgUsagePut("#pg-usage-counts", pgUsageErr(s.err.counts) + (s.counts ? pgUsageCountsHtml(s.counts, s.countsKey !== pgUsageCountsKey()) : s.err.counts ? "" : pgUsageWait("Reading the user counts…")));
+  pgUsagePut("#pg-usage-apps", pgUsageErr(s.err.apps) + (s.apps ? pgUsageAppsHtml(s.apps, s.appsKey !== pgUsageAppsKey()) : s.err.apps ? "" : pgUsageWait("Reading the apps…")));
+}
+async function pgUsageLoadCounts() {
+  const s = pgUsageState, id = s.id, key = pgUsageCountsKey(), mine = pgUsageTick("counts");
+  try { const d = await pgApi(id, `/usage/counts?metric=${encodeURIComponent(s.metric)}&${pgUsageQuery()}${s.countsAdmin ? "&admin=" + encodeURIComponent(s.countsAdmin) : ""}`); if (s.id !== id || mine !== pgUsageTok.counts) return; s.counts = d; s.countsKey = key; s.countsAt = Date.now(); s.err.counts = ""; }
+  catch (e) { if (s.id !== id || mine !== pgUsageTok.counts) return; s.err.counts = (e && e.message) || String(e); if (s.countsKey !== pgUsageCountsKey()) s.counts = null; }
+  pgUsageDrawPair();
+}
+async function pgUsageLoadApps() {
+  const s = pgUsageState, id = s.id, key = pgUsageAppsKey(), mine = pgUsageTick("apps");
+  try { const d = await pgApi(id, `/usage/sub-apps?${pgUsageQuery()}${s.appsAdmin ? "&admin=" + encodeURIComponent(s.appsAdmin) : ""}`); if (s.id !== id || mine !== pgUsageTok.apps) return; s.apps = d; s.appsKey = key; s.appsAt = Date.now(); s.err.apps = ""; }
+  catch (e) { if (s.id !== id || mine !== pgUsageTok.apps) return; s.err.apps = (e && e.message) || String(e); if (s.appsKey !== pgUsageAppsKey()) s.apps = null; }
+  pgUsageDrawPair();
+}
+window.pgUsageMetric = k => { pgUsageState.metric = k; pgUsageDrawPair(); pgUsageLoadCounts(); };
+window.pgUsageCountsAdmin = v => { pgUsageState.countsAdmin = v; pgUsageDrawPair(); pgUsageLoadCounts(); };
+window.pgUsageAppsAdmin = v => { pgUsageState.appsAdmin = v; pgUsageDrawPair(); pgUsageLoadApps(); };
 
 /* ---- the lookup box: an admin or a user, for the range chosen at the top */
 function pgUsageLookFormHtml() {
@@ -269,6 +319,7 @@ function pgUsageRelook() {
 
 /* ---- the tab */
 const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-usage-bar"></div><div id="pg-usage-cards"></div><div id="pg-usage-range"></div>
+  <div class="pg-usage-cols pg-usage-pair" id="pg-usage-pair" hidden><div id="pg-usage-counts"></div><div id="pg-usage-apps"></div></div>
   <div class="pg-usage-cols"><div id="pg-usage-top"></div><div class="card pg-usage-card pg-usage-look"><h3>Usage of an admin or a user</h3><div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div></div></div></div>`;
 async function pgUsageLoadRanges() {
   const s = pgUsageState, id = s.id, r = await pgApi(id, "/usage/ranges");          // the dates of the presets: no question to the panel, so it is cheap
@@ -281,6 +332,8 @@ function pgUsageKick(force) {
   const s = pgUsageState, now = Date.now();
   if (force || !s.ov || now - s.ovAt > 14000) pgUsageLoadCards();
   if (pgUsageIsPg() && (force || !s.range || s.rangeKey !== pgUsageQuery() || (now - s.rangeAt > 29000 && !pgUsageRangeIsOld()))) pgUsageLoadRange();
+  if (pgUsageIsPg() && (force || !s.counts || s.countsKey !== pgUsageCountsKey() || (now - s.countsAt > 29000 && !pgUsageEnded(s.counts)))) pgUsageLoadCounts();
+  if (pgUsageIsPg() && (force || !s.apps || s.appsKey !== pgUsageAppsKey() || (now - s.appsAt > 29000 && !pgUsageEnded(s.apps)))) pgUsageLoadApps();
   if (force || !s.top || s.topKey !== pgUsageTopKey() || now - s.topAt > 29000) pgUsageLoadTop();
   if (s.admins == null) pgUsageLoadAdmins();
   if (force || now - s.rangesAt > 300000) pgUsageLoadRanges().then(() => pgUsagePut("#pg-usage-bar", pgUsageBarHtml())).catch(() => { /* the dates on show stay as they are */ });
@@ -294,7 +347,7 @@ async function pgUsageRender(id, box) {
     if (!box.isConnected || (typeof pn !== "undefined" && pn.tab !== "usage")) return;          // another tab was opened meanwhile
   }
   pgPaint(box, pgUsageSkeleton());          // from what is known, at once: the first await comes after this
-  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawTop();
+  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageDrawTop();
   pgUsagePut("#pg-usage-look-form", pgUsageLookFormHtml()); pgUsageDrawLook();
   pgUsageKick(false);
 }

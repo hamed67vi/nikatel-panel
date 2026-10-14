@@ -72,6 +72,18 @@ def usage_user(panel_id: int, username: str, preset: Preset = "last7", frm: From
     return {"ok": True, **_wrap(pg_usage.user_usage, _cred(panel_id), username, preset, frm, to)}
 
 
+@router.get("/panels/{panel_id}/pg/usage/counts")
+def usage_counts(panel_id: int, metric: str = Query("online", pattern=r"^(online|expired|limited)$"), preset: Preset = "last7", frm: FromDate = "", to: ToDate = "", admin: str = Query("", max_length=64)):
+    """How many users were online, expired or limited over time in a range of Tehran days (a point per hour up to two days, else per day), for everybody or one admin (PasarGuard only)."""
+    return {"ok": True, **_wrap(pg_usage.counts, _cred(panel_id), metric, preset, frm, to, admin)}
+
+
+@router.get("/panels/{panel_id}/pg/usage/sub-apps")
+def usage_sub_apps(panel_id: int, preset: Preset = "last7", frm: FromDate = "", to: ToDate = "", user: str = Query("", max_length=128), admin: str = Query("", max_length=64)):
+    """Which apps fetch the subscription: the share of each client over a range, for everybody, one user or one admin (PasarGuard only)."""
+    return {"ok": True, **_wrap(pg_usage.sub_apps, _cred(panel_id), preset, frm, to, user, admin)}
+
+
 @router.get("/panels/{panel_id}/pg/usage/top-users")
 def usage_top_users(panel_id: int, sort: str = Query("used_traffic", max_length=20), limit: int = Query(20, ge=1, le=20), admin: str = Query("", max_length=64)):
     """The top users by a sort the panel itself does (used traffic, last online, data limit, creation date): at most 20 rows, never the whole list, never secrets."""

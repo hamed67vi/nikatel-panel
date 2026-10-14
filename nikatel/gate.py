@@ -2,7 +2,7 @@
 every URL answers 404 until the browser has opened /<entry_path> once; that visit sets a signed gate
 cookie (valid 30 days, bound to the current path) and only then the login page, the static files and the API
 answer. Requests that come straight from this machine (no reverse proxy header) are never gated: the
-deploy health check and the local smoke test use them."""
+deploy health check and the local smoke test use them. (Beside auth.py, not in services/: it works on the HTTP request.)"""
 from __future__ import annotations
 
 import hashlib
@@ -12,9 +12,9 @@ import time
 from fastapi import Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from .. import auth
-from ..config import get_settings
-from . import settings as st
+from . import auth
+from .config import get_settings
+from .services import settings as st
 
 PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$")
 _CACHE = {"at": 0.0, "path": ""}
@@ -87,7 +87,7 @@ def allowed(request: Request) -> bool:
     bearer = request.headers.get("authorization", "")
 
     if bearer.lower().startswith("bearer "):                   # a machine with a live API token needs no door cookie; a wrong token sees the missing page like everyone else
-        from . import tokens
+        from .services import tokens
 
         return tokens.verify(bearer[7:]) is not None
 

@@ -38,7 +38,17 @@ from ..models import (
     Tunnel,
 )
 from ..ssh import Node, SSHError, run_action, run_script
-from . import autopilot, builder, dnsprov, failover, gateway, license, panels, telegram
+from . import (
+    autopilot,
+    builder,
+    dnscache,
+    dnsprov,
+    failover,
+    gateway,
+    license,
+    panels,
+    telegram,
+)
 from . import settings as st
 from .events import emit
 
@@ -527,27 +537,23 @@ RECORDS_MAX_AGE = 600           # the page reads the records the DNS page alread
 
 def _arvan_rows(fresh: bool) -> tuple[list[dict], list[str]]:
     """The records of every ArvanCloud account: from the DNS page's copy when it is recent (and `fresh` is not asked), else read now (which also renews that copy)."""
-    from ..api import dns as dns_api
-
     accs = {a.id: a for a in dnsprov.accounts() if a.provider == "arvan"}
 
-    if not fresh and dns_api._CACHE["at"]:
-        if time.time() - dns_api._CACHE["at"] > RECORDS_MAX_AGE:
-            dns_api._refresh_in_background()                     # what is on the screen is the copy it has; the next look has the new one
+    if not fresh and dnscache.CACHE["at"]:
+        if time.time() - dnscache.CACHE["at"] > RECORDS_MAX_AGE:
+            dnscache.refresh_in_background()                     # what is on the screen is the copy it has; the next look has the new one
 
-        bad = [f"{i['name']}: {i['error']}" for i in dns_api._CACHE["accounts"] if i["id"] in accs and not i["ok"]]
-        return [r for r in dns_api._CACHE["rows"] if r.get("account") in accs], bad
+        bad = [f"{i['name']}: {i['error']}" for i in dnscache.CACHE["accounts"] if i["id"] in accs and not i["ok"]]
+        return [r for r in dnscache.CACHE["rows"] if r.get("account") in accs], bad
 
-    dns_api._read_all()
-    bad = [f"{i['name']}: {i['error']}" for i in dns_api._CACHE["accounts"] if i["id"] in accs and not i["ok"]]
-    return [r for r in dns_api._CACHE["rows"] if r.get("account") in accs], bad
+    dnscache.read_all()
+    bad = [f"{i['name']}: {i['error']}" for i in dnscache.CACHE["accounts"] if i["id"] in accs and not i["ok"]]
+    return [r for r in dnscache.CACHE["rows"] if r.get("account") in accs], bad
 
 
 def _forget_records() -> None:
     """A record was changed: the DNS page's copy is out of date."""
-    from ..api import dns as dns_api
-
-    dns_api._CACHE["at"] = 0.0
+    dnscache.forget()
 
 
 def connect_plan(fresh: bool = False) -> dict:
@@ -587,9 +593,8 @@ def connect_plan(fresh: bool = False) -> dict:
                      "target": f"{route['target_host']}:{route['target_port']}", "ready": bool(g and g.installed and g.applied_at)})
 
     rows.sort(key=lambda x: (x["server"], x["fqdn"]))
-    from ..api import dns as dns_api
 
-    return {"records": rows, "errors": errors, "forwards": len(routes), "bridged": sum(1 for x in rows if x["state"] == "bridged"), "cached_at": int(dns_api._CACHE["at"] or time.time())}
+    return {"records": rows, "errors": errors, "forwards": len(routes), "bridged": sum(1 for x in rows if x["state"] == "bridged"), "cached_at": int(dnscache.CACHE["at"] or time.time())}
 
 
 def _set_port(row: dict, port: int, before_log: bool) -> dict:

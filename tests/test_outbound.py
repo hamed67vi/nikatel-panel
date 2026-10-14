@@ -323,9 +323,9 @@ def test_classify():
 def _dns(monkeypatch, fake):
     from types import SimpleNamespace
 
-    from nikatel.api import dns as dns_api
+    from nikatel.services import dnscache
 
-    dns_api._CACHE.update(at=0.0, rows=[], accounts=[])                                                          # the DNS page keeps a copy of the records: every test starts without it
+    dnscache.CACHE.update(at=0.0, rows=[], accounts=[])                                                          # the DNS page keeps a copy of the records: every test starts without it
     acc = SimpleNamespace(id="arvan", provider="arvan", name="ArvanCloud")
     monkeypatch.setattr(outbound.dnsprov, "accounts", lambda: [acc])
     monkeypatch.setattr(outbound.dnsprov, "provider_of", lambda a: fake)
@@ -731,20 +731,20 @@ def test_the_records_come_from_the_dns_pages_copy_unless_fresh_is_asked(monkeypa
 def test_an_old_copy_of_the_records_is_shown_at_once_and_renewed_in_the_background(monkeypatch):
     import time
 
-    from nikatel.api import dns as dns_api
+    from nikatel.services import dnscache
 
     _world()
     fake = FakeArvan("203.0.113.5")
     _dns(monkeypatch, fake)
     outbound.from_tunnels()
     assert len(outbound.connect_plan()["records"]) == 1
-    dns_api._CACHE["at"] = time.time() - 5000                                                                       # the copy is old
+    dnscache.CACHE["at"] = time.time() - 5000                                                                       # the copy is old
     renewed = []
-    monkeypatch.setattr(dns_api, "_refresh_in_background", lambda: renewed.append(1))
+    monkeypatch.setattr(dnscache, "refresh_in_background", lambda: renewed.append(1))
     asked = []
     real = fake.records
     fake.records = lambda d: asked.append(d) or real(d)
     plan = outbound.connect_plan()
     assert len(plan["records"]) == 1 and asked == [] and renewed == [1]                                             # shown from the copy, ArvanCloud not asked, a renewal started
-    assert abs(plan["cached_at"] - dns_api._CACHE["at"]) < 2 and plan["cached_at"] < time.time() - 4000
+    assert abs(plan["cached_at"] - dnscache.CACHE["at"]) < 2 and plan["cached_at"] < time.time() - 4000
     assert len(outbound.connect_plan(True)["records"]) == 1 and asked == ["example.test"]                           # fresh still asks

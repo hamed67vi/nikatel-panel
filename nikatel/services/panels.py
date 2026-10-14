@@ -325,8 +325,9 @@ def _cred(p: Panel) -> dict:
             "api_key_trimmed": f"{tok[:10]}***{tok[-3:]}" if is_api_key(tok) else ""}      # the form the panel lists its keys in: the API keys tab marks (and protects) the key this panel is connected with
 
 
-def _http(c: dict, method: str, path: str, token: str | None = None, form: dict | None = None, body=None, timeout: float = 20):
-    headers = {"Accept": "application/json", "User-Agent": "nikatel-panel"}
+def _send(c: dict, method: str, path: str, token: str | None = None, form: dict | None = None, body=None, timeout: float = 20, accept: str = "application/json"):
+    """One request to a panel; the answer when it is a success. An error answer is a PanelError with the panel's own words (and its status as the code), a redirect is an error too."""
+    headers = {"Accept": accept, "User-Agent": "nikatel-panel"}
 
     if token:
         headers.update(auth_headers(token))
@@ -350,6 +351,12 @@ def _http(c: dict, method: str, path: str, token: str | None = None, form: dict 
 
     if 300 <= r.status_code < 400:                                       # a redirect is not an answer: a POST to /api/host (no slash) got 307 from a PasarGuard 5.4.1 panel and created nothing, quietly
         raise PanelError(f"HTTP {r.status_code}: the panel redirected {method} {path} to {r.headers.get('location', 'somewhere else')} instead of doing it", r.status_code)
+
+    return r
+
+
+def _http(c: dict, method: str, path: str, token: str | None = None, form: dict | None = None, body=None, timeout: float = 20):
+    r = _send(c, method, path, token, form, body, timeout)
 
     if not r.content:
         return None
@@ -446,6 +453,19 @@ def call(c: dict, method: str, path: str, **kw):
             return _http(c, method, path, token=_token(c, fresh=True), **kw)
 
         raise
+
+
+def call_raw(c: dict, method: str, path: str, timeout: float = 30) -> tuple[str, bytes]:
+    """The same call for an answer that is not JSON (a subscription in the Clash or sing-box format, a zip): (the content type, the bytes)."""
+    try:
+        r = _send(c, method, path, _token(c), timeout=timeout, accept="*/*")
+    except PanelError as e:
+        if e.code != 401:
+            raise
+
+        r = _send(c, method, path, _token(c, fresh=True), timeout=timeout, accept="*/*")
+
+    return r.headers.get("content-type", ""), r.content
 
 
 def cred_for(panel_id: int) -> dict:

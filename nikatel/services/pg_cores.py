@@ -1187,6 +1187,47 @@ def delete(c: dict, core_id: int, confirm: bool = False) -> dict:
     return {"deleted": True, "backup": name, "warnings": warns}
 
 
+MAX_BULK_CORES = 20
+
+
+def delete_many(c: dict, ids, confirm: bool = False) -> dict:
+    """Delete several cores in ONE call (the panel's own `POST /api/cores/bulk/delete`, all or none): never the first core; what each of them takes with it (the nodes that run it, the hosts and
+    groups that use its inbounds) is collected and needs `confirm`; every core is written to a backup first (`recreate` makes one again)."""
+    _writable()
+    want = sorted({int(i) for i in ids})
+
+    if not 1 <= len(want) <= MAX_BULK_CORES:
+        raise ValueError(f"pick 1 to {MAX_BULK_CORES} cores")
+
+    if DEFAULT_CORE_ID in want:
+        raise ValueError("the first core of the panel is its default one: the panel does not delete it")
+
+    with _WRITE_LOCK:
+        curs = [_get_core(c, i) for i in want]
+        warns = [{**w, "core": cur["name"]} for cur in curs for w in delete_warnings(c, cur)]
+
+        if warns and not confirm:
+            raise NeedsConfirm(warns)
+
+        if not confirm:
+            raise ValueError("deleting cores cannot be undone on the panel: send confirm: true (a backup of each is kept here, see the deleted cores)")
+
+        backups = [backup_write(c["id"], cur, "before deleting the cores (several at once)") for cur in curs]
+
+        try:
+            r = panels.call(c, "POST", "/api/cores/bulk/delete", body={"ids": want}, timeout=120)
+        except PanelError as e:
+            for name in backups:
+                (_bdir() / name).unlink(missing_ok=True)                    # nothing was deleted: the backups are not needed
+
+            raise PanelError(f"the panel did not delete the cores ({_scrub(str(e), *[cur['config'] for cur in curs])})", e.code) from None
+
+        gone = [str(x) for x in r["cores"]] if isinstance(r, dict) and isinstance(r.get("cores"), list) and r["cores"] else [cur["name"] for cur in curs]
+        _record(c, f"Cores {', '.join('“' + n + '”' for n in gone)} of panel #{c['id']} deleted in one call (backups {len(backups)}).")
+
+    return {"deleted": gone, "count": len(gone), "backups": backups, "warnings": warns}
+
+
 def deleted_backups(c: dict) -> list[dict]:
     """The newest backup of every core of this panel that is not on the panel any more (deleted here or there): {core, name, at, file, inbounds, outbounds, type}."""
     try:

@@ -2,7 +2,7 @@
    The Templates tab (pg_access.js) shows a "User templates | Client templates" switch and hands over to pgCtplRender when "Client templates" is on. Everything goes through
    /api/panels/{id}/pg/client-templates; the panel checks the content (Jinja, then YAML / JSON) and its sentence is shown as it comes. A system template and the last template of a
    type are never deleted; the default of a type is moved, never switched off. A change and a delete save the template here first (Backups). */
-const pgCtpl = {id: 0, on: false, d: null, q: "", at: 0, bk: []};
+const pgCtpl = {id: 0, on: false, d: null, q: "", at: 0, bk: [], sel: new Set()};
 const pgCtplOf = id => ((pgCtpl.d || {}).templates || []).find(t => t.id === +id);
 const pgCtplHints = {
   clash_subscription: "A YAML template (Jinja is allowed). The panel renders it and reads the result as YAML.",
@@ -16,7 +16,7 @@ window.pgCtplSet = on => { pgCtpl.on = !!on; refresh(); };
 window.pgCtplSeg = () => `<div class="pg-admin-seg"><button type="button" class="${pgCtpl.on ? "" : "on"}" onclick="pgCtplSet(false)">User templates</button><button type="button" class="${pgCtpl.on ? "on" : ""}" onclick="pgCtplSet(true)">Client templates</button></div>`;
 
 window.pgCtplRender = async (id, box) => {
-  const S = pgCtpl; if (S.id !== id) Object.assign(S, {id, d: null, q: "", at: 0, bk: []});
+  const S = pgCtpl; if (S.id !== id) Object.assign(S, {id, d: null, q: "", at: 0, bk: [], sel: new Set()});
   if (!S.d || Date.now() - S.at > 25000) { pgLoading(box, "Reading the client templates…"); try { S.d = await pgApi(id, "/client-templates"); S.at = Date.now(); } catch (e) { if (box.isConnected) pgError(box, e); return; } }
   if (!box.isConnected || S.id !== id || pn.tab !== "templates") return;
   pgCtplPaint(box);
@@ -26,22 +26,47 @@ window.pgCtplReload = () => { pgCtpl.d = null; refresh(); };
 function pgCtplPaint(box) {
   const S = pgCtpl, d = S.d;
   const left = pgCtplSeg() + `<input type="search" class="pg-admin-q" placeholder="Search name or type…" value="${esc(S.q)}" oninput="pgCtplQ(this.value)" autocomplete="off" spellcheck="false"><span class="pg-admin-cnt"><span class="pill">${d.total} templates</span></span>`;
-  const right = `<button class="sm" onclick="pgCtplBackups()" title="Templates saved here before a change or a delete">Backups</button><button class="sm" onclick="pgCtplReload()" title="Read the templates from the panel again">↻</button><button class="sm pri" onclick="pgCtplEdit(0)">＋ New client template</button>`;
+  const right = `<button class="sm danger pg-admin-kdel" id="pg-ctpl-del" hidden onclick="pgCtplDeleteMany()" title="Delete the ticked templates in one call: all of them or none; each is saved here first">Delete 0 selected</button><button class="sm" onclick="pgCtplBackups()" title="Templates saved here before a change or a delete">Backups</button><button class="sm" onclick="pgCtplReload()" title="Read the templates from the panel again">↻</button><button class="sm pri" onclick="pgCtplEdit(0)">＋ New client template</button>`;
   pgPaint(box, pgBar(left, right) + `<div class="lbox full pg-admin-box" id="pg-ctpl-list">${pgCtplTable()}</div>
     <small class="mut pg-admin-note2">A client template is what a subscription link answers with for one kind of client. Every type has one DEFAULT; a host can use another template of the type for itself (Hosts). The templates the panel came with (system) can be edited but not deleted.</small>`);
+  pgCtplSync();
   const q = $(".pg-admin-q"); if (q && S.q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
-function pgCtplTable() {
+function pgCtplRows() {
   const S = pgCtpl, order = Object.fromEntries(S.d.types.map((t, i) => [t.key, i]));
-  const rows = S.d.templates.filter(t => nkHit([t.name, t.label, t.type].join(" "), S.q)).sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9) || b.default - a.default || a.name.localeCompare(b.name));
-  return `<table class="tbl lift pg-admin-tbl"><colgroup><col style="width:28%"><col style="width:22%"><col style="width:110px"><col><col style="width:250px"></colgroup>
-    <thead><tr><th>Template</th><th>Type</th><th>Default</th><th>Size</th><th></th></tr></thead>
-    <tbody>${rows.map(t => `<tr class="${t.default ? "up" : ""}"><td class="name"><div class="pg-admin-nm"><b class="pg-admin-link" onclick="pgCtplEdit(${t.id})" title="Edit this template">${esc(t.name)}</b>${t.system ? '<span class="pill" title="Made by the panel: it can be edited but not deleted">system</span>' : ""}</div></td>
+  return S.d.templates.filter(t => nkHit([t.name, t.label, t.type].join(" "), S.q)).sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9) || b.default - a.default || a.name.localeCompare(b.name));
+}
+function pgCtplTable() {
+  const S = pgCtpl, rows = pgCtplRows(), can = rows.some(t => !t.system);
+  return `<table class="tbl lift pg-admin-tbl"><colgroup><col style="width:34px"><col style="width:28%"><col style="width:22%"><col style="width:110px"><col><col style="width:250px"></colgroup>
+    <thead><tr><th class="pg-ck"><input type="checkbox" class="ck" id="pg-ctpl-all" ${can ? "" : "disabled"} onchange="pgCtplSelAll(this.checked)" aria-label="Tick every template that can be deleted" title="Tick every template that can be deleted"></th><th>Template</th><th>Type</th><th>Default</th><th>Size</th><th></th></tr></thead>
+    <tbody>${rows.map(t => `<tr class="${t.default ? "up" : ""}"><td class="pg-ck"><input type="checkbox" class="ck" value="${t.id}" ${S.sel.has(t.id) ? "checked" : ""} ${t.system ? 'disabled title="A system template is never deleted"' : ""} onchange="pgCtplSel(this)" aria-label="Tick ${esc(t.name)}"></td>
+      <td class="name"><div class="pg-admin-nm"><b class="pg-admin-link" onclick="pgCtplEdit(${t.id})" title="Edit this template">${esc(t.name)}</b>${t.system ? '<span class="pill" title="Made by the panel: it can be edited but not deleted">system</span>' : ""}</div></td>
       <td><span class="td-type">${esc(t.label)}</span></td><td>${t.default ? '<span class="pill ok">default</span>' : `<button class="sm" onclick="pgCtplDefault(${t.id})" title="Make this the template that is used for ${esc(t.label)} clients">Make default</button>`}</td>
       <td class="mut">${t.size.toLocaleString()} characters · ${t.lines} lines</td>
-      <td class="pg-admin-acts"><button class="sm" onclick="pgCtplEdit(${t.id})">Edit</button><button class="sm" onclick="pgCtplEdit(${t.id}, true)" title="Make a new template as a copy of this one">Copy</button><button class="sm danger" ${t.system ? "disabled" : ""} onclick="pgCtplDelete(${t.id})" title="${t.system ? "A system template is never deleted" : "Delete this template"}">✕</button></td></tr>`).join("") || `<tr><td colspan="5" class="mut">${S.d.templates.length ? "no template matches" : "this panel has no client template"}</td></tr>`}</tbody></table>`;
+      <td class="pg-admin-acts"><button class="sm" onclick="pgCtplEdit(${t.id})">Edit</button><button class="sm" onclick="pgCtplEdit(${t.id}, true)" title="Make a new template as a copy of this one">Copy</button><button class="sm danger" ${t.system ? "disabled" : ""} onclick="pgCtplDelete(${t.id})" title="${t.system ? "A system template is never deleted" : "Delete this template"}">✕</button></td></tr>`).join("") || `<tr><td colspan="6" class="mut">${S.d.templates.length ? "no template matches" : "this panel has no client template"}</td></tr>`}</tbody></table>`;
 }
-window.pgCtplQ = v => { pgCtpl.q = v.trim(); const el = $("#pg-ctpl-list"); if (el) el.innerHTML = pgCtplTable(); };
+const pgCtplDrawList = () => { const el = $("#pg-ctpl-list"); if (el) { el.innerHTML = pgCtplTable(); pgCtplSync(); } };
+window.pgCtplQ = v => { pgCtpl.q = v.trim(); pgCtplDrawList(); };
+
+/* ---- several templates at once: ticks in the list and one delete button in the bar (a system template can not be ticked) */
+const pgCtplTicked = () => [...pgCtpl.sel].filter(i => { const t = pgCtplOf(i); return t && !t.system; });
+function pgCtplSync() {
+  const S = pgCtpl, n = pgCtplTicked().length, b = $("#pg-ctpl-del"), all = $("#pg-ctpl-all"), ids = S.d ? pgCtplRows().filter(t => !t.system).map(t => t.id) : [], k = ids.filter(i => S.sel.has(i)).length;
+  if (b) { b.hidden = !n; b.textContent = `Delete ${n} selected`; }
+  if (all) { all.checked = k > 0 && k === ids.length; all.indeterminate = k > 0 && k < ids.length; }
+}
+window.pgCtplSel = el => { const S = pgCtpl, id = +el.value; if (el.checked) S.sel.add(id); else S.sel.delete(id); pgCtplSync(); };
+window.pgCtplSelAll = on => { const S = pgCtpl; pgCtplRows().forEach(t => { if (t.system) return; if (on) S.sel.add(t.id); else S.sel.delete(t.id); }); pgCtplDrawList(); };
+window.pgCtplDeleteMany = async () => {
+  const S = pgCtpl, ids = pgCtplTicked(); if (!ids.length) return;
+  const ts = ids.map(pgCtplOf), names = ts.map(t => `“${t.name}”`), dflt = ts.filter(t => t.default), who = `${ids.length} client template${ids.length === 1 ? "" : "s"} (${names.slice(0, 5).join(", ")}${names.length > 5 ? ", …" : ""})`;
+  if (!await gconfirm(`Delete ${who}?${dflt.length ? ` ${dflt.map(t => "“" + t.name + "”").join(", ")} ${dflt.length === 1 ? "is the default of its type" : "are defaults of their types"}: another template of the type becomes the default.` : ""} A host that used one falls back to the default. All of them are deleted or none. The panel cannot undo it; each template is saved here first (Backups can make it again).`, {danger: true})) return;
+  const r = await pgDo(() => pgApi(S.id, "/client-templates/bulk-delete", {method: "POST", body: {ids, confirm: true}}), "");
+  if (!r) return;
+  toast(`✓ ${r.count} client template${r.count === 1 ? "" : "s"} deleted (saved in Backups)`, "ok");
+  S.sel = new Set(); S.d = null; await refresh();
+};
 
 /* the window: a name, the type (fixed after it is made), the content, and whether it is the default of its type */
 window.pgCtplEdit = async (id, copy) => {

@@ -90,15 +90,15 @@ class FakeCloudflare:
 
 @pytest.fixture
 def fakes(client, monkeypatch):
-    from nikatel.api import dns as api_dns
     from nikatel.config import get_settings
+    from nikatel.services import dnscache
 
     a, c = FakeArvan(), FakeCloudflare()
     monkeypatch.setattr(get_settings(), "read_only", False)
     monkeypatch.setattr(arvan, "_req", a.req)
     monkeypatch.setattr(cloudflare, "req", c.req)
     monkeypatch.setattr(failover, "_notice", lambda text: None)
-    api_dns._CACHE["at"] = 0.0
+    dnscache.forget()
     st.put("arvan", {"api_key": "arvan-key-0123456789"})
     return a, c
 
@@ -156,14 +156,14 @@ def test_the_main_arvan_key_can_be_removed(client, fakes):
 def test_the_record_list_is_served_from_the_cache_and_renewed_in_the_background(client, fakes, monkeypatch):
     import time as _t
 
-    from nikatel.api import dns as api_dns
+    from nikatel.services import dnscache
 
-    api_dns._CACHE.update(at=0.0, rows=[], accounts=[], refreshing=False)
+    dnscache.CACHE.update(at=0.0, rows=[], accounts=[], refreshing=False)
     first = client.get("/api/dns/records").json()
     assert first["refreshing"] is False and first["cached_at"] > 0 and any(r["type"] == "MX" for r in first["records"])
-    api_dns._CACHE["at"] = _t.time() - 600                               # stale: the page gets the old rows at once, a thread renews them
+    dnscache.CACHE["at"] = _t.time() - 600                               # stale: the page gets the old rows at once, a thread renews them
     seen = []
-    monkeypatch.setattr(api_dns, "_read_all", lambda: (seen.append(1), api_dns._CACHE.update(at=_t.time())))
+    monkeypatch.setattr(dnscache, "read_all", lambda: (seen.append(1), dnscache.CACHE.update(at=_t.time())))
     stale = client.get("/api/dns/records").json()
     assert any(r["type"] == "MX" for r in stale["records"])
     _t.sleep(0.3)

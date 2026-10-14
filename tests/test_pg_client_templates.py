@@ -45,6 +45,14 @@ class Fake:
         if u.path == "/api/client_templates" and method == "GET":
             return {"count": len(self.t), "templates": copy.deepcopy(list(self.t.values()))}
 
+        if u.path == "/api/client_templates/bulk/delete" and method == "POST":
+            for tid in body["ids"]:
+                if tid in self.t and self.t[tid]["is_system"]:
+                    raise PanelError("HTTP 403: Cannot delete system template", 403)
+
+            gone = [self.t.pop(tid)["name"] for tid in body["ids"] if tid in self.t]
+            return {"templates": gone, "count": len(gone)}
+
         if u.path == "/api/client_template" and method == "POST":
             if any(x["name"] == body["name"] and x["template_type"] == body["template_type"] for x in self.t.values()):
                 raise PanelError("HTTP 409: Template with this name already exists for this type", 409)
@@ -204,6 +212,37 @@ def test_a_delete_needs_the_ok_and_can_be_undone(fake):
     assert fake.writes()[-1][2]["content"] == UA
 
 
+def test_several_templates_go_in_one_call_with_a_file_of_each_and_every_type_keeps_one(fake):
+    a = ct.template_create(C, "A", "user_agent", UA)["id"]
+    b = ct.template_create(C, "B", "user_agent", UA)["id"]
+    c = ct.template_create(C, "C", "clash_subscription", "mode: rule\n")["id"]
+    with pytest.raises(ValueError, match="confirm: true"):
+        ct.templates_delete(C, [a, b])
+    assert {a, b, c} <= set(fake.t) and not [w for w in fake.writes() if "bulk" in w[1]]
+    out = ct.templates_delete(C, [b, a, b, c], True)                                                                           # a double is one
+    assert out["deleted"] == ["A", "B", "C"] and out["count"] == 3 and len(out["backups"]) == 3 and not ({a, b, c} & set(fake.t))
+    assert ("POST", "/api/client_templates/bulk/delete", {"ids": [a, b, c]}) in fake.calls
+    assert {x["name"] for x in ct.template_backups(C)} >= {"A", "B", "C"}                                                       # each can be put back
+
+
+def test_a_bulk_delete_of_templates_never_takes_a_system_template_nor_the_last_of_a_type(fake):
+    with pytest.raises(ValueError, match="system template"):
+        ct.templates_delete(C, [1], True)
+
+    fake.t[3]["is_system"] = False                                                                                             # the only sing-box template, no longer a system one
+    with pytest.raises(ValueError, match="no sing-box JSON template"):
+        ct.templates_delete(C, [3], True)
+
+    ua = ct.template_create(C, "Extra", "user_agent", UA)["id"]
+    writes = len(fake.writes())
+
+    for ids, why in (([], "1 to 50"), (list(range(1, 60)), "1 to 50"), ([ua, 99], "no template 99")):
+        with pytest.raises(ValueError, match=why):
+            ct.templates_delete(C, ids, True)
+
+    assert 3 in fake.t and ua in fake.t and len(fake.writes()) == writes                                                       # nothing was sent for any of them
+
+
 def test_a_changed_template_is_put_back_from_its_file(fake):
     t = ct.template_create(C, "Mine", "user_agent", UA)
     ct.template_update(C, t["id"], content=json.dumps({"list": ["x"]}))
@@ -253,6 +292,12 @@ def test_the_api_lists_makes_changes_and_deletes(client, fake, pid):
     assert client.delete(f"{base}/{tid}?confirm=true").json()["deleted"] is True
     bk = client.get(base + "/backups").json()["backups"]
     assert bk and client.post(f"{base}/restore/{bk[0]['file']}").json()["made_again"] is True
+    x = client.post(base, json={"name": "X", "template_type": "user_agent", "content": UA}).json()["template"]["id"]
+    y = client.post(base, json={"name": "Y", "template_type": "user_agent", "content": UA}).json()["template"]["id"]
+    assert client.post(base + "/bulk-delete", json={"ids": [x, y]}).status_code == 400                                          # it always asks
+    assert client.post(base + "/bulk-delete", json={"ids": []}).status_code == 422 and client.post(base + "/bulk-delete", json={"ids": [1], "confirm": True}).status_code == 400
+    done = client.post(base + "/bulk-delete", json={"ids": [x, y], "confirm": True}).json()
+    assert done["ok"] is True and done["deleted"] == ["X", "Y"] and done["count"] == 2
 
 
 def test_the_api_is_for_signed_in_owners_of_pasarguard_panels_only(client, fake, pid):
@@ -271,5 +316,5 @@ def test_the_api_is_for_signed_in_owners_of_pasarguard_panels_only(client, fake,
 def test_every_route_has_a_short_description(client):
     spec = client.app.openapi()
     mine = {(m, p): op for p, ops in spec["paths"].items() if "/pg/client-templates" in p for m, op in ops.items()}
-    assert len(mine) == 7
+    assert len(mine) == 8
     assert all(0 < len((op.get("description") or "").split("\n")[0]) <= 300 for op in mine.values())

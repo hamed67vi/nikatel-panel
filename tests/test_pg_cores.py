@@ -915,5 +915,5 @@ def test_the_api_restart(client, fake, panel_row, monkeypatch):
 def test_every_route_of_the_tab_has_a_short_description(client):
     spec = client.app.openapi()
     mine = {(m, p): op for p, ops in spec["paths"].items() if "/pg/cores" in p for m, op in ops.items()}
-    assert len(mine) == 18                                           # the 8 of the editor + new core, template, deleted (list and make again), delete (check and do), name and tag lists, reality scan, one inbound (dry run, apply)
+    assert len(mine) == 19                                           # the 8 of the editor + new core, template, deleted (list and make again), delete (check, do, several), name and tag lists, reality scan, one inbound (dry run, apply)
     assert all(0 < len((op.get("description") or "").split("\n")[0]) <= 300 for op in mine.values())

@@ -65,6 +65,13 @@ class Fake:
                                "fallbacks_inbound_tags": body["fallbacks_inbound_tags"], "created_at": "2026-02-02T00:00:00Z"}
             return copy.deepcopy(self.cores[cid])
 
+        if u.path == "/api/cores/bulk/delete" and method == "POST":
+            if 1 in body["ids"]:
+                raise PanelError("HTTP 403: Cannot delete default core config", 403)
+
+            gone = [self.cores.pop(i)["name"] for i in body["ids"] if i in self.cores]
+            return {"cores": gone, "count": len(gone)}
+
         if u.path == "/api/core/reality-scan" and method == "POST":
             return {"target": body["target"], "host": "example.test", "port": 443, "feasible": True, "tls13": True, "h2": True, "cert_valid": True, "server_names": ["example.test"], "latency_ms": 31}
 
@@ -342,6 +349,45 @@ def test_when_the_panel_refuses_the_delete_the_backup_is_not_kept(fake):
     assert 2 in fake.cores and list((get_settings().data_dir / "pg-backups").glob("cores-7-2-*")) == []
 
 
+def test_several_cores_go_in_one_call_with_a_backup_of_each(fake):
+    make_second(fake)
+    fake.cores[3] = {**copy.deepcopy(fake.cores[2]), "id": 3, "name": "Third"}
+    fake.hosts.clear()
+    fake.groups.clear()
+    fake.nodes.clear()
+    with pytest.raises(ValueError, match="confirm: true"):
+        pg_cores.delete_many(C, [2, 3])
+    assert fake.writes() == [] and set(fake.cores) == {1, 2, 3}
+    out = pg_cores.delete_many(C, [3, 2, 3], True)                                                                       # a double is one
+    assert out["deleted"] == ["Second", "Third"] and out["count"] == 2 and len(out["backups"]) == 2 and set(fake.cores) == {1}
+    assert ("POST", "/api/cores/bulk/delete", {"ids": [2, 3]}) in fake.calls
+    assert sorted(g["core"] for g in pg_cores.deleted_backups(C)) == [2, 3]                                                # each can be made again
+
+
+def test_a_bulk_delete_of_cores_names_what_it_takes_never_takes_the_first_and_keeps_no_backup_when_refused(fake):
+    make_second(fake)
+    fake.nodes.append({"id": 2, "name": "node-b", "status": "connected", "core_config_id": 2})
+    with pytest.raises(pg_cores.NeedsConfirm) as e:
+        pg_cores.delete_many(C, [2])
+    assert e.value.warnings[0]["code"] == "nodes_use_core" and e.value.warnings[0]["core"] == "Second" and 2 in fake.cores and fake.writes() == []
+
+    with pytest.raises(ValueError, match="default one"):
+        pg_cores.delete_many(C, [1, 2], True)
+
+    fake.fail[("POST", "/api/cores/bulk/delete")] = PanelError("HTTP 409: a core is in use", 409)
+    with pytest.raises(PanelError, match="did not delete the cores"):
+        pg_cores.delete_many(C, [2], True)
+
+    assert 2 in fake.cores and list((get_settings().data_dir / "pg-backups").glob("cores-7-2-*")) == []                 # nothing went: the backups are not kept
+
+    for ids, why in (([], "1 to 20"), (list(range(2, 30)), "1 to 20")):
+        with pytest.raises(ValueError, match=why):
+            pg_cores.delete_many(C, ids, True)
+
+    with pytest.raises(PanelError, match="not found"):
+        pg_cores.delete_many(C, [9], True)
+
+
 def test_every_deleted_core_is_listed_once_with_its_newest_backup(fake):
     make_second(fake)
     fake.cores[3] = {**copy.deepcopy(fake.cores[2]), "id": 3, "name": "Third"}
@@ -494,6 +540,23 @@ def test_the_api_makes_deletes_and_remakes_a_core(client, fake, pid):
     assert [g["core"] for g in gone] == [2]
     again = client.post(url(pid, f"/deleted/2/{gone[0]['file']}/recreate")).json()
     assert again["core"]["id"] == 3 and client.delete(url(pid, "/1?confirm=true")).status_code == 400
+
+
+def test_the_api_deletes_several_cores(client, fake, pid):
+    make_second(fake)
+    fake.cores[3] = {**copy.deepcopy(fake.cores[2]), "id": 3, "name": "Third"}
+    fake.hosts.clear()
+    fake.groups.clear()
+    fake.nodes.clear()
+    r = client.post(url(pid, "/bulk-delete"), json={"ids": [2, 3]})
+    assert r.status_code == 400 and "confirm: true" in r.json()["error"] and set(fake.cores) == {1, 2, 3}                 # it always asks
+    assert client.post(url(pid, "/bulk-delete"), json={"ids": [1, 2], "confirm": True}).status_code == 400                # never the first
+    assert client.post(url(pid, "/bulk-delete"), json={"ids": []}).status_code == 422
+    fake.nodes.append({"id": 2, "name": "node-b", "status": "connected", "core_config_id": 2})
+    assert client.post(url(pid, "/bulk-delete"), json={"ids": [2]}).status_code == 409                                    # what it takes with it is told first
+    fake.nodes.clear()
+    ok = client.post(url(pid, "/bulk-delete"), json={"ids": [2, 3], "confirm": True}).json()
+    assert ok["ok"] is True and ok["deleted"] == ["Second", "Third"] and set(fake.cores) == {1}
 
 
 def test_the_api_renames_and_scans(client, fake, pid):

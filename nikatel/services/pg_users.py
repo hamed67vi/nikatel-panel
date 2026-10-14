@@ -19,6 +19,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 
+from . import panels
 from .panels import PanelError
 from .pg_admin import _call, _dict, _list, _number, audit
 
@@ -445,20 +446,11 @@ def _admin_ids(c: dict, names: list) -> list[int]:
     return [found[n] for n in names]
 
 
-def shift_body(c: dict, what: str, amount, filters: dict | None, dry_run: bool) -> dict:
-    """The body of the bulk change of the end date (`expire`, days) or the data limit (`data_limit`, GB): `amount` added to (negative: taken from) every user the filters match -
-    statuses, groups (ids), admins and users (names, looked up here), and a range of end dates (YYYY-MM-DD). At least one filter: the panel would change every user otherwise."""
-    if what not in ("expire", "data_limit"):
-        raise ValueError("shift the end date (expire) or the data limit (data_limit)")
-
+def filter_body(c: dict, filters: dict | None, dry_run: bool) -> dict:
+    """The part of a bulk body that says WHOM: `dry_run` and the filters the panel's bulk routes share - statuses, groups (ids), admins and users (names, looked up here), and a range of end
+    dates (YYYY-MM-DD). At least one filter: the panel would change every user otherwise."""
     f = _dict(filters)
-    hi = 36500 if what == "expire" else 1_000_000
-    n = _number(amount, "the amount", -hi, hi)
-
-    if n == 0:
-        raise ValueError("the amount is not zero")
-
-    body: dict = {"dry_run": bool(dry_run), "amount": int(n * (DAY if what == "expire" else GB))}
+    body: dict = {"dry_run": bool(dry_run)}
 
     if f.get("status"):
         st = f["status"] if isinstance(f["status"], list) else [f["status"]]
@@ -487,9 +479,25 @@ def shift_body(c: dict, what: str, amount, filters: dict | None, dry_run: bool) 
     if f.get("expire_before_day"):
         body["expire_before"] = day_end(f["expire_before_day"])
 
-    if len(body) <= 2:
+    if len(body) <= 1:
         raise ValueError("choose whom to change: a status, a group, an admin, an end date range, or ticked users")
 
+    return body
+
+
+def shift_body(c: dict, what: str, amount, filters: dict | None, dry_run: bool) -> dict:
+    """The body of the bulk change of the end date (`expire`, days) or the data limit (`data_limit`, GB): `amount` added to (negative: taken from) every user the filters match."""
+    if what not in ("expire", "data_limit"):
+        raise ValueError("shift the end date (expire) or the data limit (data_limit)")
+
+    hi = 36500 if what == "expire" else 1_000_000
+    n = _number(amount, "the amount", -hi, hi)
+
+    if n == 0:
+        raise ValueError("the amount is not zero")
+
+    body = filter_body(c, filters, dry_run)
+    body["amount"] = int(n * (DAY if what == "expire" else GB))
     return body
 
 
@@ -508,6 +516,59 @@ def shift(c: dict, what: str, amount, filters: dict | None = None, dry_run: bool
         audit(c, f"{'end date' if what == 'expire' else 'data limit'} shifted by {float(amount):g} {'days' if what == 'expire' else 'GB'} for {count if count is not None else 'the matching'} users", "warn")
 
     return {"what": what, "dry_run": bool(dry_run), "count": count}
+
+
+SS_METHODS = ("aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-poly1305")
+
+
+def proxy_method(c: dict, method: str, filters: dict | None = None, dry_run: bool = True, confirm: bool = False) -> dict:
+    """Change the SHADOWSOCKS cipher (method) of every user the filters match (`POST /api/users/bulk/proxy_settings`): the user's own password stays, only the method changes, and a client
+    has to take the subscription again. The dry run (the default) only counts whom it would touch; the real run needs `confirm`."""
+    if method not in SS_METHODS:
+        raise ValueError(f"the method is one of: {', '.join(SS_METHODS)}")
+
+    body = filter_body(c, filters, dry_run)
+    body["method"] = method
+
+    if not dry_run and not confirm:
+        raise ValueError("this changes every user that matches: look at the count of the dry run first, then send confirm: true")
+
+    r = _dict(_call(c, "POST", "/api/users/bulk/proxy_settings", body=body, timeout=180))
+    m = re.search(r"\b(\d+)\s+users?\b", str(r.get("detail") or ""))
+    count = r["affected_users"] if isinstance(r.get("affected_users"), int) else int(m.group(1)) if m else None
+
+    if not dry_run:
+        audit(c, f"shadowsocks method set to {method} for {count if count is not None else 'the matching'} users", "warn")
+
+    return {"method": method, "dry_run": bool(dry_run), "count": count}
+
+
+FORMATS = ("links", "links_base64", "xray", "sing_box", "clash", "clash_meta", "outline", "wireguard")      # (the panel lists `block` too and answers 406 for it)
+MAX_SUB_TEXT = 400_000
+
+
+def subscription(c: dict, username: str, fmt: str) -> dict:
+    """The subscription of ONE user in ONE client format, as the panel renders it (`GET /api/user/{id}/subscription/{format}`): links, Xray JSON, sing-box, Clash, Clash Meta, Outline are text
+    (cut at 400 KB); WireGuard is a zip, so only its size and file are reported (download it from the link of the user). Holds the user's own secrets, like its link: it is not logged."""
+    if fmt not in FORMATS:
+        raise ValueError(f"the format is one of: {', '.join(FORMATS)}")
+
+    name = clean_username(username)
+    uid = _id_of(c, name)
+
+    try:
+        ctype, raw = panels.call_raw(c, "GET", f"/api/user/{uid}/subscription/{fmt}", timeout=60)
+    except PanelError as e:
+        if e.code == 406:
+            raise ValueError("the panel does not render this format") from None
+
+        raise
+
+    if fmt == "wireguard" or "zip" in ctype:
+        return {"format": fmt, "type": ctype, "size": len(raw), "binary": True, "text": "", "truncated": False, "empty": len(raw) <= 22}      # an empty zip is 22 bytes
+
+    text = raw.decode("utf-8", "replace")
+    return {"format": fmt, "type": ctype.split(";")[0].strip(), "size": len(raw), "binary": False, "text": text[:MAX_SUB_TEXT], "truncated": len(text) > MAX_SUB_TEXT, "empty": not text.strip()}
 
 
 def expired(c: dict, target: str = "expired", admin: str | None = None, before_day: str | None = None, after_day: str | None = None, delete: bool = False, typed: str = "") -> dict:

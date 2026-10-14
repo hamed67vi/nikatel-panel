@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from .. import auth
+from .. import auth, gate
 from ..db import session
 from ..log import get_logger
-from ..services import gate
 from ..services import settings as st
 from ..services.events import emit
 from ..services.telegram import send_text

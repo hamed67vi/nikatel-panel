@@ -214,3 +214,41 @@ def template_delete(c: dict, tid: int, confirm: bool = False) -> dict:
     _call(c, "DELETE", f"/api/client_template/{int(tid)}")
     audit(c, f"client template “{name}” deleted (saved as {bk})", "warn")
     return {"deleted": True, "backup": bk, "was_default": bool(cur.get("is_default"))}
+
+
+MAX_BULK = 50
+
+
+def templates_delete(c: dict, ids, confirm: bool = False) -> dict:
+    """Delete several client templates in ONE call (the panel's `POST /api/client_templates/bulk/delete`, all or none), with the rules of one: never a system template, and every type keeps at
+    least one template (what is left of a type after the delete is counted here, the panel refuses otherwise); each is saved to a file first. Needs `confirm`."""
+    want = sorted({int(i) for i in ids})
+
+    if not 1 <= len(want) <= MAX_BULK:
+        raise ValueError(f"pick 1 to {MAX_BULK} templates")
+
+    everything = _all(c)
+    by_id = {x.get("id"): x for x in everything if isinstance(x, dict)}
+    missing = [i for i in want if i not in by_id]
+
+    if missing:
+        raise ValueError("there is no template " + ", ".join(str(i) for i in missing))
+
+    for i in want:
+        if by_id[i].get("is_system"):
+            raise ValueError(f"“{by_id[i].get('name')}” is a system template: the panel does not delete it")
+
+    for typ in {str(by_id[i].get("template_type") or "") for i in want}:
+        left = [x for x in everything if x.get("template_type") == typ and x.get("id") not in want]
+
+        if not left:
+            raise ValueError(f"that would leave no {LABELS.get(typ, typ)} template: a type always keeps one")
+
+    if not confirm:
+        raise ValueError("deleting templates cannot be undone on the panel: send confirm: true (each is saved here first)")
+
+    backups = [_backup(c, _dict(_call(c, "GET", f"/api/client_template/{i}")), "before a delete (several at once)") for i in want]      # the whole template (the list may cut the content)
+    r = _dict(_call(c, "POST", "/api/client_templates/bulk/delete", body={"ids": want}))
+    gone = [str(x) for x in _list(r.get("templates"))] or [str(by_id[i].get("name") or "") for i in want]
+    audit(c, f"{len(gone)} client templates deleted: {', '.join('“' + n + '”' for n in gone[:5])}{', …' if len(gone) > 5 else ''}", "warn")
+    return {"deleted": gone, "count": r.get("count", len(gone)) if isinstance(r.get("count"), int) else len(gone), "backups": backups}

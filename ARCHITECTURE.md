@@ -27,6 +27,7 @@ nikatel/
                    Maintenance, Config, ConfigSample, Subscription, Panel, ActionLog, Gateway, RepairCase, ApiToken
   ssh.py           Node, run_script(name, params) over the reviewed SCRIPTS and ACTIONS; run_raw only read-write
   auth.py          one admin, scrypt, signed cookie
+  gate.py          the secret entry path: the panel answers 404 to everyone who does not know it (a live API token passes it); it works on the HTTP request, so it sits beside auth.py and not in services/
   jobs.py          background loops with their status in the jobs table; stop_all waits for in-flight SSH
   services/        the logic, importable without HTTP
     facts.py         server resources (parse_facts is pure)
@@ -58,8 +59,8 @@ nikatel/
                      _work = make before break when the source is on (new tunnel first, DNS, TTL wait, old tunnel last), the DNS
                      records of EVERY account re-pointed in their own account, dns_log with restore / undo, Telegram notices
     arvan.py         ArvanCloud CDN API client: records of every domain, swap_ip (pure), apply with read-back, test; create / edit / delete A records
-    cloudflare.py    Cloudflare DNS API client (one address per record, proxied flag); dnsprov.py: the DNS accounts (several ArvanCloud, Cloudflare) under one list
-    gate.py          the secret entry path: the panel answers 404 to everyone who does not know it (a live API token passes it)
+    cloudflare.py    Cloudflare DNS API client (one address per record, proxied flag); dnsprov.py: the DNS accounts (several ArvanCloud, Cloudflare) under one list;
+                     dnscache.py: the ONE copy of the records of every account that the DNS page and the Outbound page share (read in the background, forgotten on every write)
     tokens.py        API tokens for machines: hashed at rest, shown once, scoped read / act / admin (`allowed` is pure), revocable
     license.py       owner / licensed / free: a signed NK1 token (Ed25519), features, the gates the rest of the panel asks
     ai.py            Anthropic advice inside Fix (key in settings, never in the repo)
@@ -81,14 +82,14 @@ nikatel/
     pg_access.py     PasarGuard groups and user templates (roadmap #94), api/pg_access.py, web/pg_access.js
     pg_nodes.py      PasarGuard nodes joined with the servers of this panel by address (add / install a node from the Add server form, web/pg_srvnode.js), api/pg_nodes.py, web/pg_nodes.js
     pg_nodes_extra.py  PasarGuard nodes, the rest of the API: bulk enable / disable / reset / reconnect / delete, usage and latency curves, user counts, clearing usage; routes in api/pg_nodes.py
-    pg_cores.py      PasarGuard cores (Xray configs): make / duplicate / delete, inbound add / change / delete with a REALITY builder, dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
-    pg_admin.py      PasarGuard admins, API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
+    pg_cores.py      PasarGuard cores (Xray configs): make / duplicate / delete (also several at once), inbound add / change / delete with a REALITY builder, dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
+    pg_admin.py      PasarGuard admins (also several at once through the panel's bulk calls), API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
     pg_roles.py      PasarGuard admin roles (permissions, limits, access, device rules) with backups and restore, api/pg_roles.py, web/pg_roles.js
-    pg_client_templates.py  PasarGuard client (subscription) templates - Clash, Xray, sing-box, User-Agent lists - with backups, api/pg_client_templates.py, web/pg_client.js
+    pg_client_templates.py  PasarGuard client (subscription) templates - Clash, Xray, sing-box, User-Agent lists - with backups, delete several in one call, api/pg_client_templates.py, web/pg_client.js
     pg_system.py     PasarGuard System tab: version, resources, user counters and the other numbers the panel keeps, api/pg_system.py, web/pg_system.js
-    pg_users.py      PasarGuard users in full: the whole user (groups, on hold, devices limit, next plan, owner), devices, subscription fetches, bulk by name, shift of end dates and data limits, clean-up, users from a template; api/pg_users.py, web/pg_users.js
+    pg_users.py      PasarGuard users in full: the whole user (groups, on hold, devices limit, next plan, owner), devices, subscription fetches and the subscription in each client format, bulk by name, shift of end dates and data limits, the Shadowsocks method of many, clean-up, users from a template; api/pg_users.py, web/pg_users.js
     pg_hosts.py      PasarGuard hosts in full: every field, the advanced settings as checked JSON, make / change / clone / delete / bulk, backups; api/pg_hosts.py, web/pg_hosts.js
-    pg_usage.py      Usage analytics of a PasarGuard / Marzban panel, read only: counters, usage by node and Tehran day, admin / user lookups, top users, Jalali calendar; api/pg_usage.py, web/pg_usage.js
+    pg_usage.py      Usage analytics of a PasarGuard / Marzban panel, read only: counters, usage by node and Tehran day, admin / user lookups, top users, users over time (online / expired / limited), the apps that fetch the subscription, Jalali calendar; api/pg_usage.py, web/pg_usage.js
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side, one action / a new user on every panel, the signed merged subscription link (/sub/<token>, api/sub.py)
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)
     outbound.py      the Outbound section: a pool of exit configs (vless / vmess / trojan / ss) and forwards to the foreign nodes, put on the
@@ -108,31 +109,41 @@ nikatel/
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
                    (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot,
                     alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, system = health, logs, update of the panel itself)
-  web/             index.html + app.css + app.js - no build step; PAGES.<name> per page, SUB tabs,
-                   glass modal windows (showModal), themes (LOOK), a loading box on every page change
-                   and automatic retry when a load fails, a status bar for messages, phone layout
+  web/             plain JS and CSS, no build step. index.html loads everything; app.js: PAGES.<name> per page, SUB tabs, glass modal windows (showModal), themes (LOOK),
+                   a loading box on every page change and automatic retry when a load fails, a status bar for messages; pg_*.js: one file per PasarGuard tab, each
+                   registers itself in pgTabs (pg_common.js) and is drawn by the pages of the PasarGuard group (see 2b); app.css + pg_*.css: the looks.
+                   The fluid layer (1.44.0, roadmap #101): early.js picks the layout (`html[data-fluid]`), fluid.css is the desktop and the tablet (bars are one row,
+                   windows, the lock at 560 px), fluid.js fits a table to its box (columns shrink, the less important ones drop; a header can say its own
+                   importance with data-prio, 0 = never drops - for a table whose first column is a tick box), mobile2.css is the phone,
+                   mobile.css the old card layout (`?fluid=0`); i18n*.js the Persian words
   main.py          create_app(), lifespan, security headers (CSP), `nikatel` CLI (serve / import / set-password / run-job / restore)
 bot/miniapp/       the Telegram Mini App of the shop bot (api.php + index.html + app.js + app.css), deployed
                    next to the bot by the panel (Shop bot → Tools → Mini App) or scripts/deploy-miniapp.sh
 tests/             pytest; services tested pure, the API through TestClient, ssh never real
 scripts/           deploy.sh (secrets → tests → unit → restart → health → rollback), backup.sh, deploy-miniapp.sh,
-                   unit, secrets check
+                   unit, secrets check, pg_coverage.py (which routes of a PasarGuard panel the tests send: a recorder on the calls to a panel
+                   matched with the OpenAPI document of a live panel)
 install.sh         the one-line installer (also used by the panel's own "Update" button through deploy.sh)
 docs/              operations, development, logging, roadmap, adr/
 ```
 
 ## 2b. The UI, page by page
 
+The left menu (`web/index.html`): **Dashboard · Servers · Tunnels**, a **PasarGuard** group (**Users · Hosts · Access · Core · Admins · Panel**), Shop bot (switched off) and
+**Settings**. `PAGES.<name>` draws a page, `SUB` holds the tabs of a page (the bar under the header), `NAV_ALIAS` keeps the old page names working.
+
 * **Dashboard** - health rows, Problems box (live state, Fix with AI, Fix all), activity feed with
   categories; auto-refresh.
-* **Nodes** - Iran / Foreign / Gateway & outbounds. More / Edit / Delete on every row; the More window
-  has overview, charts, tunnels, filtering, tools (console, connect, reboot, Abuse-Defender, geo, launchers).
+* **Servers** - Foreign · Iran · **Nodes** (the PasarGuard nodes of the picked panel beside our servers). More / Edit / Delete on every row; the window of a server has its buttons
+  (console, install, connect, reboot, Abuse-Defender, geo), the line of its nodes, three boxes (System, Resources, Access & status) and the charts.
 * **Tunnels** - List (More window with quality and ports, Health / Restart / Rebuild), Create, Test (pair
   test over several engines and transports, Advanced for the transports), Core update, Tunnel Doctor
   (attention list, live repair stories, history), DNS · IP switch (ArvanCloud records, Point, failover plans,
   the DNS change log with Restore).
-* **Panels** - Configs (group bar, grid / compact / list, inline tunnel and CDN port, subscriptions,
-  GRE / filter checks) and Panels (Marzban / PasarGuard: nodes, users, hosts; a test config per panel).
+* **The PasarGuard group** (Marzban panels have Users, Hosts and Usage only) - every page draws the bar of the panels (`pnBar`: which panel) and its tab(s); a tab is a `pgTabs`
+  entry of a `web/pg_*.js` file and a route first (`/api/panels/{id}/pg/…`). `PG_PAGES` (app.js) says which tab belongs to which page, `pnTab(t)` opens the page that owns a tab:
+  **Users** (users, accounts over every panel) · **Hosts** · **Access** (Groups, Templates, client templates) · **Core** · **Admins** (admins, API keys, roles) · **Panel** (Usage, System,
+  Settings). The Nodes tab is a tab of Servers. Configs (the probe's client configs) are switched off.
 * **Shop bot** - Overview · Payments · Orders · Users · Plans · Categories · Servers · Discounts ·
   Gift codes · Broadcast · Tickets · Texts · Settings · Tools (Mini App, backups, apps, top-ups, tables,
   SQL, stats, webhook, commands, restart, dump, logs, import).
