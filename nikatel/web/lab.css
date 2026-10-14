@@ -163,3 +163,15 @@ html[data-mode="light"] body nav a.nav-lock { opacity: .5; }
 .lab-kinds .lab-plus { min-width: 30px; padding: 0 10px; font-weight: 700; font-size: 16px; color: var(--acc); }
 .lab-kinds .lab-plus.lab-ed { font-size: 13px; min-width: 28px; color: var(--mut); }
 .lab-menu.flat { min-width: 250px; } .lab-menu.flat .lab-mi { display: flex; align-items: center; gap: 13px; padding: 7px 12px; font-size: 13.5px; } .lab-mic { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; } .lab-mic svg { width: 19px; height: 19px; fill: none; stroke: #8fa6ff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .lab-mi.danger .lab-mic svg { stroke: #ff6f86; } .lab-menu.flat .lab-mg + .lab-mg { margin-top: 4px; padding-top: 4px; }
+/* the choice of the profile (category): a segmented control like macOS - a soft grey track, the open segment raised - and the icon buttons beside it */
+.lab-ksw { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+html body #page .tabs.lab-kinds { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; border: 0; background: rgba(118,118,140,.24); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.07); }
+html body #page .tabs.lab-kinds > button { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent !important; box-shadow: none !important; color: var(--text); font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transform: none; }
+html body #page .tabs.lab-kinds > button.on { background: rgba(255,255,255,.2) !important; box-shadow: 0 1px 3px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.14) !important; color: #fff; font-weight: 600; }
+html body #page .tabs.lab-kinds > button:not(.on):hover { background: rgba(255,255,255,.08) !important; }
+html body #page .tabs.lab-kinds .cnt { background: transparent; color: var(--mut); font-size: 11px; min-width: 0; padding: 0; }
+.lab-tabact { display: inline-flex; gap: 4px; }
+html body #page .lab-tabact .lab-ib { width: 28px; height: 28px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border: 0; border-radius: 8px; background: rgba(118,118,140,.24); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.07); color: var(--text); transform: none; }
+html body #page .lab-tabact .lab-ib svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .lab-tabact .lab-ib:hover { background: rgba(255,255,255,.16); } html body #page .lab-tabact .lab-ib.danger:hover { color: #ff6f86; }
+.nav-sub a.nav-act .ic svg { stroke: currentColor; }

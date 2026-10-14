@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.51.2 - Servers, All, a macOS-style choice of profile
+
+- **The section is called Servers again** (it was Lab), the first tab is **All**, the menu item at the end is **Add profile** with a proper plus icon like the other icons of the panel (the bar button stays Add server).
+- **The choice of the profile is a segmented control like macOS** (a soft grey track, the open segment raised) with icon buttons beside it - add, rename, delete - in place of the emoji.
+- **The colour of a server's icon (the owner):** red only when the server is entirely cut (offline), yellow when it answers but something is wrong (a GRE or tunnel fault, load, no login), green when all is well.
+
 ## 1.51.1 - The logos have no background and are sharper
 
 - The winged lion (PasarGuard) and the barbed wire (Marzban) are cut out with a clear background, cropped tight and larger (160 px), so they stay sharp in the tabs, the menu and the rows; the screen blending is gone.
