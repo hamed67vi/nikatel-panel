@@ -70,7 +70,7 @@ html body #page .pgu-row.pgu-hd { min-height: 28px; border-top: 0; color: var(--
 html body #page .pgu-row.off { opacity: .72; } html body #page .pgu-none { padding: 6px 4px; }
 html body #page .pgu-n { display: flex; align-items: center; gap: 7px; min-width: 0; } html body #page .pgu-n b, html body #page .pgu-n small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pgu-n small { flex: 0 1 auto; }
 html body #page .pgu-n .dotc { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #5b667c; } html body #page .pgu-n .dotc.ok { background: #30d158; box-shadow: 0 0 7px rgba(48,209,88,.5); } html body #page .pgu-n .dotc.bad { background: #ff453a; box-shadow: 0 0 7px rgba(255,69,58,.5); }
-html body #page .pgu-s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pgu-s, html body #page .pgu-c { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .pgu-v { white-space: nowrap; } html body #page .pgu-v i { font-style: normal; opacity: .6; } html body #page .pgu-v.warn b { color: var(--warn); } html body #page .pgu-v.ok { color: var(--ok); }
 html body #page .pgu-a { display: inline-flex; gap: 6px; justify-content: flex-end; } html body #page .pgu-a .sm { height: 28px; }
 @container (max-width: 640px) { html body #page .pgu-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) auto; } html body #page .pgu-row > :nth-child(2) { display: none; } }

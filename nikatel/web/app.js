@@ -310,7 +310,7 @@ function navTabs() {      // the tabs that hang under their page: [key, name, ic
     list: SI.swap, dns: SI.cloud, repairs: SI.pulse,
     users: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16M3 9.5h18"/></svg>', hosts: globe, access: '<svg viewBox="0 0 24 24"><path d="M12 3.5l8.5 4.7L12 13 3.5 8.2z"/><path d="M3.5 12.2L12 17l8.5-4.8M3.5 16.2L12 21l8.5-4.8"/></svg>',
     core: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.cog};      // (the tab of the Panel page that is called settings is General: the settings of the panel)
-  const of = page => (SUB[page] || []).filter(t => t[3] !== "off").map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc]);
+  const of = page => (SUB[page] || []).map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off"]);      // (a tab that is switched off is in the menu too, grey like Shop bot: the owner asked to see the rest of the tabs of Tunnels)
   return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};
 }
 function navBuild() {
@@ -319,9 +319,9 @@ function navBuild() {
     const head = nav.querySelector(`:scope > a[data-page="${page}"]`); if (!head || list.length < 2) continue;
     const g = document.createElement("div"), gh = document.createElement("div"), sub = document.createElement("div"), tg = document.createElement("button");
     g.className = "nav-g"; g.dataset.page = page; g.dataset.kind = "tabs"; g.dataset.open = "0"; gh.className = "nav-gh"; sub.className = "nav-sub"; sub.id = "nav-sub-" + page; tg.type = "button"; tg.className = "nav-tg";
-    sub.innerHTML = list.map(([k, name, icon]) => `<a data-page="${page}" data-sub="${k}"><i class="ic">${icon}</i><span>${esc(name)}</span></a>`).join("");
+    sub.innerHTML = list.map(([k, name, icon, off]) => `<a data-page="${page}" data-sub="${k}"${off ? ' class="nav-off" aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)"' : ""}><i class="ic">${icon}</i><span>${esc(name)}</span></a>`).join("");
     head.replaceWith(g); gh.append(head, tg); g.append(gh, sub);
-    sub.querySelectorAll("a").forEach(a => { a.onclick = () => go(a.dataset.page, a.dataset.sub); });
+    sub.querySelectorAll("a:not(.nav-off)").forEach(a => { a.onclick = () => go(a.dataset.page, a.dataset.sub); });
   }
   const saved = navOpenMap();
   nav.querySelectorAll(".nav-g").forEach(g => {
@@ -2175,7 +2175,7 @@ function pnOverviewHtml(p) {
 function fmtB(b) { if (b == null) return "—"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i >= 3 ? 2 : 0) + " " + u[i]; }
 function pnNodesHtml(p) {
   const rows = (p.nodes || []).map(n => { const ok = ["connected", "healthy", "disabled"].includes(n.status); return `<tr class="${ok ? (n.status === "disabled" ? "" : "up") : "down"}"><td class="name">${esc(n.name)}</td><td><span class="st ${ok ? (n.status === "disabled" ? "" : "up") : "down"}">${esc(n.status || "?")}</span></td><td class="mut">${esc(n.address)}</td><td class="mut">${esc(n.xray || "")}</td><td class="mut" title="${esc(n.message)}">${esc(n.message).slice(0, 60)}${n.fails ? ` <span class="pill err">${n.fails} checks</span>` : ""}</td>
-      <td><button class="sm" onclick="pnNodeLogs(${p.id}, ${n.id}, '${esc(n.name)}')">Log</button> <button class="sm" onclick="pnNodeReconnect(${p.id}, ${n.id})">Reconnect</button></td></tr>`; }).join("");
+      <td><button class="sm" onclick="pnNodeLogs(${p.id}, ${n.id})">Log</button> <button class="sm" onclick="pnNodeReconnect(${p.id}, ${n.id})">Reconnect</button></td></tr>`; }).join("");
   return `<table class="tbl"><colgroup><col style="width:18%"><col style="width:12%"><col style="width:18%"><col style="width:10%"><col><col style="width:200px"></colgroup><thead><tr><th>Node</th><th>Status</th><th>Address</th><th>Xray</th><th>Message</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="mut">no nodes</td></tr>'}</tbody></table>
     ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
 }
@@ -2268,7 +2268,7 @@ window.pnForget = async (id, force) => {
 };
 window.pnDel = async (id, name) => { if (!await gconfirm(`Remove the panel ${name} from this list? Nothing on the panel itself changes; its saved key or login is forgotten here.`, {danger: true})) return; try { await api(`/api/panels/${id}`, {method: "DELETE"}); toast("✓ Panel removed from the list", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } pn.id = ""; pn.edit = false; refresh(); };
 window.pnNodeReconnect = async (id, nid) => { try { await api(`/api/panels/${id}/nodes/${nid}/reconnect`, {method: "POST"}); toast("✓ Reconnect requested", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.pnNodeLogs = async (id, nid, name) => { try { pn.logs = {name, text: (await api(`/api/panels/${id}/nodes/${nid}/logs`)).log}; } catch (e) { pn.logs = {name, text: "✕ " + e.message}; } refresh(); };
+window.pnNodeLogs = async (id, nid) => { const pl = Array.isArray(state.panelsCache) ? state.panelsCache : (state.panelsCache || {}).panels || [], nm = ((pl.find(x => x.id === id) || {}).nodes || []).find(n => n.id === nid), name = nm ? nm.name : "node " + nid; try { pn.logs = {name, text: (await api(`/api/panels/${id}/nodes/${nid}/logs`)).log}; } catch (e) { pn.logs = {name, text: "✕ " + e.message}; } refresh(); };
 
 /* ---- All panels: one account = the same person on every panel (same username, or a link made by hand); every panel is asked through its API when you look */
 /* the bar on top of the Panels pages is the one of the CDN page: a row of chips (one per panel, "All panels", and the dashed "＋ Add panel" chip) and a row of facts and buttons */

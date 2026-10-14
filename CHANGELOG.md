@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.48.1 - The rest of the tabs of Tunnels, and no panel-supplied name inside a button
+
+- **The tabs of Tunnels that are switched off are in the menu again (the owner: "when we click Tunnels show the rest of the tabs"):** the group of Tunnels shows **Tunnel manager · CDN · Tunnel Doctor** and **Outbound** in grey (switched off for now, like the Shop bot), where 1.47.0 left the grey one out. A click on it does nothing; the groups of Servers, Panel and Settings have no tab that is switched off.
+- **A name that comes from a panel is never put inside a button's script:** `esc()` turns a quote into an entity and the browser decodes an attribute *before* it reads the script in it, so `onclick="f('${esc(name)}')"` with a node called `x');alert(1);//` would run code. The buttons of the node views, the list of nodes outside our servers, the Settings update card and the old node log button of the Panel bar now carry numbers (ids, the number of a row) and look the name up when they run. A static test reads the three files and fails on the pattern.
+- The version cells of the nodes in Settings → PasarGuard stay inside their column.
 ## 1.48.0 - Foreign and Nodes are one list: the node and everything about it are in the window of its server
 
 - **One row for every server, and the node with it (the owner: "merge Foreign and Nodes into one list, each foreign server one row, the node's data and ALL its operations in the window of the server"):** the **Nodes tab of Servers is gone**. The Panel column of the list names the panels whose node runs on the server; a click on that name (or the new **Node** button of the window) opens the window of the server on its **Node view**:

@@ -79,3 +79,15 @@ def test_no_global_function_is_defined_twice_by_window_assignment():
 
     twice = {n: fs for n, fs in seen.items() if len(fs) > 1}
     assert not twice, "a global is assigned more than once (the later one replaces the earlier): " + "; ".join(f"{n}: {', '.join(fs)}" for n, fs in sorted(twice.items()))
+
+def test_the_node_and_update_files_never_put_a_name_from_a_panel_into_a_handler():
+    """`esc()` makes a quote an entity, and an attribute is decoded BEFORE its script is read: onclick="f('${esc(name)}')" with the name x');alert(1);// runs the alert. A node or a panel name comes
+    from a panel, so the buttons of these files carry numbers (ids, the row of a list) and look the name up when they run."""
+    bad = []
+
+    for name in ("pg_nodes.js", "pg_srvnode.js", "pg_update.js"):
+        for i, line in enumerate((WEB / name).read_text(encoding="utf-8").splitlines(), 1):
+            if any("'${esc(" in m.group(1) for m in re.finditer(r'\bon\w+="([^"]*)"', line)):
+                bad.append(f"{name}:{i}")
+
+    assert not bad, f"a handler with a name inside a string: {bad}"

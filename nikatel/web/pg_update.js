@@ -46,7 +46,7 @@ window.pgUpdLoad = async force => {
     if (pill) { pill.textContent = left ? `${left} behind` : "up to date"; pill.className = "pill " + (left ? "warn" : "ok"); }
   } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 };
-window.pgUpdAddHost = pid => { const p = ((pgu.data || {}).panels || []).find(x => x.id === pid); if (p) pgSrvAddFromNode(0, null, p.host_name, p.name); };      // the Add server form with the address of the panel filled in
+window.pgUpdAddHost = pid => { const p = ((pgu.data || {}).panels || []).find(x => x.id === pid); if (p) pgSrvAddServer(p.name, p.host_name); };      // the Add server form with the address of the panel filled in
 
 /* ---- the story of an update: a window that follows the action until it is done (it keeps running when the window is closed) */
 const pgUpdFollow = async (title, aid, polls) => {

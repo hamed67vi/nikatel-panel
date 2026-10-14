@@ -28,9 +28,9 @@ window.pgSrvOpenNode = (sid, key) => {      // the window of the server, on its 
   if (!(state.serversCache || []).some(x => x.id === sid)) return;
   docOpen(sid); state.wtab = "node";      // (docOpen goes to the Servers page and opens the window; it starts on the Node view)
 };
-window.pgSrvOpenPanel = (pid, type) => {      // the panel itself: the Panel page, on General (a PasarGuard panel) or on Users (a Marzban panel has no General)
+window.pgSrvOpenPanel = (pid, pg) => {      // the panel itself: the Panel page, on General (a PasarGuard panel: pg is 1) or on Users (a Marzban panel has no General)
   pn.id = String(pid); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null;
-  go("pgpanel", type === "pasarguard" ? "settings" : "users");
+  go("pgpanel", pg ? "settings" : "users");
 };
 /* the list and the window show a change at once: a window that is open is updated where it stands (its chips and its Node view), the list behind it when the window closes */
 window.pgSrvRedraw = () => {
@@ -98,19 +98,19 @@ window.pgSrvBulk = async action => {
 };
 
 /* ---- nodes outside our servers: a window that lists them (and the same Node view for each) */
-const pgSrvRow = (x, from) => {
+const pgSrvRow = (x, from, i) => {
   const man = x.type !== "pasarguard", cls = pgSrvCls(x);
   return `<tr><td class="name"><i class="dotc ${cls}"></i> <b>${esc(x.name || "—")}</b>${x.hint ? `<br><small class="mut" title="A server of ours has this name but another address">${esc(x.hint.name)} has another address</small>` : ""}</td>
     <td><span class="mchip ${cls}" title="${esc(pgSrvTip(x))}">${esc(x.panel)}</span> <small class="mut">${man ? "Marzban" : "PasarGuard"}</small></td><td class="mono mut">${esc(x.address)}</td>
     <td><span class="st ${cls === "ok" ? "up" : cls === "bad" ? "down" : ""}" title="${esc(x.message || x.status)}">${esc(x.status || "?")}</span></td>
-    <td class="pg-nodes-act">${pgSrvIsPg(x) ? `<button class="sm" onclick="pgNodeOut(${x.panel_id}, ${x.node_id}, ${from ? 1 : 0})" title="The Node view: log, usage, certificate, edit, restart, update, delete">Manage</button>` : `<button class="sm" onclick="pgSrvOpenPanel(${x.panel_id}, '${esc(x.type)}')" title="${man ? "A Marzban node is changed in its panel" : "The panel gave this node no id"}">Open the panel</button>`}<button class="sm" onclick="pgSrvAddFromNode(${x.panel_id}, ${x.node_id == null ? "null" : x.node_id}, '${esc(x.address)}', '${esc(x.name)}')" title="Add the machine of this node to the servers (the form opens with its name and address)">Add to servers</button></td></tr>`;
+    <td class="pg-nodes-act">${pgSrvIsPg(x) ? `<button class="sm" onclick="pgNodeOut(${x.panel_id}, ${x.node_id}, ${from ? 1 : 0})" title="The Node view: log, usage, certificate, edit, restart, update, delete">Manage</button>` : `<button class="sm" onclick="pgSrvOpenPanel(${x.panel_id}, ${man ? 0 : 1})" title="${man ? "A Marzban node is changed in its panel" : "The panel gave this node no id"}">Open the panel</button>`}<button class="sm" onclick="pgSrvAddFromNode(${i})" title="Add the machine of this node to the servers (the form opens with its name and address)">Add to servers</button></td></tr>`;
 };
 window.pgSrvOutside = () => {
   const rows = pgSrv.outside || [], ps = pgSrvPanels();
   state.nodeWin = {list: true};
   showModal(`<b>Nodes outside our servers</b> <span class="pill">${rows.length}</span>`, `<div class="frm-act pg-nodes-tools"><small class="mut">Nodes of your panels whose address is none of the servers in the list (a server of another person, or one that was never added). Their state is what the health job saw last.</small><span class="sp"></span>${ps.length ? `<button class="sm pri" onclick="pgSrvAddNode()" title="Add a node to a PasarGuard panel by hand: address, key and certificate">＋ Add a node by hand</button>` : ""}</div>
     <div class="lbox full pg-nodes-ubox"><table class="tbl lift pg-out-tbl"><colgroup><col style="width:24%"><col style="width:20%"><col style="width:22%"><col style="width:12%"><col></colgroup><thead><tr><th>Node</th><th>Panel</th><th>Address</th><th>State</th><th></th></tr></thead>
-      <tbody>${rows.map(x => pgSrvRow(x, true)).join("") || '<tr><td colspan="5" class="mut">every node of your panels runs on one of the servers in the list</td></tr>'}</tbody></table></div>`, "wide");
+      <tbody>${rows.map((x, i) => pgSrvRow(x, true, i)).join("") || '<tr><td colspan="5" class="mut">every node of your panels runs on one of the servers in the list</td></tr>'}</tbody></table></div>`, "wide");
 };
 window.pgSrvAddNode = () => {      // by hand: the panel first when there is more than one PasarGuard panel
   const ps = pgSrvPanels(); if (!ps.length) return;
@@ -222,7 +222,8 @@ window.pgSrvAfterDelete = async (sname, nodes) => {
 };
 
 /* ---- a node outside our servers can be added to them (the form opens with the name and the address filled in) */
-window.pgSrvAddFromNode = (pid, nid, address, name) => {
+window.pgSrvAddFromNode = i => { const x = (pgSrv.outside || [])[i]; if (x) pgSrvAddServer(x.name, x.address); };      // a node outside our servers: its row number (the handler never carries a name that came from a panel)
+window.pgSrvAddServer = (name, address) => {
   state.prefill = {name: String(name || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60), host: String(address || "").replace(/^\[|\]$/g, "")};
   closeModal(); go("nodes"); state.edit = "new"; state.open = null; refresh();
   setTimeout(() => { const f = document.querySelector(".srv-form2"); if (f && f.elements.host && f.elements.host.value && typeof srvWhere === "function") srvWhere(f); }, 900);      // where is it (Iran or foreign): found from the address

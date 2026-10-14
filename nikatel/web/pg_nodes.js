@@ -120,7 +120,7 @@ function pgNodeMain(sub) {
   if (!pgNodeIs(cur)) {      // a Marzban node (or a node without an id): what the health job saw, and the way to its panel
     const man = cur.type !== "pasarguard";
     return head + run + pick + `<div class="sgrid np-grid two">${box(SI.cube, "Node", [kv("Panel", chip), kv("Type", man ? "Marzban" : "PasarGuard"), kv("Status", stat(cur.status, cur.message)), kv("Address", `<span class="mono">${esc(cur.address)}</span>`), kv("Xray", cur.xray ? esc(cur.xray) : none), kv("Server", cur.match === "dns" ? "matched through the DNS" : cur.match ? "same address" : "no server of ours")])}
-      <div class="sbox np-note"><h5><i>${SI.gear}</i>Managed elsewhere</h5><div class="np-empty mut">${man ? "A Marzban node is changed in its Marzban panel: its log, its restart and its certificate are there." : "The panel gave this node no id: it cannot be changed from here."}</div><div class="np-make"><button class="sm" onclick="pgSrvOpenPanel(${cur.panel_id}, '${esc(cur.type)}')">Open the panel</button></div></div></div>`;
+      <div class="sbox np-note"><h5><i>${SI.gear}</i>Managed elsewhere</h5><div class="np-empty mut">${man ? "A Marzban node is changed in its Marzban panel: its log, its restart and its certificate are there." : "The panel gave this node no id: it cannot be changed from here."}</div><div class="np-make"><button class="sm" onclick="pgSrvOpenPanel(${cur.panel_id}, ${cur.type === "pasarguard" ? 1 : 0})">Open the panel</button></div></div></div>`;
   }
   const C = pgNodesC[cur.panel_id], data = C && C.data, d = data ? (data.nodes || []).find(n => n.id === cur.node_id) || null : null, live = (d && d.live) || null;
   const bad = pgNodeV.err && pgNodeV.err.key === pgNodeKey(cur) ? pgNodeV.err.text : "";

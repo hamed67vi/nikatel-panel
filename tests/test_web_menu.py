@@ -72,3 +72,9 @@ def test_the_groups_of_the_menu_are_built_from_the_tabs_of_their_pages():
 
 def test_go_takes_the_tab_the_menu_asks_for():
     assert re.search(r"function go\(page, tab\)", APP) and "navMark(true)" in APP and "function subSet(page, k)" in APP and "function tabSet(k)" in APP
+
+def test_a_tab_that_is_switched_off_is_in_the_menu_grey_and_cannot_be_clicked():
+    """The owner asked to see the rest of the tabs of Tunnels: Outbound is switched off (roadmap #92) and shows grey, like the Shop bot, instead of missing from the group."""
+    assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off"])' in APP
+    assert 'class="nav-off" aria-disabled="true"' in APP and 'sub.querySelectorAll("a:not(.nav-off)")' in APP          # (and a click on it does nothing)
+    assert re.search(r'\["gateway", "[^"]*Outbound", INFO_GW, "off"\]', APP)
