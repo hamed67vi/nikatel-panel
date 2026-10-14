@@ -21,14 +21,14 @@ const labMbps = b => b == null ? "—" : (b * 8 / 1e6).toFixed(1);
 
 /* ---------------------------------------------------------------- what is wrong with a server, as a short list (the worst first) */
 function labIssues(s) {
-  const f = s.facts || {}, x = s.extra || {}, out = [], add = (sev, txt, tip) => out.push({sev, txt, tip: tip || txt});
+  const f = s.facts || {}, x = s.extra || {}, out = [], add = (sev, txt, tip, gre) => out.push({sev, txt, tip: tip || txt, gre: !!gre});
   if (!s.enabled) return out;
   if (noLogin(s)) add("warn", "No login", s.last_error);
   else if (s.online === false) add("bad", "Offline", s.last_error || "The server does not answer");
   else if (s.online && /^SSH does not answer/.test(s.last_error || "")) add("warn", "SSH ✕", s.last_error);
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name), gre = mine.filter(t => (t.type === "backhaul" || t.type === "gre") && t.state === "down");
-  if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "));
-  else if (!mine.length && x.gre && !x.gre.ok && x.gre.links) add("bad", "GRE ✕", x.gre.detail);
+  if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "), true);
+  else if (!mine.length && x.gre && !x.gre.ok && x.gre.links) add("bad", "GRE ✕", x.gre.detail, true);
   const down = mine.filter(t => t.state === "down" && !gre.includes(t));
   if (down.length) add("bad", `${down.length} tunnel${down.length === 1 ? "" : "s"} down`, down.map(t => t.name).join(", "));
   const flt = x.iran_filter; if (flt && (flt.level === "filtered" || flt.level === "blocked")) add("bad", "Filtered", "Not reachable from inside Iran");
@@ -49,8 +49,14 @@ function labStateHtml(s) {
   const b = srvBusy(s); if (b) return `<span class="lab-st busy" title="${esc(b.what + (b.detail ? ": " + b.detail : ""))}"><i class="spin"></i>${esc(b.what)}…</span>`;
   if (!s.enabled) return '<span class="lab-st off" title="Disabled: the panel does not check it and gives no alerts"><i></i>Disabled</span>';
   if (s.online == null) return '<span class="lab-st off" title="The panel has not looked at it yet"><i></i>Not checked yet</span>';
-  const is = labIssues(s); if (!is.length) return `<span class="lab-st ok" title="Answers over SSH${s.last_seen_at ? ", last seen " + ago(s.last_seen_at) + " ago" : ""}"><i></i>Online</span>`;
+  const is = labIssues(s).filter(i => !i.gre); if (!is.length) return `<span class="lab-st ok" title="Answers over SSH${s.last_seen_at ? ", last seen " + ago(s.last_seen_at) + " ago" : ""}"><i></i>Online</span>`;
   return `<span class="lab-st ${is.some(i => i.sev === "bad") ? "bad" : "warn"}" title="${esc(is.map(i => i.tip).join("\n"))}"><i></i>${esc(is[0].txt)}${is.length > 1 ? `<em>+${is.length - 1}</em>` : ""}</span>`;
+}
+function labGreTag(s) {      // a small tag for the GRE links of a server: green when they answer, yellow when some do not, red when none does (the owner: the GRE tag smaller, green when it is well)
+  const mine = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && (t.type === "backhaul" || t.type === "gre")), g = (s.extra || {}).gre;
+  if (!s.enabled || s.online === false || (!mine.length && !(g && g.links))) return "";
+  const up = mine.filter(t => t.state === "up").length, ok = mine.length ? up === mine.length : !!g.ok, none = mine.length ? up === 0 : !g.ok;
+  return `<span class="lab-gre ${ok ? "ok" : none ? "bad" : "warn"}" title="${esc(mine.length ? mine.map(t => t.name + ": " + t.state).join("\n") : (g.detail || "GRE links"))}">GRE</span>`;
 }
 const labCells = (strip, tip) => `<span class="lab-strip" title="${esc(tip)}">${[...(strip || "")].map(c => `<i class="c${c === "-" ? "n" : c}"></i>`).join("")}</span>`;
 const labBar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</b>`;
@@ -71,7 +77,7 @@ function labServerRow(p) {
   return `<tr class="${labTrCls(tone, on, s.online)} clk" data-id="${p.id}" data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
     <td class="name ${cc ? "has-flag" : ""}" ${cc ? `style="--flag:url(/flags/${cc}.png)" title="${cc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="${!on ? "disabled" : s.online ? "online" : s.online === false ? "offline" : "not checked yet"}">${SRV_IC}</i><div class="lab-nm"><b>${esc(s.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</b><small class="mono" title="${esc(s.host)}">${esc(s.host)}${s.provider ? " · " + esc(s.provider) : ""}</small></div></div></td>
     <td class="lab-serves">${labServes(s)}</td>
-    <td><div class="lab-stw">${labStateHtml(s)}${on && st ? labCells(st.strip, `Last 24 hours, heard over SSH ${st.up == null ? "—" : st.up + " %"} of the time (one cell = one hour)`) : ""}</div></td>
+    <td><div class="lab-stw">${labStateHtml(s)}${labGreTag(s)}${on && st ? labCells(st.strip, `Last 24 hours, heard over SSH ${st.up == null ? "—" : st.up + " %"} of the time (one cell = one hour)`) : ""}</div></td>
     <td>${on && s.online !== false && f.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(f.cpu, 80, 92)}</span><small>RAM ${labNum(f.ram, 85, 92)} · Disk ${labNum(f.disk, 85, 95)}</small></div>` : '<span class="mut">—</span>'}</td>
     <td class="lab-trf">${on && f.rx_mbps != null ? `<span class="trf"><i class="ta d">↓</i>${f.rx_mbps}</span><span class="trf"><i class="ta u">↑</i>${f.tx_mbps}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + s.name)}</div></td></tr>`;

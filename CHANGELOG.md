@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.51.3 - A small GRE tag
+
+- **The GRE of a server is a small tag beside its state (the owner):** green when its GRE links answer, yellow when some do not, red when none does; it no longer makes the state pill long (the server's icon still turns yellow for a GRE fault).
+
 ## 1.51.2 - Servers, All, a macOS-style choice of profile
 
 - **The section is called Servers again** (it was Lab), the first tab is **All**, the menu item at the end is **Add profile** with a proper plus icon like the other icons of the panel (the bar button stays Add server).
