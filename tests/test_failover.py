@@ -324,3 +324,18 @@ def test_the_return_button_is_not_held_back_by_the_cooldown_but_an_automatic_ret
     with pytest.raises(ValueError, match="waits"):
         doctor.move_now(ids["t1"], ids["ir2"], "return", "the clock says back")                                      # an automatic return still waits for the cooldown
     assert doctor.move_now(ids["t1"], ids["ir2"], "manual") == 7                                                      # a manual move never did
+
+def test_the_temporary_name_never_equals_the_name_the_running_tunnel_has_on_the_servers():
+    assert failover._temp_name("ca-prov-a") == "ca-prov-a-mv" and failover._temp_name("a-very-long-tunnel-name") == "a-very-long-mv"
+    assert failover._temp_name("mvtest1", "mvtest1-mv") == "mvtest1-mw"                  # moved once: it keeps the slug -mv, so the next build takes -mw
+    assert failover._temp_name("mvtest1", "mvtest1-mw") == "mvtest1-mv"                  # and back again
+    assert failover._temp_name("mvtest1", "mvtest1") == "mvtest1-mv"
+
+
+def test_a_record_is_tied_to_a_tunnel_by_its_origin_port_when_no_config_names_it(monkeypatch):
+    tunnels = [{"id": 1, "name": "a", "state": "up", "ports": {2095}}, {"id": 2, "name": "b", "state": "up", "ports": {8072}}]
+    monkeypatch.setattr(failover.dnsprov, "accounts", lambda: [object()])
+    monkeypatch.setattr(failover, "_fetch_records", lambda ip: ([{"fqdn": "x.example.test", "port": 2095, "ips": [ip]}, {"fqdn": "y.example.test", "port": None, "ips": [ip]}, {"fqdn": "z.example.test", "port": 9999, "ips": [ip]}], ""))
+    recs, _ = failover._records("203.0.113.5", tunnels)
+    assert [r["tunnels"] for r in recs] == [[1], [], []]                                # x follows tunnel a; a record with no port or an unknown port is tied to nothing
+    assert failover.closure({1}, recs) == {1}

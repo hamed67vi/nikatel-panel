@@ -2207,7 +2207,7 @@ async function pnUsersLoad(id) {
   }
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
-  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select class="sm pn-st-sel" title="Show the users of one status" onchange="pn.ustatus=this.value;pn.uoff=0;pnUsersLoad(+pn.id)">${[["", "All statuses"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<option value="${v}" ${pn.ustatus === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="pn-cnt-chip"><b>${(+u.total || 0).toLocaleString()}</b> users</span><button class="sm pn-reload" onclick="pnReload()" title="Read the list from the panel again">↻</button><span class="sp"></span>
+  box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select class="sm pn-st-sel" title="Show the users of one status" onchange="pn.ustatus=this.value;pn.uoff=0;pnUsersLoad(+pn.id)">${[["", "All statuses"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<option value="${v}" ${pn.ustatus === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="sp"></span>
       <span class="tcount pstat pn-sel"><span class="tc"><b id="pn-seln">0</b> selected</span><span class="tc"><a onclick="pnSelAll(true)" title="Tick every user of this page">select page</a></span><span class="tc"><a onclick="pnSelAll(false)" title="Untick everything">clear</a></span></span><span class="pn-acts"><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'enable')" title="Switch the ticked users on">Enable</button><button class="sm pn-actbtn" disabled onclick="pnBulk(${id}, 'disable')" title="Switch the ticked users off">Disable</button><button class="sm pn-actbtn" disabled onclick="pnBulkRenew(${id})" title="Add days to the ticked users">＋ Days…</button></span></div></div>
     <div class="lbox full usr-box"><table class="tbl lift usr-tbl"><colgroup><col style="width:46px"><col style="width:30%"><col style="width:12%"><col style="width:38%"><col></colgroup>
       <thead><tr><th><input type="checkbox" id="pn-all" title="Select every user of this page" onchange="pnSelAll(this.checked)"></th><th>User</th><th>Status</th><th title="Used so far, what is left, and the volume of the account">Traffic <small>used · left · account</small></th><th>Expires</th></tr></thead>
@@ -2216,10 +2216,30 @@ async function pnUsersLoad(id) {
 `).join("") || '<tr><td colspan="5" class="mut">nobody matches</td></tr>'}</tbody></table></div>
 `;
   const ft = $("#pn-foot"); if (ft) ft.innerHTML = pnFoot(pnPager(u.total, ps));
+  pnLiveStart(id);
   pn.curPS = ps; pnFit(ps); pnFitSoon(ps);       // after the list was put into its box
   const q = $("#pn-uq"); if (q && pn.uq) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
   const rows = box.querySelectorAll("tbody tr");                 // the first time, the real height of a row is measured and the page size follows it
   if (!pnRow.done && rows.length > 2) { pnRow.done = true; const pitch = (rows[rows.length - 1].getBoundingClientRect().bottom - rows[0].getBoundingClientRect().top) / rows.length; if (pitch > 20 && Math.abs(pitch - pnRow.h) > 0.5) { pnRow.h = pitch; if (pnPS() !== ps) pnUsersLoad(id); } }
+}
+/* LIVE: an account made in the panel shows here by itself, without reading the list again and again. Every 15 s (only while this tab is on screen, the Users list is open and the page is not hidden)
+   ONE small question is asked: the newest user and the total (limit 1). When something new is there and the list is the first page with no search, no filter and nothing ticked, the list is
+   read once; otherwise a short notice says that a new account exists. */
+pn.live = {t: null, id: 0, top: null, total: 0};
+function pnLiveStop() { clearInterval(pn.live.t); pn.live.t = null; }
+function pnLiveStart(id) { if (pn.live.id !== id) Object.assign(pn.live, {id, top: null, total: 0}); if (!pn.live.t) pn.live.t = setInterval(() => pnLiveTick(id), 15000); }
+async function pnLiveTick(id) {
+  if (state.page !== "configs" || sub("configs") !== "panels" || pn.tab !== "users" || String(pn.id) !== String(id) || !$("#pn-body .usr-tbl")) { pnLiveStop(); return; }      // left the list: no more questions
+  if (document.hidden || $("#modal .modal")) return;
+  let r; try { r = await api(`/api/panels/${id}/users?limit=1&sort=-created_at`); } catch (e) { return; }
+  const top = (r.users[0] || {}).username || "", total = +r.total || 0, l = pn.live;
+  const fresh = l.top !== null && (top !== l.top || total > l.total);
+  const added = Math.max(1, total - l.total);
+  Object.assign(l, {top, total});
+  if (!fresh) return;
+  const quiet = pn.uoff === 0 && !pn.uq && !pn.ustatus && !document.querySelector(".pn-uchk:checked");
+  toast(`＋ New account in the panel: ${top}${added > 1 ? ` (and ${added - 1} more)` : ""}`, "ok");
+  if (quiet) { pn.users = null; pnUsersLoad(id); }
 }
 const pnRow = {h: 46, done: true};
 const mainBottom = () => { const m = document.querySelector(".main"); return m ? Math.min(innerHeight, m.getBoundingClientRect().bottom) : innerHeight; };

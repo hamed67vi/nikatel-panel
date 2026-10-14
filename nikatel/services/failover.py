@@ -172,7 +172,7 @@ def _fetch_records(ip: str) -> tuple[list[dict], str]:
                 for r in prov.records(d):
                     if r.get("type") == "A" and ip in (r.get("ips") or []):
                         recs.append({"account": a.id, "account_name": a.name, "provider": a.provider, "domain": d, "id": str(r["id"]), "name": r.get("name") or "@", "fqdn": r["fqdn"], "ip": ip,
-                                     "ips": list(r.get("ips") or []), "ttl": r.get("ttl"), "cloud": bool(r.get("cloud"))})
+                                     "ips": list(r.get("ips") or []), "ttl": r.get("ttl"), "cloud": bool(r.get("cloud")), "port": r.get("port")})
         except (RuntimeError, ValueError) as e:
             errors.append(f"{a.name}: {str(e)[:120]}")
 
@@ -192,7 +192,9 @@ def _records(ip: str, tunnels: list[dict]) -> tuple[list[dict], str]:
     for r in recs:
         mine = [(n, p) for n, a, p in configs if a == r["fqdn"].lower()]
         r["configs"] = [n for n, _ in mine]
-        r["tunnels"] = sorted({t["id"] for t in tunnels if any(p in t["ports"] for _, p in mine)})
+        by_config = {t["id"] for t in tunnels if any(p in t["ports"] for _, p in mine)}
+        by_port = {t["id"] for t in tunnels if r.get("port") and int(r["port"]) in t["ports"]}       # a CDN record whose origin port is the port of a tunnel belongs to that tunnel (found by the real test: without this a record no probe config names was left on the old server)
+        r["tunnels"] = sorted(by_config | by_port)
 
     return recs, err
 
@@ -389,9 +391,12 @@ def check() -> None:
 
 
 # ------------------------------------------------------------------ doing it
-def _temp_name(name: str) -> str:
-    """The name the new tunnel is built under while the old one still runs (same shape a tunnel name always has)."""
-    return (name[:11] if len(name) > 11 else name) + "-mv"
+def _temp_name(name: str, slug: str = "") -> str:
+    """The name the new tunnel is built under while the old one still runs (same shape a tunnel name always has). A tunnel that was moved before keeps the server-side name it was
+    built with (renaming changes only the panel), so it may already be called <name>-mv on the servers: the new one then takes -mw, or the two would share a GRE interface and a
+    unit on the foreign server and the move would break the tunnel it replaces (found by the real test of Return now)."""
+    base = name[:11] if len(name) > 11 else name
+    return base + ("-mw" if str(slug or name).endswith("-mv") else "-mv")
 
 
 def _leftover(snap: dict, server_id: int) -> dict:
@@ -440,7 +445,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
             kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
 
             if src_on:
-                temp = _temp_name(snap["name"])
+                temp = _temp_name(snap["name"], str((snap.get("record") or {}).get("slug") or ""))
                 autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
                 ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts")))
 

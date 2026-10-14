@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.41.1 - Two bugs of the Doctor's moves found by the real test; the Users list lives
+
+- **Found by the real test of the Doctor (an Iran server, a foreign server and a second Iran server, a real ArvanCloud record, a real tunnel moved there and back):**
+  - **Return now left the DNS behind.** A DNS record is tied to a tunnel through the probe configs that use its name; a record no config names was never re-pointed in a move of ONE tunnel, so after "Return" the record still led to the server the tunnel had left - and when the old tunnel was removed the users got only errors. A record is now also tied to the tunnel whose port is its ORIGIN port (the CDN records of the real setup have the tunnel port as origin port).
+  - **A second move could break the tunnel it replaces.** A moved tunnel keeps the name it was built with on the servers (a rename changes only the panel), so the next move built the new tunnel under the same server-side name: on the foreign server they shared a GRE interface and a unit. The new tunnel now takes a different suffix (-mv, then -mw, then -mv ...).
+  - Measured for the first time: a move while the old server is on loses no request (169 of 169 answered through the CDN record during the move). Left open: about 30 seconds of errors right after the old tunnel was removed, 7 minutes after the DNS change - the CDN keeps using the old origin address a little longer than the TTL says (roadmap #95).
+- **Users list**: the user count chip and the refresh button are gone. **Live**: a new account made in the panel shows up by itself. While the Users list is open and the page is on screen, ONE small question (the newest user and the total, limit 1) is asked every 15 seconds; the list is read again only when something is new, it is the first page, and nothing is searched, filtered or ticked - otherwise a notice says which account is new.
+
 ## 1.41.0 - TLS copies of the plain WebSocket hosts
 
 - **Panels → Hosts → "🔒 TLS copies on 443…"**: tick the plain vless / vmess / trojan WebSocket hosts of a Marzban or PasarGuard panel, and every one gets a COPY with port 443, security tls, SNI = its Host header (the CDN name), alpn http/1.1 and fingerprint chrome. Nothing is changed on the nodes or the tunnels: the CDN (ArvanCloud) ends the TLS and sends the same plain WebSocket on to the same port as before, when HTTPS is on for that domain.
