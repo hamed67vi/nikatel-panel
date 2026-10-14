@@ -16,9 +16,17 @@ window.pgSrvLoad = async () => {
 };
 const pgSrvTip = x => `${x.type === "pasarguard" ? "PasarGuard" : "Marzban"} node ${x.name} of the panel ${x.panel}: ${x.status || "?"}${x.message ? " (" + x.message + ")" : ""}${x.match === "dns" ? " - matched through the DNS" : ""}`;
 window.pgSrvChips = s => pgSrvOn(s).map(x => `<span class="mchip ${x.status === "connected" ? "ok" : x.status === "disabled" || x.status === "connecting" ? "" : "bad"}" onclick="event.stopPropagation();pgSrvOpenPanel(${x.panel_id}, '${esc(x.type)}')" title="${esc(pgSrvTip(x))}">${esc(x.panel)}</span>`).join("");
-window.pgSrvOpenPanel = (pid, type) => {      // the panel the node belongs to: its Nodes tab (PasarGuard) or its nodes window (Marzban)
-  go("configs"); pn.id = String(pid); pn.tab = type === "pasarguard" ? "nodes" : "users"; pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; refresh();
-  if (type !== "pasarguard") setTimeout(() => { if (typeof pnNodesWin === "function") pnNodesWin(); }, 900);
+window.pgSrvOpenPanel = (pid, type) => {      // the panel the node belongs to: the Nodes tab of the Servers page (1.45.0: the nodes of a Marzban panel are listed there too)
+  pn.id = String(pid); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null;
+  go("nodes"); setSub("nodes", "pgnodes");
+};
+
+/* ---- the server window (1.45.0): under its buttons, a line for every node that runs on the server (the panel, its state, one click to the Nodes tab of Servers) - or the offer to make a foreign server a node */
+window.pgSrvLine = s => {
+  const on = pgSrvOn(s), ps = pgSrvPanels(), cls = x => x.status === "connected" ? "ok" : x.status === "disabled" || x.status === "connecting" ? "" : "bad";
+  const rows = on.map(x => `<div class="pg-nl"><i class="dotc ${cls(x)}"></i><b>${x.type === "pasarguard" ? "PasarGuard" : "Marzban"} node</b><span class="mchip ${cls(x)}" title="${esc(pgSrvTip(x))}">${esc(x.panel)}</span><small class="mut">${esc(x.name)} · ${esc(x.status || "?")}${x.message ? " · " + esc(x.message) : ""}</small><span class="sp"></span><button class="sm" onclick="pgSrvOpenPanel(${x.panel_id}, '${esc(x.type)}')" title="The Nodes tab of the Servers page: log, usage, certificate, restart, disable">Open in Nodes</button></div>`);
+  if (!on.some(x => x.type === "pasarguard") && s.role === "foreign" && ps.length) rows.push(`<div class="pg-nl off"><i class="dotc"></i><b>PasarGuard node</b><small class="mut">this server is not a node of any panel</small><span class="sp"></span><button class="sm" onclick="wtab('install')" title="Install the node here and add it to a PasarGuard panel">Make a node…</button></div>`);
+  return rows.length ? `<div class="pg-nline">${rows.join("")}</div>` : "";
 };
 
 /* ---- the tick of "Add server": a PasarGuard node (and the Marzban node next to it: one machine has one node on the ports 62050 / 62051, so the two ticks exclude each other) */

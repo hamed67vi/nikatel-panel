@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.45.0 - PasarGuard has its own place in the left menu
+
+- **A PasarGuard group in the left menu (roadmap #102, the owner's wish: the panel follows the structure of PasarGuard):** the ten tabs of the old Users page are pages now - **Users**, **Hosts**, **Access** (groups and templates), **Core**, **Admins** (admins, API keys, roles) and **Panel** (usage, system and the settings of the panel). The bar of the panels (which panel) is on top of each page, and picking another panel keeps the page. A part that a type of panel does not have (a Marzban panel has no groups) says so and asks for another panel. In the rail (under 1180 px) the group is a thin line, on a phone the bottom bar scrolls sideways (the open page stays in view), and in a short window the menu scrolls inside the side bar so that Sign out stays in view.
+- **Nodes are a tab of Servers:** Servers → Foreign · Iran · **Nodes** shows the nodes of the panel you pick beside our servers (the old Nodes tab; the nodes of a Marzban panel are listed there too); a click on the panel chip of a server opens it there. **The window of a server has a line for its nodes** - which panel, its state, "Open in Nodes" - and, on a foreign server that is no node yet, "Make a node…".
+- **Fixed: the side bar of a narrow desktop window.** Under 820 px an old rule of `app.css` put the menu in a row inside the 56 px rail, and its icons were 2 px wide (the owner's screenshot at about 600 px); the rail is a column again in every window narrower than 1180 px. The number cards of a server window are wide enough for their words (the end of "peak 32.7%" was cut).
+
 ## 1.44.0 - The whole panel shrinks with the window and stops where it would break
 
 - **The owner's rule, built (roadmap #101):** a narrower window makes the boxes smaller; **rows stay rows**; a bar of buttons, chips or tabs is **one row** that shrinks (the words of a button go first, then the labels in front of numbers, then the extras); a table keeps its columns, cuts a long text with "…" and, when the columns still do not fit, drops the **less important ones** (the first column, the status and the buttons at the end last of all). Nothing is turned into cards any more, on a phone too. The old card layout stays as a fallback: `?fluid=0` once (or `localStorage nk.fluid = 0`) brings it back.

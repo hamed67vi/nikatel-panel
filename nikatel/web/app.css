@@ -4423,6 +4423,31 @@ html[data-mode="light"] body .pan-anim .win { fill: rgba(47,111,224,.08); stroke
 html[data-mode="light"] body .bot-anim .hd { fill: rgba(47,111,224,.08); stroke: #3a5aa0; stroke-width: 1.6; } html[data-mode="light"] body .bot-anim .ant, html[data-mode="light"] body .bot-anim .mo { stroke: #3a5aa0; } html[data-mode="light"] body .bot-anim .ap { fill: #d58b00; } html[data-mode="light"] body .bot-anim .eye { fill: #2f6fe0; }
 html[data-mode="light"] body .gear-anim .gear { fill: rgba(47,111,224,.12); stroke: #3a5aa0; stroke-width: 1.6; }
 html[data-mode="light"] body .head h1 .t-anim, html[data-mode="light"] body #title .t-anim { opacity: 1; }html body #page .dns-tbl .port-pill { height: 22px; min-width: 46px; padding: 0 10px; font-size: 12.5px; font-weight: 700; letter-spacing: .01em; }
+
+/* ---- the left menu has a PasarGuard group (1.45.0, roadmap #102): a quiet label over its items; the menu scrolls when the window is short; in the rail (under 1180 px) the label is a thin line;
+   on a phone the label is gone and the bottom bar scrolls sideways (every item keeps a hand-sized width) */
+nav#nav { min-height: 0; overflow-y: auto; scrollbar-width: none; } nav#nav::-webkit-scrollbar { display: none; }
+@media not ((max-width: 760px) and (pointer: coarse)) { .side { max-height: calc(100vh - 28px); min-height: 0; } }      /* a short window: the menu scrolls inside the side bar, the sign-out stays in view */
+nav#nav .nav-grp { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; padding: 0 12px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mut); opacity: .75; user-select: none; }
+nav#nav .nav-grp::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,.1); }
+html[data-mode="light"] nav#nav .nav-grp::after { background: rgba(30,50,100,.14); }
+@media (max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse))) { nav#nav .nav-grp { margin: 4px 6px 0; padding: 0; } nav#nav .nav-grp > span { display: none; } }
+@media (max-width: 760px) and (pointer: coarse) {
+  nav#nav .nav-grp { display: none; }
+  #nav { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; } #nav::-webkit-scrollbar { display: none; }
+  #nav a { flex: 0 0 auto; min-width: 64px; }
+}
+/* the badge of the Nodes tab of Servers: a round green badge with a node (four short lines around a centre) */
+.tic-node { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CradialGradient id='g' cx='35%25' cy='30%25' r='80%25'%3E%3Cstop offset='0' stop-color='%236ee7c8'/%3E%3Cstop offset='1' stop-color='%230f7d6b'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.9' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 5.5v3.4M12 15.1v3.4M5.5 12h3.4M15.1 12h3.4'/%3E%3Ccircle cx='12' cy='12' r='2.4'/%3E%3C/g%3E%3C/svg%3E"); }
+/* a page of the PasarGuard group has one tab: the strip is not drawn, an empty bar takes no room */
+.pn-bars:empty { display: none; }
+/* the line of PasarGuard nodes under the buttons of a server window: one row for every node (the panel, its state, a button to the Nodes tab), or the offer to make the server one */
+.pg-nline { display: grid; gap: 6px; margin: 0 0 8px; }
+.pg-nl { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; padding: 6px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.03); font-size: 12.5px; }
+.pg-nl > * { flex: none; } .pg-nl > small { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pg-nl > .sp { flex: 1 1 0; min-width: 0; } .pg-nl > .mchip { flex: 0 1 auto; min-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-nl b { font-size: 12.5px; font-weight: 600; white-space: nowrap; } .pg-nl.off { opacity: .85; } .pg-nl .sm { height: 28px; }
+#modal .pg-nl .dotc { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #5b667c; } #modal .pg-nl .dotc.ok { background: #30d158; box-shadow: 0 0 8px rgba(48,209,88,.55); } #modal .pg-nl .dotc.bad { background: #ff453a; box-shadow: 0 0 8px rgba(255,69,58,.5); }
+html[data-mode="light"] .pg-nl { background: #f6f9fe; border-color: rgba(30,50,100,.12); }
 /* the error box of a form */
 html body #modal .qp-err { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,90,100,.1); border: 1px solid rgba(255,90,100,.4); color: #ffb3bd; font-size: 13px; line-height: 1.45; animation: qpErrIn .18s ease-out; }
 html body #modal .qp-err > i { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; background: rgba(255,90,100,.3); color: #fff; margin-top: 1px; }

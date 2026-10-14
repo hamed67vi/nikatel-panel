@@ -159,6 +159,11 @@ const INFO = {
   jobs: ["Jobs", "The background jobs of the panel and whether they succeed."],
   logs: ["Logs", "The panel's own log, newest first. Secrets are masked before they are written."],
   settings: ["Settings", "Account, Telegram and backup, the probe, appearance and about, AI and automation."],
+  pghosts: ["Hosts", "The address, port and TLS of every link in the subscriptions of the PasarGuard panel you pick."],
+  pgaccess: ["Access", "Groups (which inbounds a user gets) and templates (the recipe of a new user) of the panel you pick."],
+  pgcore: ["Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
+  pgadmins: ["Admins", "The admins of the panel you pick, their roles and their API keys."],
+  pgpanel: ["Panel", "Usage, system and settings of the panel you pick."],
 };
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
@@ -167,7 +172,7 @@ if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "iran";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const CONFIGS_UI = false;      // the Configs list is switched off and hidden (no tab, no card, no problem rows) until the project grows (the owner, 2026-10-14, roadmap #98); the probe and the routes keep running; set true to bring it back
 const SUB = {
-  nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
+  nodes: [["foreign", "<i class=\"tic tic-globe\"></i>Foreign", "Foreign servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["iran", "<i class=\"tic tic-ir\"></i>Iran", "Iran servers: reachable, load, memory, disk. Sampled every 2 minutes over SSH. A disabled server is not checked and gives no alerts."], ["pgnodes", "<i class=\"tic tic-node\"></i>Nodes", "The PasarGuard nodes of the panel you pick: connected or not, the server each one runs on (Make a node turns a server of the list into one), their usage."], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
   tunnels: [["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
   configs: [...(CONFIGS_UI ? [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."]] : []), ["panels", "🧩 Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."]],      // the page is called Users; with the Configs tab off it has one tab, so the tab bar is not drawn
 };
@@ -209,6 +214,7 @@ const TITLE_ANIM = {
   }   // what the page we leave still waits for is dropped; the new page starts at the top
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.page === page));
+  const navOn = $("#nav a.on"); if (navOn && isPhone()) navOn.scrollIntoView({inline: "center", block: "nearest"});      // the bottom bar of a phone scrolls: the item of the open page stays in view
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
   if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
   $("#subnav").classList.toggle("hidden", !subBarOn(page));
@@ -255,6 +261,7 @@ PAGES.serverDoctor = async () => {
   renderSub();
   const s = sub("nodes");
   if (s === "doctor") return PAGES.serverDoctor();
+  if (s === "pgnodes") return PAGES.panels();      // the PasarGuard nodes beside the servers (1.45.0): the panel bar and the Nodes view
   state.tab = s;
   return PAGES.servers(false);
 };
@@ -669,7 +676,7 @@ const ibox = (icon, title, rows) => `<div class="ibox"><h5><i>${icon}</i>${title
 function serverDetailHtml(s) {
   if (state.wtab === "console") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + serverPartHtml(s, "console");
   if (state.wtab === "install") return `<div class="wback"><button class="sm" onclick="wtab('all')">← Back</button></div>` + installHtml(s);
-  return serverBar(s) + serverGridHtml(s) + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>`;
+  return serverBar(s) + (window.pgSrvLine ? pgSrvLine(s) : "") + serverGridHtml(s) + `<div class="wsec"><h4>Last 24 hours</h4>${serverPartHtml(s, "charts")}</div>`;
 }
 function serverBar(s) {
   const f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, nm = esc(s.name);
@@ -2055,9 +2062,15 @@ window.cfSubDel = async id => { if (!await gconfirm("Forget this subscription re
 const pn = {id: localStorage.getItem("nk.pn") || "", tab: "users", add: false, edit: false, users: null, usersKey: "", uq: "", ustatus: "", uoff: 0, user: null, hosts: null, hostsKey: "", hostEdit: null, core: null, raw: false, logs: null};
 INFO.panels = ["Users", "Your Marzban and PasarGuard panels: are they up, are their nodes connected, their users, the hosts in the subscription links, and the Xray outbounds of the core — every core change is backed up first."];
 const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).toFixed(v / GB >= 100 ? 0 : 1) + " GB";
+/* ---- the PasarGuard sections are pages of the left menu (1.45.0, roadmap #102): each page shows the bar of the panels (which panel) and its own tab(s) of what was one page with ten tabs.
+   Nodes are a tab of Servers (the server beside the node it runs). pn.want = the tab a link asked for; pnShow() settles pn.tab for the page that is open. */
+const PG_PAGES = {configs: ["users"], pghosts: ["hosts"], pgaccess: ["groups", "templates"], pgcore: ["cores"], pgadmins: ["admins"], pgpanel: ["usage", "system", "settings"], nodes: ["nodes"]};
+const PG_PAGE_OF = {}; Object.entries(PG_PAGES).forEach(([pg, tabs]) => tabs.forEach(t => { PG_PAGE_OF[t] = pg; }));
+const pnShow = tabs => { if (pn.want && tabs.includes(pn.want)) pn.tab = pn.want; else if (!tabs.includes(pn.tab)) pn.tab = tabs[0]; pn.want = null; };
 PAGES.panels = async () => {
   const list = (await api("/api/panels")).panels; state.panelsCache = list;
-  if (pn.id === "*" && list.length > 1) return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
+  pnShow(PG_PAGES[state.page] || ["users"]);
+  if (pn.id === "*" && list.length > 1 && state.page === "configs") return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
   if (pn.id === "*") pn.id = "";
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
@@ -2067,6 +2080,9 @@ PAGES.panels = async () => {
   const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
   $("#page").innerHTML = pnBar(list, p.id, `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span><button class="pn-b-chk" onclick="pnCheck(${p.id})" title="Ask the panel now"><i class="ic">↻</i><span class="bt">Check now</span></button><button class="pn-b-edit" onclick="pnEditWin()" title="Name, address, key or token, TLS check"><i class="ic">✎</i><span class="bt">Edit</span></button>`) + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
     <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
+  const tdef = window.pgTabs && window.pgTabs[pn.tab], here = $("#pn-body");
+  if (here && pn.tab === "nodes" && p.type !== "pasarguard") { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="card"><h3>Nodes of ${esc(p.name)}</h3>${pnNodesHtml(p)}</div>`; return; }      // a Marzban panel: its nodes as they are read, no more
+  if (here && tdef && tdef.types && !tdef.types.includes(p.type)) { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="empty">${esc(tdef.label)} is a part of PasarGuard panels; ${esc(p.name)} is a ${esc(p.type)} panel. Pick a PasarGuard panel in the bar above.</div>`; return; }
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
@@ -2087,8 +2103,14 @@ function pnNodesHtml(p) {
   return `<table class="tbl"><colgroup><col style="width:18%"><col style="width:12%"><col style="width:18%"><col style="width:10%"><col><col style="width:200px"></colgroup><thead><tr><th>Node</th><th>Status</th><th>Address</th><th>Xray</th><th>Message</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="mut">no nodes</td></tr>'}</tbody></table>
     ${pn.logs ? `<div class="card"><h3>Log of ${esc(pn.logs.name)} <span class="sp"></span><button class="sm" onclick="pn.logs=null;refresh()">Close</button></h3><pre class="gl-out">${esc(pn.logs.text || "(empty)")}</pre></div>` : ""}`;
 }
-window.pnPick = v => { pn.tab = "users"; pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };
-window.pnTab = t => { pn.tab = t; pn.user = null; pn.hostEdit = null; refresh(); };
+window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };      // (another panel: the page and its tab stay)
+window.pnTab = t => {      // a tab of the page that is open stays here; a tab that belongs to another page opens that page
+  pn.user = null; pn.hostEdit = null;
+  const pg = PG_PAGE_OF[t];
+  if (pg && pg !== state.page) { pn.want = t; go(pg); if (pg === "nodes") setSub("nodes", "pgnodes"); return; }
+  pn.tab = t; refresh();
+};
+["pghosts", "pgaccess", "pgcore", "pgadmins", "pgpanel"].forEach(pg => { PAGES[pg] = () => PAGES.panels(); });
 window.pnNodesWin = () => { const p = (state.panelsCache || []).find(x => String(x.id) === pn.id); if (p) showModal(`<b>Nodes of ${esc(p.name)}</b>`, pnNodesHtml(p), "wide"); };
 window.pnReload = () => { pn.users = pn.hosts = null; pn.usersKey = pn.hostsKey = ""; refresh(); };
 window.pnCheck = async id => { toast("Asking the panel…"); try { const r = await api(`/api/panels/${id}/check`, {method: "POST"}); toast(r.ok ? `✓ answers in ${r.latency_ms} ms · ${r.nodes.length} nodes` : "✕ " + r.error, r.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -2336,7 +2358,7 @@ let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = se
 const pnType = () => ((state.panelsCache || []).find(p => String(p.id) === pn.id) || {}).type || "";
 /* the tabs of the panel: Users, Hosts, then every tab a pg_*.js file registered in pgTabs for this type of panel (PasarGuard: groups, templates, nodes, cores, admins, settings, usage) */
 const pnExtraTabs = () => Object.entries(window.pgTabs || {}).filter(([, t]) => !t.types || t.types.includes(pnType())).sort((a, b) => (a[1].order || 99) - (b[1].order || 99)).map(([k, t]) => [k, t.label]);
-const pnTabs = () => `<div class="toolbar pn-tabs"><div class="tabs">${[["users", "Users"], ["hosts", "Hosts"], ...pnExtraTabs()].map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>`;
+const pnTabs = () => { const mine = PG_PAGES[state.page] || ["users"], list = [["users", "Users"], ["hosts", "Hosts"], ...pnExtraTabs()].filter(([t]) => mine.includes(t)).sort((a, b) => mine.indexOf(a[0]) - mine.indexOf(b[0])); return list.length > 1 ? `<div class="toolbar pn-tabs"><div class="tabs">${list.map(([t, l]) => `<button class="${pn.tab === t ? "on" : ""}" onclick="pnTab('${t}')">${l}</button>`).join("")}</div></div>` : ""; };      // only the tabs of the page that is open; a page with one tab has no strip
 const pnFoot = mid => mid;
 function pnPager(total, ps, off = pn.uoff, fn = "pnGo") {
   const pages = Math.max(1, Math.ceil(total / ps)), cur = Math.floor(off / ps), last = pages - 1;
