@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.29 - The other empty Panel tabs: one fixed card, nothing to press
+
+- **Panel > Users / Configs / Admins with no panel (the owner):** the same fixed card as General (an icon, *No panel connected*, one line saying panels are added in General); the *＋ Add a panel in General* button is gone from the middle of the page, and so is the dead copy of the Users table. A test keeps every helper of the Panel bar on its own line (a comment glued to the next declaration had swallowed one).
+
 ## 1.57.28 - The empty Panel page in one fixed card
 
 - **Panel > General with no panel (the owner: *a fixed box for this part too*):** one card of a fixed size, fitted to the window - an icon, *No panel yet*, one line and the *Add panel* button; the bar above only says *No panel yet*. The description of General no longer mentions the removed System and Templates tabs.

@@ -345,12 +345,13 @@ def test_the_add_tab_takes_a_pasted_link_and_picks_the_kind_of_it():
         assert f'"{kid}"' in kind_of, kid
 
 
-def test_a_panel_page_without_a_panel_keeps_its_boxes():
-    """The owner, 2026-10-15: "if no panel was added, the boxes stay" - the bar and the table of the Users tab are drawn empty, with the way to add a panel in General."""
+def test_a_panel_page_without_a_panel_is_one_fixed_card_with_nothing_to_press():
+    """The owner, 2026-10-15: "if no panel was added, the boxes stay" - and later "a fixed box, and remove the + Add a panel in General button from the middle of the page"."""
     app = _web("app.js")
     assert "const pnEmptyPage = () =>" in app and "pnEmptyPage()" in app
     page = app.split("const pnEmptyPage = () =>", 1)[1].split("const pnBar = ", 1)[0]
-    assert "usr-tbl" in page and "pn-sb" in page and "Add a panel in General" in page and "No PasarGuard panel is connected yet" in page
+    assert '<div class="card pn-first fx-box">' in page and "No panel connected" in page and "button" not in page.split("`<div id=\"pn-body\">", 1)[1] and "Add a panel in General" not in app and "usr-tbl" not in page
+    assert "if (!manage) pnFuse(); if (typeof fxFit === \"function\") fxFit(); return; }" in app
 
 
 def test_the_core_cards_count_the_selected_ones_in_the_select_all_row():
@@ -730,3 +731,13 @@ def test_the_empty_panel_page_is_one_fixed_card():
     app, css = _web("app.js"), _web("lab.css")
     assert "const pnFirstCard = () => `<div class=\"card pn-first fx-box\">" in app and "pnBar([], \"\", \"\") + pnFirstCard()" in app and "<span class=\"pn-none mut\">No panel yet</span>" in app
     assert "its usage, its system" not in app and ".pn-first { display: flex; flex-direction: column; align-items: center; justify-content: center;" in css
+
+
+def test_the_panel_page_helpers_each_start_their_own_line():
+    """A // comment glued in front of the next declaration swallowed `const pnBar` once (the page then failed to load): the helpers of the Panel bar each begin a line."""
+    import re
+
+    app = _web("app.js")
+
+    for name in ("pnFirstCard", "pnEmptyPage", "pnBar", "pnTabBtns", "pnTabs"):
+        assert re.search(rf"^(const|function) {name}\b", app, re.MULTILINE), name
