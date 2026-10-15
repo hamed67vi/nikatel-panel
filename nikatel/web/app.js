@@ -1136,13 +1136,13 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
       <td class="num hide-sm" title="${esc(q.latency_ms != null ? "quality test: " + q.latency_ms + " ms · jitter " + q.jitter_ms + " · loss " + q.loss_pct + "% · score " + q.score : "")}">${t.rx_mbps != null ? "↓" + mbps(t.rx_mbps) + " ↑" + mbps(t.tx_mbps) : "—"}</td>
       <td><div class="td-act">${t.id < 0 ? `<span class="busy-chip"><i class="spin"></i>rebuilding…</span>` : ""}</div></td></tr>`; };
   const creating = false;
-  pageTarget().innerHTML = `<div class="toolbar joined"><button class="cta cta-tunnel" onclick="openBuild()" title="Build a tunnel between an Iran and a foreign server"><i class="cta-ic">＋</i><span class="bt">Create tunnel</span></button><button onclick="checkAll()" ${state.tunChecking ? "disabled" : ""} title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">${state.tunChecking ? '<i class="spin"></i><span class="bt">Checking…</span>' : '<span class="bt">Check all</span>'}</button><button onclick="restartAll()" title="Restart the tunnel service of every tunnel, four at a time"><span class="bt">Restart all</span></button><span class="tcount"><span class="tc up"><i></i><b>${list.filter(t => t.state === "up").length}</b><span class="lab"> up</span></span><span class="tc down"><i></i><b>${list.filter(t => t.state === "down").length}</b><span class="lab"> down</span></span><span class="tc unstable"><i></i><b>${list.filter(t => t.state === "degraded").length}</b><span class="lab"> unstable</span></span></span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
-    <div class="lbox tun-box">${trashBox()}
+  pageTarget().innerHTML = `<div class="toolbar joined${list.length ? "" : " is-empty"}"><button class="cta cta-tunnel" onclick="openBuild()" title="Build a tunnel between an Iran and a foreign server"><i class="cta-ic">＋</i><span class="bt">Create tunnel</span></button><button onclick="checkAll()" ${state.tunChecking || !list.length ? "disabled" : ""} title="Checks every tunnel for real - up or down, does data pass - and measures its packet loss and latency. Only shows; nothing is repaired">${state.tunChecking ? '<i class="spin"></i><span class="bt">Checking…</span>' : '<span class="bt">Check all</span>'}</button><button onclick="restartAll()" ${list.length ? "" : "disabled"} title="Restart the tunnel service of every tunnel, four at a time"><span class="bt">Restart all</span></button><span class="tcount"><span class="tc up"><i></i><b>${list.filter(t => t.state === "up").length}</b><span class="lab"> up</span></span><span class="tc down"><i></i><b>${list.filter(t => t.state === "down").length}</b><span class="lab"> down</span></span><span class="tc unstable"><i></i><b>${list.filter(t => t.state === "degraded").length}</b><span class="lab"> unstable</span></span></span><span class="sp"></span><div class="tabs set-tabs tf-tabs"><button class="${tmode === "all" ? "on" : ""}" onclick="tunFilter('all')">All <i class="cnt">${list.length}</i></button><button class="${tmode === "problems" ? "on" : ""}" onclick="tunFilter('problems')">Problems ${nProblems ? `<i class="cnt">${nProblems}</i>` : ""}</button></div>${searchSeg()}</div>
+    <div class="lbox tun-box fx-box">${trashBox()}
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${rows.length ? `<table class="tbl lift tun-tbl"><colgroup><col style="width:14%"><col style="width:17%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:9%"><col style="width:12%"><col style="width:90px"></colgroup>
       <thead><tr><th>Tunnel</th><th>Type</th><th>Status</th><th class="r">Iran node</th><th class="c" title="Round-trip time / packets lost on the link">ping/loss%</th><th>Foreign node</th><th>Ports</th><th>Traffic</th><th></th></tr></thead>
       <tbody>${[...rows].sort((x, y) => TUN_TYPES.indexOf(tunType(x)) - TUN_TYPES.indexOf(tunType(y)) || String(x.name).localeCompare(String(y.name))).map(row).join("")}</tbody></table>` : '<div class="empty">No tunnel.</div>'}</div>`;      // ONE table for every tunnel of every type: a new type only brings its own tag (no header, no table of its own)
-  applyQ();
+  applyQ(); fxFit();
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);
  
@@ -1601,7 +1601,7 @@ PAGES.actions = async () => {
   const movesTab = `<div class="mv-bar"><span class="mv-plan"><span class="mut">What if</span><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><span class="mut">went off?</span><button type="button" class="sm" onclick="foPreview()" title="The tunnels that would move, the server that would take them, the DNS records of every account that would change - nothing is changed">👁 Show the plan</button></span>${backChips}<span class="sp"></span><small class="mut">At most ${rails.max_per_day} moves a day per tunnel, ${rails.cooldown_hours} hours between two, one at a time; Telegram tells before and after.</small></div>
     <div class="mv-list">${mv.map(mvRow).join("") || '<div class="tk-empty"><b>No move yet</b><span>When the Doctor moves the tunnels of an Iran server (or you do, from a tunnel window), it is written here with a way back.</span></div>'}</div>`;
   $("#page").innerHTML = `<div data-tab="att" class="ap-top">${storm}${disturb}</div>${modes}
-    <div class="card ap-tasks" data-tab="att">
+    <div class="card ap-tasks fx-box" data-tab="att">
       <div class="ap-thead"><div class="ap-ttabs"><button data-k="now" class="${apTab === "now" ? "on" : ""}" onclick="apTasksTab('now')">🔧 In progress${nowN ? ` <i class="cnt">${nowN}</i>` : ""}</button><button data-k="done" class="${apTab === "done" ? "on" : ""}" onclick="apTasksTab('done')">✔ Finished${doneN ? ` <i class="cnt">${doneN}</i>` : ""}</button><button data-k="moves" class="${apTab === "moves" ? "on" : ""}" onclick="apTasksTab('moves')" title="Every move of tunnels between Iran servers, with Return and DNS back">🔁 Moves${openN ? ` <i class="cnt">${openN}</i>` : ""}</button><button data-k="ana" class="${apTab === "ana" ? "on" : ""}" onclick="apTasksTab('ana')" title="What the history says about the tunnels and the servers, and the CPU cores">📊 Analyst</button></div><span class="sp"></span>${acts}</div>
       <div class="ap-tbody ${apTab === "now" ? "" : "hidden"}" id="ap-t-now">${sugBox}<div class="ap-att">${workingRows}${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
         ${nowN ? "" : '<div class="tk-empty"><b>✓ Nothing to fix right now</b></div>'}</div>
@@ -1612,7 +1612,7 @@ PAGES.actions = async () => {
     </div>
     `;
   if (apTab === "ana") anaLoad();          // the Analyst is the fourth list of the Doctor's box (In progress · Finished · Moves · Analyst); the CPU cores live under it
-  apFit(null);
+  apFit(null); fxFit();
 };
 /* the mode cards: a click on a card chooses the mode; a change of the number inside a card saves it at once (with the mode as it is) */
 const apNum = (nm, dflt) => { const el = document.querySelector(`.ap-modes [name=${nm}]`); return el && +el.value ? +el.value : dflt; };
@@ -2338,6 +2338,9 @@ async function pnLiveTick(id) {
   if (quiet) { pn.users = null; pnUsersLoad(id); }
 }
 const pnRow = {h: 46, done: true};
+/* a fixed box (.fx-box): it fills the page down to the bottom of the window and keeps that size, whatever is inside; the list scrolls inside it (the owner: "a fixed box") */
+function fxFit() { document.querySelectorAll("#page .fx-box").forEach(b => { if (isPhone()) { b.style.removeProperty("height"); return; } b.style.height = Math.max(360, Math.floor(mainBottom() - b.getBoundingClientRect().top - 14)) + "px"; }); }
+addEventListener("resize", fxFit);
 const mainBottom = () => { const m = document.querySelector(".main"); return m ? Math.min(innerHeight, m.getBoundingClientRect().bottom) : innerHeight; };
 const pnPS = () => { if (isPhone()) return 10; const b = $("#pn-body"), top = b ? b.getBoundingClientRect().top : 270; return Math.max(5, Math.min(100, Math.floor((mainBottom() - top - ($("#pn-ctl") ? 0 : 56) - 52 - 14 - 10 - 36 - 6) / pnRow.h))); };
 /* the list box is one fixed box from its top down to the pager, which sits on the bottom edge: the rows are stretched to fill it exactly, so nothing scrolls and no empty strip is left */
@@ -4210,7 +4213,7 @@ PAGES.dns = async () => {
   let recs = (rr.records || []).filter(r => (r.editable !== false || r.deletable) && !(r.type === "NS" && (r.name === "@" || r.name === ""))), log = (fo && fo.dns_log) || [], accounts = accs.accounts || [], live = rr.accounts || [];      // the records that cannot be changed (MX, NS ...) are not listed
   const accPick = (() => { let v = "*"; try { v = localStorage.getItem("nk.dns.acc") || "*"; } catch (e) { /* private window */ } return accounts.some(a => a.id === v) ? v : (accounts[0] ? accounts[0].id : "*"); })();      // one account at a time (the first one until you choose)      // the account chosen in the bar above ("*" = all of them)
   if (accPick !== "*") recs = recs.filter(r => r.account === accPick);
-  const tab = ["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records";
+  const tab = !accounts.length ? "accounts" : (["records", "changes", "accounts", "failover"].includes(state.dnsTab) ? state.dnsTab : "records");      // without an account only the Accounts tab works
   const nA = recs.filter(r => r.type === "A").length, onPanel = recs.filter(r => r.type === "A" && r.ips.some(ip => byIp[ip])).length, nDom = new Set(recs.map(r => r.account + "|" + r.domain)).size;
   const chip = (cls, label, val, tip = "") => `<span class="tc ${cls}" title="${esc(tip)}">${label} <b>${val}</b></span>`;
   const bad = live.filter(a => !a.ok), connected = accounts.length > 0 && live.some(a => a.ok);
@@ -4229,7 +4232,7 @@ PAGES.dns = async () => {
   const accChips = accounts.map(a => { const l = live.find(x => x.id === a.id) || {}, ok = l.ok !== undefined ? l.ok : (a.status || {}).ok; return `<span class="dns-cw"><button type="button" class="dns-chip ${accPick === a.id ? "on" : ""}" onclick="dnsPickAcc('${esc(a.id)}')" title="${esc(ok ? a.name : (l.error || "this account does not answer"))}"><i class="pv pv-${esc(a.provider)}"></i><b>${esc(a.name)}</b>${ok && l.domains ? `<span class="cnt" title="${l.domains.length} domains">${l.domains.length}</span>` : ""}<i class="dot ${ok ? "ok" : "bad"}" title="${ok ? "connected" : "does not answer"}"></i></button><button type="button" class="dns-x" onclick="dnsAccDel('${esc(a.id)}', '${esc(a.name)}')" title="Remove the account ${esc(a.name)} from this panel (nothing changes at the provider)" aria-label="Remove ${esc(a.name)}">${X_SVG}</button></span>`; }).join("");      // each account box has a faint cross: it takes the account off the list (after a confirmation)
   const bar = `<div class="toolbar joined srv-bar dns-bar"><div class="dns-r dns-accbar"><span class="dns-lab">Accounts</span>${accChips}<button type="button" class="cta cta-server dns-add" onclick="dnsAccForm('')" title="Add an ArvanCloud account (another one) or a Cloudflare account" aria-label="Add account"><i class="cta-ic">＋</i>Add account</button></div>
     <div class="dns-r dns-main">${addBtn}${tab === "records" && connected ? domSel : ""}<span class="dns-stats" title="The panel never changes an IP by itself while this is being tested. You can still change a record by hand.">${connected ? dstat("Domains", nDom) + dstat("A records", nA) + dstat("On the panel", onPanel, "A records that point at a server added to this panel") : conn}</span>
-      <span class="sp"></span><div class="tabs srv-tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>${tab === "records" && connected ? searchSeg() : ""}</div></div>`;
+      <span class="sp"></span><div class="tabs srv-tabs">${tabs.map(([k, l, n]) => `<button class="${k === tab ? "on" : ""}" ${!accounts.length && k !== "accounts" ? 'disabled title="Add an account first"' : ""} onclick="dnsSetTab('${k}')">${l}${n ? ` <i class="cnt">${n}</i>` : ""}</button>`).join("")}</div>${tab === "records" && connected ? searchSeg() : ""}</div></div>`;
   let body = "";
 
   if (tab === "records") body = !accounts.length ? dnsEmpty() : dnsRecords(recs, rr.err, byIp, cur, live);
@@ -4237,8 +4240,8 @@ PAGES.dns = async () => {
   else if (tab === "accounts") body = dnsAccounts(accounts, live);
   else body = dnsFailover(fo, all.filter(s => s.role === "iran"), connected);
 
-  $("#page").innerHTML = bar + body;
-  applyQ();
+  $("#page").innerHTML = bar + `<div class="lbox full fx-box dns-box">${body}</div>`;
+  applyQ(); fxFit();
 };
 const dnsEmpty = () => `<div class="card dns-pane"><h3>🌐 No DNS account yet</h3><div class="mut">Add the API key of your ArvanCloud account (or a Cloudflare token) with <b>Add account</b> above: the panel then lists the DNS records of your domains like the account's own DNS page, and lets you add, change and delete A records.</div></div>`;
 function dnsRecords(recs, err, byIp, cur, live) {

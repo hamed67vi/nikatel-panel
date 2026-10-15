@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.56.23 - Fixed boxes, a quiet lamp, a finer load bar
+
+- **Fixed boxes (the owner):** the tunnels, every tab of the DNS page (Records, Changes, Accounts, Failover) and the box of the Doctor keep one size, fitted to the window; the list scrolls inside.
+- **Nothing there, nothing to press:** without a DNS account only the *Accounts* tab works; without a tunnel *Check all*, *Restart all*, the tabs and the search are switched off.
+- **Server icons:** black-and-white only (white in the dark theme, dark in the light one, the lion too); behind them a small lamp - a soft disc with a thin ring - green, yellow, red or blue.
+- **Lab table:** the *Serves* column is gone; the address now stands right after the name, the profile (the tag) has its own column, and what the panel is doing with a server (the steps of an install) is written under its name.
+- **The load bar:** bigger, finer, in the blue of the UI kit's slider (amber when busy, red when overloaded).
+
 ## 1.56.22 - A status lamp behind the server icons, a fixed box for the tunnels
 
 - **The icon of a server is never coloured (the owner):** it is white in the dark theme and the colour of the text in the light one; behind it a soft lamp says how the server is - green well, yellow with a problem, red cut, blue while the panel works on it.

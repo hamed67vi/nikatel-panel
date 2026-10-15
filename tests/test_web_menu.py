@@ -427,10 +427,25 @@ def test_the_lab_looks_again_by_itself_so_a_new_server_does_not_stay_with_dashes
     lab = _web("lab.js")
     assert "labAutoT = setTimeout(() =>" in lab and "waiting ? 3500 : 30000" in lab and "s.enabled && !(s.facts && s.facts.cpu != null)" in lab and "!document.querySelector(\"#modal .modal\")" in lab
 
-def test_the_tunnel_manager_has_a_fixed_box_buttons_with_names_only_and_the_server_icon_is_never_coloured():
-    """The owner, 2026-10-15: "a fixed box for the tunnel manager", "only their names, remove the emoji", "the icons of the servers never coloured: white (the theme's colour), a status lamp behind them"."""
+
+def test_fixed_boxes_names_only_buttons_disabled_without_items_and_the_server_icon_is_never_coloured():
+    """The owner, 2026-10-15: "a fixed box" for the tunnels, every tab of the DNS page and the Doctor; "only their names"; disabled when there is nothing; "the icons of the servers never coloured: white, a quiet lamp behind them"; "the bar bigger, in the blue of the kit"."""
     app, css = _web("app.js"), _web("lab.css")
-    assert '<div class="lbox tun-box">' in app and "🔍" not in app.split("PAGES.tunnelsList = async () => {", 1)[1].split("applyQ();", 1)[0]
-    assert '<span class="bt">Check all</span>' in app and '<span class="bt">Restart all</span>' in app
-    assert ".lbox.tun-box { height: calc(100vh - 235px)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
-    assert "color: var(--text) !important" in css and ".srv-ic::before { content: \"\"" in css and "tr.sev-yellow { --lamp: rgba(255, 196, 77" in css
+    tun = app.split("PAGES.tunnelsList = async () => {", 1)[1].split("applyQ(); fxFit();", 1)[0]
+    assert '<div class="lbox tun-box fx-box">' in tun and "🔍" not in tun and '<span class="bt">Check all</span>' in tun and '<span class="bt">Restart all</span>' in tun
+    assert '!list.length ? "disabled"' in tun and 'list.length ? "" : "disabled"' in tun and " is-empty" in tun
+    assert "function fxFit()" in app and 'class="lbox full fx-box dns-box"' in app and 'class="card ap-tasks fx-box"' in app
+    assert '!accounts.length ? "accounts"' in app and '!accounts.length && k !== "accounts" ? \'disabled title="Add an account first"\'' in app
+    assert "html body #page .fx-box { height: calc(100vh - 290px)" in css and ".toolbar.is-empty :is(.tf-tabs, .tb-search)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
+    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and "inset 0 0 0 1px color-mix(in srgb, var(--lamp" in css and "tr.sev-yellow { --lamp: #ffc44d" in css
+    assert ".lab-cpu .bar { flex: 0 1 96px" in css and "linear-gradient(90deg, #0a62ff, #4aa8ff)" in css
+
+
+def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_the_profile_has_its_own_column():
+    """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
+    assert '<th>Name</th><th data-prio="1">IP</th><th data-prio="3">Profile</th>' in lab
+    assert lab.count('<td class="lab-prof">${labTagChip(p.tag)}</td>') == 2 and "lab-tagp" not in lab
+    assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
+    assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
