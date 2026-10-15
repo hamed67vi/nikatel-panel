@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.19 - The PasarGuard part of Add a server shows at once
+
+- The PasarGuard part opens with the box when the open profile is a PasarGuard one (it waited for the first draw).
+
 ## 1.55.18 - Add a server: the profile is a drop-down, the install options belong to the PasarGuard profile
 
 - **The Profile field of Add a server is a drop-down of the profiles that were made** (Any = none); the open tab is chosen by itself.
