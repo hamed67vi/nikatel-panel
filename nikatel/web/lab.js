@@ -172,7 +172,7 @@ const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind
 function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }function labListInner(shown) {
   if (!shown.length) return `<div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button>${labIsPgTag(labKindNow()) ? `<button onclick="labSyncNodes()" title="Read the PasarGuard panels now and bring their nodes here">⟳ Sync the nodes</button>` : ""}</div>`;
   const rows = shown.slice().sort((a, b) => labRank(a) - labRank(b) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, undefined, {sensitivity: "base"}));
-  return `<table class="tbl lift srv-tbl joined lab-tbl"><colgroup><col style="width:8%"><col style="width:26%"><col style="width:17%"><col style="width:27%"><col style="width:15%"><col style="width:7%"></colgroup>
+  return `<table class="tbl lift srv-tbl joined lab-tbl"><colgroup><col style="width:80px"><col style="width:26%"><col style="width:17%"><col style="width:27%"><col style="width:15%"><col style="width:7%"></colgroup>
     <thead><tr><th data-prio="0">Status</th><th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2">Load</th><th data-prio="4" title="Megabits per second on the network card of the default route, over three seconds">Traffic Mbit/s</th><th></th></tr></thead><tbody>${rows.map(labRowOf).join("")}</tbody></table>`;      // (the table of the old Servers list: its cards, its icons, and the fluid layer that drops the less important columns when the box is narrow)
 }
 function labPage() {

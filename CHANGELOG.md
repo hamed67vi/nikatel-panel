@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.10 - Closer to the lamp, flags that fade on both sides
+
+- **Lab rows (the owner):** the Status column is a fixed 80 px, so the icon and the name stand close to their lamp; the flag is as wide as its picture (cover, no stretching) and its mask fades BOTH sides of it (before, the picture began where the fade had already ended, leaving hard edges).
+
 ## 1.57.9 - The load in the middle, a longer bar in the owner's blue
 
 - **Lab (the owner):** the number, the bar and RAM / Disk stand in the middle of the Load column; the bar is longer and is the thick round bar of his picture - a flat soft blue (amber or red when busy) on a slate track, no glow.

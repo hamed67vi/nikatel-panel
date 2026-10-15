@@ -491,7 +491,7 @@ def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is
     lab, css = _web("lab.js"), _web("lab.css")
     assert "labCheck()" not in lab and "window.labCheck = " not in lab and 'class="sm lab-chk"' not in lab and "window.labCheckOne = " in lab
     assert '<span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span>' in lab and "＋</span><span class=\"lab-lb\">Add server" not in lab
-    assert "td.name.has-flag::before { width: 150px; background-size: contain;" in css and "button.lab-add::before" in css and ".lab-bar .lab-chk" not in css
+    assert "td.name.has-flag::before { left: 0; right: auto; width: 100px;" in css and "button.lab-add::before" in css and ".lab-bar .lab-chk" not in css
 
 
 def test_the_bar_of_a_page_is_in_the_kits_look_primary_secondary_chip_segmented_and_field():
@@ -522,7 +522,7 @@ def test_the_usage_overview_cards_are_two_rows_of_three_in_fixed_boxes():
 def test_flags_keep_their_shape_tabs_keep_one_size_the_open_one_is_blue_and_windows_are_in_the_kits_look():
     """The owner, 2026-10-15: "the flags less stretched, fading more, grey and in colour when the row is pointed at", "tabs never change size, the chosen one a different colour", "the Add a server window like a MacBook"."""
     css = _web("lab.css")
-    assert "mask-composite: intersect; opacity: .26 !important; filter: grayscale(1) !important;" in css and ".lab-tbl tr:hover td.name.has-flag::before { opacity: .62 !important; filter: none !important; }" in css
+    assert "td.name.has-flag::before { left: 0; right: auto; width: 100px; background-size: cover;" in css and "opacity: .3 !important; filter: grayscale(1) !important;" in css and ".lab-tbl tr:hover td.name.has-flag::before { opacity: .62 !important; filter: none !important; }" in css
     assert ".tabs button { box-sizing: border-box; border: 1px solid transparent; font-weight: 600 !important; }" in css and ".tabs button.on { background: #2d3f68 !important;" in css
     assert "html body #modal :is(input:not([type=checkbox])" in css and "#modal input[type=number]::-webkit-inner-spin-button" in css and "html body #modal button.pri { border-radius: 11px !important;" in css and "#modal .modal-head > button { border-radius: 11px" in css
     assert "${dates}" not in _web("pg_usage.js") and "pg-usage-dates" not in _web("pg_usage.js")
