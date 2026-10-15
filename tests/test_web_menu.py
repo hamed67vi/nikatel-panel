@@ -426,3 +426,11 @@ def test_the_lab_looks_again_by_itself_so_a_new_server_does_not_stay_with_dashes
     """The owner, 2026-10-15: "I added a normal server and it stayed like this" (dashes until the page was refreshed)."""
     lab = _web("lab.js")
     assert "labAutoT = setTimeout(() =>" in lab and "waiting ? 3500 : 30000" in lab and "s.enabled && !(s.facts && s.facts.cpu != null)" in lab and "!document.querySelector(\"#modal .modal\")" in lab
+
+def test_the_tunnel_manager_has_a_fixed_box_buttons_with_names_only_and_the_server_icon_is_never_coloured():
+    """The owner, 2026-10-15: "a fixed box for the tunnel manager", "only their names, remove the emoji", "the icons of the servers never coloured: white (the theme's colour), a status lamp behind them"."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert '<div class="lbox tun-box">' in app and "🔍" not in app.split("PAGES.tunnelsList = async () => {", 1)[1].split("applyQ();", 1)[0]
+    assert '<span class="bt">Check all</span>' in app and '<span class="bt">Restart all</span>' in app
+    assert ".lbox.tun-box { height: calc(100vh - 235px)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
+    assert "color: var(--text) !important" in css and ".srv-ic::before { content: \"\"" in css and "tr.sev-yellow { --lamp: rgba(255, 196, 77" in css

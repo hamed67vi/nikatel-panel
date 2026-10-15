@@ -272,3 +272,19 @@ html body .ss-ht .about-bar u { position: relative; border-radius: 999px; backgr
 html body .ss-ht .about-bar u::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); transform: translateX(-100%); animation: aboutShine 1.6s ease-in-out infinite; }
 @keyframes aboutShine { to { transform: translateX(100%); } }
 html body .ss-ht #about-box .mut { font-variant-numeric: tabular-nums; }
+/* 1.56.22 - (1) the icon of a server is never coloured: white in the dark theme, the colour of the text in the light one, and a status lamp behind it - green when it is well, yellow with a problem, red when it is cut (the owner);
+   (2) the box of the tunnel manager is fixed (it does not shrink to its content; the list scrolls inside); (3) tabs and search stand in ONE row, the same height */
+html body #page .srv-ic { position: relative; color: var(--text) !important; filter: none !important; transform: none; }
+html[data-mode="light"] body #page .srv-ic { color: #1b2540 !important; }
+html body #page .srv-ic svg { position: relative; z-index: 1; }
+html body #page .srv-ic .b { stroke: currentColor !important; fill: color-mix(in srgb, currentColor 10%, transparent) !important; }
+html body #page .srv-ic .led { fill: currentColor !important; animation: none !important; opacity: 1 !important; }
+html body #page .srv-ic::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, var(--lamp, transparent) 0%, transparent 68%); opacity: .8; pointer-events: none; z-index: 0; transition: background .3s; }
+html body #page tr.up { --lamp: rgba(61, 220, 151, .62); } html body #page tr.sev-blue { --lamp: rgba(77, 163, 255, .62); } html body #page tr.sev-yellow { --lamp: rgba(255, 196, 77, .68); }
+html body #page tr.down, html body #page tr.sev-red { --lamp: rgba(255, 107, 139, .68); } html body #page tr.srv-off { --lamp: transparent; }
+html body #page .toolbar.joined { align-items: center; }
+html body #page .toolbar.joined .tf-tabs { align-self: center; display: inline-flex; align-items: center; height: 36px; margin: 0; }
+html body #page .toolbar.joined .tf-tabs button { height: 28px; line-height: 28px; }
+html body #page .toolbar.joined .tb-search { align-self: center; display: inline-flex; align-items: center; height: 36px; margin: 0; }
+html body #page .toolbar.joined .tb-search input { height: 36px; box-sizing: border-box; margin: 0; }
+html body #page .lbox.tun-box { height: calc(100vh - 235px); min-height: 360px; max-height: none; }

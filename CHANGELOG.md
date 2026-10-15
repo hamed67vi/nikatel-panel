@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.56.22 - A status lamp behind the server icons, a fixed box for the tunnels
+
+- **The icon of a server is never coloured (the owner):** it is white in the dark theme and the colour of the text in the light one; behind it a soft lamp says how the server is - green well, yellow with a problem, red cut, blue while the panel works on it.
+- **Tunnel manager:** a fixed box (it keeps its size, the list scrolls inside); *Check all* and *Restart all* have names only; the tabs All / Problems and the search stand in one row, the same height.
+
 ## 1.56.21 - The Lab looks again by itself
 
 - **A server that was just added does not stay with dashes (the owner):** the Lab page looks again every 3-4 seconds while a server is busy or has not been read yet, and every 30 seconds otherwise (never while a window is open), so the first numbers appear by themselves.
