@@ -247,3 +247,24 @@ html body #modal .pgh .pgh-a textarea { width: 100%; box-sizing: border-box; pad
 html body #modal .pgh .pgh-a textarea.bad { border-color: var(--bad, #ff453a); }
 html body #modal .pgh .frm-act .sp { flex: 1; }
 html body #modal .pgh form.pgh-form { display: block !important; }
+
+/* 1.57.25 - Settings redesigned like the other sections (the owner: "neat and compact like the rest"): the sections are the kit's segmented control, the form is ONE card of a fixed height (the head, the fields that scroll, the buttons at its foot), every control is 36 px (a switch is a 36 px well too, so a row of fields sits on one line), 280 px columns */
+html body #page .pg-admin-seg { flex-wrap: nowrap; align-items: center; gap: 2px; height: 36px; box-sizing: border-box; padding: 3px; max-width: 100%; overflow-x: auto; scrollbar-width: none; border-radius: 11px; background: #151a2b; border: 1px solid var(--uk-line); }
+html body #page .pg-admin-seg button { height: 28px; padding: 0 14px; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #b6bfd6; font-size: 13px; font-weight: 600; white-space: nowrap; }
+html body #page .pg-admin-seg button:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+html body #page .pg-admin-seg button.on { background: #2d3f68; border-color: rgba(120, 170, 255, .5); color: #fff; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4); }
+html body #page .pg-admin-ib { width: 36px; height: 36px; padding: 0; display: inline-grid; place-items: center; flex: none; border-radius: 11px; background-image: linear-gradient(180deg, #44577f, #37486c) !important; border: 1px solid rgba(255, 255, 255, .18) !important; color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12) !important; }
+html body #page .pg-admin-ib:hover { background-image: linear-gradient(180deg, #2f8bff, #0b5ad9) !important; border-color: rgba(120, 180, 255, .55) !important; }
+html body #page .pg-admin-ib svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .pg-admin-card { display: flex; flex-direction: column; margin: 0; padding: 0; overflow: hidden; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .09); background: linear-gradient(180deg, #181e30, #141a2b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05); }
+html body #page .pg-admin-card .pg-admin-sechead { flex: none; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--uk-line); font-size: 12.5px; } html body #page .pg-admin-card .pg-admin-sechead b { font-size: 14px; font-weight: 650; color: var(--text); }
+html body #page .pg-admin-card .pg-admin-formbox { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; overflow: auto; scrollbar-width: thin; }
+html body #page .pg-admin-card .pg-admin-fgrid.pg-admin-top { padding: 14px 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px 18px; align-items: end; }
+html body #page .pg-admin-card .pg-admin-f input:not([type=checkbox]), html body #page .pg-admin-card .pg-admin-f select { height: 36px; border-radius: 11px; font-size: 13px; }
+html body #page .pg-admin-card .pg-admin-f .pg-admin-secrow button { height: 36px; }
+html body #page .pg-admin-card .pg-admin-sw { height: 36px; min-height: 0; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--uk-line); border-radius: 11px; background: #0f1424; color: var(--text); font-size: 13px; }
+html body #page .pg-admin-card .pg-admin-grp { padding: 4px 12px 12px; border-radius: 14px; } html body #page .pg-admin-card .pg-admin-grp .pg-admin-fgrid { gap: 8px 18px; }
+html body #page .pg-admin-card .pg-admin-foot { flex: none; display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 16px; border-top: 1px solid var(--uk-line); background: rgba(0, 0, 0, .14); }
+html body #page .pg-admin-card .pg-admin-foot button { height: 36px; padding: 0 16px; border-radius: 11px; font-size: 13px; font-weight: 600; }
+html[data-mode="light"] body #page .pg-admin-seg { background: #eef2fa; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .pg-admin-seg button { color: #4a5a7e; } html[data-mode="light"] body #page .pg-admin-seg button.on { background: #fff; color: #14213d; box-shadow: 0 1px 3px rgba(30, 50, 100, .18), inset 0 0 0 1px rgba(47, 111, 224, .35); }
+html[data-mode="light"] body #page .pg-admin-card { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 1px 2px rgba(30, 50, 100, .06); } html[data-mode="light"] body #page .pg-admin-card .pg-admin-sw { background: #f6f8fc; }html body #page .pg-bar .pg-admin-ib { width: 36px; height: 36px; }      /* (the bar's own rule made it 30 px: measured in a real browser) */

@@ -705,3 +705,13 @@ def test_the_add_form_has_a_drawer_per_protocol_a_core_field_and_no_user_templat
     form = js.split("function pgKindFormHtml(inline) {", 1)[1].split("</form>", 1)[0]
     assert form.count('name="core_id"') == 1 and form.index('name="core_id"') < form.index('<details class="pg-kind-adv">') and form.index('name="address"') < form.index('name="core_id"') < form.index('name="port"')
     assert ".pg-kind-dr > summary {" in css and ".pg-kind-dr[open] > summary::after" in css and ".pg-kind-quick { grid-template-columns: repeat(5, minmax(0, 1fr)); }" in css
+
+
+def test_settings_is_one_fixed_card_with_the_kits_segmented_sections_and_36_px_controls():
+    """The owner, 2026-10-15: "redesign Settings like the other sections: neat and compact"."""
+    js, css = _web("pg_admin.js"), _web("pg_admin.css")
+    paint = js.split("function pgAdminPaintSettings(box) {", 1)[1].split("\nfunction pgAdminDraw", 1)[0]
+    assert paint.rstrip().endswith("}") and "foot) */" in paint                              # (the function is closed on its own line: a // comment had swallowed the brace and only node --check noticed)
+    assert '<div class="card pg-admin-card fx-box">' in paint and 'class="pg-admin-ib"' in paint and "One section is saved at a time." not in paint and "if (typeof fxFit === \"function\") fxFit();" in paint
+    assert paint.index('class="pg-admin-sechead"') < paint.index('class="pg-admin-formbox"') < paint.index('class="pg-admin-foot"')
+    assert ".pg-admin-seg { flex-wrap: nowrap; align-items: center; gap: 2px; height: 36px;" in css and ".pg-admin-seg button.on { background: #2d3f68;" in css and ".pg-admin-card .pg-admin-sw { height: 36px;" in css and "minmax(280px, 1fr)); gap: 14px 18px; align-items: end;" in css and ".pg-bar .pg-admin-ib { width: 36px; height: 36px; }" in css

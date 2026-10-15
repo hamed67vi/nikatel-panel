@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.25 - Settings redesigned
+
+- **Panel > General > Settings (the owner: *redesign it like the other sections, neat and compact*):** the sections (Telegram, Webhook, Notifications, Events, Subscription, HWID, General, User template) are the kit's segmented control with the lifted blue open one; the form is ONE card of a fixed height - a head (the title and its help, without the repeated sentence), the fields that scroll inside it, and the buttons at its foot; every control is 36 px (a switch is a 36 px well too, so a row of fields sits on one line) in 280 px columns; the *read again* button is the kit's icon button. Checked in a real browser: card, 36 px controls, 28 px segment buttons, the foot inside the card, switching sections, the unsaved-edits dot and the way to *User template* all work.
+
 ## 1.57.24 - The Add form in drawers, with a Core field
 
 - **Panel > Configs > Add (the owner: *arrange it, VLESS in a drawer, no user template, the core from there*):** the suggested configs are one **drawer** per protocol (VLESS, Trojan, VMess, Shadowsocks; one open at a time, the chosen kind is named on its drawer and its drawer opens by itself, e.g. after pasting a link); the kit's chips; ONE row of five fields - name, address, **core**, port, group. The *User template* checkbox (and its GB and days) is gone - nothing is made but the inbound, the group and the host. The core select moved out of *More* and is always there.

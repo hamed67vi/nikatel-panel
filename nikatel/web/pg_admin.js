@@ -491,10 +491,13 @@ function pgAdminFindSpec(fields, parts) {      // the description of the field a
 function pgAdminPaintSettings(box) {
   const S = pgAdminS, sec = S.sect, spec = pgAdminSpec(sec), d = pgAdminDraftOf(sec), dirty = pgAdminDirtyOf(sec);
   const tabs = pgAdminSeg([...S.S.sections.map(s => [s.key, s.label, s.key === sec, pgAdminDirtyOf(s.key) ? "dirty" : "", `pgAdminSect('${s.key}')`]), ["utpl", "User template", false, "", "pnTab('templates')"]]);
-  pgPaint(box, pgBar(tabs, `<button class="sm" onclick="pgAdminSetReload()" title="Read the settings from the panel again (your unsaved edits stay)">↻</button>`) + `<div class="pg-admin-sechead"><b>${esc(spec.label)}</b><span class="mut">${esc(spec.help)} One section is saved at a time.</span>${spec.confirm ? `<span class="pill warn" title="${esc(spec.confirm)}">asks first</span>` : ""}</div>
-    <div class="lbox full pg-admin-formbox"><div class="pg-admin-fgrid pg-admin-top">${spec.fields.map(f => pgAdminFieldHtml(f, d, "", sec)).join("")}</div></div>
-    <div class="frm-act pg-admin-foot"><button class="pri" id="pg-admin-save" ${dirty ? "" : "disabled"} onclick="pgAdminSaveSet()">Save ${esc(spec.label)}</button><button id="pg-admin-discard" ${dirty ? "" : "disabled"} onclick="pgAdminDiscard()">Discard edits</button>
-      <span class="pg-admin-dirty mut">${dirty ? "unsaved edits" : ""}</span><span class="sp"></span><button onclick="pgAdminHistory()" title="Put back the values from before an earlier save">Restore previous values…</button></div>`);
+  const ic = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/></svg>';
+  pgPaint(box, pgBar(tabs, `<button type="button" class="pg-admin-ib" onclick="pgAdminSetReload()" title="Read the settings from the panel again (your unsaved edits stay)" aria-label="Read the settings again">${ic}</button>`) + `<div class="card pg-admin-card fx-box">
+    <div class="pg-admin-sechead"><b>${esc(spec.label)}</b><span class="mut">${esc(spec.help)}</span>${spec.confirm ? `<span class="pill warn" title="${esc(spec.confirm)}">asks first</span>` : ""}</div>
+    <div class="pg-admin-formbox"><div class="pg-admin-fgrid pg-admin-top">${spec.fields.map(f => pgAdminFieldHtml(f, d, "", sec)).join("")}</div></div>
+    <div class="pg-admin-foot"><button class="pri" id="pg-admin-save" ${dirty ? "" : "disabled"} onclick="pgAdminSaveSet()" title="Each section is saved on its own">Save ${esc(spec.label)}</button><button id="pg-admin-discard" ${dirty ? "" : "disabled"} onclick="pgAdminDiscard()">Discard edits</button>
+      <span class="pg-admin-dirty mut">${dirty ? "unsaved edits" : ""}</span><span class="sp"></span><button onclick="pgAdminHistory()" title="Put back the values from before an earlier save">Restore previous values…</button></div></div>`);
+  if (typeof fxFit === "function") fxFit();      /* the card is a box of one fixed height (the fields scroll inside it, the buttons stay at its foot) */
 }
 function pgAdminDraw() {      // redraw after a row was added or a secret marked: the form keeps its scroll position
   const box = $("#pn-body"); if (!box || !pgAdminS.S) return;
