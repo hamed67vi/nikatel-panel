@@ -278,3 +278,33 @@ def test_the_category_that_was_called_pasarguard_is_called_pasarguard_nodes_by_t
         assert svc.rename_old_tag(db) == 0                                                                 # once
 
     assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", "Marzban"), ("ir1", "PasarGuard Nodes")]
+
+
+def test_a_node_added_in_pasarguard_later_is_found_by_the_check_and_put_on_the_page_and_one_taken_off_on_purpose_stays_off(client, monkeypatch):
+    """The owner, 2026-10-15: "the panel was supposed to detect the node that was added in PasarGuard by itself" - the nodes were put on the page only when the panel was connected."""
+    pid = _panel(nodes_=[{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected"}])
+    seen = [{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected"}]
+    monkeypatch.setattr(panels, "_cred", lambda p: {"id": p.id, "url": "https://p.example:8000", "type": p.type, "token": ""})
+    monkeypatch.setattr(panels, "check", lambda c: {"ok": True, "latency_ms": 5, "stats": {"version": "1"}, "nodes": [dict(n) for n in seen], "error": ""})
+
+    panels.check_all()
+    assert [p["name"] for p in _profiles(client)] == ["n7"]                                                     # (the node that was there is on the page by the first check)
+
+    seen.append({"id": 9, "name": "AS", "address": "203.0.113.9", "status": "connected"})                        # the owner adds a node in PasarGuard
+    panels.check_all()
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("AS", "PasarGuard Nodes"), ("n7", "PasarGuard Nodes")]
+    panels.check_all()
+    assert len(_profiles(client)) == 2                                                                           # (and not twice)
+
+    gone = next(p["id"] for p in _profiles(client) if p["name"] == "AS")
+    assert client.delete(f"/api/profiles/{gone}").status_code == 200                                              # taken off on purpose
+    panels.check_all()
+    assert [p["name"] for p in _profiles(client)] == ["n7"]                                                      # the check does not put it back
+
+    r = client.post("/api/profiles", json={"kind": "node", "panel_id": pid, "node_ids": [9], "tag": "Mine"})
+    assert r.status_code == 201 and r.json()["added"][0]["tag"] == "Mine"                                         # added by hand again: it follows the page again
+    client.delete(f"/api/profiles/{r.json()['added'][0]['id']}")
+    with session() as db:
+        assert svc._skip(db) == {f"{pid}:9"}
+        svc.drop_panel(db, pid)
+        assert svc._skip(db) == set()                                                                              # a panel that is removed takes its notes with it

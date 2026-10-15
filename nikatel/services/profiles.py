@@ -13,7 +13,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Panel, Profile, Server
+from ..models import Panel, Profile, Server, Setting
 from . import settings
 from .events import emit
 
@@ -76,6 +76,23 @@ def node_in(panel: Panel, node_id: int) -> dict | None:
     """Pure: the node of the panel (as the health job last read it) with this id, or None."""
     return next((n for n in (panel.nodes or []) if isinstance(n, dict) and n.get("id") == node_id), None)
 
+
+def _skip(db: Session) -> set[str]:
+    """The nodes ("panel:node") the owner took off the page on purpose: the health check does not put them back."""
+    row_ = db.get(Setting, "lab")
+    v = row_.value.get("skip_nodes") if row_ is not None and isinstance(row_.value, dict) else None
+    return {x for x in v if isinstance(x, str)} if isinstance(v, list) else set()
+
+
+def _set_skip(db: Session, keys: set[str]) -> None:
+    row_ = db.get(Setting, "lab")
+    doc = dict(row_.value) if row_ is not None and isinstance(row_.value, dict) else {}
+    doc["skip_nodes"] = sorted(keys)[:400]
+
+    if row_ is None:
+        db.add(Setting(key="lab", value=doc))
+    else:
+        row_.value = doc
 
 def row(p: Profile, servers: dict[int, Server], panels: dict[int, Panel]) -> dict:
     """Pure: one profile for the list - what it is, and what it points at (its name and address; `missing` when that is gone)."""
@@ -140,6 +157,10 @@ def create(db: Session, kind: str, server_id=None, panel_id=None, node_id=None, 
 
         p = Profile(kind="node", panel_id=pid, node_id=nid, tag=tag)
         what = f"PasarGuard node {n.get('name') or nid} ({panel.name})"
+        skipped = _skip(db)
+
+        if f"{pid}:{nid}" in skipped:          # (added by hand again: the check may follow it again)
+            _set_skip(db, skipped - {f"{pid}:{nid}"})
     else:
         sid = _int(server_id, "the server")
         s = db.get(Server, sid)
@@ -231,19 +252,23 @@ def set_tag(db: Session, pid: int, tag) -> str:
 
 
 def auto_nodes(db: Session, panel: Panel) -> int:
-    """A PasarGuard panel was connected (the owner: "a profile is added by itself on the Lab page, tagged PasarGuard"): every node it has, that is not on the page yet, gets a profile with the tag PasarGuard. Returns how many."""
+    """The nodes of a PasarGuard panel are put on the Lab page by themselves (the owner: "the panel must detect a node that was added in PasarGuard"): when the panel is connected and on every
+    check of it (30 s), a node that has no profile yet - and that he did not take off the page on purpose - gets one, tagged PasarGuard Nodes. Returns how many."""
     if panel.type != "pasarguard":
         return 0
 
-    made = 0
+    made, skipped = 0, _skip(db)
 
     for n in panel.nodes or []:
-        if isinstance(n, dict) and isinstance(n.get("id"), int) and db.scalar(select(Profile.id).where(Profile.kind == "node", Profile.panel_id == panel.id, Profile.node_id == n["id"])) is None:
+        if not isinstance(n, dict) or not isinstance(n.get("id"), int) or f"{panel.id}:{n['id']}" in skipped:
+            continue
+
+        if db.scalar(select(Profile.id).where(Profile.kind == "node", Profile.panel_id == panel.id, Profile.node_id == n["id"])) is None:
             db.add(Profile(kind="node", panel_id=panel.id, node_id=n["id"], tag=NODE_TAG))
+            emit(db, "info", "servers", f"Node {n.get('name') or n['id']} of the panel {panel.name} was found and put on the Lab page ({NODE_TAG}).", str(n.get("name") or n["id"]))
             made += 1
 
     return made
-
 
 def rename_old_tag(db: Session) -> int:
     """The step of the upgrade to 1.52.0: the category that was called PasarGuard is called PasarGuard Nodes (the owner). Returns how many profiles followed."""
@@ -294,6 +319,10 @@ def delete(db: Session, pid: int) -> str:
         raise LookupError("profile not found")
 
     name = row(p, {s.id: s for s in db.scalars(select(Server))}, {x.id: x for x in db.scalars(select(Panel))})["name"]
+
+    if p.kind == "node" and p.panel_id is not None and p.node_id is not None:
+        _set_skip(db, _skip(db) | {f"{p.panel_id}:{p.node_id}"})          # (on purpose: the check of the panel does not put it back)
+
     emit(db, "info", "servers", f"Profile {name} taken off the Lab page (nothing was changed on it).", name)
     db.delete(p)
     return name
@@ -316,4 +345,5 @@ def drop_panel(db: Session, panel_id: int) -> int:
     for p in gone:
         db.delete(p)
 
+    _set_skip(db, {k for k in _skip(db) if not k.startswith(f"{panel_id}:")})
     return len(gone)

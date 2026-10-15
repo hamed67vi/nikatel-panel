@@ -604,6 +604,7 @@ def check_all() -> None:
                     nodes.append(n)
 
                 p.nodes = nodes
+                profiles.auto_nodes(db, p)          # (a node that was added in PasarGuard is put on the Lab page by the next check)
 
                 if p.status != "up":
                     if p.status == "down":

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.2 - A node added in PasarGuard is found by the panel by itself
+
+- **The panel detects the nodes of a PasarGuard panel on every check, not only when the panel is connected (the owner: a node he added in PasarGuard was not seen in the panel):** a node that has no profile yet gets one at the next check (30 s), tagged PasarGuard Nodes, and an event says so. A node he takes off the page on purpose stays off (the check remembers it as skipped); adding it by hand again, or removing its panel, clears that note.
+
 ## 1.55.1 - The Add form is one row, Top users fits
 
 - **Add tab:** the form was squeezed into one column of the page grid (and the fields a kind does not use were shown); it is a block now - one row of Name / Address / Port / Group / template, the rest folded, the family name on the line of its chips.
