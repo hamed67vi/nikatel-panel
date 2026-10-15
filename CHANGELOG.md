@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.20 - The other uptime strip is blue too
+
+- **Lab (the owner):** the strip of the last days in the *Monitor* section has the same bright blue as *Heard over SSH* (1.57.19 changed only the Overview one; its test was red - fixed).
+
 ## 1.57.19 - Vertical dots, a blue strip
 
 - **Menus (the owner):** the ⋯ button of every row and window has vertical dots now.
