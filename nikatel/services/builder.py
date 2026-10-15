@@ -24,6 +24,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
+from ..ssh import target as ssh_target
 from . import settings as st
 from .events import emit
 from .trash import snapshot as trash_snapshot
@@ -444,12 +445,12 @@ def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> 
     _say(aid, f"copying the backhaul binary from {src.host} to {dst.host} through the panel")
 
     if not local.exists() or local.stat().st_size < 1024:
-        r = subprocess.run(["scp", *opts, "-P", str(src.port), f"{src.user}@{src.host}:/usr/local/bin/backhaul", str(local)], capture_output=True, text=True, timeout=240, check=False)
+        r = subprocess.run(["scp", *opts, "-P", str(src.port), "--", f"{ssh_target(src)}:/usr/local/bin/backhaul", str(local)], capture_output=True, text=True, timeout=240, check=False)
 
         if r.returncode != 0 or local.stat().st_size < 1024:
             raise RuntimeError("could not fetch the backhaul binary: " + r.stderr.strip()[:120])
 
-    r = subprocess.run(["scp", *opts, "-P", str(dst.port), str(local), f"{dst.user}@{dst.host}:/usr/local/bin/.backhaul.nikatel-tmp"], capture_output=True, text=True, timeout=240, check=False)
+    r = subprocess.run(["scp", *opts, "-P", str(dst.port), "--", str(local), f"{ssh_target(dst)}:/usr/local/bin/.backhaul.nikatel-tmp"], capture_output=True, text=True, timeout=240, check=False)
 
     if r.returncode != 0:
         raise RuntimeError("could not copy the backhaul binary to the server: " + r.stderr.strip()[:120])

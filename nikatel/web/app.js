@@ -197,7 +197,7 @@ function renderSub() {
   const cur = sub(state.page);
   const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
   const nop = k => k !== "settings" && state.page === "pgpanel" && window.labNoPanel && labNoPanel();      // (no panel yet: those tabs are dim and quiet)
-  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => nop(k) ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true">${quiet(label)}</button>` : off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : off === "act" ? `<button data-k="${k}" class="sub-act" onclick="subAct('${state.page}', '${k}')">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
+  morphHtml(box, `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => nop(k) ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true">${quiet(label)}</button>` : off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : off === "act" ? `<button data-k="${k}" class="sub-act" onclick="subAct('${state.page}', '${k}')">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`);
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
 function subSet(page, k) {      // what changes when a tab of a page is chosen (setSub = this and a redraw; the left menu calls it through go)
@@ -215,7 +215,8 @@ const TITLE_ANIM = {
   configs: `<svg class="t-anim pan-anim" viewBox="0 0 32 28" width="32" height="28" aria-hidden="true"><rect class="win" x="2" y="2" width="28" height="24" rx="3.5"/><path class="bar0" d="M2 8h28"/><rect class="b b1" x="7" y="12" width="4" height="10" rx="1"/><rect class="b b2" x="14" y="12" width="4" height="10" rx="1"/><rect class="b b3" x="21" y="12" width="4" height="10" rx="1"/><circle class="dt" cx="6" cy="5" r="1"/><circle class="dt" cx="10" cy="5" r="1"/></svg>`,
   settings: `<svg class="t-anim gear-anim" viewBox="0 0 30 30" width="28" height="28" aria-hidden="true"><g class="gear"><path d="M15 3.5l2 .4.7 3 2.2 1 2.6-1.6 2.7 2.7-1.6 2.6 1 2.2 3 .7.4 2-.4 2-3 .7-1 2.2 1.6 2.6-2.7 2.7-2.6-1.6-2.2 1-.7 3-2 .4-2-.4-.7-3-2.2-1-2.6 1.6-2.7-2.7 1.6-2.6-1-2.2-3-.7-.4-2 .4-2 3-.7 1-2.2-1.6-2.6 2.7-2.7 2.6 1.6 2.2-1 .7-3z" transform="translate(0 0) scale(.9) translate(1.7 1.7)"/><circle cx="15" cy="15" r="4"/></g></svg>`,
   bot: `<svg class="t-anim bot-anim" viewBox="0 0 30 30" width="30" height="30" aria-hidden="true"><path class="ant" d="M15 3v4"/><circle class="ap" cx="15" cy="3" r="1.8"/><rect class="hd" x="4" y="8" width="22" height="17" rx="5"/><ellipse class="eye" cx="11" cy="16" rx="2.3" ry="2.6"/><ellipse class="eye" cx="19" cy="16" rx="2.3" ry="2.6"/><path class="mo" d="M11 21.2h8"/></svg>`,
-};function go(page, tab) {      // `tab`: a section of the left menu - the page opens on that tab
+};const TABBED = new Set(["tunnels", "pgpanel", "configs"]);      // the pages whose first box is a toolbar the tabs sit on
+function go(page, tab) {      // `tab`: a section of the left menu - the page opens on that tab
   let aliased = false;
   if (NAV_PN[page] && typeof pn !== "undefined") pn.want = NAV_PN[page];
   if (NAV_ALIAS[page]) {   aliased = true;               // an old page name: open the page that holds it, on the right sub-tab
@@ -239,6 +240,7 @@ const TITLE_ANIM = {
   const navOn = $("#nav a.on"); if (navOn && isPhone()) navOn.scrollIntoView({inline: "center", block: "nearest"});      // the bottom bar of a phone scrolls: the item of the open page stays in view
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
   if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
+  if (TABBED.has(page)) document.body.classList.add("tabbed");      // the sub tabs stick to the box under them: set now when the page has them, so the bar never changes shape when the data lands; it is taken away only when the page that has none is drawn (refresh() decides) - never while the old page, still on the screen, would shift
   refresh();
 }
 /* ---- Server Doctor: what is wrong with a server, in plain words, and what to do about it */
@@ -331,7 +333,7 @@ const navIcons = () => {      // the icons of the tabs of the menu (lab.js draws
 function navTabs() {      // the tabs that hang under their page: [key, name, icon]
   const ic = navIcons();
   const of = page => (SUB[page] || []).map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "act" ? "act" : false]);      // (a tab that is switched off is in the menu too, grey like Shop bot: the owner asked to see the rest of the tabs of Tunnels; an "act" is a door to an action, drawn in the accent colour with a + after its name, never the open tab)
-  return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear, SET_OFF.has(k) ? "off" : false])};
+  return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};
 }
 function navBuild() {
   const nav = $("#nav"); if (!nav) return;
@@ -369,7 +371,7 @@ function isPhone() { return matchMedia("(max-width: 760px) and (pointer: coarse)
 (() => {
   const pg = $("#page"); if (!pg) return;
   let q = 0;
-  const fit = () => { if (isPhone()) return; const fixed = !!pg.querySelector(".cf-top, .lab-root"); /* (the Lab list is a box of ONE fixed height too, whatever the number of its rows: the owner, 2026-10-15) */ pg.querySelectorAll(".lbox").forEach(b => { const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
+  const fit = () => { if (isPhone()) return; const fixed = !!pg.querySelector(".cf-top, .lab-root"); /* (the Lab list is a box of ONE fixed height too, whatever the number of its rows: the owner, 2026-10-15) */ pg.querySelectorAll(".lbox").forEach(b => { if (b.matches(".fx-box")) return; const mh = Math.max(150, window.innerHeight - b.getBoundingClientRect().top - 24); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
   const labelCells = () => { if (!isPhone()) return; pg.querySelectorAll("table.tbl").forEach(tb => { const hs = [...tb.querySelectorAll("thead th")].map(h => h.textContent.trim()); if (!hs.length) return; tb.querySelectorAll("tbody tr").forEach(tr => { let i = 0; for (const td of tr.children) { if (td.tagName !== "TD") continue; if (!td.hasAttribute("data-l")) td.setAttribute("data-l", hs[i] || ""); i += +td.getAttribute("colspan") || 1; } }); }); };
   const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); labelCells(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
@@ -436,7 +438,7 @@ async function refreshNow() {
   }
 }
 let lastTick = Date.now();
-setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
+setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 /* a window that is drawn again changes only what is different, in place: a value that changed is rewritten where it stands, everything else is not touched - so nothing blinks or jumps when Health, Quality, a check ... end */
 function morphNode(a, b) {
@@ -2461,7 +2463,7 @@ function pnFit(ps) {
   for (let k = 0; k < 3; k++) { set(h); const over = tb.offsetHeight - inner(); if (Math.abs(over) < 1) break; h -= over / ps; }
   pnFit.k = key; pnFit.h = Math.floor(h * 10) / 10; set(pnFit.h);
 }
-let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = setTimeout(() => { if (!$("#pn-body .usr-tbl")) return; if (pnPS() !== pn.curPS) refresh(); else pnFitSoon(pn.curPS); }, 150); });
+let pnFitT; addEventListener("resize", () => { clearTimeout(pnFitT); pnFitT = setTimeout(() => { if (!$("#pn-body .usr-tbl")) return; if (pnPS() !== pn.curPS) pnUsersLoad(+pn.id); else pnFitSoon(pn.curPS); }, 150); });
 const pnType = () => ((state.panelsCache || []).find(p => String(p.id) === pn.id) || {}).type || "";
 /* the tabs of the panel: Users, Hosts, then every tab a pg_*.js file registered in pgTabs for this type of panel (PasarGuard: groups, templates, nodes, cores, admins, settings, usage) */
 const pnExtraTabs = () => Object.entries(window.pgTabs || {}).filter(([, t]) => !t.types || t.types.includes(pnType())).sort((a, b) => (a[1].order || 99) - (b[1].order || 99)).map(([k, t]) => [k, t.label]);
@@ -3841,15 +3843,14 @@ PAGES.settings = async () => {
   const topic = (k, p) => !bk.telegram_ready ? '<span class="mut">Telegram is not set up (Alerts)</span>' : p.topic ? `<span class="pill ok" title="Its backups go to this topic of the group"><i class="bi">${SI.folder}</i>${esc(p.topic_name || "topic")}</span> <a class="mut" onclick="bkTopicOff('${k}')"><i class="bi">${SI.link}</i>unlink</a>` : `<button class="sm" type="button" onclick="bkTopic('${k}')" title="Make a separate page (topic) for it in the Telegram group">＋ topic</button>`;
   const part = ([k, p]) => `<div class="si bp ${p.enabled && p.ready ? "ok" : "off"}"><i class="ss-ic">${k === "panel" ? SI.db : SI.cart}</i><div class="si-b"><div class="si-t"><span class="si-n"><b>${p.label}</b></span><small>${esc(p.what)}${p.ready ? "" : ' · <span class="err">set the bot server first</span>'}</small></div></div><div class="bp-r"><div class="bp-a"><label class="swl" title="${p.enabled ? "In the daily backup" : "Not in the daily backup"}"><input type="checkbox" class="sw" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"></label><button class="sm pri" type="button" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}><i class="bi">${SI.cloud}</i>Back up now</button><button class="sm" type="button" onclick="bkRestoreOpen('${k}')"><i class="bi">${SI.restore}</i>Restore</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}"><i class="bi">${SI.down}</i>Download</a>` : ""}</div><div class="bp-s"><span class="bp-l"><i class="bi">${SI.clock}</i>${p.last ? `latest ${ago(p.last.at)} ago, ${kb(p.last.bytes)}` : "no backup yet"}</span>${topic(k, p)}</div></div></div>`;
   const everyOpts = [[0, "day"], [15, "15 min"], [30, "30 min"], [60, "hour"], [180, "3 h"], [360, "6 h"], [720, "12 h"]], tgOpts = [["all", "every backup"], ["daily", "once a day"], ["off", "never"]];
-  const backups = sFrame("Backups", "Encrypted copies of the panel and the shop bot: kept here and sent to Telegram.", bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>',
-    (bk.has_passphrase ? "" : sGrp({form: "return savePass(event)", ok: false, icon: SI.key, title: "Backup password", desc: "the files are encrypted with it; you type it only when you restore — keep it somewhere safe",
-        rows: sRow("Passphrase", '<input name="passphrase" type="text" minlength="12" required autocomplete="off" spellcheck="false">', "at least 12 characters"),
-        acts: '<button type="button" class="sm" onclick="bkGen(this.form)">🎲 Generate</button><button class="pri sm" type="submit">Set the password</button>', cls: "x"}))
-    + `<div class="sl">` + Object.entries(bk.parts).map(part).join("") + `</div>`
-    + sGrp({form: "return saveBackup(event)", cls: "two flat", ok: !!bk.enabled, icon: SI.clock, title: "Schedule", pill: bk.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
-        rows: sSw("enabled", bk.enabled, "Automatic backups") + sRow("Every", sSel("every_minutes", everyOpts, bk.every_minutes || 0, `onchange="this.form.querySelector('.bk-hour').classList.toggle('hidden', this.value !== '0')"`)) + `<label class="sr bk-hour ${(bk.every_minutes || 0) ? "hidden" : ""}"><span>At hour</span><div class="v"><input name="hour" type="number" min="0" max="23" value="${bk.hour}"></div></label>` + sRow("Keep for", `<input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}">`, "days") + sRow("Send to Telegram", sSel("tg", tgOpts, bk.send_telegram ? (bk.tg_every || "all") : "off")),
-        acts: '<button class="pri sm" type="submit">Save</button>'})
-    + (bk.has_passphrase ? `<form class="sl" onsubmit="return savePass(event)">` + sItem({icon: SI.key, title: "Passphrase", desc: "files made before keep the old one", field: pwBox("", "passphrase", "New passphrase", "new-password", " minlength=\"12\""), acts: '<button class="sm" type="submit">Replace passphrase</button>'}) + `</form>` : ""));
+  const passRow = sItem({ok: !!bk.has_passphrase, icon: SI.key, title: "Backup password", pill: bk.has_passphrase ? '<span class="pill ok">set</span>' : '<span class="pill err">not set</span>', desc: "the files are encrypted with it; you type it only when you restore - keep it somewhere safe", acts: pgSw(!!bk.has_passphrase, "bkPassToggle(this)", 'title="' + (bk.has_passphrase ? "Replace the password" : "Set the password") + '"')})
+    + `<form class="bpw-form hidden" id="bpw-form" data-has="${bk.has_passphrase ? 1 : 0}" onsubmit="return savePass(event)">${bk.has_passphrase ? pwBox("", "passphrase", "New passphrase", "new-password", " minlength=\"12\"") : '<input class="si-f" name="passphrase" type="text" minlength="12" required placeholder="at least 12 characters" autocomplete="off" spellcheck="false">'}${bk.has_passphrase ? "" : '<button type="button" class="sm" onclick="bkGen(this.form)">🎲 Generate</button>'}<button class="pri sm" type="submit">${bk.has_passphrase ? "Replace passphrase" : "Set the password"}</button><small class="mut">at least 12 characters${bk.has_passphrase ? "; files made before keep the old one" : ""}</small></form>`;
+  const backups = sFrame("Backups", "Encrypted copies of the panel: kept here and sent to Telegram.", bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>',
+    `<div class="sl">` + Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("") + `</div>`
+    + `<div class="sl bpw">${passRow}</div>`
+    + sGrp({form: "return saveBackup(event)", cls: "two flat bk-sched", ok: !!bk.enabled, icon: SI.clock, title: "Schedule", pill: bk.enabled ? '<span class="pill ok">on</span>' : '<span class="pill">off</span>',
+        rows: sSw("enabled", bk.enabled, "Automatic backups") + sRow("Every", sSel("every_minutes", everyOpts, bk.every_minutes || 0, `onchange="this.form.querySelector('.bk-hour').classList.toggle('hidden', this.value !== '0')"`)) + `<label class="sr bk-hour ${(bk.every_minutes || 0) ? "hidden" : ""}"><span>At hour</span><div class="v"><input name="hour" type="number" min="0" max="23" value="${bk.hour}"></div></label>` + sRow("Keep for (days)", `<input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}">`, "days") + sRow("Send to Telegram", sSel("tg", tgOpts, bk.send_telegram ? (bk.tg_every || "all") : "off")),
+        acts: '<button class="pri sm" type="submit">Save</button>'}));
 
   /* probe */
   const prOn = !!pr.state.active && !pr.state.fails;
@@ -3864,22 +3865,19 @@ PAGES.settings = async () => {
 
   /* AI */
   const st = ai_.status || {};
-  const ai = sFrame("AI assistant", "Explains problems and helps the Tunnel Doctor. Needs an Anthropic API key.", aiPill(ai_),
+  const aiBody = sCat(`AI assistant · Anthropic ${aiPill(ai_)}`) +      // the AI assistant lives in the API tab (the owner, 2026-10-16: "add this section to API"); its Use switches went - the Tunnel Doctor decides how the AI is used
     sHero(!ai_.has_api_key ? "s0" : !st.at ? "s1" : st.ok ? "s3" : "s0", SI.bot, !ai_.has_api_key ? "No key saved" : !st.at ? "Key saved, not tested yet" : st.ok ? "Connected" : "Not working", !ai_.has_api_key ? "Paste an Anthropic API key below; the panel tests it at once." : !st.at ? "Press Test the key." : st.ok ? `${esc(st.provider || "Anthropic")} · ${esc(st.model || ai_.model)} · ${st.ms} ms · tested ${ago(st.at)} ago` : esc(st.error || "no answer"))
     + `<form class="sl" onsubmit="return saveAi(event)">`
-    + sGrp({icon: SI.key, title: "Key and use",
+    + sGrp({icon: SI.key, title: "Anthropic key",
         rows: sRow("Anthropic API key", fIc(SI.key, `<input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off">`, true), "empty keeps the saved one") + sRow("Model", fIc(SI.cube, `<input name="model" value="${esc(ai_.model)}">`))})
-    + sGrp({icon: SI.gear, title: "Use",
-        rows: sSw2("enabled", ai_.enabled, "Diagnose broken tunnels with the AI", "Let the AI analyze errors and suggest fixes.") + sSw2("actions", ai_.actions, "Let it add safe repair steps to the plan", "Include recommended repair steps in action plans.")})
-    + `<div class="sf-act"><button type="button" class="sm danger" onclick="forgetAi()"><i class="bi">${SI.trash}</i>Remove the key</button><button type="button" class="sm" onclick="testAi()"><i class="bi">${SI.play}</i>Test the key</button><button class="pri sm" type="submit"><i class="bi">${SI.save}</i>Save</button></div></form>`);
+    + `<div class="sf-act"><button type="button" class="sm danger" onclick="forgetAi()"><i class="bi">${SI.trash}</i>Remove the key</button><button type="button" class="sm" onclick="testAi()"><i class="bi">${SI.play}</i>Test the key</button><button class="pri sm" type="submit"><i class="bi">${SI.save}</i>Save</button></div></form>`;
   /* API (the owner, 2026-10-16: "make this section API and bring every API connection here"): this panel's own API - its tokens (moved here from Security) and its docs - and the state of every connection that works by an API key, each with the way to its place */
   const apiRow = (ok, icon, title, desc, click, label) => sItem({ok, icon, title, pill: ok === true ? '<span class="pill ok">● connected</span>' : ok === false ? '<span class="pill err">● not set</span>' : '<span class="pill">● saved, not tested</span>', desc, acts: `<button type="button" class="sm" onclick="${click}">${label}</button>`});
   const accts = (dacc && dacc.accounts) || [], pls = (pnl && pnl.panels) || [], plUp = pls.filter(p => p.status === "up").length;
   const apiFrame = sFrame("API", "This panel's own API - tokens and docs - and every connection that works by an API key.", '<span class="pill" id="api-pill">…</span>',
     sHero("s3", SI.link, "This panel's API", `${esc(location.origin)}/api/… · a token signs a script, a bot or an AI in (read, act or admin) · the description of every route is at /api/docs, with your session`, '<a class="sm btn" href="/api/docs" target="_blank" rel="noopener">Open /api/docs</a>')
-    + '<div id="api-box"><div class="mut">loading…</div></div>'
-    + sCat("Connections by API key") + `<div class="sl">`
-    + apiRow(ai_.has_api_key ? (ai_.status && ai_.status.at ? !!ai_.status.ok : null) : false, SI.bot, "AI assistant · Anthropic", ai_.has_api_key ? `key …${esc(ai_.api_key_tail || "")} · ${esc(ai_.model)}` : "no key saved - it is set in the AI assistant card below", "apiGo('AI assistant')", "Below")
+    + '<div id="api-box"><div class="mut">loading…</div></div>' + aiBody
+    + sCat("Other connections by API key") + `<div class="sl">`
     + apiRow(tg.has_token ? tgOn : false, SI.send, "Telegram bot", tg.has_token ? `token saved · chat ${esc(tg.chat_id || "—")}${tg.enabled ? "" : " · switched off"}` : "no bot token", "setTab('alerts')", "Manage in Alerts")
     + apiRow(pr.state.active ? !pr.state.fails : false, SI.probe, "Probe", pr.state.active ? `${esc(pr.state.active)} · ${pr.has_api_token ? "token saved" : "no token"}` : "no probe set", "setTab('probe')", "Manage in Probe")
     + apiRow(accts.length ? true : false, SI.cloud, "DNS accounts · ArvanCloud, Cloudflare", accts.length ? accts.map(a => esc(a.name || a.provider || "")).join(" · ") : "no DNS account", "go('tunnels', 'dns')", "Manage in CDN")
@@ -3912,7 +3910,7 @@ PAGES.settings = async () => {
   /* security: filled by secLoad */
   const security = sFrame("Security", "How the panel is protected, and your password.", '<span class="pill" id="sec-pill">…</span>', '<div id="sec-box"><div class="mut">loading…</div></div>');
 
-  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${apiFrame}${ai}${shop}${look}${about}</div>`;
+  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${apiFrame}${shop}${look}${about}</div>`;
   settingsTabs();
   if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }
   if ($("#sec-box")) secLoad();
@@ -3937,7 +3935,7 @@ async function secLoad() {
   const gP = sItem({chev: true, ok: onP, icon: SI.lock(onP), title: "Secret entry path", pill: onP ? '<span class="pill ok">on</span>' : '<span class="pill err">off</span>', desc: "the panel answers 404 until the secret address is opened once",
       field: `<input class="si-f" id="sec-path" placeholder="${onP ? esc(s.entry_path) : "your own path (8-64 letters, digits, - _)"}" value="" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')secPathSet()">`,
       acts: `<button class="sm pri" onclick="secPathSet()">Set</button><button class="sm" onclick="secPath(true)">Random</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`});
-  const gW = `<form class="sl" onsubmit="return changePassword(event)"><div class="si pw"><i class="ss-ic">${SI.key}</i><div class="si-b"><div class="si-t"><span class="si-n"><b>Password</b></span><small>at least 10 characters</small></div></div><div class="pwf-f">${pwBox("cur", "current", "Current password", "current-password")}${pwBox("nw", "new", "New password", "new-password", " minlength=\"10\"")}${pwBox("nw", "again", "Repeat the new one", "new-password", " minlength=\"10\"")}<div class="pwf-btns"><button class="pri sm" type="submit"><i class="bi">${SI.lock(false)}</i>Change password</button><button type="button" class="sm" onclick="secLogoutOthers()" title="Terminate all active sessions except this device. Your password is asked; it does not change."><i class="bi">${SI.exit || SI.lock(false)}</i>Sign out of other devices</button></div></div></div></form>`;  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}</div>${gW}`;
+  const gW = `<form class="sl" onsubmit="return changePassword(event)"><div class="si pw"><i class="ss-ic">${SI.key}</i><div class="si-b"><div class="si-t"><span class="si-n"><b>Password</b></span><small>at least 10 characters</small></div><div class="pwf-f">${pwBox("cur", "current", "Current password", "current-password")}${pwBox("nw", "new", "New password", "new-password", " minlength=\"10\"")}${pwBox("nw", "again", "Repeat the new one", "new-password", " minlength=\"10\"")}<div class="pwf-btns"><button class="pri pwf-chg" type="submit"><i class="bi">${SI.lock(false)}</i>Change password</button><button type="button" class="pwf-out" onclick="secLogoutOthers()" title="Terminate all active sessions except this device. Your password is asked; it does not change."><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 017.6-1.7"/></svg>Sign out of other devices</button></div></div></div></div></form>`;  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}</div>${gW}`;
 }
 async function apiLoad() {      // Settings → API: the tokens of this panel's API (they were a row of Security until 2026-10-16)
   const box = $("#api-box"); if (!box) return;
@@ -3949,7 +3947,6 @@ async function apiLoad() {      // Settings → API: the tokens of this panel's 
   const pill = $("#api-pill"); if (pill) { pill.textContent = toks.length ? `${toks.length} token${toks.length === 1 ? "" : "s"}` : "no token"; pill.className = "pill " + (toks.length ? "ok" : ""); }
   box.innerHTML = `<div class="sl">${gT}</div>`;
 }
-window.apiGo = n => { const c = document.querySelector(`.sf[data-name="${n}"]`); if (c) c.scrollIntoView({behavior: "smooth", block: "start"}); };
 window.tokCreate = async () => {
   const name = ($("#tok-name") || {}).value || "", scope = ($("#tok-scope") || {}).value || "read";
   if (!name.trim()) { toast("Give the token a name first", "bad"); return; }
@@ -3978,10 +3975,11 @@ const aiStatus = a => {   // which AI is behind the key, whether it answers, how
   const rows = [["AI", esc(s.provider || "Anthropic") + " · Claude"], ["Model", `<b>${esc(s.model || a.model)}</b>`], ["Key", "..." + esc(a.api_key_tail || "")], ["Answer time", s.ok ? s.ms + " ms" : "—"], ["Tested", ago(s.at) + " ago"], ["Used for", a.enabled ? "diagnosis inside Fix" + (a.actions ? " + safe repair steps" : "") : "<span class=\"mut\">switched off (tick the first box)</span>"]];
   return `<div class="ai-stat ${s.ok ? "ok" : "bad"}"><div class="ai-head">${s.ok ? "● Connected" : "● Not working"}</div>${s.ok ? "" : `<div class="err">${esc(s.error || "no answer")}</div>`}<div class="ai-grid">${rows.map(r => `<span class="mut">${r[0]}</span><span>${r[1]}</span>`).join("")}</div></div>`;
 };
-window.saveAi = e => put(e, "/api/settings/ai", formJson(e, [], ["enabled", "actions"]), "✓ AI settings saved");
+const aiCur = () => (state.setCache && state.setCache.data && state.setCache.data[10]) || {};      // (what is saved; the page keeps it for the tabs of Settings)
+window.saveAi = async e => { e.preventDefault(); const f = e.target; try { await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: true, actions: aiCur().actions !== false, api_key: f.api_key.value.trim(), model: f.model.value.trim()})}); toast("✓ AI settings saved", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };      // (a saved key puts the AI on: the Use switches are gone)
 window.testAi = async () => {      // a key typed in the box is saved first (the test asks the SAVED key), and the card is drawn again so the state shows
   const f = document.querySelector('form[onsubmit^="return saveAi"]'), typed = f && f.api_key.value.trim(); toast("Asking Anthropic…");
-  try { if (typed) await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: f.enabled.checked, actions: f.actions.checked, api_key: typed, model: f.model.value.trim()})}); const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  try { if (typed) await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: true, actions: aiCur().actions !== false, api_key: typed, model: f.model.value.trim()})}); const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
   refresh();
 };
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
@@ -4049,16 +4047,16 @@ const SET_TABS = {
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the rules, the daily report and maintenance windows.", ["Alerts"]],
   backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
-  ai: ["🔌 API", "Everything that connects by API: this panel's own tokens and docs, the AI assistant's key, and the state of every other API connection - Telegram, DNS accounts, the probe, the panels.", ["API", "AI assistant"]],
+  ai: ["🔌 API", "Everything that connects by API: this panel's own tokens and docs, the AI assistant's key, and the state of every other API connection - Telegram, DNS accounts, the probe, the panels.", ["API"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
   update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, the PasarGuard panels and their nodes, and the settings the service runs with.", ["About & update"]],
 };
-const SET_OFF = new Set(["bot"]);      // the tabs of Settings that are switched off for now - grey in the menu and in the bar, cannot be chosen (the owner, 2026-10-16: "disable this section in Settings": Shop bot)
+const SET_OFF = new Set(["bot"]);      // the tabs of Settings that are switched off for now - not in the menu, not in the bar (the owner, 2026-10-16: everything of the Shop bot is off and seen nowhere in the menu)
 function settingsTabs() {
   const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";
   state.stab = cur;
-  const bar = `<div class="set-top"><div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}${SET_OFF.has(k) ? " sub-off" : ""}" ${SET_OFF.has(k) ? 'disabled aria-disabled="true" title="Switched off for now: the important work comes first"' : `onclick="setTab('${k}')"`}>${TAB_SVG[k] ? `<i class="ti">${TAB_SVG[k]}</i>${v[0].replace(/^\S+\s*/, "")}` : v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
+  const bar = `<div class="set-top"><div class="tabs set-tabs">${Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${TAB_SVG[k] ? `<i class="ti">${TAB_SVG[k]}</i>${v[0].replace(/^\S+\s*/, "")}` : v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
   $("#page").insertAdjacentHTML("afterbegin", bar);
   const grid = $("#page .grid2"), byName = {};
   grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); const nm = c.dataset.name || (h ? h.childNodes[0].textContent.trim() : ""); c.dataset.name = nm; byName[nm] = c; c.classList.add("hidden"); });
@@ -4129,31 +4127,6 @@ window.balApply = async (id, on) => {
 window.saveReport = e => put(e, "/api/settings/report", formJson(e, ["hour", "tz_offset_minutes"], ["enabled"]), "✓ Report settings saved");
 window.previewReport = async () => { const r = await api("/api/report/preview"); const p = $("#report-prev"); p.textContent = r.text; p.classList.remove("hidden"); };
 window.sendReport = async () => { toast("Sending…"); try { await api("/api/report/send", {method: "POST"}); toast("✓ Report sent (if Telegram is configured)", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-/* ---- Settings → Backups: one tile per part (panel, shop bot): its switch, its Telegram topic, its latest file, its own "Back up now" */
-const backupCard = bk => {
-  const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
-  const topic = (k, p) => !bk.telegram_ready ? '<small class="mut">Telegram is not set up (Settings → Alerts)</small>'
-    : p.topic ? `<span class="pill ok" title="Its backups go to this topic of the group">▣ ${esc(p.topic_name || "topic")} · #${p.topic}</span><a class="mut bk-un" onclick="bkTopicOff('${k}')">unlink</a>`
-    : `<button class="sm" onclick="bkTopic('${k}')" title="Make a separate page (topic) for it in the Telegram group">＋ Telegram topic</button><small class="mut">goes to the main page now</small>`;
-  const part = ([k, p]) => `<div class="bk-part ${p.enabled ? "" : "off"}">
-      <label class="bk-sw" title="${p.enabled ? "On: included in the daily backup" : "Off: not in the daily backup"}"><input type="checkbox" ${p.enabled ? "checked" : ""} onchange="bkPart('${k}', this.checked)"><span></span></label>
-      <div class="bk-main"><b>${esc(p.label)}</b><small class="mut">${esc(p.what)}</small><small class="bk-last">${p.last ? "latest: " + ago(p.last.at) + " ago · " + kb(p.last.bytes) : "no backup yet"}${p.ready ? "" : " · set the bot server first (Shop bot card)"}</small></div>
-      <div class="bk-tg">${topic(k, p)}</div>
-      <div class="bk-act"><button class="sm pri" onclick="backupNow('${k}')" ${p.ready && bk.has_passphrase ? "" : "disabled"}>Back up now</button><button class="sm" onclick="bkRestoreOpen('${k}')" title="Put a backup of this part back: one kept on this server or a file from your computer">↩ Restore</button>${p.last ? `<a class="sm btn" href="/api/backup/download/${esc(p.last.file)}" title="${esc(p.last.file)}">Download</a>` : ""}</div></div>`;
-  return `<div class="card pr-card bk-card"><h3>Backups <small class="mut gw-sub">Encrypted copies of the panel and the shop bot: kept here and sent to Telegram.</small><span class="sp"></span>${bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>'}</h3>
-    ${bk.has_passphrase ? "" : `<form class="frm one bk-pass" onsubmit="return savePass(event)"><label>Backup password <small>(the backup files are encrypted with it, so a copied file is unreadable without it; you type it only when you restore — keep it somewhere safe; min 12 characters)</small><input name="passphrase" type="text" minlength="12" required autocomplete="off" spellcheck="false"></label><div class="frm-act"><button class="pri" type="submit">Set the password</button><button type="button" onclick="bkGen(this.form)" title="A strong random password is put in the box: copy it somewhere safe, then press Set">🎲 Generate</button></div></form>`}
-    <div class="bk-parts">${Object.entries(bk.parts).map(part).join("")}</div>
-    <form class="bk-sched" onsubmit="return saveBackup(event)">
-      <label class="chk"><input name="enabled" type="checkbox" ${bk.enabled ? "checked" : ""}> on</label>
-      <label>every <select name="every_minutes" onchange="this.form.querySelector('.bk-hour').style.visibility = this.value === '0' ? 'visible' : 'hidden'">${[[0, "day"], [15, "15 min"], [30, "30 min"], [60, "hour"], [180, "3 h"], [360, "6 h"], [720, "12 h"]].map(([v, l]) => `<option value="${v}" ${(bk.every_minutes || 0) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label class="bk-hour" style="visibility:${(bk.every_minutes || 0) ? "hidden" : "visible"}">at <input name="hour" type="number" min="0" max="23" value="${bk.hour}"> h</label>
-      <label>keep <input name="keep_days" type="number" min="1" max="365" value="${bk.keep_days}"> days</label>
-      <label>Telegram <select name="tg">${[["all", "every backup"], ["daily", "once a day"], ["off", "never"]].map(([v, l]) => `<option value="${v}" ${(bk.send_telegram ? (bk.tg_every || "all") : "off") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <button class="sm pri" type="submit">Save</button></form>
-    <details class="bk-more"><summary>Restore and passphrase</summary>
-      <small class="mut">Restore is the ↩ button of each part above. A file made with another passphrase asks for it.</small>
-      ${bk.has_passphrase ? `<form class="frm one" onsubmit="return savePass(event)"><label>New passphrase <small>(files made before keep the old one)</small><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label><div class="frm-act"><button type="submit">Replace passphrase</button></div></form>` : ""}</details></div>`;
-};
 /* Restore: pick a backup kept on this server or a file from the computer. The panel part is put in place by the next start (the panel restarts, sign in again); the bot part is loaded into the bot database at once, after a safety dump of it. */
 const bkKb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 window.bkRestoreOpen = async part => {
@@ -4189,6 +4162,7 @@ function bkDone(r) {
     if (n > 90) clearInterval(t);
   }, 2000);
 }window.bkGen = f => { const a = new Uint8Array(15); crypto.getRandomValues(a); f.passphrase.value = [...a].map(b => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789".charAt(b % 55)).join("").replace(/(.{5})/g, "$1-").replace(/-$/, ""); f.passphrase.focus(); f.passphrase.select(); toast("Copy this password somewhere safe, then press Set", "ok"); };
+window.bkPassToggle = el => { const form = $("#bpw-form"); if (!form) return; if (form.dataset.has === "1") { el.checked = true; form.classList.toggle("hidden"); } else { form.classList.toggle("hidden", !el.checked); const i = form.querySelector("input"); if (el.checked && i) i.focus(); } };      // (a password that is set cannot be switched off - backups are always encrypted: the switch opens the field to REPLACE it; one that is not set opens the field to set it)
 window.bkPart = async (k, on) => { try { await api(`/api/settings/backup/part/${k}`, {method: "POST", body: JSON.stringify({enabled: on})}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); } };
 window.bkTopic = async k => { toast("Making the topic…"); try { await api(`/api/backup/topic/${k}`, {method: "POST"}); toast("✓ Topic made: its backups go there now", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.bkTopicOff = async k => { if (!await gconfirm("Unlink the topic? Its backups go to the main page of the group again (the topic itself stays in Telegram).")) return; try { await api(`/api/backup/topic/${k}`, {method: "DELETE"}); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };window.savePass = async e => { e.preventDefault(); try { await api("/api/settings/backup/passphrase", {method: "POST", body: JSON.stringify({passphrase: new FormData(e.target).get("passphrase")})}); toast("✓ Passphrase set", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };

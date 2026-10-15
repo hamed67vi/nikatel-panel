@@ -21,6 +21,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server
 from ..ssh import Node, SSHError, run_action, run_script
+from ..ssh import target as ssh_target
 from .events import emit
 
 log = get_logger("engines")
@@ -188,7 +189,7 @@ def ensure_on_node(node: Node, engine: str, say=None) -> bool:
 
     s = get_settings()
     opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
-    r = subprocess.run(["scp", *opts, "-P", str(node.port), str(f), f"{node.user}@{node.host}:{e['bin']}.nikatel.new"], capture_output=True, text=True, timeout=300, check=False)
+    r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(f), f"{ssh_target(node)}:{e['bin']}.nikatel.new"], capture_output=True, text=True, timeout=300, check=False)
 
     if r.returncode != 0:
         raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + r.stderr.strip()[:120])

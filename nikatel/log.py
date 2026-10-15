@@ -22,6 +22,8 @@ _SECRET_PATTERNS = [
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._-]{12,}"),
     re.compile(r"(?i)(password|passwd|token|secret|api_key)(=|: ?)(\S+)"),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL),
+    re.compile(r"\bpg_key_[A-Za-z0-9_-]{8,}"),                 # a PasarGuard API key
+    re.compile(r"\bnkt_[A-Za-z0-9]{12,}"),                    # a token of this panel's own API
 ]
 
 
@@ -33,6 +35,8 @@ def mask(text: str) -> str:
     t = _SECRET_PATTERNS[2].sub(r"\1<token>", t)
     t = _SECRET_PATTERNS[3].sub(r"\1\2<hidden>", t)
     t = _SECRET_PATTERNS[4].sub("<private-key>", t)
+    t = _SECRET_PATTERNS[5].sub("<api-key>", t)
+    t = _SECRET_PATTERNS[6].sub("<token>", t)
     return t
 
 

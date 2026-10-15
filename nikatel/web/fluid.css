@@ -90,7 +90,7 @@ html[data-fluid] body #modal .pg-admin-pwrow { flex-wrap: wrap; }
 html[data-fluid] body #modal .pg-admin-pwrow input { flex: 1 1 140px; }      /* (the field and its buttons: the buttons go under the field when the window is narrow) */
 
 /* ---- Settings: the row of a password (icon, words, three fields) may be narrower than its least widths of old */
-html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(110px, 1fr) minmax(0, 1.7fr); }
+html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }      /* (1.57.39: the password boxes sit under the title, like the field of the row above) */
 html[data-fluid] body #page .pwf-f, html[data-fluid] body #page .pwf-f .pwi { min-width: 0; max-width: 100%; }
 html[data-fluid] body #page .si-r { flex-wrap: wrap; row-gap: 8px; }
 html[data-fluid] body #page .si-r > .si-a { flex: 0 1 auto; min-width: 0; max-width: 100%; }

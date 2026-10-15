@@ -78,4 +78,4 @@ def test_a_script_error_or_a_refused_key_is_not_a_reason_to_take_a_detour(monkey
 
 def test_the_jump_command_is_one_quoted_proxy_option():
     opt = ssh._proxy_option(Node("203.0.113.7", "root", 22))
-    assert opt[0] == "-o" and opt[1].startswith("ProxyCommand=ssh ") and " -W %h:%p root@203.0.113.7" in opt[1]
+    assert opt[0] == "-o" and opt[1].startswith("ProxyCommand=ssh ") and " -W %h:%p -- root@203.0.113.7" in opt[1]

@@ -117,7 +117,7 @@ class Many(BaseModel):
     role: str
     lines: str = Field(max_length=20000)
     password: str = ""
-    ssh_user: str = "root"
+    ssh_user: str = Field("root", min_length=1, max_length=32, pattern=r"^[a-z_][a-z0-9_-]*$")
     ssh_port: int = 22
     tag: str = Field("", max_length=40)
 

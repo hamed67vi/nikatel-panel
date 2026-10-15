@@ -17,6 +17,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server
 from ..ssh import Node, SSHError, run_action, run_raw, run_script
+from ..ssh import target as ssh_target
 from . import profiles
 from .events import emit
 
@@ -136,7 +137,7 @@ def _connect(server_id: int, password: str) -> dict:
     try:
         r = subprocess.run(["sshpass", "-e", "ssh", "-p", str(node.port), "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
                             "-o", "ConnectTimeout=12", "-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no", "-o", "LogLevel=ERROR",
-                            f"{node.user}@{host}", script], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30, env=env)
+                            "--", ssh_target(Node(host, node.user, node.port)), script], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30, env=env)
     except FileNotFoundError:
         raise RuntimeError("sshpass is not installed on the panel server (apt install sshpass)")
     except subprocess.TimeoutExpired:
@@ -240,7 +241,12 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
 
         name, host = p[0][:64], p[1]
         user = p[2] if len(p) > 2 else ssh_user
+        user = str(user)[:64]
         port = int(p[3]) if len(p) > 3 and p[3].isdigit() else int(ssh_port)
+
+        if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", user):
+            items.append({"name": name, "host": host, "ok": False, "error": "bad ssh user"})
+            continue
 
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]*", host):
             items.append({"name": name, "host": host, "ok": False, "error": "bad name or host"})

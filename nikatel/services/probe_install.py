@@ -13,6 +13,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server
 from ..ssh import Node, run_action
+from ..ssh import target as ssh_target
 from . import settings as st
 from .events import emit
 
@@ -76,7 +77,7 @@ def install(server_id: int, as_standby: bool = False) -> dict:
         if not p.exists():
             continue
 
-        r = subprocess.run(["scp", *opts, "-P", str(node.port), str(p), f"{node.user}@{node.host}:/opt/nikatel-probe/xray/{fname}"], capture_output=True, text=True, timeout=600, check=False)
+        r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(p), f"{ssh_target(node)}:/opt/nikatel-probe/xray/{fname}"], capture_output=True, text=True, timeout=600, check=False)
 
         if r.returncode != 0:
             raise RuntimeError(f"could not copy {fname} to the server: " + r.stderr.strip()[:120])

@@ -608,10 +608,39 @@ html body #page .abt-pg .ss-hero .ss-ic { width: 38px; height: 38px; border-radi
 html body #page .abt-pg .pgu-row { min-height: 30px; font-size: 12px; gap: 8px; } html body #page .abt-pg .pgu-row.pgu-hd { min-height: 24px; } html body #page .abt-pg .pgu-row button { height: 24px; font-size: 11.5px; }
 html body #page .abt-pg .ss { margin: 0; }
 /* the facts of the service */
-html body #page .abt-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 0; box-sizing: border-box; padding: 8px 6px; border-radius: 14px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
-html body #page .abt-foot > span { display: inline-flex; align-items: center; gap: 8px; padding: 0 9px; } html body #page .abt-foot > span + span { border-left: 1px solid var(--uk-line); }
-html body #page .abt-fi { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; } html body #page .abt-fi svg { width: 15px; height: 15px; }
+html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 0; overflow-x: auto; scrollbar-width: thin; box-sizing: border-box; padding: 9px 8px; border-radius: 14px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
+html body #page .abt-foot > span { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 0 9px; } html body #page .abt-foot > span + span { border-left: 1px solid var(--uk-line); }
+html body #page .abt-fi { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 9px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; } html body #page .abt-fi svg { width: 15px; height: 15px; }
 html body #page .abt-fv { display: grid; gap: 1px; padding: 0; } html body #page .abt-fv em { font-style: normal; font-size: 10.5px; color: var(--mut); white-space: nowrap; } html body #page .abt-fv b { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
 html[data-mode="light"] body #page :is(.abt-card, .abt-foot) { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page :is(.abt-ti, .abt-fi, .abt-row, .abt-iid) { background: #f3f6fc; border-color: rgba(30, 50, 100, .16); }
 /* the buttons under the password boxes (Settings → Security) */
-html body #page .pwf-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; } html body #page .pwf-btns button { height: 32px; }
+html body #page .pwf-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+html body #page .pwf-btns button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; box-sizing: border-box; height: 46px; padding: 0 20px; border-radius: 14px; font-size: 15px; font-weight: 600; }
+html body #page .pwf-btns .pwf-out { background: #0f1626; border: 1px solid var(--uk-line); box-shadow: none; color: var(--text); }
+html body #page .pwf-btns .pwf-out:hover { border-color: rgba(120, 170, 255, .45); background: #131d33; }
+html body #page .pwf-btns .pwf-out svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+html[data-mode="light"] body #page .pwf-btns .pwf-out { background: #f3f6fc; border-color: rgba(30, 50, 100, .16); }
+/* 1.57.39 - the password boxes start under the title, at the left, and end where the row above ends (the owner, 2026-10-16) */
+html body #page .si.pw .si-b { min-width: 0; flex: 1 1 auto; }
+html body #page .si.pw .pwf-f { align-items: stretch; width: 100%; padding: 8px 0 0; }
+html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%; max-width: none; box-sizing: border-box; }
+html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }      /* (two columns: the icon and the body - the third, empty one made the body as narrow as its text) */
+
+html body #page .abt-foot .abt-copy { width: 26px; height: 26px; margin-left: 2px; } html body #page .abt-foot .abt-copy svg { width: 15px; height: 15px; }      /* (one row, always: a narrow window scrolls it sideways - the owner, 2026-10-16) */
+html body #page .si.pw .si-b { padding-right: 46px; }      /* (the rows above keep the room of their chevron: the boxes end where those rows end) */
+html body #page .abt-foot > span:last-child { flex: 0 1 auto; min-width: 0; } html body #page .abt-foot > span:last-child .abt-fv { min-width: 0; } html body #page .abt-foot #abt-env { display: block; overflow: hidden; text-overflow: ellipsis; }
+
+/* 1.57.40 - Settings → Backups: the backup password is a switch row under the list, the schedule is ONE compact row (the owner, 2026-10-16) */
+html body #page .bpw-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--uk-line); border-radius: 12px; background: #0f1626; }
+html body #page .bpw-form.hidden { display: none; } html body #page .bpw-form .si-f, html body #page .bpw-form .pwi { flex: 1 1 260px; min-width: 0; height: 32px; } html body #page .bpw-form .pwi .si-f { width: 100%; max-width: none; }
+html body #page .bpw-form button { height: 32px; } html body #page .bpw-form small { flex: 1 0 100%; font-size: 11.5px; }
+html body #page .sf form.ss.bk-sched { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px; padding: 10px 14px; }
+html body #page .sf .ss.bk-sched .ss-h { align-self: center; flex: 0 0 auto; width: auto; margin: 0 10px 0 0; min-height: 0; } html body #page .sf .ss.bk-sched .ss-h .ss-ic { width: 28px; height: 28px; }
+html body #page .sf .ss.bk-sched .ss-rows { display: contents; }
+html body #page .sf .ss.bk-sched .sr { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 3px; flex: 0 0 auto; width: auto; min-width: 0; max-width: none; min-height: 0; padding: 0; margin: 0; border: 0; background: none; }
+html body #page .sf .ss.bk-sched .sr.hidden { display: none !important; }
+html body #page .sf .ss.bk-sched .sr > span { font-size: 11px; color: var(--mut); }
+html body #page .sf .ss.bk-sched .sr > .v { width: auto; flex: none; }
+html body #page .sf .ss.bk-sched .sr > .v :is(input:not([type=checkbox]), select) { width: 112px; height: 30px; min-height: 0; padding: 0 10px; font-size: 12.5px; box-sizing: border-box; }
+html body #page .sf .ss.bk-sched .sr:nth-last-of-type(1) > .v select { width: 150px; }
+html body #page .sf .ss.bk-sched .ss-a { margin: 0 0 0 auto; padding: 0; } html body #page .sf .ss.bk-sched .ss-a button { height: 30px; }

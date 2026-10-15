@@ -24,6 +24,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Gateway, Server
 from ..ssh import Node, SSHError, run_action, run_script
+from ..ssh import target as ssh_target
 from .events import emit
 
 log = get_logger("gateway")
@@ -304,11 +305,11 @@ def install(server_id: int) -> dict:
     run_action(node, "put_file", {"PATH": "/etc/systemd/system/nikatel-xgw-dir.service", "B64": base64.b64encode(b"[Unit]\nDescription=placeholder\n").decode(), "MODE": "0644"})
     opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
     # /opt/nikatel-xgw must exist before scp: put_file creates directories only under the allowed roots, so use a tiny unit-free trick: scp into /tmp then install
-    r = subprocess.run(["scp", *opts, "-P", str(node.port), str(binary), f"{node.user}@{node.host}:/opt/nikatel-xgw/xray.new"], capture_output=True, text=True, timeout=400, check=False)
+    r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(binary), f"{ssh_target(node)}:/opt/nikatel-xgw/xray.new"], capture_output=True, text=True, timeout=400, check=False)
 
     if r.returncode != 0 and "No such file" in r.stderr:
         run_action(node, "xgw_mkdir")
-        r = subprocess.run(["scp", *opts, "-P", str(node.port), str(binary), f"{node.user}@{node.host}:/opt/nikatel-xgw/xray.new"], capture_output=True, text=True, timeout=400, check=False)
+        r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(binary), f"{ssh_target(node)}:/opt/nikatel-xgw/xray.new"], capture_output=True, text=True, timeout=400, check=False)
 
     if r.returncode != 0:
         raise RuntimeError("could not copy Xray to the server: " + r.stderr.strip()[:140])

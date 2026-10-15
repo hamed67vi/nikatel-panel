@@ -6,6 +6,7 @@ A token can be revoked; every use moves `last_used_at` (at most once a minute). 
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import time
 
@@ -16,7 +17,9 @@ from ..models import ApiToken
 
 SCOPES = ("read", "act", "admin")
 PREFIX = "nkt_"
-ADMIN_PATHS = ("/api/auth", "/api/tokens", "/api/settings", "/api/license", "/api/system", "/api/logs", "/api/dns/accounts", "/api/shopbot/query", "/api/shopbot/table")
+ADMIN_PATHS = ("/api/auth", "/api/tokens", "/api/settings", "/api/license", "/api/system", "/api/logs", "/api/dns/accounts", "/api/shopbot/query", "/api/shopbot/table",
+               "/api/backup", "/api/nodes/user-key", "/api/servers/add-many", "/api/shopbot/settings", "/api/shopbot/payment-keys")      # (a backup restores the sign-in itself; the user key is the PRIVATE key; add-many takes SSH passwords; the bot settings hold its payment keys)
+ADMIN_RE = (re.compile(r"/api/servers/\d+/(console|connect|launcher)"),)      # (a root shell on a server, an SSH password, a launcher with the key: the signed-in admin only)
 _LAST_USED: dict[int, float] = {}
 
 
@@ -25,7 +28,7 @@ def allowed(scope: str, method: str, path: str) -> bool:
     if scope == "admin" or path in ("/api/auth/me", "/api/health"):          # every token may ask who it is
         return True
 
-    if any(path == p or path.startswith(p + "/") for p in ADMIN_PATHS):
+    if any(path == p or path.startswith(p + "/") for p in ADMIN_PATHS) or any(rx.fullmatch(path) for rx in ADMIN_RE):
         return False
 
     if scope == "read":

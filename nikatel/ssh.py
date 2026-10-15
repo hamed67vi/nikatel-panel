@@ -32,6 +32,19 @@ class Node:
     port: int = 22
 
 
+_USER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,31}")
+_HOST_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9.:\-]{0,252}")
+
+
+def target(node: Node) -> str:
+    """`user@host` for an ssh / scp command line, checked: a user or a host that starts with `-` would be read by ssh as an OPTION (`-oProxyCommand=...` runs a command on the panel host).
+    Every command line that names a server takes it from here, and puts `--` before it."""
+    if not _USER_RE.fullmatch(str(node.user or "")) or not _HOST_RE.fullmatch(str(node.host or "")):
+        raise SSHError("bad ssh user or host")
+
+    return f"{node.user}@{node.host}"
+
+
 # ---------------------------------------------------------------- reviewed read-only scripts
 # Each value: (script, {param: validation regex}). Params are substituted as @NAME@.
 
@@ -474,7 +487,7 @@ def _proxy_option(jump: Node) -> list[str]:
     if s.ssh_multiplex:        # the jump hop keeps one connection of its own (a ProxyCommand cannot use the %C of the main path)
         inner += ["-o", "ControlMaster=auto", "-o", f"ControlPath={s.data_dir / 'cm' / ('j-' + re.sub(r'[^A-Za-z0-9.-]', '_', jump.host) + '-' + str(jump.port))}", "-o", "ControlPersist=120"]
 
-    inner += ["-W", "%h:%p", f"{jump.user}@{jump.host}"]
+    inner += ["-W", "%h:%p", "--", target(jump)]
     return ["-o", "ProxyCommand=" + " ".join(x if x == "%h:%p" else shlex.quote(x) for x in inner)]
 
 
@@ -505,7 +518,7 @@ def _ssh_base(node: Node, jump: Node | None = None) -> list[str]:
     if jump is not None:
         cmd += _proxy_option(jump)
 
-    return cmd + [f"{node.user}@{node.host}"]
+    return cmd + ["--", target(node)]
 
 
 def _exec(node: Node, script: str, timeout: int) -> str:
@@ -588,7 +601,7 @@ def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, t
     for key, rule in rules.items():
         value = str(params.get(key, ""))
 
-        if not re.match(rule, value):
+        if not re.fullmatch(rule, value):
             raise ValueError(f"bad value for {key}: {value[:40]!r}")
 
         script = script.replace(f"@{key}@", value)
@@ -998,7 +1011,7 @@ rm -f /root/abuse-defender*.sh /etc/cron.d/abuse-defender*; mkdir -p /etc/iptabl
     # shop bot: one UPDATE/INSERT with validated values (statement chosen here, values are quoted by the regexes)
     "bot_sql": (r"""set -a; [ -f '@ENV@' ] && . '@ENV@'; set +a
 mysql --batch --raw --default-character-set=utf8mb4 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e @SQL@ 2>&1 | head -c 20000; echo DONE
-""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "SQL": r"^'(UPDATE|INSERT INTO|DELETE FROM|CREATE TABLE IF NOT EXISTS) [^;`\\]{1,20000}'$"}),
+""", {"ENV": r"^/opt/[A-Za-z0-9._-]{1,40}/db\.env$", "SQL": r"^'(UPDATE|INSERT INTO|DELETE FROM|CREATE TABLE IF NOT EXISTS) [^;'`\\]{1,20000}'$"}),
 
     # shop bot: dump the live database (before an import, or on request)
     "bot_backup": (r"""set -e; set -a; . '@ENV@'; set +a; mkdir -p /opt/nikabot/backups
@@ -1348,7 +1361,7 @@ def run_action(node: Node, name: str, params: Mapping[str, str] | None = None, t
     for key, rule in rules.items():
         value = str(params.get(key, ""))
 
-        if not re.match(rule, value):
+        if not re.fullmatch(rule, value):
             raise ValueError(f"bad value for {key}: {value[:40]!r}")
 
         script = script.replace(f"@{key}@", value)
@@ -1367,7 +1380,7 @@ def render_action(name: str, params: Mapping[str, str]) -> str:
     for key, rule in rules.items():
         value = str(params.get(key, ""))
 
-        if not re.match(rule, value):
+        if not re.fullmatch(rule, value):
             raise ValueError(f"bad value for {key}: {value[:40]!r}")
 
         script = script.replace(f"@{key}@", value)

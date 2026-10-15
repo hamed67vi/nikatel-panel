@@ -75,7 +75,7 @@ def _index_html() -> str:
 
 
 # the public demo: what it never serves (a key pair is made on the first read, the API description and the log are for the operator, the rest reach out of the machine)
-_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher")
+_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher", "/api/backup/download", "/api/tokens", "/api/auth/security", "/api/servers/where", "/api/shopbot")
 _DEMO_HITS: dict[str, list[float]] = {}
 _DEMO_LIMIT, _DEMO_WINDOW = 300, 60.0         # requests per client address per minute: a page load is a few dozen, a group of people looking is fine, a script hammering is not
 

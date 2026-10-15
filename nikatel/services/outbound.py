@@ -38,6 +38,7 @@ from ..models import (
     Tunnel,
 )
 from ..ssh import Node, SSHError, run_action, run_script
+from ..ssh import target as ssh_target
 from . import (
     autopilot,
     builder,
@@ -820,7 +821,7 @@ def apply_hub(aid: int, server_id: int) -> bool:
         s = get_settings()
         opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
         run_action(node, "xrelay_mkdir")
-        r = subprocess.run(["scp", *opts, "-P", str(node.port), str(binary), f"{node.user}@{node.host}:{RELAY_DIR}/xray.new"], capture_output=True, text=True, timeout=400, check=False)
+        r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(binary), f"{ssh_target(node)}:{RELAY_DIR}/xray.new"], capture_output=True, text=True, timeout=400, check=False)
 
         if r.returncode != 0:
             raise RuntimeError("could not copy Xray to the relay: " + r.stderr.strip()[:140])

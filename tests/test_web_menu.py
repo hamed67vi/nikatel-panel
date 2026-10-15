@@ -791,7 +791,7 @@ def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_bu
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
     assert "grid-template-rows: 232px minmax(0, 1fr);" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app and 'const hd = $("#lic-head"); if (hd) hd.innerHTML = head;' in app
-    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others"' not in app and "logout_others: true" in app and "html body #page .pwf-btns {" in css
+    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others"' not in app and "logout_others: true" in app and "html body #page .pwf-btns {" in css and 'class="pwf-out" onclick="secLogoutOthers()"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css and "html body #page .abt-foot #abt-env { display: block; overflow: hidden; text-overflow: ellipsis; }" in css
 
 
 def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_tabs():
@@ -807,19 +807,30 @@ def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_t
     assert "html body #page #pn-body.pn-busy > :not(.pn-bars) { opacity: .45; pointer-events: none;" in css
 
 
-def test_the_shop_bot_tab_of_settings_is_switched_off():
-    """The owner, 2026-10-16: "disable this section in Settings" - Shop bot: grey in the menu and in the bar, cannot be chosen, a saved choice of it falls back to Security."""
+def test_the_shop_bot_is_seen_nowhere_in_the_menu_and_the_backup_password_is_a_switch():
+    """The owner, 2026-10-16: everything of the Shop bot is off and seen nowhere in the menu; the backup password is a switch under the backup list; the schedule is one compact row."""
     app, css = _web("app.js"), _web("lab.css")
-    assert 'const SET_OFF = new Set(["bot"]);' in app and 'TAB_SVG[k] || SI.gear, SET_OFF.has(k) ? "off" : false])' in app
-    assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and '${SET_OFF.has(k) ? " sub-off" : ""}' in app
-    assert "html body #page .set-tabs button.sub-off { opacity: .38;" in css
+    assert 'const SET_OFF = new Set(["bot"]);' in app and "settings: Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};" in app
+    assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and "Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => `<button class=\"${k === cur ? \"on\" : \"\"}\" onclick=\"setTab('${k}')\">" in app
+    assert 'Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")' in app and "the shop bot: kept here" not in app
+    assert 'const passRow = sItem({ok: !!bk.has_passphrase, icon: SI.key, title: "Backup password"' in app and "pgSw(!!bk.has_passphrase, \"bkPassToggle(this)\"" in app and "window.bkPassToggle = el =>" in app and 'id="bpw-form"' in app and 'title: "Backup password", desc:' not in app
+    assert 'cls: "two flat bk-sched"' in app and "html body #page .sf form.ss.bk-sched { display: flex; flex-wrap: wrap;" in css and "html body #page .sf .ss.bk-sched .ss-rows { display: contents; }" in css
 
 
 def test_the_api_tab_of_settings_gathers_every_api_connection():
     """The owner, 2026-10-16: "make this section API and bring every API connection here": the tab AI became API - this panel's tokens (moved out of Security) and docs,
     the state of the AI key, the Telegram bot, the probe, the DNS accounts and the panels, each with the way to its place; the AI assistant card stays under it."""
     app = _web("app.js")
-    assert 'ai: ["🔌 API",' in app and '["API", "AI assistant"]],' in app and "ai: SI.link," in app
-    assert 'sFrame("API", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
+    assert 'ai: ["🔌 API",' in app and '["API"]],' in app and "ai: SI.link," in app
+    assert 'sFrame("API", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
     assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
+    assert 'const aiBody = sCat(' in app and 'title: "Use"' not in app and '${probe}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app
     assert 'apiRow(tg.has_token ? tgOn : false, SI.send, "Telegram bot"' in app and '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → API" in app
+
+
+def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_timers():
+    """The whole-panel smoothness review, 2026-10-16 (second batch)."""
+    app = _web("app.js")
+    assert 'const TABBED = new Set(["tunnels", "pgpanel", "configs"]);' in app and 'if (TABBED.has(page)) document.body.classList.add("tabbed");' in app
+    assert "morphHtml(box, `<div class=\"tabs sub-tabs\">${list.map(" in app and "if (b.matches(\".fx-box\")) return; const mh = Math.max(150" in app
+    assert "if (pnPS() !== pn.curPS) pnUsersLoad(+pn.id); else pnFitSoon(pn.curPS);" in app and '.nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked' in app

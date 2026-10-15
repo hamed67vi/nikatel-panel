@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.57.40 - The Shop bot is off everywhere in the menu, the backup password is a switch, the schedule is one row
+
+- **Shop bot:** its tab of Settings is not in the menu or in the bar any more, and the Backups tab lists only the panel (the Shop bot section itself was already hidden).
+- **Settings → Backups:** the backup password is a switch row under the list (not set: the switch opens the field to set it, with Generate; set: it opens the field to replace it); the *Schedule* is ONE compact row - the switch, Every, At hour, Keep for, Send to Telegram and Save.
+## 1.57.39 - Security hardening, the AI assistant inside API, the Sign out button like the picture
+
+- **Security (from the review):** a server user or host that looks like an option (`-oProxyCommand=...`) never reaches ssh / scp - every command line takes `user@host` from one checked helper after `--`, and *add many* / the shop bot settings refuse such a user; the parameters of a script must match whole (a trailing newline no longer passes); the SQL of the bot takes no single quote inside; an API token can no longer reach the backups (a restore replaces the sign-in), the private key of the panel, SSH passwords, the console or the bot's payment keys; the public demo does not serve backups, tokens, the security page or the shop bot; the log masks PasarGuard keys and panel tokens; SECURITY.md says what the code does.
+- **Settings → API:** the AI assistant is part of it (key, model, test) - no separate sub-tab; its *Use* switches are gone (the Tunnel Doctor decides how the AI is used; a saved key puts it on).
+- **Settings → Security:** *Sign out of other devices* is a wide button with an open padlock under the password boxes, like the owner's picture.
 ## 1.57.38 - About & update after the picture, Sign out of other devices
 
 - **Settings → About & update:** built after the owner's picture - four boxes of ONE fixed size (*About & Update* with the *Update from GitHub* row, *License* with its chips and the install id with a copy button, *Tunnel cores*, *PasarGuard*), what is longer scrolls inside its box, and under them a strip of the facts of the service, each with its little icon (the path of the env file can be copied).
