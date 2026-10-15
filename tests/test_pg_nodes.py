@@ -191,6 +191,8 @@ class FakeServers:
     def __init__(self):
         self.certs: dict[int, str] = {}
         self.silent: set[int] = set()
+        self.busy: dict[int, list[str]] = {}          # server -> who holds the ports of a node
+        self.stopped: set[int] = set()          # servers that have a certificate but no running node
         self.calls: list[int] = []
 
     def cert(self, server_id):
@@ -210,6 +212,8 @@ def world(monkeypatch):
     fake, ssh = FakePG(), FakeServers()
     monkeypatch.setattr(panels, "call", fake)
     monkeypatch.setattr(extras, "pasarguard_cert", ssh.cert)
+    monkeypatch.setattr(extras, "ports_busy", lambda sid: ssh.busy.get(sid, []))
+    monkeypatch.setattr(extras, "pgnode_running", lambda sid: sid not in ssh.stopped)
     monkeypatch.setattr(pg_nodes, "POLL", 0)
     monkeypatch.setattr(get_settings(), "read_only", False)
     return types.SimpleNamespace(pg=fake, ssh=ssh)
@@ -1328,3 +1332,22 @@ def test_every_route_has_one_short_sentence_for_a_docstring():
         assert doc and len(doc) <= 300, (r.path, len(doc))
         assert doc.endswith(".") and ". " not in doc, (r.path, doc)                                          # one sentence
         assert r.path.startswith("/panels/{panel_id}/pg/nodes"), r.path
+
+
+def test_the_plan_names_a_taken_port_and_a_certificate_without_a_running_node_is_no_install(world, C):
+    """The owner, 2026-10-15: the install on a server ended after minutes with "port 62050 is already in use"; a failed install also leaves its certificate behind."""
+    a = add_server("busy1", "203.0.113.31")
+    p = pg_nodes.make_plan(C, a)                                                     # no certificate: not installed, the ports are free
+    assert p["ok"] and p["installed"] is False
+
+    world.ssh.busy[a] = ["port 62050 by python (pid 1004)"]
+    p = pg_nodes.make_plan(C, a)
+    assert not p["ok"] and "62050 by python (pid 1004)" in p["problems"][0] and "Nothing was changed" in p["problems"][0]
+
+    b = add_server("half1", "203.0.113.32")
+    world.ssh.certs[b] = CERT_A
+    world.ssh.stopped.add(b)                                                         # the certificate is there, no node runs
+    p = pg_nodes.make_plan(C, b)
+    assert p["installed"] is False and any("did not finish" in w for w in p["warnings"])
+    world.ssh.stopped.discard(b)
+    assert pg_nodes.make_plan(C, b)["installed"] is True

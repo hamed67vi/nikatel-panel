@@ -247,6 +247,16 @@ def ports_busy(server_id: int) -> list[str]:
 
     return out
 
+def pgnode_running(server_id: int) -> bool:
+    """Is a PasarGuard node container running on this server (read-only over SSH)? A question that could not be asked says True: only a clear "no container" says False."""
+    try:
+        node, _name, _ip = _node(server_id)
+        out = run_script(node, "pgnode_running", timeout=30).strip()
+    except Exception:  # noqa: BLE001 - the plan must not fail because of this one question
+        return True
+
+    return bool(out)          # (no output = no Docker, or no such container: the node is not running)
+
 def pasarguard_cert(server_id: int) -> dict:
     """The public certificate the PasarGuard node made, to be set in the PasarGuard panel (read-only on the server)."""
     node, _name, _ip = _node(server_id)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.4 - A failed install is no install
+
+- **A certificate alone no longer means the node is installed:** the plan also asks whether a PasarGuard node container runs. A failed install leaves its certificate behind (found on a real server: the plan said "installed" after "port 62050 is already in use"), and the next make skipped the install and added a node that never started. Now such a server is not installed: the plan says an earlier install did not finish and does it again (the ports are checked first).
+
 ## 1.56.3 - Add a server to a PasarGuard node: checked from the start to the end
 
 - **The plan looks at the ports first:** before anything is installed it asks the server who listens on 62050 and 62051; a taken port is a problem the first line of the message names ("port 62050 by python (pid ...)"), so an install that would stop after minutes does not start. Nothing is changed on the server.

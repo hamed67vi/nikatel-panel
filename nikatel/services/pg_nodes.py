@@ -1160,6 +1160,10 @@ def make_plan(c: dict, server_id: int, opts: dict | None = None, resolver: Resol
         try:
             _server_cert(server_id)
             installed = True
+
+            if not extras.pgnode_running(server_id):          # (a failed install leaves its certificate behind: that is no node)
+                installed = False
+                warnings.append("A certificate of a PasarGuard node is on the server, but no node is running: an earlier install did not finish. It is done again.")
         except ServerSilent as e:
             problems.append(str(e))
         except ValueError:
