@@ -922,7 +922,7 @@ NODE_PAGE_RUNNER = r"""
 const fs = require("fs"), vm = require("vm");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const els = {}, el = sel => els[sel] || (els[sel] = {innerHTML: "", textContent: "", hidden: false, dataset: {}, children: [], querySelectorAll: () => []});
-const ctx = vm.createContext({window: {pgTabs: {}}, esc, $: el, console, fmtB: b => b == null ? "-" : (b / 1073741824).toFixed(2) + " GB"});
+const ctx = vm.createContext({window: {pgTabs: {}}, esc, $: el, console, fmtB: b => b == null ? "-" : (b / 1073741824).toFixed(2) + " GB", pgBar: (l, r) => "BAR[" + l + "|" + r + "]", pnTabBtns: () => "TABS"});
 vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx, {filename: "pg_usage.js"});
 vm.runInContext("pgUsageState.err = {}", ctx);
 process.stdout.write(JSON.stringify(eval("(" + process.argv[2] + ")")(ctx, els, src => vm.runInContext(src, ctx))));
@@ -957,3 +957,17 @@ def test_js_overview_draws_round_cards_from_what_is_known_and_the_nodes_section_
     assert "pg-ns" in nodes and 'id="pg-usage-range-nodes"' in nodes and "n2" in nodes and "12.50 GB" not in nodes or "pg-ns" in nodes
     assert mz.count('class="card pg-rc"') == 3 and "Traffic" not in mz and "Nodes" not in mz           # users, server, top users
     assert cur_mz == "ov" and cur_pg == "nodes"
+
+
+@needs_node
+def test_js_range_button_pure_dates_and_the_relative_panel():
+    """The range is ONE button (its label says what it is) and a panel with Relative and Absolute tabs; the chosen chip is the one that matches the range."""
+    got = run_js("c => [c.pgUsageAddDays('2026-10-15', -6), c.pgUsageAddDays('2026-03-01', -1), c.pgUsageAddDays('2026-12-31', 1), c.pgUsageAddDays('junk', 3), c.pgUsageDaysBetween('2026-10-09', '2026-10-15'), c.pgUsageDaysBetween('2026-10-15', '2026-10-15'), c.pgUsageDaysBetween('x', 'y')]")
+    assert got == ["2026-10-09", "2026-02-28", "2027-01-01", "", 7, 1, 0]
+    bar, pop, label, days, pop30 = run_page_js("""run("Object.assign(pgUsageState, {ranges: {tehran_today: '2026-10-15', presets: [{preset: 'last7', label: '', from: '2026-10-09', to: '2026-10-15', from_j: 'a', to_j: 'b', days: 7}]}, preset: 'last7', from: '', to: ''})");
+      const bar = c.pgUsageBarHtml(), pop = c.pgUsagePopHtml();
+      run("pgUsageState.preset = 'custom'; pgUsageState.from = '2026-09-16'; pgUsageState.to = '2026-10-15'");
+      return [bar, pop, c.pgUsageRangeLabel(), c.pgUsageCurDays(), c.pgUsagePopHtml()];""")
+    assert 'class="pg-rng"' in bar and "Last 7 days" in bar and 'aria-haspopup="dialog"' in bar and bar.startswith("BAR[TABS") and "2026-10-09" in bar
+    assert 'class="pg-pc on" onclick="pgUsageRel(7)"' in pop and pop.count('class="pg-pc on"') == 1 and 'id="pg-pop-from" value="2026-10-09"' in pop and "Relative" in pop and "Absolute" in pop
+    assert label == "Last 30 days" and days == 30 and 'class="pg-pc on" onclick="pgUsageRel(30)"' in pop30 and 'id="pg-pop-from" value="2026-09-16"' in pop30

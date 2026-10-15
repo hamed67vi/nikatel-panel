@@ -158,34 +158,97 @@ const pgUsageStat = (label, value, note = "", cls = "") => `<div class="pg-ust $
 
 /* ---- the range bar: one row - the tabs, the range buttons (with their dates in both calendars), the age of the counters and Refresh */
 function pgUsagePresetInfo(key) { const r = pgUsageState.ranges; return r && r.presets.find(p => p.preset === key); }
-function pgUsageBarHtml() {
-  const s = pgUsageState, r = s.ranges || {presets: []}, cur = pgUsagePresetInfo(s.preset), ml = k => { const p = pgUsagePresetInfo(k); return p ? p.label : ""; };
-  const names = [["today", "Today", ""], ["last7", "7 days", ""], ["last30", "30 days", ""], ["jmonth", "This month", ml("jmonth")], ["last_jmonth", "Last month", ml("last_jmonth")], ["custom", "Custom", ""]];
-  const seg = `<div class="pg-useg" role="group" aria-label="Range" title="Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before">${names.map(([k, l, tip]) => `<button type="button" class="${s.preset === k ? "on" : ""}" onclick="pgUsagePreset('${k}')" ${tip ? `title="${esc(tip)}"` : ""}>${l}</button>`).join("")}</div>`;
-  const day = (id, iso) => `<input type="date" id="${id}" value="${esc(iso)}" max="${esc(r.tehran_today || "")}" onchange="pgUsageDates()"><span class="pg-usage-j mono" id="${id}-j">${esc(pgUsageJalaliOf(iso))}</span>`;
-  const dates = s.preset === "custom"
-    ? `${day("pg-usage-from", s.from)}<span class="mut">→</span>${day("pg-usage-to", s.to)}`
-    : cur ? `<span class="pg-usage-dates mono" title="${cur.days} day${cur.days === 1 ? "" : "s"}">${pgUsageSpan(cur)}</span>` : "";
-  return pgBar(`${pnTabBtns()}<i class="pg-usage-sep"></i>${seg}${dates}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
-}
 function pgUsageDrawAge() {
   const a = $("#pg-usage-age"), s = pgUsageState; if (!a) return;
   const age = s.ov ? s.ov.age_s + (Date.now() - s.ovAt) / 1000 : 0;
   a.textContent = !s.ov || age < 25 ? "" : `counters ${Math.round(age)} s old`;      // (said only when they are old: the bar stays in one row)
 }
+/* ---- the range: ONE button with a small panel that opens softly under it (the owner, 2026-10-15) - tab Relative (Days / Weeks / Months and the two Jalali months), tab Absolute (two dates). The dates are whole Tehran days and one question covers at most 93 of them. */
+/* pure: a date 'YYYY-MM-DD' moved by n days / the number of days from a to b (both counted) */
+function pgUsageAddDays(iso, n) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || "")); if (!m) return "";
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + (+n || 0)));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+function pgUsageDaysBetween(a, b) {
+  const x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(a || "")), y = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(b || "")); if (!x || !y) return 0;
+  return Math.round((Date.UTC(+y[1], +y[2] - 1, +y[3]) - Date.UTC(+x[1], +x[2] - 1, +x[3])) / 86400000) + 1;
+}
+const PGU_REL = [["Days", [[1, "Today"], [2, "2d"], [3, "3d"], [5, "5d"], [7, "7d"], [10, "10d"]]], ["Weeks", [[14, "2w"], [21, "3w"], [28, "4w"]]], ["Months", [[30, "1m"], [60, "2m"], [90, "3m"]]]];      // [days, what the chip says]: 93 days is all one question covers
+function pgUsageCurDays() {          // how many days back from today the range is (0 = it is not "the last n days")
+  const s = pgUsageState;
+  if (s.preset === "custom") return s.from && s.to && s.to === (s.ranges || {}).tehran_today ? pgUsageDaysBetween(s.from, s.to) : 0;
+  return s.preset === "today" ? 1 : s.preset === "last7" ? 7 : s.preset === "last30" ? 30 : 0;
+}
+function pgUsageRangeLabel() {
+  const s = pgUsageState, n = pgUsageCurDays(), j = {jmonth: "This month", last_jmonth: "Last month"}[s.preset];
+  return j || (n === 1 ? "Today" : n ? `Last ${n} days` : "Custom range");
+}
+const pgUsageIcon = {cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>', chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'};
+function pgUsageBarHtml() {
+  const s = pgUsageState, cur = pgUsagePresetInfo(s.preset);
+  const trigger = `<button type="button" class="pg-rng" id="pg-rng" aria-haspopup="dialog" aria-expanded="false" onclick="pgUsagePop(this)" title="Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before"><i class="pg-rng-i">${pgUsageIcon.cal}</i><span>${esc(pgUsageRangeLabel())}</span><i class="pg-rng-c">${pgUsageIcon.chev}</i></button>`;
+  const span = s.preset === "custom" && s.from && s.to ? {from: s.from, from_j: pgUsageJalaliOf(s.from), to: s.to, to_j: pgUsageJalaliOf(s.to), days: pgUsageDaysBetween(s.from, s.to)} : cur;
+  const dates = span ? `<span class="pg-usage-dates mono" title="${span.days} day${span.days === 1 ? "" : "s"}">${pgUsageSpan(span)}</span>` : "";
+  return pgBar(`${pnTabBtns()}<i class="pg-usage-sep"></i>${trigger}${dates}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
+}
+/* the panel itself */
+let pgUsagePopEl = null, pgUsagePopBtn = null;
+function pgUsagePopClose() {
+  const el = pgUsagePopEl, btn = pgUsagePopBtn; pgUsagePopEl = pgUsagePopBtn = null;
+  document.removeEventListener("mousedown", pgUsagePopOut, true); document.removeEventListener("keydown", pgUsagePopKey, true); window.removeEventListener("resize", pgUsagePopClose);
+  if (btn) btn.setAttribute("aria-expanded", "false");
+  if (el) { el.classList.remove("open"); setTimeout(() => el.remove(), 220); }
+}
+const pgUsagePopOut = e => { if (pgUsagePopEl && !pgUsagePopEl.contains(e.target) && !(pgUsagePopBtn && pgUsagePopBtn.contains(e.target))) pgUsagePopClose(); };
+const pgUsagePopKey = e => { if (e.key === "Escape") { e.stopPropagation(); pgUsagePopClose(); } };
+function pgUsagePopHtml() {
+  const s = pgUsageState, n = pgUsageCurDays(), today = (s.ranges || {}).tehran_today || "", span = s.preset === "custom" ? {from: s.from, to: s.to} : (pgUsagePresetInfo(s.preset) || {from: s.from, to: s.to}), ml = k => { const p = pgUsagePresetInfo(k); return p ? p.label : ""; };
+  const chip = (label, on, fn, tip = "") => `<button type="button" class="pg-pc${on ? " on" : ""}" onclick="${fn}" ${tip ? `title="${esc(tip)}"` : ""}>${esc(label)}</button>`;
+  const rel = PGU_REL.map(([name, items]) => `<div class="pg-pr"><span>${name}</span><div>${items.map(([d, l]) => chip(l, n === d && !["jmonth", "last_jmonth"].includes(s.preset), `pgUsageRel(${d})`, d === 1 ? "Today so far" : `The last ${d} days, up to today`)).join("")}</div></div>`).join("")
+    + `<div class="pg-pr"><span>Months<small>Jalali</small></span><div>${chip("This month", s.preset === "jmonth", "pgUsagePreset('jmonth')", ml("jmonth"))}${chip("Last month", s.preset === "last_jmonth", "pgUsagePreset('last_jmonth')", ml("last_jmonth"))}</div></div>`;
+  const day = (id, iso) => `<input type="date" id="${id}" value="${esc(iso)}" max="${esc(today)}" oninput="document.getElementById('${id}-j').textContent = pgUsageJalaliOf(this.value)"><span class="pg-usage-j mono" id="${id}-j">${esc(pgUsageJalaliOf(iso))}</span>`;
+  const abs = `<div class="pg-pa"><label><span>From</span>${day("pg-pop-from", span.from)}</label><label><span>To</span>${day("pg-pop-to", span.to)}</label><small class="mut">Whole Tehran days, at most 93 of them.</small><button type="button" class="pri sm" onclick="pgUsageAbs()">Show this range</button></div>`;
+  return `<div class="pg-pop-tabs" role="tablist"><button type="button" role="tab" class="on" data-p="rel" onclick="pgUsagePopTab('rel')">Relative</button><button type="button" role="tab" data-p="abs" onclick="pgUsagePopTab('abs')">Absolute</button><i class="pg-pop-ul"></i></div>
+    <div class="pg-pop-body"><div class="pg-pp on" data-p="rel">${rel}</div><div class="pg-pp" data-p="abs">${abs}</div></div>`;
+}
+window.pgUsagePop = btn => {
+  if (pgUsagePopEl) { pgUsagePopClose(); return; }
+  const m = document.createElement("div"); m.className = "pg-pop"; m.setAttribute("role", "dialog"); m.setAttribute("aria-label", "Range"); m.innerHTML = pgUsagePopHtml();
+  document.body.appendChild(m); pgUsagePopEl = m; pgUsagePopBtn = btn; btn.setAttribute("aria-expanded", "true");
+  const r = btn.getBoundingClientRect(), w = m.offsetWidth;
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px"; m.style.top = (r.bottom + 8) + "px";
+  pgUsagePopTab("rel", true);
+  requestAnimationFrame(() => requestAnimationFrame(() => m.classList.add("open")));
+  document.addEventListener("mousedown", pgUsagePopOut, true); document.addEventListener("keydown", pgUsagePopKey, true); window.addEventListener("resize", pgUsagePopClose);
+};
+window.pgUsagePopTab = (k, quiet) => {
+  const m = pgUsagePopEl; if (!m) return;
+  m.querySelectorAll(".pg-pop-tabs button").forEach(b => b.classList.toggle("on", b.dataset.p === k));
+  m.querySelectorAll(".pg-pp").forEach(p => p.classList.toggle("on", p.dataset.p === k));
+  const on = m.querySelector(".pg-pop-tabs button.on"), ul = m.querySelector(".pg-pop-ul");
+  if (on && ul) { ul.style.width = on.offsetWidth + "px"; ul.style.transform = `translateX(${on.offsetLeft}px)`; }
+};
+function pgUsageRangeChanged() {          // the same steps for every way of choosing a range
+  pgUsagePopClose();
+  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawAge(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
+}
+window.pgUsageRel = d => {          // "the last d days": today and the days before it
+  const s = pgUsageState, today = (s.ranges || {}).tehran_today; if (!today) return;
+  if (d === 1) { s.preset = "today"; } else if (d === 7) { s.preset = "last7"; } else if (d === 30) { s.preset = "last30"; } else { s.preset = "custom"; s.to = today; s.from = pgUsageAddDays(today, -(d - 1)); }
+  pgUsageRangeChanged();
+};
+window.pgUsageAbs = () => {
+  const f = document.getElementById("pg-pop-from"), t = document.getElementById("pg-pop-to"), s = pgUsageState; if (!f || !t) return;
+  if (!f.value || !t.value) { toast("✕ Choose both days", "bad"); return; }
+  if (f.value > t.value) { toast("✕ The first day is after the last day", "bad"); return; }
+  if (pgUsageDaysBetween(f.value, t.value) > 93) { toast("✕ One question covers at most 93 days", "bad"); return; }
+  s.preset = "custom"; s.from = f.value; s.to = t.value; pgUsageRangeChanged();
+};
 window.pgUsagePreset = v => {
   const s = pgUsageState;
   if (v === "custom" && (!s.from || !s.to)) { const p = pgUsagePresetInfo("last7") || {}; s.from = p.from || ""; s.to = p.to || ""; }
-  s.preset = v;
-  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawAge(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
-};
-window.pgUsageDates = () => {
-  const f = $("#pg-usage-from"), t = $("#pg-usage-to"), s = pgUsageState; if (!f || !t) return;
-  $("#pg-usage-from-j").textContent = pgUsageJalaliOf(f.value); $("#pg-usage-to-j").textContent = pgUsageJalaliOf(t.value);
-  if (!f.value || !t.value) return;
-  if (f.value > t.value) { toast("✕ The first day is after the last day", "bad"); return; }
-  s.from = f.value; s.to = t.value;
-  pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
+  s.preset = v; pgUsageRangeChanged();
 };
 
 /* ---- the overview (1.57.0, the owner: "short, useful, packed - the numbers easy on the eye, like a round stats menu; e.g. a section of the nodes' usage only"): rings and gauges on ONE screen,

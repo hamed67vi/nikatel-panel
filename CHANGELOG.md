@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.57.7 - Usage cards in two fixed rows
+
+- **Usage overview (the owner):** the six cards stand in two rows of three, every box the same fixed size, in the kit's look (a dark card, normal-case titles, a rounded-square › button that turns blue when pointed at); two columns on a narrow window, one on a phone. (1.57.5 / 1.57.6 below went out in the same push: the Panel bar in the kit's look without the refresh button and with a fixed box of panels, and the Usage range as one soft panel.)
+
+## 1.57.6 - Usage range as one soft panel, the Panel bar in the kit's look
+
+- **Usage range (the owner's picture):** the six range buttons are ONE button with its label (*Last 7 days*, *This month*, *Custom range* ...) and the dates beside it; a click opens a small panel softly under it - tab *Relative* (Days 1-10, Weeks, Months up to 3, and the two Jalali months, the chosen chip in blue) and tab *Absolute* (two dates). One question still covers at most 93 whole Tehran days, so there is no hours row.
+- **Panel bar:** no *Check now* (refresh) button any more; the panels are kit tags (the open one lifted), *add* is the kit's icon button, and the box of the panels is fixed - many panels scroll inside it and never push the rest out of the page.
+- **Tunnels bar:** the kit look of 1.57.4 now lives in lab.css (the kit file sets looks only, never sizes).
+
 ## 1.57.4 - The bar of a page in the kit's own look
 
 - **Bars (the owner: Tunnels and the same bar of the other pages):** the primary button is the flat blue of the sheet's *Connect* with a line plus (no gloss, no circle); *Check all*, *Restart all* and the like are the dark card of *Settings*; the counters are the chip; *All / Problems* is the segmented control with the lifted open segment; *Search* is the text field with the blue ring. Light theme has its own colours.

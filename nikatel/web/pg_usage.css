@@ -123,3 +123,39 @@ html body #page .pg-ns .pg-usage-nodes { max-height: calc(100vh - 360px); min-he
 html body #page .pg-usage-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 10px; align-items: start; } html body #page .pg-usage-two > div:empty { display: none; }
 html[data-mode="light"] body #page .pg-ring-track { stroke: rgba(30,50,100,.10); } html[data-mode="light"] body #page .pg-rc-go { background: rgba(30,50,100,.07); }
 @media (max-width: 760px) { html body #page .pg-ns { grid-template-columns: minmax(0, 1fr); } }
+/* 1.57.6 - the range of the Usage tab is ONE button; a small panel opens softly under it: tabs Relative / Absolute, rows of chips, the chosen one in blue (the owner's picture) */
+html body #page .pg-rng { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 11px; border-radius: 11px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+html body #page .pg-rng-i svg, html body #page .pg-rng-c svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } html body #page .pg-rng-i { color: var(--mut); display: inline-grid; }
+html body #page .pg-rng-c { display: inline-grid; opacity: .7; transition: transform .25s cubic-bezier(.2, .9, .25, 1); } html body #page .pg-rng[aria-expanded="true"] .pg-rng-c { transform: rotate(180deg); }
+.pg-pop { position: fixed; z-index: 75; width: 430px; max-width: calc(100vw - 16px); overflow: hidden; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .16); background: #1b2133; box-shadow: 0 18px 48px rgba(0, 0, 0, .55); opacity: 0; transform: translateY(-8px) scale(.97); transform-origin: 24px 0; pointer-events: none; transition: opacity .2s ease, transform .3s cubic-bezier(.2, .9, .25, 1); }
+.pg-pop.open { opacity: 1; transform: none; pointer-events: auto; }
+.pg-pop-tabs { position: relative; display: flex; padding: 0 6px; border-bottom: 1px solid rgba(255, 255, 255, .1); }
+html body .pg-pop-tabs button { height: 42px; padding: 0 20px; border: 0 !important; border-radius: 0 !important; background: none !important; box-shadow: none !important; color: #98a2bd !important; font-size: 14px; font-weight: 600; cursor: pointer; transition: color .2s; }
+html body .pg-pop-tabs button.on { color: #6aa7ff !important; }
+.pg-pop-ul { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; border-radius: 2px; background: #4a8bf0; transition: transform .3s cubic-bezier(.3, .8, .3, 1), width .3s ease; }
+.pg-pop-body { padding: 14px 16px 16px; }
+.pg-pp { display: none; gap: 10px; } .pg-pp.on { display: grid; animation: pgPopIn .26s ease both; }
+@keyframes pgPopIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.pg-pr { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 10px; } .pg-pr > span { font-size: 13.5px; font-weight: 500; color: #e8ebf7; } .pg-pr > span small { display: block; font-size: 10.5px; font-weight: 400; color: #98a2bd; }
+.pg-pr > div { display: flex; flex-wrap: wrap; gap: 8px; }
+html body .pg-pop button.pg-pc { min-width: 50px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .12) !important; background: #222a40 !important; background-image: none !important; color: #dfe5f5 !important; font-size: 13px; font-weight: 500; cursor: pointer; box-shadow: none !important; transition: background-color .15s, border-color .15s, transform .1s; }
+html body .pg-pop button.pg-pc:hover { background: #2b3652 !important; border-color: rgba(255, 255, 255, .24) !important; } html body .pg-pop button.pg-pc:active { transform: translateY(1px); }
+html body .pg-pop button.pg-pc.on { background: #3570e8 !important; border-color: #3570e8 !important; color: #fff !important; box-shadow: 0 2px 10px rgba(53, 112, 232, .4) !important; }
+.pg-pa { display: grid; gap: 12px; } .pg-pa label { display: flex; align-items: center; gap: 10px; } .pg-pa label > span:first-child { width: 44px; font-size: 13px; color: #98a2bd; } .pg-pa input[type=date] { flex: 0 1 170px; height: 34px; padding: 0 10px; border-radius: 10px; } .pg-pa .pri { justify-self: start; }
+html[data-mode="light"] .pg-pop { background: #fff; border-color: rgba(30, 50, 100, .16); box-shadow: 0 14px 40px rgba(30, 50, 100, .22); } html[data-mode="light"] .pg-pop-tabs { border-bottom-color: rgba(30, 50, 100, .12); }
+html[data-mode="light"] body .pg-pop-tabs button { color: #5b6b8c !important; } html[data-mode="light"] body .pg-pop-tabs button.on { color: #1456c8 !important; } html[data-mode="light"] .pg-pr > span { color: #1b2540; }
+html[data-mode="light"] body .pg-pop button.pg-pc { background: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #1b2540 !important; } html[data-mode="light"] body .pg-pop button.pg-pc:hover { background: #eef3fc !important; } html[data-mode="light"] body .pg-pop button.pg-pc.on { background: #3570e8 !important; color: #fff !important; }
+@media (prefers-reduced-motion: reduce) { .pg-pop, .pg-pop-ul, .pg-pp.on, html body #page .pg-rng-c { transition: none; animation: none; } }
+/* 1.57.7 - the cards of the overview: TWO rows of three, every box the same fixed size, in the kit's look (the owner: "put them in two rows, fixed boxes, like a MacBook") */
+html body #page .pg-rcs { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 220px; gap: 12px; }
+html body #page .pg-rc { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; padding: 12px 16px 14px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .09); background: linear-gradient(180deg, #181e30, #141a2b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05); }
+html body #page .pg-rc > :not(.pg-rc-h) { flex: 1 1 auto; min-height: 0; }
+html body #page .pg-rc > .pg-rc-tr, html body #page .pg-rc > .pg-rc-foot, html body #page .pg-rc > .pg-spark { flex: none; }
+html body #page .pg-rc > .pg-spark { margin-top: auto; }
+html body #page .pg-rc-h h3 { font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; color: #e8ebf7; }
+html body #page .pg-rc-go { width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(180deg, #232b42, #1b2133); border: 1px solid rgba(255, 255, 255, .12); color: #c7d0e6; transition: background .15s, border-color .15s, color .15s; }
+html body #page .pg-rc-go:hover { background: linear-gradient(180deg, #2f8bff, #0b5ad9); border-color: rgba(120, 180, 255, .55); color: #fff; }
+html[data-mode="light"] body #page .pg-rc { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 1px 2px rgba(30, 50, 100, .06); }
+html[data-mode="light"] body #page .pg-rc-h h3 { color: #14213d; } html[data-mode="light"] body #page .pg-rc-go { background: #f2f5fb; border-color: rgba(30, 50, 100, .16); color: #4a5a7e; }
+@media (max-width: 980px) { html body #page .pg-rcs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { html body #page .pg-rcs { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(210px, auto); } }

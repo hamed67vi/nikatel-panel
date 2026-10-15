@@ -224,7 +224,7 @@ def test_the_top_of_the_panel_page_is_one_row_that_only_switches_and_general_add
     assert 'if (pick) return' in before_add and 'id="pn-ctl"' in before_add and "pnAddWin" not in before_add                    # the bar that only switches is returned before the + button is even built
     assert '${pick ? "" : `<button type="button" class="dns-x" onclick="pnDel(' in bar                                          # and the cross that removes a panel is drawn only outside it
     facts = APP.split("const facts = ", 1)[1].split("pnBar(list, p.id", 1)[0]
-    assert "pnEditWin()" in facts and "pnCheck(" in facts and 'manage ? facts : "", manage ? "manage" : "pick"' in APP          # Check now and Edit: General only    assert "function pnFuse()" in APP and "slot.replaceChildren(...bars.childNodes)" in APP and "pnFuseWatch();" in APP
+    assert "pnEditWin()" in facts and "pnCheck(" not in facts and "pn-b-chk" not in facts and 'manage ? facts : "", manage ? "manage" : "pick"' in APP          # Check now and Edit: General only    assert "function pnFuse()" in APP and "slot.replaceChildren(...bars.childNodes)" in APP and "pnFuseWatch();" in APP
     assert 'body.querySelector(".pg-bar:not(.pg-usage .pg-bar)")' in APP and "slot.append(tool)" in APP                 # the own bar of Access, Core, Admins and Hosts goes up too (not the range bar of Usage)
     assert "pnFuse();" in APP.split("async function pnUsersLoad", 1)[1].split("async function pnHostsLoad", 1)[0]    # the list is measured after the controls moved up
     assert "pnFuse();" in APP.split("async function pnHostsLoad", 1)[1].split("window.hpCount", 1)[0]
@@ -496,7 +496,24 @@ def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is
 
 def test_the_bar_of_a_page_is_in_the_kits_look_primary_secondary_chip_segmented_and_field():
     """The owner, 2026-10-15: "these buttons and this row: this style" (the sheet of the UI kit)."""
-    css = _web("uikit.css")
+    css = _web("lab.css")
+    assert "width:" not in _web("uikit.css")                                           # (the kit file sets looks only, never a size)
     assert ".toolbar.joined :is(button.cta, button.pri) { border-radius: 11px !important; background-image: linear-gradient(180deg, #1a74ff 0%, #0a5cf2 100%)" in css and ".toolbar.joined .cta-ic::before" in css
     assert ".toolbar.joined .tcount {" in css and ".toolbar.joined .tabs button.on { background: #2d3f68" in css and ".tb-search input:focus { border-color: var(--uk-blue)" in css
     assert 'html[data-mode="light"] body #page .toolbar.joined .tabs {' in css
+
+
+def test_the_panel_bar_is_in_the_kits_look_and_its_box_of_panels_is_fixed():
+    """The owner, 2026-10-15: "remove the refresh here", "make the box fixed: many panels must not go out of the page", "like a MacBook" (= the UI kit sheet)."""
+    css = _web("lab.css")
+    assert ".pn-chips { min-width: 0; max-width: 100%; overflow-x: auto;" in css and ".pn-chips .dns-cw { min-width: 84px; }" in css
+    assert "button.dns-chip.on { background-image: none !important; background-color: #2d3f68" in css and "button.pn-add.ico { width: 36px; height: 36px; border-radius: 11px" in css
+    js, pcss = _web("pg_usage.js"), _web("pg_usage.css")
+    assert "window.pgUsagePop = btn =>" in js and "window.pgUsageRel = d =>" in js and "window.pgUsageAbs = () =>" in js and "pgUsageDates" not in js and 'class="pg-useg" role="group" aria-label="Range"' not in js
+    assert ".pg-pop.open { opacity: 1; transform: none;" in pcss and ".pg-pop-ul {" in pcss and "prefers-reduced-motion" in pcss
+
+
+def test_the_usage_overview_cards_are_two_rows_of_three_in_fixed_boxes():
+    """The owner, 2026-10-15: "put them in two rows, fixed boxes, like a MacBook" (the UI kit sheet)."""
+    css = _web("pg_usage.css")
+    assert "html body #page .pg-rcs { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 220px;" in css and ".pg-rc { height: 100%; box-sizing: border-box;" in css and ".pg-rc-go { width: 28px; height: 28px; border-radius: 9px;" in css
