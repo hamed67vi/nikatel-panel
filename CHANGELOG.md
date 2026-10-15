@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.56.10 - The torrent block takes a minute, and blocks something
+
+- **Why it stuck (found on a real server):** the public script makes six iptables calls for each of its 4634 tracker names - 27 000 process starts, 5 to 7 minutes - and then maps the names to 0.0.0.0 in /etc/hosts, so its rules only ever dropped 0.0.0.0 ("drop rules=7" was three rules and four).
+- **Now:** the tracker list is theirs, how it is applied is ours - every name is resolved once (in parallel), the addresses go into one ipset, three iptables rules drop it; about a minute. An address that is shared (a name pointing where more than three others point, or any Cloudflare address) is never blocked, and if the list of Cloudflare ranges cannot be had nothing is. It runs daily and at boot; the leftovers of the old script (the /etc/hosts lines, the rules for 0.0.0.0) are removed.
+
 ## 1.56.9 - The Doctor of a server names the cause
 
 - **A refused login says so (the owner):** "Wrong SSH password: the server does not accept the login" with the button **Enter the right password** (and Check again). **A server that cannot be reached** says why (no route to host, timeout, refused) and that a password would not help, with **Check again** and **Change address / port**.

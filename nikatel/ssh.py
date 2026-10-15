@@ -1121,21 +1121,68 @@ sleep 3; for u in nikatel-speed-api nikatel-probe-manager nikatel-probe-monitor;
     "probe_speed": (r"""timeout 180 /usr/local/bin/nikatel-probe speed '@NAME@' 2>&1 | tail -n 5
 """, {"NAME": r"^[\w .\-]{1,32}$"}),
 
-    # after adding a server: stop torrent trackers (the public script of Heclalava/blockpublictorrent-iptables: a tracker list, DROP rules in a daily cron job, hosts entries).
-    # The script writes the cron job but does not run it, so it is run once to make the rules active now. That run applies thousands of iptables rules and takes minutes,
-    # so the whole install runs DETACHED on the server (it survives the SSH call and a restart of the panel); the panel asks `install_status` how far it is.
+    # after adding a server: stop the public torrent trackers. The tracker LIST is the public one of Heclalava/blockpublictorrent-iptables (4634 names); how it is applied is ours (1.56.10): that project's own script
+    # makes SIX iptables calls per name (27 000 calls, 5-7 minutes) and then maps the names to 0.0.0.0 in /etc/hosts, so its rules only ever drop 0.0.0.0. Here every name is resolved ONCE (in parallel, 2 s each), the
+    # addresses go into ONE ipset, and three iptables rules drop it: about a minute. Addresses that are shared - a name that points where more than three others point, or any address of Cloudflare - are never blocked
+    # (that would cut ordinary sites and CDN configs); if the CDN list cannot be had nothing is blocked. The refresh script runs daily (cron.daily) and at boot. The whole install runs DETACHED on the server
+    # (it survives the SSH call and a restart of the panel); the panel asks `install_status` how far it is.
     "install_btblock": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
 if pgrep -f 'nikatel-install/btblock.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
 rm -f $d/btblock.ok $d/btblock.fail $d/btblock.out
 cat > $d/btblock.sh <<'EOS'
-set -e; export DEBIAN_FRONTEND=noninteractive
-command -v wget >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq wget >/dev/null; }
-command -v iptables >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq iptables >/dev/null; }
-w=$(mktemp -d); cd "$w"
-wget -q https://github.com/Heclalava/blockpublictorrent-iptables/raw/main/bt.sh && chmod +x bt.sh && bash bt.sh >/dev/null 2>&1
-[ -x /etc/cron.daily/denypublic ] || { echo BT_FAILED: the script did not create /etc/cron.daily/denypublic; exit 1; }
-bash /etc/cron.daily/denypublic >/dev/null 2>&1 || true
-echo "BT_OK drop_rules=$(iptables -S 2>/dev/null | grep -c -- '-j DROP')" > /var/lib/nikatel-install/btblock.out
+set -e; export DEBIAN_FRONTEND=noninteractive; d=/var/lib/nikatel-install
+need() { command -v "$1" >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq "$2" >/dev/null; }; }
+need curl curl; need iptables iptables; need ipset ipset; need python3 python3-minimal
+command -v ipset >/dev/null 2>&1 || { echo "BT_FAILED: ipset could not be installed"; exit 1; }
+cat > /usr/local/sbin/nikatel-btblock <<'EOF'
+#!/bin/bash
+# Nikatel: blocks the public torrent trackers (the list of Heclalava/blockpublictorrent-iptables). Every name is resolved ONCE (in parallel), the addresses go into one ipset, three iptables rules drop it.
+# Shared addresses (a CDN, an address many names point at) are never blocked. Runs from cron.daily and at boot.
+set -u
+d=/var/lib/nikatel-install; mkdir -p "$d"
+w=$(mktemp -d); trap 'rm -rf "$w"' EXIT
+if curl -fsSL --max-time 60 https://raw.githubusercontent.com/Heclalava/blockpublictorrent-iptables/main/trackers -o "$w/trackers"; then cp "$w/trackers" "$d/trackers"; else cp "$d/trackers" "$w/trackers" 2>/dev/null || exit 1; fi
+if curl -fsSL --max-time 30 https://www.cloudflare.com/ips-v4 -o "$w/cf"; then cp "$w/cf" "$d/cf-ips"; else cp "$d/cf-ips" "$w/cf" 2>/dev/null || exit 2; fi
+sort -u "$w/trackers" | grep -E '^[A-Za-z0-9._-]+$' | xargs -P 128 -n 1 sh -c 'timeout 2 getent ahostsv4 "$1" 2>/dev/null | awk -v n="$1" "{print n, \$1}" | sort -u' _ > "$w/pairs"
+python3 - "$w/pairs" "$w/cf" > "$w/ips" <<'PY'
+import collections, ipaddress, sys
+cf = [ipaddress.ip_network(x) for x in open(sys.argv[2]).read().split() if "/" in x]
+names = collections.defaultdict(set)
+for ln in open(sys.argv[1]):
+    p = ln.split()
+    if len(p) == 2:
+        names[p[1]].add(p[0])
+for ip, ns in sorted(names.items()):
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        continue
+    if not a.is_global or len(ns) > 3 or any(a in c for c in cf):
+        continue
+    print(ip)
+PY
+n=$(wc -l < "$w/ips")
+[ "$n" -gt 0 ] || exit 3
+ipset create -exist bt-block hash:ip maxelem 262144 || exit 4
+ipset create -exist bt-block-new hash:ip maxelem 262144 || exit 4
+ipset flush bt-block-new
+sed 's/^/add bt-block-new /' "$w/ips" | ipset restore -exist
+ipset swap bt-block-new bt-block
+ipset destroy bt-block-new 2>/dev/null || true
+for c in INPUT FORWARD OUTPUT; do iptables -C "$c" -m set --match-set bt-block dst -j DROP 2>/dev/null || iptables -I "$c" 1 -m set --match-set bt-block dst -j DROP; done
+echo "$n" > "$d/btblock.count"
+EOF
+chmod +x /usr/local/sbin/nikatel-btblock
+ln -sf /usr/local/sbin/nikatel-btblock /etc/cron.daily/denypublic
+printf '@reboot root /usr/local/sbin/nikatel-btblock >/dev/null 2>&1\n' > /etc/cron.d/nikatel-btblock
+# what the old script left: the names mapped to 0.0.0.0 in /etc/hosts (they would be resolved to 0.0.0.0 and never blocked) and its rules that drop 0.0.0.0
+w=$(mktemp -d)
+if curl -fsSL --max-time 30 https://raw.githubusercontent.com/Heclalava/blockpublictorrent-iptables/main/hostsTrackers -o "$w/ht"; then grep -v -x -F -f "$w/ht" /etc/hosts > "$w/hosts.new" || true; [ -s "$w/hosts.new" ] && cat "$w/hosts.new" > /etc/hosts; fi
+for c in INPUT FORWARD OUTPUT; do while iptables -D "$c" -d 0.0.0.0/32 -j DROP 2>/dev/null; do :; done; done
+rm -rf "$w"
+rc=0; bash /usr/local/sbin/nikatel-btblock || rc=$?
+[ "$rc" = 0 ] || { echo "BT_FAILED: the rules could not be made (code $rc: 1 no tracker list, 2 no list of the CDN ranges, 3 nothing resolved, 4 no ipset support in the kernel)"; exit 1; }
+echo "BT_OK blocked_ips=$(cat $d/btblock.count)" > $d/btblock.out
 EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/btblock.sh > /var/lib/nikatel-install/btblock.log 2>&1 && touch /var/lib/nikatel-install/btblock.ok || touch /var/lib/nikatel-install/btblock.fail' >/dev/null 2>&1 &
 echo STARTED

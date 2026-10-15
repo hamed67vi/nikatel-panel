@@ -15,7 +15,8 @@ CERT = "-----BEGIN CERTIFICATE-----\nMIIBdemo\n\n-----END CERTIFICATE-----\n"
 
 def test_actions_render_exactly_what_was_asked():
     bt = render_action("install_btblock", {})
-    assert "Heclalava/blockpublictorrent-iptables/raw/main/bt.sh" in bt and "bash bt.sh" in bt and "/etc/cron.daily/denypublic" in bt
+    assert "Heclalava/blockpublictorrent-iptables/main/trackers" in bt and "ipset create" in bt and "ipset swap" in bt and "/etc/cron.daily/denypublic" in bt and "nikatel-btblock" in bt          # (1.56.10: the list is theirs, how it is applied is ours: one ipset, not 27 000 iptables calls)
+    assert "bash bt.sh" not in bt and "ips-v4" in bt and "len(ns) > 3" in bt and "@reboot" in bt          # (their script is not run; shared and Cloudflare addresses are never blocked)
     b64 = base64.b64encode(extras.check_cert(CERT).encode()).decode()
     mz = render_action("install_marzban_node", {"B64": b64})
     assert "Gozargah/Marzban-scripts/raw/master/marzban-node.sh" in mz and "bash mz.sh install" in mz and b64 in mz and "MZNODE_OK" in mz

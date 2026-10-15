@@ -23,7 +23,7 @@ ITEMS = ("btblock", "marzban_node", "pasarguard_node", "os_update")
 LABEL = {"btblock": "torrent block", "marzban_node": "Marzban node", "pasarguard_node": "PasarGuard node", "os_update": "system update", "pasarguard_panel": "PasarGuard panel update"}      # (the last is not an install: services/pg_update.py runs it with _run_item, it is not in ITEMS)
 KEY = {"btblock": "btblock", "marzban_node": "mznode", "pasarguard_node": "pgnode", "os_update": "osupdate", "pasarguard_panel": "pgpanel"}          # the name of the install on the server
 ACTION = {"btblock": "install_btblock", "marzban_node": "install_marzban_node", "pasarguard_node": "install_pasarguard_node", "os_update": "install_os_update", "pasarguard_panel": "install_pgpanel_update"}
-BUSY_TEXT = {"btblock": "Torrent block: adding the rules (minutes)", "marzban_node": "Marzban node (minutes)", "pasarguard_node": "PasarGuard node (minutes)", "os_update": "System update (minutes)", "pasarguard_panel": "PasarGuard panel update (minutes)"}      # (the short line of the row of the server while the install runs)
+BUSY_TEXT = {"btblock": "Torrent block: resolving the trackers (about a minute)", "marzban_node": "Marzban node (minutes)", "pasarguard_node": "PasarGuard node (minutes)", "os_update": "System update (minutes)", "pasarguard_panel": "PasarGuard panel update (minutes)"}      # (the short line of the row of the server while the install runs)
 LIMIT = {"btblock": 2700, "marzban_node": 1500, "pasarguard_node": 1200, "os_update": 2700, "pasarguard_panel": 2400}                   # seconds the panel waits for each
 POLL = 10
 
@@ -132,7 +132,7 @@ def _run_item(aid: int, node: Node, ip: str, item: str, cert: str, resume: bool 
             autopilot._say(aid, f"{LABEL[item]}: the panel was restarted; the install kept running, following it again…")
             return _result(aid, item, *_poll(aid, node, item), ip)
 
-    autopilot._say(aid, f"{LABEL[item]}: starting" + {"marzban_node": " (Docker, the node image and its service; a few minutes)…", "pasarguard_node": " (the official installer, Docker and the node; a few minutes)…", "os_update": " (apt update and upgrade; the server is not rebooted; a few minutes)…", "pasarguard_panel": " (the pasarguard command on the server: backup, then update; a few minutes)…"}.get(item, " (a tracker list and thousands of rules; a few minutes)…"))
+    autopilot._say(aid, f"{LABEL[item]}: starting" + {"marzban_node": " (Docker, the node image and its service; a few minutes)…", "pasarguard_node": " (the official installer, Docker and the node; a few minutes)…", "os_update": " (apt update and upgrade; the server is not rebooted; a few minutes)…", "pasarguard_panel": " (the pasarguard command on the server: backup, then update; a few minutes)…"}.get(item, " (the tracker list, each name resolved once, one ipset; about a minute)…"))
 
     try:
         out = _start_action(node, item, cert)
