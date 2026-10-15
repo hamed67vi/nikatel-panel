@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.57.13 - Row geometry in three numbers, Traffic used, the Panel bar like the profile bar
+
+- **Lab geometry (the owner: *the distance from the lamp exact and engineered, checked with a test*):** the lamp is now inside the name cell; one set of three numbers decides everything - the lamp is 16 px from the edge and 14 px wide, the icon starts 20 px after it (50 px from the edge); a test keeps the header, the colgroup and every kind of row at the same number of columns. Measured in a real browser on seven rows: lamp 14 x 14 px at 16 px (17 with the cell's border), 20 px to the icon, icon 26 x 26, 9 px to the name, lamp and icon both exactly centred.
+- **Flags:** they fade more on all four sides; when a row is pointed at they get only a little colour (so the text and the icon stay readable) and the name and the icon get a soft shadow.
+- **Problems as tags (the owner: *GRE x, Filtered ...*):** a server with a problem shows it as tags after its name - the kit's Error and Warning chips: *GRE ✕*, *Filtered*, *Offline*, *Bad route*, *CPU 91 %* ... (three at most, the rest as *+n*); a node that is not connected says its state the same way; the search finds a server by its problem.
+- **Traffic used (new column):** the bytes a server's network card has carried since it started (a node: what its panel counted), value over unit, between Load and the speed. The probe now also reads the byte counters (x_bytes, 	x_bytes in the facts).
+- **Panel bar (the owner: *like the Profile section, no edit button, a locked box*):** the panels are the same segmented control as the profiles with the same + and bin icon buttons; the edit button is gone (the API key pill still opens the edit window); the box has one fixed height and the panels scroll inside it.
+
 ## 1.57.12 - Flyout menus, the Usage range in the lower row, autofill, the Doctor buttons
 
 - **Menus (the owner: *as much as you can like Move to profile, only the important actions on their own*):** the menu of a node has Overview, Check now, Edit and Restart on their own and *Move to profile*, *Monitor*, *Manage* and *Update* as flyouts; a server's menu keeps Check now, Console, Edit and Reboot on their own and opens *Access*, *Tests* and *Install* (and *PasarGuard node*) as flyouts.

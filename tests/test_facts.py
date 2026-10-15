@@ -25,6 +25,7 @@ def test_parse_facts_numbers():
     assert f["disk"] == 20.0
     assert f["swap"] == 10.0
     assert f["rx_mbps"] == 4.0 and f["tx_mbps"] == 4.8
+    assert f["rx_bytes"] == 1500000 and f["tx_bytes"] == 2600000          # the counters since boot, as the last read saw them
     assert f["cores"] == 4 and f["conn"] == 42 and f["uptime"] == 86400
     assert f["hostname"] == "ir5" and f["kernel"].startswith("6.8")
 

@@ -30,7 +30,7 @@ html body #page .lab-bar .tb-search input { width: 100%; height: 30px; border-ra
 .lab-list { border: 1px solid var(--line); border-radius: 0 0 14px 14px; background: var(--panel); }      /* (only when there is nothing to list) */
 .lab-empty { display: grid; justify-items: center; gap: 8px; padding: 34px 14px; text-align: center; }
 html body #page .lab-tbl td { height: 48px; }
-html body #page .srv-tbl.lab-tbl td:nth-child(4) { font-family: inherit; font-variant-numeric: normal; font-feature-settings: normal; font-size: inherit; font-weight: inherit; letter-spacing: normal; color: inherit; }      /* (the old list kept the address in its fourth column: here it is the load) */
+html body #page .srv-tbl.lab-tbl td.lab-ld { font-family: inherit; font-variant-numeric: normal; font-feature-settings: normal; font-size: inherit; font-weight: inherit; letter-spacing: normal; color: inherit; }      /* (the old list kept the address in its fourth column: here it is the load) */
 html body #page .lab-tbl td:last-child::after { content: none !important; }      /* (no "›" over the "⋯" at the end of a card) */
 .lab-tbl td.name { overflow: hidden; }
 .lab-nmw { display: flex; align-items: center; min-width: 0; }
@@ -338,10 +338,9 @@ html body .lab-menu .lab-mic .lab-emoji { width: auto; margin: 0; font-size: 13p
 html[data-mode="light"] body .lab-menu .lab-mic img.lab-logo:not(.lab-flag) { filter: brightness(0) opacity(.8); }
 /* 1.57.1 - the row like the owner's drawing: a lamp of its own at the left, the flag and the icon, the name with its provider under it | the address with a globe | a small chart of the CPU with the number, a thin bar and RAM / Disk | the traffic in two lines | the menu and a chevron */
 html body #page .lab-tbl td { height: 56px; }
-html body #page .lab-tbl td:nth-child(n+3) { position: relative; }
-html body #page .lab-tbl td:nth-child(n+3)::before { content: ""; position: absolute; left: 0; top: 24%; bottom: 24%; width: 1px; background: rgba(255,255,255,.09); pointer-events: none; }
-html[data-mode="light"] body #page .lab-tbl td:nth-child(n+3)::before { background: rgba(30,50,100,.14); }
-html body #page .lab-tbl td.lab-lp { padding: 0 0 0 16px; width: 1%; }
+html body #page .lab-tbl :is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act) { position: relative; }
+html body #page .lab-tbl :is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before { content: ""; position: absolute; left: 0; top: 24%; bottom: 24%; width: 1px; background: rgba(255,255,255,.09); pointer-events: none; }
+html[data-mode="light"] body #page .lab-tbl :is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before { background: rgba(30,50,100,.14); }
 html body #page .lab-lamp { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--lamp, #5e6a86); box-shadow: 0 0 10px color-mix(in srgb, var(--lamp, transparent) 55%, transparent); transition: background .3s, box-shadow .3s; }
 html body #page tr[data-lamp="off"] .lab-lamp { box-shadow: none; opacity: .75; }
 html body #page .lab-tbl td.name .lab-tagc { height: 20px; margin-left: 8px; padding: 0 8px; font-size: 11px; vertical-align: 1px; }
@@ -388,20 +387,9 @@ html[data-mode="light"] body #page .toolbar.joined .tabs button { color: #4a5a7e
 html[data-mode="light"] body #page :is(.toolbar.joined, .lab-bar) .tb-search input { background-color: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #14213d !important; }
 
 /* 1.57.5 - the Panel bar in the kit's look ("like a MacBook" = the sheet): the panels are tags (the open one is the lifted segment, a faint cross), "add" is the icon button of the sheet (a slate rounded square, blue when pointed at), the facts are chips; and the box of the panels is fixed: many panels never push the rest out of the page, they scroll inside it */
-html body #page .pn-chips { min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-html body #page .pn-chips::-webkit-scrollbar { display: none; }
-html body #page .pn-chips .dns-cw { min-width: 84px; }
-html body #page .pn-bar button.dns-chip { height: 32px; border-radius: 11px; background-image: linear-gradient(180deg, #1d2335, #171c2c) !important; background-color: #1a2032 !important; border: 1px solid rgba(255, 255, 255, .12) !important; color: #e8ebf7 !important; font-weight: 600; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05) !important; }
-html body #page .pn-bar button.dns-chip.on { background-image: none !important; background-color: #2d3f68 !important; border-color: rgba(120, 170, 255, .45) !important; color: #fff !important; }
-html body #page .pn-bar button.dns-chip:not(.on):hover { background-color: #212a40 !important; border-color: rgba(255, 255, 255, .2) !important; }
-html body #page .pn-bar button.pn-add.ico { width: 36px; height: 36px; border-radius: 11px !important; background-image: linear-gradient(180deg, #44577f, #37486c) !important; border: 1px solid rgba(255, 255, 255, .18) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12) !important; }
-html body #page .pn-bar button.pn-add.ico:hover { background-image: linear-gradient(180deg, #2f8bff, #0b5ad9) !important; border-color: rgba(120, 180, 255, .55) !important; box-shadow: 0 2px 10px rgba(10, 98, 255, .38) !important; filter: none; }
 html body #page .pn-bar .dns-stat, html body #page .pn-bar .pn-auth, html body #page .pn-bar .pn-facts .pill { border-radius: 11px; }
-html[data-mode="light"] body #page .pn-bar button.dns-chip { background-image: none !important; background-color: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #1b2540 !important; box-shadow: 0 1px 2px rgba(30, 50, 100, .08) !important; }
-html[data-mode="light"] body #page .pn-bar button.dns-chip.on { background-color: #e3edff !important; border-color: #9bbcf3 !important; color: #1456c8 !important; }
 /* 1.57.8 - (1) the flag behind a name keeps its own proportions (it was stretched), fades on all four sides, is grey and turns to its colours when the row is pointed at; (2) the tabs of a panel keep ONE size when chosen and the open one is lifted and blue (the owner: "so the user knows he is in Usage"); (3) the windows are in the kit's look ("like a MacBook" = the sheet): dark wells with a soft blue ring, square header buttons, the flat blue primary */
-html body #page .lab-tbl td.name.has-flag::before { left: 0; right: auto; width: 100px; background-size: cover; background-position: center; background-repeat: no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 36%, #000 64%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 36%, #000 64%, transparent 100%); opacity: .3 !important; filter: grayscale(1) !important; transition: opacity .3s, filter .3s; }      /* the flag: its own proportions (cover, no stretching), the mask is as wide as the picture so BOTH sides fade */
-html body #page .lab-tbl tr:hover td.name.has-flag::before { opacity: .62 !important; filter: none !important; }
+html body #page .lab-tbl tr:hover td.name.has-flag::before { opacity: .4 !important; filter: none !important; }
 html body #page .lab-tbl tr.srv-off td.name.has-flag::before { opacity: .12 !important; filter: grayscale(1) !important; }
 html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button { box-sizing: border-box; border: 1px solid transparent; font-weight: 600 !important; }
 html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff !important; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; }
@@ -415,7 +403,7 @@ html body #modal button.pri::before, html body #modal button.pri::after { conten
 html[data-mode="light"] body #modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) { background-color: #fff !important; border-color: rgba(30, 50, 100, .18) !important; color: #14213d; }
 html[data-mode="light"] body #modal .modal-head > button { background-image: none !important; background-color: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #1b2540 !important; }
 /* 1.57.9 - the load of a row stands in the MIDDLE of its column, the bar is longer and looks like the owner's drawing: a thick round bar, a flat soft blue (amber / red when busy) on a slate track, no glow */
-html body #page .lab-tbl th:nth-child(4), html body #page .lab-tbl td:nth-child(4) { text-align: center; }
+html body #page .lab-tbl th.lab-ld, html body #page .lab-tbl td.lab-ld { text-align: center; }
 html body #page .lab-tbl .lab-ldw { justify-content: center; }
 html body #page .lab-ldx { justify-items: center; text-align: center; }
 html body #page .lab-ldx .lab-cpu { align-items: center; width: 100%; }
@@ -427,9 +415,7 @@ html body #page :is(.lab-cpu, .pbar) .bar i[style*="width:0%"] { min-width: 0; }
 html[data-mode="light"] body #page :is(.lab-cpu, .pbar) .bar { background: rgba(30, 50, 100, .13) !important; }
 /* 1.57.10 - the icon and the name stand close to their lamp (the Status column is a fixed 80 px) */
 html body #page .lab-tbl td.name .lab-nmw { margin-left: 2px; }
-html body #page .lab-tbl th:first-child { padding-left: 14px; padding-right: 0; }
 /* 1.57.12 - (1) the lamp column is just the lamp (no word over it), so the names stand close to it; (2) the two rows of the Panel page - the panels and the tabs - are one surface of the kit: the same dark card, the same light edge, the same corners and height */
-html body #page .lab-tbl td.lab-lp { padding: 0 6px 0 16px; }
 html body #page :is(.pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #141a2b !important; border: 1px solid var(--uk-line) !important; border-radius: 14px !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04) !important; min-height: 52px; box-sizing: border-box; }
 html[data-mode="light"] body #page :is(.pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #fff !important; border-color: rgba(30, 50, 100, .14) !important; box-shadow: 0 1px 2px rgba(30, 50, 100, .06) !important; }
 /* 1.57.12 - the buttons of the Doctor page ("make their size and style like a MacBook and alike"): the two rows of tabs and the range are the same segmented track (36 px, radius 11, 28 px buttons, the open one lifted and blue), the icons are quiet, Explain is a kit button and the chips have the kit's corners */
@@ -443,3 +429,30 @@ html body #page .ap-thead button:not([data-k]) { height: 32px; border-radius: 11
 html body #page .ap-thead .pill { height: 28px; display: inline-flex; align-items: center; border-radius: 11px; }
 html[data-mode="light"] body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) { background: #eef2fa; border-color: rgba(30, 50, 100, .14); }
 html[data-mode="light"] body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button { color: #4a5a7e; } html[data-mode="light"] body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button.on { background: #fff !important; color: #14213d; box-shadow: 0 1px 3px rgba(30, 50, 100, .18), inset 0 0 0 1px rgba(47, 111, 224, .35) !important; }
+/* 1.57.13 - the geometry of a Lab row, in three numbers (the owner: "the distance from the lamp exact and engineered, checked with a test"): the lamp is INSIDE the name cell, --lab-pad from its left edge, --lab-dot wide; the icon starts --lab-gap after the lamp (the cell's left padding is pad + dot + gap, the icon has no other margin); the flag sits under the icon and fades on all four sides, and when the row is pointed at the text and the icon get a shadow so they stay readable */
+html body #page .lab-tbl { --lab-pad: 16px; --lab-dot: 14px; --lab-gap: 20px; --lab-icon: 26px; --lab-start: calc(var(--lab-pad) + var(--lab-dot) + var(--lab-gap)); }
+html body #page .lab-tbl td.name, html body #page .lab-tbl th:first-child { padding-left: var(--lab-start); }
+html body #page .lab-tbl td.name .lab-lamp { position: absolute; left: var(--lab-pad); top: 50%; width: var(--lab-dot); height: var(--lab-dot); margin: calc(var(--lab-dot) / -2) 0 0; }
+html body #page .lab-tbl td.name .lab-nmw { margin-left: 0; }
+html body #page .lab-tbl td.name .srv-ic { width: var(--lab-icon); height: var(--lab-icon); }
+html body #page .lab-tbl td.name.has-flag::before { left: calc(var(--lab-start) - 30px); right: auto; width: 110px; background-size: cover; background-position: center; background-repeat: no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 42%, #000 58%, transparent 100%), linear-gradient(180deg, transparent 0%, #000 34%, #000 66%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 42%, #000 58%, transparent 100%), linear-gradient(180deg, transparent 0%, #000 34%, #000 66%, transparent 100%); -webkit-mask-composite: source-in; mask-composite: intersect; opacity: .24 !important; filter: grayscale(1) !important; transition: opacity .3s, filter .3s; }
+html body #page .lab-tbl tr:hover td.name .lab-nm b, html body #page .lab-tbl tr:hover td.name .lab-nm small { text-shadow: 0 1px 3px rgba(0, 0, 0, .85), 0 0 8px rgba(0, 0, 0, .55); }
+html body #page .lab-tbl tr:hover td.name .srv-ic > svg { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .85)); }
+html body #page .lab-tbl tr:hover td.name .srv-ic img.lab-logo { filter: grayscale(1) brightness(1.5) drop-shadow(0 1px 2px rgba(0, 0, 0, .85)); }
+html[data-mode="light"] body #page .lab-tbl tr:hover td.name :is(.lab-nm b, .lab-nm small) { text-shadow: none; }
+/* 1.57.13 - the bar of the panels is the bar of the profiles (the owner: "like the Profile section, no edit button, a locked box"): the same segmented control, the same + and bin icon buttons; the box has ONE fixed height and the panels scroll inside it, they never push the facts out of the page */
+html body #page .pn-bar { height: 56px; box-sizing: border-box; overflow: hidden; }
+html body #page .pn-bar .pn-ksw { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+html body #page .pn-bar .pn-seg { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+html body #page .pn-bar .pn-seg::-webkit-scrollbar { display: none; }
+html body #page .pn-bar .pn-seg > button { flex: 0 0 auto; }
+html body #page .pn-bar .pn-seg i.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--unk, #5e6a86); } html body #page .pn-bar .pn-seg i.dot.ok { background: var(--ok); } html body #page .pn-bar .pn-seg i.dot.bad { background: var(--bad); }
+/* 1.57.13 - the column "Traffic used": the bytes a server (or a node) has carried, value over unit, the same two arrows as the speed */
+html body #page .lab-tbl td.lab-used .tv small { font-size: 11px; }
+/* 1.57.13 - the problems of a server as tags after its name (the kit's Warning and Error chips): GRE x, Filtered, Offline, CPU 91 % ... - the lamp ignores the way to the server, these tags say it */
+html body #page .lab-tbl td.name .lab-iss { display: inline-flex; align-items: center; gap: 4px; height: 20px; margin-left: 8px; padding: 0 8px; border: 1px solid; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: 1px; white-space: nowrap; }
+html body #page .lab-tbl td.name .lab-iss svg { width: 11px; height: 11px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .lab-tbl td.name .lab-iss.bad { color: #ff8a9b; background: rgba(255, 107, 129, .14); border-color: rgba(255, 107, 129, .4); }
+html body #page .lab-tbl td.name .lab-iss.warn { color: #f5b94a; background: rgba(245, 185, 74, .14); border-color: rgba(245, 185, 74, .4); }
+html body #page .lab-tbl td.name .lab-iss.more { color: var(--mut); background: rgba(255, 255, 255, .06); border-color: var(--uk-line); }
+html[data-mode="light"] body #page .lab-tbl td.name .lab-iss.bad { color: #c0213b; background: #ffe7ec; } html[data-mode="light"] body #page .lab-tbl td.name .lab-iss.warn { color: #9a6200; background: #fff3d6; }

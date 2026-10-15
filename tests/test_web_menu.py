@@ -220,11 +220,10 @@ def test_the_top_of_the_panel_page_is_one_row_that_only_switches_and_general_add
     assert 'const pnManage = () => state.page !== "pgpanel" || sub("pgpanel") === "settings";' in APP
     assert 'list = manage ? every : every.filter(x => x.type === "pasarguard")' in APP                      # outside General: the PasarGuard panels only
     bar = APP.split("const pnBar = (list, cur, row2, mode = ", 1)[1].split("/* outside General the strip", 1)[0]
-    before_add = bar.split("const add = ", 1)[0]
-    assert 'if (pick) return' in before_add and 'id="pn-ctl"' in before_add and "pnAddWin" not in before_add                    # the bar that only switches is returned before the + button is even built
-    assert '${pick ? "" : `<button type="button" class="dns-x" onclick="pnDel(' in bar                                          # and the cross that removes a panel is drawn only outside it
+    assert 'if (pick) return' in bar and 'id="pn-ctl"' in bar and 'const acts = pick ? "" : `<span class="lab-tabact">' in bar            # the bar that only switches has no + and no bin: they are built only outside it
+    assert 'onclick="pnDel(${curP.id}' in bar and 'class="lab-ib"' in bar and "pn-b-edit" not in APP                                      # the bin takes the open panel off the list; there is no edit button (the API key pill opens the edit window)
     facts = APP.split("const facts = ", 1)[1].split("pnBar(list, p.id", 1)[0]
-    assert "pnEditWin()" in facts and "pnCheck(" not in facts and "pn-b-chk" not in facts and 'manage ? facts : "", manage ? "manage" : "pick"' in APP          # Check now and Edit: General only    assert "function pnFuse()" in APP and "slot.replaceChildren(...bars.childNodes)" in APP and "pnFuseWatch();" in APP
+    assert "pnEditWin()" not in facts and "pnAuthPill(p)" in facts and "pnCheck(" not in facts and "pn-b-chk" not in facts and 'manage ? facts : "", manage ? "manage" : "pick"' in APP          # Check now and Edit: General only    assert "function pnFuse()" in APP and "slot.replaceChildren(...bars.childNodes)" in APP and "pnFuseWatch();" in APP
     assert 'body.querySelector(".pg-bar:not(.pg-usage .pg-bar)")' in APP and "slot.append(tool)" in APP                 # the own bar of Access, Core, Admins and Hosts goes up too (not the range bar of Usage)
     assert "pnFuse();" in APP.split("async function pnUsersLoad", 1)[1].split("async function pnHostsLoad", 1)[0]    # the list is measured after the controls moved up
     assert "pnFuse();" in APP.split("async function pnHostsLoad", 1)[1].split("window.hpCount", 1)[0]
@@ -448,7 +447,7 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th data-prio="0"></th><th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2">Load</th>' in lab
+    assert '<th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2" class="lab-ld">Load</th>' in lab
     assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
@@ -475,16 +474,16 @@ def test_move_to_profile_is_a_flyout_and_a_plain_server_can_be_made_a_pasarguard
     assert "const labMoveItems = id =>" in lab and 'labItem("＋ New profile…", () => labMoveNew(id))' in lab and "on: t.toLowerCase() === cur" in lab
     assert 'labIt("Make a PasarGuard node…", "box", () => labMakeNode(p.id)' in lab and "window.labMakeNode = async id =>" in lab and "labCanMakeNode(s)" in lab and "await pgSrvMake(s.id, s.name," in lab
     assert ".lab-menu.lab-submenu { z-index: 71" in css and ".lab-mi.has-sub .lab-chev" in css and ".lab-tbl td.name .lab-nmw { margin-left: 12px; }" in css
-    assert "td.lab-lp { padding: 0 0 0 16px;" in css and "srv-ic::before" not in css
+    assert "--lab-pad: 16px; --lab-dot: 14px; --lab-gap: 20px;" in css and "srv-ic::before" not in css
 
 
 def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_chart_traffic_and_two_buttons():
     """The owner, 2026-10-15: "make the design like this" (a lamp, the flag and the icon, the name with its PROVIDER under it - not the country, the address with a globe, the CPU number with a thin bar and RAM / Disk - the small CPU chart was taken out again, the traffic in two lines, the menu and a chevron)."""
     lab, css = _web("lab.js"), _web("lab.css")
-    assert lab.count('<td class="lab-lp"><i class="lab-lamp"') == 3 and "const labSub = s =>" in lab and "s.provider ?" in lab
+    assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "s.provider ?" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
     assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
-    assert ".lab-tbl td:nth-child(n+3)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
+    assert ":is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
 
 
 def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is_the_kit_button():
@@ -492,7 +491,7 @@ def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is
     lab, css = _web("lab.js"), _web("lab.css")
     assert "labCheck()" not in lab and "window.labCheck = " not in lab and 'class="sm lab-chk"' not in lab and "window.labCheckOne = " in lab
     assert '<span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span>' in lab and "＋</span><span class=\"lab-lb\">Add server" not in lab
-    assert "td.name.has-flag::before { left: 0; right: auto; width: 100px;" in css and "button.lab-add::before" in css and ".lab-bar .lab-chk" not in css
+    assert "td.name.has-flag::before { left: calc(var(--lab-start) - 30px); right: auto; width: 110px;" in css and "button.lab-add::before" in css and ".lab-bar .lab-chk" not in css
 
 
 def test_the_bar_of_a_page_is_in_the_kits_look_primary_secondary_chip_segmented_and_field():
@@ -507,8 +506,8 @@ def test_the_bar_of_a_page_is_in_the_kits_look_primary_secondary_chip_segmented_
 def test_the_panel_bar_is_in_the_kits_look_and_its_box_of_panels_is_fixed():
     """The owner, 2026-10-15: "remove the refresh here", "make the box fixed: many panels must not go out of the page", "like a MacBook" (= the UI kit sheet)."""
     css = _web("lab.css")
-    assert ".pn-chips { min-width: 0; max-width: 100%; overflow-x: auto;" in css and ".pn-chips .dns-cw { min-width: 84px; }" in css
-    assert "button.dns-chip.on { background-image: none !important; background-color: #2d3f68" in css and "button.pn-add.ico { width: 36px; height: 36px; border-radius: 11px" in css
+    assert ".pn-bar { height: 56px; box-sizing: border-box; overflow: hidden; }" in css and ".pn-bar .pn-seg { flex: 0 1 auto; min-width: 0; overflow-x: auto;" in css and "pn-chips" not in css
+    assert ".pn-bar .pn-seg > button { flex: 0 0 auto; }" in css and "button.pn-add.ico" not in css
     js, pcss = _web("pg_usage.js"), _web("pg_usage.css")
     assert "window.pgUsagePop = btn =>" in js and "window.pgUsageRel = d =>" in js and "window.pgUsageAbs = () =>" in js and "pgUsageDates" not in js and 'class="pg-useg" role="group" aria-label="Range"' not in js
     assert ".pg-pop.open { opacity: 1; transform: none;" in pcss and ".pg-pop-ul {" in pcss and "prefers-reduced-motion" in pcss
@@ -523,7 +522,7 @@ def test_the_usage_overview_cards_are_two_rows_of_three_in_fixed_boxes():
 def test_flags_keep_their_shape_tabs_keep_one_size_the_open_one_is_blue_and_windows_are_in_the_kits_look():
     """The owner, 2026-10-15: "the flags less stretched, fading more, grey and in colour when the row is pointed at", "tabs never change size, the chosen one a different colour", "the Add a server window like a MacBook"."""
     css = _web("lab.css")
-    assert "td.name.has-flag::before { left: 0; right: auto; width: 100px; background-size: cover;" in css and "opacity: .3 !important; filter: grayscale(1) !important;" in css and ".lab-tbl tr:hover td.name.has-flag::before { opacity: .62 !important; filter: none !important; }" in css
+    assert "td.name.has-flag::before { left: calc(var(--lab-start) - 30px); right: auto; width: 110px; background-size: cover;" in css and "opacity: .24 !important; filter: grayscale(1) !important;" in css and ".lab-tbl tr:hover td.name.has-flag::before { opacity: .4 !important; filter: none !important; }" in css
     assert ".tabs button { box-sizing: border-box; border: 1px solid transparent; font-weight: 600 !important; }" in css and ".tabs button.on { background: #2d3f68 !important;" in css
     assert "html body #modal :is(input:not([type=checkbox])" in css and "#modal input[type=number]::-webkit-inner-spin-button" in css and "html body #modal button.pri { border-radius: 11px !important;" in css and "#modal .modal-head > button { border-radius: 11px" in css
     assert "${dates}" not in _web("pg_usage.js") and "pg-usage-dates" not in _web("pg_usage.js")
@@ -532,7 +531,7 @@ def test_flags_keep_their_shape_tabs_keep_one_size_the_open_one_is_blue_and_wind
 def test_the_load_of_a_row_is_centred_and_its_bar_is_the_owners_flat_soft_blue():
     """The owner, 2026-10-15: "in the middle, the bar a little longer, the colour like the picture I sent" (a thick round bar, a soft blue on a slate track)."""
     css = _web("lab.css")
-    assert ".lab-tbl td:nth-child(4) { text-align: center; }" in css and ".lab-ldx .lab-cpu .bar { max-width: 170px; height: 9px; }" in css
+    assert ".lab-tbl th.lab-ld, html body #page .lab-tbl td.lab-ld { text-align: center; }" in css and ".lab-ldx .lab-cpu .bar { max-width: 170px; height: 9px; }" in css
     assert ".bar i { min-width: 8px; background: #66a3ff !important; box-shadow: none; }" in css and ".bar { background: #2a3350 !important; box-shadow: none; }" in css
 
 
@@ -556,7 +555,7 @@ def test_no_word_over_the_lamp_no_refresh_in_usage_and_the_two_rows_of_the_panel
     """The owner, 2026-10-15: "remove the word Status so the names come closer", "remove the Refresh button", "make the two rows alike, like a MacBook"."""
     lab, css, js = _web("lab.js"), _web("lab.css"), _web("pg_usage.js")
     assert ">Status<" not in lab and "pgUsageRefresh" not in js and "↻ Refresh" not in js
-    assert "td.lab-lp { padding: 0 6px 0 16px; }" in css and ".pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #141a2b !important;" in css
+    assert ".pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #141a2b !important;" in css
 
 
 def test_an_autofilled_field_keeps_the_kits_colours_and_the_doctor_buttons_are_one_segmented_look():
@@ -565,3 +564,48 @@ def test_an_autofilled_field_keeps_the_kits_colours_and_the_doctor_buttons_are_o
     assert "input:-webkit-autofill" in uk and "-webkit-text-fill-color: #e8ebf7 !important" in uk and "html body .eye { color: var(--uk-mut); }" in uk and "width:" not in uk
     assert ".ap-ttabs, .ana-head .tabs, .bt-range) { display: inline-flex;" in css and ".ap-ttabs .tic {" in css and ".ap-thead button:not([data-k]) { height: 32px; border-radius: 11px;" in css
     assert '<i class="tic">🔧</i> In progress' in app and '<i class="tic">📊</i> Analyst' in app
+
+
+def test_the_geometry_of_a_lab_row_is_three_numbers_and_every_row_has_one_cell_per_column():
+    """The owner, 2026-10-15: "the distance from the lamp exact and engineered, checked with a test": the lamp is inside the name cell, pad + dot + gap is where the icon starts, and the header, the colgroup and every kind of row agree on the number of columns."""
+    import re
+
+    lab, css = _web("lab.js"), _web("lab.css")
+    pad, dot, gap = (int(re.search(rf"--lab-{k}: (\d+)px;", css).group(1)) for k in ("pad", "dot", "gap"))
+    assert (pad, dot, gap) == (16, 14, 20) and "--lab-start: calc(var(--lab-pad) + var(--lab-dot) + var(--lab-gap));" in css
+    assert "td.name, html body #page .lab-tbl th:first-child { padding-left: var(--lab-start); }" in css and "left: var(--lab-pad); top: 50%; width: var(--lab-dot); height: var(--lab-dot); margin: calc(var(--lab-dot) / -2) 0 0;" in css
+    assert ".lab-tbl td.name .lab-nmw { margin-left: 0; }" in css and ".lab-tbl td.name .srv-ic { width: var(--lab-icon); height: var(--lab-icon); }" in css
+    cols = re.findall(r'<col style="width:(\d+)%">', lab)
+    heads = re.findall(r"<th[ >]", lab.split("<thead>", 1)[1].split("</thead>", 1)[0])
+    server = lab.split("function labServerRow(p) {", 1)[1].split("const LAB_AD", 1)[0]
+    node = lab.split("function labNodeRowHtml(p) {", 1)[1].split("const labGoneRow", 1)[0]
+    gone = lab.split("const labGoneRow = ", 1)[1].split("const labRowOf", 1)[0]
+    assert sum(map(int, cols)) == 100 and len(cols) == len(heads) == 6
+    assert len(re.findall(r"<td[ >]", server)) == len(re.findall(r"<td[ >]", node)) == len(re.findall(r"<td[ >]", gone)) == 6
+    assert all(t.count('<i class="lab-lamp"') == 1 and t.index('<i class="lab-lamp"') < t.index('<div class="lab-nmw">') for t in (server, node, gone))     # the lamp is the first thing in the name cell
+
+
+def test_the_lab_has_a_traffic_used_column_made_of_the_bytes_since_boot():
+    """The owner, 2026-10-15: "put a traffic usage column here": the bytes the server's card carried since it started (a node: what its panel counted), value over unit, in the order Load | Traffic used | Traffic Mbit/s."""
+    lab = _web("lab.js")
+    assert '<th data-prio="3" title="Everything the network card has carried since the server started' in lab and ">Traffic used</th>" in lab
+    assert lab.count('class="lab-trf lab-used"') == 2 and "labUsed(f.rx_bytes, f.tx_bytes)" in lab and "labUsed(I.d.downlink, I.d.uplink)" in lab and "const labUsed = (rx, tx) =>" in lab
+    assert lab.index('class="lab-trf lab-used"') < lab.index('<td class="lab-trf">')                               # (the used cell comes before the speed cell)
+
+
+def test_the_problems_of_a_server_are_tags_after_its_name_and_the_search_finds_them():
+    """The owner, 2026-10-15: "when a server has a problem, put it as a tag in front of it: GRE x, Filtered ..." (the lamp ignores the way to the server, so the tags say it)."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert "const labIssueChips = s =>" in lab and "list.slice(0, 3)" in lab and "${labIssueChips(s)}${labTagChip(p.tag, 1)}</b>" in lab and "...labIssues(s).map(i => i.txt)" in lab
+    assert 'class="pill lab-iss ${i.sev}"' in lab and "LAB_ISS_IC.bad" in lab and '"GRE ✕"' in lab and 'add("bad", "Filtered"' in lab
+    assert ".lab-tbl td.name .lab-iss.bad { color: #ff8a9b;" in css and ".lab-iss.warn { color: #f5b94a;" in css
+
+
+def test_every_helper_of_the_lab_rows_starts_its_own_line_so_no_comment_swallows_it():
+    """A // comment glued in front of the next declaration silently removes it (the page then says "LAB_ISS_IC is not defined"): the helpers of the rows each begin a line."""
+    import re
+
+    lab = _web("lab.js")
+
+    for name in ("LAB_AD", "LAB_GLB", "LAB_ISS_IC", "labUsed", "labIssueChips", "labTagChip", "labSub", "labLampTone", "labBusyHtml", "labPgSrv", "labGoneRow", "labRowOf"):
+        assert re.search(rf"^(const|function) {name}\b", lab, re.MULTILINE), name

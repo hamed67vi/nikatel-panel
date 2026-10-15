@@ -78,6 +78,7 @@ def parse_facts(out: str) -> dict:
         "uptime": int(up),
         "rx_mbps": round(max(0.0, rx2 - rx1) * 8 / 1e6 / netdt, 2),
         "tx_mbps": round(max(0.0, tx2 - tx1) * 8 / 1e6 / netdt, 2),
+        "rx_bytes": int(rx2), "tx_bytes": int(tx2),      # everything the card of the default route has carried since the server started (the "Traffic used" column of the Lab)
         "conn": conn,
         "hostname": host[0] if host else "",
         "kernel": host[1] if len(host) > 1 else "",
