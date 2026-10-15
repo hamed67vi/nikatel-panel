@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.54.0 - Hosts, Access and Core are ONE section: Configs
+
+- **One section to add an account to the panel (the owner: "make these three sections one"):** the menu of the Panel has General · Users · **Configs** · Admins now. Configs holds four tabs in the one row at the top: **Add** (choose a protocol; the inbound, the group, the host and a user template are made for you - the form that was a window is in the page now and the result stays in it, with "Make another"), **Hosts**, **Groups** and **Core**. An old link to Hosts, Access or Core opens its tab in Configs.
+
 ## 1.53.5 - Templates are a tab of General
 
 - **The Templates tab (user templates and client templates) moved from Access to General (the owner):** General is now Usage · System · Settings · Templates; Access holds the groups only.

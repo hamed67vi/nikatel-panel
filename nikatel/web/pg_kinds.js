@@ -10,16 +10,16 @@ const pgKindRand = () => Math.random().toString(36).slice(2, 8);
 const pgKindOf = id => ((pgKind.o || {}).kinds || []).find(k => k.id === id) || {};
 window.pgKindNew = async () => {
   const id = +pn.id; if (!id) return;
-  Object.assign(pgKind, {id, o: null, k: "", res: null});
+  Object.assign(pgKind, {id, o: null, k: "", res: null, inline: false});
   showModal("<b>＋ Account type</b>", '<div class="loading"><i class="spin"></i><span>Reading the panel…</span></div>', "wide");
   try { pgKind.o = await pgApi(id, "/kinds"); } catch (e) { showModal("<b>＋ Account type</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); return; }
   pgKind.path = "/" + pgKindRand(); pgKind.svc = "g" + pgKindRand();
   pgKindDraw(); pgKindPick("vless-reality");
 };
-function pgKindDraw() {
+function pgKindFormHtml(inline) {      // the whole form: in a window (the old button) or as the Add tab of Configs (inline: no Cancel)
   const o = pgKind.o, opt = (v, t, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(t)}</option>`, tls = o.tls || {};
   const chips = o.kinds.map(k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}"><b>${esc(k.title)}</b><small>${esc(k.note)}</small></button>`).join("");
-  showModal("<b>＋ Account type</b>", `<p class="pg-kind-lead">Choose the protocol. The panel does the rest: the inbound, the group, the host and a user template - the name, the address, the port and the keys are chosen for you.</p>
+  return `<p class="pg-kind-lead">Choose the protocol. The panel does the rest: the inbound, the group, the host and a user template - the name, the address, the port and the keys are chosen for you.</p>
     <div class="pg-kind-chips">${chips}</div>
     <form class="frm pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
     <details class="pg-kind-adv"><summary>Details - all of them are chosen for you; open to change something</summary><div class="pg-cores-form">
@@ -44,8 +44,19 @@ function pgKindDraw() {
       <label data-need="reality">Short ids <small>empty = one is made</small><input name="reality_short_ids" autocomplete="off"></label>
       <label class="chk wide"><input type="checkbox" name="restart"> Restart Xray on the nodes of the core now <small>(cuts their customers for a moment; without it the nodes use the new inbound after their next restart)</small></label></div></details></form>
     <div id="pg-kind-res"></div>
-    <div class="frm-act"><button class="sm" onclick="pgKindCheck()" title="Check the steps and see what is chosen for you; nothing is written">Check</button><span class="sp"></span><button class="pri" id="pg-kind-go" onclick="pgKindMake()">Make it…</button><button onclick="closeModal()">Cancel</button></div>`, "wide");
+    <div class="frm-act"><button class="sm" onclick="pgKindCheck()" title="Check the steps and see what is chosen for you; nothing is written">Check</button><span class="sp"></span><button class="pri" id="pg-kind-go" onclick="pgKindMake()">Make it…</button>${inline ? "" : '<button onclick="closeModal()">Cancel</button>'}</div>`;
 }
+function pgKindDraw() { showModal("<b>＋ Account type</b>", pgKindFormHtml(false), "wide"); }
+/* the Add tab of Configs: the same form, in the page (the Panel page redraws itself every 15 s: while this form is on, state.build holds that back) */
+window.pgTabs.kinds = {label: "Add", order: 20, types: ["pasarguard"], render: async (id, box) => {
+  Object.assign(pgKind, {id, o: null, k: "", res: null, inline: true});
+  pgLoading(box, "Reading the panel…");
+  try { pgKind.o = await pgApi(id, "/kinds"); } catch (e) { pgError(box, e); return; }
+  if (!box.isConnected || pn.tab !== "kinds") return;
+  pgKind.path = "/" + pgKindRand(); pgKind.svc = "g" + pgKindRand();
+  pgPaint(box, `<div class="pg-kind-page" id="pg-kind-page">${pgKindFormHtml(true)}</div>`); state.build = "kinds";
+  pgKindPick("vless-reality");
+}};
 window.pgKindPick = k => {
   const f = $("#pg-kind-form"); if (!f) return;
   pgKind.k = k; pgKind.res = null;
@@ -112,11 +123,12 @@ window.pgKindMake = async () => {
   } catch (e) { $("#pg-kind-res").innerHTML = `<div class="err">${esc(e.message)}</div>`; toast("✕ " + e.message, "bad"); go.disabled = false; }
 };
 function pgKindDone(out) {
+  state.build = null;
   if (typeof pgCoresSt !== "undefined") Object.assign(pgCoresSt, {list: null, d: null, dry: null, dryFor: "", notice: null});      // the Core tab reads the core again
   if (typeof pgAccess !== "undefined") Object.assign(pgAccess, {g: null, t: null});                                                // and the Access tab the groups
   pn.hosts = null; pn.hostsKey = "";
-  const ok = out.checks.every(c => c.ok);
-  showModal(`<b>${ok ? "✓" : "⚠"} Account type made</b>`, `<div class="pg-kind-steps">
+  const ok = out.checks.every(c => c.ok), inline = pgKind.inline && $("#pg-kind-page");
+  const body = `<div class="pg-kind-steps">
       <div class="pg-kind-step ok"><i>✓</i><div><b>Core:</b> the inbound <b>${esc(out.tag)}</b> is in the core (backup <span class="mono">${esc(out.core.backup)}</span>)</div></div>
       ${out.group ? `<div class="pg-kind-step ok"><i>✓</i><div><b>Access:</b> the group <b>${esc(out.group.name)}</b> ${out.group.created ? "is new and holds it" : "holds it now"}</div></div>` : ""}
       ${out.template ? `<div class="pg-kind-step ok"><i>✓</i><div><b>Access:</b> the user template <b>${esc(out.template.name)}</b> (${out.template.data_limit_gb ? out.template.data_limit_gb + " GB" : "unlimited data"}, ${out.template.expire_days ? out.template.expire_days + " days" : "no end"}) gives the group</div></div>` : ""}
@@ -126,5 +138,7 @@ function pgKindDone(out) {
     ${out.core.public_key ? `<div class="pg-kind-chk">REALITY public key <code class="mono">${esc(out.core.public_key)}</code> <button class="sm" onclick="navigator.clipboard.writeText('${esc(out.core.public_key)}').then(() => toast('✓ Copied', 'ok'))">Copy</button> <span class="mut">(the private key stays on the panel)</span></div>` : ""}
     <div class="pg-kind-chk ${out.restarted ? "ok" : out.restart_error ? "bad" : ""}">${out.restarted ? "✓ Xray was restarted on the nodes: it works now." : out.restart_error ? `✕ Saved, but the restart failed: ${esc(out.restart_error)}` : "The nodes use it after their next restart (Core → Restart nodes…)."}</div>
     ${out.template ? `<div class="pg-kind-chk mut">Next: a user of this kind is one choice - Users → More… → New user from a template → <b>${esc(out.template.name)}</b>.</div>` : out.group ? '<div class="pg-kind-chk mut">Next: make a user and give them the group (Users → More… → Apply a template…, or Access → Groups).</div>' : '<div class="pg-kind-chk mut">No group holds it yet: nobody gets this link until a group does (Access).</div>'}
-    <div class="frm-act"><span class="sp"></span><button class="pri" onclick="closeModal();refresh()">Done</button></div>`, "wide");
+    <div class="frm-act"><span class="sp"></span>${inline ? '<button class="pri" onclick="refresh()">Make another</button>' : '<button class="pri" onclick="closeModal();refresh()">Done</button>'}</div>`;
+  if (inline) $("#pg-kind-page").innerHTML = `<h3 class="pg-kind-done">${ok ? "✓" : "⚠"} Account type made</h3>` + body;
+  else showModal(`<b>${ok ? "✓" : "⚠"} Account type made</b>`, body, "wide");
 }

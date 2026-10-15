@@ -32,7 +32,7 @@ def test_every_item_of_the_menu_opens_a_page_that_has_a_title():
 
 
 def test_the_panel_page_has_a_tab_for_each_section_of_pasarguard_in_the_order_of_the_owner():
-    assert _tabs("pgpanel") == [("settings", "General"), ("users", "Users"), ("hosts", "Hosts"), ("access", "Access"), ("core", "Core"), ("admins", "Admins")]      # General (the settings of the panel) is the first one: the owner, 2026-10-14
+    assert _tabs("pgpanel") == [("settings", "General"), ("users", "Users"), ("configs", "Configs"), ("admins", "Admins")]      # General (the settings of the panel) is the first one (the owner, 2026-10-14); Hosts, Access and Core are ONE tab, Configs (1.54.0)
     assert "PAGES.pgpanel = async () => { if (window.labLockNow && await labLockNow()) return; renderSub(); return PAGES.panels(); }" in APP          # (the lock of the Panel is the first thing it asks)
     assert "settings: SI.cog}" in APP and "cog: '<svg" in APP          # (and its icon is a cog wheel, not the sun of SI.gear)
 
@@ -44,8 +44,9 @@ def test_the_servers_page_has_no_nodes_tab_any_more_the_nodes_are_in_the_server_
 
 def test_the_old_pages_of_the_sections_still_open_their_tab():
     alias = APP.split("const NAV_ALIAS = {", 1)[1].split("};", 1)[0]
-    for page, tab in (("pghosts", "hosts"), ("pgaccess", "access"), ("pgcore", "core"), ("pgadmins", "admins")):
+    for page, tab in (("pghosts", "configs"), ("pgaccess", "configs"), ("pgcore", "configs"), ("pgadmins", "admins")):
         assert f'{page}: "pgpanel/{tab}"' in alias
+    assert 'const NAV_PN = {pghosts: "hosts", pgaccess: "groups", pgcore: "cores"};' in APP and "if (NAV_PN[page]" in APP          # (an old name opens the inner tab it used to be)
     assert 'panels: "pgpanel/users", configs: "pgpanel/users"' in APP          # (while the Configs list is off: the Users of the panels are the first tab of the Panel page)
 
 
@@ -280,4 +281,15 @@ def test_the_account_type_button_is_not_shown_and_comes_back_with_one_switch():
 def test_the_templates_are_a_tab_of_general_not_of_access():
     """The owner, 2026-10-15: "move this part (Templates) to the General tab"."""
     subs = re.search(r"const PG_SUBS = \{(.*?)\};", APP, re.DOTALL).group(1)
-    assert 'access: ["groups"]' in subs and 'settings: ["usage", "system", "settings", "templates"]' in subs and '"templates"' not in subs.split("settings:")[0]
+    assert 'settings: ["usage", "system", "settings", "templates"]' in subs and '"templates"' not in subs.split("settings:")[0]          # (and Access is gone: its groups are in Configs)
+
+
+def test_hosts_access_and_core_are_one_section_called_configs_with_an_add_tab_first():
+    """The owner, 2026-10-15: "make these three sections one, so that we can easily add an account to the panel" (Hosts, Groups, Core Configs)."""
+    tabs = _tabs("pgpanel")
+    assert [k for k, _ in tabs] == ["settings", "users", "configs", "admins"], tabs
+    subs = re.search(r"const PG_SUBS = \{(.*?)\};", APP, re.DOTALL).group(1)
+    assert 'configs: ["kinds", "hosts", "groups", "cores"]' in subs and "hosts: [" not in subs.replace("configs:", "") and "access:" not in subs and "core:" not in subs
+    js = _web("pg_kinds.js")
+    assert 'window.pgTabs.kinds = {label: "Add"' in js and "function pgKindFormHtml(inline)" in js and 'state.build = "kinds"' in js
+    assert "configs: SI.cpu" in APP

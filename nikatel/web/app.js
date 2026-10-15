@@ -164,7 +164,8 @@ const INFO = {
 
 /* top-level pages and their sub-tabs: the sidebar shows the page, the bar under the header the sub-tab */
 const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actions: "tunnels/repairs", events: "nodes", jobs: "nodes", logs: "nodes",      // an old page name opens the page that holds it ("page/tab": on that tab)
-  pghosts: "pgpanel/hosts", pgaccess: "pgpanel/access", pgcore: "pgpanel/core", pgadmins: "pgpanel/admins"};      // (1.47.0: the sections of PasarGuard are the tabs of the Panel page)
+  pghosts: "pgpanel/configs", pgaccess: "pgpanel/configs", pgcore: "pgpanel/configs", pgadmins: "pgpanel/admins"};      // (1.47.0: the sections of PasarGuard are the tabs of the Panel page; 1.54.0: Hosts, Access and Core are ONE section, Configs)
+const NAV_PN = {pghosts: "hosts", pgaccess: "groups", pgcore: "cores"};      // (and an old name opens the inner tab of Configs it used to be)
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "lab";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
 const OUTBOUND_UI = false;      // the Outbound tab of Network is hidden (the owner, 2026-10-15: "do not show Outbound and the Shop bot in the panel until we get to them later"); true brings it back
@@ -180,9 +181,7 @@ const SUB = {
 SUB.pgpanel = [
   ["settings", "General", "The panel you pick as a whole: its usage, its system, its settings and its templates (the recipe of a new user, the formats of the clients)."],      // (the first tab, 2026-10-14: it was "Panel settings", the last one)
   ["users", "Users", "The users of the panel you pick: search, status, edit, bulk actions and the tools of the More… menu. Pick a panel in the bar."],
-  ["hosts", "Hosts", "The address, port and TLS of every link in the subscriptions of the PasarGuard panel you pick."],
-  ["access", "Access", "The groups (which inbounds a user gets) of the panel you pick."],
-  ["core", "Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
+  ["configs", "Configs", "Everything a link of the panel you pick is made of, in one place: Add (choose a protocol: the inbound, the group, the host and a template are made for you), the Hosts (address, port and TLS of every link), the Groups (which inbounds a user gets) and the Core (the Xray config, with a backup before every change)."],
   ["admins", "Admins", "The admins of the panel you pick, their roles and their API keys."],
 ];
 /* a tab's 4th element: "off" = switched off (grey, cannot be chosen) or "act" = not a tab but a door to an action (the Lab's "Add profile": it is at the END of its list in the menu, with a "+" after its name, and a button in the bar;
@@ -215,6 +214,7 @@ const TITLE_ANIM = {
   bot: `<svg class="t-anim bot-anim" viewBox="0 0 30 30" width="30" height="30" aria-hidden="true"><path class="ant" d="M15 3v4"/><circle class="ap" cx="15" cy="3" r="1.8"/><rect class="hd" x="4" y="8" width="22" height="17" rx="5"/><ellipse class="eye" cx="11" cy="16" rx="2.3" ry="2.6"/><ellipse class="eye" cx="19" cy="16" rx="2.3" ry="2.6"/><path class="mo" d="M11 21.2h8"/></svg>`,
 };function go(page, tab) {      // `tab`: a section of the left menu - the page opens on that tab
   let aliased = false;
+  if (NAV_PN[page] && typeof pn !== "undefined") pn.want = NAV_PN[page];
   if (NAV_ALIAS[page]) {   aliased = true;               // an old page name: open the page that holds it, on the right sub-tab
     const [target, want] = NAV_ALIAS[page].split("/"), k = want || page;
     if ((SUB[target] || []).some(x => x[0] === k)) { state.sub[target] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); }      // (kept: a reload comes back to the same tab)
@@ -318,7 +318,7 @@ const navIcons = () => {      // the icons of the tabs of the menu (lab.js draws
   return {foreign: globe, iran: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2.2 3.6L16 11H5"/></svg>', node: SI.cube,
     list: SI.swap, dns: SI.cloud, repairs: SI.pulse, lab: '<svg viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg>',
     users: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16M3 9.5h18"/></svg>', hosts: globe, access: '<svg viewBox="0 0 24 24"><path d="M12 3.5l8.5 4.7L12 13 3.5 8.2z"/><path d="M3.5 12.2L12 17l8.5-4.8M3.5 16.2L12 21l8.5-4.8"/></svg>',
-    core: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.cog};      // (the tab of the Panel page that is called settings is General: the settings of the panel)
+    core: SI.cpu, configs: SI.cpu, admins: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.2 10"/></svg>', settings: SI.cog};      // (the tab of the Panel page that is called settings is General: the settings of the panel)
 };
 function navTabs() {      // the tabs that hang under their page: [key, name, icon]
   const ic = navIcons();
@@ -2051,7 +2051,7 @@ const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).t
 /* ---- the PasarGuard sections are the tabs of the Panel page (1.47.0; in 1.45.0 they were pages of the left menu, roadmap #102): every tab shows the bar of the panels (which panel) and its own tab(s) of what was one page
    with ten tabs - PG_SUBS says which tabs (of pgTabs) each tab of the Panel page holds. Nodes are a tab of Servers (the server beside the node it runs). pn.want = the tab a link asked for; pnShow() settles pn.tab
    for the part that is open. */
-const PG_SUBS = {users: ["users"], hosts: ["hosts"], access: ["groups"], core: ["cores"], admins: ["admins"], settings: ["usage", "system", "settings", "templates"]};      // (Templates moved from Access to General: the owner, 2026-10-15)
+const PG_SUBS = {users: ["users"], configs: ["kinds", "hosts", "groups", "cores"], admins: ["admins"], settings: ["usage", "system", "settings", "templates"]};      // (Templates moved from Access to General: the owner, 2026-10-15)
 const PG_SUB_OF = {}; Object.entries(PG_SUBS).forEach(([s, tabs]) => tabs.forEach(t => { PG_SUB_OF[t] = s; }));
 const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
 const pnIsUsers = () => (state.page === "pgpanel" && sub("pgpanel") === "users") || (state.page === "configs" && sub("configs") === "panels");
@@ -2097,7 +2097,7 @@ function pnNodesHtml(p) {
 }
 window.pnPick = v => { pn.id = v; localStorage.setItem("nk.pn", v); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; pn.usersKey = pn.hostsKey = ""; pn.edit = pn.add = false; refresh(); };      // (another panel: the page and its tab stay)
 window.pnTab = t => {      // a tab of the part that is open stays here; a tab that belongs to another tab of the Panel page opens that
-  pn.user = null; pn.hostEdit = null;
+  pn.user = null; pn.hostEdit = null; if (t !== "kinds") state.build = null;
   if (pnPageTabs().includes(t)) { pn.tab = t; refresh(); return; }
   if (PG_SUB_OF[t]) { pn.want = t; go("pgpanel", PG_SUB_OF[t]); return; }
   pn.tab = t; refresh();
