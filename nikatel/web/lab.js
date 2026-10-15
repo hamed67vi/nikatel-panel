@@ -196,13 +196,21 @@ window.labPgFirst = async () => {      // the option of a node is grey while no 
 };
 window.labConnect = () => labNodePanel(true);      // only the panel: the same screen as the node's first step, and no node is asked for
 const labBack = '<div class="wback"><button type="button" class="sm" onclick="labTagDraft.v = \'\'; labAdd()">← Back</button></div>';
-window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase().startsWith("pasarguard")) labAddNode(); };      // choosing the tag PasarGuard brings the settings of a PasarGuard node (its panel, then its nodes)
-window.labTagInput = () => `<input name="tag" id="lab-tag" list="lab-taglist" maxlength="40" autocomplete="off" placeholder="Any" value="${esc(labTagDraft.v)}" oninput="labTagDraft.v = this.value" onchange="labTagPick(this.value)"><datalist id="lab-taglist">${[...new Set(["Iran", "Foreign", ...labTags()])].map(t => `<option value="${esc(t)}"></option>`).join("")}</datalist>`;      // (the Tag field: one box, Any when empty, Iran and Foreign suggested)
-window.labAdd = (fill) => {      // the box is the one the Servers page always had (SERVER_FORM: the server, how the panel reaches it, what to install after) with ONE more field, the Tag; with the tag PasarGuard the settings of a node come instead
+const labTagCur = () => labTagDraft.v || (labKindNow() !== "any" ? labKindNow() : "");      // the profile the new server goes to: what was chosen, else the tab that is open
+window.labTagPick = v => {      // a profile is chosen in the form of Add a server (the owner, 2026-10-15): a PasarGuard profile brings the install options of a PasarGuard node (and Block public torrents); the others have none
+  labTagDraft.v = v; const form = document.querySelector(".srv-f3"), sec = form && form.querySelector(".srv-after"); if (!sec) return;
+  const on = labIsPgTag(v), bt = sec.querySelector("[name=x_bt]"), pg = sec.querySelector("[name=x_pgnode]");
+  sec.hidden = !on; if (bt) bt.disabled = !on;
+  if (pg) { pg.disabled = !on; pg.checked = on; srvNodeKind(pg); }
+};
+window.labTagInput = () => {      // the Profile field: a drop-down of the profiles that were made (Any = none)
+  const cur = labTagCur(), all = [...new Set([...labTags(), ...(cur ? [cur] : [])])];
+  return `<select name="tag" id="lab-tag" onchange="labTagPick(this.value)"><option value="">Any (no profile)</option>${all.map(t => `<option value="${esc(t)}" ${t.toLowerCase() === cur.toLowerCase() ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
+};window.labAdd = (fill) => {      // the box is the one the Servers page always had (SERVER_FORM: the server, how the panel reaches it, what to install after) with ONE more field, the Tag; with the tag PasarGuard the settings of a node come instead
   fill = fill && typeof fill === "object" ? fill : null; if (fill && fill.tag != null) labTagDraft.v = fill.tag;
   state.prefill = fill ? {name: fill.name || "", host: fill.host || ""} : null;
   labModal("<b>Add a server</b>", `<div class="lab-pfwin lab-xwide">${SERVER_FORM(null)}</div>`);
-  setTimeout(() => { const i = document.querySelector(".srv-form2 input[name=name]"); if (i) i.focus(); const h = document.querySelector(".srv-form2 input[name=host]"); if (h && h.value && typeof srvWhere === "function") srvWhere(h.form); }, 80);
+  setTimeout(() => { const i = document.querySelector(".srv-form2 input[name=name]"); if (i) i.focus(); const h = document.querySelector(".srv-form2 input[name=host]"); if (h && h.value && typeof srvWhere === "function") srvWhere(h.form); labTagPick(labTagCur()); }, 80);
 };window.labAddWith = async (name, host) => {      // a node outside our servers ("Add to servers"): the box opens on a new server with its name and address filled in; where it is (Iran or foreign) is found from the address and put in the tag
   const fill = {tag: "Foreign", name: String(name || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60), host: String(host || "").replace(/^\[|\]$/g, "")};
   try { const w = await api("/api/servers/where?host=" + encodeURIComponent(fill.host)); if (w.role === "iran") fill.tag = "Iran"; } catch (e) { /* no geo answer: abroad is the usual place of a node; the Tag field can be changed */ }

@@ -251,3 +251,5 @@ html body .lab-menu.lab-menu .lab-mi.danger { background: transparent; color: #f
 html body .lab-menu.lab-menu .lab-mg + .lab-mg, html body .lab-menu.lab-menu.flat .lab-mg + .lab-mg { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,.12); }
 html body .lab-menu.lab-menu .lab-mgrp { padding: 3px 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .1px; text-transform: none; color: rgba(255,255,255,.42); }
 html[data-mode="light"] body .lab-menu.lab-menu { background: rgba(248,248,250,.92); border-color: rgba(0,0,0,.12); } html[data-mode="light"] body .lab-menu.lab-menu .lab-mi { color: #1b2540; } html[data-mode="light"] body .lab-menu.lab-menu .lab-mgrp { color: rgba(0,0,0,.42); } html[data-mode="light"] body .lab-menu.lab-menu .lab-mi:hover:not(:disabled) { color: #fff; }
+html body #modal .srv-f3 [hidden] { display: none !important; }
+html body #modal .srv-f3 select[name=tag] { width: 100%; height: 38px; box-sizing: border-box; font-size: 13.5px; }

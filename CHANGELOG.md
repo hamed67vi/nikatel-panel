@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.55.18 - Add a server: the profile is a drop-down, the install options belong to the PasarGuard profile
+
+- **The Profile field of Add a server is a drop-down of the profiles that were made** (Any = none); the open tab is chosen by itself.
+- **Install after adding is gone.** Choosing a **PasarGuard** profile brings the PasarGuard part: **Block public torrents** and **Install the PasarGuard node** (on by itself; everything automatic, a random API key, the options folded). Other profiles have no install options. **Marzban is switched off** for now (only PasarGuard is developed).
+
 ## 1.55.17 - The menus like a MacBook's
 
 - **Every menu that opens (a server, a node, the Users More...) is small and in the style of a MacBook (the owner):** compact rows, a soft dark glass, the row under the pointer in the accent colour, delete in red text (filled red under the pointer), a small grey name for each group (Profile, Monitor, Manage, Update; Server, Access, Tests, Install) and a thin line between the groups.

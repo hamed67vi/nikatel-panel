@@ -132,11 +132,10 @@ window.pgSrvPanelNodes = async pid => {      // "Nodes 2 / 2" of the bar of a pa
 };
 
 /* ---- the tick of "Add server": a PasarGuard node (and the Marzban node next to it: one machine has one node on the ports 62050 / 62051, so the two ticks exclude each other) */
-window.pgSrvTick = () => {
+window.pgSrvTick = () => {      // "Install the PasarGuard node": in the PasarGuard part of Add a server; labTagPick (lab.js) turns it on when a PasarGuard profile is chosen
   const ps = pgSrvPanels();
-  return `<label class="chk" title="${ps.length ? "Install the PasarGuard node (Docker) on the server and add it to a PasarGuard panel: ports 62050 / 62051" : "Add a PasarGuard panel first (the Panel page): the node is added to it"}"><input name="x_pgnode" type="checkbox" ${ps.length ? "" : "disabled"} onchange="srvNodeKind(this)"> PasarGuard node</label>`;
-};
-window.pgSrvBox = () => {      // the owner (2026-10-15): the tick does EVERYTHING by itself - Docker and the node, a random API key (never shown), the certificate, the panel; the fields are folded under Options
+  return `<label class="chk" title="${ps.length ? "Install the PasarGuard node (Docker) on the server and add it to a PasarGuard panel: ports 62050 / 62051" : "Add a PasarGuard panel first (the Panel page): the node is added to it"}"><input name="x_pgnode" type="checkbox" disabled onchange="srvNodeKind(this)"> Install the PasarGuard node</label>`;
+};window.pgSrvBox = () => {      // the owner (2026-10-15): the tick does EVERYTHING by itself - Docker and the node, a random API key (never shown), the certificate, the panel; the fields are folded under Options
   const ps = pgSrvPanels(), pick = ps.length > 1, sel = `<label class="f3"><span>Panel</span><select name="x_pg_panel" disabled onchange="pgSrvCores(this.form)">${ps.map(p => `<option value="${p.id}" ${String(p.id) === String(pn.id) ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>`;
   return `<div class="x-pg off"><div class="x-pg-auto"><i>✓</i><span>Everything is automatic: the panel installs the node over SSH (Docker, a few minutes), makes a random API key (never shown), reads the certificate and adds the node to ${pick ? "the panel chosen below" : `<b>${esc(ps[0] ? ps[0].name : "your PasarGuard panel")}</b>`}.</span></div>${pick ? sel : ""}
     <details class="x-pg-more"><summary>Options</summary><div class="x-pg-grid">${pick ? "" : sel}

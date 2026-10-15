@@ -633,15 +633,9 @@ const SERVER_FORM = (s, role) => {   // one small window (1.55.15, the owner: "d
       <div class="f3-g3">${f3("User", `<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}">`)}${f3("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}">`)}${f3("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to install the panel's key now" : "empty = the panel's key is already there"}" title="With a password the panel logs in once, installs its own key and forgets the password">`)}</div>
       <p class="f3-note">${s ? "A password here installs the panel's key now." : "With a password the panel logs in once, installs its key and forgets it. Without one, the panel's key must already be on the server (Settings shows it)."}</p></section>
     ${s ? `<input type="hidden" name="provider" value="${esc(s.provider)}">` : ""}
-    <section class="f3-sec srv-after"><h5 class="f3-h">${s ? "Install after saving" : "Install after adding"} <small>optional · needs root</small></h5>
-      <div class="f3-opts srv-opts">
-        <label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>
-        <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="srvNodeKind(this)"> Marzban node</label>
-        ${window.pgSrvTick ? pgSrvTick() : ""}</div>
-      <label class="x-cert off">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" disabled spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
-      <label class="x-cert-save off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label>
-      ${window.pgSrvBox ? pgSrvBox() : ""}</section>
-    <div class="f3-foot"><label class="chk" title="The panel looks at this server every few minutes"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> Checked by the panel</label><span class="sp"></span>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<button class="pri" type="submit">${s ? "Save" : "Add server"}</button></div>
+    ${!s && window.pgSrvBox ? `<section class="f3-sec srv-after f3-pg" ${window.labIsPgTag && labIsPgTag(window.labTagCur ? labTagCur() : "") ? "" : "hidden"}><h5 class="f3-h">PasarGuard node <small>for this profile</small></h5>
+      <div class="f3-opts srv-opts"><label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>${window.pgSrvTick ? pgSrvTick() : ""}</div>
+      ${pgSrvBox()}</section>` : ""}    <div class="f3-foot"><label class="chk" title="The panel looks at this server every few minutes"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> Checked by the panel</label><span class="sp"></span>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<button class="pri" type="submit">${s ? "Save" : "Add server"}</button></div>
   </form>`;
 };
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
