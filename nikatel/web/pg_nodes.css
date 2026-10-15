@@ -56,12 +56,6 @@ html body .ins-node .ins-h .pill { margin: 0 0 0 auto; max-width: 60%; overflow:
 html body .ins-node .ins-field select { flex: 1 1 auto; min-width: 0; height: 40px; border-radius: 12px; }
 
 /* ---- the System tab (pg_system.js) */
-html body #page .pg-sys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin: 0 0 10px; }
-html body #page .pg-sys-card { margin: 0; padding: 10px 14px 12px; } html body #page .pg-sys-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; } html body #page .pg-sys-card h3 .sp { flex: 1; }
-html body #page .pg-sys-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 8px; min-height: 28px; font-size: 12.5px; }
-html body #page .pg-sys-row .pbar { min-width: 0; } html body #page .pg-sys-row small { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-html body #page .pg-sys-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; } html body #page .pg-sys-pills .pill { margin: 0; }
-html body #page .pg-sys-ib { max-height: 320px; margin: 0 0 8px; }
 
 /* ---- Settings → PasarGuard (pg_update.js): the nodes with the version they run and the newest one, one row each (a grid, not a table: it keeps its row and drops a column by the width of its box) */
 html body #page .pgu-tbl { display: grid; width: 100%; container-type: inline-size; }

@@ -199,3 +199,7 @@ html body #page .pg-usage-look .pg-ibtn svg { width: 17px; height: 17px; fill: n
 html[data-mode="light"] body #page .pg-usage-look { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 1px 2px rgba(30, 50, 100, .06); } html[data-mode="light"] body #page .pg-usage-look .pg-usage-ch h3 { color: #14213d; }
 /* 1.57.22 - the gauges (CPU, memory, disk) are the owner's soft blue while they are quiet (amber and red when busy); the green stays for "active" in the ring of the users */
 html body #page :is(.pg-ring-arc, .pg-leg i).cool { --pc: #8db4ff; }
+/* 1.57.23 - the Users box of the old System tab, at the top of Usage > Users */
+html body #page .pg-ub { margin: 0 0 10px; }
+html body #page .pg-ub-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+html body #page .pg-ub-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 13px; } html body #page .pg-ub-row b { font-weight: 650; font-variant-numeric: tabular-nums; } html body #page .pg-ub-row small { margin-left: auto; }

@@ -971,3 +971,10 @@ def test_js_range_button_pure_dates_and_the_relative_panel():
     assert 'class="pg-rng"' in bar and "Last 7 days" in bar and 'aria-haspopup="dialog"' in bar and bar.startswith('<div class="pg-usec-row">') and "2026-10-09 → 2026-10-15" in bar and "pg-rng" not in topbar and topbar.startswith("BAR[TABS")
     assert 'class="pg-pc on" onclick="pgUsageRel(7)"' in pop and pop.count('class="pg-pc on"') == 1 and 'id="pg-pop-from" value="2026-10-09"' in pop and "Relative" in pop and "Absolute" in pop
     assert label == "Last 30 days" and days == 30 and 'class="pg-pc on" onclick="pgUsageRel(30)"' in pop30 and 'id="pg-pop-from" value="2026-09-16"' in pop30
+
+
+@needs_node
+def test_js_the_users_box_of_the_old_system_tab_is_in_usage():
+    box = run_page_js("""return c.pgUsageUsersBoxHtml(ov);""")
+    assert "7 online" in box and "100 active" in box and "2 on hold" in box and "5 limited" in box and "10 expired" in box and "3 disabled" in box and "120 in all" in box
+    assert 'class="pill warn"' in box and "since the counters were last reset" in box and "↓ 0.93 GB · ↑ 1.86 GB" in box

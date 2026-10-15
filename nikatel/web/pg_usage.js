@@ -297,12 +297,18 @@ function pgUsageTopRc(d) {
   const rows = us.map(u => `<li data-u="${esc(u.username)}" onclick="pgUsageLookupUser(this.dataset.u); pgUsageSec('look')" title="Show the usage of this user in the range"><span class="ell">${esc(u.username)}</span><i class="pg-mini"><u style="width:${max > 0 ? Math.max(3, (+u.used_gb || 0) / max * 100).toFixed(0) : 0}%"></u></i><b>${esc(pgUsageGbText(u.used_gb))}</b></li>`).join("");
   return pgUsageRc("Top users", "most used, all time", rows ? `<ul class="pg-mini-l">${rows}</ul>` : '<div class="pg-rc-none mut">No user yet</div>', "users");
 }
-function pgUsageDrawCards() {          // the overview: what is known is drawn at once, the rest comes in as it arrives
+function pgUsageUsersBoxHtml(ov) {          // the Users box of the old System tab, now at the top of Usage > Users (the owner, 2026-10-15): the users by state and the traffic since the counters were last reset
+  const n = v => v == null ? "—" : Number(v).toLocaleString("en-US"), chip = (label, v, cls = "") => `<span class="pill ${cls}">${n(v)} ${label}</span>`;
+  const body = `<div class="pg-ub-chips">${chip("online", ov.online, "ok")}${chip("active", ov.active)}${chip("on hold", ov.on_hold)}${chip("limited", ov.limited, ov.limited ? "warn" : "")}${chip("expired", ov.expired, ov.expired ? "warn" : "")}${chip("disabled", ov.disabled)}</div>
+    <div class="pg-ub-row"><span>Traffic</span><b>↓ ${esc(fmtB(ov.traffic_in))} · ↑ ${esc(fmtB(ov.traffic_out))}</b><small class="mut">since the counters were last reset</small></div>`;
+  return pgUsageCard("Users", `${n(ov.total)} in all`, body, false, "pg-ub");
+}function pgUsageDrawCards() {          // the overview: what is known is drawn at once, the rest comes in as it arrives
   const s = pgUsageState, pg = pgUsageIsPg(), cards = [];
   if (s.ov) cards.push(pgUsageUsersRc(s.ov), pgUsageServerRc(s.ov));
   if (pg && s.range) cards.push(pgUsageTrafficRc(s.range), pgUsageNodesRc(s.range));
   if (pg && s.apps) cards.push(pgUsageAppsRc(s.apps));
   if (s.top) cards.push(pgUsageTopRc(s.top));
+  pgUsagePut("#pg-usage-ubox", s.ov ? pgUsageUsersBoxHtml(s.ov) : "");
   pgUsagePut("#pg-usage-ov", pgUsageErr(s.err.cards) + (cards.length ? `<div class="pg-rcs">${cards.join("")}</div>` : s.err.cards ? "" : pgUsageWait("Reading the counters…")));
   pgUsageDrawAge();
 }
@@ -506,7 +512,7 @@ const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-u
   <div data-for="ov" id="pg-usage-ov"></div>
   <div data-for="traffic" id="pg-usage-range"></div>
   <div data-for="nodes" id="pg-usage-nodes"></div>
-  <div data-for="users" class="pg-usage-two"><div id="pg-usage-counts"></div><div id="pg-usage-top"></div></div>
+  <div data-for="users"><div id="pg-usage-ubox"></div><div class="pg-usage-two"><div id="pg-usage-counts"></div><div id="pg-usage-top"></div></div></div>
   <div data-for="look">${pgUsageCard("Usage of an admin or a user", "", '<div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div>', false, "pg-usage-look")}</div>
   <div data-for="apps" id="pg-usage-apps"></div>
 </div>`;

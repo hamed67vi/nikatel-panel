@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.23 - No System tab, its Users box in Usage
+
+- **Windows (the owner):** the Address field of the panel window was yellow with light text: in a window the focus ring (also a shadow) had removed the dark well the autofill rule paints, so the two are one shadow now; in the light theme an autofilled field is white with dark text. *API key / token | Sign in once* is the kit's segmented control with the chosen one lifted and blue.
+- **Panel > General (the owner):** the *System* tab is gone (General is *Usage*, *Settings*); its *Users* box - the users by state (online, active, on hold, limited, expired, disabled) and the traffic since the counters were last reset - is at the top of *Usage > Users*. The code of the System tab (pg_system.js) stays, unreachable.
+
 ## 1.57.22 - The user template inside Settings, blue gauges
 
 - **Panel > General (the owner):** the *Templates* button is gone; its **user template** is the last section of *Settings* (the row of Settings sections ends with *User template*; *Settings* stays the lit button while it shows). The client templates have no door any more (their code in pg_client.js stays, unreachable).

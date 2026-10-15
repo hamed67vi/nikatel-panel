@@ -89,7 +89,7 @@ nikatel/
     pg_admin.py      PasarGuard admins (also several at once through the panel's bulk calls), API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
     pg_roles.py      PasarGuard admin roles (permissions, limits, access, device rules) with backups and restore, api/pg_roles.py, web/pg_roles.js
     pg_client_templates.py  PasarGuard client (subscription) templates - Clash, Xray, sing-box, User-Agent lists - with backups, delete several in one call, api/pg_client_templates.py, web/pg_client.js
-    pg_system.py     PasarGuard System tab: version, resources, user counters and the other numbers the panel keeps, api/pg_system.py, web/pg_system.js
+    pg_system.py     what the panel keeps about itself - version, resources, user counters - api/pg_system.py (the System tab was removed on 2026-10-15; its Users box is in Usage > Users, read through /usage/overview)
     pg_users.py      PasarGuard users in full: the whole user (groups, on hold, devices limit, next plan, owner), devices, subscription fetches and the subscription in each client format, bulk by name, shift of end dates and data limits, the Shadowsocks method of many, clean-up, users from a template; api/pg_users.py, web/pg_users.js
     pg_hosts.py      PasarGuard hosts in full: every field, the advanced settings as checked JSON, make / change / clone / delete / bulk, backups; api/pg_hosts.py, web/pg_hosts.js
     pg_kinds.py      One step makes a whole KIND of account on a PasarGuard panel (eleven kinds, only the protocol is asked: the rest is chosen): the inbound (core), the group (access), the host and - when asked - a user template together, checked first, read back, taken back when a step fails; api/pg_kinds.py, web/pg_kinds.js

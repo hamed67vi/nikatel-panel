@@ -2044,7 +2044,7 @@ const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).t
 /* ---- the PasarGuard sections are the tabs of the Panel page (1.47.0; in 1.45.0 they were pages of the left menu, roadmap #102): every tab shows the bar of the panels (which panel) and its own tab(s) of what was one page
    with ten tabs - PG_SUBS says which tabs (of pgTabs) each tab of the Panel page holds. Nodes are a tab of Servers (the server beside the node it runs). pn.want = the tab a link asked for; pnShow() settles pn.tab
    for the part that is open. */
-const PG_SUBS = {users: ["users"], configs: ["kinds", "hosts", "groups", "cores"], admins: ["admins"], settings: ["usage", "system", "settings", "templates"]};      // (Templates moved from Access to General: the owner, 2026-10-15)
+const PG_SUBS = {users: ["users"], configs: ["kinds", "hosts", "groups", "cores"], admins: ["admins"], settings: ["usage", "settings", "templates"]};      // (Templates moved from Access to General and became a section of Settings, and the System tab went - its Users box is in Usage > Users: the owner, 2026-10-15)
 const PG_SUB_OF = {}; Object.entries(PG_SUBS).forEach(([s, tabs]) => tabs.forEach(t => { PG_SUB_OF[t] = s; }));
 const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
 const pnIsUsers = () => (state.page === "pgpanel" && sub("pgpanel") === "users") || (state.page === "configs" && sub("configs") === "panels");

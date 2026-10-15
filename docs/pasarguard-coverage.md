@@ -25,7 +25,7 @@ the code is `nikatel/services/pg_*.py`, `nikatel/api/pg_*.py`, `nikatel/web/pg_*
 | **Admin roles** `/api/admin-roles`, `/api/admin-role/{id}` | Admins tab → Roles (`pg_roles`) | permissions, limits, access, device rules; owner role read only, built-in roles never deleted |
 | **API keys** `/api/api_keys`, `/api/api_key/{id}` (+ `revoke`), `/api/api_keys/bulk/delete` | Admins tab → API keys (`pg_admin`) | the secret is shown once and never kept; the key this panel itself uses is protected |
 | **Settings** `/api/settings` | Settings tab (`pg_admin`) | 7 sections as forms, secrets only "set / not set", a dry run, history, restore |
-| **System** `/api/system`, `/api/inbounds`, `/api/inbounds/details` | System tab (`pg_system`), the forms that choose an inbound | version, resources, counters |
+| **System** `/api/system`, `/api/inbounds`, `/api/inbounds/details` | the forms that choose an inbound (the System tab was removed on 2026-10-15; Usage > Users reads the same counters) | version, resources, counters |
 | **Usage** `/api/node/usage`, `/api/users/usage`, `/api/admin/…/usage`, `/api/user/by-id/{id}/usage`, `/api/users/counts/{metric}`, `/api/users/sub_update/chart` | Usage tab (`pg_usage`) | by node and Tehran day, Jalali dates, top users, **users over time** (online / expired / limited per hour or day, all or one admin), **subscription apps** (the share of each client) |
 | **Subscription** `/sub/{token}` | the merged link (`/sub/<token>` of this panel, accounts) | read, never changed |
 

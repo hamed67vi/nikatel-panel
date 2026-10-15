@@ -280,7 +280,7 @@ def test_the_account_type_button_is_not_shown_and_comes_back_with_one_switch():
 def test_the_templates_are_a_tab_of_general_not_of_access():
     """The owner, 2026-10-15: "move this part (Templates) to the General tab"."""
     subs = re.search(r"const PG_SUBS = \{(.*?)\};", APP, re.DOTALL).group(1)
-    assert 'settings: ["usage", "system", "settings", "templates"]' in subs and '"templates"' not in subs.split("settings:")[0]          # (and Access is gone: its groups are in Configs)
+    assert 'settings: ["usage", "settings", "templates"]' in subs and '"templates"' not in subs.split("settings:")[0]          # (and Access is gone: its groups are in Configs)
 
 
 def test_hosts_access_and_core_are_one_section_called_configs_with_an_add_tab_first():
@@ -680,3 +680,18 @@ def test_the_load_of_a_row_is_smaller():
     """The owner, 2026-10-15: "make these smaller" (the number, the bar and the line under it)."""
     css = _web("lab.css")
     assert ".lab-ldx .lab-cpu b { font-size: 12px; }" in css and ".lab-ldx .lab-cpu .bar { max-width: 120px; height: 6px; }" in css and ".lab-ldw small { font-size: 10px; }" in css
+
+
+def test_there_is_no_system_tab_and_its_users_box_is_in_usage_users():
+    """The owner, 2026-10-15: "remove the System section and move that Users box to Usage > Users"."""
+    app, js = _web("app.js"), _web("pg_usage.js")
+    assert 'settings: ["usage", "settings", "templates"]};' in app and '"system"' not in app.split("const PG_SUBS = ", 1)[1].split("\n", 1)[0].split("//", 1)[0]
+    assert "function pgUsageUsersBoxHtml(ov) {" in js and '<div data-for="users"><div id="pg-usage-ubox"></div>' in js and 'pgUsagePut("#pg-usage-ubox", s.ov ? pgUsageUsersBoxHtml(s.ov) : "");' in js
+
+
+def test_autofill_stays_dark_inside_windows_and_the_panel_mode_switch_shows_the_chosen_one():
+    """The owner, 2026-10-15: the Address field of the panel window was yellow with light text; "API key / token | Sign in once" showed no chosen one."""
+    uk, css = _web("uikit.css"), _web("lab.css")
+    assert "html body #modal input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0 1000px #0f1424 inset, 0 0 0 3px rgba(59, 130, 246, .30) !important;" in uk and "transition: background-color 9999s ease-out 0s !important; }" in uk and "width:" not in uk
+    assert 'html[data-mode="light"] body #modal input:-webkit-autofill, ' in uk and "-webkit-text-fill-color: #14213d !important;" in uk
+    assert "html body #modal .tabs.pn-mode button.on { background: #2d3f68 !important;" in css and "html body #modal .tabs.pn-mode { display: inline-flex;" in css

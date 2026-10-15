@@ -481,3 +481,9 @@ html body #page .lab-trf .tv b { font-size: 13px; } html body #page .lab-trf .tv
 html body #page .lab-ldx .lab-cpu b { font-size: 12px; }
 html body #page .lab-ldx .lab-cpu .bar { max-width: 120px; height: 6px; }
 html body #page .lab-ldw small { font-size: 10px; }
+/* 1.57.23 - "API key / token | Sign in once" (Add and Edit panel): the kit's segmented control, the chosen one lifted and blue (the owner: "their colour must differ when I choose") */
+html body #modal .tabs.pn-mode { display: inline-flex; align-items: center; gap: 2px; height: 36px; box-sizing: border-box; padding: 3px; border-radius: 11px; background: #151a2b; border: 1px solid var(--uk-line); }
+html body #modal .tabs.pn-mode button { height: 28px; padding: 0 14px; box-sizing: border-box; border: 1px solid transparent !important; border-radius: 8px !important; background: transparent !important; box-shadow: none !important; color: #b6bfd6 !important; font-size: 13px; font-weight: 600; }
+html body #modal .tabs.pn-mode button:hover { color: #fff !important; background: rgba(255, 255, 255, .06) !important; }
+html body #modal .tabs.pn-mode button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff !important; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; }
+html[data-mode="light"] body #modal .tabs.pn-mode { background: #eef2fa; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #modal .tabs.pn-mode button { color: #4a5a7e !important; } html[data-mode="light"] body #modal .tabs.pn-mode button.on { background: #fff !important; color: #14213d !important; box-shadow: 0 1px 3px rgba(30, 50, 100, .18), inset 0 0 0 1px rgba(47, 111, 224, .35) !important; }
