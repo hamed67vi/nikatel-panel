@@ -247,7 +247,7 @@ def test_one_window_makes_a_whole_kind_of_account_and_the_three_tabs_open_it():
     main = (WEB.parent / "main.py").read_text(encoding="utf-8")
     assert '"pg_kinds.js"' in main and '"pg_kinds.css"' in main
     assert 'html body #modal .pg-kind-chip.on' in _web("pg_kinds.css")
-    assert 'name="template" checked' in js and "const pgKindTplSync" in js and "b.template = f.elements.template.checked" in js       # the user template is a tick of the same window
+    assert 'name="template"' not in js and "b.template = false;" in js       # (no user template tick any more: the owner, 2026-10-15)
     assert "More (everything here is chosen for you)" in js and "<details class=\"pg-kind-adv\">" in js and "const pgKindFill = auto =>" in js and "Chosen for you:" in js      # (1.53.2, 1.55.0) only the protocol is asked (chips, or a pasted link): the details are folded and filled with what was chosen
     assert "required" not in js.split("pgKindDraw() {", 1)[1].split("window.pgKindPick", 1)[0]
 
@@ -695,3 +695,13 @@ def test_autofill_stays_dark_inside_windows_and_the_panel_mode_switch_shows_the_
     assert "html body #modal input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0 1000px #0f1424 inset, 0 0 0 3px rgba(59, 130, 246, .30) !important;" in uk and "transition: background-color 9999s ease-out 0s !important; }" in uk and "width:" not in uk
     assert 'html[data-mode="light"] body #modal input:-webkit-autofill, ' in uk and "-webkit-text-fill-color: #14213d !important;" in uk
     assert "html body #modal .tabs.pn-mode button.on { background: #2d3f68 !important;" in css and "html body #modal .tabs.pn-mode { display: inline-flex;" in css
+
+
+def test_the_add_form_has_a_drawer_per_protocol_a_core_field_and_no_user_template():
+    """The owner, 2026-10-15: "arrange the make-a-config part, the suggested configs in order, VLESS in a drawer, remove the user template, the core can be chosen from there"."""
+    js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
+    assert '<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"' in js and 'class="pg-dr-sel"' in js and "if (own) d.open = true;" in js and "const pgKindShort = k =>" in js
+    assert 'name="template"' not in js and "pg-kind-tpl" not in js and "pgKindTplSync" not in js and "b.template = false;" in js and "pg-kind-tpl" not in css
+    form = js.split("function pgKindFormHtml(inline) {", 1)[1].split("</form>", 1)[0]
+    assert form.count('name="core_id"') == 1 and form.index('name="core_id"') < form.index('<details class="pg-kind-adv">') and form.index('name="address"') < form.index('name="core_id"') < form.index('name="port"')
+    assert ".pg-kind-dr > summary {" in css and ".pg-kind-dr[open] > summary::after" in css and ".pg-kind-quick { grid-template-columns: repeat(5, minmax(0, 1fr)); }" in css

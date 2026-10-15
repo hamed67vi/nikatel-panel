@@ -7,6 +7,7 @@ const pgKind = {id: 0, o: null, k: "", res: null};
 const PG_KINDS_UI = false;      // the button "＋ Account type" is not shown in Access, Hosts and Core (the owner, 2026-10-15: "remove this completely"); the window and its routes stay: true brings the button back
 window.pgKindBtn = () => !PG_KINDS_UI || pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgKindNew()" title="Make a whole kind of account in one step: choose the protocol, the panel makes the inbound, the group, the host and a user template">＋ Account type</button>`;
 const pgKindRand = () => Math.random().toString(36).slice(2, 8);
+const pgKindShort = k => String((k && k.title) || "").replace(/^(VLESS|Trojan|VMess) · /, "");
 const pgKindOf = id => ((pgKind.o || {}).kinds || []).find(k => k.id === id) || {};
 window.pgKindNew = async () => {
   const id = +pn.id; if (!id) return;
@@ -18,16 +19,17 @@ window.pgKindNew = async () => {
 };
 function pgKindFormHtml(inline) {      // the whole form: in a window (the old button) or as the Add tab of Configs (inline: no Cancel); 1.54.7: the protocols in rows by family, one row of fields, the rest folded
   const o = pgKind.o, opt = (v, t, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(t)}</option>`, tls = o.tls || {};
-  const chip = k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}">${esc(k.title.replace(/^(VLESS|Trojan|VMess) · /, ""))}</button>`;
-  const chips = [["VLESS", "vless"], ["Trojan", "trojan"], ["VMess", "vmess"], ["Shadowsocks", "shadowsocks"]].map(([label, proto]) => { const ks = o.kinds.filter(k => k.protocol === proto); return ks.length ? `<div class="pg-kind-grp"><span class="pg-kind-gl">${label}</span><div class="pg-kind-row">${ks.map(chip).join("")}</div></div>` : ""; }).join("");
+  const chip = k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}">${esc(pgKindShort(k))}</button>`;
+  const drawers = [["VLESS", "vless"], ["Trojan", "trojan"], ["VMess", "vmess"], ["Shadowsocks", "shadowsocks"]].map(([label, proto]) => { const ks = o.kinds.filter(k => k.protocol === proto); return ks.length ? `<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"${proto === "vless" ? " open" : ""}><summary><span class="pg-dr-n">${label}</span><i class="pg-dr-c">${ks.length}</i><span class="pg-dr-sel"></span></summary><div class="pg-kind-row">${ks.map(chip).join("")}</div></details>` : ""; }).join("");      // (the owner, 2026-10-15: "VLESS in a drawer"): one drawer per protocol, one open at a time, the chosen kind shown on the drawer even when it is shut
+  const chips = drawers;
   return `<div class="pg-kind-paste"><input id="pg-kind-link" placeholder="Your own config: paste a vless:// trojan:// vmess:// or ss:// link to copy its type" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') pgKindUseLink()"><button type="button" class="sm" onclick="pgKindUseLink()">Use</button></div><div class="pg-kind-groups">${chips}</div><div class="pg-kind-note" id="pg-kind-note"></div>
     <form class="frm pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
     <div class="pg-kind-quick">
       <label>Name<input name="name" maxlength="64" placeholder="chosen for you" autocomplete="off" title="The inbound, the group and the link are named from it"></label>
       <label>Address<input name="address" list="pg-kind-addr" placeholder="${esc(o.addresses[0] ? "the first node: " + o.addresses[0] : "write it")}" autocomplete="off" title="Domain or IP written into the link"><datalist id="pg-kind-addr">${o.addresses.map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
+      <label>Core<select name="core_id" title="The core (Xray config) the inbound is written into">${o.cores.length ? o.cores.map((c, i) => opt(c.id, `${c.name} (#${c.id})`, i === 0)).join("") : opt("", "no core yet")}</select></label>
       <label>Port <small id="pg-kind-portnote"></small><input name="port" type="number" min="1" max="65535"></label>
       <label>Group<select name="group">${opt("new", "A new group", true)}${o.groups.map(g => opt("g" + g.id, `Add to “${g.name}” (${g.tags.length})`)).join("")}${opt("none", "No group")}</select></label>
-      <label class="pg-kind-tpl"><span class="chk"><input type="checkbox" name="template" checked> User template</span><span class="pg-kind-tplnum" data-tpl><input name="tpl_gb" type="number" min="0" step="any" value="50" title="Data limit, GB (0 = unlimited)"> GB <input name="tpl_days" type="number" min="0" value="30" title="Days (0 = no end)"> days</span></label>
       <label class="wide" data-need="mlkem">Decryption <small>the server string of <code>xray vlessenc</code>, for the inbound</small><input name="decryption" placeholder="mlkem768x25519plus.native.600s…" autocomplete="off" spellcheck="false"></label>
       <label class="wide" data-need="mlkem">Encryption <small>the client string of <code>xray vlessenc</code>, written into the links</small><input name="encryption" placeholder="mlkem768x25519plus.native.0rtt…" autocomplete="off" spellcheck="false"></label>
     </div>
@@ -39,7 +41,6 @@ function pgKindFormHtml(inline) {      // the whole form: in a window (the old b
       <label class="wide" data-need="reality">The site REALITY imitates <small>empty = the panel's own REALITY site, else the first usual site it finds usable</small><span class="pg-ib-dest"><input name="reality_dest" value="${esc((o.reality || {}).dest || "")}" placeholder="chosen for you" autocomplete="off"><button type="button" class="sm" onclick="pgKindScan()" title="Ask the panel whether this site is a good target: TLS 1.3, h2, x25519">Scan…</button></span></label>
       <label data-need="spx">SpiderX path <small>empty = none (a link may carry /api)</small><input name="reality_spx" placeholder="/" autocomplete="off"></label>
       <label data-sec="fp">Fingerprint <small>of the client, in the link</small><select name="fingerprint"><option value="">default</option>${(o.fingerprints || []).map(x => opt(x, x)).join("")}</select></label>
-      ${o.cores.length > 1 ? `<label>Core<select name="core_id">${o.cores.map((c, i) => opt(c.id, `${c.name} (#${c.id})`, i === 0)).join("")}</select></label>` : `<input type="hidden" name="core_id" value="${o.cores[0] ? o.cores[0].id : ""}">`}
       <label class="wide">Name of the link <small>what the user sees; {USERNAME} is replaced by the panel</small><input name="link_name" maxlength="256" placeholder="the name, then ({USERNAME})" autocomplete="off"></label>
       <label>Port in the link <small>empty = the port of the inbound (a CDN may show another)</small><input name="host_port" type="number" min="1" max="65535" autocomplete="off"></label>
       <label data-need="path">Host header <small>empty = the address</small><input name="host_header" autocomplete="off"></label>
@@ -68,7 +69,8 @@ window.pgKindPick = k => {
   f.querySelectorAll("[data-need]").forEach(l => { const on = l.dataset.need.split(" ").some(n => kd.needs.includes(n)); l.hidden = !on; l.querySelectorAll("input, select, button").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-sec]").forEach(l => { const on = kd.security !== "none"; l.hidden = !on; l.querySelectorAll("select, input").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-auto]").forEach(i => { i.value = ""; delete i.dataset.auto; });      // what the last check chose for another kind goes: this kind is chosen again
-  pgKindPort(); pgKindTplSync();
+  document.querySelectorAll(".pg-kind-dr").forEach(d => { const own = kd.protocol === d.dataset.p, sel = d.querySelector(".pg-dr-sel"); if (sel) sel.textContent = own ? pgKindShort(kd) : ""; if (own) d.open = true; });      // the drawer of the chosen kind opens (the others shut) and says which one is chosen
+  pgKindPort();
   const r = $("#pg-kind-res"); if (r) r.innerHTML = "";
 };
 const pgKindPort = (keep) => {      // the first usual port of the kind that no inbound of the chosen core uses (not touched when the owner typed one: keep)
@@ -76,16 +78,10 @@ const pgKindPort = (keep) => {      // the first usual port of the kind that no 
   if (!keep) f.elements.port.value = kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];
   $("#pg-kind-portnote").textContent = core.ports.includes(+f.elements.port.value) ? "in use in this core" : "free in this core";
 };
-const pgKindTplSync = () => {      // a template gives a group: with no group there is none; its two numbers show only while it is wanted
-  const f = $("#pg-kind-form"), none = f.elements.group.value === "none";
-  if (none) f.elements.template.checked = false;
-  f.elements.template.disabled = none;
-  f.querySelectorAll("[data-tpl]").forEach(l => { l.hidden = !f.elements.template.checked; l.querySelectorAll("input").forEach(i => { i.disabled = l.hidden; }); });
-};
 window.pgKindStale = ev => {
   pgKind.res = null; if (!$("#pg-kind-form")) return;
   if (ev && ev.target && ev.target.dataset) delete ev.target.dataset.auto;      // a value the owner touched is his, not the one chosen for him
-  pgKindPort(!(ev && ev.target && ev.target.name === "core_id")); pgKindTplSync();
+  pgKindPort(!(ev && ev.target && ev.target.name === "core_id"));
 };
 const pgKindFill = auto => {      // what the server chose is put into the details, so the owner sees it (and can change it); it is marked, so another kind clears it again
   const f = $("#pg-kind-form");
@@ -95,7 +91,7 @@ const pgKindBody = () => {
   const f = $("#pg-kind-form"), b = {kind: pgKind.k}, g = f.elements.group.value;
   [...f.elements].forEach(el => { if (!el.name || el.disabled || ["group", "restart", "template"].includes(el.name)) return; const v = el.type === "number" ? (el.value === "" ? "" : +el.value) : el.value.trim(); if (v !== "") b[el.name] = v; });
   b.group_mode = g === "new" ? "new" : g === "none" ? "none" : "existing"; if (g.startsWith("g")) b.group_id = +g.slice(1);
-  b.template = f.elements.template.checked;
+  b.template = false;      // (no user template here: the owner, 2026-10-15)
   return b;
 };
 /* ---- your own config: paste a client link (vless:// trojan:// vmess:// ss://) and the form is filled with its type, port, path, Host, SNI, fingerprint and the rest; the keys and ids are made new (a link holds only the public half of a REALITY key) */

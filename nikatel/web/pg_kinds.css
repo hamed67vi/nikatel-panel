@@ -16,7 +16,6 @@ html body .pg-kind-notes { margin: 8px 0; padding: 8px 10px; border-radius: 10px
 html body #page .pg-kind-page { max-width: 1180px; padding: 2px 2px 24px; } html body #page .pg-kind-done { margin: 0 0 8px; font-size: 15px; }      /* the Add tab of Configs (the same form as the window, in the page) */
 /* 1.54.7 - the Add tab rebuilt: the protocols in rows by family (small chips), ONE row of fields, the rest folded (the owner: "tidy, compact, one piece") */
 html body #page .pg-kind-groups { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; }
-html body #page .pg-kind-grp { display: flex; align-items: center; gap: 10px; } html body #page .pg-kind-gl { flex: none; width: 84px; font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--mut); }
 html body #page .pg-kind-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 html body #page .pg-kind-chip, html body #modal .pg-kind-chip { display: inline-flex; flex-direction: row; align-items: center; height: 30px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 html body #page .pg-kind-chip.on, html body #modal .pg-kind-chip.on { background: rgba(77,163,255,.24) !important; border-color: #4da3ff !important; box-shadow: inset 0 0 0 1px #4da3ff !important; color: #cfe3ff; }
@@ -24,10 +23,27 @@ html body #page .pg-kind-note, html body #modal .pg-kind-note { min-height: 17px
 html body #page .pg-kind-quick, html body #modal .pg-kind-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 10px; align-items: end; margin: 0 0 6px; }
 html body #page .pg-kind-quick label, html body #modal .pg-kind-quick label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--mut); min-width: 0; } html body #page .pg-kind-quick label.wide { grid-column: 1 / -1; }
 html body #page .pg-kind-quick input:not([type=checkbox]), html body #page .pg-kind-quick select, html body #modal .pg-kind-quick input:not([type=checkbox]), html body #modal .pg-kind-quick select { height: 32px; min-width: 0; font-size: 12.5px; }
-html body #page .pg-kind-tpl .chk { display: flex; align-items: center; gap: 6px; color: var(--txt, #e6e9f5); font-size: 12px; } html body #page .pg-kind-tplnum { display: flex; align-items: center; gap: 4px; font-size: 11.5px; } html body #page .pg-kind-tplnum input { width: 62px; }
 html body #page .pg-kind-adv { margin: 2px 0 8px; } html body #page .pg-kind-adv > summary { margin: 2px 0 6px; }
 html body #page .pg-kind-paste { display: flex; gap: 8px; margin: 0 0 10px; } html body #page .pg-kind-paste input { flex: 1; min-width: 0; height: 34px; font-size: 12.5px; }
 /* 1.55.1 - the form is a block (the generic .frm is a three-column grid: the quick row was squeezed into one column), a hidden field stays hidden, the family name sits on the line of its chips */
 html body #page .pg-kind-form, html body #modal .pg-kind-form { display: block; max-width: none; } html body .pg-kind-form [hidden] { display: none !important; }
-html body #page .pg-kind-grp { align-items: flex-start; } html body #page .pg-kind-gl { line-height: 30px; }
 html body #page .pg-kind-quick { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* 1.57.24 - the Add form tidy (the owner: "arrange it, put the suggested configs in order, VLESS in a drawer, no user template here, the core can be chosen"): one DRAWER per protocol (one open at a time, the chosen kind named on its drawer), the kit's chips, ONE row of five fields - name, address, core, port, group */
+html body #page .pg-kind-groups { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+html body #page .pg-kind-dr { border: 1px solid var(--uk-line); border-radius: 14px; background: #141a2b; overflow: hidden; }
+html body #page .pg-kind-dr > summary { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px; box-sizing: border-box; list-style: none; cursor: pointer; user-select: none; font-size: 14px; font-weight: 650; color: var(--text); }
+html body #page .pg-kind-dr > summary::-webkit-details-marker { display: none; }
+html body #page .pg-kind-dr > summary::after { content: ""; flex: none; margin-left: auto; width: 7px; height: 7px; border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(45deg) translateY(-2px); transition: transform .25s cubic-bezier(.2, .9, .25, 1); }
+html body #page .pg-kind-dr[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+html body #page .pg-kind-dr .pg-dr-c { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: rgba(255, 255, 255, .1); color: var(--mut); font-size: 11px; font-style: normal; font-weight: 600; }
+html body #page .pg-kind-dr .pg-dr-sel { margin-left: 6px; font-size: 12.5px; font-weight: 600; color: #8db4ff; }
+html body #page .pg-kind-dr .pg-kind-row { padding: 12px 16px 14px; border-top: 1px solid var(--uk-line); animation: pgKindDr .26s ease both; }
+@keyframes pgKindDr { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+html body #page .pg-kind-chip { height: 32px; border-radius: 10px; background: #1a2032 !important; border: 1px solid rgba(255, 255, 255, .11) !important; color: #e8ebf7; font-size: 13px; font-weight: 600; box-shadow: none; }
+html body #page .pg-kind-chip:hover { background: #212a40 !important; border-color: rgba(255, 255, 255, .2) !important; }
+html body #page .pg-kind-chip.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; }
+html body #page .pg-kind-quick { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+html body #page .pg-kind-quick input:not([type=checkbox]), html body #page .pg-kind-quick select { height: 36px; border-radius: 11px; }
+html body #page .pg-kind-paste { gap: 10px; } html body #page .pg-kind-paste input { height: 36px; border-radius: 11px; }
+@media (max-width: 1000px) { html body #page .pg-kind-quick { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } }
+html[data-mode="light"] body #page .pg-kind-dr { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .pg-kind-chip { background: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #1b2540; } html[data-mode="light"] body #page .pg-kind-chip.on { background: #e3edff !important; color: #1456c8; }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.24 - The Add form in drawers, with a Core field
+
+- **Panel > Configs > Add (the owner: *arrange it, VLESS in a drawer, no user template, the core from there*):** the suggested configs are one **drawer** per protocol (VLESS, Trojan, VMess, Shadowsocks; one open at a time, the chosen kind is named on its drawer and its drawer opens by itself, e.g. after pasting a link); the kit's chips; ONE row of five fields - name, address, **core**, port, group. The *User template* checkbox (and its GB and days) is gone - nothing is made but the inbound, the group and the host. The core select moved out of *More* and is always there.
+
 ## 1.57.23 - No System tab, its Users box in Usage
 
 - **Windows (the owner):** the Address field of the panel window was yellow with light text: in a window the focus ring (also a shadow) had removed the dark well the autofill rule paints, so the two are one shadow now; in the light theme an autofilled field is white with dark text. *API key / token | Sign in once* is the kit's segmented control with the chosen one lifted and blue.
