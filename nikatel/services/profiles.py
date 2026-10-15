@@ -199,11 +199,11 @@ def add_tag(tag) -> str:
 
 
 def _locked(db: Session, tag: str) -> bool:
-    """The profile of the nodes of a PasarGuard panel (PasarGuard Nodes) stays as it is while a PasarGuard panel is connected (the owner, 2026-10-15)."""
-    return tag.lower() == NODE_TAG.lower() and db.scalar(select(Panel.id).where(Panel.type == "pasarguard").limit(1)) is not None
+    """A PasarGuard profile (PasarGuard, PasarGuard Nodes ...) stays as it is while a PasarGuard panel is connected: no rename, no delete (the owner, 2026-10-15)."""
+    return tag.lower().startswith("pasarguard") and db.scalar(select(Panel.id).where(Panel.type == "pasarguard").limit(1)) is not None
 
 
-LOCKED_MSG = "A PasarGuard panel is connected: the profile PasarGuard Nodes stays as it is (it cannot be renamed or deleted)"
+LOCKED_MSG = "A PasarGuard panel is connected: a PasarGuard profile stays as it is (it cannot be renamed or deleted)"
 
 
 def rename_tag(db: Session, old, new) -> str:

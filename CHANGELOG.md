@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.12 - Every PasarGuard profile is locked while a panel is connected
+
+- The lock is not only for "PasarGuard Nodes": a profile called **PasarGuard** (or any name that starts with it) cannot be renamed or deleted either while a PasarGuard panel is connected - the two buttons are off with a tip, and the server refuses it.
+
 ## 1.55.11 - The traffic column of the Lab
 
 - The arrows are drawn (one size, one weight; green down, pink up) and the numbers are in the font and weight of the rest of the row, with tabular figures and a clear gap between the two.

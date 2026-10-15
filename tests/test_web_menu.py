@@ -382,7 +382,7 @@ def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarg
     assert 'const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard"]' in lab and "window.labNpFill = b =>" in lab and 'class="ghost lab-np-chip"' in lab
     assert 'showModal("<b>＋ Add profile</b>", labNpForm(false), "narrow")' in lab                                       # (a small box, not the wide one)
     assert ".lab-np .lab-np-in {" in css and ".lab-np .lab-np-chip {" in css
-    assert 'const labTagLocked = t => labHasPg() && String(t).toLowerCase() === "pasarguard nodes"' in lab and lab.count("if (labTagLocked(cur)) {") == 2
+    assert 'const labTagLocked = t => labHasPg() && String(t).toLowerCase().startsWith("pasarguard")' in lab and lab.count("if (labTagLocked(cur)) {") == 2
     assert lab.count('${labTagLocked(cur) ? "disabled" : ""}') == 2                                                      # (the two buttons beside the tabs are off)
 
 def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the_pasarguard_panel():

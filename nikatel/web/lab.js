@@ -152,7 +152,7 @@ window.labSyncNodes = async () => {      // the Sync button of a PasarGuard prof
     const r = await api("/api/profiles/sync", {method: "POST", body: JSON.stringify({tag: cur === "any" ? "" : cur})});
     toast(r.added ? `✓ ${r.added} node${r.added === 1 ? "" : "s"} added to ${cur}` : r.errors.length ? "✕ " + r.errors[0] : "✓ Every node of the panels is on the page already", r.errors.length && !r.added ? "bad" : "ok"); refresh();
   } catch (e) { toast("✕ " + e.message, "bad"); }
-};const labTagLocked = t => labHasPg() && String(t).toLowerCase() === "pasarguard nodes";      // the profile of the nodes of a connected PasarGuard panel: it cannot be renamed or deleted while the panel is connected (the owner, 2026-10-15)
+};const labTagLocked = t => labHasPg() && String(t).toLowerCase().startsWith("pasarguard");      // the profile of the nodes of a connected PasarGuard panel: it cannot be renamed or deleted while the panel is connected (the owner, 2026-10-15)
 const LAB_LOCKED_TIP = "A PasarGuard panel is connected: this profile stays as it is";
 const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : [];      // (none from the start: the menu is only "+ Add profile" until a profile is made)
 const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind).toLowerCase()) || "any";
