@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.41 - Telegram and its alerts inside Settings → API, the Doctor header without two pills
+
+- **Settings → API:** the *Alerts* tab is gone - its Telegram part is an API connection and now lives here as a compact row (bot token, chat id, the switch) with the buttons *Test*, *Rules*, *Daily report*, *Maintenance* and *Save*; Rules, Daily report and Maintenance windows open small windows with what the tab had.
+- **Tunnel Doctor:** *How it works* and *All nodes* are removed from the header (*Explain*, the state chip and *Fix all* stay).
 ## 1.57.40 - The Shop bot is off everywhere in the menu, the backup password is a switch, the schedule is one row
 
 - **Shop bot:** its tab of Settings is not in the menu or in the bar any more, and the Backups tab lists only the panel (the Shop bot section itself was already hidden).

@@ -772,7 +772,7 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
     a switch between CDN / Tunnel manager / Tunnel Doctor that does not jump (one bar shape, one width, no late paint of the old tab), Create tunnel without a redraw, the kit menu of its selects, the why line of a failed build."""
     app, lab, css, dr, index, main = _web("app.js"), _web("lab.js"), _web("lab.css"), _web("doctor.css"), INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
     assert '<link rel="stylesheet" href="/static/doctor.css">' in index and '"doctor.css"' in main
-    assert 'mcard("off", "bars", "Doctor Mode", "Only monitors and reports.' in app and 'mcard("fix", "wrench", "Auto Fix Tunnels"' in app and 'mcard("move", "server", "Auto Move to Iran Server"' in app and "window.apHow = () =>" in app and 'window.apNodePick = v =>' in app and 'window.apStep = (btn, dir) =>' in app
+    assert 'mcard("off", "bars", "Doctor Mode", "Only monitors and reports.' in app and 'mcard("fix", "wrench", "Auto Fix Tunnels"' in app and 'mcard("move", "server", "Auto Move to Iran Server"' in app and "window.apHow" not in app and "apNodePick" not in app and "dr-node" not in app and 'window.apStep = (btn, dir) =>' in app
     assert "`<div class=\"dr-top\">${storm}${disturb}${modes}</div>" in app and ".dr-head, .dr-top, .set-top" in app and 'if (pg0 && pg0.querySelector(".fx-box")) fxFit();' in app
     assert "navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(\".main\"); if (m) m.scrollTop = 0; }\n  subSet(page, k); refresh();" in app
     assert "html body .main { scrollbar-gutter: stable; }" in css and "html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }" in dr and "html body #page .dr-card.on {" in dr and "html body #page .dr-empty {" in dr
@@ -814,7 +814,7 @@ def test_the_shop_bot_is_seen_nowhere_in_the_menu_and_the_backup_password_is_a_s
     assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and "Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => `<button class=\"${k === cur ? \"on\" : \"\"}\" onclick=\"setTab('${k}')\">" in app
     assert 'Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")' in app and "the shop bot: kept here" not in app
     assert 'const passRow = sItem({ok: !!bk.has_passphrase, icon: SI.key, title: "Backup password"' in app and "pgSw(!!bk.has_passphrase, \"bkPassToggle(this)\"" in app and "window.bkPassToggle = el =>" in app and 'id="bpw-form"' in app and 'title: "Backup password", desc:' not in app
-    assert 'cls: "two flat bk-sched"' in app and "html body #page .sf form.ss.bk-sched { display: flex; flex-wrap: wrap;" in css and "html body #page .sf .ss.bk-sched .ss-rows { display: contents; }" in css
+    assert 'cls: "two flat bk-sched"' in app and "html body #page .sf form.ss.bk-sched { display: flex !important; flex-wrap: wrap;" in css and "html body #page .sf .ss.bk-sched .ss-rows { display: contents; }" in css
 
 
 def test_the_api_tab_of_settings_gathers_every_api_connection():
@@ -825,7 +825,8 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     assert 'sFrame("API", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
     assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
     assert 'const aiBody = sCat(' in app and 'title: "Use"' not in app and '${probe}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app
-    assert 'apiRow(tg.has_token ? tgOn : false, SI.send, "Telegram bot"' in app and '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → API" in app
+    assert 'title: "Telegram bot", cls: "two flat bk-sched api-tg"' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and r"alertsWin(\'rules\')" in app and r"alertsWin(\'report\')" in app and r"alertsWin(\'windows\')" in app and 'async function setData() {' in app and '${security}${backups}' in app
+    assert '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → API" in app
 
 
 def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_timers():
@@ -834,3 +835,11 @@ def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_
     assert 'const TABBED = new Set(["tunnels", "pgpanel", "configs"]);' in app and 'if (TABBED.has(page)) document.body.classList.add("tabbed");' in app
     assert "morphHtml(box, `<div class=\"tabs sub-tabs\">${list.map(" in app and "if (b.matches(\".fx-box\")) return; const mh = Math.max(150" in app
     assert "if (pnPS() !== pn.curPS) pnUsersLoad(+pn.id); else pnFitSoon(pn.curPS);" in app and '.nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked' in app
+
+
+def test_the_rows_of_active_tasks_after_the_picture():
+    """The owner, 2026-10-16 (his picture): a dot with its word, buttons with icons - blue for what to do, dark for the rest."""
+    app, dr = _web("app.js"), _web("doctor.css")
+    assert '${apIc("wifi")}<span>Live</span>' in app and '${apIc("sync")}<span>Move now</span>' in app and '${apIc("spark")}<span>Fix with AI</span>' in app and "📡" not in app.split("PAGES.actions = async", 1)[1].split("window.apMode", 1)[0]
+    assert '"down" : "degraded") : t.state}">' in app
+    assert 'html body #page .ap-tasks .ap-row .st::before { content: ""; flex: none; width: 12px;' in dr and "html body #page .ap-tasks .ap-row button.pri { background: #2f7bf5;" in dr and "html body #page .ap-tasks .nw-box.sug-box {" in dr
