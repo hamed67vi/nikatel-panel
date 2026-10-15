@@ -821,12 +821,12 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     """The owner, 2026-10-16: "make this section API and bring every API connection here": the tab AI became API - this panel's tokens (moved out of Security) and docs,
     the state of the AI key, the Telegram bot, the probe, the DNS accounts and the panels, each with the way to its place; the AI assistant card stays under it."""
     app = _web("app.js")
-    assert 'ai: ["🔌 API",' in app and '["API"]],' in app and "ai: SI.link," in app
-    assert 'sFrame("API", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
-    assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
+    assert 'ai: ["🔌 Api & Key",' in app and '["Api & Key"]],' in app and "ai: SI.link," in app
+    assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
+    assert '  const s = await api("/api/auth/security");' in app and '<div class="sec-col"><div class="sl">${gP}</div>${gW}</div></div>`;' in app and "html body #page .sec-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in _web("lab.css") and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
     assert 'const aiBody = sCat(' in app and 'title: "Use"' not in app and '${probe}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app
     assert 'title: "Telegram bot", cls: "two flat bk-sched api-tg"' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and r"alertsWin(\'rules\')" in app and r"alertsWin(\'report\')" in app and r"alertsWin(\'windows\')" in app and 'async function setData() {' in app and '${security}${backups}' in app
-    assert '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → API" in app
+    assert '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → Api & Key" in app
 
 
 def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_timers():
@@ -850,3 +850,12 @@ def test_the_model_of_the_ai_is_a_field_with_a_list_that_opens_as_the_kit_menu()
     app, css = _web("app.js"), _web("lab.css")
     assert 'const AI_MODELS = [["claude-fable-5-1", "Fable 5.1' in app and "window.nkCombo = btn =>" in app and 'class="nk-combo"><input name="model"' in app and 'onmousedown="event.preventDefault(); nkCombo(this)"' in app
     assert "function nkDdOpen(sel, anchor) {" in app and "if (s.__combo) { s.__combo.value = s.options[i].value;" in app and "aiRemember(f.model.value);" in app and "html body #page .sf .nk-combo .nk-combo-b {" in css
+
+
+def test_the_add_account_type_form_in_two_columns_with_pictures():
+    """The owner, 2026-10-16 (his picture): the drawers on the left, one card with the note and the fields in pairs on the right; one drawer open at a time."""
+    js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
+    assert '<div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side">' in js and '</div></div></div>`;\n}' in js and "const PKI = {};" in js and "const pgKindIc = k =>" in js
+    assert '<i class="pg-dr-i">${PKI.cube}</i>' in js and '<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i>' in js and 'name="core_id" data-dd' in js and 'name="group" data-dd' in js and '${PKI.spark}<span>Make it…</span>${PKI.chev}' in js
+    assert 'document.addEventListener("toggle", e => {' in js and ".pg-kind-dr[open]" in js
+    assert "html body #page .pg-kind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);" in css and "html body #page .pg-kind-side .pg-kind-quick { grid-template-columns: repeat(2, minmax(0, 1fr));" in css

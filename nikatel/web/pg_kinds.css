@@ -52,3 +52,39 @@ html body #page .pg-kind-tpl { gap: 3px; }
 html body #page .pg-kind-tpl .chk { display: flex; align-items: center; gap: 8px; height: 17px; color: var(--text); font-size: 12px; }
 html body #page .pg-kind-tplnum { display: flex; align-items: center; gap: 6px; height: 36px; font-size: 12px; color: var(--mut); } html body #page .pg-kind-tplnum input { width: 64px; flex: none; }
 @media (max-width: 1000px) { html body #page .pg-kind-quick { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } }
+
+/* 1.57.46 - the Add form in TWO columns after the owner's picture (2026-10-16): on the left the drawers of the protocols (a cube tile, the name, the count, a chevron; the chips inside in two columns, each with its little picture, the chosen one in blue), on the right one card - the note of the kind with an info mark, the fields in pairs with a picture tile, More, Check and Make it... */
+html body #page .pg-kind-paste { display: flex; align-items: center; gap: 10px; box-sizing: border-box; padding: 8px 10px 8px 8px; margin: 0 0 12px; border: 1px solid var(--uk-line); border-radius: 16px; background: #0e1626; }
+html body #page .pg-kind-paste input { flex: 1; min-width: 0; height: 40px; border: 0 !important; background: transparent !important; box-shadow: none !important; font-size: 13.5px; }
+html body #page .pg-kind-paste button { height: 40px; padding: 0 22px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+html body #page .pg-kf-i { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 11px; background: #1a2236; color: #aab4d0; font-style: normal; } html body #page .pg-kf-i svg, html body #page .pg-dr-i svg, html body #page .pg-kc-i svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } html body #page .pg-kf-i svg { width: 20px; height: 20px; }
+html body #page .pg-kind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 14px; align-items: start; }
+@media (max-width: 1000px) { html body #page .pg-kind-cols { grid-template-columns: minmax(0, 1fr); } }
+html body #page .pg-kind-page .pg-kind-groups { margin: 0; gap: 10px; }
+html body #page .pg-kind-page .pg-kind-dr { border-radius: 18px; background: #0f1829; border: 1px solid var(--uk-line); }
+html body #page .pg-kind-page .pg-kind-dr > summary { height: 56px; padding: 0 18px 0 12px; gap: 12px; font-size: 16px; font-weight: 650; }
+html body #page .pg-dr-i { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 11px; background: #1a2236; color: #aab4d0; font-style: normal; } html body #page .pg-dr-i svg { width: 20px; height: 20px; }
+html body #page .pg-kind-page .pg-kind-dr .pg-kind-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px 12px 14px; }
+html body #page .pg-kind-page .pg-kind-chip { display: flex; align-items: center; gap: 10px; box-sizing: border-box; height: 46px; padding: 0 12px 0 8px; border-radius: 12px; font-size: 13.5px; font-weight: 500; white-space: nowrap; text-align: left; }
+html body #page .pg-kc-i { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 9px; background: rgba(255, 255, 255, .06); font-style: normal; } html body #page .pg-kc-i svg { width: 18px; height: 18px; }
+html body #page .pg-kind-page .pg-kind-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html body #page .pg-kind-page .pg-kind-chip.on { background: linear-gradient(180deg, #1c63f5, #0f46c8) !important; border-color: #3d7dff !important; color: #fff; box-shadow: 0 6px 18px rgba(20, 90, 255, .32) !important; } html body #page .pg-kind-page .pg-kind-chip.on .pg-kc-i { background: rgba(255, 255, 255, .16); }
+html body #page .pg-kind-side { box-sizing: border-box; padding: 14px; border: 1px solid var(--uk-line); border-radius: 18px; background: #0e1626; min-width: 0; }
+html body #page .pg-kind-side .pg-kind-note { display: flex; align-items: center; gap: 12px; box-sizing: border-box; min-height: 52px; margin: 0 0 14px; padding: 8px 14px 8px 10px; border-radius: 14px; background: #131c2f; border: 1px solid var(--uk-line); font-size: 13px; line-height: 1.45; color: #aab6d4; }
+html body #page .pg-kind-side .pg-kind-note::before { content: "i"; display: grid; place-items: center; flex: none; width: 30px; height: 30px; box-sizing: border-box; border: 1.6px solid #8f9bbd; border-radius: 50%; font: italic 700 15px/1 Georgia, serif; color: #aab4d0; }
+html body #page .pg-kind-side .pg-kind-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; align-items: start; margin: 0 0 12px; }
+html body #page .pg-kind-side .pg-kind-quick label { flex-wrap: nowrap !important; align-content: stretch !important; align-items: stretch !important; justify-content: flex-start; gap: 6px; font-size: 13px; color: #9aa6c4; }
+html body #page .pg-kind-side .pg-kind-quick label.wide { grid-column: 1 / -1; }
+html body #page .pg-kf { display: flex; align-items: stretch; box-sizing: border-box; height: 42px; min-width: 0; border: 1px solid var(--uk-line); border-radius: 12px; background: #0b1120; overflow: hidden; }
+html body #page .pg-kf .pg-kf-i { width: 40px; height: auto; border-radius: 0; border-right: 1px solid var(--uk-line); }
+html body #page .pg-kf input, html body #page .pg-kf select { flex: 1 1 auto; min-width: 0; height: 100% !important; min-height: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; border-radius: 0 !important; font-size: 13.5px; color: var(--text); }
+html body #page .pg-kind-side #pg-kind-portnote { font-size: 12px; color: #8793b3; }
+html body #page .pg-kind-side .pg-kind-tpl .chk { height: 22px; font-size: 13px; }
+html body #page .pg-kind-side .pg-kind-tplnum { height: 42px; font-size: 13px; } html body #page .pg-kind-side .pg-kind-tplnum input { width: 74px; height: 42px; border-radius: 12px; }
+html body #page .pg-kind-side .pg-kind-adv > summary { margin: 4px 0 10px; font-size: 13.5px; color: #aab4d0; }
+html body #page .pg-kind-side .frm-act { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+html body #page .pg-kind-side .frm-act button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 46px; padding: 0 22px; border-radius: 13px; font-size: 14.5px; font-weight: 600; }
+html body #page .pg-kind-side .frm-act button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+html body #page .pg-kind-side .frm-act button:not(.pri) { background: #1a2236; border: 1px solid var(--uk-line); color: var(--text); }
+html body #page .pg-kind-side .frm-act button.pri { background: linear-gradient(180deg, #1c63f5, #0f46c8); border: 1px solid rgba(120, 170, 255, .4); color: #fff; box-shadow: 0 6px 18px rgba(20, 90, 255, .3); padding: 0 26px; }
+html[data-mode="light"] body #page .pg-kind-side, html[data-mode="light"] body #page .pg-kind-paste { background: #fff; border-color: rgba(30, 50, 100, .14); }

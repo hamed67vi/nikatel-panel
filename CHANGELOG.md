@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.46 - The Add account type form in two columns, the tab named Api & Key
+
+- **Add account type:** two columns after the owner's picture - on the left the drawers of the protocols (a tile, the name, the count; the kinds inside in two columns, each with its little picture, the chosen one in blue; one drawer open at a time), on the right one card with the note of the kind, the fields in pairs with a picture tile (name, address, core, port, group, the user template), *More*, *Check* and *Make it…*; the paste-a-link row on top has its tile and *Use*.
+- **Settings:** the tab *API* is named *Api & Key*.
+
 ## 1.57.45 - Only the useful facts of the panel, smaller
 
 - **Settings → About & update:** the strip of facts shows only what is of use to the user - *Works by: API based*, the mode, the tunnel checks, the server checks, the session - smaller; the SSH workers, the log level, the port and the env file are not shown (the env file stays in the tooltip of the strip).
