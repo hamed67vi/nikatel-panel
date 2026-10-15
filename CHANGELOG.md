@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.1 - The update card waits for the new run
+
+- After the click on Update the percentage ignores what the log says of an older run (a finished or a failed one) until the new run has started (at most 20 s), so it never says Updated or Failed too early. Found by the full walk.
+
 ## 1.56.0 - The full test of everything so far
 
 - The whole suite, the real test of all 17 kinds of account on a throw-away PasarGuard, a walk through every page and a smoke test of every read route of the live test panel. Found and fixed: the Lab page that did not load (1.55.22), a timer kept on `window` by the update card, and six tests that still described the old Add server box.

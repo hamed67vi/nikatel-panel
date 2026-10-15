@@ -3856,13 +3856,14 @@ window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; 
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutWatch(true); } catch (e) { toast("✕ " + e.message, "bad"); } };
 let aboutTimer = null;      // the timer of the progress of an update
 window.aboutWatch = fresh => {      // the update runs: only its percentage (the owner, 2026-10-15: no log box); the bar waits while the panel restarts, and the page reloads when it is done
-  if (aboutTimer) return; let last = 3, stale = !!fresh;
+  if (aboutTimer) return; let last = 3, stale = !!fresh; const t0 = Date.now();
   document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = true; });
   const draw = (txt, cls, pct) => { const b = $("#about-box"); if (!b) return false; b.innerHTML = `<span class="${cls}">${txt}</span><i class="about-bar"><u style="width:${pct}%"></u></i>`; return true; };
   const tick = async () => {
     let u = null; try { u = await api("/api/system/update"); } catch (e) { /* the panel restarts: the bar waits */ }
     const p = u && u.progress;
-    if (p && !(stale && p.state === "done")) { stale = false; last = Math.max(last, p.percent); }      // (a finished run of before the click is not this one)
+    if (p && stale && (p.state === "running" || Date.now() - t0 > 20000)) stale = false;      // (what the log says of a run before the click is not this one: wait for the new run, at most 20 s)
+    if (p && !stale) last = Math.max(last, p.percent);
     if (p && !stale && p.state === "done") { aboutTimer = null; draw("Updated 100%", "gw-ok", 100); setTimeout(() => location.reload(), 1200); return; }
     if (p && !stale && p.state === "failed") { aboutTimer = null; draw("The update did not finish: the old version stays", "err", last); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
     if (!draw(`Updating… ${last}%`, "mut", last)) { aboutTimer = null; return; }
