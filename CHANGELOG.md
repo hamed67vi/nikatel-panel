@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.24 - The lamp of a server is one small dot
+
+- **Server icons (the owner):** no disc and no ring behind them; the icon stays black-and-white and its state is ONE small round lamp on its corner, like the dots of *up / down / unstable* - green, yellow, red or blue.
+
 ## 1.56.23 - Fixed boxes, a quiet lamp, a finer load bar
 
 - **Fixed boxes (the owner):** the tunnels, every tab of the DNS page (Records, Changes, Accounts, Failover) and the box of the Doctor keep one size, fitted to the window; the list scrolls inside.

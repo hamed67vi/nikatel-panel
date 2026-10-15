@@ -437,7 +437,7 @@ def test_fixed_boxes_names_only_buttons_disabled_without_items_and_the_server_ic
     assert "function fxFit()" in app and 'class="lbox full fx-box dns-box"' in app and 'class="card ap-tasks fx-box"' in app
     assert '!accounts.length ? "accounts"' in app and '!accounts.length && k !== "accounts" ? \'disabled title="Add an account first"\'' in app
     assert "html body #page .fx-box { height: calc(100vh - 290px)" in css and ".toolbar.is-empty :is(.tf-tabs, .tb-search)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
-    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and "inset 0 0 0 1px color-mix(in srgb, var(--lamp" in css and "tr.sev-yellow { --lamp: #ffc44d" in css
+    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".srv-ic::before { content: \"\"; position: absolute; top: -2px; right: -5px; width: 9px; height: 9px; border-radius: 50%;" in css and "tr.sev-yellow { --lamp: #ffc44d" in css
     assert ".lab-cpu .bar { flex: 0 1 96px" in css and "linear-gradient(90deg, #0a62ff, #4aa8ff)" in css
 
 

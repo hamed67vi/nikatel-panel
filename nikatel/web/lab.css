@@ -272,7 +272,7 @@ html body .ss-ht .about-bar u { position: relative; border-radius: 999px; backgr
 html body .ss-ht .about-bar u::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); transform: translateX(-100%); animation: aboutShine 1.6s ease-in-out infinite; }
 @keyframes aboutShine { to { transform: translateX(100%); } }
 html body .ss-ht #about-box .mut { font-variant-numeric: tabular-nums; }
-/* 1.56.22/23 - the icon of a server is never coloured: white in the dark theme, dark in the light one; behind it a small lamp (a soft disc with a thin ring, not a glow): green when it is well, yellow with a problem, red when it is cut, blue while the panel works on it (the owner) */
+/* 1.56.22/24 - the icon of a server is never coloured: white in the dark theme, dark in the light one; its status is ONE small round lamp on its corner (the owner: "not in a circle, a lamp like the dots of up / down / unstable"): green when it is well, yellow with a problem, red when it is cut, blue while the panel works on it */
 html body #page .srv-ic { position: relative; color: var(--text) !important; filter: none !important; transform: none; }
 html[data-mode="light"] body #page .srv-ic { color: #1b2540 !important; }
 html body #page .srv-ic > * { position: relative; z-index: 1; }
@@ -280,7 +280,7 @@ html body #page .srv-ic .b { stroke: currentColor !important; fill: color-mix(in
 html body #page .srv-ic .led { fill: currentColor !important; animation: none !important; opacity: 1 !important; }
 html body #page .srv-ic img.lab-logo { filter: grayscale(1) brightness(1.5); }
 html[data-mode="light"] body #page .srv-ic img.lab-logo { filter: brightness(0) opacity(.85); }
-html body #page .srv-ic::before { content: ""; position: absolute; inset: -4px; border-radius: 50%; z-index: 0; pointer-events: none; background: color-mix(in srgb, var(--lamp, transparent) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lamp, transparent) 45%, transparent); transition: background .3s, box-shadow .3s; }
+html body #page .srv-ic::before { content: ""; position: absolute; top: -2px; right: -5px; width: 9px; height: 9px; border-radius: 50%; z-index: 2; pointer-events: none; background: var(--lamp, transparent); box-shadow: 0 0 0 2px var(--bg), 0 0 8px color-mix(in srgb, var(--lamp, transparent) 70%, transparent); transition: background .3s, box-shadow .3s; }      /* the lamp: one small round light on the corner of the icon, like the dots of "up / down / unstable" (no disc, no ring) */
 html body #page tr.up { --lamp: #3ddc97; } html body #page tr.sev-blue { --lamp: #4da3ff; } html body #page tr.sev-yellow { --lamp: #ffc44d; }
 html body #page tr.down, html body #page tr.sev-red { --lamp: #ff6b8b; } html body #page tr.srv-off { --lamp: transparent; }
 html body #page .toolbar.joined { align-items: center; }
