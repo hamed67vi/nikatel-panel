@@ -257,7 +257,7 @@ def test_the_list_of_servers_has_an_ip_column_in_place_of_the_state_column_and_s
     """The owner, 2026-10-15: "remove this column" (State · last 24 h), "a column with the IP of the servers instead", "show the numbers of the traffic right"."""
     lab = _web("lab.js")
     assert "State · last 24 h" not in lab and "labStateHtml" not in lab and "labGreTag" not in lab and "labCells" not in lab and "LAB.strips" not in lab
-    assert '<th data-prio="1">IP</th>' in lab and 'class="lab-ip mono" title="${esc(s.host)}">${esc(s.host)}</td>' in lab
+    assert '<th data-prio="1">IP</th>' in lab and 'class="lab-ip mono" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); copyText(this.dataset.ip)"' in lab and 'const addr = d ? d.address : p.address' in lab          # (an address is copied by a click; a node shows no port)
     assert "/api/profiles/strips" not in lab                                                         # the list does not ask for the strips any more
     assert lab.count('<col style="width:') == 6 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
     assert ".lab-ip {" in _web("lab.css")

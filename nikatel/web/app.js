@@ -995,14 +995,14 @@ window.saveServer = async (e, id) => {
       try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); api(`/api/servers/${saved.id}/gre-check`, {method: "POST"}).catch(() => {}).then(() => refresh()); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
     refresh(); state.prefill = null;
-    if (items.length && connected) {   // the extras run in one story the operator can follow (and minimise)
-      const r = await api(`/api/servers/${saved.id}/install`, {method: "POST", body: JSON.stringify({items, cert})});
-      showModal(`<b>⬇ Installing on ${esc(body.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
-      await followStory(r.id, $("#ap-story"), 400); refresh();
-    } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
-    if (pgNode && connected) { await pgSrvMake(saved.id, body.name, pgNode); refresh(); }      // the node of the PasarGuard panel: the flow of the Nodes tab, after the other installs
+    if (pgNode && connected) { await pgSrvMake(saved.id, body.name, pgNode); refresh(); }      // the node of the PasarGuard panel FIRST (it is what was asked for; the steps are on the row of the server)
     else if (pgNode) toast("The server is added, but it does not log in yet, so the node is not made: fix the login, then use Install → PasarGuard node in the window of the server", "bad");
-  } catch (err) { toast("✕ " + err.message, "bad"); }
+    if (items.length && connected) {   // then the extras (the torrent block applies thousands of rules: minutes); the row says "installing"
+      const r = await api(`/api/servers/${saved.id}/install`, {method: "POST", body: JSON.stringify({items, cert})});
+      toast(`Installing on ${body.name}: the steps show on its row`); refresh();
+      const fin = await followStory(r.id, document.createElement("div"), 1800), lastLine = fin && fin.story ? [...fin.story].reverse().find(l => l && l.trim() && !/^Done/.test(l.trim())) : "";
+      toast(fin && fin.ok ? `✓ Installed on ${body.name}` : "✕ " + String(lastLine || "Not finished").trim().slice(0, 200), fin && fin.ok ? "ok" : "bad"); refresh();
+    } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");  } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;
 };
 window.srvPassword = async (id, name) => {

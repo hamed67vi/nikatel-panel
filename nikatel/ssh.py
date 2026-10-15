@@ -267,6 +267,9 @@ done
 echo NO_CERT
 """, {}),
 
+    # read-only: who listens on the two ports of a PasarGuard node (62050 / 62051) - "62050 users:(("python",pid=1004,fd=6))" - so the plan can say a port is taken BEFORE anything is installed
+    "ports_busy": (r"""ss -ltnpH 2>/dev/null | awk '{n=split($4,a,":"); p=a[n]; if (p==62050 || p==62051) print p" "$6}' | sort -u | head -4; true
+""", {}),
     "ping_host": (r"""ping -c 4 -W 2 -i 0.4 '@HOST@' 2>&1 | grep -E 'packets transmitted|rtt'; true
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$"}),
 

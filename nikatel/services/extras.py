@@ -233,6 +233,20 @@ def resume_pending() -> None:
         threading.Thread(target=_work, args=(row["aid"], row["server_id"], row["items"], row.get("cert", ""), True), name=f"install-resume-{row['aid']}", daemon=True).start()
 
 
+def ports_busy(server_id: int) -> list[str]:
+    """Who already listens on the ports a PasarGuard node needs (62050, 62051) on this server, as sentences ("port 62050 by python (pid 1004)"); empty = both are free (read-only over SSH)."""
+    node, _name, _ip = _node(server_id)
+    out = []
+
+    for ln in run_script(node, "ports_busy", timeout=30).splitlines():
+        m = re.match(r"^(\d+)\s+(.*)$", ln.strip())
+
+        if m:
+            who = re.search(r'\(\("([^"]+)",pid=(\d+)', m.group(2))
+            out.append(f"port {m.group(1)} by {who.group(1)} (pid {who.group(2)})" if who else f"port {m.group(1)}")
+
+    return out
+
 def pasarguard_cert(server_id: int) -> dict:
     """The public certificate the PasarGuard node made, to be set in the PasarGuard panel (read-only on the server)."""
     node, _name, _ip = _node(server_id)

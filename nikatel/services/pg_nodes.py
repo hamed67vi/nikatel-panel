@@ -1165,6 +1165,17 @@ def make_plan(c: dict, server_id: int, opts: dict | None = None, resolver: Resol
         except ValueError:
             installed = False                      # it answered: there is no node certificate, so no node yet
 
+    if installed is False:          # the node is not there: its two ports must be free, or the installer stops at once (the owner, 2026-10-15: the install on ind took minutes and ended with "port 62050 is already in use")
+        try:
+            taken = extras.ports_busy(server_id)
+        except (SSHError, ValueError):
+            taken = []
+
+        if taken:
+            who = "; ".join(taken)
+            problems.append(f"A PasarGuard node needs the ports {NODE_PORT} and {API_PORT}, and this server has them taken: {who}. If that is an old Marzban or PasarGuard node, remove it first; "
+                            "or install the node by hand on other ports and add it with Add node. Nothing was changed on the server.")
+
     o = make_options(opts, srv["name"], installing=installed is not True)
     nodes, clash, elsewhere = _node_on(c, srv, resolver)
 

@@ -323,13 +323,14 @@ def auto_nodes(db: Session, panel: Panel, tag: str = NODE_TAG, force: bool = Fal
     if panel.type != "pasarguard":
         return 0
 
+    own = {s.host for s in db.scalars(select(Server).where(Server.id.in_(select(Profile.server_id).where(Profile.server_id.is_not(None)))))}          # (a node that runs on a server of ours that is on the page is that server's row - the lion on its icon - not a second row)
     made, skipped = 0, set() if force else _skip(db)          # (force = the Sync button: the nodes he took off the page are brought back too)
 
     if force:
         _set_skip(db, {k for k in _skip(db) if not k.startswith(f"{panel.id}:")})
 
     for n in panel.nodes or []:
-        if not isinstance(n, dict) or not isinstance(n.get("id"), int) or f"{panel.id}:{n['id']}" in skipped:
+        if not isinstance(n, dict) or not isinstance(n.get("id"), int) or f"{panel.id}:{n['id']}" in skipped or str(n.get("address") or "") in own:
             continue
 
         if db.scalar(select(Profile.id).where(Profile.kind == "node", Profile.panel_id == panel.id, Profile.node_id == n["id"])) is None:

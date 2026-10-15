@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.56.3 - Add a server to a PasarGuard node: checked from the start to the end
+
+- **The plan looks at the ports first:** before anything is installed it asks the server who listens on 62050 and 62051; a taken port is a problem the first line of the message names ("port 62050 by python (pid ...)"), so an install that would stop after minutes does not start. Nothing is changed on the server.
+- **The node first, the torrent block after:** when both are ticked the PasarGuard node is made first (it is what was asked for), then the torrent block (thousands of rules, minutes) runs and the row says "installing - torrent block"; no big window - the steps are on the row, the end says in a message.
+- **A node that runs on a server of ours that is on the page is that server's row** (with the lion icon), not a second row; Sync still brings a node in that is not on any row.
+
 ## 1.56.2 - The IP column: no port, a click copies
 
 - The IP column of the Lab shows the address only (a node showed its port after it), and a click on an address **copies it** (the toast says what was copied), as the old list did.
