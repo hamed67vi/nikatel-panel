@@ -1,11 +1,11 @@
-/* Settings → PasarGuard (the owner, 2026-10-14: "add the update of the nodes and of PasarGuard itself to Settings"). ONE card of Settings: the newest releases of PasarGuard, its node and Xray (GitHub, kept an hour
+/* Settings → About & update, its right column (the owner, 2026-10-14: "add the update of the nodes and of PasarGuard itself to Settings"; 2026-10-16: "move it to About & update"): the newest releases of PasarGuard, its node and Xray (GitHub, kept an hour
    by the panel), every PasarGuard panel with the version it runs and the server that runs it, and every node with its software and Xray - each marked when it is behind. Nothing is automatic: an update is a
    click and a question. Nodes are updated ONE AT A TIME (each must be connected again with the new version before the next; one that does not come back stops the run), the panel itself on its own server
    with the official command (a backup first, the name of the panel typed back). Both are actions of the panel with a story that this file follows.
    Routes used: GET /api/pg-updates, GET /api/pg-updates/panels/{id}/plan, POST /api/pg-updates/panels/{id}, POST /api/pg-updates/nodes, GET /api/actions/{id}.
    Uses the helpers of app.js: $, api, esc, toast, showModal, closeModal, gconfirm, gprompt, followStory, go, state, SI, sFrame, sHero, sGrp, sItem, sWide. */
 const pgu = {data: null, at: 0};
-window.pgUpdCard = () => sFrame("PasarGuard", "Update the PasarGuard panels and their nodes: the newest releases, what each one runs, one click.", '<span class="pill" id="pgu-pill">…</span>', '<div id="pgu-box"><div class="mut" style="padding:8px 4px">reading the panels and GitHub…</div></div>');
+window.pgUpdBody = () => `<div class="abt-pg"><div class="abt-h"><i>${SI.box}</i><b>PasarGuard</b><small class="mut">the panels and their nodes: the newest releases, what each one runs, one click</small><span class="pill" id="pgu-pill">…</span></div><div id="pgu-box"><div class="mut" style="padding:8px 4px">reading the panels and GitHub…</div></div></div>`;      // drawn by the About & update page of Settings (app.js), filled by pgUpdLoad
 
 const pguShort = v => String(v || "").replace(/^v/, "");
 const pguVer = (now, latest, behind) => behind === true ? `<span class="pgu-v warn" title="${esc(`runs ${now || "?"}, the newest is ${latest}`)}">${esc(pguShort(now) || "?")} <i>→</i> <b>${esc(pguShort(latest))}</b></span>`

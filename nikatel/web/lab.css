@@ -556,3 +556,37 @@ html[data-mode="light"] body .nk-dd .nk-dd-i { color: #1b2540; } html[data-mode=
 /* 1.57.33 - the page area keeps ONE width whether the page needs a scrollbar or not (a page without one shifted everything 10 px to the right - the owner, 2026-10-16: "the page jumps when I switch"); the why line under a verdict of a story */
 @media (min-width: 761px), (pointer: fine) { html body .main { scrollbar-gutter: stable; } }
 html body .fx-line .fx-why { display: block; margin-top: 3px; font-style: normal; font-weight: 400; line-height: 1.4; color: var(--mut); }
+
+/* 1.57.34 - Settings → About & update in two compact columns (the owner, 2026-10-16): the panel + license + tunnel cores on the left, PasarGuard (panels, nodes) on the right, the service facts in small print under both */
+html body #page .sf .abt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+html body #page .sf .abt-col { display: grid; gap: 10px; align-content: start; min-width: 0; }
+@media (max-width: 1000px) { html body #page .sf .abt-grid { grid-template-columns: minmax(0, 1fr); } }
+html body #page .abt-grid .ss-hero { width: auto; max-width: none; margin: 0 !important; padding: 8px 12px !important; }
+html body #page .abt-grid .ss-hero .ss-ic { width: 30px; height: 30px; }
+html body #page .abt-grid .ss { margin: 0; }
+html body #page .abt-grid .ss-rows .sr.x { padding: 6px 8px; }
+html body #page .abt-grid .eng-bar { margin-bottom: 4px; font-size: 11px; display: flex; align-items: center; gap: 8px; }
+html body #page .abt-grid .eng-bar button { margin-left: auto; height: 26px; }
+html body #page .abt-grid .eng-head, html body #page .abt-grid .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 8px; padding: 4px 10px; }
+html body #page .abt-grid .eng-head { font-size: 10px; }
+html body #page .abt-grid .eng-row { margin-bottom: 4px; font-size: 12px; }
+html body #page .abt-grid .eng-row .eng-act button { height: 26px; font-size: 11.5px; }
+html body #page .abt-grid .lic-top b { font-size: 12.5px; }
+html body #page .abt-grid .lic-feats { margin: 6px 0; }
+html body #page .abt-grid .lic-top small { font-size: 11px; }
+html body #page .abt-grid .lic-feats .pill { height: 22px; font-size: 11px; }
+html body #page .abt-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 30px; padding: 0 2px; font-size: 13px; }
+html body #page .abt-h i { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 9px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; }
+html body #page .abt-h i svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .abt-h small { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+html body #page .abt-h .pill { margin-left: auto; }
+html body #page .abt-pg #pgu-box { display: grid; gap: 10px; }
+html body #page .abt-pg .pgu-row { min-height: 30px; font-size: 12px; gap: 8px; }
+html body #page .abt-pg .pgu-row.pgu-hd { min-height: 24px; }
+html body #page .abt-pg .pgu-row button { height: 24px; font-size: 11.5px; }
+html body #page .abt-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; padding: 7px 12px; border: 1px solid var(--uk-line); border-radius: 12px; font-size: 11px; color: var(--mut); }
+html body #page .abt-foot span { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+html body #page .abt-foot em { font-style: normal; text-transform: uppercase; letter-spacing: .5px; font-size: 9.5px; }
+html body #page .abt-foot b { font-size: 11.5px; font-weight: 600; color: var(--text); }
+html body #page .abt-foot code { font-size: 10.5px; }
+html[data-mode="light"] body #page .abt-h i { background: #f3f6fc; border-color: rgba(30, 50, 100, .16); color: #4a5a7e; }

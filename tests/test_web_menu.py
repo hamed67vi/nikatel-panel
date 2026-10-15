@@ -781,3 +781,13 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
     assert "function nkDdOpen(sel) {" in app and 'select[data-dd]' in app and '<select name="ttype" data-dd data-ddw="470"' in app and '<select name="iran_id" required data-dd' in app and "html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }" in css
     assert "const apWhy = s => {" in app and 'apWhyHtml(s)' in app and "html body .fx-line .fx-why {" in css
     assert 'a.classList.toggle("nav-nopanel", dim)' in lab and "window.labNoPanel = () =>" in lab and "html body nav a.nav-nopanel { opacity: .38;" in css and 'const nop = k => k !== "settings" && state.page === "pgpanel" && window.labNoPanel && labNoPanel();' in app
+
+
+def test_about_and_update_in_two_columns_with_the_pasarguard_update_inside():
+    """The owner, 2026-10-16: "move my PasarGuard update section here, write the service facts very small, all the sections in two neat compact columns"."""
+    app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
+    assert '`<div class="abt-grid"><div class="abt-col">`' in app and '`</div><div class="abt-col">${window.pgUpdBody ? pgUpdBody() : ""}</div></div>`' in app and '<div class="abt-foot" title="set in ${esc(s.env_file)} on the panel server' in app
+    assert 'pgupd: ["🧩 PasarGuard"' not in app and "pgUpdCard" not in app and 'if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }' in app and "pgupd: SI.box" not in app
+    assert "window.pgUpdBody = () => `<div class=\"abt-pg\"><div class=\"abt-h\">" in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
+    assert "html body #page .sf .abt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in css and "html body #page .abt-foot {" in css and "font-size: 11px; color: var(--mut); }" in css
+    assert 'void m.offsetWidth; m.classList.add("open");' in app

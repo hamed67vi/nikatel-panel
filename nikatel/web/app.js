@@ -500,7 +500,7 @@ function nkDdOpen(sel) {
   const below = innerHeight - r.bottom - 14, above = r.top - 14, h = Math.min(m.scrollHeight + 14, Math.floor(innerHeight * 0.64)), up = below < Math.min(h, 260) && above > below;
   m.style.maxHeight = Math.max(160, Math.min(h, up ? above : below)) + "px"; m.style.top = up ? Math.max(8, r.top - 6 - Math.min(h, above)) + "px" : r.bottom + 6 + "px";
   const on = m.querySelector(".nk-dd-i.on"); if (on) on.scrollIntoView({block: "center"});
-  requestAnimationFrame(() => m.classList.add("open"));
+  void m.offsetWidth; m.classList.add("open");
   document.addEventListener("mousedown", nkDdOut, true); document.addEventListener("keydown", nkDdKey, true); document.addEventListener("scroll", nkDdScroll, true); window.addEventListener("resize", nkDdClose);
 }
 document.addEventListener("mousedown", e => { const s = e.target.closest && e.target.closest("select[data-dd]"); if (s && !s.disabled && e.button === 0) { e.preventDefault(); s.focus(); nkDdOpen(s); } }, true);
@@ -3871,21 +3871,21 @@ PAGES.settings = async () => {
         rows: sRow("Day / night", sIc(SI.moon, sSel("mode", [["dark", "Night"], ["light", "Day"], ["auto", "Follow my device"]], LOOK.mode, `onchange="lookSet('mode', this.value)"`))) + sRow("Text size", sIc(SI.aa, sSel("size", [["small", "Small"], ["normal", "Normal"], ["large", "Large"]], LOOK.size, `onchange="lookSet('size', this.value)"`))) + sRow("Animations", sIc(SI.pulse, sSel("anim", [["calm", "Calm (default)"], ["rich", "Rich: moving backgrounds"], ["off", "Off (lightest)"]], LOOK.anim, `onchange="lookSet('anim', this.value)"`)), "Calm: nothing moves by itself"),
         acts: '<button type="button" class="sm" onclick="lookReset()"><i class="bi">' + SI.reset + '</i>Reset the look</button>'}));
 
-  /* about & update */
-  const about = sFrame("About & update", "This panel, the tunnel cores on your servers, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
-    `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small></small></div><div class="ss-hr"><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div>`
+  /* about & update: two compact columns (the owner, 2026-10-16) - left: this panel (update from GitHub), its license, the tunnel cores; right: the PasarGuard panels and their nodes (pg_update.js); under both, what the service runs with, in small print */
+  const facts = [["Mode", ro ? "read-only" : "read-write"], ["Server sampling", `every ${s.server_sample_interval} s`], ["Tunnel checks", `every ${s.tunnel_check_interval} s`], ["Parallel SSH", s.ssh_workers], ["Session", `${s.session_hours} h`], ["Log level", esc(s.log_level)], ["Port", s.listen_port]];
+  const about = sFrame("About & update", "This panel, its license, the tunnel cores on your servers, the PasarGuard panels and their nodes, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
+    `<div class="abt-grid"><div class="abt-col">`
+    + `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small></small></div><div class="ss-hr"><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div>`
     + sGrp({icon: SI.shield(false), title: "License", desc: "which features this install may use", cls: "x flat", rows: '<div class="sr x" id="lic-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x flat", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
-    + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x flat",
-        rows: sWide(`<div class="eff-grid"><span><em>Mode</em><b>${ro ? "read-only" : "read-write"}</b></span><span><em>Server sampling</em><b>every ${s.server_sample_interval} s</b></span><span><em>Tunnel checks</em><b>every ${s.tunnel_check_interval} s</b></span><span><em>Parallel SSH</em><b>${s.ssh_workers}</b></span><span><em>Session</em><b>${s.session_hours} h</b></span><span><em>Log level</em><b>${esc(s.log_level)}</b></span><span><em>Port</em><b>${s.listen_port}</b></span></div>`)}));
-
+    + `</div><div class="abt-col">${window.pgUpdBody ? pgUpdBody() : ""}</div></div>`
+    + `<div class="abt-foot" title="set in ${esc(s.env_file)} on the panel server, then systemctl restart nikatel">${facts.map(([k, v]) => `<span><em>${k}</em><b>${v}</b></span>`).join("")}<span><em>Env file</em><code>${esc(s.env_file)}</code></span></div>`);
   /* security: filled by secLoad */
   const security = sFrame("Security", "How the panel is protected, and your password.", '<span class="pill" id="sec-pill">…</span>', '<div id="sec-box"><div class="mut">loading…</div></div>');
 
-  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${window.pgUpdCard ? pgUpdCard() : ""}${about}</div>`;
+  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${about}</div>`;
   settingsTabs();
-  if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); }
-  if (state.stab === "pgupd" && window.pgUpdLoad) pgUpdLoad();
+  if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }
   if ($("#sec-box")) secLoad();
 };/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
 const sec = {setup: null, codes: null};
@@ -4002,7 +4002,7 @@ window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOO
 window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
-const TAB_SVG = {account: SI.shield(false), alerts: SI.bell, backup: SI.save, probe: SI.bolt, ai: SI.bot, bot: SI.cart, look: SI.paint, pgupd: SI.box, update: SI.arrowUp};      // the tabs whose emoji is drawn as a line icon
+const TAB_SVG = {account: SI.shield(false), alerts: SI.bell, backup: SI.save, probe: SI.bolt, ai: SI.bot, bot: SI.cart, look: SI.paint, update: SI.arrowUp};      // the tabs whose emoji is drawn as a line icon
 const SET_TABS = {
   account: ["🛡 Security", "Two-step sign-in, recovery codes, the secret entry path and your password.", ["Security"]],
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the rules, the daily report and maintenance windows.", ["Alerts"]],
@@ -4011,8 +4011,7 @@ const SET_TABS = {
   ai: ["🤖 AI", "The AI assistant that explains problems and helps the Tunnel Doctor.", ["AI assistant"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
-  pgupd: ["🧩 PasarGuard", "Update the PasarGuard panels and their nodes: the newest releases, what each one runs, one click.", ["PasarGuard"]],
-  update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, and the settings the service runs with.", ["About & update"]],
+  update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, the PasarGuard panels and their nodes, and the settings the service runs with.", ["About & update"]],
 };
 function settingsTabs() {
   const cur = SET_TABS[state.stab] ? state.stab : "account";

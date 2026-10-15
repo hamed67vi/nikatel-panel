@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.34 - About & update in two columns, with the PasarGuard update inside
+
+- **Settings → About & update:** two compact columns - on the left this panel (update from GitHub), its license and the tunnel cores; on the right the PasarGuard panels and their nodes (the section that was a tab of its own: *Settings → PasarGuard* is gone); under both, what the service runs with, in small print.
+- **Create tunnel:** the kit menu of a select opens even in a browser tab that is not on the screen.
 ## 1.57.33 - The Tunnel Doctor after the picture, tab switches that do not jump, kit menus in Create tunnel
 
 - **Tunnel Doctor:** rebuilt after the owner's design picture - three mode cards (*Doctor Mode* with its Off chip, *Auto Fix Tunnels*, *Auto Move to Iran Server*; the chosen one lit, with a tick, the number of a mode in its own card with little arrows), the box of *Active Tasks / Completed / Auto Moves / Analytics* with *Explain*, the state chip, *How it works* (a window that explains the three modes and the moves) and *All nodes* (the lists narrowed to one server) on its right, and a dashed empty box with a friendly line. A mode is switched in place (no redraw), the box keeps ONE size for every tab.
