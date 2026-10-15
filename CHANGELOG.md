@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.15 - Quiet arrows
+
+- **Lab (the owner):** the arrows of *Traffic used* and *Traffic Mbit/s* have the colour of the small text under the load (green and pink are gone).
+
 ## 1.57.14 - No node version line, quiet icons in the Doctor tabs
 
 - **Lab (the owner):** the version line under a node's name is gone (one node had it, two did not).

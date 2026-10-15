@@ -456,3 +456,5 @@ html body #page .lab-tbl td.name .lab-iss.bad { color: #ff8a9b; background: rgba
 html body #page .lab-tbl td.name .lab-iss.warn { color: #f5b94a; background: rgba(245, 185, 74, .14); border-color: rgba(245, 185, 74, .4); }
 html body #page .lab-tbl td.name .lab-iss.more { color: var(--mut); background: rgba(255, 255, 255, .06); border-color: var(--uk-line); }
 html[data-mode="light"] body #page .lab-tbl td.name .lab-iss.bad { color: #c0213b; background: #ffe7ec; } html[data-mode="light"] body #page .lab-tbl td.name .lab-iss.warn { color: #9a6200; background: #fff3d6; }
+/* 1.57.15 - the arrows of the traffic columns have the colour of the small text under the load ("RAM 35 % · Disk 33 %"), the kit's muted text colour (the owner) */
+html body #page .lab-tbl .lab-trf .ta.d, html body #page .lab-tbl .lab-trf .ta.u { color: var(--mut); }

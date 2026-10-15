@@ -618,3 +618,9 @@ def test_a_node_row_has_no_version_line():
     lab = _web("lab.js")
     node = lab.split("function labNodeRowHtml(p) {", 1)[1].split("const labGoneRow", 1)[0]
     assert "ver" not in re.findall(r"\b(ver)\b", node) and "d.version" not in node and "<small>" not in node.split('class="lab-nm"', 1)[1].split("</div>", 1)[0]
+
+
+def test_the_traffic_arrows_have_the_colour_of_the_small_text_under_the_load():
+    """The owner, 2026-10-15: "only the colour of the arrows like the colour of this text (RAM 35 % · Disk 33 %)"."""
+    css = _web("lab.css")
+    assert ".lab-tbl .lab-trf .ta.d, html body #page .lab-tbl .lab-trf .ta.u { color: var(--mut); }" in css and ".lab-ldw small { color: var(--mut);" in css
