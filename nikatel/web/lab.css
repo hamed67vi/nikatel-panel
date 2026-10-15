@@ -536,23 +536,27 @@ html body nav a.nav-nopanel { opacity: .38; filter: grayscale(1); pointer-events
 html body nav a.nav-nopanel::before, html body nav a.nav-nopanel::after { display: none !important; }
 html[data-mode="light"] body nav a.nav-nopanel { opacity: .45; }
 
-/* 1.57.33 - the kit menu of a select (nkDd in app.js): flat dark card, a heading for every group, a tick before the chosen item, the highlighted item in kit blue */
-html body .nk-dd { position: fixed; z-index: 100000; box-sizing: border-box; overflow: auto; padding: 6px; border-radius: 14px; background: #0f1424; border: 1px solid var(--uk-line); box-shadow: 0 18px 48px rgba(0, 0, 0, .55), 0 0 0 .5px rgba(0, 0, 0, .6); scrollbar-width: thin; opacity: 0; transform: translateY(-4px) scale(.985); transition: opacity .14s ease, transform .14s ease; }
+/* 1.57.43 - the kit menu of a select or a field with a list (nkDd in app.js), after the owner's picture: a dark card with big round corners, the groups in spaced capitals with a line between them, every item a little picture tile + the name + its note under it, thin lines between the items; the chosen one on a soft blue ground with a blue tick at the right */
+html body .nk-dd { position: fixed; z-index: 100000; box-sizing: border-box; overflow: auto; padding: 8px 10px 10px; border-radius: 22px; background: #0f1829; border: 1px solid rgba(255, 255, 255, .1); box-shadow: 0 24px 64px rgba(0, 0, 0, .6), 0 0 0 .5px rgba(0, 0, 0, .7); scrollbar-width: thin; scrollbar-color: #3a4766 transparent; opacity: 0; transform: translateY(-4px) scale(.985); transition: opacity .14s ease, transform .14s ease; }
 html body .nk-dd.open { opacity: 1; transform: none; }
-html body .nk-dd .nk-dd-g { padding: 10px 10px 4px 34px; font-size: 11px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: #8f9bbd; }
-html body .nk-dd .nk-dd-g:first-child { padding-top: 5px; }
-html body .nk-dd .nk-dd-i { display: flex; align-items: center; gap: 9px; box-sizing: border-box; width: 100%; height: 34px; margin: 0; padding: 0 12px 0 10px; border: 0; border-radius: 9px; background: transparent; box-shadow: none; color: #e3e9f8; font-size: 13.5px; font-weight: 500; text-align: left; white-space: nowrap; cursor: pointer; }
-html body .nk-dd .nk-dd-i:hover:not([disabled]), html body .nk-dd .nk-dd-i.hl:not([disabled]) { background: #2f7bf5; color: #fff; }
-html body .nk-dd .nk-dd-ck { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
-html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }
-html body .nk-dd .nk-dd-t { flex: none; font-weight: 600; }
-html body .nk-dd .nk-dd-n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 400; color: #8f9bbd; }
-html body .nk-dd .nk-dd-i:hover:not([disabled]) .nk-dd-n, html body .nk-dd .nk-dd-i.hl:not([disabled]) .nk-dd-n { color: rgba(255, 255, 255, .82); }
+html body .nk-dd .nk-dd-g { padding: 12px 10px 6px; font-size: 12.5px; font-weight: 500; letter-spacing: 1.6px; text-transform: uppercase; color: #8793b3; }
+html body .nk-dd .nk-dd-g:first-child { padding-top: 8px; } html body .nk-dd .nk-dd-g:not(:first-child) { margin-top: 6px; border-top: 1px solid rgba(255, 255, 255, .07); padding-top: 16px; }
+html body .nk-dd .nk-dd-i { display: flex; align-items: center; gap: 14px; box-sizing: border-box; width: 100%; min-height: 54px; margin: 0; padding: 7px 12px 7px 8px; border: 1px solid transparent; border-bottom-color: rgba(255, 255, 255, .06); border-radius: 0; background: transparent; box-shadow: none; color: #eef2fb; font-size: 14.5px; font-weight: 500; text-align: left; cursor: pointer; }
+html body .nk-dd .nk-dd-i.noic { min-height: 40px; padding-left: 12px; }
+html body .nk-dd .nk-dd-i:hover:not([disabled]), html body .nk-dd .nk-dd-i.hl:not([disabled]) { background: rgba(255, 255, 255, .05); border-radius: 12px; }
+html body .nk-dd .nk-dd-i.on { background: rgba(70, 120, 230, .18); border-color: rgba(100, 150, 255, .22); border-radius: 12px; }
+html body .nk-dd .nk-dd-ic { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 12px; background: #1a2236; color: #d3dbef; font-style: normal; }
+html body .nk-dd .nk-dd-ic.blue { color: #4f9bff; } html body .nk-dd .nk-dd-ic.violet { color: #8f86f7; } html body .nk-dd .nk-dd-i.on .nk-dd-ic { background: #23407a; color: #6fa8ff; }
+html body .nk-dd .nk-dd-ic svg, html body .nk-dd .nk-dd-ck { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; } html body .nk-dd .nk-dd-ic svg { width: 21px; height: 21px; }
+html body .nk-dd .nk-dd-tx { display: grid; gap: 1px; flex: 1 1 auto; min-width: 0; }
+html body .nk-dd .nk-dd-t { font-size: 15px; font-weight: 500; line-height: 1.25; color: #f1f4fc; }
+html body .nk-dd .nk-dd-n { font-size: 13.5px; font-weight: 400; line-height: 1.3; color: #9aa6c4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body .nk-dd .nk-dd-star { display: inline-block; vertical-align: -2px; margin-left: 4px; font-style: normal; color: #4f9bff; } html body .nk-dd .nk-dd-star svg { width: 15px; height: 15px; fill: currentColor; stroke: none; }
+html body .nk-dd .nk-dd-ck { width: 20px; height: 20px; stroke-width: 2.4; color: #4f9bff; visibility: hidden; } html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }
 html body .nk-dd .nk-dd-i[disabled] { opacity: .4; cursor: default; }
 html[data-mode="light"] body .nk-dd { background: #fff; border-color: rgba(30, 50, 100, .16); box-shadow: 0 18px 48px rgba(30, 50, 100, .22); }
-html[data-mode="light"] body .nk-dd .nk-dd-i { color: #1b2540; } html[data-mode="light"] body .nk-dd .nk-dd-g, html[data-mode="light"] body .nk-dd .nk-dd-n { color: #6b7896; }
+html[data-mode="light"] body .nk-dd .nk-dd-i, html[data-mode="light"] body .nk-dd .nk-dd-t { color: #1b2540; } html[data-mode="light"] body .nk-dd :is(.nk-dd-g, .nk-dd-n) { color: #6b7896; } html[data-mode="light"] body .nk-dd .nk-dd-ic { background: #f1f4fa; color: #3d4b70; }
 @media (prefers-reduced-motion: reduce) { html body .nk-dd { transition: none; } }
-
 /* 1.57.33 - the page area keeps ONE width whether the page needs a scrollbar or not (a page without one shifted everything 10 px to the right - the owner, 2026-10-16: "the page jumps when I switch"); the why line under a verdict of a story */
 @media (min-width: 761px), (pointer: fine) { html body .main { scrollbar-gutter: stable; } }
 html body .fx-line .fx-why { display: block; margin-top: 3px; font-style: normal; font-weight: 400; line-height: 1.4; color: var(--mut); }
@@ -649,3 +653,15 @@ html body #page .sf .ss.bk-sched .ss-a { margin: 0 0 0 auto; padding: 0; } html 
 html body #page .sf .ss.api-tg .sr:nth-of-type(1) > .v input { width: 230px; } html body #page .sf .ss.api-tg .sr:nth-of-type(2) > .v input { width: 150px; }
 html body #page .sf .ss.api-tg .ss-a { display: flex; flex-wrap: wrap; gap: 6px; }
 html body #modal .alerts-win .ap-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--uk-line); font-size: 12.5px; } html body #modal .alerts-win .ap-row > a { margin-left: auto; cursor: pointer; }
+
+/* 1.57.42 - a text field with a list that opens as the kit menu (the model of the AI assistant) */
+html body #page .nk-combo { position: relative; display: block; width: 100%; }
+html body #page .nk-combo > input { width: 100%; box-sizing: border-box; padding-right: 38px; }
+html body #page .sf .nk-combo .nk-combo-b { position: absolute; top: 3px; right: 3px; bottom: 3px; display: grid !important; place-items: center; width: 30px; min-width: 30px; height: auto; min-height: 0; padding: 0 !important; border: 0; border-radius: 8px; background: transparent !important; box-shadow: none; color: #8f9bbd; cursor: pointer; }
+html body #page .sf .nk-combo .nk-combo-b:hover { color: #fff; background: rgba(255, 255, 255, .08) !important; }
+html body #page .sf .nk-combo .nk-combo-b svg { flex: none; width: 16px; min-width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 1.57.45 - the facts of the service: only the ones of use to the user, smaller (the owner, 2026-10-16) */
+html body #page .abt-foot { padding: 6px 8px; justify-content: flex-start; gap: 0; } html body #page .abt-foot > span { gap: 7px; padding: 0 14px; }
+html body #page .abt-fi { width: 24px; height: 24px; border-radius: 8px; } html body #page .abt-fi svg { width: 13px; height: 13px; }
+html body #page .abt-fv em { font-size: 10px; } html body #page .abt-fv b { font-size: 11.5px; }

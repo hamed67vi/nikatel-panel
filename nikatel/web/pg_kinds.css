@@ -36,7 +36,6 @@ html body #page .pg-kind-dr > summary::-webkit-details-marker { display: none; }
 html body #page .pg-kind-dr > summary::after { content: ""; flex: none; margin-left: auto; width: 7px; height: 7px; border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(45deg) translateY(-2px); transition: transform .25s cubic-bezier(.2, .9, .25, 1); }
 html body #page .pg-kind-dr[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
 html body #page .pg-kind-dr .pg-dr-c { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: rgba(255, 255, 255, .1); color: var(--mut); font-size: 11px; font-style: normal; font-weight: 600; }
-html body #page .pg-kind-dr .pg-dr-sel { margin-left: 6px; font-size: 12.5px; font-weight: 600; color: #8db4ff; }
 html body #page .pg-kind-dr .pg-kind-row { padding: 12px 16px 14px; border-top: 1px solid var(--uk-line); animation: pgKindDr .26s ease both; }
 @keyframes pgKindDr { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 html body #page .pg-kind-chip { height: 32px; border-radius: 10px; background: #1a2032 !important; border: 1px solid rgba(255, 255, 255, .11) !important; color: #e8ebf7; font-size: 13px; font-weight: 600; box-shadow: none; }

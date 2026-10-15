@@ -701,7 +701,7 @@ def test_autofill_stays_dark_inside_windows_and_the_panel_mode_switch_shows_the_
 def test_the_add_form_has_a_drawer_per_protocol_a_core_field_and_the_user_template_tick():
     """The owner, 2026-10-15: "arrange the make-a-config part, the suggested configs in order, VLESS in a drawer, the core can be chosen from there" - and, a little later, "bring the user template back"."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
-    assert '<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"' in js and 'class="pg-dr-sel"' in js and "if (own) d.open = true;" in js and "const pgKindShort = k =>" in js
+    assert '<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"' in js and 'class="pg-dr-sel"' not in js and "if (own) d.open = true;" in js and "const pgKindShort = k =>" in js
     assert 'name="template" checked' in js and "pgKindTplSync();" in js and "b.template = f.elements.template.checked;" in js and ".pg-kind-tpl .chk" in css
     form = js.split("function pgKindFormHtml(inline) {", 1)[1].split("</form>", 1)[0]
     assert form.count('name="core_id"') == 1 and form.index('name="core_id"') < form.index('<details class="pg-kind-adv">') and form.index('name="address"') < form.index('name="core_id"') < form.index('name="port"')
@@ -778,7 +778,7 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
     assert "html body .main { scrollbar-gutter: stable; }" in css and "html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }" in dr and "html body #page .dr-card.on {" in dr and "html body #page .dr-empty {" in dr
     assert "const apModeDraw = (box, k) =>" in app and 'const bd = $("#ap-t-" + k); if (bd) bd.scrollTop = 0; fxFit();' in app and "html body #page .ap-tasks.fx-box { flex: none; overflow: hidden; }" in dr
     assert "window.openBuild = async () => {" in app and 'if (state.page === "tunnels" && $("#page .tun-box")) { state.build = true;' in app
-    assert "function nkDdOpen(sel) {" in app and 'select[data-dd]' in app and '<select name="ttype" data-dd data-ddw="470"' in app and '<select name="iran_id" required data-dd' in app and "html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }" in css
+    assert "function nkDdOpen(sel, anchor) {" in app and 'select[data-dd]' in app and '<select name="ttype" data-dd data-ddw="520"' in app and '<select name="iran_id" required data-dd' in app and "html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }" in css and "function nkDdIc(name, title, g) {" in app and "html body .nk-dd .nk-dd-ic {" in css
     assert "const apWhy = s => {" in app and 'apWhyHtml(s)' in app and "html body .fx-line .fx-why {" in css
     assert 'a.classList.toggle("nav-nopanel", dim)' in lab and "window.labNoPanel = () =>" in lab and "html body nav a.nav-nopanel { opacity: .38;" in css and 'const nop = k => k !== "settings" && state.page === "pgpanel" && window.labNoPanel && labNoPanel();' in app
 
@@ -786,12 +786,12 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
 def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_button():
     """The owner, 2026-10-16: "build these, all the boxes fixed" (the picture of About & update) and "a button Sign out of other devices under the password boxes"."""
     app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
-    assert '`<div class="abt-wrap fx-box"><div class="abt-grid">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' in app
+    assert '`<div class="abt-wrap fx-box"><div class="abt-grid">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
     assert 'pgupd: ["🧩 PasarGuard"' not in app and "pgUpdCard" not in app and 'if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }' in app and "pgupd: SI.box" not in app
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
     assert "grid-template-rows: 232px minmax(0, 1fr);" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app and 'const hd = $("#lic-head"); if (hd) hd.innerHTML = head;' in app
-    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others"' not in app and "logout_others: true" in app and "html body #page .pwf-btns {" in css and 'class="pwf-out" onclick="secLogoutOthers()"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css and "html body #page .abt-foot #abt-env { display: block; overflow: hidden; text-overflow: ellipsis; }" in css
+    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others"' not in app and "logout_others: true" in app and "html body #page .pwf-btns {" in css and 'class="pwf-out" onclick="secLogoutOthers()"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
 
 
 def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_tabs():
@@ -843,3 +843,10 @@ def test_the_rows_of_active_tasks_after_the_picture():
     assert '${apIc("wifi")}<span>Live</span>' in app and '${apIc("sync")}<span>Move now</span>' in app and '${apIc("spark")}<span>Fix with AI</span>' in app and "📡" not in app.split("PAGES.actions = async", 1)[1].split("window.apMode", 1)[0]
     assert '"down" : "degraded") : t.state}">' in app
     assert 'html body #page .ap-tasks .ap-row .st::before { content: ""; flex: none; width: 12px;' in dr and "html body #page .ap-tasks .ap-row button.pri { background: #2f7bf5;" in dr and "html body #page .ap-tasks .nw-box.sug-box {" in dr
+
+
+def test_the_model_of_the_ai_is_a_field_with_a_list_that_opens_as_the_kit_menu():
+    """The owner, 2026-10-16: any model the user wants can be added; the list drops down."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert 'const AI_MODELS = [["claude-fable-5-1", "Fable 5.1' in app and "window.nkCombo = btn =>" in app and 'class="nk-combo"><input name="model"' in app and 'onmousedown="event.preventDefault(); nkCombo(this)"' in app
+    assert "function nkDdOpen(sel, anchor) {" in app and "if (s.__combo) { s.__combo.value = s.options[i].value;" in app and "aiRemember(f.model.value);" in app and "html body #page .sf .nk-combo .nk-combo-b {" in css

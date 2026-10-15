@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.57.45 - Only the useful facts of the panel, smaller
+
+- **Settings → About & update:** the strip of facts shows only what is of use to the user - *Works by: API based*, the mode, the tunnel checks, the server checks, the session - smaller; the SSH workers, the log level, the port and the env file are not shown (the env file stays in the tooltip of the strip).
+
+## 1.57.44 - The name of the chosen kind is gone from its drawer
+
+- **Add an account type:** the drawer *VLESS (12)* no longer repeats the chosen kind (*REALITY*) beside its name.
+
+## 1.57.43 - The menus of the lists after the picture
+
+- **Kit menu (tunnel type, Iran / foreign server, the AI model):** a dark card with big round corners, groups in spaced capitals with a line between them, every item with a little picture tile, its name and its note under it, a soft blue ground and a blue tick for the chosen one - the texts are the same.
+
+## 1.57.42 - Any model for the AI assistant, from a list that drops down
+
+- **Settings → API → AI assistant:** the *Model* is a field you can type ANY model name into, with a list that drops down as the kit menu - the models the panel knows (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5) and the ones you used before (kept in this browser).
+
 ## 1.57.41 - Telegram and its alerts inside Settings → API, the Doctor header without two pills
 
 - **Settings → API:** the *Alerts* tab is gone - its Telegram part is an API connection and now lives here as a compact row (bot token, chat id, the switch) with the buttons *Test*, *Rules*, *Daily report*, *Maintenance* and *Save*; Rules, Daily report and Maintenance windows open small windows with what the tab had.

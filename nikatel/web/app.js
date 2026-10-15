@@ -471,13 +471,13 @@ function showModal(title, body, cls = "", acts = "") {
 }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; state.nodeWin = null; }      // (state.nodeWin: a window of the nodes that is not a server's is open - the Servers page does not close it, see pg_nodes.js)
 /* the kit menu for a select (the owner, 2026-10-16: "grouped like a MacBook, the same style and colours"): a select with data-dd opens a one-column menu - a heading for every group, a tick before the chosen item, the highlighted one in blue - instead of the browser's own list. The select stays in the form as it is (it holds the value and fires its own change), so nothing that reads it changes. */
-let nkDdEl = null, nkDdSel = null;
+let nkDdEl = null, nkDdSel = null, nkDdAnchor = null;
 function nkDdClose() {
-  const el = nkDdEl; nkDdEl = null; if (nkDdSel) nkDdSel.removeAttribute("aria-expanded"); nkDdSel = null;
+  const el = nkDdEl; nkDdEl = null; if (nkDdSel) nkDdSel.removeAttribute("aria-expanded"); nkDdSel = null; nkDdAnchor = null;
   document.removeEventListener("mousedown", nkDdOut, true); document.removeEventListener("keydown", nkDdKey, true); document.removeEventListener("scroll", nkDdScroll, true); window.removeEventListener("resize", nkDdClose);
   if (el) { el.classList.remove("open"); setTimeout(() => el.remove(), 140); }
 }
-const nkDdOut = e => { if (nkDdEl && !nkDdEl.contains(e.target) && !(nkDdSel && nkDdSel.contains(e.target))) nkDdClose(); };
+const nkDdOut = e => { if (nkDdEl && !nkDdEl.contains(e.target) && !(nkDdSel && nkDdSel.contains(e.target)) && !(nkDdAnchor && nkDdAnchor.contains(e.target))) nkDdClose(); };
 const nkDdScroll = e => { if (nkDdEl && !nkDdEl.contains(e.target)) nkDdClose(); };
 const nkDdRows = () => nkDdEl ? [...nkDdEl.querySelectorAll(".nk-dd-i:not([disabled])")] : [];
 function nkDdKey(e) {
@@ -490,19 +490,47 @@ function nkDdKey(e) {
 }
 function nkDdPick(i) {
   const s = nkDdSel; nkDdClose(); if (!s || !s.options[i] || s.options[i].disabled) return;
+  if (s.__combo) { s.__combo.value = s.options[i].value; s.__combo.dispatchEvent(new Event("input", {bubbles: true})); s.__combo.focus(); return; }      // (a text field with a list: the chosen name is written into the field)
   if (s.selectedIndex !== i) { s.selectedIndex = i; s.dispatchEvent(new Event("input", {bubbles: true})); s.dispatchEvent(new Event("change", {bubbles: true})); }
   s.focus();
 }
-function nkDdItem(o, g) {
-  let text = o.textContent.trim(); if (g && text.startsWith(g + " · ")) text = text.slice(g.length + 3);      // (the group says it already: "Backhaul over GRE · TCP Mux" is "TCP Mux" under its heading)
-  const k = text.indexOf(" — "), title = k > 0 ? text.slice(0, k) : text, note = k > 0 ? text.slice(k + 3) : "";
-  return `<button type="button" role="option" class="nk-dd-i${o.selected ? " on hl" : ""}" data-i="${o.index}" aria-selected="${o.selected}" ${o.disabled ? "disabled" : ""} onclick="nkDdPick(${o.index})"><svg class="nk-dd-ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span class="nk-dd-t">${esc(title)}</span>${note ? `<span class="nk-dd-n">${esc(note)}</span>` : ""}</button>`;
+const NKDD_IC = {swap: '<path d="M17 4l3 3-3 3M20 7H8M7 20l-3-3 3-3M4 17h12"/>', nodes: '<circle cx="12" cy="5.5" r="2.5"/><circle cx="5.5" cy="17" r="2.5"/><circle cx="18.5" cy="17" r="2.5"/><path d="M12 8v3M10.4 12.4L7 15M13.6 12.4L17 15"/>', wifi: '<path d="M4.5 9.5a11 11 0 0115 0M7.5 12.8a6.8 6.8 0 019 0M10.5 16a2.6 2.6 0 013 0M12 19h.01"/>',
+  shield: '<path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/>', eyeoff: '<path d="M3 3l18 18M10.6 6.2A9.7 9.7 0 0112 6c4.5 0 8 3.6 9.5 6a14 14 0 01-3 3.6M6.5 7.3A14 14 0 002.5 12c1.5 2.4 5 6 9.5 6 1.5 0 2.9-.4 4.1-1M10 10a3 3 0 004 4"/>', layers: '<path d="M12 3l9 5-9 5-9-5 9-5zM3 12.5l9 5 9-5M3 16.5l9 5 9-5"/>',
+  gamepad: '<rect x="3" y="8" width="18" height="10" rx="5"/><path d="M8 11v4M6 13h4M15.5 12.5h.01M18 14.5h.01"/>', gauge: '<path d="M4 17a9 9 0 1116 0M12 17l4-6"/><circle cx="12" cy="17" r="1"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
+  link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>', lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>', antenna: '<circle cx="12" cy="10" r="2"/><path d="M12 12l-3.5 9M12 12l3.5 9M6.5 6.5a8 8 0 000 7M17.5 6.5a8 8 0 010 7M3.5 4a12 12 0 000 12M20.5 4a12 12 0 010 12"/>',
+  server: '<rect x="3" y="3" width="18" height="7.5" rx="2.2"/><rect x="3" y="13.5" width="18" height="7.5" rx="2.2"/><path d="M7 6.8h.01M7 17.2h.01"/>', spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5L12 12l8-4.5M12 12v9"/>'};
+function nkDdIc(name, title, g) {      // the little picture of an item (the owner's picture, 2026-10-16): the way of a tunnel, a server, a model; a list with no picture gets none
+  if (name === "ttype") {
+    if (/TLS Mux/i.test(title)) return g === "Backhaul over GRE" ? ["shield", ""] : ["layers", "violet"];
+    if (/TCP Mux/i.test(title)) return ["swap", "blue"];
+    if (/^TCP$/i.test(title)) return ["nodes", ""];
+    if (/Stealth/i.test(title)) return ["eyeoff", ""];
+    if (/PCK/i.test(title)) return ["layers", ""];
+    if (/KCP|FEC/i.test(title)) return ["gamepad", ""];
+    if (/QUIC/i.test(title)) return ["gauge", ""];
+    if (/xDi|ICMP/i.test(title)) return ["antenna", ""];
+    if (/SNI/i.test(title)) return ["shield", ""];
+    if (/WebSocket Mux/i.test(title)) return [g === "Backhaul over GRE" ? "wifi" : "link", ""];
+    if (/TLS WebSocket|WebSocket TLS/i.test(title)) return ["lock", ""];
+    if (/WebSocket/i.test(title)) return ["globe", ""];
+    if (/UDP/i.test(title)) return ["wifi", ""];
+    return ["swap", ""];
+  }
+  if (name === "iran_id" || name === "foreign_id") return [/Smart/i.test(title) ? "spark" : "server", /Smart/i.test(title) ? "blue" : ""];
+  if (name === "model") return ["cube", ""];
+  return null;
 }
-function nkDdOpen(sel) {
-  if (nkDdSel === sel) { nkDdClose(); return; } nkDdClose();
-  const html = [...sel.children].map(ch => ch.tagName === "OPTGROUP" ? `<div class="nk-dd-g" role="presentation">${esc(ch.label)}</div>` + [...ch.children].map(o => nkDdItem(o, ch.label)).join("") : nkDdItem(ch, "")).join("");
+function nkDdItem(o, g, name) {
+  let text = o.textContent.trim(); if (g && text.startsWith(g + " · ")) text = text.slice(g.length + 3);      // (the group says it already: "Backhaul over GRE · TCP Mux" is "TCP Mux" under its heading)
+  const k = text.indexOf(" — "), title = k > 0 ? text.slice(0, k) : text, note = k > 0 ? text.slice(k + 3) : "", ic = nkDdIc(name, title, g);
+  const star = '<i class="nk-dd-star"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></i>';
+  const noteHtml = esc(note).replace(/\s*⭐/, " " + star);
+  return `<button type="button" role="option" class="nk-dd-i${o.selected ? " on hl" : ""}${ic ? "" : " noic"}" data-i="${o.index}" aria-selected="${o.selected}" ${o.disabled ? "disabled" : ""} onclick="nkDdPick(${o.index})">${ic ? `<i class="nk-dd-ic ${ic[1]}"><svg viewBox="0 0 24 24" aria-hidden="true">${NKDD_IC[ic[0]]}</svg></i>` : ""}<span class="nk-dd-tx"><span class="nk-dd-t">${esc(title)}</span>${note ? `<span class="nk-dd-n">${noteHtml}</span>` : ""}</span><svg class="nk-dd-ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>`;
+}function nkDdOpen(sel, anchor) {
+  if ((anchor && nkDdAnchor === anchor) || (!anchor && nkDdSel === sel)) { nkDdClose(); return; } nkDdClose(); nkDdAnchor = anchor || null;
+  const html = [...sel.children].map(ch => ch.tagName === "OPTGROUP" ? `<div class="nk-dd-g" role="presentation">${esc(ch.label)}</div>` + [...ch.children].map(o => nkDdItem(o, ch.label, sel.__combo ? "model" : sel.name)).join("") : nkDdItem(ch, "", sel.__combo ? "model" : sel.name)).join("");
   const m = document.createElement("div"); m.className = "nk-dd"; m.setAttribute("role", "listbox"); m.innerHTML = html; document.body.appendChild(m); nkDdEl = m; nkDdSel = sel; sel.setAttribute("aria-expanded", "true");
-  const r = sel.getBoundingClientRect(), w = Math.min(innerWidth - 16, Math.max(r.width, +sel.dataset.ddw || 0));
+  const r = (anchor || sel).getBoundingClientRect(), w = Math.min(innerWidth - 16, Math.max(r.width, +sel.dataset.ddw || 0));
   m.style.width = w + "px"; m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
   const below = innerHeight - r.bottom - 14, above = r.top - 14, h = Math.min(m.scrollHeight + 14, Math.floor(innerHeight * 0.64)), up = below < Math.min(h, 260) && above > below;
   m.style.maxHeight = Math.max(160, Math.min(h, up ? above : below)) + "px"; m.style.top = up ? Math.max(8, r.top - 6 - Math.min(h, above)) + "px" : r.bottom + 6 + "px";
@@ -510,6 +538,17 @@ function nkDdOpen(sel) {
   void m.offsetWidth; m.classList.add("open");
   document.addEventListener("mousedown", nkDdOut, true); document.addEventListener("keydown", nkDdKey, true); document.addEventListener("scroll", nkDdScroll, true); window.addEventListener("resize", nkDdClose);
 }
+/* a text field with a list (the owner, 2026-10-16: "any model the user wants can be added; the list drops down"): type any name, or open the list - the models known to the panel and the ones you used before (kept in this browser) */
+const AI_MODELS = [["claude-fable-5-1", "Fable 5.1 · the most capable"], ["claude-opus-5-5", "Opus 5.5 · deep work"], ["claude-sonnet-5-5", "Sonnet 5.5 · balanced"], ["claude-haiku-5-5", "Haiku 5.5 · fast and light"]];
+const aiMine = () => { try { return JSON.parse(localStorage.getItem("nk.aimodels") || "[]").filter(x => typeof x === "string"); } catch (e) { return []; } };
+const aiRemember = m => { m = String(m || "").trim(); if (!m || AI_MODELS.some(x => x[0] === m)) return; try { localStorage.setItem("nk.aimodels", JSON.stringify([m, ...aiMine().filter(x => x !== m)].slice(0, 12))); } catch (e) { /* private window */ } };
+window.nkCombo = btn => {
+  const box = btn.closest(".nk-combo"), inp = box && box.querySelector("input"); if (!inp) return;
+  const cur = inp.value.trim(), mine = aiMine().filter(x => !AI_MODELS.some(m => m[0] === x)), sel = document.createElement("select"), opt = (v, note, g) => { const o = document.createElement("option"); o.value = v; o.textContent = note ? `${v} — ${note}` : v; if (v === cur) o.selected = true; g.appendChild(o); };
+  const g1 = document.createElement("optgroup"); g1.label = "Models"; AI_MODELS.forEach(([v, n]) => opt(v, n, g1)); sel.appendChild(g1);
+  const own = [...new Set([...(cur && !AI_MODELS.some(m => m[0] === cur) ? [cur] : []), ...mine])]; if (own.length) { const g2 = document.createElement("optgroup"); g2.label = "Yours"; own.forEach(v => opt(v, "", g2)); sel.appendChild(g2); }
+  sel.dataset.ddw = "360"; sel.__combo = inp; nkDdOpen(sel, box);
+};
 document.addEventListener("mousedown", e => { const s = e.target.closest && e.target.closest("select[data-dd]"); if (s && !s.disabled && e.button === 0) { e.preventDefault(); s.focus(); nkDdOpen(s); } }, true);
 document.addEventListener("keydown", e => { const s = e.target; if (!nkDdEl && s && s.matches && s.matches("select[data-dd]") && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); nkDdOpen(s); } }, true);
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
@@ -1332,7 +1371,7 @@ async function buildFormHtml() {
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>SNI domain <small>(a domain your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "") + (tr.key === "pck" || tr.key === "sni" ? num("mtu", "Carrier MTU", 1380, 1000, 1500) : "") + chk("accept_udp", "Forward UDP too");
   else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode" data-dd>${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
   else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
-  const typeSel = `<select name="ttype" data-dd data-ddw="470" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  const typeSel = `<select name="ttype" data-dd data-ddw="520" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
   const fl = (label, inner) => `<label class="kv2 kf bf"><span>${label}</span>${inner}</label>`;
   const forHint = BK_FOR[K.key + ":" + tr.key] || "";
   return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
@@ -3842,7 +3881,7 @@ PAGES.settings = async () => {
     sHero(!ai_.has_api_key ? "s0" : !st.at ? "s1" : st.ok ? "s3" : "s0", SI.bot, !ai_.has_api_key ? "No key saved" : !st.at ? "Key saved, not tested yet" : st.ok ? "Connected" : "Not working", !ai_.has_api_key ? "Paste an Anthropic API key below; the panel tests it at once." : !st.at ? "Press Test the key." : st.ok ? `${esc(st.provider || "Anthropic")} · ${esc(st.model || ai_.model)} · ${st.ms} ms · tested ${ago(st.at)} ago` : esc(st.error || "no answer"))
     + `<form class="sl" onsubmit="return saveAi(event)">`
     + sGrp({icon: SI.key, title: "Anthropic key",
-        rows: sRow("Anthropic API key", fIc(SI.key, `<input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off">`, true), "empty keeps the saved one") + sRow("Model", fIc(SI.cube, `<input name="model" value="${esc(ai_.model)}">`))})
+        rows: sRow("Anthropic API key", fIc(SI.key, `<input name="api_key" type="password" placeholder="${ai_.has_api_key ? "•••••••• saved" : "your Anthropic key"}" autocomplete="off">`, true), "empty keeps the saved one") + sRow("Model", fIc(SI.cube, `<span class="nk-combo"><input name="model" value="${esc(ai_.model)}" placeholder="any model name, e.g. claude-sonnet-5-5" autocomplete="off" spellcheck="false"><button type="button" class="nk-combo-b" aria-label="Choose a model" title="The models you can choose" onmousedown="event.preventDefault(); nkCombo(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></span>`))})
     + `<div class="sf-act"><button type="button" class="sm danger" onclick="forgetAi()"><i class="bi">${SI.trash}</i>Remove the key</button><button type="button" class="sm" onclick="testAi()"><i class="bi">${SI.play}</i>Test the key</button><button class="pri sm" type="submit"><i class="bi">${SI.save}</i>Save</button></div></form>`;
   /* API (the owner, 2026-10-16: "make this section API and bring every API connection here"): this panel's own API - its tokens (moved here from Security) and its docs - and the state of every connection that works by an API key, each with the way to its place */
   const apiRow = (ok, icon, title, desc, click, label) => sItem({ok, icon, title, pill: ok === true ? '<span class="pill ok">● connected</span>' : ok === false ? '<span class="pill err">● not set</span>' : '<span class="pill">● saved, not tested</span>', desc, acts: `<button type="button" class="sm" onclick="${click}">${label}</button>`});
@@ -3874,14 +3913,14 @@ PAGES.settings = async () => {
   /* about & update (the owner's design picture, 2026-10-16): four boxes of ONE fixed size - this panel, its license, the tunnel cores, the PasarGuard panels and nodes - each with a big icon, and under them what the service runs with, every fact with its little icon; what is longer scrolls inside its box */
   const GH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19c-4 1.5-4-2-6-2.5m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.2 4.2 0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 00-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 00-.1 3.2A4.6 4.6 0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg>', CHEV = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>', COPY = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/></svg>';
   const fi = d => `<i class="abt-fi"><svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg></i>`;
-  const facts = [[fi('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>'), "Mode", ro ? "read-only" : "read-write"], [fi('<path d="M5 12a7 7 0 0112-5l2 2M19 12a7 7 0 01-12 5l-2-2M19 5v4h-4M5 19v-4h4"/>'), "Server sampling", `every ${s.server_sample_interval} s`], [fi('<circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M8.2 6h7.6M7 8l4 8M17 8l-4 8"/>'), "Tunnel checks", `every ${s.tunnel_check_interval} s`], [fi('<path d="M4 7h16M4 12h16M4 17h16"/>'), "Parallel SSH", s.ssh_workers], [fi('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), "Session", `${s.session_hours} h`], [fi('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'), "Log level", esc(s.log_level)], [fi('<path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/>'), "Port", s.listen_port]];
+  const facts = [[fi('<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>'), "Works by", "API based"], [fi('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>'), "Mode", ro ? "read-only" : "read-write"], [fi('<circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M8.2 6h7.6M7 8l4 8M17 8l-4 8"/>'), "Tunnel checks", `every ${s.tunnel_check_interval} s`], [fi('<path d="M5 12a7 7 0 0112-5l2 2M19 12a7 7 0 01-12 5l-2-2M19 5v4h-4M5 19v-4h4"/>'), "Server checks", `every ${s.server_sample_interval} s`], [fi('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), "Session", `${s.session_hours} h`]];      // only what is of use to the one who uses the panel (the owner, 2026-10-16: the rest - SSH workers, log level, port, the env file - is not shown; the env file stays in the tooltip)
   const about = sFrame("About & update", "This panel, its license, the tunnel cores on your servers, the PasarGuard panels and their nodes, and what the service runs with.", "",
     `<div class="abt-wrap fx-box"><div class="abt-grid">`
     + `<div class="abt-card" id="about-hero"><div class="abt-ch"><i class="abt-ti ok">${SI.up}</i><div class="abt-ct"><div class="abt-t1"><b>About &amp; Update</b><span class="pill">v${esc(s.version)}</span></div><small>Update this panel from GitHub with one click and keep everything secure and stable.</small></div><span class="abt-pill" id="about-pill">checking…</span></div><div class="abt-cb"><div id="about-box" class="abt-line"></div><button type="button" class="abt-row" onclick="panelUpdate()"><i class="abt-ti sm">${GH}</i><b>Update from GitHub</b><i class="abt-chev">${CHEV}</i></button></div></div>`
     + `<div class="abt-card"><div class="abt-ch"><i class="abt-ti">${SI.shield(false)}</i><div class="abt-ct"><div class="abt-t1"><b>License</b></div><small id="lic-head">loading…</small></div></div><div class="abt-cb" id="lic-box"><div class="mut">loading…</div></div></div>`
     + `<div class="abt-card"><div class="abt-ch"><i class="abt-ti">${SI.cpu}</i><div class="abt-ct"><div class="abt-t1"><b>Tunnel cores</b></div><small>Backhaul, BackPack, Paqet, Chisel and Xray on every server</small></div></div><div class="abt-cb" id="eng-box"><div class="mut">loading…</div></div></div>`
     + `${window.pgUpdBody ? pgUpdBody() : ""}</div>`
-    + `<div class="abt-foot" title="set in ${esc(s.env_file)} on the panel server, then systemctl restart nikatel">${facts.map(([ic, k, v]) => `<span>${ic}<span class="abt-fv"><em>${k}</em><b>${v}</b></span></span>`).join("")}<span>${fi('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 12h5M9.5 15.5h5"/>')}<span class="abt-fv"><em>Env file</em><b id="abt-env">${esc(s.env_file)}</b></span><button type="button" class="abt-copy" onclick="abtCopy('abt-env')" title="Copy the path">${COPY}</button></span></div></div>`);
+    + `<div class="abt-foot" title="set in ${esc(s.env_file)} on the panel server, then systemctl restart nikatel">${facts.map(([ic, k, v]) => `<span>${ic}<span class="abt-fv"><em>${k}</em><b>${v}</b></span></span>`).join("")}</div></div>`);
   /* security: filled by secLoad */
   const security = sFrame("Security", "How the panel is protected, and your password.", '<span class="pill" id="sec-pill">…</span>', '<div id="sec-box"><div class="mut">loading…</div></div>');
 
@@ -3951,7 +3990,7 @@ const aiStatus = a => {   // which AI is behind the key, whether it answers, how
   return `<div class="ai-stat ${s.ok ? "ok" : "bad"}"><div class="ai-head">${s.ok ? "● Connected" : "● Not working"}</div>${s.ok ? "" : `<div class="err">${esc(s.error || "no answer")}</div>`}<div class="ai-grid">${rows.map(r => `<span class="mut">${r[0]}</span><span>${r[1]}</span>`).join("")}</div></div>`;
 };
 const aiCur = () => (state.setCache && state.setCache.data && state.setCache.data[10]) || {};      // (what is saved; the page keeps it for the tabs of Settings)
-window.saveAi = async e => { e.preventDefault(); const f = e.target; try { await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: true, actions: aiCur().actions !== false, api_key: f.api_key.value.trim(), model: f.model.value.trim()})}); toast("✓ AI settings saved", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };      // (a saved key puts the AI on: the Use switches are gone)
+window.saveAi = async e => { e.preventDefault(); const f = e.target; try { await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: true, actions: aiCur().actions !== false, api_key: f.api_key.value.trim(), model: f.model.value.trim()})}); aiRemember(f.model.value); toast("✓ AI settings saved", "ok"); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };      // (a saved key puts the AI on: the Use switches are gone)
 window.testAi = async () => {      // a key typed in the box is saved first (the test asks the SAVED key), and the card is drawn again so the state shows
   const f = document.querySelector('form[onsubmit^="return saveAi"]'), typed = f && f.api_key.value.trim(); toast("Asking Anthropic…");
   try { if (typed) await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: true, actions: aiCur().actions !== false, api_key: typed, model: f.model.value.trim()})}); const r = await api("/api/settings/ai/test", {method: "POST"}); toast("✓ The key works (" + r.answer + ")", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
