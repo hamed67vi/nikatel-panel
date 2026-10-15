@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.25 - A stray piece of a comment is gone
+
+- Cleaned a leftover in the comment of the busy line of the Lab (no change in what the page does).
+
 ## 1.55.24 - The Lab page loads again
 
 - Fix: 1.55.22 used `labPgSrv` (the lion icon of a PasarGuard server) without defining it, so the Lab page said "This page could not be loaded". It is defined now. Found by the full walk through every page.
