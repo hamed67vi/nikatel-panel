@@ -24,7 +24,8 @@ KINDS = ("iran", "foreign", "node")
 LABEL = {"iran": "Iran server", "foreign": "Foreign server", "node": "PasarGuard node"}
 MAX_PROFILES = 400
 DEFAULT_TAGS: tuple[str, ...] = ()      # no category from the start (the owner, 2026-10-15: "delete all, only Add profile stays: the user makes a profile first"); a tag is made by adding a profile with it, or with the + beside the tabs
-NODE_TAG = "PasarGuard Nodes"      # (the owner: "PasarGuard Nodes") the tag of the profiles that are made by themselves for the nodes of a connected PasarGuard panel
+NODE_TAG = "PasarGuard"      # the tag of the profiles that are made by themselves for the nodes of a connected PasarGuard panel (the owner, 2026-10-15: "PasarGuard", not "PasarGuard Nodes" - there is ONE PasarGuard profile)
+OLD_NODE_TAG = "PasarGuard Nodes"      # what it was called from 1.52.0 to 1.56.18: migration 19 renames it
 
 
 def _int(v, what: str) -> int:
@@ -319,7 +320,7 @@ def set_tag(db: Session, pid: int, tag) -> str:
 
 def auto_nodes(db: Session, panel: Panel, tag: str = NODE_TAG, force: bool = False) -> int:
     """The nodes of a PasarGuard panel are put on the Lab page by themselves (the owner: "the panel must detect a node that was added in PasarGuard"): when the panel is connected and on every
-    check of it (30 s), a node that has no profile yet - and that he did not take off the page on purpose - gets one, tagged PasarGuard Nodes. Returns how many."""
+    check of it (30 s), a node that has no profile yet - and that he did not take off the page on purpose - gets one, tagged PasarGuard. Returns how many."""
     if panel.type != "pasarguard":
         return 0
 
@@ -339,6 +340,34 @@ def auto_nodes(db: Session, panel: Panel, tag: str = NODE_TAG, force: bool = Fal
             made += 1
 
     return made
+
+def rename_nodes_tag(db: Session) -> int:
+    """The step of the upgrade to 1.56.19 (the owner: "two PasarGuard profiles - one empty - make it ONE called PasarGuard"): the category PasarGuard Nodes is called PasarGuard; when both exist they become one (the profiles of the old one join the other, the name is listed once). Returns how many profiles followed."""
+    n = 0
+
+    for p in db.scalars(select(Profile)):
+        if (p.tag or "").lower() == OLD_NODE_TAG.lower():
+            p.tag = NODE_TAG
+            n += 1
+
+    row_ = db.get(Setting, "lab")
+
+    if row_ is not None and isinstance(row_.value, dict) and isinstance(row_.value.get("tags"), list):
+        seen: list[str] = []
+
+        for x in row_.value["tags"]:
+            y = NODE_TAG if isinstance(x, str) and x.lower() == OLD_NODE_TAG.lower() else x
+
+            if isinstance(y, str) and y.lower() in {z.lower() for z in seen}:
+                continue
+
+            seen.append(y)
+
+        doc = dict(row_.value)
+        doc["tags"] = seen
+        row_.value = doc
+
+    return n
 
 def drop_gone_nodes(db: Session, panel: Panel, names: dict[str, str] | None = None) -> int:
     """A node that was taken out of the PasarGuard panel itself goes off the Lab page too (the owner: "I deleted the node in PasarGuard and it stayed here"): the profiles of this panel whose node the panel

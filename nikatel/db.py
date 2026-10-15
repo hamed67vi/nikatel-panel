@@ -46,6 +46,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (16, "profiles table (created by create_all)", []),
     (17, "profiles.tag column + a profile for every node of a connected PasarGuard panel", lambda db: [_add_column(db, "profiles", "tag", "VARCHAR(40)"), _auto_nodes(db)]),
     (18, "the category PasarGuard is called PasarGuard Nodes", lambda db: _rename_pg_tag(db)),
+    (19, "the category PasarGuard Nodes is called PasarGuard again (one PasarGuard profile)", lambda db: _rename_nodes_tag(db)),
 ]
 
 
@@ -60,6 +61,13 @@ def _rename_pg_tag(db: Session) -> None:
     from .services import profiles
 
     profiles.rename_old_tag(db)
+
+
+def _rename_nodes_tag(db: Session) -> None:
+    from .services import profiles
+
+    n = profiles.rename_nodes_tag(db)
+    log.info("profiles: %s profile%s moved from PasarGuard Nodes to PasarGuard", n, "" if n == 1 else "s")
 
 
 def _add_column(db: Session, table: str, column: str, ddl: str) -> None:

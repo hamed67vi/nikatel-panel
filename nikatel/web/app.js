@@ -291,10 +291,14 @@ document.querySelectorAll('#nav a[data-page="bot"]').forEach(a => { a.hidden = !
    its head alone (the tabs are in the bar under the header there); while a group is open in a wide window its tabs are in the menu and the bar is not drawn (app.css). */
 const navPlain = t => String(t).replace(/<[^>]*>/g, "").replace(/^[^\p{L}\p{N}]+/u, "").trim();      // the name of a tab without its icon
 const navOpenMap = () => { try { const m = JSON.parse(localStorage.getItem("nk.nav.g") || "{}"); return m && typeof m === "object" ? m : {}; } catch (e) { return {}; } };
-function navGroup(g, open, keep) {      // `keep`: the owner chose it with the arrow (remembered, and the group stays as it is); else it was opened by a page and closes again when another page is opened
+function navGroupSet(g, open, keep) {      // `keep`: the owner chose it with the arrow (remembered, and the group stays as it is); else it was opened by a page and closes again when another page is opened
   g.dataset.open = open ? "1" : "0";
   const b = g.querySelector(".nav-tg"); if (b) b.setAttribute("aria-expanded", open ? "true" : "false");
   if (keep) { delete g.dataset.auto; const m = navOpenMap(); m[g.dataset.page] = open ? 1 : 0; try { localStorage.setItem("nk.nav.g", JSON.stringify(m)); } catch (e) { /* kept for this visit only */ } }
+}
+function navGroup(g, open, keep) {      // ONE list is open at a time (the owner, 2026-10-15): opening a group closes the one that was open
+  if (open) document.querySelectorAll("#nav .nav-g").forEach(o => { if (o !== g && o.dataset.open === "1") navGroupSet(o, false, true); });
+  navGroupSet(g, open, keep);
   navSubBar();
 }
 function navSubBar() {      // while the group of the open page is open its tabs are in the menu: the bar under the header is not drawn then (a wide window; app.css)
@@ -342,7 +346,7 @@ function navBuild() {
     const tg = g.querySelector(".nav-tg"), name = g.querySelector(".nav-gh > a > span").textContent.trim();
     tg.setAttribute("aria-controls", g.querySelector(".nav-sub").id); tg.setAttribute("aria-label", `Show or hide the sections of ${name}`); tg.title = `Show or hide the sections of ${name}`;
     tg.onclick = () => navGroup(g, g.dataset.open !== "1", true);
-    navGroup(g, saved[g.dataset.page] === 1, false);
+    if (saved[g.dataset.page] === 1 && !nav.querySelector(".nav-g[data-open='1']")) navGroup(g, true, false); else navGroupSet(g, false, false);      // (several lists remembered as open: only the first stays)
   });
   navTitles(); matchMedia("(max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse)))").addEventListener("change", navTitles);
   navMark(false);

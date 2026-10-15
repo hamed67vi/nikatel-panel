@@ -6,6 +6,7 @@
    - the window of a server has four sections: Overview, Node (everything PasarGuard can do to the node that runs here), Monitor (charts and the strip of the last days) and Tools; a node profile opens the Node view
    Routes used: GET/POST /api/profiles, DELETE /api/profiles/{id}, GET /api/servers/{id}/uptime, POST /api/servers, POST /api/panels, and the node routes of pg_nodes.js.
    Uses the helpers of app.js (api, esc, toast, state, showModal, srvModal, serverGridHtml, serverPartHtml, installHtml, loadServerCharts, srvDiagnose ...) and pg_srvnode.js / pg_nodes.js. */
+let labAutoT = null;      // the timer of the automatic look again of the Lab page
 const LAB = {kind: localStorage.getItem("nk.lab.k") || "any", profiles: [], tags: (() => { try { const v = JSON.parse(localStorage.getItem("nk.lab.tags") || "[]"); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; } catch (e) { return []; } })()};      // (the profiles of the last visit are in the menu at once after a refresh: no jump when the page has read them)
 // (the categories are TAGS now: Marzban, PasarGuard, Iran from the start and every other tag the owner types; "any" is no tag - see labTags)      // ("Any": every kind at once - the owner chose the name: any kind of server can be added)
 const LAB_SECS = [["overview", "Overview"], ["node", "Node"], ["monitor", "Monitor"]];      // (what can be done is in the "⋯" menu, not in a section of buttons)
@@ -106,7 +107,8 @@ PAGES.lab = async () => {
   LAB.kind = labKindNow();
   const openSrv = list.find(s => s.id === state.open);      // (any server: a shortcut of the dashboard or a diagnosis opens one that was taken off the page too)
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the Lab or of a node is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };
-  if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin) refresh(); }, 3000); }
+  clearTimeout(labAutoT); const waiting = list.some(s => srvBusy(s) || (s.enabled && !(s.facts && s.facts.cpu != null)));      // the page looks again by itself: every 3-4 s while a server is busy or has not been read yet (a server just added), else every 30 s (the owner, 2026-10-15: a new server stayed with dashes until the page was refreshed)
+  labAutoT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin && !document.querySelector("#modal .modal")) refresh(); }, waiting ? 3500 : 30000);
   pageTarget().innerHTML = LAB.profiles.length || labTags().length ? labPage() : labFirst();
   showWin();
   applyQ();
@@ -306,7 +308,7 @@ window.labNodeList = async pid => {
 };
 window.labNodeGo = async pid => {
   const ids = [...document.querySelectorAll(".lab-pick-row input:checked")].map(i => +i.value); if (!ids.length) return;
-  try { const r = await api("/api/profiles", {method: "POST", body: JSON.stringify({kind: "node", panel_id: pid, node_ids: ids, tag: labTagDraft.v || "PasarGuard Nodes"})}); toast("✓ Added: " + r.added.map(x => x.name).join(", ") + (r.skipped.length ? ` (${r.skipped.length} skipped: ${r.skipped[0].why})` : ""), "ok"); labLockSet(true); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
+  try { const r = await api("/api/profiles", {method: "POST", body: JSON.stringify({kind: "node", panel_id: pid, node_ids: ids, tag: labTagDraft.v || "PasarGuard"})}); toast("✓ Added: " + r.added.map(x => x.name).join(", ") + (r.skipped.length ? ` (${r.skipped.length} skipped: ${r.skipped[0].why})` : ""), "ok"); labLockSet(true); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
 };
 
 /* ---------------------------------------------------------------- the Panel item of the menu: grey with a lock only while NO panel is connected (the owner: "we have a panel now, it must not be locked; the lock is for when no panel is connected").

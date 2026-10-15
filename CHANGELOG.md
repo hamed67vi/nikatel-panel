@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.56.21 - The Lab looks again by itself
+
+- **A server that was just added does not stay with dashes (the owner):** the Lab page looks again every 3-4 seconds while a server is busy or has not been read yet, and every 30 seconds otherwise (never while a window is open), so the first numbers appear by themselves.
+
+## 1.56.20 - One list of the menu open at a time
+
+- **Opening a list of the left menu closes the one that was open (the owner):** press Servers while Network is open and Network closes. Of several lists remembered as open only the first stays after a refresh.
+
+## 1.56.19 - One PasarGuard profile
+
+- **The profile of the nodes of a PasarGuard panel is called PasarGuard (the owner), not PasarGuard Nodes:** the nodes found by themselves go to PasarGuard, and the upgrade (migration 19) renames the old name; when both names exist they become one and the name is listed once. (On the main panel the empty PasarGuard profile was deleted and PasarGuard Nodes renamed by hand, after a backup of its database.)
+
 ## 1.56.18 - "new" goes after 15 minutes
 
 - The "new" pill of a server stays 15 minutes (it stayed an hour).

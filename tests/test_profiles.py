@@ -233,7 +233,7 @@ def test_the_nodes_of_a_pasarguard_panel_are_put_on_the_page_by_themselves_tagge
     monkeypatch.setattr(panels, "check", lambda c: {"ok": True, "latency_ms": 5, "stats": {"version": "1"}, "nodes": nodes_, "error": ""})
 
     panels.add("pg1", "pasarguard", "https://p.example:8000", token="pg_key_x")
-    assert sorted((p["kind"], p["name"], p["tag"]) for p in _profiles(client)) == [("node", "n7", "PasarGuard Nodes"), ("node", "n8", "PasarGuard Nodes")]
+    assert sorted((p["kind"], p["name"], p["tag"]) for p in _profiles(client)) == [("node", "n7", "PasarGuard"), ("node", "n8", "PasarGuard")]
 
     panels.add("mz1", "marzban", "https://m.example:8000", token="t")                                        # a Marzban panel has no PasarGuard nodes
     assert len(_profiles(client)) == 2
@@ -241,7 +241,7 @@ def test_the_nodes_of_a_pasarguard_panel_are_put_on_the_page_by_themselves_tagge
     with session() as db:
         db.execute(Profile.__table__.delete())
         assert svc.auto_all(db) == 2 and svc.auto_all(db) == 0                                               # the upgrade step: once, and a second run makes nothing
-        assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard Nodes"}
+        assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard"}
 
 def test_a_category_made_by_hand_stays_on_the_page_while_no_profile_carries_it(client):
     r = client.post("/api/profiles/tags", json={"tag": "  Gaming  "})
@@ -269,16 +269,6 @@ def test_a_category_can_be_renamed_and_deleted_and_its_servers_follow(client):
     assert client.delete("/api/profiles/tags/any").status_code == 400
     assert client.get(f"/api/servers/{s['id']}").status_code == 200
 
-def test_the_category_that_was_called_pasarguard_is_called_pasarguard_nodes_by_the_upgrade(client):
-    _server(client, "ir1", "3.3.3.3", "iran", tag="pasarguard")
-    _server(client, "fo1", "4.4.4.4", "foreign", tag="Marzban")
-
-    with session() as db:
-        assert svc.rename_old_tag(db) == 1
-        assert svc.rename_old_tag(db) == 0                                                                 # once
-
-    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("fo1", "Marzban"), ("ir1", "PasarGuard Nodes")]
-
 
 def test_a_node_added_in_pasarguard_later_is_found_by_the_check_and_put_on_the_page_and_one_taken_off_on_purpose_stays_off(client, monkeypatch):
     """The owner, 2026-10-15: "the panel was supposed to detect the node that was added in PasarGuard by itself" - the nodes were put on the page only when the panel was connected."""
@@ -292,7 +282,7 @@ def test_a_node_added_in_pasarguard_later_is_found_by_the_check_and_put_on_the_p
 
     seen.append({"id": 9, "name": "AS", "address": "203.0.113.9", "status": "connected"})                        # the owner adds a node in PasarGuard
     panels.check_all()
-    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("AS", "PasarGuard Nodes"), ("n7", "PasarGuard Nodes")]
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("AS", "PasarGuard"), ("n7", "PasarGuard")]
     panels.check_all()
     assert len(_profiles(client)) == 2                                                                           # (and not twice)
 
@@ -338,21 +328,21 @@ def test_a_node_deleted_in_pasarguard_goes_off_the_page_at_the_next_good_check(c
 def test_the_profile_of_a_connected_pasarguard_panel_cannot_be_renamed_or_deleted_while_the_panel_is_there(client):
     """The owner, 2026-10-15: "while a PasarGuard panel is connected, its profile cannot be deleted or renamed"."""
     pid = _panel()
-    r = client.post("/api/profiles", json={"kind": "node", "panel_id": pid, "node_ids": [7], "tag": "PasarGuard Nodes"})
+    r = client.post("/api/profiles", json={"kind": "node", "panel_id": pid, "node_ids": [7], "tag": "PasarGuard"})
     assert r.status_code == 201
 
-    for name in ("PasarGuard%20Nodes", "pasarguard%20nodes"):
+    for name in ("PasarGuard", "pasarguard"):
         assert client.put(f"/api/profiles/tags/{name}", json={"tag": "Mine"}).status_code == 400
         assert client.delete(f"/api/profiles/tags/{name}").status_code == 400
 
-    assert [p["tag"] for p in _profiles(client)] == ["PasarGuard Nodes"]
+    assert [p["tag"] for p in _profiles(client)] == ["PasarGuard"]
     other = client.post("/api/profiles/tags", json={"tag": "Hetzner"})
     assert other.status_code == 201 and client.put("/api/profiles/tags/Hetzner", json={"tag": "Backup"}).status_code == 200          # any other profile is free
 
     with session() as db:
         db.execute(Panel.__table__.delete())                                                                           # the panel is gone: the profile is a plain one again
 
-    assert client.put("/api/profiles/tags/PasarGuard%20Nodes", json={"tag": "Mine"}).status_code == 200
+    assert client.put("/api/profiles/tags/PasarGuard", json={"tag": "Mine"}).status_code == 200
 
 def test_the_sync_button_of_a_pasarguard_profile_reads_the_panels_now_and_brings_every_node_in_even_one_taken_off(client, monkeypatch):
     """The owner, 2026-10-15: "in the PasarGuard profile an option to sync: a panel is there but its nodes are not shown"."""
@@ -375,3 +365,18 @@ def test_the_sync_button_of_a_pasarguard_profile_reads_the_panels_now_and_brings
     r = client.post("/api/profiles/sync", json={"tag": ""})
     assert r.json()["added"] == 0 and "no answer" in r.json()["errors"][0] and pid
     assert client.post("/api/profiles/sync", json={"tag": "a/b"}).status_code == 400
+
+def test_the_two_pasarguard_profiles_become_one_called_pasarguard_at_the_upgrade():
+    """The owner, 2026-10-15: "I have two PasarGuard profiles: delete the empty one, call this one PasarGuard"."""
+    from nikatel.models import Setting
+
+    with session() as db:
+        db.add(Setting(key="lab", value={"tags": ["Marzban", "PasarGuard Nodes", "Iran", "PasarGuard"], "skip_nodes": []}))
+        db.add(Profile(kind="node", panel_id=1, node_id=1, tag="PasarGuard Nodes"))
+        db.add(Profile(kind="node", panel_id=1, node_id=2, tag="PasarGuard Nodes"))
+        db.flush()
+        assert svc.rename_nodes_tag(db) == 2
+        db.flush()
+        assert {p.tag for p in db.scalars(select(Profile))} == {"PasarGuard"}
+        assert db.get(Setting, "lab").value["tags"] == ["Marzban", "PasarGuard", "Iran"] and db.get(Setting, "lab").value["skip_nodes"] == []          # (one name, listed once, in the place of the first)
+        assert svc.rename_nodes_tag(db) == 0

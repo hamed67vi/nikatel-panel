@@ -414,3 +414,15 @@ def test_a_server_that_carries_a_pasarguard_node_keeps_the_actions_of_the_node_i
     row = lab.split('if (ctx === "row") {', 1)[1].split("return [labGrp(\"Server\")", 1)[0]
     assert 'x.type === "pasarguard" && x.node_id != null' in row and 'labNodeItems({panel_id: pgn.panel_id, node_id: pgn.node_id}, null, "node").slice(0, -1)' in row and '{grp: "Node · " + x.grp}' in row
     assert "labSep, ...nodeActs, gone, labSep, del]" in lab
+
+def test_one_list_of_the_left_menu_is_open_at_a_time():
+    """The owner, 2026-10-15: "two collapsible lists must not be open together: when I press Servers and Panel was open, it closes"."""
+    app = _web("app.js")
+    body = app.split("function navGroup(g, open, keep) {", 1)[1].split("\n}", 1)[0]
+    assert 'if (open) document.querySelectorAll("#nav .nav-g").forEach(o => { if (o !== g && o.dataset.open === "1") navGroupSet(o, false, true); });' in body
+    assert "function navGroupSet(g, open, keep) {" in app and "only the first stays" in app
+
+def test_the_lab_looks_again_by_itself_so_a_new_server_does_not_stay_with_dashes():
+    """The owner, 2026-10-15: "I added a normal server and it stayed like this" (dashes until the page was refreshed)."""
+    lab = _web("lab.js")
+    assert "labAutoT = setTimeout(() =>" in lab and "waiting ? 3500 : 30000" in lab and "s.enabled && !(s.facts && s.facts.cpu != null)" in lab and "!document.querySelector(\"#modal .modal\")" in lab
