@@ -258,7 +258,7 @@ def test_the_list_of_servers_has_an_ip_column_in_place_of_the_state_column_and_s
     assert "State · last 24 h" not in lab and "labStateHtml" not in lab and "labGreTag" not in lab and "labCells" not in lab and "LAB.strips" not in lab
     assert '<th data-prio="1">IP</th>' in lab and 'class="lab-ip mono ip-copy" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); labCopyIp(this)"' in lab and 'const addr = d ? d.address : p.address' in lab          # (an address is copied by a click; a node shows no port)
     assert "/api/profiles/strips" not in lab                                                         # the list does not ask for the strips any more
-    assert lab.count('<col style="width:') == 6 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
+    assert lab.count('<col style="width:') == 7 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
     assert ".lab-ip {" in _web("lab.css")
 
 
@@ -447,7 +447,7 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2" class="lab-ld">Load</th>' in lab
+    assert '<th data-prio="0">Name</th><th data-prio="3" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="1">IP</th><th data-prio="2" class="lab-ld">Load</th>' in lab
     assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
@@ -483,7 +483,7 @@ def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_c
     assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "s.provider ?" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
     assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
-    assert ":is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
+    assert ":is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
 
 
 def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is_the_kit_button():
@@ -580,8 +580,8 @@ def test_the_geometry_of_a_lab_row_is_three_numbers_and_every_row_has_one_cell_p
     server = lab.split("function labServerRow(p) {", 1)[1].split("const LAB_AD", 1)[0]
     node = lab.split("function labNodeRowHtml(p) {", 1)[1].split("const labGoneRow", 1)[0]
     gone = lab.split("const labGoneRow = ", 1)[1].split("const labRowOf", 1)[0]
-    assert sum(map(int, cols)) == 100 and len(cols) == len(heads) == 6
-    assert len(re.findall(r"<td[ >]", server)) == len(re.findall(r"<td[ >]", node)) == len(re.findall(r"<td[ >]", gone)) == 6
+    assert sum(map(int, cols)) == 100 and len(cols) == len(heads) == 7
+    assert len(re.findall(r"<td[ >]", server)) == len(re.findall(r"<td[ >]", node)) == len(re.findall(r"<td[ >]", gone)) == 7
     assert all(t.count('<i class="lab-lamp"') == 1 and t.index('<i class="lab-lamp"') < t.index('<div class="lab-nmw">') for t in (server, node, gone))     # the lamp is the first thing in the name cell
 
 
@@ -596,9 +596,9 @@ def test_the_lab_has_a_traffic_used_column_made_of_the_bytes_since_boot():
 def test_the_problems_of_a_server_are_tags_after_its_name_and_the_search_finds_them():
     """The owner, 2026-10-15: "when a server has a problem, put it as a tag in front of it: GRE x, Filtered ..." (the lamp ignores the way to the server, so the tags say it)."""
     lab, css = _web("lab.js"), _web("lab.css")
-    assert "const labIssueChips = s =>" in lab and "list.slice(0, 3)" in lab and "${labIssueChips(s)}${labTagChip(p.tag, 1)}</b>" in lab and "...labIssues(s).map(i => i.txt)" in lab
+    assert "const labIssueChips = s =>" in lab and "list.slice(0, 3)" in lab and '<td class="lab-pb">${labIssueChips(s)}</td>' in lab and "${labTagChip(p.tag, 1)}</b>" in lab and "...labIssues(s).map(i => i.txt)" in lab
     assert 'class="pill lab-iss ${i.sev}"' in lab and "LAB_ISS_IC.bad" in lab and '"GRE ✕"' in lab and 'add("bad", "Filtered"' in lab
-    assert ".lab-tbl td.name .lab-iss.bad { color: #ff8a9b;" in css and ".lab-iss.warn { color: #f5b94a;" in css
+    assert ".lab-tbl td.lab-pb .lab-iss.bad { color: #ff8a9b;" in css and ".lab-iss.warn { color: #f5b94a;" in css and "height: 18px; margin: 2px 4px 2px 0; padding: 0 7px;" in css and "font-size: 10.5px;" in css
 
 
 def test_every_helper_of_the_lab_rows_starts_its_own_line_so_no_comment_swallows_it():
@@ -624,3 +624,9 @@ def test_the_traffic_arrows_have_the_colour_of_the_small_text_under_the_load():
     """The owner, 2026-10-15: "only the colour of the arrows like the colour of this text (RAM 35 % · Disk 33 %)"."""
     css = _web("lab.css")
     assert ".lab-tbl .lab-trf .ta.d, html body #page .lab-tbl .lab-trf .ta.u { color: var(--mut); }" in css and ".lab-ldw small { color: var(--mut);" in css
+
+
+def test_the_lab_list_is_a_box_of_one_fixed_height():
+    """The owner, 2026-10-15: "the box of this part fixed too": the generic box fitter gives the Lab list a height, not only a maximum height."""
+    app = _web("app.js")
+    assert 'const fixed = !!pg.querySelector(".cf-top, .lab-root");' in app and "if (fixed) { b.style.height = mh + " in app

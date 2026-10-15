@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.16 - The problems in a column of their own, a fixed Lab box
+
+- **Lab (the owner):** the problem tags (*GRE ✕*, *Filtered*, *Offline*, *CPU 91 %* ...) leave the name and stand in a fixed *Problems* column between Name and IP, a clear step away from the name; they are smaller (18 px high, 10.5 px type). The list is a box of ONE fixed height, whatever the number of its rows.
+
 ## 1.57.15 - Quiet arrows
 
 - **Lab (the owner):** the arrows of *Traffic used* and *Traffic Mbit/s* have the colour of the small text under the load (green and pink are gone).

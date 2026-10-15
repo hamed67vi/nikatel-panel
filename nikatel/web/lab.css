@@ -338,9 +338,9 @@ html body .lab-menu .lab-mic .lab-emoji { width: auto; margin: 0; font-size: 13p
 html[data-mode="light"] body .lab-menu .lab-mic img.lab-logo:not(.lab-flag) { filter: brightness(0) opacity(.8); }
 /* 1.57.1 - the row like the owner's drawing: a lamp of its own at the left, the flag and the icon, the name with its provider under it | the address with a globe | a small chart of the CPU with the number, a thin bar and RAM / Disk | the traffic in two lines | the menu and a chevron */
 html body #page .lab-tbl td { height: 56px; }
-html body #page .lab-tbl :is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act) { position: relative; }
-html body #page .lab-tbl :is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before { content: ""; position: absolute; left: 0; top: 24%; bottom: 24%; width: 1px; background: rgba(255,255,255,.09); pointer-events: none; }
-html[data-mode="light"] body #page .lab-tbl :is(td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before { background: rgba(30,50,100,.14); }
+html body #page .lab-tbl :is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act) { position: relative; }
+html body #page .lab-tbl :is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before { content: ""; position: absolute; left: 0; top: 24%; bottom: 24%; width: 1px; background: rgba(255,255,255,.09); pointer-events: none; }
+html[data-mode="light"] body #page .lab-tbl :is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before { background: rgba(30,50,100,.14); }
 html body #page .lab-lamp { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--lamp, #5e6a86); box-shadow: 0 0 10px color-mix(in srgb, var(--lamp, transparent) 55%, transparent); transition: background .3s, box-shadow .3s; }
 html body #page tr[data-lamp="off"] .lab-lamp { box-shadow: none; opacity: .75; }
 html body #page .lab-tbl td.name .lab-tagc { height: 20px; margin-left: 8px; padding: 0 8px; font-size: 11px; vertical-align: 1px; }
@@ -450,11 +450,12 @@ html body #page .pn-bar .pn-seg i.dot { flex: none; width: 8px; height: 8px; bor
 /* 1.57.13 - the column "Traffic used": the bytes a server (or a node) has carried, value over unit, the same two arrows as the speed */
 html body #page .lab-tbl td.lab-used .tv small { font-size: 11px; }
 /* 1.57.13 - the problems of a server as tags after its name (the kit's Warning and Error chips): GRE x, Filtered, Offline, CPU 91 % ... - the lamp ignores the way to the server, these tags say it */
-html body #page .lab-tbl td.name .lab-iss { display: inline-flex; align-items: center; gap: 4px; height: 20px; margin-left: 8px; padding: 0 8px; border: 1px solid; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: 1px; white-space: nowrap; }
-html body #page .lab-tbl td.name .lab-iss svg { width: 11px; height: 11px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-html body #page .lab-tbl td.name .lab-iss.bad { color: #ff8a9b; background: rgba(255, 107, 129, .14); border-color: rgba(255, 107, 129, .4); }
-html body #page .lab-tbl td.name .lab-iss.warn { color: #f5b94a; background: rgba(245, 185, 74, .14); border-color: rgba(245, 185, 74, .4); }
-html body #page .lab-tbl td.name .lab-iss.more { color: var(--mut); background: rgba(255, 255, 255, .06); border-color: var(--uk-line); }
-html[data-mode="light"] body #page .lab-tbl td.name .lab-iss.bad { color: #c0213b; background: #ffe7ec; } html[data-mode="light"] body #page .lab-tbl td.name .lab-iss.warn { color: #9a6200; background: #fff3d6; }
+html body #page .lab-tbl td.lab-pb .lab-iss { display: inline-flex; align-items: center; gap: 3px; height: 18px; margin: 2px 4px 2px 0; padding: 0 7px; border: 1px solid; border-radius: 9px; font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
+html body #page .lab-tbl td.lab-pb .lab-iss svg { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .lab-tbl td.lab-pb .lab-iss.bad { color: #ff8a9b; background: rgba(255, 107, 129, .14); border-color: rgba(255, 107, 129, .4); }
+html body #page .lab-tbl td.lab-pb .lab-iss.warn { color: #f5b94a; background: rgba(245, 185, 74, .14); border-color: rgba(245, 185, 74, .4); }
+html body #page .lab-tbl td.lab-pb .lab-iss.more { color: var(--mut); background: rgba(255, 255, 255, .06); border-color: var(--uk-line); }
+html[data-mode="light"] body #page .lab-tbl td.lab-pb .lab-iss.bad { color: #c0213b; background: #ffe7ec; } html[data-mode="light"] body #page .lab-tbl td.lab-pb .lab-iss.warn { color: #9a6200; background: #fff3d6; }
 /* 1.57.15 - the arrows of the traffic columns have the colour of the small text under the load ("RAM 35 % · Disk 33 %"), the kit's muted text colour (the owner) */
 html body #page .lab-tbl .lab-trf .ta.d, html body #page .lab-tbl .lab-trf .ta.u { color: var(--mut); }
+html body #page .lab-tbl td.lab-pb { padding-left: 16px; }      /* the problems have a column of their own, a clear step away from the name (1.57.16) */
