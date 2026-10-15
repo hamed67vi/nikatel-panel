@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.28 - The empty Panel page in one fixed card
+
+- **Panel > General with no panel (the owner: *a fixed box for this part too*):** one card of a fixed size, fitted to the window - an icon, *No panel yet*, one line and the *Add panel* button; the bar above only says *No panel yet*. The description of General no longer mentions the removed System and Templates tabs.
+
 ## 1.57.27 - Usage > Users in fixed, alike boxes
 
 - **Usage > Users (the owner):** the three boxes (*Users*, *Users over time*, *Top users*) are the same kit card as the overview - normal-case titles, 16 px corners - the *Users* box has one fixed height, the two cards below share one fixed height and their content scrolls inside, and every control in them is 36 px.

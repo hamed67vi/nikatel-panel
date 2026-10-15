@@ -179,7 +179,7 @@ const SUB = {
 };
 /* the Panel page (1.47.0, the owner: "when we click Panel, show everything as tabs"): ONE page for the panel you pick, with a tab for each section of PasarGuard that was a page of its own (what PG_SUBS says about the tabs inside each) */
 SUB.pgpanel = [
-  ["settings", "General", "The panel you pick as a whole: its usage, its system, its settings and its templates (the recipe of a new user, the formats of the clients)."],      // (the first tab, 2026-10-14: it was "Panel settings", the last one)
+  ["settings", "General", "The panel you pick as a whole: its usage and its settings (Telegram, webhook, notifications, events, subscription, HWID, general and the user template)."],      // (the first tab, 2026-10-14: it was "Panel settings", the last one)
   ["users", "Users", "The users of the panel you pick: search, status, edit, bulk actions and the tools of the More… menu. Pick a panel in the bar."],
   ["configs", "Configs", "Everything a link of the panel you pick is made of, in one place: Add (choose a protocol: the inbound, the group, the host and a template are made for you), the Hosts (address, port and TLS of every link), the Groups (which inbounds a user gets) and the Core (the Xray config, with a backup before every change)."],
   ["admins", "Admins", "The admins of the panel you pick, their roles and their API keys."],
@@ -2059,7 +2059,7 @@ PAGES.panels = async () => {
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
   const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
-  if (!list.length) { $("#page").innerHTML = manage ? pnBar([], "", "") + '<div class="empty">No panel yet. Add one with its API key or access token.</div>' : pnEmptyPage(); if (!manage) pnFuse(); return; }      // (no panel: the boxes of the tab stay, empty, with the way to add one - the owner, 2026-10-15)
+  if (!list.length) { $("#page").innerHTML = manage ? pnBar([], "", "") + pnFirstCard() : pnEmptyPage(); if (!manage) pnFuse(); else if (typeof fxFit === "function") fxFit(); return; }      // (no panel: the boxes of the tab stay, empty, with the way to add one - the owner, 2026-10-15)
   const p = sel, s = p.stats || {};
   const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
   const facts = `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span>`;
@@ -2181,6 +2181,7 @@ window.pnNodeLogs = async (id, nid) => { const pl = Array.isArray(state.panelsCa
 
 /* ---- All panels: one account = the same person on every panel (same username, or a link made by hand); every panel is asked through its API when you look */
 /* the bar on top of the Panels pages is the one of the CDN page: a row of chips (one per panel, "All panels", and the dashed "＋ Add panel" chip) and a row of facts and buttons */
+const pnFirstCard = () => `<div class="card pn-first fx-box"><div class="pn-first-ic">${SI.cube}</div><h2>No panel yet</h2><p class="mut">Add one with its API key or access token: its usage, its settings and its users then show here.</p><button type="button" class="cta cta-server" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i>Add panel</button></div>`;      // (the empty General page: ONE card of a fixed size with the way to add a panel - the owner, 2026-10-15)
 const pnEmptyPage = () => {      // a tab of the Panel page while no PasarGuard panel is connected: the same boxes, empty
   const add = '<button class="sm pri" onclick="go(\'pgpanel\', \'settings\')" title="Panels are added in General">＋ Add a panel in General</button>';
   const users = pn.tab === "users" || pnPageTabs().includes("users");
@@ -2194,7 +2195,7 @@ const pnBar = (list, cur, row2, mode = "manage") => {      // the bar of the pan
   const IB = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, curP = list.find(p => String(p.id) === String(cur));
   const tabs = list.map(p => `<button type="button" class="${String(p.id) === String(cur) ? "on" : ""}" onclick="pnPick('${p.id}')" title="${esc(p.url || "")}${p.status === "down" ? " · down" : ""}"><i class="dot ${dot(p)}"></i><span class="lab-kn">${esc(p.name)}</span></button>`).join("");
   const acts = pick ? "" : `<span class="lab-tabact"><button type="button" class="lab-ib" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel" aria-label="Add panel">${IB('<path d="M12 5v14M5 12h14"/>')}</button>${curP ? `<button type="button" class="lab-ib danger" onclick="pnDel(${curP.id}, '${esc(curP.name)}')" title="Take the panel ${esc(curP.name)} off this list (nothing changes on the panel itself)" aria-label="Remove ${esc(curP.name)}">${IB('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')}</button>` : ""}</span>`;
-  const box = list.length ? `<span class="lab-ksw pn-ksw"><div class="tabs lab-kinds pn-seg">${tabs}</div>${acts}</span>` : `<button type="button" class="cta cta-server pn-add" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i>Add panel</button>`;      // (no panel yet: one button with a name)
+  const box = list.length ? `<span class="lab-ksw pn-ksw"><div class="tabs lab-kinds pn-seg">${tabs}</div>${acts}</span>` : '<span class="pn-none mut">No panel yet</span>';      // (no panel yet: the page says it in one card, the bar only names it)
   if (pick) return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar pn-pick"><div class="dns-r dns-accbar pn-one">${box}<div id="pn-ctl" class="pn-ctl"></div></div></div>`;
   return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one">${box}<span class="sp"></span><div class="pn-facts">${row2}</div></div></div>`;
 };

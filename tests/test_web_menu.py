@@ -723,3 +723,10 @@ def test_the_boxes_of_usage_users_are_alike_and_fixed():
     assert ".pg-ub { height: 128px; overflow: hidden; margin: 0 0 10px; }" in css and ".pg-usage-two { grid-auto-rows: 380px; }" in css
     assert '.pg-usage [data-for="users"] .pg-usage-card, html body #page .pg-ub { border-radius: 16px;' in css and ".pg-usage-two > div > .pg-usage-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }" in css
     assert ".pg-usage-two .pg-usage-row select, html body #page .pg-usage-two .pg-usage-row input { height: 36px;" in css
+
+
+def test_the_empty_panel_page_is_one_fixed_card():
+    """The owner, 2026-10-15: "make a fixed box for this part too" (the Panel page with no panel yet)."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert "const pnFirstCard = () => `<div class=\"card pn-first fx-box\">" in app and "pnBar([], \"\", \"\") + pnFirstCard()" in app and "<span class=\"pn-none mut\">No panel yet</span>" in app
+    assert "its usage, its system" not in app and ".pn-first { display: flex; flex-direction: column; align-items: center; justify-content: center;" in css
