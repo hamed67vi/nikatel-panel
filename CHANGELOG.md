@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.0 - The full test of everything so far
+
+- The whole suite, the real test of all 17 kinds of account on a throw-away PasarGuard, a walk through every page and a smoke test of every read route of the live test panel. Found and fixed: the Lab page that did not load (1.55.22), a timer kept on `window` by the update card, and six tests that still described the old Add server box.
+
 ## 1.55.25 - A stray piece of a comment is gone
 
 - Cleaned a leftover in the comment of the busy line of the Lab (no change in what the page does).

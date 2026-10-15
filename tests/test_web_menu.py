@@ -121,8 +121,8 @@ def test_a_profile_is_added_in_one_box_with_no_tabs_that_asks_its_name_and_its_t
     assert "labChooser" not in lab and "labAddKind" not in lab and "labServerStep" not in lab          # (no choice of three kinds)
     assert "lab-addtabs" not in lab and "labSaveMany" not in lab and "labPickGo" not in lab and "Already in the panel" not in lab and "Several at once" not in lab          # (no tabs, no several-at-once, no already-in-the-panel)
     assert 'name="tag" id="lab-tag" onchange="labTagPick(this.value)"' in lab and 'Any (no profile)' in lab and "SERVER_FORM(null)" in lab and "labTagInput()" in (WEB / "app.js").read_text(encoding="utf-8")          # the old box of the Servers page, with one more field          # ONE Tag field: empty is Any, a datalist suggests
-    assert '["Iran", "Foreign", ...labTags()]' in lab          # Iran and Foreign are suggested, then every tag there is
-    assert 'onchange="labTagPick(this.value)"' in lab and 'window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase().startsWith("pasarguard")) labAddNode(); };' in lab          # the tag PasarGuard brings the node's settings
+    assert 'all = [...new Set([...labTags(), ...(cur ? [cur] : [])])];' in lab          # the Profile field is a drop-down of every tag there is (and the open one)
+    assert 'window.labTagPick = v => {' in lab and 'const on = labIsPgTag(v)' in lab          # a PasarGuard profile brings the install options of a PasarGuard node
     assert "const labRoleOf = " in lab and "labRoleOf(f.get(\"tag\"))" in (WEB / "app.js").read_text(encoding="utf-8") and "tag: String(f.get(\"tag\")" in (WEB / "app.js").read_text(encoding="utf-8")          # the tags Iran / Foreign say where a new server is; the tag goes to the API
     assert "window.labSetTag = " in lab and 'Move to profile…' in lab and '`/api/profiles/${id}/tag`' in lab          # a tag can be changed from the ⋯ menu
 
@@ -180,7 +180,7 @@ def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_o
     (the picture of a single ⋯ menu), "much more compact"."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     css = (WEB / "lab.css").read_text(encoding="utf-8")
-    assert '<table class="tbl lift srv-tbl joined lab-tbl">' in lab and "${SRV_IC}" in lab and 'class="srv-ic"' in lab          # the table, the server icon and the flag of the old list
+    assert '<table class="tbl lift srv-tbl joined lab-tbl">' in lab and ": SRV_IC}</i>" in lab and 'class="srv-ic"' in lab          # the table, the server icon and the flag of the old list
     assert 'cc = s.role === "iran" ? "ir"' in lab and "has-flag" in lab                                                        # Iran has its flag too
     assert ".lab-root" in css and not re.search(r"^\.lab \{", css, re.MULTILINE)                                              # (".lab" is hidden by the fluid layer on a narrow window)
     assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "const two = false" in lab         # one menu, always ONE column (the owner)

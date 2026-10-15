@@ -3854,20 +3854,21 @@ window.testAi = async () => {      // a key typed in the box is saved first (the
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
 window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = u.up_to_date ? `<span class="gw-ok">Up to date</span> <span class="mut">v${esc(u.version)}</span>` : `<span class="err">${u.newer && u.latest ? "Version " + esc(u.latest) + " is available" : "A newer build is available"}</span>`; const h = $("#about-hero"); if (h) { h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const sm = h.querySelector(".ss-ht small"); if (sm) sm.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : ""; } if (u.progress && u.progress.state === "running") aboutWatch(); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutWatch(true); } catch (e) { toast("✕ " + e.message, "bad"); } };
+let aboutTimer = null;      // the timer of the progress of an update
 window.aboutWatch = fresh => {      // the update runs: only its percentage (the owner, 2026-10-15: no log box); the bar waits while the panel restarts, and the page reloads when it is done
-  if (window.__aboutT) return; let last = 3, stale = !!fresh;
+  if (aboutTimer) return; let last = 3, stale = !!fresh;
   document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = true; });
   const draw = (txt, cls, pct) => { const b = $("#about-box"); if (!b) return false; b.innerHTML = `<span class="${cls}">${txt}</span><i class="about-bar"><u style="width:${pct}%"></u></i>`; return true; };
   const tick = async () => {
     let u = null; try { u = await api("/api/system/update"); } catch (e) { /* the panel restarts: the bar waits */ }
     const p = u && u.progress;
     if (p && !(stale && p.state === "done")) { stale = false; last = Math.max(last, p.percent); }      // (a finished run of before the click is not this one)
-    if (p && !stale && p.state === "done") { window.__aboutT = null; draw("Updated 100%", "gw-ok", 100); setTimeout(() => location.reload(), 1200); return; }
-    if (p && !stale && p.state === "failed") { window.__aboutT = null; draw("The update did not finish: the old version stays", "err", last); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
-    if (!draw(`Updating… ${last}%`, "mut", last)) { window.__aboutT = null; return; }
-    window.__aboutT = setTimeout(tick, 2000);
+    if (p && !stale && p.state === "done") { aboutTimer = null; draw("Updated 100%", "gw-ok", 100); setTimeout(() => location.reload(), 1200); return; }
+    if (p && !stale && p.state === "failed") { aboutTimer = null; draw("The update did not finish: the old version stays", "err", last); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
+    if (!draw(`Updating… ${last}%`, "mut", last)) { aboutTimer = null; return; }
+    aboutTimer = setTimeout(tick, 2000);
   };
-  window.__aboutT = setTimeout(tick, 600);
+  aboutTimer = setTimeout(tick, 600);
 };
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview
