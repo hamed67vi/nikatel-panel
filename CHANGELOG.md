@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.20 - No Checked switch in the server form
+
+- The "Checked by the panel" switch is gone from Add a server (a new server is always checked; an existing one keeps its state, and its window has the switch).
+
 ## 1.55.19 - The PasarGuard part of Add a server shows at once
 
 - The PasarGuard part opens with the box when the open profile is a PasarGuard one (it waited for the first draw).

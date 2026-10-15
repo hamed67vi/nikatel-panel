@@ -635,7 +635,7 @@ const SERVER_FORM = (s, role) => {   // one small window (1.55.15, the owner: "d
     ${s ? `<input type="hidden" name="provider" value="${esc(s.provider)}">` : ""}
     ${!s && window.pgSrvBox ? `<section class="f3-sec srv-after f3-pg" ${typeof labIsPgTag === "function" && labIsPgTag(typeof labTagCur === "function" ? labTagCur() : "") ? "" : "hidden"}><h5 class="f3-h">PasarGuard node <small>for this profile</small></h5>
       <div class="f3-opts srv-opts"><label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>${window.pgSrvTick ? pgSrvTick() : ""}</div>
-      ${pgSrvBox()}</section>` : ""}    <div class="f3-foot"><label class="chk" title="The panel looks at this server every few minutes"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> Checked by the panel</label><span class="sp"></span>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<button class="pri" type="submit">${s ? "Save" : "Add server"}</button></div>
+      ${pgSrvBox()}</section>` : ""}    <div class="f3-foot"><input name="enabled" type="checkbox" style="display:none" ${!s || s.enabled ? "checked" : ""}><span class="sp"></span>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<button class="pri" type="submit">${s ? "Save" : "Add server"}</button></div>
   </form>`;
 };
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
