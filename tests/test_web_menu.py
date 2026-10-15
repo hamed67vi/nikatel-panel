@@ -247,7 +247,7 @@ def test_one_window_makes_a_whole_kind_of_account_and_the_three_tabs_open_it():
     main = (WEB.parent / "main.py").read_text(encoding="utf-8")
     assert '"pg_kinds.js"' in main and '"pg_kinds.css"' in main
     assert 'html body #modal .pg-kind-chip.on' in _web("pg_kinds.css")
-    assert 'name="template"' not in js and "b.template = false;" in js       # (no user template tick any more: the owner, 2026-10-15)
+    assert 'name="template" checked' in js and "const pgKindTplSync" in js and "b.template = f.elements.template.checked" in js       # the user template is a tick of the same form (taken out and brought back on 2026-10-15)
     assert "More (everything here is chosen for you)" in js and "<details class=\"pg-kind-adv\">" in js and "const pgKindFill = auto =>" in js and "Chosen for you:" in js      # (1.53.2, 1.55.0) only the protocol is asked (chips, or a pasted link): the details are folded and filled with what was chosen
     assert "required" not in js.split("pgKindDraw() {", 1)[1].split("window.pgKindPick", 1)[0]
 
@@ -697,14 +697,14 @@ def test_autofill_stays_dark_inside_windows_and_the_panel_mode_switch_shows_the_
     assert "html body #modal .tabs.pn-mode button.on { background: #2d3f68 !important;" in css and "html body #modal .tabs.pn-mode { display: inline-flex;" in css
 
 
-def test_the_add_form_has_a_drawer_per_protocol_a_core_field_and_no_user_template():
-    """The owner, 2026-10-15: "arrange the make-a-config part, the suggested configs in order, VLESS in a drawer, remove the user template, the core can be chosen from there"."""
+def test_the_add_form_has_a_drawer_per_protocol_a_core_field_and_the_user_template_tick():
+    """The owner, 2026-10-15: "arrange the make-a-config part, the suggested configs in order, VLESS in a drawer, the core can be chosen from there" - and, a little later, "bring the user template back"."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
     assert '<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"' in js and 'class="pg-dr-sel"' in js and "if (own) d.open = true;" in js and "const pgKindShort = k =>" in js
-    assert 'name="template"' not in js and "pg-kind-tpl" not in js and "pgKindTplSync" not in js and "b.template = false;" in js and "pg-kind-tpl" not in css
+    assert 'name="template" checked' in js and "pgKindTplSync();" in js and "b.template = f.elements.template.checked;" in js and ".pg-kind-tpl .chk" in css
     form = js.split("function pgKindFormHtml(inline) {", 1)[1].split("</form>", 1)[0]
     assert form.count('name="core_id"') == 1 and form.index('name="core_id"') < form.index('<details class="pg-kind-adv">') and form.index('name="address"') < form.index('name="core_id"') < form.index('name="port"')
-    assert ".pg-kind-dr > summary {" in css and ".pg-kind-dr[open] > summary::after" in css and ".pg-kind-quick { grid-template-columns: repeat(5, minmax(0, 1fr)); }" in css
+    assert ".pg-kind-dr > summary {" in css and ".pg-kind-dr[open] > summary::after" in css and ".pg-kind-quick { grid-template-columns: 1.1fr 1.2fr 1.2fr .8fr 1.1fr 1.7fr; }" in css
 
 
 def test_settings_is_one_fixed_card_with_the_kits_segmented_sections_and_36_px_controls():

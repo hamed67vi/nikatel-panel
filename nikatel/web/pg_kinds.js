@@ -30,6 +30,7 @@ function pgKindFormHtml(inline) {      // the whole form: in a window (the old b
       <label>Core<select name="core_id" title="The core (Xray config) the inbound is written into">${o.cores.length ? o.cores.map((c, i) => opt(c.id, `${c.name} (#${c.id})`, i === 0)).join("") : opt("", "no core yet")}</select></label>
       <label>Port <small id="pg-kind-portnote"></small><input name="port" type="number" min="1" max="65535"></label>
       <label>Group<select name="group">${opt("new", "A new group", true)}${o.groups.map(g => opt("g" + g.id, `Add to “${g.name}” (${g.tags.length})`)).join("")}${opt("none", "No group")}</select></label>
+      <label class="pg-kind-tpl"><span class="chk"><input type="checkbox" name="template" checked> User template</span><span class="pg-kind-tplnum" data-tpl><input name="tpl_gb" type="number" min="0" step="any" value="50" title="Data limit, GB (0 = unlimited)"> GB <input name="tpl_days" type="number" min="0" value="30" title="Days (0 = no end)"> days</span></label>
       <label class="wide" data-need="mlkem">Decryption <small>the server string of <code>xray vlessenc</code>, for the inbound</small><input name="decryption" placeholder="mlkem768x25519plus.native.600s…" autocomplete="off" spellcheck="false"></label>
       <label class="wide" data-need="mlkem">Encryption <small>the client string of <code>xray vlessenc</code>, written into the links</small><input name="encryption" placeholder="mlkem768x25519plus.native.0rtt…" autocomplete="off" spellcheck="false"></label>
     </div>
@@ -70,7 +71,7 @@ window.pgKindPick = k => {
   f.querySelectorAll("[data-sec]").forEach(l => { const on = kd.security !== "none"; l.hidden = !on; l.querySelectorAll("select, input").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-auto]").forEach(i => { i.value = ""; delete i.dataset.auto; });      // what the last check chose for another kind goes: this kind is chosen again
   document.querySelectorAll(".pg-kind-dr").forEach(d => { const own = kd.protocol === d.dataset.p, sel = d.querySelector(".pg-dr-sel"); if (sel) sel.textContent = own ? pgKindShort(kd) : ""; if (own) d.open = true; });      // the drawer of the chosen kind opens (the others shut) and says which one is chosen
-  pgKindPort();
+  pgKindPort(); pgKindTplSync();
   const r = $("#pg-kind-res"); if (r) r.innerHTML = "";
 };
 const pgKindPort = (keep) => {      // the first usual port of the kind that no inbound of the chosen core uses (not touched when the owner typed one: keep)
@@ -78,10 +79,15 @@ const pgKindPort = (keep) => {      // the first usual port of the kind that no 
   if (!keep) f.elements.port.value = kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];
   $("#pg-kind-portnote").textContent = core.ports.includes(+f.elements.port.value) ? "in use in this core" : "free in this core";
 };
-window.pgKindStale = ev => {
+const pgKindTplSync = () => {      // a template gives a group: with no group there is none; its two numbers show only while it is wanted
+  const f = $("#pg-kind-form"), none = f.elements.group.value === "none";
+  if (none) f.elements.template.checked = false;
+  f.elements.template.disabled = none;
+  f.querySelectorAll("[data-tpl]").forEach(l => { l.hidden = !f.elements.template.checked; l.querySelectorAll("input").forEach(i => { i.disabled = l.hidden; }); });
+};window.pgKindStale = ev => {
   pgKind.res = null; if (!$("#pg-kind-form")) return;
   if (ev && ev.target && ev.target.dataset) delete ev.target.dataset.auto;      // a value the owner touched is his, not the one chosen for him
-  pgKindPort(!(ev && ev.target && ev.target.name === "core_id"));
+  pgKindPort(!(ev && ev.target && ev.target.name === "core_id")); pgKindTplSync();
 };
 const pgKindFill = auto => {      // what the server chose is put into the details, so the owner sees it (and can change it); it is marked, so another kind clears it again
   const f = $("#pg-kind-form");
@@ -91,7 +97,7 @@ const pgKindBody = () => {
   const f = $("#pg-kind-form"), b = {kind: pgKind.k}, g = f.elements.group.value;
   [...f.elements].forEach(el => { if (!el.name || el.disabled || ["group", "restart", "template"].includes(el.name)) return; const v = el.type === "number" ? (el.value === "" ? "" : +el.value) : el.value.trim(); if (v !== "") b[el.name] = v; });
   b.group_mode = g === "new" ? "new" : g === "none" ? "none" : "existing"; if (g.startsWith("g")) b.group_id = +g.slice(1);
-  b.template = false;      // (no user template here: the owner, 2026-10-15)
+  b.template = f.elements.template.checked;
   return b;
 };
 /* ---- your own config: paste a client link (vless:// trojan:// vmess:// ss://) and the form is filled with its type, port, path, Host, SNI, fingerprint and the rest; the keys and ids are made new (a link holds only the public half of a REALITY key) */
