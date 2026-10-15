@@ -384,3 +384,14 @@ def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarg
     assert ".lab-np .lab-np-in {" in css and ".lab-np .lab-np-chip {" in css
     assert 'const labTagLocked = t => labHasPg() && String(t).toLowerCase() === "pasarguard nodes"' in lab and lab.count("if (labTagLocked(cur)) {") == 2
     assert lab.count('${labTagLocked(cur) ? "disabled" : ""}') == 2                                                      # (the two buttons beside the tabs are off)
+
+def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the_pasarguard_panel():
+    """The owner, 2026-10-15: "when we press Delete a box opens with a checkbox: if ticked, the node is deleted from the PasarGuard panel itself"."""
+    app, nodes = _web("app.js"), _web("pg_nodes.js")
+    assert "check = null} = {}) {" in app and 'class="ask-check"' in app and "cb ? {checked: cb.checked} : true" in app          # (the tick is an option of the glass box; the answer is {checked}, or false on Cancel)
+    branch = nodes.split('if (v === "delete") {', 1)[1].split("\n};", 1)[0]
+    assert "Also delete the node from the PasarGuard panel itself" in branch and "r.checked" in branch
+    assert branch.count('{method: "DELETE"}') == 3 and "/api/profiles/${prof.id}" in branch                          # (unticked: only the profile goes off the page; ticked: the panel's node first, then the profile)
+    assert branch.index("await delPanel()") < branch.index("/api/profiles/${prof.id}")
+    assert "if (!prof) {" in branch                                                                                   # (a node with no profile keeps the plain question)
+    assert ".ask-check {" in _web("lab.css")

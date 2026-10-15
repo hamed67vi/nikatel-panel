@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.55.6 - Delete a node: a box with a tick
+
+- **Delete the node... opens a box with a tick (the owner):** by itself it takes the node off the Lab page of this panel (it stays in its PasarGuard panel and keeps working; the check does not put it back); tick **Also delete the node from the PasarGuard panel itself** and the node is deleted there first (saved to a file, Backups can make it again), then the profile goes. A node that has no profile on the page keeps the plain question.
+- The glass confirm box can carry a tick (an option of glassAsk; the answer is {checked}).
+
 ## 1.55.5 - A prettier Add profile box, suggested tags, the PasarGuard profile stays
 
 - **The Add profile box** is a small card (it was as wide as the window): a big field and the **suggested tags** under it (Iran, Foreign, Marzban, PasarGuard, Hetzner, Backup - the ones that exist are left out); one click fills the name. The first page uses the same form.
