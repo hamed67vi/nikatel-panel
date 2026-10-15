@@ -388,7 +388,7 @@ def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarg
 def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the_pasarguard_panel():
     """The owner, 2026-10-15: "when we press Delete a box opens with a checkbox: if ticked, the node is deleted from the PasarGuard panel itself"."""
     app, nodes = _web("app.js"), _web("pg_nodes.js")
-    assert "check = null} = {}) {" in app and 'class="ask-check"' in app and "cb ? {checked: cb.checked} : true" in app          # (the tick is an option of the glass box; the answer is {checked}, or false on Cancel)
+    assert "check = null, generate = true} = {}) {" in app and 'class="ask-check"' in app and "cb ? {checked: cb.checked} : true" in app          # (the tick is an option of the glass box; the answer is {checked}, or false on Cancel)
     branch = nodes.split('if (v === "delete") {', 1)[1].split("\n};", 1)[0]
     assert "Also delete the node from the PasarGuard panel itself" in branch and "r.checked" in branch
     assert branch.count('{method: "DELETE"}') == 3 and "/api/profiles/${prof.id}" in branch                          # (unticked: only the profile goes off the page; ticked: the panel's node first, then the profile)
@@ -399,3 +399,18 @@ def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the
 def test_a_pasarguard_profile_has_a_sync_button_beside_its_tabs_and_in_its_empty_page():
     lab = _web("lab.js")
     assert "window.labSyncNodes = async () =>" in lab and '"/api/profiles/sync"' in lab and lab.count("onclick=\"labSyncNodes()\"") == 2 and "${labSyncBtn(cur, IB)}" in lab
+
+def test_deleting_a_server_that_carries_a_pasarguard_node_has_the_tick_in_its_own_box():
+    """The owner, 2026-10-15: "when I press Delete server it did not bring the tick that deletes the node from the PasarGuard panel too"."""
+    app, srv = _web("app.js"), _web("pg_srvnode.js")
+    body = app.split("window.deleteServer = async (id, name) => {", 1)[1].split("window.forgetKey", 1)[0]
+    assert "check: {label: `Also delete the node" in body and "alsoNode" in body and "pgSrvAfterDelete(name, nodes, alsoNode)" in body
+    after = srv.split("window.pgSrvAfterDelete = async (sname, nodes, alsoNode) => {", 1)[1].split("/* ----", 1)[0]
+    assert "if (alsoNode)" in after and "gconfirm" not in after          # (no second question: the tick of the first box says)
+
+def test_a_server_that_carries_a_pasarguard_node_keeps_the_actions_of_the_node_in_its_menu():
+    """The owner, 2026-10-15: "I did not say remove these capabilities" - the node was merged into the row of its server, and the Log, Usage, Certificate, Restart ... of the node were gone from the menu."""
+    lab = _web("lab.js")
+    row = lab.split('if (ctx === "row") {', 1)[1].split("return [labGrp(\"Server\")", 1)[0]
+    assert 'x.type === "pasarguard" && x.node_id != null' in row and 'labNodeItems({panel_id: pgn.panel_id, node_id: pgn.node_id}, null, "node").slice(0, -1)' in row and '{grp: "Node · " + x.grp}' in row
+    assert "labSep, ...nodeActs, gone, labSep, del]" in lab

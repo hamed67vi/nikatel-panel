@@ -210,18 +210,16 @@ window.pgSrvWin = (sid, pid) => {      // the plan of "make a node", for the pan
   pgNodesUse(pid); pgNodesMake(sid);
 };
 
-/* ---- removing a server: its node stays in the panel unless the owner says it goes too (asked after the server is gone, default: stays) */
-window.pgSrvAfterDelete = async (sname, nodes) => {
+/* ---- removing a server: its node stays in the panel unless the tick of the delete box was set (the owner, 2026-10-15: the tick is IN the box of Delete server, no second question) */
+window.pgSrvAfterDelete = async (sname, nodes, alsoNode) => {
   for (const x of nodes) {
     if (x.type === "pasarguard" && x.node_id != null) {
-      if (await gconfirm(`${sname} was the node ${x.name} of the PasarGuard panel ${x.panel}. Delete that node from the panel too? Its traffic history goes with it and whoever is connected through it is cut; the users stay, and the node is saved to a file first (Servers → Nodes… → Backups of the nodes can make it again). OK deletes it, Cancel leaves it in the panel.`, {danger: true})) {
-        try { await api(`/api/panels/${x.panel_id}/pg/nodes/${x.node_id}?confirm=true`, {method: "DELETE"}); toast(`✓ Node ${x.name} deleted from ${x.panel}`, "ok"); pgNodesLoad(x.panel_id, true).catch(() => {}); } catch (e) { toast("✕ " + e.message, "bad"); }
-      }
+      if (alsoNode) { try { await api(`/api/panels/${x.panel_id}/pg/nodes/${x.node_id}?confirm=true`, {method: "DELETE"}); toast(`✓ Node ${x.name} deleted from ${x.panel}`, "ok"); pgNodesLoad(x.panel_id, true).catch(() => {}); } catch (e) { toast("✕ " + e.message, "bad"); } }
+      else toast(`The node ${x.name} stays in the PasarGuard panel ${x.panel}`);
     } else toast(`The node ${x.name} is still in the ${x.type === "marzban" ? "Marzban" : ""} panel ${x.panel}: remove it there if the server is gone for good.`);
   }
   pgSrvLoad();
 };
-
 /* ---- a node outside our servers can be added to them (the form opens with the name and the address filled in) */
 window.pgSrvAddFromNode = i => { const x = (pgSrv.outside || [])[i]; if (x) pgSrvAddServer(x.name, x.address); };      // a node outside our servers: its row number (the handler never carries a name that came from a panel)
 window.pgSrvAddServer = (name, address) => { closeModal(); labAddWith(name, address); };      // the Lab's Add profile opens on a new server with the name and the address filled in (lab.js finds where it is, Iran or foreign, from the address)

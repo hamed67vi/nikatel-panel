@@ -936,7 +936,9 @@ systemctl daemon-reload; echo "REMOVED $n"
 """, {"NAME": _TNAME, "KIND": r"^(backpack|paqet|chisel)$", "PORT": r"^\d{1,5}$", "PROTO": r"^(tcp|udp)$"}),
 
     # Abuse-Defender (foreign servers only): drop outgoing traffic to a public list of abused ranges,
-    # the panel's own servers / tunnel links / DNS / gateway stay whitelisted; refreshed nightly by cron
+    # the panel's own servers / tunnel links / DNS / gateway stay whitelisted; refreshed nightly by cron.
+    # 1.56.13 (the owner: it stuck, and an Abuse-Defender that is on the server already must go first): the install STARTS FRESH - the chains, the cron lines and the scripts of an earlier Abuse-Defender
+    # (ours or the old one) are removed - and the ranges go in with ONE iptables-restore (a call for each of the thousands of ranges took minutes and the SSH call timed out).
     "abuse_install": (r"""set -e
 export DEBIAN_FRONTEND=noninteractive
 command -v iptables >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y iptables >/dev/null 2>&1; }
@@ -950,8 +952,13 @@ URL="@URL@"; WL="@WL@"
 tmp=$(mktemp)
 curl -fsS --max-time 25 "$URL" -o "$tmp" || { echo "LIST-DOWNLOAD-FAILED"; exit 3; }
 [ -s "$tmp" ] || { echo "LIST-EMPTY"; exit 3; }
-for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do iptables -N "$c" 2>/dev/null || true; done
-iptables -F abuse-defender-whitelist
+for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do
+  while iptables -D OUTPUT -j "$c" 2>/dev/null; do :; done
+  iptables -F "$c" 2>/dev/null || true; iptables -X "$c" 2>/dev/null || true
+done
+( crontab -l 2>/dev/null | grep -v -i 'abuse-defender' || true ) | crontab - 2>/dev/null || true
+rm -f /root/abuse-defender*.sh /etc/cron.d/abuse-defender*
+for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do iptables -N "$c"; done
 for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1); do
   case "$i" in gre0|gretap0|erspan0) continue;; esac
   iptables -A abuse-defender-whitelist -o "$i" -j ACCEPT
@@ -961,15 +968,9 @@ for ip in $(awk '/^nameserver/{print $2}' /etc/resolv.conf 2>/dev/null | grep -E
 gw=$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')
 [ -n "$gw" ] && iptables -A abuse-defender-whitelist -d "$gw" -j ACCEPT
 iptables -A abuse-defender-whitelist -d 169.254.169.254 -j ACCEPT
-iptables -F abuse-defender
-while read -r r; do
-  r=$(echo "$r" | tr -d '\r ')
-  echo "$r" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$' || continue
-  iptables -A abuse-defender -d "$r" -j DROP
-done < "$tmp"
+{ echo '*filter'; echo '-F abuse-defender'; tr -d '\r ' < "$tmp" | grep -E '^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$' | awk '{print "-A abuse-defender -d " $0 " -j DROP"}'; echo 'COMMIT'; } | iptables-restore --noflush
 rm -f "$tmp"
 for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do
-  while iptables -D OUTPUT -j "$c" 2>/dev/null; do :; done
   iptables -I OUTPUT 1 -j "$c"
 done
 cat > /root/abuse-defender-update.sh <<'EOF'
@@ -977,17 +978,12 @@ cat > /root/abuse-defender-update.sh <<'EOF'
 tmp=$(mktemp)
 curl -fsS --max-time 25 "@URL@" -o "$tmp" || exit 1
 [ -s "$tmp" ] || exit 1
-iptables -F abuse-defender
-while read -r r; do
-  r=$(echo "$r" | tr -d '\r ')
-  echo "$r" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$' || continue
-  iptables -A abuse-defender -d "$r" -j DROP
-done < "$tmp"
+{ echo '*filter'; echo '-F abuse-defender'; tr -d '\r ' < "$tmp" | grep -E '^[0-9]+(\.[0-9]+){3}(/[0-9]+)?$' | awk '{print "-A abuse-defender -d " $0 " -j DROP"}'; echo 'COMMIT'; } | iptables-restore --noflush
 rm -f "$tmp"
 mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4
 EOF
 chmod +x /root/abuse-defender-update.sh
-( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh'; echo "0 0 * * * /root/abuse-defender-update.sh" ) | crontab -
+( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh' || true; echo "0 0 * * * /root/abuse-defender-update.sh" ) | crontab -          # (|| true: with set -e an empty crontab - grep finds nothing, status 1 - ended the subshell before the echo, so the cron line was never written)
 mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4
 echo "ABUSE_OK=$(iptables -S abuse-defender | grep -c DROP)"
 """, {"URL": r"^https://raw\.githubusercontent\.com/[A-Za-z0-9._/-]{5,120}$", "WL": r"^(\d{1,3}(\.\d{1,3}){3}( \d{1,3}(\.\d{1,3}){3}){0,200})?$"}),
@@ -995,8 +991,8 @@ echo "ABUSE_OK=$(iptables -S abuse-defender | grep -c DROP)"
   while iptables -D OUTPUT -j "$c" 2>/dev/null; do :; done
   iptables -F "$c" 2>/dev/null; iptables -X "$c" 2>/dev/null
 done
-( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh' ) | crontab - 2>/dev/null || true
-rm -f /root/abuse-defender-update.sh; mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4 2>/dev/null || true; echo ABUSE_REMOVED
+( crontab -l 2>/dev/null | grep -v -i 'abuse-defender' ) | crontab - 2>/dev/null || true
+rm -f /root/abuse-defender*.sh /etc/cron.d/abuse-defender*; mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4 2>/dev/null || true; echo ABUSE_REMOVED
 """, {}),
 
     # shop bot: one UPDATE/INSERT with validated values (statement chosen here, values are quoted by the regexes)

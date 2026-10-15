@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.56.14 - The actions of the node are back in the menu of its server
+
+- **A server that carries a PasarGuard node keeps every action of the node in its menu (the owner):** when the node became one row with its server (1.56.3) its Log, Usage, Resources, Latency, Certificate, Edit, Restart, Disable, Resync users, Reset counters and the three updates went from the list; they are in the menu of the server row again, under the groups *Node · Monitor*, *Node · Manage* and *Node · Update*. Its Delete is the tick in Delete server.
+
+## 1.56.13 - Delete server has the node tick; Abuse-Defender starts fresh
+
+- **Delete server... has the tick (the owner):** for a server that carries a PasarGuard node the box says **Also delete the node NAME from the PasarGuard panel itself** - ticked, the node goes from the panel after the server; unticked, it stays (no second question after the server is gone).
+- **Abuse-Defender starts fresh:** one that is on the server already (ours or the old one: its chains, cron lines and scripts) is removed first, and the ranges go in with ONE iptables-restore. Found on the way: the nightly cron line was never written on a server with an empty crontab (the grep that finds nothing ended the subshell under `set -e`); fixed.
+
 ## 1.56.12 - The Copied pill of the old list on the addresses
 
 - The addresses of the Lab are `ip-copy` cells like the old list's: a click copies, the address flashes and a green **Copied** pill pops at its right.

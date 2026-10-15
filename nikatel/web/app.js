@@ -1020,12 +1020,13 @@ window.srvPassword = async (id, name) => {
 };
 const X_SVG = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>';      // the cross of the faint "remove" buttons (accounts, panels, servers)
 window.deleteServer = async (id, name) => {
-  if (!await gconfirm(`Remove ${name} from the panel? Nothing changes on the server itself.`, {danger: true})) return;
-  const nodes = window.pgSrvOn ? pgSrvOn({id}).map(x => ({...x})) : [];      // the nodes of the panels that run on it (read before it is gone)
+  const nodes = window.pgSrvOn ? pgSrvOn({id}).map(x => ({...x})) : [], pg = nodes.filter(x => x.type === "pasarguard" && x.node_id != null);      // the nodes of the panels that run on it (read before it is gone)
+  const ans = await gconfirm(`Remove ${name} from the panel? Nothing changes on the server itself.`, pg.length ? {danger: true, check: {label: `Also delete the node ${pg.map(x => x.name).join(", ")} from the PasarGuard panel itself`}} : {danger: true});      // (a tick in the same box, the owner 2026-10-15: the node goes from the PasarGuard panel too - or stays there)
+  if (!ans) return;
+  const alsoNode = !!(ans && ans.checked);
   try { await api(`/api/servers/${id}`, {method: "DELETE"}); toast("✓ Removed", "ok"); state.edit = null; state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); return; }
-  if (nodes.length && window.pgSrvAfterDelete) await pgSrvAfterDelete(name, nodes);      // then: should its node leave the PasarGuard panel too (asked, never done by itself)
-};
-window.forgetKey = async (id, name) => {
+  if (nodes.length && window.pgSrvAfterDelete) await pgSrvAfterDelete(name, nodes, alsoNode);
+};window.forgetKey = async (id, name) => {
   if (!await gconfirm(`Forget the SSH host key of ${name}? Do this only after the server was reinstalled.`)) return;
   try { await api(`/api/servers/${id}/forget-hostkey`, {method: "POST"}); toast("✓ Host key forgotten", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
