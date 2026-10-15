@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.7 - The delete box is shorter
+
+- The tick of the delete-node box has no long explanation under it (the owner).
+
 ## 1.55.6 - Delete a node: a box with a tick
 
 - **Delete the node... opens a box with a tick (the owner):** by itself it takes the node off the Lab page of this panel (it stays in its PasarGuard panel and keeps working; the check does not put it back); tick **Also delete the node from the PasarGuard panel itself** and the node is deleted there first (saved to a file, Backups can make it again), then the profile goes. A node that has no profile on the page keeps the plain question.
