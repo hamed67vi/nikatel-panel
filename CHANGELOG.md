@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.15 - The address writes Copied
+
+- A click on an address copies it and the cell itself says **✓ Copied** (in green) for a moment, then shows the address again.
+
 ## 1.56.14 - The actions of the node are back in the menu of its server
 
 - **A server that carries a PasarGuard node keeps every action of the node in its menu (the owner):** when the node became one row with its server (1.56.3) its Log, Usage, Resources, Latency, Certificate, Edit, Restart, Disable, Resync users, Reset counters and the three updates went from the list; they are in the menu of the server row again, under the groups *Node · Monitor*, *Node · Manage* and *Node · Update*. Its Delete is the tick in Delete server.

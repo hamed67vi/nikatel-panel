@@ -264,3 +264,5 @@ html body .lab-emoji { display: inline-block; width: 16px; margin-right: 6px; fo
 html body .nav-sub .ic .lab-emoji { width: auto; margin: 0; font-size: 16px; vertical-align: middle; }
 /* 1.56.6 - the pictures of the profiles are not coloured (the owner): the flag of Iran and the emoji are grey like the logos */
 html body .lab-logo.lab-flag, html body .lab-emoji { filter: grayscale(1) brightness(1.15); opacity: .92; }
+/* 1.56.15 - the address says Copied in its own cell */
+html body #page .lab-tbl td.lab-ip.lab-ip-done { color: var(--ok) !important; font-weight: 700; text-decoration: none; }
