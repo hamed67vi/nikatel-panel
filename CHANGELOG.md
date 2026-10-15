@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.12 - The Copied pill of the old list on the addresses
+
+- The addresses of the Lab are `ip-copy` cells like the old list's: a click copies, the address flashes and a green **Copied** pill pops at its right.
+
 ## 1.56.11 - The address says Copied where it was clicked
 
 - A click on an address of the Lab copies it and marks the address itself (a solid mark for a moment), as the old list did - not a message at the top.
