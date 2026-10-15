@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.57.0 - Usage as round stats; the lamp ignores the way to the server
+
+- **Usage (the owner):** rebuilt as round stats on ONE screen - a ring of the users by status (with the ones online now), three gauges for the server (CPU, memory, disk), the traffic with a strip of bars, a ring of the usage per node, a ring of the subscription apps and the five biggest users. Every card has a › that opens its own section.
+- **Sections:** chips under the range bar - *Overview*, *Traffic*, *Nodes* (only the consumption of the nodes: a big ring and the sortable table), *Users*, *Apps*, *Look up*; the chosen one is remembered. Marzban has Overview, Users and Look up.
+- **The lamp of a server:** a filtered address, a GRE fault, a tunnel down or a bad route no longer turns it yellow or red; it follows the server itself (not answering, login, CPU, memory, disk, node).
+
 ## 1.56.27 - A flyout for Move to profile, Make a PasarGuard node
 
 - **Move to profile (the owner):** it is a flyout now - a small menu opens beside it with the names of the profiles (each with its picture, the current one checked); one click moves the server. Menus can have such submenus anywhere (hover, click or the right arrow).

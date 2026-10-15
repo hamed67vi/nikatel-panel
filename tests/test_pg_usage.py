@@ -900,3 +900,60 @@ def test_js_bar_chart_svg():
 def test_js_sorting_by_a_header_does_not_change_the_data():
     got = run_js("""c => { const rows = [{name: 'b', gb: 2}, {name: 'a', gb: 9}, {name: 'c', gb: 5}]; return [c.pgUsageSortRows(rows, 'gb', -1).map(r => r.name), c.pgUsageSortRows(rows, 'gb', 1).map(r => r.name), c.pgUsageSortRows(rows, 'name', 1).map(r => r.name), c.pgUsageSortRows(rows, 'name', -1).map(r => r.name), rows.map(r => r.name), c.pgUsageSortRows(null, 'gb', 1), c.pgUsageGbText(1234.5), c.pgUsageGbText(null)]; }""")
     assert got == [["a", "c", "b"], ["b", "c", "a"], ["a", "b", "c"], ["c", "b", "a"], ["b", "a", "c"], [], "1,234.50 GB", "0.00 GB"]
+
+
+@needs_node
+def test_js_rings_gauges_strips_and_top_n():
+    ring = run_js("c => c.pgUsageRingSvg([{v: 3, cls: 'ok', label: 'Active: 3'}, {v: 1, cls: 'bad', label: 'Expired: 1'}, {v: 0, cls: 'off', label: 'x'}], {big: '4', small: 'users'})")
+    assert ring.startswith("<svg") and ring.endswith("</svg>") and ring.count('class="pg-ring-arc') == 2 and "pg-ring-track" in ring and ">4</text>" in ring and ">users</text>" in ring and ring.count("<title>") == 2 and "Active: 3" in ring
+    empty = run_js("c => [c.pgUsageRingSvg([]), c.pgUsageRingSvg(null, {big: '0'}), c.pgUsageRingSvg([{v: 'x'}])]")
+    assert all("pg-ring-arc" not in e and "pg-ring-track" in e for e in empty)
+    evil = run_js("c => c.pgUsageRingSvg([{v: 1, cls: '\"><img src=x>', label: '<script>alert(1)</script>'}], {big: '<b>'})")
+    assert "<script>" not in evil and "<img" not in evil and "<b>" not in evil
+    gauge = run_js("c => [c.pgUsageGaugeSvg(41, {name: 'Memory'}), c.pgUsageGaugeSvg(80, {warn: 70, bad: 85}), c.pgUsageGaugeSvg(95), c.pgUsageGaugeSvg(null)]")
+    assert 'class="pg-ring-arc ok"' in gauge[0] and ">41%</text>" in gauge[0] and 'pg-ring-arc warn' in gauge[1] and 'pg-ring-arc bad' in gauge[2] and "pg-ring-arc" not in gauge[3] and ">—</text>" in gauge[3]
+    spark = run_js("c => [c.pgUsageSparkSvg([{label: '10-11', gb: 3}, {label: '10-12', gb: 12}, {label: '10-13', gb: 0}]), c.pgUsageSparkSvg([]), c.pgUsageSparkSvg(null)]")
+    assert spark[0].count("<rect") == 3 and spark[0].count("pg-spark-b top") == 1 and "10-12: 12.00 GB" in spark[0] and spark[1] == "" and spark[2] == ""
+    got = run_js("c => [c.pgUsageTopN([{name: 'a', v: 5}, {name: 'b', v: 1}, {name: 'c', v: 9}], 5).map(r => r.name), c.pgUsageTopN([{name: 'a', v: 5}, {name: 'b', v: 4}, {name: 'c', v: 3}, {name: 'd', v: 2}, {name: 'z', v: 0}], 3).map(r => [r.name, r.v]), c.pgUsageTopN(null, 3), c.pgUsageGbParts(12.345), c.pgUsageGbParts(250), c.pgUsageGbParts(2048), c.pgUsageGbParts('x')]")
+    assert got == [["c", "a", "b"], [["a", 5], ["b", 4], ["Other", 5]], [], ["12.3", "GB"], ["250", "GB"], ["2.00", "TB"], ["0.0", "GB"]]
+
+
+NODE_PAGE_RUNNER = r"""
+const fs = require("fs"), vm = require("vm");
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const els = {}, el = sel => els[sel] || (els[sel] = {innerHTML: "", textContent: "", hidden: false, dataset: {}, children: [], querySelectorAll: () => []});
+const ctx = vm.createContext({window: {pgTabs: {}}, esc, $: el, console, fmtB: b => b == null ? "-" : (b / 1073741824).toFixed(2) + " GB"});
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), ctx, {filename: "pg_usage.js"});
+vm.runInContext("pgUsageState.err = {}", ctx);
+process.stdout.write(JSON.stringify(eval("(" + process.argv[2] + ")")(ctx, els, src => vm.runInContext(src, ctx))));
+"""
+PAGE_DATA = """
+const ov = {total: 120, online: 7, active: 100, limited: 5, expired: 10, disabled: 3, on_hold: 2, cpu_pct: 41, mem_pct: 88, disk_pct: 14, speed_in: 1000, speed_out: 2000, traffic_in: 1e9, traffic_out: 2e9, version: "0.5.4", uptime_s: 90000, panel_type: "pasarguard"};
+const range = {total: {gb: 12.5}, avg_per_day_gb: 1.8, granularity: "day", range: {days: 7, from: "2026-10-09", to: "2026-10-15", from_j: "a", to_j: "b"}, series: [{label: "10-09", gb: 1}, {label: "10-10", gb: 3}], by_node: [{name: "n1", gb: 8, share: 0.64}, {name: "n2", gb: 4.5, share: 0.36}]};
+const apps = {total: 10, apps: [{name: "v2rayNG", count: 6, percent: 60}, {name: "Streisand", count: 4, percent: 40}]};
+const top = {users: [{username: "alice", used_gb: 5.5}, {username: "<b>x</b>", used_gb: 1}], total: 2, sorts: []};
+"""
+
+
+def run_page_js(body: str):
+    fn = "(c, els, run) => {" + PAGE_DATA + body + "}"
+    out = subprocess.run(["node", "-e", NODE_PAGE_RUNNER, str(WEB / "pg_usage.js"), fn], check=False, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+@needs_node
+def test_js_overview_draws_round_cards_from_what_is_known_and_the_nodes_section_alone():
+    """The overview is built from the counters, the range, the apps and the top users as they arrive; Marzban gets only the cards it can fill; a section that Marzban has not is never the current one."""
+    got = run_page_js("""run("Object.assign(pgUsageState, {type: 'pasarguard', ov: " + JSON.stringify(ov) + ", range: " + JSON.stringify(range) + ", apps: " + JSON.stringify(apps) + ", top: " + JSON.stringify(top) + "})");
+      c.pgUsageDrawCards(); const full = els["#pg-usage-ov"].innerHTML;
+      const nodes = c.pgUsageNodesSecHtml(range, false);
+      run("Object.assign(pgUsageState, {type: 'marzban', range: null, apps: null, sec: 'nodes'})"); c.pgUsageDrawCards(); const mz = els["#pg-usage-ov"].innerHTML;
+      return [full, nodes, mz, run("pgUsageSecCur()"), run("pgUsageState.type = 'pasarguard'; pgUsageSecCur()")];""")
+    full, nodes, mz, cur_mz, cur_pg = got
+    assert full.count('class="card pg-rc"') == 6 and "7 online now" in full and full.count("pg-ring-arc") >= 5 + 3 + 2 + 2 + 0 and "NaN" not in full and "undefined" not in full
+    assert 'pg-ring-arc warn' in full and ">88%</text>" in full and ">41%</text>" in full and ">14%</text>" in full            # the memory is amber, the others are quiet
+    assert "n1" in full and "64%" in full and "Streisand" in full and "alice" in full and "&lt;b&gt;x&lt;/b&gt;" in full and "<b>x</b>" not in full
+    assert "pg-ns" in nodes and 'id="pg-usage-range-nodes"' in nodes and "n2" in nodes and "12.50 GB" not in nodes or "pg-ns" in nodes
+    assert mz.count('class="card pg-rc"') == 3 and "Traffic" not in mz and "Nodes" not in mz           # users, server, top users
+    assert cur_mz == "ov" and cur_pg == "nodes"

@@ -74,3 +74,52 @@ html body #page .pg-usage-stale { margin: 0 0 6px; padding: 5px 8px; border: 1px
   html body #page .pg-ustats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 html body #page .pg-usage-card .tbl td.name small { display: block; font-size: 10.5px; line-height: 1.2; } html body #page .pg-usage-card .tbl td.name .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 1.57.0 - the Usage tab as round stats (the owner: "short, useful, packed; easy on the eye, like a round stats menu; a section of the nodes' usage only"): the section chips, the cards of the overview (rings, gauges, a strip of bars), the Nodes section */
+html body #page .pg-usec { align-self: flex-start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+html body #page .pg-usec button { height: 28px; padding: 0 14px; font-size: 13px; }
+html body #page .pg-rcs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+html body #page .pg-rc { margin: 0; padding: 10px 14px 12px; min-width: 0; border-radius: 14px; }
+html body #page .pg-rc-h { display: flex; align-items: center; gap: 10px; min-height: 24px; margin: 0 0 8px; }
+html body #page .pg-rc-h h3 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px; font-weight: 650; }
+html body #page .pg-rc-h small { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+html body #page .pg-rc-go { flex: none; width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 17px; line-height: 1; color: var(--mut); background: rgba(255,255,255,.06); border: 0; }
+html body #page .pg-rc-go:hover { color: #fff; background: rgba(255,255,255,.16); }
+html body #page .pg-rc-b { display: flex; align-items: center; gap: 14px; min-width: 0; }
+html body #page .pg-rc-pill { flex: none; padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 11.5px; color: var(--mut); white-space: nowrap; }
+html body #page .pg-rc-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+html body #page .pg-rc-none { padding: 22px 4px; font-size: 12.5px; }
+html body #page .pg-ring { display: block; flex: none; }
+html body #page .pg-ring-track { fill: none; stroke: rgba(255,255,255,.07); }
+html body #page .pg-ring-arc { fill: none; stroke: var(--pc, var(--acc)); stroke-linecap: round; }
+html body #page .pg-ring-arc:hover { filter: brightness(1.25); }
+html body #page .pg-ring-big { fill: var(--text); font-size: 21px; font-weight: 700; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+html body #page .pg-ring-small { fill: var(--mut); font-size: 11px; }
+html body #page .pg-leg { flex: 1 1 auto; min-width: 0; margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+html body #page .pg-leg li { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; }
+html body #page .pg-leg i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--pc, var(--acc)); }
+html body #page .pg-leg .ell { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mut); }
+html body #page .pg-leg b { flex: none; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html body #page .pg-leg em { flex: none; width: 34px; text-align: right; font-style: normal; font-size: 11px; color: var(--mut); }
+html body #page :is(.pg-ring-arc, .pg-leg i).ok { --pc: var(--ok); } html body #page :is(.pg-ring-arc, .pg-leg i).warn { --pc: var(--warn); } html body #page :is(.pg-ring-arc, .pg-leg i).bad { --pc: var(--bad); }
+html body #page :is(.pg-ring-arc, .pg-leg i).hold { --pc: #4da3ff; } html body #page :is(.pg-ring-arc, .pg-leg i).off { --pc: #7c869f; } html body #page :is(.pg-ring-arc, .pg-leg i).po { --pc: #6b7694; }
+html body #page :is(.pg-ring-arc, .pg-leg i).p0 { --pc: #4da3ff; } html body #page :is(.pg-ring-arc, .pg-leg i).p1 { --pc: #3ddc97; } html body #page :is(.pg-ring-arc, .pg-leg i).p2 { --pc: #ffc44d; }
+html body #page :is(.pg-ring-arc, .pg-leg i).p3 { --pc: #ff6b8b; } html body #page :is(.pg-ring-arc, .pg-leg i).p4 { --pc: #a78bfa; } html body #page :is(.pg-ring-arc, .pg-leg i).p5 { --pc: #22d3ee; }
+html body #page .pg-rc-gs { display: flex; justify-content: space-around; align-items: flex-start; gap: 8px; padding: 2px 0 4px; }
+html body #page .pg-gau { display: flex; flex-direction: column; align-items: center; gap: 3px; } html body #page .pg-gau small { font-size: 11px; color: var(--mut); }
+html body #page .pg-gau .pg-ring-big { font-size: 17px; }
+html body #page .pg-rc-foot { display: flex; flex-wrap: wrap; gap: 3px 14px; margin-top: 6px; font-size: 11.5px; color: var(--mut); font-variant-numeric: tabular-nums; }
+html body #page .pg-rc-tr { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 12px; margin: 0 0 8px; } html body #page .pg-rc-tr .mut { font-size: 12px; }
+html body #page .pg-rc-big { font-size: 28px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums; } html body #page .pg-rc-big small { font-size: 13px; font-weight: 500; color: var(--mut); letter-spacing: 0; }
+html body #page .pg-spark { display: block; width: 100%; height: 52px; } html body #page .pg-spark-b { fill: var(--acc); opacity: .7; } html body #page .pg-spark-b.top { fill: var(--acc-2); opacity: 1; } html body #page .pg-spark-b:hover { opacity: 1; }
+html body #page .pg-mini-l { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+html body #page .pg-mini-l li { display: grid; grid-template-columns: minmax(0, 1fr) 64px auto; align-items: center; gap: 10px; padding: 4px 6px; border-radius: 8px; font-size: 12.5px; cursor: pointer; }
+html body #page .pg-mini-l li:hover { background: rgba(255,255,255,.06); }
+html body #page .pg-mini-l .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pg-mini-l b { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html body #page .pg-mini { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,.09); overflow: hidden; } html body #page .pg-mini u { display: block; height: 100%; border-radius: 3px; background: var(--acc); text-decoration: none; }
+html body #page .pg-ns { display: grid; grid-template-columns: minmax(230px, 310px) minmax(0, 1fr); gap: 18px; align-items: start; }
+html body #page .pg-ns-ring { display: flex; flex-direction: column; align-items: center; gap: 12px; } html body #page .pg-ns-ring .pg-leg { width: 100%; }
+html body #page .pg-ns .pg-usage-nodes { max-height: calc(100vh - 360px); min-height: 160px; }
+html body #page .pg-usage-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 10px; align-items: start; } html body #page .pg-usage-two > div:empty { display: none; }
+html[data-mode="light"] body #page .pg-ring-track { stroke: rgba(30,50,100,.10); } html[data-mode="light"] body #page .pg-rc-go { background: rgba(30,50,100,.07); }
+@media (max-width: 760px) { html body #page .pg-ns { grid-template-columns: minmax(0, 1fr); } }

@@ -358,14 +358,16 @@ def test_the_core_cards_count_the_selected_ones_in_the_select_all_row():
     assert 'id="pg-cores-cnt"' in js and 'cnt.textContent = `${k}/${(st.list || []).length}`' in js
 
 
-def test_the_usage_tab_is_a_dashboard_of_two_columns_with_a_scale_on_its_chart():
-    """The owner, 2026-10-15: "make the Usage section very professional" - one bar with the range buttons, a band of counters, two columns of cards, a chart with a scale; the page scrolls."""
+def test_the_usage_tab_is_round_stats_in_sections_with_a_nodes_only_view():
+    """The owner, 2026-10-15: "short, useful, packed; easy on the eye, like a round stats menu; a section with only the nodes' usage": rings and gauges on one screen, chips for the sections, a Nodes section."""
     js, css = _web("pg_usage.js"), _web("pg_usage.css")
-    for part in ("function pgUsageNice(m)", "const pgUsageStat = ", "pg-ukpi", "pg-usage-main", "pg-usage-side", 'class="pg-useg"', "Busiest node", "Subscription apps", "Users over time", "Top users", "pg-usage-gl"):
+    for part in ("function pgUsageNice(m)", "function pgUsageRingSvg(", "function pgUsageGaugeSvg(", "function pgUsageSparkSvg(", "const PGU_SECS = ", 'data-for="nodes"', 'data-for="ov"', "function pgUsageNodesSecHtml(", "window.pgUsageSec = ", 'class="pg-useg pg-usec"', "Busiest node", "Subscription apps", "Users over time", "Top users", "pg-usage-gl"):
         assert part in js, part
-    assert "pgUsageFit" not in js                                              # (no fixed one-screen height any more: the page scrolls, the cards keep their own height)
-    assert ".main:has(.pg-usage) { overflow-y: auto; }" in css and ".pg-usage-grid {" in css and ".pg-useg button.on {" in css
-    assert js.count('class="pg-usage-grid"') == 1                              # (the class of the columns is not the class of a grid line of the SVG)
+    assert "pgUsageFit" not in js and "pg-ukpi" not in js and "pg-usage-pair" not in js and "#pg-usage-cards" not in js
+    assert ".main:has(.pg-usage) { overflow-y: auto; }" in css and ".pg-rcs {" in css and ".pg-ns {" in css and ".pg-useg button.on {" in css
+    lab, labcss = _web("lab.js"), _web("lab.css")          # (the same day: the lamp of a server ignores a filtered address and the faults of the way to it)
+    assert "const labLampTone = s =>" in lab and "labIssues(s).some(i => !i.path)" in lab and lab.count(", false, true);") == 3 and "true, true);" in lab and lab.count('data-lamp="') == 3
+    assert 'tr[data-lamp="bad"] { --lamp: #ff6b8b; }' in labcss and 'tr[data-lamp="warn"] { --lamp: #ffc44d; }' in labcss
 
 def test_a_server_or_node_can_be_moved_to_any_profile_from_the_menu_or_by_dragging_its_row_onto_a_tab():
     """The owner, 2026-10-15: "a way to move a server to any profile we like"."""
@@ -437,7 +439,7 @@ def test_fixed_boxes_names_only_buttons_disabled_without_items_and_the_server_ic
     assert "function fxFit()" in app and 'class="lbox full fx-box dns-box"' in app and 'class="card ap-tasks fx-box"' in app
     assert '!accounts.length ? "accounts"' in app and '!accounts.length && k !== "accounts" ? \'disabled title="Add an account first"\'' in app
     assert "html body #page .fx-box { height: calc(100vh - 290px)" in css and ".toolbar.is-empty :is(.tf-tabs, .tb-search)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
-    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".srv-ic::before { content: \"\"; position: absolute; top: -1px;" in css and "tr.sev-yellow { --lamp: #ffc44d" in css
+    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".srv-ic::before { content: \"\"; position: absolute; top: -1px;" in css and 'tr[data-lamp="warn"] { --lamp: #ffc44d' in css
     assert ".lab-cpu .bar { flex: 0 1 96px" in css and "linear-gradient(90deg, #0a62ff, #4aa8ff)" in css
 
 

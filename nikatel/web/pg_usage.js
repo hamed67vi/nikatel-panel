@@ -86,9 +86,48 @@ function pgUsageBarsSvg(series, o = {}) {
   return `${head}${grid}${bars}${labels}${max > 0 ? "" : `<text class="pg-usage-none" x="${(L + pw / 2).toFixed(1)}" y="${(T + ph / 2).toFixed(1)}" text-anchor="middle">${esc(none)}</text>`}</svg>`;
 }
 
+/* ---- pure: round stats (1.56.24, the owner: "easy on the eye, like a round stats menu"). A ring of parts, a one-value gauge, a bar strip with no axis, the biggest N rows + "Other". No DOM, no library. */
+/* the SVG text of a ring (donut): parts = [{v, cls, label}] (a part of 0 is not drawn); o.total fixes the whole (a gauge: 100), o.big / o.small are the two lines in the middle; every arc has a tooltip */
+function pgUsageRingSvg(parts, o = {}) {
+  const size = o.size || 120, sw = o.stroke || 13, r = (size - sw) / 2, c = 2 * Math.PI * r, m = size / 2;
+  const list = (Array.isArray(parts) ? parts : []).filter(p => p && Number.isFinite(+p.v) && +p.v > 0), tot = o.total > 0 ? o.total : list.reduce((a, p) => a + +p.v, 0);
+  let off = 0;
+  const arcs = tot > 0 ? list.map(p => {
+    const len = Math.min(+p.v, tot) / tot * c, gap = list.length > 1 ? Math.min(3, len / 3) : 0, dash = Math.max(0.01, len - gap);
+    const el = `<circle class="pg-ring-arc ${esc(p.cls || "")}" cx="${m}" cy="${m}" r="${r.toFixed(2)}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(c - dash).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${m} ${m})"><title>${esc(p.label || "")}</title></circle>`;
+    off += len; return el;
+  }).join("") : "";
+  const mid = (o.big != null ? `<text class="pg-ring-big" x="${m}" y="${o.small ? m + 2 : m + 6}" text-anchor="middle">${esc(o.big)}</text>` : "") + (o.small ? `<text class="pg-ring-small" x="${m}" y="${m + 16}" text-anchor="middle">${esc(o.small)}</text>` : "");
+  return `<svg class="pg-ring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${esc(o.label || "")}"><circle class="pg-ring-track" cx="${m}" cy="${m}" r="${r.toFixed(2)}" stroke-width="${sw}"/>${arcs}${mid}</svg>`;
+}
+/* a gauge: ONE percentage on a ring that turns amber and red (warn / bad are the limits) */
+function pgUsageGaugeSvg(pct, o = {}) {
+  const n = pct == null || pct === "" ? NaN : +pct, v = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0, warn = o.warn == null ? 75 : o.warn, bad = o.bad == null ? 90 : o.bad;
+  return pgUsageRingSvg([{v, cls: v > bad ? "bad" : v > warn ? "warn" : "ok", label: `${o.name || ""} ${v}%`.trim()}], {size: o.size || 84, stroke: o.stroke || 9, total: 100, big: Number.isFinite(n) ? Math.round(v) + "%" : "—", label: o.name});
+}
+/* a strip of bars with no scale (the shape of a range at a glance); series = [{label, gb}] */
+function pgUsageSparkSvg(series, o = {}) {
+  const pts = (Array.isArray(series) ? series : []).filter(p => p && Number.isFinite(+p.gb)), max = Math.max(0, ...pts.map(p => +p.gb));
+  if (!pts.length) return "";
+  const H = o.height || 52, step = 14, W = pts.length * step, vt = typeof o.valueText === "function" ? o.valueText : v => pgUsageGbText(v);
+  const bars = pts.map((p, i) => { const v = +p.gb, h = max > 0 && v > 0 ? Math.max(3, v / max * (H - 2)) : 2; return `<rect class="pg-spark-b${v === max && max > 0 ? " top" : ""}" x="${(i * step + 2).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${step - 4}" height="${h.toFixed(1)}" rx="2.5"><title>${esc(p.label)}: ${esc(vt(v))}</title></rect>`; }).join("");
+  return `<svg class="pg-spark" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${esc(o.label || "usage")}">${bars}</svg>`;
+}
+/* the biggest n rows of [{name, v}] and one "Other" row with the rest (rows of 0 are left out) */
+function pgUsageTopN(rows, n) {
+  const s = (Array.isArray(rows) ? rows : []).filter(r => r && Number(r.v) > 0).sort((a, b) => b.v - a.v);
+  if (s.length <= n) return s;
+  return [...s.slice(0, n - 1), {name: "Other", v: s.slice(n - 1).reduce((a, r) => a + Number(r.v), 0), other: true}];
+}
+/* GB as "12.3 GB" / "1.40 TB" in two pieces, for the middle of a ring: [number, unit] */
+function pgUsageGbParts(v) {
+  const n = Number.isFinite(+v) ? +v : 0;
+  return n >= 1024 ? [(n / 1024).toFixed(2), "TB"] : [n >= 100 ? n.toFixed(0) : n.toFixed(1), "GB"];
+}
+
 /* ---- state: what the tab knows. The Panels page draws itself again every 15 s and calls render() each time: render paints from this state AT ONCE (no "loading" flash, the
    scroll position stays) and asks the server only for what is older than the server's own cache (counters 15 s, ranges and top users 30 s). */
-const pgUsageState = {id: 0, type: "pasarguard", ranges: null, rangesAt: 0, preset: "last7", from: "", to: "", ov: null, ovAt: 0, range: null, rangeKey: "", rangeAt: 0, top: null, topKey: "", topAt: 0, admins: null,
+const pgUsageState = {sec: (() => { try { return localStorage.getItem("nk.pgu.sec") || "ov"; } catch (e) { return "ov"; } })(), id: 0, type: "pasarguard", ranges: null, rangesAt: 0, preset: "last7", from: "", to: "", ov: null, ovAt: 0, range: null, rangeKey: "", rangeAt: 0, top: null, topKey: "", topAt: 0, admins: null,
   look: null, lookBusy: false, lookErr: "", lookStale: false, kind: "admin", name: "", topSort: "used_traffic", topAdmin: "", err: {}, scroll: {}, sort: {range: {key: "gb", dir: -1}, look: {key: "gb", dir: -1}},
   counts: null, countsKey: "", countsAt: 0, metric: "online", countsAdmin: "", apps: null, appsKey: "", appsAt: 0, appsAdmin: ""};
 const pgUsageTok = {};            // one counter per kind of question: a newer question drops the answer of an older one
@@ -149,22 +188,76 @@ window.pgUsageDates = () => {
   pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
 };
 
-/* ---- the counters: users (with the colour of what needs a look) and the server (the meters turn amber and red) */
-function pgUsageCardsHtml(ov) {
-  const n = v => v == null ? null : Number(v).toLocaleString("en-US");
-  const k = (label, val, cls = "") => val == null ? "" : `<div class="pg-uk ${cls}"><small>${esc(label)}</small><b>${esc(val)}</b></div>`;
-  const meter = (label, v, bad) => v == null ? "" : `<div class="pg-uk ${v > bad ? "bad" : v > bad - 15 ? "warn" : ""}"><small>${esc(label)}</small><b>${esc(v + "%")}</b><i class="pg-ubar"><u style="width:${Math.min(100, Math.max(0, v))}%"></u></i></div>`;
-  const pair = (label, a, b, suffix) => a == null && b == null ? "" : `<div class="pg-uk wide"><small>${esc(label)}</small><b>↓ ${esc(fmtB(a) + suffix)}<span> ↑ ${esc(fmtB(b) + suffix)}</span></b></div>`;
-  const users = [k("Users", n(ov.total)), k("Online", n(ov.online), ov.online > 0 ? "ok" : ""), k("Active", n(ov.active)), k("Limited", n(ov.limited), ov.limited > 0 ? "warn" : ""), k("Expired", n(ov.expired), ov.expired > 0 ? "bad" : ""), k("Disabled", n(ov.disabled)), k("On hold", n(ov.on_hold))].join("");
-  const server = [meter("CPU", ov.cpu_pct, 85), meter("Memory", ov.mem_pct, 90), meter("Disk", ov.disk_pct, 90), pair("Speed now", ov.speed_in, ov.speed_out, "/s"), pair("Traffic total", ov.traffic_in, ov.traffic_out, "")].join("");
-  const ver = ov.version ? `${esc(ov.panel_type === "marzban" ? "Marzban" : "PasarGuard")} ${esc(ov.version)}${ov.uptime_s ? " · up " + Math.floor(ov.uptime_s / 86400) + " d" : ""}` : "";
-  return `<div class="pg-ukpi"><div class="pg-ukg pg-ukg-u"><h4>Users</h4><div class="pg-ukr">${users}</div></div><div class="pg-ukg pg-ukg-s"><h4>Server <small class="mut">${ver}</small></h4><div class="pg-ukr">${server}</div></div></div>`;
+/* ---- the overview (1.57.0, the owner: "short, useful, packed - the numbers easy on the eye, like a round stats menu; e.g. a section of the nodes' usage only"): rings and gauges on ONE screen,
+   every card has a › that opens its own section; the sections are chips under the range bar (Overview, Traffic, Nodes, Users, Apps, Look up) and only the chosen one is on the page */
+const pgUsageN = v => v == null ? null : Number(v).toLocaleString("en-US");
+const PGU_PAL = ["p0", "p1", "p2", "p3", "p4", "p5"];
+const pgUsageLeg = items => `<ul class="pg-leg">${items.map(i => `<li title="${esc(i.name)}: ${esc(i.val)}"><i class="${esc(i.cls)}"></i><span class="ell">${esc(i.name)}</span><b>${esc(i.val)}</b>${i.pct != null ? `<em>${esc(i.pct)}</em>` : ""}</li>`).join("")}</ul>`;
+const pgUsageRc = (title, sub, body, go) => `<div class="card pg-rc"><div class="pg-rc-h"><h3>${esc(title)}</h3>${sub ? `<small class="mut">${sub}</small>` : ""}${go ? `<button type="button" class="pg-rc-go" onclick="pgUsageSec('${go}')" title="Open ${esc(title)}" aria-label="Open ${esc(title)}">›</button>` : ""}</div>${body}</div>`;
+function pgUsageUsersRc(ov) {
+  const n = pgUsageN, parts = [["Active", ov.active, "ok"], ["On hold", ov.on_hold, "hold"], ["Limited", ov.limited, "warn"], ["Expired", ov.expired, "bad"], ["Disabled", ov.disabled, "off"]].filter(x => x[1] != null);
+  const ring = pgUsageRingSvg(parts.map(([name, v, cls]) => ({v, cls, label: `${name}: ${n(v)}`})), {size: 118, stroke: 13, big: n(ov.total) || "0", small: "users", label: "Users by status"});
+  const live = ov.online > 0 ? `<span class="pg-rc-pill ok">● ${n(ov.online)} online now</span>` : '<span class="pg-rc-pill">○ nobody online</span>';
+  return pgUsageRc("Users", live, `<div class="pg-rc-b">${ring}${pgUsageLeg(parts.map(([name, v, cls]) => ({name, cls, val: n(v)})))}</div>`, "users");
 }
-function pgUsageDrawCards() {
-  const s = pgUsageState;
-  pgUsagePut("#pg-usage-cards", pgUsageErr(s.err.cards) + (s.ov ? pgUsageCardsHtml(s.ov) : s.err.cards ? "" : pgUsageWait("Reading the counters…")));
+function pgUsageServerRc(ov) {
+  const g = (name, v, bad) => v == null ? "" : `<div class="pg-gau">${pgUsageGaugeSvg(v, {name, warn: bad - 15, bad})}<small>${esc(name)}</small></div>`;
+  const ver = ov.version ? `${ov.panel_type === "marzban" ? "Marzban" : "PasarGuard"} ${ov.version}${ov.uptime_s ? " · up " + Math.floor(ov.uptime_s / 86400) + " d" : ""}` : "";
+  const tr = ov.traffic_in != null || ov.traffic_out != null ? `<span title="All the traffic of the server since it started">↓ ${esc(fmtB(ov.traffic_in))} · ↑ ${esc(fmtB(ov.traffic_out))}</span>` : "";
+  const sp = ov.speed_in != null || ov.speed_out != null ? `<span title="The speed now">⚡ ↓ ${esc(fmtB(ov.speed_in))}/s · ↑ ${esc(fmtB(ov.speed_out))}/s</span>` : "";
+  return pgUsageRc("Server", esc(ver), `<div class="pg-rc-gs">${g("CPU", ov.cpu_pct, 85)}${g("Memory", ov.mem_pct, 90)}${g("Disk", ov.disk_pct, 90)}</div><div class="pg-rc-foot">${tr}${sp}</div>`, null);
+}
+function pgUsageTrafficRc(d) {
+  const unit = d.granularity === "hour" ? "hour" : "day", series = d.series || [], peak = series.reduce((a, p) => (+p.gb > (a ? +a.gb : 0) ? p : a), null), [num, u] = pgUsageGbParts(d.total.gb);
+  const body = `<div class="pg-rc-tr"><span class="pg-rc-big">${esc(num)}<small> ${u}</small></span><span class="mut">avg ${esc(pgUsageGbText(d.avg_per_day_gb))} / day${peak && +peak.gb > 0 ? ` · busiest ${esc(peak.label)}: ${esc(pgUsageGbText(peak.gb))}` : ""}</span></div>${pgUsageSparkSvg(series, {label: "traffic per " + unit})}`;
+  return pgUsageRc("Traffic", `${d.range.days} day${d.range.days === 1 ? "" : "s"}`, body, "traffic");
+}
+/* the nodes as ring parts: the biggest n-1 and "Other"; every row has its colour class and its percent of the whole */
+function pgUsageNodeParts(nodes, n) {
+  const tot = nodes.reduce((a, r) => a + (+r.gb || 0), 0), top = pgUsageTopN(nodes.map(r => ({name: r.name, v: +r.gb || 0})), n);
+  return {tot, rows: top.map((r, i) => ({name: r.name, v: r.v, cls: r.other ? "po" : PGU_PAL[i % PGU_PAL.length], pct: tot > 0 ? Math.round(r.v / tot * 100) : 0}))};
+}
+function pgUsageNodesRc(d) {
+  const nodes = d.by_node || [], {tot, rows} = pgUsageNodeParts(nodes, 5), [num, u] = pgUsageGbParts(tot);
+  const ring = pgUsageRingSvg(rows.map(r => ({v: r.v, cls: r.cls, label: `${r.name}: ${pgUsageGbText(r.v)} · ${r.pct}%`})), {size: 118, stroke: 13, big: num, small: u, label: "Usage by node"});
+  const body = rows.length ? `<div class="pg-rc-b">${ring}${pgUsageLeg(rows.map(r => ({name: r.name, cls: r.cls, val: pgUsageGbText(r.v), pct: r.pct + "%"})))}</div>` : '<div class="pg-rc-none mut">No node has traffic in this range</div>';
+  return pgUsageRc("Nodes", `${nodes.length} node${nodes.length === 1 ? "" : "s"}`, body, "nodes");
+}
+function pgUsageAppsRc(d) {
+  const rows = pgUsageTopN((d.apps || []).map(a => ({name: a.name || "unknown app", v: +a.count || 0})), 5), tot = +d.total || rows.reduce((a, r) => a + r.v, 0);
+  const col = rows.map((r, i) => ({...r, cls: r.other ? "po" : PGU_PAL[i % PGU_PAL.length], pct: tot > 0 ? Math.round(r.v / tot * 100) : 0}));
+  const ring = pgUsageRingSvg(col.map(r => ({v: r.v, cls: r.cls, label: `${r.name}: ${pgUsageN(r.v)} · ${r.pct}%`})), {size: 118, stroke: 13, big: pgUsageN(tot) || "0", small: "fetches", label: "Subscription apps"});
+  const body = col.length ? `<div class="pg-rc-b">${ring}${pgUsageLeg(col.map(r => ({name: r.name, cls: r.cls, val: pgUsageN(r.v), pct: r.pct + "%"})))}</div>` : '<div class="pg-rc-none mut">No fetch in this range</div>';
+  return pgUsageRc("Apps", "subscription fetches", body, "apps");
+}
+function pgUsageTopRc(d) {
+  const us = (d.users || []).slice(0, 5), max = Math.max(0, ...us.map(u => +u.used_gb || 0));
+  const rows = us.map(u => `<li data-u="${esc(u.username)}" onclick="pgUsageLookupUser(this.dataset.u); pgUsageSec('look')" title="Show the usage of this user in the range"><span class="ell">${esc(u.username)}</span><i class="pg-mini"><u style="width:${max > 0 ? Math.max(3, (+u.used_gb || 0) / max * 100).toFixed(0) : 0}%"></u></i><b>${esc(pgUsageGbText(u.used_gb))}</b></li>`).join("");
+  return pgUsageRc("Top users", "most used, all time", rows ? `<ul class="pg-mini-l">${rows}</ul>` : '<div class="pg-rc-none mut">No user yet</div>', "users");
+}
+function pgUsageDrawCards() {          // the overview: what is known is drawn at once, the rest comes in as it arrives
+  const s = pgUsageState, pg = pgUsageIsPg(), cards = [];
+  if (s.ov) cards.push(pgUsageUsersRc(s.ov), pgUsageServerRc(s.ov));
+  if (pg && s.range) cards.push(pgUsageTrafficRc(s.range), pgUsageNodesRc(s.range));
+  if (pg && s.apps) cards.push(pgUsageAppsRc(s.apps));
+  if (s.top) cards.push(pgUsageTopRc(s.top));
+  pgUsagePut("#pg-usage-ov", pgUsageErr(s.err.cards) + (cards.length ? `<div class="pg-rcs">${cards.join("")}</div>` : s.err.cards ? "" : pgUsageWait("Reading the counters…")));
   pgUsageDrawAge();
 }
+/* ---- the sections: chips under the range bar; Marzban has Overview, Users and Look up only (it does not answer the usage of all users) */
+const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nodes", "Nodes", false], ["users", "Users", true], ["apps", "Apps", false], ["look", "Look up", true]];      // [key, name, also on Marzban]
+const pgUsageSecCur = () => { const s = pgUsageState; return PGU_SECS.some(x => x[0] === s.sec && (pgUsageIsPg() || x[2])) ? s.sec : "ov"; };
+function pgUsageSecBarHtml() {
+  const cur = pgUsageSecCur();
+  return `<div class="pg-useg pg-usec" role="tablist" aria-label="Section">${PGU_SECS.filter(x => pgUsageIsPg() || x[2]).map(([k, l]) => `<button type="button" role="tab" aria-selected="${cur === k}" class="${cur === k ? "on" : ""}" onclick="pgUsageSec('${k}')">${l}</button>`).join("")}</div>`;
+}
+function pgUsageApplySec() {
+  const root = $("#pg-usage"); if (!root) return;
+  const cur = pgUsageSecCur(); root.dataset.sec = cur;
+  [...root.children].forEach(e => { if (e.dataset.for) e.hidden = e.dataset.for !== cur; });
+  pgUsagePut("#pg-usage-secbar", pgUsageSecBarHtml());
+}
+window.pgUsageSec = k => { pgUsageState.sec = k; try { localStorage.setItem("nk.pgu.sec", k); } catch (e) { /* private window */ } pgUsageApplySec(); };
 async function pgUsageLoadCards() {
   const s = pgUsageState, id = s.id, mine = pgUsageTick("cards");
   try { const ov = await pgApi(id, "/usage/overview"); if (s.id !== id || mine !== pgUsageTok.cards) return; s.ov = ov; s.ovAt = Date.now(); s.err.cards = ""; }
@@ -197,12 +290,23 @@ function pgUsageRangeHtml(d, busy) {
   const peak = series.reduce((a, p) => (+p.gb > (a ? +a.gb : 0) ? p : a), null), best = nodes.reduce((a, r) => (r.gb > (a ? a.gb : 0) ? r : a), null);
   const tb = d.total.gb >= 1024 ? `${(d.total.gb / 1024).toFixed(2)} TB` : "";
   const stats = `<div class="pg-ustats">${pgUsageStat("Total", esc(pgUsageGbText(d.total.gb)), tb, "big")}${pgUsageStat("Average per day", esc(pgUsageGbText(d.avg_per_day_gb)), `${d.range.days} day${d.range.days === 1 ? "" : "s"}`)}${pgUsageStat(`Busiest ${unit}`, peak ? esc(pgUsageGbText(peak.gb)) : "—", peak ? esc(peak.label) : "")}${pgUsageStat("Busiest node", best ? esc(best.name) : "—", best ? `${esc(pgUsageGbText(best.gb))} · ${(best.share * 100).toFixed(0)}%` : "")}</div>`;
-  return pgUsageCard("Traffic", `users' usage per ${unit}, Tehran time${pgUsageCached(d)}`, `${stats}<div class="pg-usage-chart">${pgUsageBarsSvg(series, {unit})}</div>${(d.notes || []).map(x => `<small class="mut">${esc(x)}</small>`).join("")}<h4 class="pg-usage-sub">By node</h4><div id="pg-usage-range-nodes">${pgUsageNodeTable("range", nodes)}</div>`, busy);
+  return pgUsageCard("Traffic", `users' usage per ${unit}, Tehran time${pgUsageCached(d)}`, `${stats}<div class="pg-usage-chart">${pgUsageBarsSvg(series, {unit})}</div>${(d.notes || []).map(x => `<small class="mut">${esc(x)}</small>`).join("")}`, busy);
+}
+function pgUsageNodesSecHtml(d, busy) {          // the section "Nodes": only the consumption of the nodes - a big ring with every node, and the sortable table
+  const nodes = d.by_node || [], {tot, rows} = pgUsageNodeParts(nodes, 8), [num, u] = pgUsageGbParts(tot);
+  const ring = pgUsageRingSvg(rows.map(r => ({v: r.v, cls: r.cls, label: `${r.name}: ${pgUsageGbText(r.v)} · ${r.pct}%`})), {size: 160, stroke: 17, big: num, small: u, label: "Usage by node"});
+  const leg = rows.length ? pgUsageLeg(rows.map(r => ({name: r.name, cls: r.cls, val: pgUsageGbText(r.v), pct: r.pct + "%"}))) : "";
+  return pgUsageCard("Node usage", `users' usage per node · ${pgUsageSpan(d.range)}${pgUsageCached(d)}`, `<div class="pg-ns"><div class="pg-ns-ring">${ring}${leg}</div><div id="pg-usage-range-nodes">${pgUsageNodeTable("range", nodes)}</div></div>`, busy);
+}
+function pgUsageDrawNodes() {
+  const s = pgUsageState; if (!pgUsageIsPg()) return;
+  pgUsagePut("#pg-usage-nodes", pgUsageErr(s.err.range) + (s.range ? pgUsageNodesSecHtml(s.range, s.rangeKey !== pgUsageQuery()) : s.err.range ? "" : pgUsageWait("Reading the usage…")));
 }
 function pgUsageDrawRange() {
   const s = pgUsageState;
   if (!pgUsageIsPg()) { pgUsagePut("#pg-usage-range", pgUsageCard("Traffic", "", '<div class="mut pg-usage-hint">Marzban answers the usage of all users only by timing out on a big panel, so it is not asked. Look up an admin (or one user) on the right: that works for the range chosen above.</div>', false)); return; }
   pgUsagePut("#pg-usage-range", pgUsageErr(s.err.range) + (s.range ? pgUsageRangeHtml(s.range, s.rangeKey !== pgUsageQuery()) : s.err.range ? "" : pgUsageWait("Reading the usage…")));
+  pgUsageDrawNodes(); pgUsageDrawCards();
 }
 const pgUsageRangeIsOld = () => !!pgUsageState.range && Date.parse(pgUsageState.range.end) < Date.now() - 7200000;       // a range that ended long ago does not change: it is not asked again
 async function pgUsageLoadRange() {
@@ -226,6 +330,7 @@ function pgUsageTopHtml(d, busy) {
 function pgUsageDrawTop() {
   const s = pgUsageState;
   pgUsagePut("#pg-usage-top", pgUsageErr(s.err.top) + (s.top ? pgUsageTopHtml(s.top, s.topKey !== pgUsageTopKey()) : s.err.top ? "" : pgUsageWait("Reading the top users…")));
+  pgUsageDrawCards();
 }
 async function pgUsageLoadTop() {
   const s = pgUsageState, id = s.id, key = pgUsageTopKey(), mine = pgUsageTick("top");
@@ -266,13 +371,13 @@ function pgUsageAppsHtml(d, busy) {
   return pgUsageCard("Subscription apps", `fetches of the subscription link${pgUsageCached(d)}`, `<div class="pg-usage-row"><select onchange="pgUsageAppsAdmin(this.value)" title="Whose fetches are counted">${pgUsageAdminOpts(s.appsAdmin, "All users")}</select><span class="pg-usage-total"><b>${n(d.total)}</b> <span class="mut">fetches</span></span></div>
     <div class="lbox full pg-usage-nodes"><table class="tbl lift"><colgroup><col><col style="width:130px"><col style="width:86px"></colgroup><thead><tr><th data-prio="0">App</th><th>Share</th><th>Fetches</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="mut">No fetch in this range</td></tr>'}</tbody></table></div>`, busy);
 }
-function pgUsageDrawPair() {
-  const s = pgUsageState, pair = $("#pg-usage-pair"); if (!pair) return;
-  pair.hidden = !pgUsageIsPg(); if (pair.hidden) return;
+function pgUsageDrawPair() {          // the users over time (section Users) and the apps (section Apps): PasarGuard only
+  const s = pgUsageState;
+  if (!pgUsageIsPg()) { pgUsagePut("#pg-usage-counts", ""); pgUsagePut("#pg-usage-apps", ""); pgUsageApplySec(); return; }
   pgUsagePut("#pg-usage-counts", pgUsageErr(s.err.counts) + (s.counts ? pgUsageCountsHtml(s.counts, s.countsKey !== pgUsageCountsKey()) : s.err.counts ? "" : pgUsageWait("Reading the user counts…")));
   pgUsagePut("#pg-usage-apps", pgUsageErr(s.err.apps) + (s.apps ? pgUsageAppsHtml(s.apps, s.appsKey !== pgUsageAppsKey()) : s.err.apps ? "" : pgUsageWait("Reading the apps…")));
-}
-async function pgUsageLoadCounts() {
+  pgUsageDrawCards();
+}async function pgUsageLoadCounts() {
   const s = pgUsageState, id = s.id, key = pgUsageCountsKey(), mine = pgUsageTick("counts");
   try { const d = await pgApi(id, `/usage/counts?metric=${encodeURIComponent(s.metric)}&${pgUsageQuery()}${s.countsAdmin ? "&admin=" + encodeURIComponent(s.countsAdmin) : ""}`); if (s.id !== id || mine !== pgUsageTok.counts) return; s.counts = d; s.countsKey = key; s.countsAt = Date.now(); s.err.counts = ""; }
   catch (e) { if (s.id !== id || mine !== pgUsageTok.counts) return; s.err.counts = (e && e.message) || String(e); if (s.countsKey !== pgUsageCountsKey()) s.counts = null; }
@@ -323,7 +428,7 @@ window.pgUsageLookup = async () => {
   s.lookBusy = false; pgUsageDrawLook();
 };
 window.pgUsageLookupUser = name => {
-  const s = pgUsageState; s.name = name; pgUsageKind("user");
+  const s = pgUsageState; s.name = name; pgUsageKind("user"); pgUsageSec("look");
   const n = $("#pg-usage-name"); if (n) n.value = name;
   pgUsageLookup();
 };
@@ -335,10 +440,13 @@ function pgUsageRelook() {
 }
 
 /* ---- the tab: the page scrolls (it is a dashboard, not a list); on a wide window the cards stand in two columns, on a narrow one in one */
-const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-usage-bar"></div><div id="pg-usage-cards"></div>
-  <div class="pg-usage-grid"><div class="pg-usage-col pg-usage-main"><div id="pg-usage-range"></div><div id="pg-usage-top"></div></div>
-    <div class="pg-usage-col pg-usage-side"><div class="pg-usage-pair" id="pg-usage-pair" hidden><div id="pg-usage-counts"></div><div id="pg-usage-apps"></div></div>
-      ${pgUsageCard("Usage of an admin or a user", "", '<div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div>', false, "pg-usage-look")}</div></div></div>`;
+const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-usage-bar"></div><div id="pg-usage-secbar"></div>
+  <div data-for="ov" id="pg-usage-ov"></div>
+  <div data-for="traffic" id="pg-usage-range"></div>
+  <div data-for="nodes" id="pg-usage-nodes"></div>
+  <div data-for="users" class="pg-usage-two"><div id="pg-usage-counts"></div><div id="pg-usage-top"></div></div>
+  <div data-for="apps" id="pg-usage-apps"></div>
+  <div data-for="look">${pgUsageCard("Usage of an admin or a user", "", '<div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div>', false, "pg-usage-look")}</div></div>`;
 async function pgUsageLoadRanges() {
   const s = pgUsageState, id = s.id, r = await pgApi(id, "/usage/ranges");          // the dates of the presets: no question to the panel, so it is cheap
   if (s.id !== id) return;
@@ -365,7 +473,7 @@ async function pgUsageRender(id, box) {
     if (!box.isConnected || (typeof pn !== "undefined" && pn.tab !== "usage")) return;          // another tab was opened meanwhile
   }
   pgPaint(box, pgUsageSkeleton());          // from what is known, at once: the first await comes after this
-  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageDrawTop();
+  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageDrawTop();
   pgUsagePut("#pg-usage-look-form", pgUsageLookFormHtml()); pgUsageDrawLook();
   pgUsageKick(false);
 }

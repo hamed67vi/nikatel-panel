@@ -281,8 +281,8 @@ html body #page .srv-ic .led { fill: currentColor !important; animation: none !i
 html body #page .srv-ic img.lab-logo { filter: grayscale(1) brightness(1.5); }
 html[data-mode="light"] body #page .srv-ic img.lab-logo { filter: brightness(0) opacity(.85); }
 html body #page .srv-ic::before { content: ""; position: absolute; top: -1px; right: -3px; width: 12px; height: 12px; border-radius: 50%; z-index: 0; pointer-events: none; background: var(--lamp, transparent); box-shadow: 0 0 9px color-mix(in srgb, var(--lamp, transparent) 65%, transparent); transition: background .3s, box-shadow .3s; }      /* the lamp: one small round light BEHIND the icon, peeking out at its corner, like the dots of "up / down / unstable" (no disc, no ring) */
-html body #page tr.up { --lamp: #3ddc97; } html body #page tr.sev-blue { --lamp: #4da3ff; } html body #page tr.sev-yellow { --lamp: #ffc44d; }
-html body #page tr.down, html body #page tr.sev-red { --lamp: #ff6b8b; } html body #page tr.srv-off { --lamp: transparent; }
+html body #page tr[data-lamp="ok"] { --lamp: #3ddc97; } html body #page tr[data-lamp="busy"] { --lamp: #4da3ff; } html body #page tr[data-lamp="warn"] { --lamp: #ffc44d; }      /* the lamp follows the server itself (labLampTone in lab.js), not the faults of the way to it */
+html body #page tr[data-lamp="bad"] { --lamp: #ff6b8b; } html body #page tr[data-lamp="off"] { --lamp: transparent; }
 html body #page .toolbar.joined { align-items: center; }
 html body #page .toolbar.joined .tf-tabs { align-self: center; display: inline-flex; align-items: center; height: 36px; margin: 0; }
 html body #page .toolbar.joined .tf-tabs button { height: 28px; line-height: 28px; }

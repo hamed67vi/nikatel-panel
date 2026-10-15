@@ -23,23 +23,24 @@ const labMbps = b => b == null ? "—" : labRate(b * 8 / 1e6);
 
 /* ---------------------------------------------------------------- what is wrong with a server, as a short list (the worst first) */
 function labIssues(s) {
-  const f = s.facts || {}, x = s.extra || {}, out = [], add = (sev, txt, tip, gre) => out.push({sev, txt, tip: tip || txt, gre: !!gre});
+  const f = s.facts || {}, x = s.extra || {}, out = [], add = (sev, txt, tip, gre, path) => out.push({sev, txt, tip: tip || txt, gre: !!gre, path: !!path});      // (path: a fault of the way TO the server - GRE, tunnels, the filter, the route - not of the server itself: the lamp ignores it)
   if (!s.enabled) return out;
   if (noLogin(s)) add("warn", "No login", s.last_error);
   else if (s.online === false) add("bad", "Offline", s.last_error || "The server does not answer");
   else if (s.online && /^SSH does not answer/.test(s.last_error || "")) add("warn", "SSH ✕", s.last_error);
   const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name), gre = mine.filter(t => (t.type === "backhaul" || t.type === "gre") && t.state === "down");
-  if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "), true);
+  if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "), true, true);
   /* (a server that no tunnel uses has no GRE to lose: its GRE links not answering is no fault - the owner: such servers are green) */
   const down = mine.filter(t => t.state === "down" && !gre.includes(t));
-  if (down.length) add("bad", `${down.length} tunnel${down.length === 1 ? "" : "s"} down`, down.map(t => t.name).join(", "));
-  const flt = x.iran_filter; if (flt && (flt.level === "filtered" || flt.level === "blocked")) add("bad", "Filtered", "Not reachable from inside Iran");
-  if ((x.reach_ir || {}).level === "bad") add("bad", "Bad route", `${x.reach_ir.bad} of ${x.reach_ir.total} Iran servers lose packets toward it`);
+  if (down.length) add("bad", `${down.length} tunnel${down.length === 1 ? "" : "s"} down`, down.map(t => t.name).join(", "), false, true);
+  const flt = x.iran_filter; if (flt && (flt.level === "filtered" || flt.level === "blocked")) add("bad", "Filtered", "Not reachable from inside Iran", false, true);
+  if ((x.reach_ir || {}).level === "bad") add("bad", "Bad route", `${x.reach_ir.bad} of ${x.reach_ir.total} Iran servers lose packets toward it`, false, true);
   if ((x.net || {}).level === "down") add("bad", "Network cut", "This Iran server cannot reach the internet"); else if ((x.net || {}).level === "bad") add("warn", "Network ⚠", `internet ${x.net.anchor}%, other Iran servers ${x.net.domestic}%, foreign servers ${x.net.foreign}% lost`);
   if (s.online !== false) for (const [v, w, b, l] of [[f.cpu, 80, 92, "CPU"], [f.ram, 85, 92, "RAM"], [f.disk, 85, 95, "Disk"]]) if (v != null && v >= w) add(v >= b ? "bad" : "warn", `${l} ${Math.round(v)}%`, `${l} is at ${Math.round(v)}%`);
   for (const n of (window.pgSrvOn ? pgSrvOn(s) : [])) if (n.status && !["connected", "disabled", "connecting"].includes(n.status)) add("warn", "Node ✕", `${n.panel}: ${n.status}${n.message ? " (" + n.message + ")" : ""}`);
   return out.sort((a, b) => (a.sev === "bad" ? 0 : 1) - (b.sev === "bad" ? 0 : 1));
 }
+const labLampTone = s => !s.enabled ? "off" : srvBusy(s) ? "busy" : s.online == null ? "off" : s.online === false ? "bad" : labIssues(s).some(i => !i.path) ? "warn" : "ok";      // the lamp of a server (the owner, 2026-10-15): green well, yellow with a problem of its own (login, SSH, CPU, memory, disk, node), red when it does not answer - a filtered address or a GRE / tunnel / route fault does not change it
 const labSrvTone = s => !s.enabled ? "off" : srvBusy(s) ? "busy" : s.online == null ? "off" : s.online === false ? "bad" : labIssues(s).length ? "warn" : "ok";
 function labNodeInfo(p) {      // a PasarGuard node profile: what the health job saw, and - once the panel was asked - what it reports about the node
   const r = labNodeRow(p), d = labNodeData(p), st = (d && d.status) || (r && r.status) || p.status || "";
@@ -58,7 +59,7 @@ function labServerRow(p) {
   const f = s.facts || {}, tone = labSrvTone(s), on = s.enabled, cc = s.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toLowerCase() : "";
   const q = [p.label, s.name, s.host, s.provider, s.role, s.country, f.hostname, ((s.extra || {}).geo || {}).provider, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase();
   /* the card of a row and its icons are the ones of the old Servers list (srv-tbl: the flag over the name, the server with its two lights); what is IN the columns is the new design */
-  return `<tr class="${labTrCls(tone, on, s.online)} clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
+  return `<tr class="${labTrCls(tone, on, s.online)} clk" data-lamp="${labLampTone(s)}" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
     <td class="name ${cc ? "has-flag" : ""}" ${cc ? `style="--flag:url(/flags/${cc}.png)" title="${cc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="${!on ? "disabled" : s.online ? "online" : s.online === false ? "offline" : "not checked yet"}">${labPgSrv(p, s) ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(s.name)}${isNew(s) ? '<span class="pill new" title="Added in the last 15 minutes">new</span>' : ""}</b>${labSub(s)}</div></div></td>
     <td class="lab-ip mono ip-copy" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); labCopyIp(this)" title="Click to copy ${esc(s.host)}">${esc(s.host)}</td><td class="lab-prof">${labTagChip(p.tag)}</td>
     <td>${on && s.online !== false && f.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(f.cpu, 80, 92)}</span><small>RAM ${labNum(f.ram, 85, 92)} · Disk ${labNum(f.disk, 85, 95)}</small></div>` : '<span class="mut">—</span>'}</td>
@@ -81,14 +82,14 @@ function labNodeRowHtml(p) {
   const stTxt = p.missing || !I.r ? "Gone from the panel" : ({connected: "Connected", connecting: "Connecting", disabled: "Disabled", error: "Error"})[I.st] || (I.st ? I.st[0].toUpperCase() + I.st.slice(1) : "Unknown");
   const ncc = srv ? (srv.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(srv.country || "") ? srv.country.toLowerCase() : "") : /^[A-Za-z]{2}$/.test(p.country || "") ? p.country.toLowerCase() : "";      // (the location of the server it runs on, as on the old cards: the flag - in every profile)
   const q = ["pasarguard node", p.name, p.address, p.panel, I.st, srv && srv.name].filter(Boolean).join(" ").toLowerCase();
-  return `<tr class="${labTrCls(I.tone, I.tone !== "off", I.tone === "ok" ? true : I.tone === "bad" ? false : null)} clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="Click for the node">
+  return `<tr class="${labTrCls(I.tone, I.tone !== "off", I.tone === "ok" ? true : I.tone === "bad" ? false : null)} clk" data-lamp="${I.tone}" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="Click for the node">
     <td class="name ${ncc ? "has-flag" : ""}" ${ncc ? `style="--flag:url(/flags/${ncc}.png)" title="${ncc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="PasarGuard node">${labLogo("PasarGuard")}</i><div class="lab-nm"><b>${esc(p.name)}</b>${ver ? `<small>${esc(ver.replace(/^ · /, ""))}</small>` : ""}</div></div></td>
     <td class="lab-ip mono${addr ? " ip-copy" : ""}" ${addr ? `data-ip="${esc(addr)}" onclick="event.stopPropagation(); labCopyIp(this)"` : ""} title="${esc(addr ? "Click to copy " + addr + " · " + (I.msg || stTxt) : I.msg || stTxt)}">${esc(addr) || "—"}</td><td class="lab-prof">${labTagChip(p.tag)}</td>
     <td>${live && live.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(live.cpu, 80, 92)}</span><small>RAM ${labNum(live.ram, 85, 92)}${live.cores ? " · " + live.cores + (live.cores === 1 ? " core" : " cores") : ""}</small></div>` : '<span class="mut">—</span>'}</td>
     <td class="lab-trf">${live && live.rx != null ? `<span class="trf"><i class="ta d">${LAB_AD}</i>${labMbps(live.rx)}</span><span class="trf"><i class="ta u">${LAB_AU}</i>${labMbps(live.tx)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 }
-const labGoneRow = p => `<tr class="down sev-red clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
+const labGoneRow = p => `<tr class="down sev-red clk" data-lamp="bad" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 const labRowOf = p => p.kind === "node" ? labNodeRowHtml(p) : labServerRow(p);
 
 /* ---------------------------------------------------------------- the page */
