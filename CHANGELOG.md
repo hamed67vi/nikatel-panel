@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.17 - The update card looks by itself
+
+- **No Check button (the owner):** the card looks for a new version by itself every minute. **An update that finishes is seen:** if the panel comes back as another version the bar runs to 100 % and the page reloads, whatever the log says (it used to stay on a few percent until the page was refreshed).
+
 ## 1.56.16 - The update takes a minute, and the bar moves like a MacBook's
 
 - **Why it was slow (the owner):** every update ran the WHOLE test suite on the server that updates - about nine minutes - although the author had run it before publishing. scripts/deploy.sh now skips the tests when HEAD is a released version (a tag); the secrets check, the migration check on a copy of the database, the install, the health check and the rollback stay. FORCE_TESTS=1 runs them anyway. An update is about a minute now.

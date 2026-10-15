@@ -3778,7 +3778,7 @@ PAGES.settings = async () => {
 
   /* about & update */
   const about = sFrame("About & update", "This panel, the tunnel cores on your servers, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
-    `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small></small></div><div class="ss-hr"><button class="sm" onclick="aboutLoad()">↻ Check</button><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div>`
+    `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small></small></div><div class="ss-hr"><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div>`
     + sGrp({icon: SI.shield(false), title: "License", desc: "which features this install may use", cls: "x flat", rows: '<div class="sr x" id="lic-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x flat", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x flat",
@@ -3854,7 +3854,9 @@ window.testAi = async () => {      // a key typed in the box is saved first (the
   refresh();
 };
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
-window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = u.up_to_date ? `<span class="gw-ok">Up to date</span> <span class="mut">v${esc(u.version)}</span>` : `<span class="err">${u.newer && u.latest ? "Version " + esc(u.latest) + " is available" : "A newer build is available"}</span>`; const h = $("#about-hero"); if (h) { h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const sm = h.querySelector(".ss-ht small"); if (sm) sm.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : ""; } if (u.progress && u.progress.state === "running") aboutWatch(); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
+let aboutAuto = null, aboutV0 = "";      // the timer of the automatic look for a new version, and the version that runs
+window.aboutLoad = async () => { const box = $("#about-box"); if (!box || aboutTimer) return; clearTimeout(aboutAuto); aboutAuto = setTimeout(() => { if ($("#about-box")) aboutLoad(); }, 60000);      // (it looks again by itself every minute: no Check button - the owner, 2026-10-15)
+  try { const u = await api("/api/system/update"); aboutV0 = u.version || aboutV0; box.innerHTML = u.up_to_date ? `<span class="gw-ok">Up to date</span> <span class="mut">v${esc(u.version)}</span>` : `<span class="err">${u.newer && u.latest ? "Version " + esc(u.latest) + " is available" : "A newer build is available"}</span>`; const h = $("#about-hero"); if (h) { h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const sm = h.querySelector(".ss-ht small"); if (sm) sm.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : ""; } if (u.progress && u.progress.state === "running") aboutWatch(); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutWatch(true); } catch (e) { toast("✕ " + e.message, "bad"); } };
 let aboutTimer = null;      // the timers of the progress of an update
 const ABOUT_STEPS = [3, 8, 15, 35, 60, 100];      // where the markers of the deploy stand: between two of them the bar creeps on its own but never promises the next one
@@ -3868,6 +3870,7 @@ window.aboutWatch = fresh => {      // the update runs: only its percentage, mov
     const p = u && u.progress;
     if (p && stale && (p.state === "running" || Date.now() - t0 > 20000)) stale = false;      // (what the log says of a run before the click is not this one: wait for the new run, at most 20 s)
     if (p && !stale) { server = Math.max(server, p.percent); if (p.state === "done") end = "done"; else if (p.state === "failed") end = "failed"; }
+    if (u && u.version && aboutV0 && u.version !== aboutV0 && !end) end = "done";      // (the panel came back as ANOTHER version: the update is done, whatever the log says)
     if (aboutTimer) aboutTimer.poll = setTimeout(poll, 1500);
   };
   const frame = () => {
