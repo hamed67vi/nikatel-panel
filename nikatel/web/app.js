@@ -301,9 +301,10 @@ function navGroup(g, open, keep) {      // ONE list is open at a time (the owner
   navGroupSet(g, open, keep);
   navSubBar();
 }
+const NAV_BAR_TOO = new Set(["tunnels"]);      // Network (the owner, 2026-10-15): its three tabs (CDN, Tunnel manager, Tunnel Doctor) stand under the header even while its list is open in the menu
 function navSubBar() {      // while the group of the open page is open its tabs are in the menu: the bar under the header is not drawn then (a wide window; app.css)
   const g = document.querySelector(`#nav .nav-g[data-kind="tabs"][data-page="${state.page}"]`);
-  document.documentElement.dataset.navsub = g && SUB[state.page] && g.dataset.open === "1" ? "1" : "";
+  document.documentElement.dataset.navsub = g && SUB[state.page] && g.dataset.open === "1" && !NAV_BAR_TOO.has(state.page) ? "1" : "";
 }
 function navMark(openIt) {      // which items are the open page (and tab); `openIt` (a page was opened) also opens the group it is in, a redraw of the same page never does
   const page = state.page, tab = page === "settings" ? state.stab : SUB[page] ? sub(page) : "";

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.25 - Network: the tabs under the header
+
+- **Network (the owner):** when it is opened, its three tabs - *CDN*, *Tunnel manager*, *Tunnel Doctor* - stand in the bar under the header (as before they were only in the menu list).
+
 ## 1.56.24 - The lamp of a server is one small dot
 
 - **Server icons (the owner):** no disc and no ring behind them; the icon stays black-and-white and its state is ONE small round lamp on its corner, like the dots of *up / down / unstable* - green, yellow, red or blue.

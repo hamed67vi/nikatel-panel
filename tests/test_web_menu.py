@@ -449,3 +449,9 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     assert lab.count('<td class="lab-prof">${labTagChip(p.tag)}</td>') == 2 and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
+
+
+def test_the_network_page_keeps_its_three_tabs_under_the_header_while_its_menu_list_is_open():
+    """The owner, 2026-10-15: "Network opens with three tabs under the header"."""
+    app = _web("app.js")
+    assert 'const NAV_BAR_TOO = new Set(["tunnels"]);' in app and '&& !NAV_BAR_TOO.has(state.page) ? "1" : ""' in app
