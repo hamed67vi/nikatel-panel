@@ -246,8 +246,8 @@ function srvDiagnose(s, tl) {
   const step = (label, click, pri = false) => steps.push({label, click, pri});
   if (s.online === false) {
     if (/host key|identification/i.test(err)) { add("bad", "Its SSH identity changed: the server was probably reinstalled, so the panel no longer trusts it."); step("↺ Trust the new server", `forgetKey(${s.id}, '${esc(s.name)}')`, true); }
-    else if (noLogin(s)) { add("bad", "The panel cannot log in: its key is not accepted (or the password changed)."); step("🔑 Enter the SSH password", `srvPassword(${s.id}, '${esc(s.name)}')`, true); }
-    else if (/timeout|timed out|refused|no route|unreachable|lost|network/i.test(err)) { add("bad", "It does not answer at all: it is off, or its address / SSH port is blocked or changed."); step("↻ Check again", `checkServer(${s.id})`, true); }
+    else if (noLogin(s)) { add("bad", "Wrong SSH password: the server does not accept the login."); step("🔑 Enter the right password", `srvPassword(${s.id}, '${esc(s.name)}')`, true); step("↻ Check again", `checkServer(${s.id})`); }      // (the owner, 2026-10-15: say the password is wrong and give the button for the right one)
+    else if (/timeout|timed out|refused|no route|unreachable|lost|network/i.test(err)) { const why = (err.match(/No route to host|Connection timed out|Connection refused|Network is unreachable|Operation timed out/i) || [""])[0]; add("bad", `SSH cannot reach the server${why ? ": " + why.toLowerCase() : ""} - it is off, or its address / port is wrong or blocked. A password would not help.`); step("↻ Check again", `checkServer(${s.id})`, true); step("✎ Change address / port", `editServer(${s.id})`); }
     else { add("bad", "It does not answer" + (err ? ": " + err.slice(0, 90) : "") + "."); step("↻ Check again", `checkServer(${s.id})`, true); }
     if (mineT.length) add("warn", `${mineT.length} tunnel${mineT.length === 1 ? "" : "s"} depend on it: nothing is done to them until it is back.`);
   } else {

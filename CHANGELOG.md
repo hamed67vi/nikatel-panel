@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.9 - The Doctor of a server names the cause
+
+- **A refused login says so (the owner):** "Wrong SSH password: the server does not accept the login" with the button **Enter the right password** (and Check again). **A server that cannot be reached** says why (no route to host, timeout, refused) and that a password would not help, with **Check again** and **Change address / port**.
+
 ## 1.56.8 - The SSH password box is short and honest
 
 - **A server that does not answer is not a wrong password (the owner):** when SSH cannot reach the server (no route to host, timeout, refused) a short message says so and no password is asked. When it is the password, the box says "SSH password of NAME?" - no long error, no Generate button, no "at least 8 characters" (that is for a new password).
