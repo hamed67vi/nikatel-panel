@@ -454,13 +454,13 @@ function showModal(title, body, cls = "", acts = "") {
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; state.nodeWin = null; }      // (state.nodeWin: a window of the nodes that is not a server's is open - the Servers page does not close it, see pg_nodes.js)
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
-function glassAsk(text, {input = false, value = "", danger, password = false, check = null} = {}) {      // check = {label, note}: a tick under the text; the answer is then {checked} (or false on Cancel)
+function glassAsk(text, {input = false, value = "", danger, password = false, check = null, generate = true} = {}) {      // check = {label, note}: a tick under the text; the answer is then {checked} (or false on Cancel)
   return new Promise(resolve => {
     const old = $("#ask"); if (old) old.remove();
     const el = document.createElement("div"); el.id = "ask";
     const verb = (String(text).match(ASK_VERB) || [""])[0], bad = danger != null ? danger : /^(Remove|Delete|Reboot|Forget|Rebuild|Clear|Import)\b/i.test(text) || /cannot be undone|type [A-Z]+ to confirm/i.test(text);
     const label = input ? "OK" : verb ? verb[0].toUpperCase() + verb.slice(1).toLowerCase() : "OK";
-    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${check ? `<label class="ask-check"><input type="checkbox" class="ask-cb"><span>${esc(check.label)}${check.note ? `<small>${esc(check.note)}</small>` : ""}</span></label>` : ""}${input ? `<div class="ask-field ${password ? "pw" : ""}">${password ? `<i class="ask-lk">${SI.lock(false)}</i>` : ""}<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "new-password" : "off"}" data-lpignore="true" data-1p-ignore spellcheck="false">${password ? `<button type="button" class="ask-eye" title="Show the password" aria-label="Show or hide the password"><svg viewBox="0 0 24 24"><path class="eye-o" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-o" cx="12" cy="12" r="3"/><path class="eye-x" d="M3 3l18 18"/></svg></button><button type="button" class="ask-gen" title="Make a strong password and show it">Generate</button>` : ""}</div>${password ? `<small class="ask-hint">At least 8 characters. Empty = the panel makes a strong one and shows it once.</small>` : ""}` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
+    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : "?"}</div><div class="ask-text">${esc(text)}</div>${check ? `<label class="ask-check"><input type="checkbox" class="ask-cb"><span>${esc(check.label)}${check.note ? `<small>${esc(check.note)}</small>` : ""}</span></label>` : ""}${input ? `<div class="ask-field ${password ? "pw" : ""}">${password ? `<i class="ask-lk">${SI.lock(false)}</i>` : ""}<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "new-password" : "off"}" data-lpignore="true" data-1p-ignore spellcheck="false">${password ? `<button type="button" class="ask-eye" title="Show the password" aria-label="Show or hide the password"><svg viewBox="0 0 24 24"><path class="eye-o" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-o" cx="12" cy="12" r="3"/><path class="eye-x" d="M3 3l18 18"/></svg></button>${generate === false ? "" : '<button type="button" class="ask-gen" title="Make a strong password and show it">Generate</button>'}` : ""}</div>${password && generate !== false ? `<small class="ask-hint">At least 8 characters. Empty = the panel makes a strong one and shows it once.</small>` : ""}` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
     document.body.appendChild(el);
     const inp = $(".ask-in", el), done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
     const cb = $(".ask-cb", el), yes = () => done(input ? inp.value : cb ? {checked: cb.checked} : true), no = () => done(input ? null : false);
@@ -956,17 +956,18 @@ window.openBuild = () => { state.build = true; state.open = null; refresh(); };
 window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "list") { go("tunnels", "list"); state.build = true; refresh(); } else openBuild(); };      // (go names the tab: CDN is the first tab of the section now, and a first draw of it must never land over the Tunnel manager)
 /* the SSH password was wrong (or the server did not answer): ask for it again, three tries, instead of leaving a server that silently has no login */
 async function connectWithPrompt(id, name, firstError) {
+  const noAnswer = m => /no route|timed out|timeout|refused|unreachable|could not resolve|name or service|network is/i.test(m), short = m => String(m).replace(/ ?· id [0-9a-f]+/i, "").replace(/^.*?(No route to host|Connection timed out|Connection refused|Network is unreachable|Operation timed out)/i, "$1").slice(0, 100);
   let why = firstError;
   for (let i = 0; i < 3; i++) {
-    const pw = await gprompt(`${name}: ${why}. Enter the SSH password again (Cancel to do it later with the 🔑 Password button).`, "", {password: true});
+    if (noAnswer(why)) { await glassChoice(`${name} does not answer on SSH (${short(why)}). Check its address and port; then use 🔑 on its row.`, [{label: "OK", v: 1, cls: "pri"}]); refresh(); return false; }      // (the server cannot be reached: a password would not help - the owner, 2026-10-15)
+    const pw = await gprompt(`SSH password of ${name}? (Cancel: later, with 🔑 on its row)`, "", {password: true, generate: false});
     if (pw == null || pw === "") break;
     try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Connected: " + r.hostname, "ok"); refresh(); return true; }
-    catch (err) { why = err.message; if (!/password|user|denied/i.test(why)) break; }
+    catch (err) { why = err.message; if (!/password|user|denied/i.test(why) && !noAnswer(why)) break; }
   }
-  toast(`✕ ${name} is added but has no login yet: ${why}. Use 🔑 Password on its row.`, "bad"); refresh();
+  toast(`✕ ${name} is added but has no login yet: ${short(why)}. Use 🔑 on its row.`, "bad"); refresh();
   return false;
-}
-window.serverPassword = (id, name, why) => connectWithPrompt(id, name, why || "enter the SSH password");
+}window.serverPassword = (id, name, why) => connectWithPrompt(id, name, why || "enter the SSH password");
 window.saveServer = async (e, id) => {
   e.preventDefault();
   const f = new FormData(e.target);

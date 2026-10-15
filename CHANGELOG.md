@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.8 - The SSH password box is short and honest
+
+- **A server that does not answer is not a wrong password (the owner):** when SSH cannot reach the server (no route to host, timeout, refused) a short message says so and no password is asked. When it is the password, the box says "SSH password of NAME?" - no long error, no Generate button, no "at least 8 characters" (that is for a new password).
+
 ## 1.56.7 - The install says short steps from the first moment
 
 - **The row of the server says what is going on in one short line, from the first moment (the owner):** Connecting to the server... -> Checking the server... -> Starting the install... -> 1/4 Installing Docker and the node (minutes) -> 2/4 Reading the certificate -> 3/4 Adding the node to the panel -> 4/4 Waiting for the panel to connect (up to 2 min); the torrent block says "Torrent block: adding the rules (minutes)". The long lines of the installer are in the story only; the install inside the steps no longer overwrites them.
