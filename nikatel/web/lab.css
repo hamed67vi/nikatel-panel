@@ -459,3 +459,17 @@ html[data-mode="light"] body #page .lab-tbl td.lab-pb .lab-iss.bad { color: #c02
 /* 1.57.15 - the arrows of the traffic columns have the colour of the small text under the load ("RAM 35 % · Disk 33 %"), the kit's muted text colour (the owner) */
 html body #page .lab-tbl .lab-trf .ta.d, html body #page .lab-tbl .lab-trf .ta.u { color: var(--mut); }
 html body #page .lab-tbl td.lab-pb { padding-left: 16px; }      /* the problems have a column of their own, a clear step away from the name (1.57.16) */
+
+/* 1.57.18 - the boxes of the Panel bar: 28 px segment buttons and icon buttons inside the 36 px track (the old rule of the bar made them 32 px, so they stuck out of the track) */
+html body #page .pn-bar .pn-ksw .pn-seg { height: 36px; box-sizing: border-box; align-items: center; }
+html body #page .pn-bar .pn-ksw .pn-seg > button { height: 28px; min-height: 0; padding: 0 12px; box-sizing: border-box; }
+html body #page .pn-bar .pn-ksw .lab-tabact { align-items: center; gap: 6px; }
+html body #page .pn-bar .pn-ksw .lab-tabact .lab-ib { width: 28px; height: 28px; min-height: 0; }
+/* 1.57.18 - the banner of a server window is ONE slim row (the owner: "instead of this big box a more compact thing in one row"): the icon, the title, what is wrong (cut with ... when it is long, the whole text in the tooltip) and the buttons at the end */
+html body .lab-ban { align-items: center; gap: 10px; min-height: 42px; padding: 6px 10px; box-sizing: border-box; border-radius: 12px; flex-wrap: nowrap; }
+html body .lab-ban .lb-i { width: 22px; height: 22px; font-size: 12px; }
+html body .lab-ban .lb-t { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; white-space: nowrap; }
+html body .lab-ban .lb-t > b { flex: none; font-size: 13px; font-weight: 650; }
+html body .lab-ban .lb-t > .lb-m { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; color: var(--mut); } html body .lab-ban .lb-t > .lb-m.err { color: var(--bad); }
+html body .lab-ban .lb-a { flex-wrap: nowrap; gap: 6px; } html body .lab-ban .lb-a button { height: 28px; padding: 0 12px; border-radius: 9px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+@media (max-width: 700px) { html body .lab-ban { flex-wrap: wrap; } html body .lab-ban .lb-t { white-space: normal; flex-wrap: wrap; } }

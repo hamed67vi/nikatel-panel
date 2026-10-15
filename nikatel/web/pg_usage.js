@@ -184,7 +184,7 @@ function pgUsageRangeLabel() {
   const s = pgUsageState, n = pgUsageCurDays(), j = {jmonth: "This month", last_jmonth: "Last month"}[s.preset];
   return j || (n === 1 ? "Today" : n ? `Last ${n} days` : "Custom range");
 }
-const pgUsageIcon = {cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>', chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'};
+const pgUsageIcon = {search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>', back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>', cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>', chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'};
 function pgUsageRangeBtn() {          // the one button of the range (it lives in the row of the sections, beside the chips)
   const s = pgUsageState, cur = pgUsagePresetInfo(s.preset), span = s.preset === "custom" ? {from: s.from, to: s.to} : cur, when = span && span.from ? `${span.from} → ${span.to} · ` : "";
   return `<button type="button" class="pg-rng" id="pg-rng" aria-haspopup="dialog" aria-expanded="false" onclick="pgUsagePop(this)" title="${esc(when)}Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before"><i class="pg-rng-i">${pgUsageIcon.cal}</i><span>${esc(pgUsageRangeLabel())}</span><i class="pg-rng-c">${pgUsageIcon.chev}</i></button>`;
@@ -307,13 +307,13 @@ function pgUsageDrawCards() {          // the overview: what is known is drawn a
   pgUsageDrawAge();
 }
 /* ---- the sections: chips under the range bar; Marzban has Overview, Users and Look up only (it does not answer the usage of all users) */
-const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nodes", "Nodes", false], ["users", "Users", true], ["apps", "Apps", false], ["look", "Look up", true]];      // [key, name, also on Marzban]
+const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nodes", "Nodes", false], ["users", "Users", true], ["apps", "Apps", false], ["look", "Look up", true]];      // [key, name, also on Marzban] (no chips: the cards of the overview open the sections; "Look up" has a button of its own in the row beside the range)
 const pgUsageSecCur = () => { const s = pgUsageState; return PGU_SECS.some(x => x[0] === s.sec && (pgUsageIsPg() || x[2])) ? s.sec : "ov"; };
-function pgUsageSecBarHtml() {
-  const cur = pgUsageSecCur();
-  return `<div class="pg-usec-row"><div class="pg-useg pg-usec" role="tablist" aria-label="Section">${PGU_SECS.filter(x => pgUsageIsPg() || x[2]).map(([k, l]) => `<button type="button" role="tab" aria-selected="${cur === k}" class="${cur === k ? "on" : ""}" onclick="pgUsageSec('${k}')">${l}</button>`).join("")}</div>${pgUsageRangeBtn()}</div>`;
-}
-function pgUsageApplySec() {
+function pgUsageSecBarHtml() {          // no chips (the owner, 2026-10-15): the overview is the page, a › on a card opens its section, and this row then says where you are and brings you back
+  const cur = pgUsageSecCur(), name = (PGU_SECS.find(x => x[0] === cur) || [])[1] || "";
+  const back = cur === "ov" ? "" : `<button type="button" class="pg-back" onclick="pgUsageSec('ov')" title="Back to the overview"><i>${pgUsageIcon.back}</i><span>Overview</span></button><span class="pg-sec-title">${esc(name)}</span>`;
+  return `<div class="pg-usec-row">${back}<span class="pg-usec-r"><button type="button" class="pg-lk${cur === "look" ? " on" : ""}" onclick="pgUsageSec('look')" title="The usage of one admin or one user in the range"><i>${pgUsageIcon.search}</i><span>Look up</span></button>${pgUsageRangeBtn()}</span></div>`;
+}function pgUsageApplySec() {
   const root = $("#pg-usage"); if (!root) return;
   const cur = pgUsageSecCur(); root.dataset.sec = cur;
   [...root.children].forEach(e => { if (e.dataset.for) e.hidden = e.dataset.for !== cur; });
@@ -507,8 +507,9 @@ const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-u
   <div data-for="traffic" id="pg-usage-range"></div>
   <div data-for="nodes" id="pg-usage-nodes"></div>
   <div data-for="users" class="pg-usage-two"><div id="pg-usage-counts"></div><div id="pg-usage-top"></div></div>
+  <div data-for="look">${pgUsageCard("Usage of an admin or a user", "", '<div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div>', false, "pg-usage-look")}</div>
   <div data-for="apps" id="pg-usage-apps"></div>
-  <div data-for="look">${pgUsageCard("Usage of an admin or a user", "", '<div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div>', false, "pg-usage-look")}</div></div>`;
+</div>`;
 async function pgUsageLoadRanges() {
   const s = pgUsageState, id = s.id, r = await pgApi(id, "/usage/ranges");          // the dates of the presets: no question to the panel, so it is cheap
   if (s.id !== id) return;

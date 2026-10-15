@@ -361,7 +361,7 @@ def test_the_core_cards_count_the_selected_ones_in_the_select_all_row():
 def test_the_usage_tab_is_round_stats_in_sections_with_a_nodes_only_view():
     """The owner, 2026-10-15: "short, useful, packed; easy on the eye, like a round stats menu; a section with only the nodes' usage": rings and gauges on one screen, chips for the sections, a Nodes section."""
     js, css = _web("pg_usage.js"), _web("pg_usage.css")
-    for part in ("function pgUsageNice(m)", "function pgUsageRingSvg(", "function pgUsageGaugeSvg(", "function pgUsageSparkSvg(", "const PGU_SECS = ", 'data-for="nodes"', 'data-for="ov"', "function pgUsageNodesSecHtml(", "window.pgUsageSec = ", 'class="pg-useg pg-usec"', "Busiest node", "Subscription apps", "Users over time", "Top users", "pg-usage-gl"):
+    for part in ("function pgUsageNice(m)", "function pgUsageRingSvg(", "function pgUsageGaugeSvg(", "function pgUsageSparkSvg(", "const PGU_SECS = ", 'data-for="nodes"', 'data-for="ov"', "function pgUsageNodesSecHtml(", "window.pgUsageSec = ", 'class="pg-back"', "Busiest node", "Subscription apps", "Users over time", "Top users", "pg-usage-gl"):
         assert part in js, part
     assert "pgUsageFit" not in js and "pg-ukpi" not in js and "pg-usage-pair" not in js and "#pg-usage-cards" not in js
     assert ".main:has(.pg-usage) { overflow-y: auto; }" in css and ".pg-rcs {" in css and ".pg-ns {" in css and ".pg-useg button.on {" in css
@@ -447,7 +447,7 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th data-prio="0">Name</th><th data-prio="3" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="1">IP</th><th data-prio="2" class="lab-ld">Load</th>' in lab
+    assert '<th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="3" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" class="lab-ld">Load</th>' in lab
     assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
@@ -540,8 +540,8 @@ def test_the_menus_use_flyouts_and_the_usage_range_button_lives_in_the_row_of_th
     lab, js, css = _web("lab.js"), _web("pg_usage.js"), _web("pg_usage.css")
     assert lab.count("labSubItem(") >= 8 and 'labSubItem("Access", "key", access)' in lab and 'labSubItem("Tests", "gre", tests, {off, tip})' in lab and 'labSubItem("Install", "box", install, {off, tip})' in lab
     assert "monitor: '<path d=\"M6 20V11M12 20V4M18 20v-7\"/>'" in lab and "manage: '<path d=\"M4 7h10M18 7h2" in lab
-    assert '<div class="pg-usec-row">' in js and "${pgUsageRangeBtn()}</div>" in js and 'class="pg-rng"' not in js.split("function pgUsageBarHtml() {", 1)[1].split("\n}", 1)[0]
-    assert ".pg-usec-row .pg-rng { height: 36px; margin-left: auto;" in css and ".pg-usec-row .pg-usec { align-self: auto; height: 36px;" in css
+    assert '<div class="pg-usec-row">' in js and "${back}<span class=\"pg-usec-r\">" in js and "${pgUsageRangeBtn()}</span></div>" in js and 'class="pg-useg pg-usec"' not in js and 'data-for="look"' in js and 'class="pg-lk${cur === "look"' in js and '["look", "Look up", true]' in js and 'class="pg-rng"' not in js.split("function pgUsageBarHtml() {", 1)[1].split("\n}", 1)[0]
+    assert ".pg-usec-row .pg-rng { height: 36px; margin-left: auto;" in css and ".pg-usec-row .pg-back {" in css and ".pg-usec-row .pg-lk {" in css and ".pg-usec-r {" in css
 
 
 def test_the_panel_tab_buttons_are_one_size_with_the_kits_radius_and_no_halo():
@@ -630,3 +630,17 @@ def test_the_lab_list_is_a_box_of_one_fixed_height():
     """The owner, 2026-10-15: "the box of this part fixed too": the generic box fitter gives the Lab list a height, not only a maximum height."""
     app = _web("app.js")
     assert 'const fixed = !!pg.querySelector(".cf-top, .lab-root");' in app and "if (fixed) { b.style.height = mh + " in app
+
+
+def test_the_segment_buttons_and_icon_buttons_of_the_panel_bar_fit_inside_their_track():
+    """The owner, 2026-10-15: "fix the boxes here too" - measured in a real browser the 32 px buttons stuck out of the 36 px track: 28 px now."""
+    css = _web("lab.css")
+    assert ".pn-bar .pn-ksw .pn-seg { height: 36px; box-sizing: border-box; align-items: center; }" in css and ".pn-bar .pn-ksw .pn-seg > button { height: 28px; min-height: 0;" in css and ".pn-ksw .lab-tabact .lab-ib { width: 28px; height: 28px; min-height: 0; }" in css
+
+
+def test_the_banner_of_a_server_window_is_one_slim_row():
+    """The owner, 2026-10-15: "instead of this big box a more compact thing in one row": icon, title, what is wrong and the buttons in one line."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    banner = lab.split("function labBanner(s) {", 1)[1].split("/* -----", 1)[0]
+    assert 'class="lb-m ${i.lvl === "bad" ? "err" : ""}" title="${esc(i.text)}"' in banner and banner.count('<div class="lb-t">') == 4
+    assert ".lab-ban { align-items: center; gap: 10px; min-height: 42px;" in css and ".lab-ban .lb-t > .lb-m { min-width: 0; overflow: hidden; text-overflow: ellipsis;" in css

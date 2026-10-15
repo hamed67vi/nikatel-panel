@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.57.17 - Usage without the section chips, IP before Problems
+
+- **Usage (the owner):** the row of chips (*Overview, Traffic, Nodes, Users, Apps, Look up*) is hidden; the overview is the page and the **›** on each card opens its section; inside a section the row shows *‹ Overview* (the way back) and the name of the section, and the range button stays at the right. 
+- **Server window (the owner: *instead of this big box a more compact thing in one row*):** the banner (*Needs attention*, *Worth a look*, *Healthy* ...) is one slim row - the icon, the title, what is wrong (cut with an ellipsis when long, the whole text in the tooltip) and the buttons at the end.
+- **Look up (the owner):** it has a button of its own in the row beside the range button - the same size and kit look, blue and lifted while its section is open (and a click on a user in *Top users* opens it).
+- **Panel bar (the owner: *fix the boxes here too*):** measured in a real browser, the segment button and the icon buttons were 32 px high inside a 36 px track and stuck out of it; they are 28 px now.
+- **Lab (the owner):** the *IP* and *Problems* columns swapped places - the address is right after the name again.
+
 ## 1.57.16 - The problems in a column of their own, a fixed Lab box
 
 - **Lab (the owner):** the problem tags (*GRE ✕*, *Filtered*, *Offline*, *CPU 91 %* ...) leave the name and stand in a fixed *Problems* column between Name and IP, a clear step away from the name; they are smaller (18 px high, 10.5 px type). The list is a box of ONE fixed height, whatever the number of its rows.

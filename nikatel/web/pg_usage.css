@@ -174,3 +174,15 @@ html[data-mode="light"] body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ct
 /* 1.57.11 - the tab buttons of a panel are ONE size everywhere (every tab of the Panel page, open or not): a 36 px track of the kit (radius 11) and 28 px buttons (radius 8), no halo around the open one */
 html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs { height: 36px; box-sizing: border-box; align-items: center; }
 html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button { padding: 0 14px; font-size: 13px; line-height: 1; min-width: 0; margin: 0; }
+/* 1.57.17 - the section chips are hidden; the row under the bar holds the range button, and - inside a section - the way back and where you are */
+html body #page .pg-usec-row .pg-back { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 10px; border-radius: 11px; font-size: 13px; font-weight: 600; box-sizing: border-box; }
+html body #page .pg-usec-row .pg-back i { display: inline-grid; } html body #page .pg-usec-row .pg-back svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .pg-usec-row .pg-sec-title { font-size: 15px; font-weight: 650; color: var(--text); }
+/* 1.57.18 - (1) the Look up button stands in the row beside the range button, the same size and kit look (blue and lifted while its section is open); (2) the boxes of the Panel bar keep their sizes: the segment buttons are 28 px inside the 36 px track and the icon buttons 28 px (an older rule made them 32 px and they stuck out of the track) */
+html body #page .pg-usec-row .pg-usec-r { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+html body #page .pg-usec-row .pg-usec-r .pg-rng { margin-left: 0; }
+html body #page .pg-usec-row .pg-lk { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px 0 11px; box-sizing: border-box; border-radius: 11px; background-image: none !important; background-color: #151a2b !important; border: 1px solid var(--uk-line) !important; box-shadow: none !important; font-size: 13px; font-weight: 600; color: #e8ebf7; }
+html body #page .pg-usec-row .pg-lk i { display: inline-grid; color: var(--mut); } html body #page .pg-usec-row .pg-lk svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .pg-usec-row .pg-lk:hover { background-color: #1b2236 !important; border-color: var(--uk-line-2) !important; }
+html body #page .pg-usec-row .pg-lk.on { background-color: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; } html body #page .pg-usec-row .pg-lk.on i { color: inherit; }
+html[data-mode="light"] body #page .pg-usec-row .pg-lk { background-color: #eef2fa !important; border-color: rgba(30, 50, 100, .14) !important; color: #14213d; } html[data-mode="light"] body #page .pg-usec-row .pg-lk.on { background-color: #e3edff !important; color: #1456c8; }
