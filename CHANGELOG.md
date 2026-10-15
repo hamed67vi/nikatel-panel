@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.57.31 - Faces instead of strips, a compact roles window, one switch size
+
+- **Admins and API keys:** a face (emoji) stands where the green strip was - a crown for the owner, a cool face for an active admin, a sleeping face for a disabled one, a stop sign for the rest, a key for an active API key.
+- **Role window (and the key / admin windows):** rows of 30 px, sections close together; the limits no longer stick out of their card (the label wraps); the rights are one list that scrolls with the window (no second scroll box, no white corner); *Cancel* and *Save* at the foot, to the right, in a bar that stays in view; the *Close* button has a gap after its cross.
+- **Switches:** one size everywhere, 40 x 24, like the check boxes of the forms.
+
 ## 1.57.30 - The kit switch, a fixed Activity box, Save at the foot, PasarGuard first
 
 - **Switches (the owner's picture):** one look everywhere, pages and windows - off a dark slate pill with a light knob, on the blue pill with a soft glow, the knob slides; the *Add the rest* switch of the user window had the old grey one with its knob off the middle.

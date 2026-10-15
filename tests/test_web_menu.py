@@ -746,7 +746,16 @@ def test_the_panel_page_helpers_each_start_their_own_line():
 def test_the_kit_switch_the_fixed_activity_box_and_the_save_row_of_the_user_window():
     """The owner, 2026-10-15: "fix that button" (the switch of the picture), "a fixed box for Activity", "put Save and Cancel right", "the default is PasarGuard"."""
     css, users, app = _web("lab.css"), _web("pg_users.js"), _web("app.js")
-    assert "label.ob2-sw i { display: block; position: relative; width: 46px; height: 26px;" in css and "label.ob2-sw:has(input:checked) i::after { transform: translateX(20px); }" in css and "linear-gradient(180deg, #2f9dff, #0a6cf0)" in css
+    assert "label.ob2-sw i { display: block; position: relative; width: 40px; height: 24px;" in css and "label.ob2-sw:has(input:checked) i::after { transform: translateX(16px); }" in css and "linear-gradient(180deg, #2f9dff, #0a6cf0)" in css
     assert "#modal .pgu #pgu-actbody { height: 150px; max-height: none; overflow: auto; }" in css and "#modal .ue .pu-save { position: sticky; bottom: 0;" in css and "justify-content: flex-end;" in css
     assert 'onclick="closeModal()">Cancel</button><button class="pri" type="submit">Save</button></div></form>`, "wide ue pgu"' in users
     assert '<select name="type" onchange="pnHint(this.form)"><option value="pasarguard">PasarGuard</option><option value="marzban">Marzban</option></select>' in app
+
+
+def test_the_roles_window_is_compact_and_the_admin_rows_have_a_face():
+    """The owner, 2026-10-16: "an emoji instead of the green lines", "compact these too, fix their buttons"."""
+    css, adm = _web("lab.css"), _web("pg_admin.js")
+    assert "const pgAdminEmo = (st, owner, base) => owner" in adm and '<i class="pg-admin-emo"' in adm and adm.count("pgAdminEmo(") >= 2 and "\nfunction pgAdminRow(a) {" in adm
+    assert "#page .pg-admin-box .tbl tbody tr td:first-child { border-left: 0 !important; box-shadow: none !important; }" in css and ".pg-admin-nm .pg-admin-emo {" in css
+    assert "#modal .pg-admin-form2 .frm-act { position: sticky; bottom: 0;" in css and "flex-direction: row-reverse;" in css and "#modal .pg-admin-permwrap { max-height: none; overflow: visible;" in css and "#modal .pg-admin-win .modal-body { overflow-x: hidden; }" in css
+    assert "#modal .pg-roles-form .pg-roles-lim .kf > span:first-child { min-width: 0;" in css and "#modal .modal-head button > .bt { margin-left: 6px; }" in css

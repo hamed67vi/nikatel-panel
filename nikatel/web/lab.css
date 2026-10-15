@@ -494,14 +494,39 @@ html body #page .pn-first h2 { margin: 4px 0 0; font-size: 18px; font-weight: 65
 html body #page .pn-bar .pn-none { font-size: 13px; }
 html[data-mode="light"] body #page .pn-first { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 1px 2px rgba(30, 50, 100, .06); } html[data-mode="light"] body #page .pn-first h2 { color: #14213d; }
 /* 1.57.30 - (1) the switch of the kit (the owner's picture): off = a dark slate pill with a light knob, on = the blue pill with a soft glow, the knob slides; one look in pages AND windows (the "Add the rest" switch of the user window had the old grey one, its knob off the middle); (2) the Activity box of the user window has ONE fixed height; (3) Cancel and Save stand at the foot of the user window, at the right (Save last), in a bar that stays in view */
-html body :is(#page, #modal) label.ob2-sw { position: relative; display: inline-flex; align-items: center; flex: none; width: 46px; min-width: 46px; height: 26px; margin: 0; padding: 0; border: 0; border-radius: 13px; background: transparent; box-shadow: none; cursor: pointer; }
-html body :is(#page, #modal) label.ob2-sw i { display: block; position: relative; width: 46px; height: 26px; border-radius: 13px; background: linear-gradient(180deg, #313a56, #252c44) !important; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .13), inset 0 1px 2px rgba(0, 0, 0, .4); transition: background .22s, box-shadow .22s; }
-html body :is(#page, #modal) label.ob2-sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(180deg, #fff, #d3dbf0); box-shadow: 0 1px 3px rgba(0, 0, 0, .45); transition: transform .25s cubic-bezier(.3, 1.2, .5, 1); }
+html body :is(#page, #modal) label.ob2-sw { position: relative; display: inline-flex; align-items: center; flex: none; width: 40px; min-width: 40px; height: 24px; margin: 0; padding: 0; border: 0; border-radius: 12px; background: transparent; box-shadow: none; cursor: pointer; }
+html body :is(#page, #modal) label.ob2-sw i { display: block; position: relative; width: 40px; height: 24px; border-radius: 12px; background: linear-gradient(180deg, #313a56, #252c44) !important; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .13), inset 0 1px 2px rgba(0, 0, 0, .4); transition: background .22s, box-shadow .22s; }
+html body :is(#page, #modal) label.ob2-sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(180deg, #fff, #d3dbf0); box-shadow: 0 1px 3px rgba(0, 0, 0, .45); transition: transform .25s cubic-bezier(.3, 1.2, .5, 1); }
 html body :is(#page, #modal) label.ob2-sw.on i, html body :is(#page, #modal) label.ob2-sw:has(input:checked) i { background: linear-gradient(180deg, #2f9dff, #0a6cf0) !important; box-shadow: 0 0 0 1px rgba(10, 124, 245, .55), 0 0 10px rgba(10, 132, 255, .45); }
-html body :is(#page, #modal) label.ob2-sw.on i::after, html body :is(#page, #modal) label.ob2-sw:has(input:checked) i::after { transform: translateX(20px); }
+html body :is(#page, #modal) label.ob2-sw.on i::after, html body :is(#page, #modal) label.ob2-sw:has(input:checked) i::after { transform: translateX(16px); }
 html body :is(#page, #modal) label.ob2-sw:focus-within { outline: 2px solid rgba(90, 169, 255, .6); outline-offset: 2px; }
 html[data-mode="light"] body :is(#page, #modal) label.ob2-sw i { background: #c3cde0 !important; box-shadow: inset 0 0 0 1px rgba(30, 40, 80, .12); }
 html[data-mode="light"] body :is(#page, #modal) label.ob2-sw.on i, html[data-mode="light"] body :is(#page, #modal) label.ob2-sw:has(input:checked) i { background: linear-gradient(180deg, #2f9dff, #0a6cf0) !important; }
 html body #modal .pgu #pgu-actbody { height: 150px; max-height: none; overflow: auto; }
-html body #modal .ue .pu-save { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 14px 0 0; padding: 12px 2px 4px; background: var(--bg); border-top: 1px solid var(--uk-line); }
+html body #modal .ue .pu-save { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 14px 0 0; padding: 12px 2px 4px; background: #0f1626; border-top: 1px solid var(--uk-line); }
 html body #modal .ue .pu-save button { height: 36px; padding: 0 20px; border-radius: 11px; font-size: 13px; font-weight: 600; }
+
+/* 1.57.31 - the roles window and its sisters (API key, admin) are COMPACT: rows of 30 px, sections close together, the limits never stick out of their card (the label wraps instead), the rights are one list that scrolls with the window (no second scroll box, no white corner), Cancel + Save stand at the foot of the window, to the right, in a bar that stays in view; the Close button has a gap between the cross and its word; the admins and keys lists show a face (emoji) where the coloured strip was */
+html body #modal .pg-admin-win .modal-body { overflow-x: hidden; }
+html body #modal .pg-admin-form2 .pg-admin-cols, html body #modal .pg-admin-form2 .pg-admin-cols > div { gap: 8px; }
+html body #modal .pg-admin-form2 .sbox { padding: 2px 12px 6px; }
+html body #modal .pg-admin-form2 .sbox > h5 { min-height: 0; height: 24px; margin: 0 0 2px; }
+html body #modal .pg-admin-form2 .kf { min-height: 30px; padding: 1px 0; }
+html body #modal .pg-admin-form2 .kf input, html body #modal .pg-admin-form2 .kf select { height: 26px; }
+html body #modal .pg-admin-form2 .pg-admin-sw { min-height: 28px; }
+html body #modal .pg-roles-form .pg-roles-lim { gap: 0 14px; }
+html body #modal .pg-roles-form .pg-roles-lim .kf { min-width: 0; gap: 8px; }
+html body #modal .pg-roles-form .pg-roles-lim .kf > span:first-child { min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.15; }
+html body #modal .pg-roles-form .pg-roles-lim input { width: 80px; }
+html body #modal .pg-roles-form .pg-roles-h { margin: 4px 0 0; }
+html body #modal .pg-roles-form .pg-roles-pick label.chk { height: 28px; }
+html body #modal .pg-admin-permwrap { max-height: none; overflow: visible; margin-top: 8px; padding-right: 0; }
+html body #modal .pg-admin-perm { gap: 8px; }
+html body #modal .pg-admin-res label { min-height: 24px; }
+html body #modal .pg-admin-res select { height: 22px; }
+html body #modal .pg-admin-form2 .frm-act { position: sticky; bottom: 0; z-index: 3; display: flex; flex-direction: row-reverse; justify-content: flex-start; align-items: center; gap: 10px; margin: 8px 0 0; padding: 10px 2px 4px; background: #0f1626; border-top: 1px solid var(--uk-line); }
+html body #modal .pg-admin-form2 .frm-act button { height: 36px; padding: 0 20px; border-radius: 11px; font-size: 13px; font-weight: 600; }
+html body #modal .modal-head button > .bt { margin-left: 6px; }
+html body #page .pg-admin-box .tbl tbody tr td:first-child { border-left: 0 !important; box-shadow: none !important; }
+html body #page .pg-admin-nm .pg-admin-emo { flex: none; font-style: normal; font-size: 17px; line-height: 1; margin-right: 8px; }
+html[data-mode="light"] body #modal :is(.pg-admin-form2 .frm-act, .ue .pu-save) { background: #f7f9fd; }
