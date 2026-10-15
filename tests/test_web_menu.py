@@ -299,7 +299,7 @@ def test_the_menu_of_a_node_row_is_the_menu_of_the_node_window_in_one_column_wit
     """The owner, 2026-10-15: "make this one like the other: in one column with groups" - the row of a node had a short menu without icons."""
     lab = _web("lab.js").split("function labNodeItems(", 1)[1].split("/* a section is drawn", 1)[0]
     assert 'ctx === "row" ? labItem(' not in lab and "ctx === \"row\" ? []" not in lab                                  # no short row version of any item any more
-    assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labIt("Move to profile…", "tag"' in lab      # (a row: the profile's own items first, with icons)
+    assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labSubItem("Move to profile", "tag", labMoveItems(p.id))' in lab      # (a row: the profile's own items first, with icons)
     for item in ("Log", "Usage", "Resources", "Latency", "Certificate…", "Edit…", "Restart…", "Resync users…", "Reset counters…", "Update the node…", "Update Xray…", "Update geo files…", "Off the page", "Delete the node…"):
         assert f'it("{item}"' in lab or 'it(off ? "Enable…" : "Disable…"' in lab, item
 
@@ -370,7 +370,7 @@ def test_the_usage_tab_is_a_dashboard_of_two_columns_with_a_scale_on_its_chart()
 def test_a_server_or_node_can_be_moved_to_any_profile_from_the_menu_or_by_dragging_its_row_onto_a_tab():
     """The owner, 2026-10-15: "a way to move a server to any profile we like"."""
     lab, css = _web("lab.js"), _web("lab.css")
-    assert 'labIt("Change tag…"' not in lab and lab.count('labIt("Move to profile…", "tag", () => labSetTag(p.id))') == 2             # (the row menu and the head of the node window)
+    assert 'labIt("Change tag…"' not in lab and lab.count('labSubItem("Move to profile", "tag", labMoveItems(p.id))') == 2             # (the row menu and the head of the node window)
     assert "window.labMoveTo = async (id, tag) =>" in lab and "/api/profiles/${id}/tag" in lab and 'class="lab-mv new" onclick="labMoveNew(${id})"' in lab
     assert lab.count("${labDragAttrs(p.id)}") == 3                                                      # (a server row, a node row, a row of what is gone)
     assert 'ondragover="labDropOver(event)"' in lab and 'ondrop="labDrop(event, this.dataset.k)"' in lab and 'labMoveTo(id, k === "any" ? "" : k)' in lab
@@ -437,7 +437,7 @@ def test_fixed_boxes_names_only_buttons_disabled_without_items_and_the_server_ic
     assert "function fxFit()" in app and 'class="lbox full fx-box dns-box"' in app and 'class="card ap-tasks fx-box"' in app
     assert '!accounts.length ? "accounts"' in app and '!accounts.length && k !== "accounts" ? \'disabled title="Add an account first"\'' in app
     assert "html body #page .fx-box { height: calc(100vh - 290px)" in css and ".toolbar.is-empty :is(.tf-tabs, .tb-search)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
-    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".srv-ic::before { content: \"\"; position: absolute; top: -2px; right: -5px; width: 9px; height: 9px; border-radius: 50%;" in css and "tr.sev-yellow { --lamp: #ffc44d" in css
+    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".srv-ic::before { content: \"\"; position: absolute; top: -1px;" in css and "tr.sev-yellow { --lamp: #ffc44d" in css
     assert ".lab-cpu .bar { flex: 0 1 96px" in css and "linear-gradient(90deg, #0a62ff, #4aa8ff)" in css
 
 
@@ -462,3 +462,14 @@ def test_the_profile_tabs_give_way_with_ellipsis_and_the_buttons_beside_them_sta
     lab, css = _web("lab.js"), _web("lab.css")
     assert '<span class="lab-kn">${k === "any" ? "All" : esc(k)}</span>' in lab
     assert ".lab-bar .lab-ksw { flex: 0 1 auto; min-width: 0; }" in css and ".lab-bar .lab-tabact { flex: none; }" in css and ".lab-kinds .lab-kn { min-width: 0; overflow: hidden; text-overflow: ellipsis;" in css
+
+
+def test_move_to_profile_is_a_flyout_and_a_plain_server_can_be_made_a_pasarguard_node():
+    """The owner, 2026-10-15: "Move to profile opens another menu beside it with the profile names; choosing one moves the server"; "a server added under All: a move that makes it a PasarGuard node"; the lamp is behind the icon, the name a little to the right."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert "window.labSubOpen = (i, btn, focus) =>" in lab and "const labSubHtml = " in lab and "function labSubClose()" in lab and 'class="lab-chev">›</span>' in lab
+    assert "window.labMenuPick = (i, j) =>" in lab and "labSubEl && labSubEl.contains(e.target)" in lab
+    assert "const labMoveItems = id =>" in lab and 'labItem("＋ New profile…", () => labMoveNew(id))' in lab and "on: t.toLowerCase() === cur" in lab
+    assert 'labIt("Make a PasarGuard node…", "box", () => labMakeNode(p.id)' in lab and "window.labMakeNode = async id =>" in lab and "labCanMakeNode(s)" in lab and "await pgSrvMake(s.id, s.name," in lab
+    assert ".lab-menu.lab-submenu { z-index: 71" in css and ".lab-mi.has-sub .lab-chev" in css and ".lab-tbl td.name .lab-nmw { margin-left: 12px; }" in css
+    assert ".srv-ic::before { content: \"\"; position: absolute; top: -1px; right: -3px; width: 12px; height: 12px; border-radius: 50%; z-index: 0;" in css

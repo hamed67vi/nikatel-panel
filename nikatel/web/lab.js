@@ -242,6 +242,23 @@ window.labMoveNew = async id => {
   const v = await gprompt("Name of the new profile:", ""); if (v == null || !String(v).trim()) return;
   try { const r = await api("/api/profiles/tags", {method: "POST", body: JSON.stringify({tag: v})}); await labMoveTo(id, r.tag); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
+const labMoveItems = id => {      // the submenu of "Move to profile": the name of every profile (with its picture), the current one checked, then "Any" and a new one
+  const p = LAB.profiles.find(x => x.id === id); if (!p) return [];
+  const cur = String(p.tag || "").toLowerCase(), one = (t, label) => labItem(label, () => labMoveTo(id, t), {ic: labLogo(t), on: t.toLowerCase() === cur});
+  return [...labTags().map(t => one(t, t)), one("", "Any (no profile)"), labSep, labItem("＋ New profile…", () => labMoveNew(id))];
+};
+const labCanMakeNode = s => typeof pgSrvPanels === "function" && pgSrvPanels().length > 0 && !(typeof pgSrvOn === "function" && pgSrvOn(s).some(x => x.type === "pasarguard"));      // a server that is not a PasarGuard node yet, while a PasarGuard panel is connected
+window.labMakeNode = async id => {      // ⋯ → Make a PasarGuard node… (the owner, 2026-10-15: a server added under Any becomes a node of the PasarGuard panel in one move: the node is installed, added to the panel, and the server goes to the PasarGuard profile)
+  const p = LAB.profiles.find(x => x.id === id), s = p && labServer(p); if (!s) return;
+  const ps = typeof pgSrvPanels === "function" ? pgSrvPanels() : []; if (!ps.length) { toast("✕ Connect a PasarGuard panel first (the Panel page)", "bad"); return; }
+  let panel = ps[0];
+  if (ps.length > 1) { const v = await glassChoice(`Make ${s.name} a node of which panel?`, ps.map(x => ({label: x.name, v: x.id}))); if (v == null) return; panel = ps.find(x => x.id === v) || panel; }
+  if (!await gconfirm(`Make ${s.name} a PasarGuard node?\n\nThe panel installs the node on it over SSH (Docker, a few minutes) and adds it to ${panel.name}; then the server moves to the PasarGuard profile.`)) return;
+  let core = null; try { core = ((await api(`/api/panels/${panel.id}/pg/cores`)).cores || []).find(c => !c.type || c.type === "xray"); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  if (!core) { toast("✕ That panel has no core config yet: make one in its Core tab first", "bad"); return; }
+  const ok = await pgSrvMake(s.id, s.name, {panel_id: panel.id, name: s.name, core_config_id: core.id, usage_coefficient: 1});
+  if (ok) { const tag = labTags().find(t => /^pasarguard/i.test(t)) || "PasarGuard"; try { await api(`/api/profiles/${id}/tag`, {method: "PUT", body: JSON.stringify({tag})}); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); }
+};
 let labDragId = null;      // the row that is being dragged (a drop on a tab moves it to that profile)
 const labDragAttrs = id => `draggable="true" ondragstart="labDragStart(event, ${id})" ondragend="labDragEnd()"`;
 window.labDragStart = (ev, id) => { labDragId = id; ev.dataTransfer.effectAllowed = "move"; try { ev.dataTransfer.setData("text/plain", String(id)); } catch (e) { /* the id is kept in labDragId */ } document.body.classList.add("lab-dragging"); };
@@ -392,19 +409,22 @@ function labBanner(s) {      // one box that says how the server is, in plain wo
 }
 /* ---------------------------------------------------------------- the menu: ONE "⋯" button in place of many buttons (the owner sent the picture of one: Overview, Rename, Power off ... Delete in red).
    The items are built when it opens and kept in LAB.menu; a click runs the item's function, so no name from a panel ever sits in a handler. */
-let labMenuEl = null, labMenuBtn = null;
+let labMenuEl = null, labMenuBtn = null, labSubEl = null;
 function labMenuClose(focus) {
+  labSubClose();
   if (labMenuEl) { labMenuEl.remove(); labMenuEl = null; }
   document.removeEventListener("mousedown", labMenuOut, true); document.removeEventListener("keydown", labMenuKey, true); document.removeEventListener("scroll", labMenuScroll, true); window.removeEventListener("resize", labMenuClose);
   if (labMenuBtn) { labMenuBtn.removeAttribute("aria-expanded"); if (focus && document.body.contains(labMenuBtn)) labMenuBtn.focus(); }
   labMenuBtn = null;
 }
-const labMenuOut = e => { if (labMenuEl && !labMenuEl.contains(e.target) && !(labMenuBtn && labMenuBtn.contains(e.target))) labMenuClose(); };
-const labMenuScroll = e => { if (labMenuEl && !labMenuEl.contains(e.target)) labMenuClose(); };
+const labMenuOut = e => { if (labMenuEl && !labMenuEl.contains(e.target) && !(labSubEl && labSubEl.contains(e.target)) && !(labMenuBtn && labMenuBtn.contains(e.target))) labMenuClose(); };
+const labMenuScroll = e => { if (labMenuEl && !labMenuEl.contains(e.target) && !(labSubEl && labSubEl.contains(e.target))) labMenuClose(); };
 const labMenuKey = e => {
   if (!labMenuEl) return;
-  if (e.key === "Escape") { e.stopPropagation(); labMenuClose(true); return; }
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const bs = [...labMenuEl.querySelectorAll(".lab-mi:not(:disabled)")]; if (!bs.length) return; const i = bs.indexOf(document.activeElement); bs[(i + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus(); }
+  const inSub = labSubEl && labSubEl.contains(document.activeElement);
+  if (e.key === "Escape" || (inSub && e.key === "ArrowLeft")) { e.stopPropagation(); if (inSub) { const p = labMenuEl.querySelector(".has-sub.open"); labSubClose(); if (p) p.focus(); } else labMenuClose(true); return; }
+  if (e.key === "ArrowRight" && document.activeElement && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); document.activeElement.click(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const bs = [...(inSub ? labSubEl : labMenuEl).querySelectorAll(".lab-mi:not(:disabled)")]; if (!bs.length) return; const i = bs.indexOf(document.activeElement); bs[(i + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus(); }
 };
 window.labMenu = (btn, ctx, id, ev) => {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
@@ -419,7 +439,7 @@ window.labMenu = (btn, ctx, id, ev) => {
     if (it.sep) { blocks.push({n: 0, html: ""}); return; }
     let b = blocks[blocks.length - 1]; if (it.grp && b.n) { b = {n: 0, html: ""}; blocks.push(b); }
     b.n++; if (!it.grp) n++;
-    b.html += it.grp ? `<small class="lab-mgrp">${esc(it.grp)}</small>` : `<button type="button" role="menuitem" class="lab-mi${it.danger ? " danger" : ""}" ${it.off ? "disabled" : ""} ${it.tip ? `title="${esc(it.tip)}"` : ""} onclick="labMenuPick(${i})">${it.ic ? `<span class="lab-mic">${it.ic}</span>` : ""}${esc(it.t)}</button>`;
+    b.html += it.grp ? `<small class="lab-mgrp">${esc(it.grp)}</small>` : `<button type="button" role="menuitem" class="lab-mi${it.danger ? " danger" : ""}${it.sub ? " has-sub" : ""}" ${it.off ? "disabled" : ""} ${it.tip ? `title="${esc(it.tip)}"` : ""} ${it.sub ? `aria-haspopup="menu" onmouseenter="labSubOpen(${i}, this)" onclick="labSubOpen(${i}, this, true)"` : `onmouseenter="labSubClose()" onclick="labMenuPick(${i})"`}>${it.ic ? `<span class="lab-mic">${it.ic}</span>` : ""}${esc(it.t)}${it.sub ? '<span class="lab-chev">›</span>' : ""}</button>`;
   });
   const two = false, cols = [{n: 0, html: ""}, {n: 0, html: ""}];
   for (const b of blocks.filter(b => b.n)) { const c = two && cols[1].n < cols[0].n ? cols[1] : cols[0]; c.n += b.n; c.html += `<div class="lab-mg">${b.html}</div>`; }
@@ -432,8 +452,26 @@ window.labMenu = (btn, ctx, id, ev) => {
   if (ev && ev.detail === 0) { const first = m.querySelector(".lab-mi:not(:disabled)"); if (first) first.focus(); }      // opened from the keyboard: the first item is ready
 };
 window.nkMenu = (btn, items, ev) => { LAB.custom = items; labMenu(btn, "custom", 0, ev); };      // any button can open the same menu: a list of labItem / labGrp / labSep (the owner: every menu in one column with groups)
-window.labMenuPick = i => { const it = (LAB.menu || [])[i]; labMenuClose(true); if (it && it.fn) it.fn(); };
-const labItem = (t, fn, o = {}) => ({t, fn, ...o}), labSep = {sep: 1}, labGrp = g => ({grp: g});
+window.labMenuPick = (i, j) => { const top = (LAB.menu || [])[i], it = j == null ? top : ((top && top.sub) || [])[j]; labMenuClose(true); if (it && it.fn) it.fn(); };
+/* a submenu (a flyout, as in the context menu of Windows or macOS): an item with `sub: [items]` shows a chevron and opens its own small menu beside it - on hover, a click, or the right arrow; an item of it may be marked `on` (a check) */
+const labSubHtml = (items, i) => { const groups = [[]]; items.forEach((it, j) => { if (it.sep) groups.push([]); else groups[groups.length - 1].push(`<button type="button" role="menuitem" class="lab-mi${it.on ? " on" : ""}" onclick="labMenuPick(${i}, ${j})"><span class="lab-mic">${it.ic || ""}</span><span class="lab-mt">${esc(it.t)}</span>${it.on ? '<span class="lab-ck">✓</span>' : ""}</button>`); }); return groups.filter(g => g.length).map(g => `<div class="lab-mg">${g.join("")}</div>`).join(""); };
+function labSubClose() { if (labSubEl) { labSubEl.remove(); labSubEl = null; } if (labMenuEl) labMenuEl.querySelectorAll(".has-sub.open").forEach(b => b.classList.remove("open")); }
+window.labSubClose = labSubClose;
+window.labSubOpen = (i, btn, focus) => {
+  if (!labMenuEl) return;
+  if (labSubEl && labSubEl.dataset.i === String(i)) { if (focus) { const f = labSubEl.querySelector(".lab-mi"); if (f) f.focus(); } return; }
+  labSubClose();
+  const it = (LAB.menu || [])[i]; if (!it || !it.sub) return;
+  btn.classList.add("open");
+  const m = document.createElement("div"); m.setAttribute("role", "menu"); m.className = "lab-menu lab-submenu flat"; m.dataset.i = String(i);
+  m.innerHTML = `<div class="lab-mbody"><div class="lab-mcol">${labSubHtml(it.sub, i)}</div></div>`;
+  document.body.appendChild(m); labSubEl = m;
+  const r = btn.getBoundingClientRect(), mr = labMenuEl.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  let left = mr.right + 2; if (left + w > innerWidth - 8) left = Math.max(8, mr.left - w - 2);
+  m.style.left = left + "px"; m.style.top = Math.max(8, Math.min(r.top - 5, innerHeight - h - 8)) + "px"; m.style.maxHeight = (innerHeight - 16) + "px";
+  if (focus) { const f = m.querySelector(".lab-mi"); if (f) f.focus(); }
+};
+const labItem = (t, fn, o = {}) => ({t, fn, ...o}), labSep = {sep: 1}, labGrp = g => ({grp: g}), labSubItem = (t, k, sub, o) => ({t, sub, ic: labSvg(k), ...o});
 function labMenuItems(ctx, id) {      // ctx "row" / "win": id = a profile; "node": id = a server whose Node section is open
   if (ctx === "node") { const s = (state.serversCache || []).find(x => x.id === id), cur = s && typeof pgNodeCurrent === "function" ? pgNodeCurrent(pgSrvOn(s)) : null; return cur && cur.type === "pasarguard" && cur.node_id != null ? labNodeItems(cur, null) : []; }
   if (ctx === "swin") { const s = (state.serversCache || []).find(x => x.id === id); return s ? labServerItems(null, s, "win") : []; }      // (a server that is on no profile: its window has the same menu, with "Put on the page" in place of "Off the page")
@@ -454,7 +492,7 @@ function labServerItems(p, s, ctx) {      // one column, an icon before each ite
   if (ctx === "row") {
     const pgn = typeof pgSrvOn === "function" ? pgSrvOn(s).find(x => x.type === "pasarguard" && x.node_id != null) : null;      // a server that carries a PasarGuard node keeps ALL the actions of the node in its menu (the owner, 2026-10-15: they must not go when the node is one row with its server)
     const nodeActs = pgn ? labNodeItems({panel_id: pgn.panel_id, node_id: pgn.node_id}, null, "node").slice(0, -1).map(x => x.grp ? {grp: "Node · " + x.grp} : x) : [];      // (the monitor, manage and update groups of the node; its Delete is the tick of Delete server)
-    return [labGrp("Server"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Move to profile…", "tag", () => labSetTag(p.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
+    return [labGrp("Server"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labSubItem("Move to profile", "tag", labMoveItems(p.id)), ...(labCanMakeNode(s) ? [labIt("Make a PasarGuard node…", "box", () => labMakeNode(p.id), {off, tip})] : []), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
       labSep, ...nodeActs, gone, labSep, del];
   }
   return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)),
@@ -466,7 +504,7 @@ function labServerItems(p, s, ctx) {      // one column, an icon before each ite
 function labNodeItems(cur, p, ctx) {      // everything the Node view could do with its eight buttons, as items; `p` = the profile (a node profile), null in the Node section of a server
   const pid = cur.panel_id, id = cur.node_id, c = typeof pgNodesC !== "undefined" ? pgNodesC[pid] : null, d = c && c.data ? (c.data.nodes || []).find(n => n.id === id) : null, off = d && d.status === "disabled";
   const act = v => async () => { try { await pgNodesLoad(pid); } catch (e) { toast("✕ " + e.message, "bad"); return; } pgNodesGo(pid, id, v); };      // (the panel is read first when it was not: the node must be known to it)
-  const head = ctx === "row" && p ? [labGrp("Profile"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Move to profile…", "tag", () => labSetTag(p.id)), labSep] : [];      // (a row: what is about the profile first, then the same menu as the node window - the owner, 2026-10-15: "like this one, in one column with groups")
+  const head = ctx === "row" && p ? [labGrp("Profile"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labSubItem("Move to profile", "tag", labMoveItems(p.id)), labSep] : [];      // (a row: what is about the profile first, then the same menu as the node window - the owner, 2026-10-15: "like this one, in one column with groups")
   const I = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, it = (t, d, fn, o) => labItem(t, fn, {ic: I(d), ...o});      // (the menu of a node: one column, an icon before each item, a line between the groups - the owner's picture)
   const look = [labGrp("Monitor"), it("Log", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 12h5M9.5 15.5h5"/>', act("logs")), it("Usage", '<path d="M6 20V11M12 20V4M18 20v-7"/>', act("usage")), it("Resources", '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>', act("stats")), it("Latency", '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', act("latency")), it("Certificate…", '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>', act("cert")), labSep];
   const change = [labGrp("Manage"), it("Edit…", '<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>', act("edit")), it("Restart…", '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>', act("reconnect")), it(off ? "Enable…" : "Disable…", '<path d="M12 3v8M7 6.5a8 8 0 1010 0"/>', act(off ? "enable" : "disable")),

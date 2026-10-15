@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.56.27 - A flyout for Move to profile, Make a PasarGuard node
+
+- **Move to profile (the owner):** it is a flyout now - a small menu opens beside it with the names of the profiles (each with its picture, the current one checked); one click moves the server. Menus can have such submenus anywhere (hover, click or the right arrow).
+- **Make a PasarGuard node…:** a server that is not a node yet (added under *All*) gets this item in its menu: the panel installs the node, adds it to the PasarGuard panel, and the server goes to the PasarGuard profile.
+- **Rows:** the icon and the name stand a little to the right; the lamp is behind the icon, peeking out, not on top of it.
+
 ## 1.56.26 - Long profile names no longer push the buttons away
 
 - **Profile tabs (the owner):** the tabs give way when the room runs short - each box gets shorter and a long name ends with an ellipsis - and the buttons beside them (add, sync, rename, delete) always stay in view.

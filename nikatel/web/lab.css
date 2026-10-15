@@ -280,7 +280,7 @@ html body #page .srv-ic .b { stroke: currentColor !important; fill: color-mix(in
 html body #page .srv-ic .led { fill: currentColor !important; animation: none !important; opacity: 1 !important; }
 html body #page .srv-ic img.lab-logo { filter: grayscale(1) brightness(1.5); }
 html[data-mode="light"] body #page .srv-ic img.lab-logo { filter: brightness(0) opacity(.85); }
-html body #page .srv-ic::before { content: ""; position: absolute; top: -2px; right: -5px; width: 9px; height: 9px; border-radius: 50%; z-index: 2; pointer-events: none; background: var(--lamp, transparent); box-shadow: 0 0 0 2px var(--bg), 0 0 8px color-mix(in srgb, var(--lamp, transparent) 70%, transparent); transition: background .3s, box-shadow .3s; }      /* the lamp: one small round light on the corner of the icon, like the dots of "up / down / unstable" (no disc, no ring) */
+html body #page .srv-ic::before { content: ""; position: absolute; top: -1px; right: -3px; width: 12px; height: 12px; border-radius: 50%; z-index: 0; pointer-events: none; background: var(--lamp, transparent); box-shadow: 0 0 9px color-mix(in srgb, var(--lamp, transparent) 65%, transparent); transition: background .3s, box-shadow .3s; }      /* the lamp: one small round light BEHIND the icon, peeking out at its corner, like the dots of "up / down / unstable" (no disc, no ring) */
 html body #page tr.up { --lamp: #3ddc97; } html body #page tr.sev-blue { --lamp: #4da3ff; } html body #page tr.sev-yellow { --lamp: #ffc44d; }
 html body #page tr.down, html body #page tr.sev-red { --lamp: #ff6b8b; } html body #page tr.srv-off { --lamp: transparent; }
 html body #page .toolbar.joined { align-items: center; }
@@ -326,3 +326,14 @@ html body #page .tabs.lab-kinds > button { flex: 0 1 auto; min-width: 46px; max-
 html body #page .tabs.lab-kinds > button[data-k="any"] { flex: none; }
 html body #page .tabs.lab-kinds .lab-kn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .tabs.lab-kinds > button .lab-logo, html body #page .tabs.lab-kinds > button .lab-emoji, html body #page .tabs.lab-kinds > button .cnt { flex: none; }
+/* 1.56.27 - (1) the icon and the name of a row stand a little to the right, and the lamp is behind the icon (above); (2) the flyout of a menu: an item with a submenu shows a chevron and opens its own small menu beside it ("Move to profile" lists the profiles) */
+html body #page .lab-tbl td.name .lab-nmw { margin-left: 12px; }
+.lab-mi.has-sub .lab-chev { margin-left: auto; padding-left: 16px; opacity: .6; font-size: 16px; line-height: 1; }
+html body .lab-menu.lab-menu .lab-mi.has-sub.open { background: #1b6ef3; color: #fff; }
+html body .lab-menu.lab-submenu { z-index: 71; min-width: 176px; }
+html body .lab-submenu .lab-mi .lab-mt { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html body .lab-submenu .lab-mi .lab-ck { margin-left: auto; padding-left: 14px; color: #6cb2ff; font-size: 12px; }
+html body .lab-submenu .lab-mi:hover .lab-ck { color: #fff; }
+html body .lab-menu .lab-mic .lab-logo { width: 15px; height: 15px; margin: 0; vertical-align: middle; filter: grayscale(1) brightness(1.3); }
+html body .lab-menu .lab-mic .lab-emoji { width: auto; margin: 0; font-size: 13px; filter: grayscale(1) brightness(1.15); }
+html[data-mode="light"] body .lab-menu .lab-mic img.lab-logo:not(.lab-flag) { filter: brightness(0) opacity(.8); }
