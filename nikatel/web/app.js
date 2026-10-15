@@ -178,10 +178,10 @@ const SUB = {
 };
 /* the Panel page (1.47.0, the owner: "when we click Panel, show everything as tabs"): ONE page for the panel you pick, with a tab for each section of PasarGuard that was a page of its own (what PG_SUBS says about the tabs inside each) */
 SUB.pgpanel = [
-  ["settings", "General", "The panel you pick as a whole: its usage, its system, its settings."],      // (the first tab, 2026-10-14: it was "Panel settings", the last one)
+  ["settings", "General", "The panel you pick as a whole: its usage, its system, its settings and its templates (the recipe of a new user, the formats of the clients)."],      // (the first tab, 2026-10-14: it was "Panel settings", the last one)
   ["users", "Users", "The users of the panel you pick: search, status, edit, bulk actions and the tools of the More… menu. Pick a panel in the bar."],
   ["hosts", "Hosts", "The address, port and TLS of every link in the subscriptions of the PasarGuard panel you pick."],
-  ["access", "Access", "Groups (which inbounds a user gets) and templates (the recipe of a new user) of the panel you pick."],
+  ["access", "Access", "The groups (which inbounds a user gets) of the panel you pick."],
   ["core", "Core", "The Xray config of the panel you pick: inbounds, outbounds and rules, with a backup before every change."],
   ["admins", "Admins", "The admins of the panel you pick, their roles and their API keys."],
 ];
@@ -2051,7 +2051,7 @@ const GB = 1024 ** 3, gb = v => v == null ? "∞" : v === 0 ? "∞" : (v / GB).t
 /* ---- the PasarGuard sections are the tabs of the Panel page (1.47.0; in 1.45.0 they were pages of the left menu, roadmap #102): every tab shows the bar of the panels (which panel) and its own tab(s) of what was one page
    with ten tabs - PG_SUBS says which tabs (of pgTabs) each tab of the Panel page holds. Nodes are a tab of Servers (the server beside the node it runs). pn.want = the tab a link asked for; pnShow() settles pn.tab
    for the part that is open. */
-const PG_SUBS = {users: ["users"], hosts: ["hosts"], access: ["groups", "templates"], core: ["cores"], admins: ["admins"], settings: ["usage", "system", "settings"]};
+const PG_SUBS = {users: ["users"], hosts: ["hosts"], access: ["groups"], core: ["cores"], admins: ["admins"], settings: ["usage", "system", "settings", "templates"]};      // (Templates moved from Access to General: the owner, 2026-10-15)
 const PG_SUB_OF = {}; Object.entries(PG_SUBS).forEach(([s, tabs]) => tabs.forEach(t => { PG_SUB_OF[t] = s; }));
 const pnPageTabs = () => state.page === "pgpanel" ? PG_SUBS[sub("pgpanel")] || ["users"] : ["users"];      // the tabs of the PasarGuard part that is on the screen
 const pnIsUsers = () => (state.page === "pgpanel" && sub("pgpanel") === "users") || (state.page === "configs" && sub("configs") === "panels");

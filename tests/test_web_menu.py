@@ -275,3 +275,9 @@ def test_the_account_type_button_is_not_shown_and_comes_back_with_one_switch():
     """The owner, 2026-10-15: "remove this completely" (the ＋ Account type button): the bars of Access, Hosts and Core ask pgKindBtn(), which answers nothing while PG_KINDS_UI is false."""
     js = _web("pg_kinds.js")
     assert "const PG_KINDS_UI = false;" in js and 'window.pgKindBtn = () => !PG_KINDS_UI || pnType() !== "pasarguard" ? "" :' in js
+
+
+def test_the_templates_are_a_tab_of_general_not_of_access():
+    """The owner, 2026-10-15: "move this part (Templates) to the General tab"."""
+    subs = re.search(r"const PG_SUBS = \{(.*?)\};", APP, re.DOTALL).group(1)
+    assert 'access: ["groups"]' in subs and 'settings: ["usage", "system", "settings", "templates"]' in subs and '"templates"' not in subs.split("settings:")[0]

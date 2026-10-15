@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.53.5 - Templates are a tab of General
+
+- **The Templates tab (user templates and client templates) moved from Access to General (the owner):** General is now Usage · System · Settings · Templates; Access holds the groups only.
+
 ## 1.53.4 - The Account type button is not shown
 
 - **The ＋ Account type button is gone from Access, Hosts and Core (the owner: "remove this completely").** Nothing else was deleted: the window, its eleven kinds and its routes stay in the code, and `PG_KINDS_UI` at the top of `pg_kinds.js` brings the button back.
