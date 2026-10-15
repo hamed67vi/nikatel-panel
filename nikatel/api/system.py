@@ -161,6 +161,38 @@ def _newest_tag() -> str:
     return ".".join(str(x) for x in best)
 
 
+def update_progress(text: str, quiet_s: float = 0.0) -> dict:
+    """Pure: where the last update run is, from its log - {state: idle | running | done | failed, percent}. The steps of scripts/deploy.sh are the markers (tests take 10 to 80 %, from the percent pytest prints); `quiet_s` = seconds since the log last grew."""
+    i = max(text.rfind("== update started"), text.rfind("== no secrets in the repo"))
+
+    if i < 0:
+        return {"state": "idle", "percent": 0}
+
+    run = text[i:]
+
+    if "DEPLOY OK" in run:
+        return {"state": "done", "percent": 100}
+
+    if "HEALTH CHECK FAILED" in run or "STILL DOWN" in run or "rolled back" in run or ("== no secrets" not in run and ("fatal:" in run or "error:" in run)):
+        return {"state": "failed", "percent": 90}
+
+    if quiet_s > 240:          # nothing was written for four minutes and it did not finish: it stopped (a failed test or step ends the script)
+        return {"state": "failed", "percent": 0}
+
+    if "== install" in run:
+        pct = 88
+    elif "== migrations" in run:
+        pct = 82
+    elif "== tests" in run:
+        found = re.findall(r"\[\s*(\d+)%\]", run.split("== tests", 1)[1])
+        pct = 10 + round(0.7 * min(100, int(found[-1]))) if found else 10
+    elif "== no secrets" in run:
+        pct = 5
+    else:
+        pct = 3
+
+    return {"state": "running", "percent": pct}
+
 @router.get("/system/update", dependencies=[Depends(current_user)])
 def update_status():
     """Installed commit vs. the newest on GitHub, the newest version number with the link of its release notes, and the log of the last update run."""
@@ -184,8 +216,12 @@ def update_status():
     if log_path.exists():
         tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-12:])
 
-    return {"ok": True, "version": __version__, "installed": cur, "newest": newest, "up_to_date": bool(newest) and cur != "" and newest.startswith(cur[:7]), "last_log": tail,
+    quiet = time.time() - log_path.stat().st_mtime if log_path.exists() else 0.0
+    progress = update_progress(log_path.read_text(errors="replace")[-60000:] if log_path.exists() else "", quiet)
+
+    return {"ok": True, "version": __version__, "installed": cur, "newest": newest, "up_to_date": bool(newest) and cur != "" and newest.startswith(cur[:7]), "last_log": tail, "progress": progress,
             "latest": latest, "newer": bool(latest) and key(latest) > key(__version__), "notes_url": f"{repo}/releases/tag/v{latest}" if repo and latest else ""}
+
 
 @router.post("/system/update", dependencies=[Depends(current_user)])
 def update_now():
@@ -195,7 +231,7 @@ def update_now():
     from pathlib import Path
 
     src = Path(__file__).resolve().parent.parent.parent
-    cmd = f"cd {src} && git pull -q --ff-only origin main && bash scripts/deploy.sh"
+    cmd = f"cd {src} && echo '== update started' && git pull -q --ff-only origin main && bash scripts/deploy.sh"
 
     try:
         subprocess.run(["systemd-run", "--no-block", "--unit", f"nikatel-update-{int(time.time())}", "--property=StandardOutput=append:/var/lib/nikatel/update.log",

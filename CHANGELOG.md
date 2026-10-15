@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.55.17 - The menus like a MacBook's
+
+- **Every menu that opens (a server, a node, the Users More...) is small and in the style of a MacBook (the owner):** compact rows, a soft dark glass, the row under the pointer in the accent colour, delete in red text (filled red under the pointer), a small grey name for each group (Profile, Monitor, Manage, Update; Server, Access, Tests, Install) and a thin line between the groups.
+
+## 1.55.16 - The update shows only its percentage
+
+- **No log box in About & update (the owner):** while the panel updates, the card shows only **Updating... NN%** with a thin bar (the steps of the deploy script are the percentage; the tests take most of it); the bar waits while the panel restarts, the page reloads at 100 %, and a failed update says so. The server reports it as `progress` in `GET /api/system/update`.
+
 ## 1.55.15 - Add a server, designed again
 
 - **Add a server is a small window of three light sections (the owner):** Server (name, profile, host; where it is is found from the address), SSH login (user, port, password in one row) and Install after adding; the foot has the Checked toggle and the button.

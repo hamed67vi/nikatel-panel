@@ -239,3 +239,15 @@ html body #modal .srv-f3 label.f3 { flex-wrap: nowrap; align-content: normal; al
 html body #modal .srv-f3 label.f3 > input, html body #modal .srv-f3 label.f3 > select { flex: 0 0 auto; }
 html body #modal .modal.keep:has(.srv-f3) { width: min(700px, 96vw); }
 html body #modal .lab-pfwin.lab-xwide { width: 100%; max-width: 640px; margin: 0 auto; }
+/* 1.55.16 - the update card shows only a percentage while it runs */
+html body .ss-ht .about-bar { display: block; width: min(360px, 100%); height: 6px; margin-top: 8px; border-radius: 3px; background: rgba(255,255,255,.10); overflow: hidden; } html body .ss-ht .about-bar u { display: block; height: 100%; border-radius: 3px; background: var(--acc); text-decoration: none; transition: width .6s; }
+/* 1.55.17 - the menus like a MacBook's (the owner): small rows, a soft dark glass, the row under the pointer in the accent colour, a small grey name for each group, a thin line between the groups */
+html body .lab-menu.lab-menu { min-width: 196px; padding: 5px; border-radius: 10px; border: 1px solid rgba(255,255,255,.13); background: rgba(40,40,46,.86); -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 0 .5px rgba(0,0,0,.7); }
+html body .lab-menu.lab-menu.flat { min-width: 204px; }
+html body .lab-menu.lab-menu .lab-mi, html body .lab-menu.lab-menu.flat .lab-mi { display: flex; align-items: center; gap: 8px; min-height: 22px; padding: 2px 8px; border-radius: 5px; font-size: 12.5px; font-weight: 400; line-height: 1.3; color: #f4f4f7; }
+html body .lab-menu.lab-menu .lab-mic { width: 15px; height: 15px; } html body .lab-menu.lab-menu .lab-mic svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; opacity: .72; }
+html body .lab-menu.lab-menu .lab-mi:hover:not(:disabled), html body .lab-menu.lab-menu .lab-mi:focus-visible { background: #1b6ef3; color: #fff; } html body .lab-menu.lab-menu .lab-mi:hover:not(:disabled) .lab-mic svg { opacity: 1; }
+html body .lab-menu.lab-menu .lab-mi.danger { background: transparent; color: #ff6b6b; } html body .lab-menu.lab-menu .lab-mi.danger .lab-mic svg { stroke: currentColor; } html body .lab-menu.lab-menu .lab-mi.danger:hover:not(:disabled) { background: #d83b3b; color: #fff; }
+html body .lab-menu.lab-menu .lab-mg + .lab-mg, html body .lab-menu.lab-menu.flat .lab-mg + .lab-mg { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,.12); }
+html body .lab-menu.lab-menu .lab-mgrp { padding: 3px 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .1px; text-transform: none; color: rgba(255,255,255,.42); }
+html[data-mode="light"] body .lab-menu.lab-menu { background: rgba(248,248,250,.92); border-color: rgba(0,0,0,.12); } html[data-mode="light"] body .lab-menu.lab-menu .lab-mi { color: #1b2540; } html[data-mode="light"] body .lab-menu.lab-menu .lab-mgrp { color: rgba(0,0,0,.42); } html[data-mode="light"] body .lab-menu.lab-menu .lab-mi:hover:not(:disabled) { color: #fff; }

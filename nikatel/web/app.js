@@ -3782,7 +3782,7 @@ PAGES.settings = async () => {
 
   /* about & update */
   const about = sFrame("About & update", "This panel, the tunnel cores on your servers, and what the service runs with.", `<span class="pill">v${esc(s.version)}</span>`,
-    `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small></small></div><div class="ss-hr"><button class="sm" onclick="aboutLoad()">↻ Check</button><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div><pre class="gl-out hidden" id="about-log"></pre>`
+    `<div class="ss-hero s3" id="about-hero"><i class="ss-ic">${SI.up}</i><div class="ss-ht"><b id="about-box">checking GitHub…</b><small></small></div><div class="ss-hr"><button class="sm" onclick="aboutLoad()">↻ Check</button><button class="pri sm" onclick="panelUpdate()">Update from GitHub</button></div></div>`
     + sGrp({icon: SI.shield(false), title: "License", desc: "which features this install may use", cls: "x flat", rows: '<div class="sr x" id="lic-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.cpu, title: "Tunnel cores", desc: "Backhaul, BackPack, Paqet, Chisel and Xray on every server", cls: "x flat", rows: '<div class="sr x" id="eng-box"><div class="mut">loading…</div></div>'})
     + sGrp({icon: SI.gear, title: "Service settings", desc: `set in <code>${esc(s.env_file)}</code> on the panel server, then <code>systemctl restart nikatel</code>`, cls: "x flat",
@@ -3858,8 +3858,23 @@ window.testAi = async () => {      // a key typed in the box is saved first (the
   refresh();
 };
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
-window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = u.up_to_date ? `<span class="gw-ok">Up to date</span> <span class="mut">v${esc(u.version)}</span>` : `<span class="err">${u.newer && u.latest ? "Version " + esc(u.latest) + " is available" : "A newer build is available"}</span>`; const h = $("#about-hero"); if (h) { h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const sm = h.querySelector(".ss-ht small"); if (sm) sm.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : ""; } const lg = $("#about-log"); if (u.last_log) { lg.textContent = u.last_log; lg.classList.remove("hidden"); } } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
-window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } toast("Updating… the page reloads in 40 s"); setTimeout(() => location.reload(), 40000); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = u.up_to_date ? `<span class="gw-ok">Up to date</span> <span class="mut">v${esc(u.version)}</span>` : `<span class="err">${u.newer && u.latest ? "Version " + esc(u.latest) + " is available" : "A newer build is available"}</span>`; const h = $("#about-hero"); if (h) { h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const sm = h.querySelector(".ss-ht small"); if (sm) sm.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : ""; } if (u.progress && u.progress.state === "running") aboutWatch(); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
+window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutWatch(true); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.aboutWatch = fresh => {      // the update runs: only its percentage (the owner, 2026-10-15: no log box); the bar waits while the panel restarts, and the page reloads when it is done
+  if (window.__aboutT) return; let last = 3, stale = !!fresh;
+  document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = true; });
+  const draw = (txt, cls, pct) => { const b = $("#about-box"); if (!b) return false; b.innerHTML = `<span class="${cls}">${txt}</span><i class="about-bar"><u style="width:${pct}%"></u></i>`; return true; };
+  const tick = async () => {
+    let u = null; try { u = await api("/api/system/update"); } catch (e) { /* the panel restarts: the bar waits */ }
+    const p = u && u.progress;
+    if (p && !(stale && p.state === "done")) { stale = false; last = Math.max(last, p.percent); }      // (a finished run of before the click is not this one)
+    if (p && !stale && p.state === "done") { window.__aboutT = null; draw("Updated 100%", "gw-ok", 100); setTimeout(() => location.reload(), 1200); return; }
+    if (p && !stale && p.state === "failed") { window.__aboutT = null; draw("The update did not finish: the old version stays", "err", last); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
+    if (!draw(`Updating… ${last}%`, "mut", last)) { window.__aboutT = null; return; }
+    window.__aboutT = setTimeout(tick, 2000);
+  };
+  window.__aboutT = setTimeout(tick, 600);
+};
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview
   ["calm", "Pro slate", "the new look: slate boxes, soft blue tiles, flat quiet buttons, compact and aligned", "#0c1222", "#7aa7f0", "#33405c"],
