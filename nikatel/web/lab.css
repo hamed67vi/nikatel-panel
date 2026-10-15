@@ -424,7 +424,7 @@ html body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button { height: 28px
 html body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button:hover { color: #fff; background: rgba(255, 255, 255, .06) !important; }
 html body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5); color: #fff; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; }
 html body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button .cnt { background: rgba(255, 255, 255, .12); color: inherit; }
-html body #page .ap-ttabs .tic { font-style: normal; filter: grayscale(1) brightness(1.25); opacity: .85; }
+html body #page .ap-ttabs .tab-ic { font-style: normal; margin: 0; }
 html body #page .ap-thead button:not([data-k]) { height: 32px; border-radius: 11px; font-size: 13px; font-weight: 600; }
 html body #page .ap-thead .pill { height: 28px; display: inline-flex; align-items: center; border-radius: 11px; }
 html[data-mode="light"] body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) { background: #eef2fa; border-color: rgba(30, 50, 100, .14); }

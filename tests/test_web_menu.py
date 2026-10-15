@@ -562,8 +562,8 @@ def test_an_autofilled_field_keeps_the_kits_colours_and_the_doctor_buttons_are_o
     """The owner, 2026-10-15: "the password field is yellow and the eye cannot be seen", "these buttons: size and style like a MacBook, alike"."""
     uk, css, app = _web("uikit.css"), _web("lab.css"), _web("app.js")
     assert "input:-webkit-autofill" in uk and "-webkit-text-fill-color: #e8ebf7 !important" in uk and "html body .eye { color: var(--uk-mut); }" in uk and "width:" not in uk
-    assert ".ap-ttabs, .ana-head .tabs, .bt-range) { display: inline-flex;" in css and ".ap-ttabs .tic {" in css and ".ap-thead button:not([data-k]) { height: 32px; border-radius: 11px;" in css
-    assert '<i class="tic">🔧</i> In progress' in app and '<i class="tic">📊</i> Analyst' in app
+    assert ".ap-ttabs, .ana-head .tabs, .bt-range) { display: inline-flex;" in css and ".ap-ttabs .tab-ic {" in css and ".ap-ttabs .tic" not in css and ".ap-thead button:not([data-k]) { height: 32px; border-radius: 11px;" in css
+    assert '<span class="tab-ic">🔧</span> In progress' in app and '<span class="tab-ic">📊</span> Analyst' in app and '<i class="tic">' not in app.split("class=\"card ap-tasks fx-box\"", 1)[1].split("ap-tbody", 1)[0]          # (.tic is the round flag of a tunnel: it drew a ring around every icon)
 
 
 def test_the_geometry_of_a_lab_row_is_three_numbers_and_every_row_has_one_cell_per_column():
@@ -609,3 +609,12 @@ def test_every_helper_of_the_lab_rows_starts_its_own_line_so_no_comment_swallows
 
     for name in ("LAB_AD", "LAB_GLB", "LAB_ISS_IC", "labUsed", "labIssueChips", "labTagChip", "labSub", "labLampTone", "labBusyHtml", "labPgSrv", "labGoneRow", "labRowOf"):
         assert re.search(rf"^(const|function) {name}\b", lab, re.MULTILINE), name
+
+
+def test_a_node_row_has_no_version_line():
+    """The owner, 2026-10-15: "remove the node version altogether: one of them has it, two do not"."""
+    import re
+
+    lab = _web("lab.js")
+    node = lab.split("function labNodeRowHtml(p) {", 1)[1].split("const labGoneRow", 1)[0]
+    assert "ver" not in re.findall(r"\b(ver)\b", node) and "d.version" not in node and "<small>" not in node.split('class="lab-nm"', 1)[1].split("</div>", 1)[0]

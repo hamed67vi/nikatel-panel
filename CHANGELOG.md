@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.14 - No node version line, quiet icons in the Doctor tabs
+
+- **Lab (the owner):** the version line under a node's name is gone (one node had it, two did not).
+- **Doctor tabs:** the icons had a ring around each (the class of the round tunnel flags was reused by mistake); they use the quiet tab-icon class now.
+
 ## 1.57.13 - Row geometry in three numbers, Traffic used, the Panel bar like the profile bar
 
 - **Lab geometry (the owner: *the distance from the lamp exact and engineered, checked with a test*):** the lamp is now inside the name cell; one set of three numbers decides everything - the lamp is 16 px from the edge and 14 px wide, the icon starts 20 px after it (50 px from the edge); a test keeps the header, the colgroup and every kind of row at the same number of columns. Measured in a real browser on seven rows: lamp 14 x 14 px at 16 px (17 with the cell's border), 20 px to the icon, icon 26 x 26, 9 px to the name, lamp and icon both exactly centred.
