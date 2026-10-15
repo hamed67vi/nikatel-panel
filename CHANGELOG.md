@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.54.4 - The first page asks the profile's name in its own card
+
+- **Add profile on a new panel asks the name in the same page (the owner):** the card turns into a name box (the name is also the tag) with Make the profile / Cancel; no window.
+
 ## 1.54.3 - Add profile makes the profile first; the Panel item is always open
 
 - **Add profile asks for a profile name first (the owner):** on a new panel the page says "Start with a profile" with **＋ Add profile** (the menu item does the same): a box asks the name, makes the profile and opens it; the servers are added inside it (its tag is already filled in).

@@ -111,7 +111,10 @@ function labFirst() {      // no profile yet: nothing else works until one is ma
   return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a profile</h2>
     <p>A profile is a group of servers under one name - for example Iran, Marzban or Hetzner. Make one, then add its servers inside it.</p><div class="lab-pf-act"><button class="pri" onclick="labNewProfile()">＋ Add profile</button></div></div></div>`;
 }
-window.labNewProfile = () => {      // "Add profile": a box asks its name; it opens the profile, and the servers are added inside it
+window.labNewProfile = () => {      // "Add profile": on the first page the card itself asks the name of the profile (its tag) - in the same page (the owner, 2026-10-15); later a box; it opens the profile, and the servers are added inside it
+  const card = document.querySelector(".lab-first-card");
+  if (card) { card.innerHTML = `<div class="lab-first-ic">${SI.server}</div><h2>Name of the new profile</h2><p>It is also its tag: the servers you add inside it are listed under this name.</p>
+    <form class="lab-first-form" onsubmit="return labNewProfileGo(event)" autocomplete="off"><input name="name" maxlength="40" placeholder="Iran" required autofocus><div class="lab-pf-act"><button class="pri" type="submit">Make the profile</button><button type="button" onclick="refresh()">Cancel</button></div></form>`; const i = card.querySelector("input"); if (i) i.focus(); return; }
   showModal("<b>＋ Add profile</b>", `<form class="frm one" onsubmit="return labNewProfileGo(event)" autocomplete="off"><label>Name <small>also its tag: the servers inside are listed under it</small><input name="name" maxlength="40" placeholder="Iran" required autofocus></label>
     <div class="frm-act"><button class="pri" type="submit">Add profile</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`);
 };

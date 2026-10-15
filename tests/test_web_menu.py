@@ -302,3 +302,10 @@ def test_the_menu_of_a_node_row_is_the_menu_of_the_node_window_in_one_column_wit
     assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labIt("Change tag…", "tag"' in lab      # (a row: the profile's own items first, with icons)
     for item in ("Log", "Usage", "Resources", "Latency", "Certificate…", "Edit…", "Restart…", "Resync users…", "Reset counters…", "Update the node…", "Update Xray…", "Update geo files…", "Off the page", "Delete the node…"):
         assert f'it("{item}"' in lab or 'it(off ? "Enable…" : "Disable…"' in lab, item
+
+
+def test_the_first_page_asks_the_name_of_the_profile_in_its_own_card():
+    """The owner, 2026-10-15: "when Add profile is pressed, ask a name for the profile tag in this same page"."""
+    lab = _web("lab.js")
+    assert 'const card = document.querySelector(".lab-first-card");' in lab and "Name of the new profile" in lab and 'onsubmit="return labNewProfileGo(event)"' in lab
+    assert ".lab-first-form {" in _web("lab.css")
