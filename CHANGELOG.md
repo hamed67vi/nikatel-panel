@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.24 - The Lab page loads again
+
+- Fix: 1.55.22 used `labPgSrv` (the lion icon of a PasarGuard server) without defining it, so the Lab page said "This page could not be loaded". It is defined now. Found by the full walk through every page.
+
 ## 1.55.23 - No jump in the Servers menu after a refresh
 
 - After a refresh the menu under Servers no longer shows "All" first and the profiles later: "All" is hidden from the first paint and the profiles of the last visit are drawn at once (they are read again when the page is).
