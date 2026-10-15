@@ -812,3 +812,13 @@ def test_the_shop_bot_tab_of_settings_is_switched_off():
     assert 'const SET_OFF = new Set(["bot"]);' in app and 'TAB_SVG[k] || SI.gear, SET_OFF.has(k) ? "off" : false])' in app
     assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and '${SET_OFF.has(k) ? " sub-off" : ""}' in app
     assert "html body #page .set-tabs button.sub-off { opacity: .38;" in css
+
+
+def test_the_api_tab_of_settings_gathers_every_api_connection():
+    """The owner, 2026-10-16: "make this section API and bring every API connection here": the tab AI became API - this panel's tokens (moved out of Security) and docs,
+    the state of the AI key, the Telegram bot, the probe, the DNS accounts and the panels, each with the way to its place; the AI assistant card stays under it."""
+    app = _web("app.js")
+    assert 'ai: ["🔌 API",' in app and '["API", "AI assistant"]],' in app and "ai: SI.link," in app
+    assert 'sFrame("API", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
+    assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
+    assert 'apiRow(tg.has_token ? tgOn : false, SI.send, "Telegram bot"' in app and '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → API" in app

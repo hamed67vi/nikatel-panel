@@ -1799,7 +1799,7 @@ window.apFixAll = async () => {
 window.apExplain = async tid => {
   showModal("<b>💬 The AI's reading of the situation</b>", '<div class="loading"><i class="spin"></i><span>Collecting the facts and asking the AI… (about 20 s)</span></div>');
   try { const r = await api("/api/autopilot/explain", {method: "POST", body: JSON.stringify({tunnel_id: tid || null})}); showModal("<b>💬 The AI's reading of the situation</b>", `<div class="ai-say">${esc(r.text).replace(/\n/g, "<br>")}</div><small class="mut">Based on: ${r.facts.this_tunnel ? "this tunnel's diagnosis and " : ""}${(r.facts.everything_else || r.facts).tunnels.length} tunnel(s) not healthy, ${(r.facts.everything_else || r.facts).servers_offline.length} server(s) offline, ${(r.facts.everything_else || r.facts).configs_down.length} config(s) down.</small>`); }
-  catch (e) { showModal("<b>💬 Explain with AI</b>", `<div class="err">${esc(e.message)}</div>${/no AI key/.test(e.message) ? '<div style="margin-top:10px"><button class="sm" onclick="closeModal();go(\'settings\');setTab(\'ai\')">Open Settings → Repairs & AI</button></div>' : ""}`); }
+  catch (e) { showModal("<b>💬 Explain with AI</b>", `<div class="err">${esc(e.message)}</div>${/no AI key/.test(e.message) ? '<div style="margin-top:10px"><button class="sm" onclick="closeModal();go(\'settings\');setTab(\'ai\')">Open Settings → API</button></div>' : ""}`); }
 };
 window.cfDiagnoseByName = name => { const c = (state.cfgCache || []).find(x => x.name === name); if (c) cfDiagnose(c.id); else api("/api/configs").then(d => { const x = d.configs.find(y => y.name === name); if (x) cfDiagnose(x.id); }); };
 INFO.actions = ["Tunnel Doctor", "Finds why a tunnel is down and fixes it: restart, rebuild, another tunnel type or another Iran server - and says which tunnel is best on today's network."];
@@ -3809,8 +3809,8 @@ const sSeg = flags => `<span class="sec-seg">${flags.map(f => `<i class="${f ? "
 const sSel = (name, opts, cur, attrs = "") => `<select name="${name}" ${attrs}>${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 
 PAGES.settings = async () => {
-  if (!state.setCache || Date.now() - state.setCache.at > 20000) state.setCache = {at: Date.now(), data: await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai")])};   // one read for all the tabs (a tab switch does not ask eleven routes again); a change through the API forgets it
-  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_] = state.setCache.data;
+  if (!state.setCache || Date.now() - state.setCache.at > 20000) state.setCache = {at: Date.now(), data: await Promise.all([api("/api/settings"), api("/api/settings/telegram"), api("/api/settings/alerts"), api("/api/settings/report"), api("/api/settings/backup"), api("/api/maintenance"), api("/api/settings/repair"), api("/api/settings/probe"), api("/api/servers?role=iran"), api("/api/settings/shopbot"), api("/api/settings/ai"), api("/api/dns/accounts").catch(() => ({accounts: []})), api("/api/panels").catch(() => ({panels: []}))])};   // one read for all the tabs (a tab switch does not ask eleven routes again); a change through the API forgets it
+  const [s, tg, al, rp, bk, mw, rp_, pr, iranList, sb, ai_, dacc, pnl] = state.setCache.data;
   const dt = ts => new Date(ts * 1000).toISOString().slice(0, 16);
   const srvOpts = (cur, none) => (none ? [["0", "—"]] : []).concat(iranList.map(x => [x.id, x.name])), ro = s.read_only;
 
@@ -3872,6 +3872,19 @@ PAGES.settings = async () => {
     + sGrp({icon: SI.gear, title: "Use",
         rows: sSw2("enabled", ai_.enabled, "Diagnose broken tunnels with the AI", "Let the AI analyze errors and suggest fixes.") + sSw2("actions", ai_.actions, "Let it add safe repair steps to the plan", "Include recommended repair steps in action plans.")})
     + `<div class="sf-act"><button type="button" class="sm danger" onclick="forgetAi()"><i class="bi">${SI.trash}</i>Remove the key</button><button type="button" class="sm" onclick="testAi()"><i class="bi">${SI.play}</i>Test the key</button><button class="pri sm" type="submit"><i class="bi">${SI.save}</i>Save</button></div></form>`);
+  /* API (the owner, 2026-10-16: "make this section API and bring every API connection here"): this panel's own API - its tokens (moved here from Security) and its docs - and the state of every connection that works by an API key, each with the way to its place */
+  const apiRow = (ok, icon, title, desc, click, label) => sItem({ok, icon, title, pill: ok === true ? '<span class="pill ok">● connected</span>' : ok === false ? '<span class="pill err">● not set</span>' : '<span class="pill">● saved, not tested</span>', desc, acts: `<button type="button" class="sm" onclick="${click}">${label}</button>`});
+  const accts = (dacc && dacc.accounts) || [], pls = (pnl && pnl.panels) || [], plUp = pls.filter(p => p.status === "up").length;
+  const apiFrame = sFrame("API", "This panel's own API - tokens and docs - and every connection that works by an API key.", '<span class="pill" id="api-pill">…</span>',
+    sHero("s3", SI.link, "This panel's API", `${esc(location.origin)}/api/… · a token signs a script, a bot or an AI in (read, act or admin) · the description of every route is at /api/docs, with your session`, '<a class="sm btn" href="/api/docs" target="_blank" rel="noopener">Open /api/docs</a>')
+    + '<div id="api-box"><div class="mut">loading…</div></div>'
+    + sCat("Connections by API key") + `<div class="sl">`
+    + apiRow(ai_.has_api_key ? (ai_.status && ai_.status.at ? !!ai_.status.ok : null) : false, SI.bot, "AI assistant · Anthropic", ai_.has_api_key ? `key …${esc(ai_.api_key_tail || "")} · ${esc(ai_.model)}` : "no key saved - it is set in the AI assistant card below", "apiGo('AI assistant')", "Below")
+    + apiRow(tg.has_token ? tgOn : false, SI.send, "Telegram bot", tg.has_token ? `token saved · chat ${esc(tg.chat_id || "—")}${tg.enabled ? "" : " · switched off"}` : "no bot token", "setTab('alerts')", "Manage in Alerts")
+    + apiRow(pr.state.active ? !pr.state.fails : false, SI.probe, "Probe", pr.state.active ? `${esc(pr.state.active)} · ${pr.has_api_token ? "token saved" : "no token"}` : "no probe set", "setTab('probe')", "Manage in Probe")
+    + apiRow(accts.length ? true : false, SI.cloud, "DNS accounts · ArvanCloud, Cloudflare", accts.length ? accts.map(a => esc(a.name || a.provider || "")).join(" · ") : "no DNS account", "go('tunnels', 'dns')", "Manage in CDN")
+    + apiRow(pls.length ? plUp === pls.length : false, SI.cube, "Marzban / PasarGuard panels", pls.length ? `${pls.length} panel${pls.length === 1 ? "" : "s"} · ${plUp} up` : "no panel connected", "go('pgpanel', 'settings')", "Manage in Panel")
+    + `</div>`);
   /* shop bot */
   const shop = sFrame("Shop bot", "The server that runs the bot and how the panel reaches it (with its SSH key).", sb.host ? '<span class="pill ok">● server set</span>' : '<span class="pill">not set</span>',
     `<form class="sl" onsubmit="return saveShopbot(event)">`
@@ -3897,15 +3910,16 @@ PAGES.settings = async () => {
   /* security: filled by secLoad */
   const security = sFrame("Security", "How the panel is protected, and your password.", '<span class="pill" id="sec-pill">…</span>', '<div id="sec-box"><div class="mut">loading…</div></div>');
 
-  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${ai}${shop}${look}${about}</div>`;
+  $("#page").innerHTML = `<div class="grid2 set-wrap">${security}${alerts}${backups}${probe}${apiFrame}${ai}${shop}${look}${about}</div>`;
   settingsTabs();
   if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }
   if ($("#sec-box")) secLoad();
+  if ($("#api-box")) apiLoad();
 };/* ---- security: two-step sign-in (authenticator app), recovery codes, the secret entry path, the security log */
 const sec = {setup: null, codes: null};
 async function secLoad() {
   const box = $("#sec-box"); if (!box) return;
-  const [s, tk] = await Promise.all([api("/api/auth/security"), api("/api/tokens").catch(() => ({tokens: []}))]);
+  const s = await api("/api/auth/security");
   const pill = $("#sec-pill"); if (pill) { pill.textContent = s.totp_enabled ? "2-step on" : "2-step OFF"; pill.className = "pill " + (s.totp_enabled ? "ok" : "err"); }
   const url = s.entry_path ? location.origin + "/" + s.entry_path : "";
   const on2 = !!s.totp_enabled, onR = (s.recovery_left || 0) > 0, onP = !!url, score = [on2, onR, onP].filter(Boolean).length;
@@ -3922,12 +3936,19 @@ async function secLoad() {
       field: `<input class="si-f" id="sec-path" placeholder="${onP ? esc(s.entry_path) : "your own path (8-64 letters, digits, - _)"}" value="" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')secPathSet()">`,
       acts: `<button class="sm pri" onclick="secPathSet()">Set</button><button class="sm" onclick="secPath(true)">Random</button>${onP ? '<button class="sm danger" onclick="secPathOff()">Off</button>' : ""}`});
   const gW = `<form class="sl" onsubmit="return changePassword(event)"><div class="si pw"><i class="ss-ic">${SI.key}</i><div class="si-b"><div class="si-t"><span class="si-n"><b>Password</b></span><small>at least 10 characters</small></div></div><div class="pwf-f">${pwBox("cur", "current", "Current password", "current-password")}${pwBox("nw", "new", "New password", "new-password", " minlength=\"10\"")}${pwBox("nw", "again", "Repeat the new one", "new-password", " minlength=\"10\"")}</div></div><div class="si so"><input type="checkbox" class="sw" name="logout_others" checked><div class="si-b"><div class="si-t"><span class="si-n"><b>Sign out of other devices</b></span><small>Terminate all active sessions except this device.</small></div></div><span class="si-a si-x"><button class="pri sm" type="submit"><i class="bi">${SI.lock(false)}</i>Change password</button></span></div></form>`;
+  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}</div>${gW}`;
+}
+async function apiLoad() {      // Settings → API: the tokens of this panel's API (they were a row of Security until 2026-10-16)
+  const box = $("#api-box"); if (!box) return;
+  let tk = {tokens: []}; try { tk = await api("/api/tokens"); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   const toks = tk.tokens || [];
   const gT = sItem({chev: true, ok: toks.length > 0 ? true : undefined, icon: SI.key, title: "API tokens", pill: `<span class="pill ${toks.length ? "ok" : ""}">${toks.length}</span>`, desc: "the sign-in of a script, a Telegram bot or an AI that drives the panel over its API (docs/api.md): read, act or admin",
       field: `<div class="tok-list">${toks.map(t => `<div class="tok-row"><b>${esc(t.name)}</b><span class="pill">${esc(t.scope)}</span><code>${esc(t.prefix)}…</code><small class="mut">${t.last_used_at ? "used " + ago(t.last_used_at) + " ago" : "never used"} · made ${ago(t.created_at)} ago</small><button type="button" class="sm danger" onclick="tokRevoke(${t.id}, this.closest('.tok-row').querySelector('b').textContent)">Revoke</button></div>`).join("") || '<small class="mut">No token yet. A token is shown once, when it is made; the panel keeps only its hash.</small>'}</div>`,
       acts: `<input class="si-f" id="tok-name" placeholder="name (what will use it)" maxlength="40" autocomplete="off"><select id="tok-scope" title="read: GET only · act: also start checks, repairs, builds · admin: everything"><option value="read">read</option><option value="act">act</option><option value="admin">admin</option></select><button type="button" class="sm pri" onclick="tokCreate()">Make</button>`});
-  box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}${gT}</div>${gW}`;
+  const pill = $("#api-pill"); if (pill) { pill.textContent = toks.length ? `${toks.length} token${toks.length === 1 ? "" : "s"}` : "no token"; pill.className = "pill " + (toks.length ? "ok" : ""); }
+  box.innerHTML = `<div class="sl">${gT}</div>`;
 }
+window.apiGo = n => { const c = document.querySelector(`.sf[data-name="${n}"]`); if (c) c.scrollIntoView({behavior: "smooth", block: "start"}); };
 window.tokCreate = async () => {
   const name = ($("#tok-name") || {}).value || "", scope = ($("#tok-scope") || {}).value || "read";
   if (!name.trim()) { toast("Give the token a name first", "bad"); return; }
@@ -3936,10 +3957,10 @@ window.tokCreate = async () => {
     const r = await api("/api/tokens", {method: "POST", body: JSON.stringify({name: name.trim(), scope, password: pw})});
     showModal("<b>Your new API token</b>", `<p>This is the only time it is shown. Copy it now and keep it where the script or bot reads it.</p><div class="tok-show"><code id="tok-new">${esc(r.token)}</code><button class="sm pri" onclick="navigator.clipboard.writeText(document.getElementById('tok-new').textContent).then(() => toast('Copied', 'ok'))">Copy</button></div>
       <p class="mut">Use it as <code>Authorization: Bearer ${esc(r.prefix)}…</code> on every request. Scope <b>${esc(r.scope)}</b>: ${r.scope === "read" ? "GET only" : r.scope === "act" ? "reads, and the routes that start checks, repairs and builds; not the settings" : "everything"}.</p>`, "narrow");
-    secLoad();
+    apiLoad();
   } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-window.tokRevoke = async (id, name) => { if (!await gconfirm(`Revoke the token ${name}? Whatever uses it stops working at once.`)) return; try { await api(`/api/tokens/${id}`, {method: "DELETE"}); toast("Token revoked", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
+window.tokRevoke = async (id, name) => { if (!await gconfirm(`Revoke the token ${name}? Whatever uses it stops working at once.`)) return; try { await api(`/api/tokens/${id}`, {method: "DELETE"}); toast("Token revoked", "ok"); apiLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };const askPw = () => gprompt("Your password, to confirm:", "", {password: true});
 window.secSetup = async () => { const pw = await askPw(); if (!pw) return; try { sec.setup = await api("/api/auth/2fa/setup", {method: "POST", body: JSON.stringify({password: pw})}); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secEnable = async () => { try { const r = await api("/api/auth/2fa/enable", {method: "POST", body: JSON.stringify({password: "", code: $("#sec-code").value})}); sec.setup = null; sec.codes = r.recovery_codes; toast("✓ Two-step sign-in is on", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.secOff = async () => { const pw = await askPw(); if (!pw) return; const code = await gprompt("A code from the app, or a recovery code:"); if (!code) return; try { await api("/api/auth/2fa/disable", {method: "POST", body: JSON.stringify({password: pw, code})}); toast("Two-step sign-in is off", "ok"); secLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -4016,13 +4037,13 @@ window.lookReset = () => { localStorage.removeItem("nk.look"); Object.assign(LOO
 window.toggleMode = () => lookSet("mode", document.documentElement.dataset.mode === "light" ? "dark" : "light");
 lookApply();
 /* settings are grouped in tabs; each tab has one line that says what it is for */
-const TAB_SVG = {account: SI.shield(false), alerts: SI.bell, backup: SI.save, probe: SI.bolt, ai: SI.bot, bot: SI.cart, look: SI.paint, update: SI.arrowUp};      // the tabs whose emoji is drawn as a line icon
+const TAB_SVG = {account: SI.shield(false), alerts: SI.bell, backup: SI.save, probe: SI.bolt, ai: SI.link, bot: SI.cart, look: SI.paint, update: SI.arrowUp};      // the tabs whose emoji is drawn as a line icon
 const SET_TABS = {
   account: ["🛡 Security", "Two-step sign-in, recovery codes, the secret entry path and your password.", ["Security"]],
   alerts: ["🔔 Alerts", "Where alerts go and when: Telegram, the rules, the daily report and maintenance windows.", ["Alerts"]],
   backup: ["💾 Backups", "Encrypted backups of the panel: passphrase, schedule, the latest files.", ["Backups"]],
   probe: ["🛰 Probe", "The probe that keeps your configs alive and tests them from inside Iran: primary, standby, install on another server.", ["Probe"]],
-  ai: ["🤖 AI", "The AI assistant that explains problems and helps the Tunnel Doctor.", ["AI assistant"]],
+  ai: ["🔌 API", "Everything that connects by API: this panel's own tokens and docs, the AI assistant's key, and the state of every other API connection - Telegram, DNS accounts, the probe, the panels.", ["API", "AI assistant"]],
   bot: ["🛒 Shop bot", "The server that runs the shop bot and how the panel reaches it.", ["Shop bot"]],
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
   update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, the PasarGuard panels and their nodes, and the settings the service runs with.", ["About & update"]],

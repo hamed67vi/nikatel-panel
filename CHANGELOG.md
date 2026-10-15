@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.57.37 - Settings → API: every API connection in one place
+
+- **Settings → API** (the tab that was *AI*): this panel's own API - its tokens (moved here from Security) and the link to /api/docs - and the state of every connection that works by an API key: the AI assistant (Anthropic), the Telegram bot, the probe, the DNS accounts (ArvanCloud, Cloudflare) and the Marzban / PasarGuard panels, each with the way to the place where it is managed. The AI assistant card stays under it.
 ## 1.57.36 - The Shop bot tab of Settings is switched off
 
 - **Settings:** the *Shop bot* tab is switched off for now - grey in the menu and in the bar, nothing happens on it (the Shop bot section itself was already hidden, roadmap #79).
