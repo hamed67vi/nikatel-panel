@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.27 - Usage > Users in fixed, alike boxes
+
+- **Usage > Users (the owner):** the three boxes (*Users*, *Users over time*, *Top users*) are the same kit card as the overview - normal-case titles, 16 px corners - the *Users* box has one fixed height, the two cards below share one fixed height and their content scrolls inside, and every control in them is 36 px.
+
 ## 1.57.26 - The user template is back in the Add form
 
 - **Panel > Configs > Add (the owner: *bring the user template back*):** the *User template* tick with its data limit (GB) and days is in the form again, as the sixth cell of the one row (name, address, core, port, group, user template); the drawers and the Core field of 1.57.24 stay.
