@@ -230,7 +230,7 @@ def test_the_top_of_the_panel_page_is_one_row_that_only_switches_and_general_add
     assert "pnFuse();" in APP.split("async function pnHostsLoad", 1)[1].split("window.hpCount", 1)[0]
     common = _web("pg_common.js")
     assert common.count("pnFuse()") == 3 and 'pn.tab === "usage" ? "" : pgBars()' in common                      # every paint of a tab moves its strip up; Usage carries its tab buttons in its own bar
-    assert "${pnTabBtns()}<i class=\"pg-usage-sep\"></i>" in _web("pg_usage.js")
+    assert "pgBar(`${pnTabBtns()}`," in _web("pg_usage.js")
     css = _web("app.css")
     assert "html body #page .pn-ctl > .toolbar { display: contents !important; }" in css and "html body #page .pn-bar.pn-pick .pn-one { flex-wrap: nowrap; }" in css
     assert "html body #page .pn-facts button .bt { display: none; }" in css                                           # the buttons of General are icons
@@ -297,11 +297,12 @@ def test_hosts_access_and_core_are_one_section_called_configs_with_an_add_tab_fi
 
 def test_the_menu_of_a_node_row_is_the_menu_of_the_node_window_in_one_column_with_groups():
     """The owner, 2026-10-15: "make this one like the other: in one column with groups" - the row of a node had a short menu without icons."""
-    lab = _web("lab.js").split("function labNodeItems(", 1)[1].split("/* a section is drawn", 1)[0]
+    lab = _web("lab.js").split("function labNodeParts(", 1)[1].split("/* a section is drawn", 1)[0]
     assert 'ctx === "row" ? labItem(' not in lab and "ctx === \"row\" ? []" not in lab                                  # no short row version of any item any more
     assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labSubItem("Move to profile", "tag", labMoveItems(p.id))' in lab      # (a row: the profile's own items first, with icons)
     for item in ("Log", "Usage", "Resources", "Latency", "Certificate…", "Edit…", "Restart…", "Resync users…", "Reset counters…", "Update the node…", "Update Xray…", "Update geo files…", "Off the page", "Delete the node…"):
-        assert f'it("{item}"' in lab or 'it(off ? "Enable…" : "Disable…"' in lab, item
+        assert f'it("{item}"' in lab or f'labIt("{item}"' in lab or 'it(off ? "Enable…" : "Disable…"' in lab, item
+    assert lab.count("labSubItem(") == 4 and 'labSubItem("Monitor", "monitor", mon)' in lab and 'labSubItem("Manage", "manage", mng)' in lab and 'labSubItem("Update", "up", upd)' in lab      # (the flyouts: only Edit and Restart stand on their own)
 
 
 def test_the_first_page_asks_the_name_of_the_profile_in_its_own_card():
@@ -414,8 +415,8 @@ def test_a_server_that_carries_a_pasarguard_node_keeps_the_actions_of_the_node_i
     """The owner, 2026-10-15: "I did not say remove these capabilities" - the node was merged into the row of its server, and the Log, Usage, Certificate, Restart ... of the node were gone from the menu."""
     lab = _web("lab.js")
     row = lab.split('if (ctx === "row") {', 1)[1].split("return [labGrp(\"Server\")", 1)[0]
-    assert 'x.type === "pasarguard" && x.node_id != null' in row and 'labNodeItems({panel_id: pgn.panel_id, node_id: pgn.node_id}, null, "node").slice(0, -1)' in row and '{grp: "Node · " + x.grp}' in row
-    assert "labSep, ...nodeActs, gone, labSep, del]" in lab
+    assert 'x.type === "pasarguard" && x.node_id != null' in row and 'labNodeParts({panel_id: pgn.panel_id, node_id: pgn.node_id})' in row and 'labSubItem("PasarGuard node", "box", [' in row
+    assert "...nodeFly, gone, labSep, del]" in lab
 
 def test_one_list_of_the_left_menu_is_open_at_a_time():
     """The owner, 2026-10-15: "two collapsible lists must not be open together: when I press Servers and Panel was open, it closes"."""
@@ -447,7 +448,7 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th data-prio="0">Status</th><th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2">Load</th>' in lab
+    assert '<th data-prio="0"></th><th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2">Load</th>' in lab
     assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
@@ -533,3 +534,26 @@ def test_the_load_of_a_row_is_centred_and_its_bar_is_the_owners_flat_soft_blue()
     css = _web("lab.css")
     assert ".lab-tbl td:nth-child(4) { text-align: center; }" in css and ".lab-ldx .lab-cpu .bar { max-width: 170px; height: 9px; }" in css
     assert ".bar i { min-width: 8px; background: #66a3ff !important; box-shadow: none; }" in css and ".bar { background: #2a3350 !important; box-shadow: none; }" in css
+
+
+def test_the_menus_use_flyouts_and_the_usage_range_button_lives_in_the_row_of_the_sections():
+    """The owner, 2026-10-15: "as much as you can like Move to profile (flyouts), only the important actions on their own"; "bring the date to the lower row and make them alike"."""
+    lab, js, css = _web("lab.js"), _web("pg_usage.js"), _web("pg_usage.css")
+    assert lab.count("labSubItem(") >= 8 and 'labSubItem("Access", "key", access)' in lab and 'labSubItem("Tests", "gre", tests, {off, tip})' in lab and 'labSubItem("Install", "box", install, {off, tip})' in lab
+    assert "monitor: '<path d=\"M6 20V11M12 20V4M18 20v-7\"/>'" in lab and "manage: '<path d=\"M4 7h10M18 7h2" in lab
+    assert '<div class="pg-usec-row">' in js and "${pgUsageRangeBtn()}</div>" in js and 'class="pg-rng"' not in js.split("function pgUsageBarHtml() {", 1)[1].split("\n}", 1)[0]
+    assert ".pg-usec-row .pg-rng { height: 36px; margin-left: auto;" in css and ".pg-usec-row .pg-usec { align-self: auto; height: 36px;" in css
+
+
+def test_the_panel_tab_buttons_are_one_size_with_the_kits_radius_and_no_halo():
+    """The owner, 2026-10-15: "the buttons differ in size in every tab: make them fixed and alike", "fix their rounded corners, like a MacBook"."""
+    css, ucss = _web("lab.css"), _web("pg_usage.css")
+    assert ".tabs { height: 36px; box-sizing: border-box; align-items: center; }" in ucss and ".tabs button { height: 28px !important; border-radius: 8px !important;" in ucss
+    assert "0 0 0 3px rgba(47, 123, 255, .14)" not in css and ".tabs button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff !important; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; }" in css
+
+
+def test_no_word_over_the_lamp_no_refresh_in_usage_and_the_two_rows_of_the_panel_page_are_one_surface():
+    """The owner, 2026-10-15: "remove the word Status so the names come closer", "remove the Refresh button", "make the two rows alike, like a MacBook"."""
+    lab, css, js = _web("lab.js"), _web("lab.css"), _web("pg_usage.js")
+    assert ">Status<" not in lab and "pgUsageRefresh" not in js and "↻ Refresh" not in js
+    assert "td.lab-lp { padding: 0 6px 0 16px; }" in css and ".pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #141a2b !important;" in css

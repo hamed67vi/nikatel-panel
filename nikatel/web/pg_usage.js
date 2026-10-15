@@ -185,12 +185,13 @@ function pgUsageRangeLabel() {
   return j || (n === 1 ? "Today" : n ? `Last ${n} days` : "Custom range");
 }
 const pgUsageIcon = {cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>', chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'};
-function pgUsageBarHtml() {
+function pgUsageRangeBtn() {          // the one button of the range (it lives in the row of the sections, beside the chips)
   const s = pgUsageState, cur = pgUsagePresetInfo(s.preset), span = s.preset === "custom" ? {from: s.from, to: s.to} : cur, when = span && span.from ? `${span.from} → ${span.to} · ` : "";
-  const trigger = `<button type="button" class="pg-rng" id="pg-rng" aria-haspopup="dialog" aria-expanded="false" onclick="pgUsagePop(this)" title="${esc(when)}Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before"><i class="pg-rng-i">${pgUsageIcon.cal}</i><span>${esc(pgUsageRangeLabel())}</span><i class="pg-rng-c">${pgUsageIcon.chev}</i></button>`;
-  return pgBar(`${pnTabBtns()}<i class="pg-usage-sep"></i>${trigger}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
+  return `<button type="button" class="pg-rng" id="pg-rng" aria-haspopup="dialog" aria-expanded="false" onclick="pgUsagePop(this)" title="${esc(when)}Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before"><i class="pg-rng-i">${pgUsageIcon.cal}</i><span>${esc(pgUsageRangeLabel())}</span><i class="pg-rng-c">${pgUsageIcon.chev}</i></button>`;
 }
-/* the panel itself */
+function pgUsageBarHtml() {
+  return pgBar(`${pnTabBtns()}`, `<span id="pg-usage-age" class="mut"></span>`);
+}/* the panel itself */
 let pgUsagePopEl = null, pgUsagePopBtn = null;
 function pgUsagePopClose() {
   const el = pgUsagePopEl, btn = pgUsagePopBtn; pgUsagePopEl = pgUsagePopBtn = null;
@@ -229,7 +230,7 @@ window.pgUsagePopTab = (k, quiet) => {
 };
 function pgUsageRangeChanged() {          // the same steps for every way of choosing a range
   pgUsagePopClose();
-  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageDrawAge(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
+  pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); pgUsageDrawAge(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageKick(false); pgUsageRelook();
 }
 window.pgUsageRel = d => {          // "the last d days": today and the days before it
   const s = pgUsageState, today = (s.ranges || {}).tehran_today; if (!today) return;
@@ -310,7 +311,7 @@ const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nod
 const pgUsageSecCur = () => { const s = pgUsageState; return PGU_SECS.some(x => x[0] === s.sec && (pgUsageIsPg() || x[2])) ? s.sec : "ov"; };
 function pgUsageSecBarHtml() {
   const cur = pgUsageSecCur();
-  return `<div class="pg-useg pg-usec" role="tablist" aria-label="Section">${PGU_SECS.filter(x => pgUsageIsPg() || x[2]).map(([k, l]) => `<button type="button" role="tab" aria-selected="${cur === k}" class="${cur === k ? "on" : ""}" onclick="pgUsageSec('${k}')">${l}</button>`).join("")}</div>`;
+  return `<div class="pg-usec-row"><div class="pg-useg pg-usec" role="tablist" aria-label="Section">${PGU_SECS.filter(x => pgUsageIsPg() || x[2]).map(([k, l]) => `<button type="button" role="tab" aria-selected="${cur === k}" class="${cur === k ? "on" : ""}" onclick="pgUsageSec('${k}')">${l}</button>`).join("")}</div>${pgUsageRangeBtn()}</div>`;
 }
 function pgUsageApplySec() {
   const root = $("#pg-usage"); if (!root) return;
@@ -523,7 +524,7 @@ function pgUsageKick(force) {
   if (pgUsageIsPg() && (force || !s.apps || s.appsKey !== pgUsageAppsKey() || (now - s.appsAt > 29000 && !pgUsageEnded(s.apps)))) pgUsageLoadApps();
   if (force || !s.top || s.topKey !== pgUsageTopKey() || now - s.topAt > 29000) pgUsageLoadTop();
   if (s.admins == null) pgUsageLoadAdmins();
-  if (force || now - s.rangesAt > 300000) pgUsageLoadRanges().then(() => pgUsagePut("#pg-usage-bar", pgUsageBarHtml())).catch(() => { /* the dates on show stay as they are */ });
+  if (force || now - s.rangesAt > 300000) pgUsageLoadRanges().then(() => { pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); }).catch(() => { /* the dates on show stay as they are */ });
 }
 async function pgUsageRender(id, box) {
   const s = pgUsageState, type = (typeof pnType === "function" && pnType()) || "pasarguard";
@@ -538,6 +539,6 @@ async function pgUsageRender(id, box) {
   pgUsagePut("#pg-usage-look-form", pgUsageLookFormHtml()); pgUsageDrawLook();
   pgUsageKick(false);
 }
-window.pgUsageRefresh = () => { pgUsageKick(true); };
+
 
 window.pgTabs.usage = {label: "Usage", order: 80, types: ["pasarguard", "marzban"], render: pgUsageRender};

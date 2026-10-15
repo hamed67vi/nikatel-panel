@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.57.11 - Flyout menus, the Usage range in the lower row
+
+- **Menus (the owner: *as much as you can like Move to profile, only the important actions on their own*):** the menu of a node has Overview, Check now, Edit and Restart on their own and *Move to profile*, *Monitor*, *Manage* and *Update* as flyouts; a server's menu keeps Check now, Console, Edit and Reboot on their own and opens *Access*, *Tests* and *Install* (and *PasarGuard node*) as flyouts.
+- **Usage:** the range button moved into the lower row, to the right of the section chips, and both rows are alike - the same segmented track and the same lifted blue open segment (the panel tabs above use it too).
+- **Lab:** the Status column shrinks to its content and has no word over the lamp, so the icon and the name stand close to their lamp.
+- **Panel page:** the two rows - the panels and the tabs - are one surface of the kit (the same dark card, edge, corners and height); the *Refresh* button of Usage is gone (the page reads itself again by itself).
+- **Panel tabs (the owner):** the tab buttons (Usage, System, Settings, Templates, Users ...) are ONE size on every tab - a 36 px track of the kit and 28 px buttons with the kit's corners; the open one is lifted and blue with no halo around it.
+
 ## 1.57.10 - Closer to the lamp, flags that fade on both sides
 
 - **Lab rows (the owner):** the Status column is a fixed 80 px, so the icon and the name stand close to their lamp; the flag is as wide as its picture (cover, no stretching) and its mask fades BOTH sides of it (before, the picture began where the fade had already ended, leaving hard edges).

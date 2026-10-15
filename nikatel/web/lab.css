@@ -404,8 +404,8 @@ html body #page .lab-tbl td.name.has-flag::before { left: 0; right: auto; width:
 html body #page .lab-tbl tr:hover td.name.has-flag::before { opacity: .62 !important; filter: none !important; }
 html body #page .lab-tbl tr.srv-off td.name.has-flag::before { opacity: .12 !important; filter: grayscale(1) !important; }
 html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button { box-sizing: border-box; border: 1px solid transparent; font-weight: 600 !important; }
-html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff !important; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .22), 0 0 0 3px rgba(47, 123, 255, .14) !important; }
-html[data-mode="light"] body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #e3edff !important; border-color: #9bbcf3 !important; color: #1456c8 !important; box-shadow: 0 0 0 3px rgba(47, 111, 224, .12) !important; }
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff !important; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4) !important; }
+html[data-mode="light"] body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #e3edff !important; border-color: #9bbcf3 !important; color: #1456c8 !important; box-shadow: inset 0 0 0 1px rgba(47, 111, 224, .35) !important; }
 html body #modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) { background-color: #0f1424 !important; border: 1px solid rgba(255, 255, 255, .10) !important; border-radius: 12px !important; color: #e8ebf7; outline: none !important; box-shadow: none; }
 html body #modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea):focus { border-color: #1f7bff !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, .30) !important; }
 html body #modal input[type=number]::-webkit-inner-spin-button, html body #modal input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } html body #modal input[type=number] { -moz-appearance: textfield; appearance: textfield; }
@@ -428,3 +428,7 @@ html[data-mode="light"] body #page :is(.lab-cpu, .pbar) .bar { background: rgba(
 /* 1.57.10 - the icon and the name stand close to their lamp (the Status column is a fixed 80 px) */
 html body #page .lab-tbl td.name .lab-nmw { margin-left: 2px; }
 html body #page .lab-tbl th:first-child { padding-left: 14px; padding-right: 0; }
+/* 1.57.12 - (1) the lamp column is just the lamp (no word over it), so the names stand close to it; (2) the two rows of the Panel page - the panels and the tabs - are one surface of the kit: the same dark card, the same light edge, the same corners and height */
+html body #page .lab-tbl td.lab-lp { padding: 0 6px 0 16px; }
+html body #page :is(.pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #141a2b !important; border: 1px solid var(--uk-line) !important; border-radius: 14px !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04) !important; min-height: 52px; box-sizing: border-box; }
+html[data-mode="light"] body #page :is(.pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #fff !important; border-color: rgba(30, 50, 100, .14) !important; box-shadow: 0 1px 2px rgba(30, 50, 100, .06) !important; }

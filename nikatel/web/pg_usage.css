@@ -159,3 +159,18 @@ html[data-mode="light"] body #page .pg-rc { background: #fff; border-color: rgba
 html[data-mode="light"] body #page .pg-rc-h h3 { color: #14213d; } html[data-mode="light"] body #page .pg-rc-go { background: #f2f5fb; border-color: rgba(30, 50, 100, .16); color: #4a5a7e; }
 @media (max-width: 980px) { html body #page .pg-rcs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px) { html body #page .pg-rcs { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(210px, auto); } }
+/* 1.57.11 - the range button is in the row of the sections, and both rows are alike: the same segmented track (36 px, radius 11), the same lifted blue open segment, the same type */
+html body #page .pg-usec-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+html body #page .pg-usec-row .pg-usec { align-self: auto; height: 36px; box-sizing: border-box; border-radius: 11px; background: #151a2b; border: 1px solid var(--uk-line); }
+html body #page .pg-usec-row .pg-usec button { height: 28px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+html body #page .pg-useg.pg-usec button.on { background: #2d3f68; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4); }
+html body #page .pg-usec-row .pg-rng { height: 36px; margin-left: auto; box-sizing: border-box; border-radius: 11px; background-image: none !important; background-color: #151a2b !important; border: 1px solid var(--uk-line) !important; box-shadow: none !important; font-size: 13px; font-weight: 600; color: #e8ebf7; }
+html body #page .pg-usec-row .pg-rng:hover { background-color: #1b2236 !important; border-color: var(--uk-line-2) !important; }
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs { background: #151a2b !important; border: 1px solid var(--uk-line) !important; border-radius: 11px !important; padding: 3px !important; gap: 2px !important; }
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button { height: 28px !important; border-radius: 8px !important; background: transparent; box-shadow: none; }
+html[data-mode="light"] body #page .pg-usec-row .pg-usec, html[data-mode="light"] body #page .pg-usec-row .pg-rng { background: #eef2fa !important; border-color: rgba(30, 50, 100, .14) !important; color: #14213d; }
+html[data-mode="light"] body #page .pg-useg.pg-usec button.on { background: #fff; color: #14213d; box-shadow: 0 1px 3px rgba(30, 50, 100, .18), inset 0 0 0 1px rgba(47, 111, 224, .35); }
+html[data-mode="light"] body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs { background: #eef2fa !important; border-color: rgba(30, 50, 100, .14) !important; }
+/* 1.57.11 - the tab buttons of a panel are ONE size everywhere (every tab of the Panel page, open or not): a 36 px track of the kit (radius 11) and 28 px buttons (radius 8), no halo around the open one */
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs { height: 36px; box-sizing: border-box; align-items: center; }
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button { padding: 0 14px; font-size: 13px; line-height: 1; min-width: 0; margin: 0; }
