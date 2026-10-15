@@ -186,11 +186,9 @@ function pgUsageRangeLabel() {
 }
 const pgUsageIcon = {cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>', chev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'};
 function pgUsageBarHtml() {
-  const s = pgUsageState, cur = pgUsagePresetInfo(s.preset);
-  const trigger = `<button type="button" class="pg-rng" id="pg-rng" aria-haspopup="dialog" aria-expanded="false" onclick="pgUsagePop(this)" title="Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before"><i class="pg-rng-i">${pgUsageIcon.cal}</i><span>${esc(pgUsageRangeLabel())}</span><i class="pg-rng-c">${pgUsageIcon.chev}</i></button>`;
-  const span = s.preset === "custom" && s.from && s.to ? {from: s.from, from_j: pgUsageJalaliOf(s.from), to: s.to, to_j: pgUsageJalaliOf(s.to), days: pgUsageDaysBetween(s.from, s.to)} : cur;
-  const dates = span ? `<span class="pg-usage-dates mono" title="${span.days} day${span.days === 1 ? "" : "s"}">${pgUsageSpan(span)}</span>` : "";
-  return pgBar(`${pnTabBtns()}<i class="pg-usage-sep"></i>${trigger}${dates}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
+  const s = pgUsageState, cur = pgUsagePresetInfo(s.preset), span = s.preset === "custom" ? {from: s.from, to: s.to} : cur, when = span && span.from ? `${span.from} → ${span.to} · ` : "";
+  const trigger = `<button type="button" class="pg-rng" id="pg-rng" aria-haspopup="dialog" aria-expanded="false" onclick="pgUsagePop(this)" title="${esc(when)}Whole Tehran days: a day starts at 00:00 Tehran = 20:30 UTC of the day before"><i class="pg-rng-i">${pgUsageIcon.cal}</i><span>${esc(pgUsageRangeLabel())}</span><i class="pg-rng-c">${pgUsageIcon.chev}</i></button>`;
+  return pgBar(`${pnTabBtns()}<i class="pg-usage-sep"></i>${trigger}`, `<span id="pg-usage-age" class="mut"></span><button class="sm" onclick="pgUsageRefresh()" title="Read everything again (the panel itself is asked at most every 15 s)">↻ Refresh</button>`);
 }
 /* the panel itself */
 let pgUsagePopEl = null, pgUsagePopBtn = null;

@@ -968,6 +968,6 @@ def test_js_range_button_pure_dates_and_the_relative_panel():
       const bar = c.pgUsageBarHtml(), pop = c.pgUsagePopHtml();
       run("pgUsageState.preset = 'custom'; pgUsageState.from = '2026-09-16'; pgUsageState.to = '2026-10-15'");
       return [bar, pop, c.pgUsageRangeLabel(), c.pgUsageCurDays(), c.pgUsagePopHtml()];""")
-    assert 'class="pg-rng"' in bar and "Last 7 days" in bar and 'aria-haspopup="dialog"' in bar and bar.startswith("BAR[TABS") and "2026-10-09" in bar
+    assert 'class="pg-rng"' in bar and "Last 7 days" in bar and 'aria-haspopup="dialog"' in bar and bar.startswith("BAR[TABS") and "2026-10-09 → 2026-10-15" in bar and "pg-usage-dates" not in bar
     assert 'class="pg-pc on" onclick="pgUsageRel(7)"' in pop and pop.count('class="pg-pc on"') == 1 and 'id="pg-pop-from" value="2026-10-09"' in pop and "Relative" in pop and "Absolute" in pop
     assert label == "Last 30 days" and days == 30 and 'class="pg-pc on" onclick="pgUsageRel(30)"' in pop30 and 'id="pg-pop-from" value="2026-09-16"' in pop30

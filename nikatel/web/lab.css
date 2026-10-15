@@ -360,7 +360,6 @@ html body #page .lab-trf .tv { display: grid; gap: 1px; } html body #page .lab-t
 html body #page .lab-tbl .td-act { gap: 8px; }
 html body #page .lab-tbl .lab-kb { width: 38px; height: 38px; border-radius: 11px; }
 /* 1.57.3 - (1) the flag behind a name fades on BOTH sides; (2) "Add server" is the button of the UI kit sheet (Button with Icon): the blue of the primary button, a line plus, no sweep of light; there is no Check button any more */
-html body #page .lab-tbl td.name.has-flag::before { width: 168px; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 26%, #000 58%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 26%, #000 58%, transparent 100%); }
 html body #page .lab-bar button.lab-add { height: 34px; padding: 0 16px 0 13px; gap: 8px; border-radius: 12px; font-size: 13.5px; font-weight: 600; letter-spacing: .1px; text-shadow: none; }
 html body #page .lab-bar button.lab-add::before, html body #page .lab-bar button.lab-add::after { content: none !important; display: none !important; }
 html body #page .lab-bar button.lab-add .lab-ic { display: inline-grid; place-items: center; width: 18px; height: 18px; font-size: 0; }
@@ -400,3 +399,29 @@ html body #page .pn-bar button.pn-add.ico:hover { background-image: linear-gradi
 html body #page .pn-bar .dns-stat, html body #page .pn-bar .pn-auth, html body #page .pn-bar .pn-facts .pill { border-radius: 11px; }
 html[data-mode="light"] body #page .pn-bar button.dns-chip { background-image: none !important; background-color: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #1b2540 !important; box-shadow: 0 1px 2px rgba(30, 50, 100, .08) !important; }
 html[data-mode="light"] body #page .pn-bar button.dns-chip.on { background-color: #e3edff !important; border-color: #9bbcf3 !important; color: #1456c8 !important; }
+/* 1.57.8 - (1) the flag behind a name keeps its own proportions (it was stretched), fades on all four sides, is grey and turns to its colours when the row is pointed at; (2) the tabs of a panel keep ONE size when chosen and the open one is lifted and blue (the owner: "so the user knows he is in Usage"); (3) the windows are in the kit's look ("like a MacBook" = the sheet): dark wells with a soft blue ring, square header buttons, the flat blue primary */
+html body #page .lab-tbl td.name.has-flag::before { width: 150px; background-size: contain; background-position: 40px center; background-repeat: no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%, #000 50%, transparent 100%), linear-gradient(180deg, transparent 0%, #000 26%, #000 74%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 30%, #000 50%, transparent 100%), linear-gradient(180deg, transparent 0%, #000 26%, #000 74%, transparent 100%); -webkit-mask-composite: source-in; mask-composite: intersect; opacity: .26 !important; filter: grayscale(1) !important; transition: opacity .3s, filter .3s; }
+html body #page .lab-tbl tr:hover td.name.has-flag::before { opacity: .62 !important; filter: none !important; }
+html body #page .lab-tbl tr.srv-off td.name.has-flag::before { opacity: .12 !important; filter: grayscale(1) !important; }
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button { box-sizing: border-box; border: 1px solid transparent; font-weight: 600 !important; }
+html body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #2d3f68 !important; border-color: rgba(120, 170, 255, .5) !important; color: #fff !important; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .22), 0 0 0 3px rgba(47, 123, 255, .14) !important; }
+html[data-mode="light"] body :is(#page, #pn-body) :is(.pn-bars, .pn-tabs, #pn-ctl, .pg-bar) .tabs button.on { background: #e3edff !important; border-color: #9bbcf3 !important; color: #1456c8 !important; box-shadow: 0 0 0 3px rgba(47, 111, 224, .12) !important; }
+html body #modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) { background-color: #0f1424 !important; border: 1px solid rgba(255, 255, 255, .10) !important; border-radius: 12px !important; color: #e8ebf7; outline: none !important; box-shadow: none; }
+html body #modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea):focus { border-color: #1f7bff !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, .30) !important; }
+html body #modal input[type=number]::-webkit-inner-spin-button, html body #modal input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } html body #modal input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+html body #modal .modal-head > button { border-radius: 11px !important; background-image: linear-gradient(180deg, #1d2335, #171c2c) !important; background-color: #1a2032 !important; border: 1px solid rgba(255, 255, 255, .12) !important; color: #e8ebf7 !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05) !important; }
+html body #modal button.pri { border-radius: 11px !important; background-image: linear-gradient(180deg, #1a74ff 0%, #0a5cf2 100%) !important; border: 1px solid rgba(120, 180, 255, .42) !important; box-shadow: 0 2px 10px rgba(10, 98, 255, .38) !important; text-shadow: none !important; font-weight: 600; }
+html body #modal button.pri::before, html body #modal button.pri::after { content: none !important; display: none !important; }
+html[data-mode="light"] body #modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) { background-color: #fff !important; border-color: rgba(30, 50, 100, .18) !important; color: #14213d; }
+html[data-mode="light"] body #modal .modal-head > button { background-image: none !important; background-color: #fff !important; border-color: rgba(30, 50, 100, .16) !important; color: #1b2540 !important; }
+/* 1.57.9 - the load of a row stands in the MIDDLE of its column, the bar is longer and looks like the owner's drawing: a thick round bar, a flat soft blue (amber / red when busy) on a slate track, no glow */
+html body #page .lab-tbl th:nth-child(4), html body #page .lab-tbl td:nth-child(4) { text-align: center; }
+html body #page .lab-tbl .lab-ldw { justify-content: center; }
+html body #page .lab-ldx { justify-items: center; text-align: center; }
+html body #page .lab-ldx .lab-cpu { align-items: center; width: 100%; }
+html body #page .lab-ldx .lab-cpu .bar { max-width: 170px; height: 9px; }
+html body #page :is(.lab-cpu, .pbar) .bar { background: #2a3350 !important; box-shadow: none; }
+html body #page :is(.lab-cpu, .pbar) .bar i { min-width: 8px; background: #66a3ff !important; box-shadow: none; }
+html body #page :is(.lab-cpu, .pbar) .bar i.warn { background: #f5b94a !important; box-shadow: none; } html body #page :is(.lab-cpu, .pbar) .bar i.bad { background: #ff6b81 !important; box-shadow: none; }
+html body #page :is(.lab-cpu, .pbar) .bar i[style*="width:0%"] { min-width: 0; }
+html[data-mode="light"] body #page :is(.lab-cpu, .pbar) .bar { background: rgba(30, 50, 100, .13) !important; }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.57.9 - The load in the middle, a longer bar in the owner's blue
+
+- **Lab (the owner):** the number, the bar and RAM / Disk stand in the middle of the Load column; the bar is longer and is the thick round bar of his picture - a flat soft blue (amber or red when busy) on a slate track, no glow.
+
+## 1.57.8 - Status column, flags, panel tabs, windows in the kit's look
+
+- **Lab:** the first column is called *Status*; the flag behind a name keeps its own proportions, fades on all four sides, is grey and turns to its colours when the row is pointed at.
+- **Usage:** the dates beside the range button are gone (they are in the button's tooltip); the tabs of a panel (Usage, System, Settings, Templates, Users ...) never change size when chosen and the open one is lifted and blue.
+- **Windows (the owner: *Add a server* like a MacBook = the UI kit sheet):** dark wells with a soft blue ring, no number spinners, square header buttons, the flat blue primary button.
+
 ## 1.57.7 - Usage cards in two fixed rows
 
 - **Usage overview (the owner):** the six cards stand in two rows of three, every box the same fixed size, in the kit's look (a dark card, normal-case titles, a rounded-square › button that turns blue when pointed at); two columns on a narrow window, one on a phone. (1.57.5 / 1.57.6 below went out in the same push: the Panel bar in the kit's look without the refresh button and with a fixed box of panels, and the Usage range as one soft panel.)
