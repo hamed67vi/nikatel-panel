@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.54.2 - A new panel's Servers menu is only "+ Add profile"
+
+- **No category and no "All" from the start (the owner: "delete all, only Add profile stays - the user makes a profile first, then can add a profile"):** the Marzban / PasarGuard Nodes / Iran items are not made for you any more. A new panel's Servers menu shows only **+ Add profile**; a category (a tag) appears when a profile that carries it is added, or with the + beside the tabs, and "All" appears when there is something to list. A panel that already has profiles keeps the tags they carry.
+
 ## 1.54.1 - The menu of a node's row is the full menu
 
 - **The ⋯ menu of a node in the list is the same menu as the node window's (the owner: "like the other one, in one column with groups"):** icons, a line between the groups - Log, Usage, Resources, Latency, Certificate…; Edit…, Restart…, Disable…, Resync users…, Reset counters…; Update the node…, Update Xray…, Update geo files…; Off the page; Delete the node… - with Overview, Check now and Change tag… on top (they are about the profile).

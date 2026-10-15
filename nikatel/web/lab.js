@@ -128,7 +128,7 @@ window.labDeleteTag = async () => {      // 🗑 beside the tabs: the profile (c
   if (!await gconfirm(`Delete the profile ${cur}? Its servers stay on the page, under Any; nothing is done to them.`, {danger: true})) return;
   try { await api(`/api/profiles/tags/${encodeURIComponent(cur)}`, {method: "DELETE"}); LAB.kind = "any"; localStorage.setItem("nk.lab.k", "any"); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard Nodes", "Iran"];
+const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : [];      // (none from the start: the menu is only "+ Add profile" until a profile is made)
 const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind).toLowerCase()) || "any";
 function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }function labListInner(shown) {
   if (!shown.length) return `<div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button></div>`;
@@ -483,6 +483,7 @@ function labNavSync() {
     a.innerHTML = `<i class="ic">${labLogo(t) || (l === "iran" ? ic.iran : l === "foreign" ? ic.foreign : l.startsWith("pasarguard") ? ic.node : ic.access) || ""}</i><span>${esc(t)}</span>`; a.onclick = () => labGoKind(t); after.after(a); after = a;
   }
   any.onclick = () => labGoKind("any");
+  any.hidden = !((LAB.profiles || []).length || labTags().length);      // "All" only when there is something to list: a new panel shows nothing but + Add profile (the owner, 2026-10-15)
   const cur = labOn() ? labKindNow() : null;      // (the open one is the tag the page shows)
   any.classList.toggle("on", cur === "any"); sub.querySelectorAll("a.nav-kind").forEach(a => a.classList.toggle("on", a.dataset.kind === cur));
   const g = sub.closest(".nav-g"); if (g) g.classList.toggle("has-on", !!sub.querySelector("a.on"));

@@ -20,7 +20,7 @@ from .events import emit
 KINDS = ("iran", "foreign", "node")
 LABEL = {"iran": "Iran server", "foreign": "Foreign server", "node": "PasarGuard node"}
 MAX_PROFILES = 400
-DEFAULT_TAGS = ("Marzban", "PasarGuard Nodes", "Iran")      # the categories the owner asked for (2026-10-14): they are on the page from the start; any other tag he types is made by using it
+DEFAULT_TAGS: tuple[str, ...] = ()      # no category from the start (the owner, 2026-10-15: "delete all, only Add profile stays: the user makes a profile first"); a tag is made by adding a profile with it, or with the + beside the tabs
 NODE_TAG = "PasarGuard Nodes"      # (the owner: "PasarGuard Nodes") the tag of the profiles that are made by themselves for the nodes of a connected PasarGuard panel
 
 
@@ -55,7 +55,7 @@ def check_tag(v) -> str:
 
 
 def _base() -> list[str]:
-    """The categories the owner has: his own list when he changed it (made, renamed or deleted one), else the three he asked for."""
+    """The categories the owner has: his own list when he changed it (made, renamed or deleted one), else none (a new panel has no category until one is made)."""
     mine = settings.get("lab").get("tags")
     return [t for t in mine if isinstance(t, str)] if isinstance(mine, list) else list(DEFAULT_TAGS)
 

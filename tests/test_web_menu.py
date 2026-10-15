@@ -107,7 +107,7 @@ def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_t
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
     assert 'for (const t of labTags())' in lab and 'any.onclick = () => labGoKind("any")' in lab          # (one item for each tag, drawn from the tags the page read)
-    assert 'const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : ["Marzban", "PasarGuard Nodes", "Iran"];' in lab          # (the three categories are there before anything is read)
+    assert 'const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : [];' in lab and "any.hidden = !((LAB.profiles || []).length || labTags().length);" in lab          # (no category and no "All" before there is a profile: the menu is only + Add profile)
     assert lab.count("labNavSync();") >= 3          # (when the page is drawn, when a tab of the page is chosen, when the profiles were read in the background)
     assert 'if (k === "connect") labConnect(); else if (typeof k === "object") labAdd("new", k); else labAdd(); }' in lab          # (the page opens the add box once it is drawn, whichever way it was reached)
     css = (WEB / "lab.css").read_text(encoding="utf-8")
