@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.18 - The look-up card in the kit's look
+
+- **Usage > Look up (the owner: *like a MacBook, an icon in place of its button*):** the card is a kit card with a normal-case title; the segmented control, the field and the button are one 36 px row; the *Show usage* text button became an icon button (a slate rounded square with a magnifier, blue when pointed at; Enter in the field works too).
+
 ## 1.57.17 - Usage without the section chips, IP before Problems
 
 - **Usage (the owner):** the row of chips (*Overview, Traffic, Nodes, Users, Apps, Look up*) is hidden; the overview is the page and the **›** on each card opens its section; inside a section the row shows *‹ Overview* (the way back) and the name of the section, and the range button stays at the right. 

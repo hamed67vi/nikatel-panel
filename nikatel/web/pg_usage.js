@@ -461,7 +461,7 @@ function pgUsageLookFormHtml() {
   const seg = ["admin", "user"].map(k => `<button type="button" class="${s.kind === k ? "on" : ""}" onclick="pgUsageKind('${k}')">${k === "admin" ? "Admin" : "User"}</button>`).join("");
   return `<div class="pg-usage-row"><div class="pg-useg" id="pg-usage-kind">${seg}</div>
     <input id="pg-usage-name" list="pg-usage-admins" placeholder="${s.kind === "user" ? "user name" : "admin name"}" value="${esc(s.name)}" autocomplete="off" spellcheck="false" oninput="pgUsageState.name = this.value" onkeydown="if (event.key === 'Enter') pgUsageLookup()"><datalist id="pg-usage-admins">${adm}</datalist>
-    <button class="sm pri" onclick="pgUsageLookup()">Show usage</button></div>`;
+    <button type="button" class="pg-ibtn" onclick="pgUsageLookup()" title="Show usage" aria-label="Show usage">${pgUsageIcon.search}</button></div>`;
 }
 window.pgUsageKind = k => {
   pgUsageState.kind = k;

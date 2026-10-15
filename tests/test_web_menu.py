@@ -644,3 +644,11 @@ def test_the_banner_of_a_server_window_is_one_slim_row():
     banner = lab.split("function labBanner(s) {", 1)[1].split("/* -----", 1)[0]
     assert 'class="lb-m ${i.lvl === "bad" ? "err" : ""}" title="${esc(i.text)}"' in banner and banner.count('<div class="lb-t">') == 4
     assert ".lab-ban { align-items: center; gap: 10px; min-height: 42px;" in css and ".lab-ban .lb-t > .lb-m { min-width: 0; overflow: hidden; text-overflow: ellipsis;" in css
+
+
+def test_the_lookup_card_has_the_kits_look_and_an_icon_button_instead_of_show_usage():
+    """The owner, 2026-10-15: "make this like a MacBook and put ... in place of its button" (read as: the text button becomes an icon button)."""
+    js, css = _web("pg_usage.js"), _web("pg_usage.css")
+    form = js.split("function pgUsageLookFormHtml() {", 1)[1].split("\n}", 1)[0]
+    assert 'class="pg-ibtn"' in form and "Show usage</button>" not in form and 'aria-label="Show usage"' in form and "pgUsageIcon.search" in form
+    assert ".pg-usage-look .pg-ibtn { flex: none; width: 36px; height: 36px;" in css and ".pg-usage-look .pg-usage-row input { flex: 1 1 auto;" in css and ".pg-usage-look .pg-useg { height: 36px;" in css
