@@ -1,7 +1,7 @@
 import re
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -398,7 +398,7 @@ def get_tunnel(tunnel_id: int):
 
 
 @router.get("/tunnels/{tunnel_id}/checks")
-def checks(tunnel_id: int, hours: int = 24):
+def checks(tunnel_id: int, hours: int = Query(24, ge=1, le=720)):
     """The checks of a tunnel over the last hours: ok, latency, throughput, reason."""
     with session() as db:
         rows = db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id,

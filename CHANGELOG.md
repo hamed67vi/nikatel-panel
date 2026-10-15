@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.57.35 - Smoother everywhere: one draw at a time, the bar with its page, no spinner between the Panel tabs
+
+- **One draw at a time:** a page or tab is drawn once at a time; a second call while that draw runs (the ticker, the Lab's busy timer, a window that closed) asks for one more draw after it, with the newest state - never two at once, never out of order.
+- **The bar of tabs shows together with its page**, not a moment before (the old page, still on the screen, shifted under it when a section with tabs was opened).
+- **Panel:** between its tabs (and its panels) the tab that was open stays on the screen, dimmed, until the new one has its data; a spinner only when the data is slow; a late answer never paints the users of the panel that was left.
+- **Engineering (from the review):** one poll per action (a second window on the same action shares it, slower once the window was closed); the engines box follows a check with a flag that dies with the box; the hours of the sample routes are bounded (1-720); the host-key forget has a timeout.
 ## 1.57.34 - About & update in two columns, with the PasarGuard update inside
 
 - **Settings → About & update:** two compact columns - on the left this panel (update from GitHub), its license and the tunnel cores; on the right the PasarGuard panels and their nodes (the section that was a tab of its own: *Settings → PasarGuard* is gone); under both, what the service runs with, in small print.

@@ -791,3 +791,16 @@ def test_about_and_update_in_two_columns_with_the_pasarguard_update_inside():
     assert "window.pgUpdBody = () => `<div class=\"abt-pg\"><div class=\"abt-h\">" in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
     assert "html body #page .sf .abt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in css and "html body #page .abt-foot {" in css and "font-size: 11px; color: var(--mut); }" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app
+
+
+def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_tabs():
+    """The whole-panel smoothness review, 2026-10-16: one draw at a time per page and tab; the bar of tabs shows together with its page; the Panel keeps the tab that was open, dimmed, until the new one has its data;
+    a late answer never paints the users of the panel that was left; one poll per action; the engines box follows a check with a flag that dies with the box."""
+    app, com, css = _web("app.js"), _web("pg_common.js"), _web("lab.css")
+    assert "if (refresh.p && refresh.seq === navSeq) { refresh.again = true; return refresh.p; }" in app and "async function refreshNow() {" in app and app.count("async function refresh() {") == 1
+    assert '$("#subnav").classList.toggle("hidden", !subBarOn(state.page));      // the bar of tabs shows (or goes) together with the page' in app and '$("#subnav").classList.toggle("hidden", !subBarOn(page));' not in app and 'box.classList.toggle("hidden", !subBarOn(state.page));' not in app
+    assert '<div id="pn-body" class="${keep && changed ? "pn-busy" : ""}">' in app and 'c.querySelectorAll(":scope > .pn-bars").forEach(x => x.remove()); return c.innerHTML;' in app
+    assert 'if (!box.isConnected || String(pn.id) !== String(id) || pn.tab !== "users") return;' in app and "const FOLLOWING = new Map();" in app and "if (FOLLOWING.has(aid)) { const f = FOLLOWING.get(aid); f.box = box; return f.p; }" in app
+    assert "if (d.checking) { if (!box._follow) { box._follow = true; engineFollow(); } }" in app and 'finally { const b = $("#eng-box"); if (b) b._follow = false; }' in app
+    assert "if (box.dataset.tab === pn.tab) return;" in com and "box._lt = setTimeout(() => { if (box.isConnected && box.classList.contains(\"pn-busy\")) pgSpin(box, text); }, 350);" in com and 'box.classList.remove("pn-busy"); box.dataset.tab = pn.tab;' in com
+    assert "html body #page #pn-body.pn-busy > :not(.pn-bars) { opacity: .45; pointer-events: none;" in css

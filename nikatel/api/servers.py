@@ -103,7 +103,7 @@ def server_uptime(server_id: int, hours: int = Query(24, ge=1, le=uptime.MAX_HOU
 
 
 @router.get("/servers/{server_id}/samples")
-def samples(server_id: int, hours: int = 24):
+def samples(server_id: int, hours: int = Query(24, ge=1, le=720)):
     """The samples of a server over the last hours (cpu, ram, disk, load, traffic, connections)."""
     with session() as db:
         rows = db.scalars(select(ServerSample).where(ServerSample.server_id == server_id,
@@ -244,7 +244,10 @@ def forget_hostkey(server_id: int):
 
     if kh.exists():
         for target in {host, f"[{host}]:{port}"}:
-            subprocess.run(["ssh-keygen", "-R", target, "-f", str(kh)], capture_output=True, check=False)
+            try:
+                subprocess.run(["ssh-keygen", "-R", target, "-f", str(kh)], capture_output=True, check=False, timeout=15)
+            except subprocess.TimeoutExpired:
+                raise HTTPException(status_code=504, detail="ssh-keygen did not answer in 15 s") from None
 
     with session() as db:
         emit(db, "info", "servers", f"Forgot the SSH host key of {name}; it is learnt again on the next check.", name)

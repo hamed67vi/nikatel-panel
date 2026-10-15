@@ -193,7 +193,6 @@ state.sub = JSON.parse(localStorage.getItem("nk.sub") || "{}");
 function sub(page) { const list = (SUB[page] || []).filter(x => x[3] !== "act"); if (!list.length) return ""; const cur = state.sub[page]; return list.some(x => x[0] === cur && x[3] !== "off") ? cur : (list.find(x => x[3] !== "off") || list[0])[0]; }       // a tab that is switched off is never the current one
 function renderSub() {
   const list = SUB[state.page], box = $("#subnav");
-  box.classList.toggle("hidden", !subBarOn(state.page));
   if (!list) return;
   const cur = sub(state.page);
   const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
@@ -240,7 +239,6 @@ const TITLE_ANIM = {
   const navOn = $("#nav a.on"); if (navOn && isPhone()) navOn.scrollIntoView({inline: "center", block: "nearest"});      // the bottom bar of a phone scrolls: the item of the open page stays in view
   $("#title").textContent = INFO[page][0]; $("#subtitle").textContent = INFO[page][1];
   if (TITLE_ANIM[page]) $("#title").insertAdjacentHTML("beforeend", TITLE_ANIM[page]);
-  $("#subnav").classList.toggle("hidden", !subBarOn(page));
   refresh();
 }
 /* ---- Server Doctor: what is wrong with a server, in plain words, and what to do about it */
@@ -396,7 +394,13 @@ const loadingBox = page => `<div class="loading"><i class="spin"></i><span>Loadi
 const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "The panel does not answer right now" : "This page could not be loaded"}</b><span>${esc(msg)}</span><small class="mut">${transient ? "It is probably restarting after an update; trying again by itself…" : ""}</small><button class="sm" onclick="retries=0;refresh()">Try again</button></div>`;
 /* every tab, sub-tab and range switch of the panel: the content that follows comes in softly (see .soft-in, and the animation of a tab panel in app.css) instead of jumping */
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".tabs button, #subnav button, .set-tabs button, .tf-tabs button, .srv-tabs button, .act-cats button, .ap-ttabs button")) state.softSwap = true; }, true);
-async function refresh() {
+async function refresh() {      // one draw at a time for the page and tab that are open: a second call while that draw runs (the ticker, the Lab's busy timer, a window that closed) asks for ONE more draw after it, with the newest state - never two at once, never out of order (review 2026-10-16)
+  if (refresh.p && refresh.seq === navSeq) { refresh.again = true; return refresh.p; }
+  const seq = navSeq, p = (async () => { do { refresh.again = false; await refreshNow(); } while (refresh.again && seq === navSeq); })();
+  refresh.p = p; refresh.seq = seq;
+  try { await p; } finally { if (refresh.p === p) refresh.p = null; }
+}
+async function refreshNow() {
   navMark(false);      // (the open tab may have changed: the menu shows it)
   if (window.labLockSync) labLockSync();      // whether a panel is connected (the Panel item of the menu is grey with a lock only while none is): asked at most every 30 s
   const snap = state.resetScroll ? [] : scrollSnapshot();
@@ -408,6 +412,7 @@ async function refresh() {
   try {
     await PAGES[state.page]();
     if (seq !== navSeq) { release(); return; }                 // another page was opened meanwhile: this one is history
+    $("#subnav").classList.toggle("hidden", !subBarOn(state.page));      // the bar of tabs shows (or goes) together with the page it belongs to - not a moment before, when the old page, still on the screen, shifted under it (the owner, 2026-10-16)
     if (focus) { const el = document.getElementById(focus.id); if (el && el !== document.activeElement) { el.focus(); try { el.setSelectionRange(focus.a, focus.b); } catch (e) { /* not a text box */ } } }   // a re-drawn page must not take the cursor out of the search box
     if (retries) toast("✓ Connected again", "ok");
     retries = 0; clearTimeout(retryT);
@@ -1151,11 +1156,11 @@ async function enginesLoad() {
     <div class="eng-head"><span>Core</span><span>Installed</span><span>Newest</span><span>Status</span><span></span></div>
     ${Object.entries(eng).map(([k, e]) => row(k, e)).join("") || '<div class="empty">Press “Check for updates” to compare the cores on your servers with the newest releases.</div>'}
     ${d.job ? `<div class="mut" style="margin-top:6px">Last update: <b>${esc(d.job.engine)} ${esc(d.job.version || "")}</b> ${d.job.done ? `— ${(d.job.items || []).filter(i => i.state === "ok").length} of ${(d.job.items || []).length} servers updated${(d.job.items || []).some(i => i.state !== "ok") ? ` <span class="err">(${(d.job.items || []).filter(i => i.state !== "ok").map(i => esc(i.name)).join(", ")} failed)</span>` : ""}` : "(running…)"}${d.job.error ? ` <span class="err">${esc(d.job.error)}</span>` : ""}</div>` : ""}`;
-  if (d.checking) { if (!enginesLoad.busy) { enginesLoad.busy = true; engineFollow().finally(() => { enginesLoad.busy = false; }); } }
-  else if (!d.checked_at || Date.now() / 1000 - d.checked_at > 3600) { if (!enginesLoad.busy) { enginesLoad.busy = true; api("/api/engines/check", {method: "POST"}).then(() => engineFollow()).catch(() => {}).finally(() => { enginesLoad.busy = false; }); } }   // checked by itself when the last check is old; the page never waits for it
+  if (d.checking) { if (!box._follow) { box._follow = true; engineFollow(); } }      // (the flag lives on the box: a GET cut by a navigation never resolves, so a flag on the function stayed on for ever - review 2026-10-16)
+  else if (!d.checked_at || Date.now() / 1000 - d.checked_at > 3600) { if (!enginesLoad.busy) { enginesLoad.busy = true; api("/api/engines/check", {method: "POST"}).catch(() => {}).finally(() => { enginesLoad.busy = false; }).then(() => engineFollow()); } }   // checked by itself when the last check is old; the page never waits for it
 };
 async function engineFollow() {   // the check runs on the server; the box is redrawn when it is done (polled every 5 s, up to two minutes)
-  for (let i = 0; i < 24; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (!d || !d.checking) { enginesLoad(); return; } }
+  try { for (let i = 0; i < 24; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (!d || !d.checking) { enginesLoad(); return; } } } finally { const b = $("#eng-box"); if (b) b._follow = false; }
 }
 window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); enginesLoad(); engineFollow(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -1496,15 +1501,20 @@ window.startBuild = async e => {
   } catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; } finally { bkRun(null); }
   return false;
 };
+const FOLLOWING = new Map();      // action id -> the poll that follows it: a second window on the same action shares it, so pollers never stack (review 2026-10-16) - every 1.5 s while its box is on the screen, every 6 s once the window was closed (what waits for the end still gets it)
 async function followStory(aid, box, maxPolls) {
-  for (let i = 0; i < maxPolls; i++) {
-    await new Promise(res => setTimeout(res, 1500));
-    const s = await api(`/api/actions/${aid}`);
-    const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 12;
-    box.innerHTML = storyHtml(s);
-    if (atEnd) box.scrollTop = box.scrollHeight;      // a fixed box that follows the end of the log, unless you scrolled up to read
-    if (s.done) return s;
-  }
+  if (FOLLOWING.has(aid)) { const f = FOLLOWING.get(aid); f.box = box; return f.p; }
+  const f = {box};
+  f.p = (async () => { try {
+    for (let i = 0; i < maxPolls; i++) {
+      const b0 = f.box, on = !!(b0 && b0.isConnected);
+      await new Promise(res => setTimeout(res, on ? 1500 : 6000));
+      const s = await api(`/api/actions/${aid}`), b = f.box;
+      if (b && b.isConnected) { const atEnd = b.scrollTop + b.clientHeight >= b.scrollHeight - 12; b.innerHTML = storyHtml(s); if (atEnd) b.scrollTop = b.scrollHeight; }      // a fixed box that follows the end of the log, unless you scrolled up to read
+      if (s.done) return s;
+    }
+  } finally { FOLLOWING.delete(aid); } })();
+  FOLLOWING.set(aid, f); return f.p;
 }
 /* removed tunnels: a copy is kept for 30 days; Restore builds the tunnel again (same name, same servers, same ports) */
 const TRASH_SHOW = 600;      // the removed tunnel stays on the page for ten minutes, and only the newest one
@@ -2155,8 +2165,10 @@ PAGES.panels = async () => {
   const p = sel, s = p.stats || {};
   const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
   const facts = `${chip(p)}${pnAuthPill(p)}<span class="dns-stats">${st("Users", (+s.users_total || 0).toLocaleString(), `${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now`, "st-users")}${st("Nodes", `${nodesOk} / ${(p.nodes || []).length}`, "Open the nodes of this panel (green: all connected)", "st-nodes " + (nodesOk === (p.nodes || []).length ? "ok" : "bad"), 'onclick="pnNodesWin()"')}${st("Traffic", s.bw_in != null ? fmtB(s.bw_in + (s.bw_out || 0)) : "—", `↓${s.bw_in != null ? fmtB(s.bw_in) : "—"} ↑${s.bw_out != null ? fmtB(s.bw_out) : "—"}`, "st-traffic")}</span>`;
+  const ob = $("#pn-body"), changed = pn.lastTab !== pn.tab || pn.lastId !== String(p.id); pn.lastTab = pn.tab; pn.lastId = String(p.id);
+  const keep = ob && !ob.querySelector(":scope > .loading") ? (() => { const c = ob.cloneNode(true); c.querySelectorAll(":scope > .pn-bars").forEach(x => x.remove()); return c.innerHTML; })() : "";      // what the tab that was open showed stays on the screen - dimmed when another tab or panel was chosen - until the new one has its data: no spinner between the tabs of the Panel (the owner, 2026-10-16)
   $("#page").innerHTML = pnBar(list, p.id, manage ? facts : "", manage ? "manage" : "pick") + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
-    <div id="pn-body"><div class="pn-bars">${pnTabs()}</div><div class="loading"><i class="spin"></i><span>Loading…</span></div></div><div id="pn-foot" class="fstrip pn-foot"></div>`;
+    <div id="pn-body" class="${keep && changed ? "pn-busy" : ""}"><div class="pn-bars">${pnTabs()}</div>${keep || '<div class="loading"><i class="spin"></i><span>Loading…</span></div>'}</div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   pnFuseWatch();
   const tdef = window.pgTabs && window.pgTabs[pn.tab], here = $("#pn-body");
   if (here && tdef && tdef.types && !tdef.types.includes(p.type)) { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="empty">${esc(tdef.label)} is a part of PasarGuard panels; ${esc(p.name)} is a ${esc(p.type)} panel. Pick a PasarGuard panel in the bar above.</div>`; return; }
@@ -2388,6 +2400,8 @@ async function pnUsersLoad(id) {
   if (!pn.users || pn.usersKey !== key) {   // read from the panel only when the question changed, not on every refresh
     try { pn.users = await api(`/api/panels/${id}/users?search=${encodeURIComponent(pn.uq)}&status=${pn.ustatus}&offset=${pn.uoff}&limit=${ps}&sort=-created_at`); pn.usersKey = key; } catch (e) { box.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="err">${esc(e.message)}</div>`; return; }
   }
+  if (!box.isConnected || String(pn.id) !== String(id) || pn.tab !== "users") return;      // (the panel or the tab changed while the list was read: a late answer must not paint the old one - the guard pg_admin.js has)
+  box.classList.remove("pn-busy");
   const u = pn.users, now = Date.now() / 1000;
   const exp = x => !x.expire_date ? "∞" : (typeof x.expire === "number" ? (x.expire < now ? '<span class="err">expired</span>' : Math.ceil((x.expire - now) / 86400) + " d") : esc(x.expire_date));
   box.innerHTML = `<div class="pn-bars">${pnTabs()}<div class="toolbar pn-sb"><input id="pn-uq" type="search" placeholder="Search user…" value="${esc(pn.uq)}" oninput="pnUQ(this.value)" autocomplete="off" spellcheck="false"></div><div class="toolbar"><select class="sm pn-st-sel" title="Show the users of one status" onchange="pn.ustatus=this.value;pn.uoff=0;pnUsersLoad(+pn.id)">${[["", "All statuses"], ["active", "Active"], ["disabled", "Disabled"], ["limited", "Limited"], ["expired", "Expired"], ["on_hold", "On hold"]].map(([v, l]) => `<option value="${v}" ${pn.ustatus === v ? "selected" : ""}>${l}</option>`).join("")}</select><span class="sp"></span>

@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -35,7 +35,7 @@ def list_configs():
 
 
 @router.get("/configs/{config_id}/samples")
-def samples(config_id: int, hours: int = 24):
+def samples(config_id: int, hours: int = Query(24, ge=1, le=720)):
     """The up / down history and the pings of one config over the last hours."""
     with session() as db:
         rows = db.scalars(select(ConfigSample).where(ConfigSample.config_id == config_id, ConfigSample.ts >= int(time.time()) - hours * 3600).order_by(ConfigSample.ts))
