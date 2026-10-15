@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.23 - No jump in the Servers menu after a refresh
+
+- After a refresh the menu under Servers no longer shows "All" first and the profiles later: "All" is hidden from the first paint and the profiles of the last visit are drawn at once (they are read again when the page is).
+
 ## 1.55.22 - A flag on every row, the lion on PasarGuard servers
 
 - **Every row has its country flag, whatever the profile (the owner):** a node that runs on no server of ours (like a node added in PasarGuard by hand) gets the flag of the country of its address, found once in the background and kept for a week.

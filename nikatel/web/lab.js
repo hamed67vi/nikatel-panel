@@ -6,7 +6,7 @@
    - the window of a server has four sections: Overview, Node (everything PasarGuard can do to the node that runs here), Monitor (charts and the strip of the last days) and Tools; a node profile opens the Node view
    Routes used: GET/POST /api/profiles, DELETE /api/profiles/{id}, GET /api/servers/{id}/uptime, POST /api/servers, POST /api/panels, and the node routes of pg_nodes.js.
    Uses the helpers of app.js (api, esc, toast, state, showModal, srvModal, serverGridHtml, serverPartHtml, installHtml, loadServerCharts, srvDiagnose ...) and pg_srvnode.js / pg_nodes.js. */
-const LAB = {kind: localStorage.getItem("nk.lab.k") || "any", profiles: [], tags: []};
+const LAB = {kind: localStorage.getItem("nk.lab.k") || "any", profiles: [], tags: (() => { try { const v = JSON.parse(localStorage.getItem("nk.lab.tags") || "[]"); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; } catch (e) { return []; } })()};      // (the profiles of the last visit are in the menu at once after a refresh: no jump when the page has read them)
 // (the categories are TAGS now: Marzban, PasarGuard, Iran from the start and every other tag the owner types; "any" is no tag - see labTags)      // ("Any": every kind at once - the owner chose the name: any kind of server can be added)
 const LAB_SECS = [["overview", "Overview"], ["node", "Node"], ["monitor", "Monitor"]];      // (what can be done is in the "⋯" menu, not in a section of buttons)
 const LAB_DOTS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
@@ -93,7 +93,7 @@ const labRowOf = p => p.kind === "node" ? labNodeRowHtml(p) : labServerRow(p);
 /* ---------------------------------------------------------------- the page */
 PAGES.lab = async () => {
   const [pr, list, tl, pnl] = await Promise.all([api("/api/profiles"), api("/api/servers"), api("/api/tunnels").catch(() => []), api("/api/panels").catch(() => null)]);
-  state.serversCache = list; state.tunnelsCache = tl; state.panelsCache = pnl || state.panelsCache || {panels: []}; LAB.profiles = pr.profiles; LAB.tags = pr.tags || [];
+  state.serversCache = list; state.tunnelsCache = tl; state.panelsCache = pnl || state.panelsCache || {panels: []}; LAB.profiles = pr.profiles; LAB.tags = pr.tags || []; try { localStorage.setItem("nk.lab.tags", JSON.stringify(LAB.tags)); } catch (e) { /* kept for this visit only */ }
   if (window.pgSrvLoad) await pgSrvLoad();
   if (!labOn()) return;      // another tab or page was chosen while this one was reading: it is not drawn over it
   if (pnl) labLockSet((pnl.panels || []).length > 0);      // (the Panel item is open while a panel is connected; a failed read changes nothing)
@@ -543,3 +543,4 @@ function labNavSync() {
   if (typeof navTitles === "function") navTitles();      // (the tooltips of the new items, where the menu is a rail of icons)
 }
 { const h = document.querySelector('#nav .nav-gh > a[data-page="nodes"]'); if (h) h.onclick = () => labGoKind("any"); }      // the head "Servers": the All tab of the Lab (the owner, 2026-10-15)
+try { labNavSync(); } catch (e) { /* the menu is drawn again when the page is */ }      // (at once, from the tags of the last visit)
