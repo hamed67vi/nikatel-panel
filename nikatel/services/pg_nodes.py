@@ -1145,6 +1145,17 @@ def _where(elsewhere: list[dict]) -> str:
     return ", ".join(f"{e['node'] or 'a node'} of {e['panel']} ({e['type']})" for e in elsewhere[:3])
 
 
+def pick_ports(busy: dict[int, str]) -> tuple[int, int] | None:
+    """Pure: the ports of a new node - the usual pair when it is free, else the first free pair 62060/62061, 62070/62071 ... (None when there is none up to 62299)."""
+    if NODE_PORT not in busy and API_PORT not in busy:
+        return NODE_PORT, API_PORT
+
+    for base in range(62060, 62300, 10):
+        if base not in busy and base + 1 not in busy:
+            return base, base + 1
+
+    return None
+
 def make_plan(c: dict, server_id: int, opts: dict | None = None, resolver: Resolver | None = None) -> dict:
     """What making one of our servers a node would do, and what stands in the way. Reads the panel and the server (is the node installed there already?), changes nothing."""
     srv = _server_by_id(server_id)
@@ -1169,18 +1180,25 @@ def make_plan(c: dict, server_id: int, opts: dict | None = None, resolver: Resol
         except ValueError:
             installed = False                      # it answered: there is no node certificate, so no node yet
 
-    if installed is False:          # the node is not there: its two ports must be free, or the installer stops at once (the owner, 2026-10-15: the install on ind took minutes and ended with "port 62050 is already in use")
-        try:
-            taken = extras.ports_busy(server_id)
-        except (SSHError, ValueError):
-            taken = []
+    busy: dict[int, str] = {}
 
-        if taken:
-            who = "; ".join(taken)
-            problems.append(f"A PasarGuard node needs the ports {NODE_PORT} and {API_PORT}, and this server has them taken: {who}. If that is an old Marzban or PasarGuard node, remove it first; "
-                            "or install the node by hand on other ports and add it with Add node. Nothing was changed on the server.")
+    if installed is not True and not problems:          # the node is not there: its two ports must be free (the owner, 2026-10-15: "when a port is busy it goes to a new port by itself")
+        try:
+            busy = extras.ports_busy(server_id)
+        except (SSHError, ValueError):
+            busy = {}
 
     o = make_options(opts, srv["name"], installing=installed is not True)
+
+    if installed is not True and (NODE_PORT in busy or API_PORT in busy):
+        pair = pick_ports(busy)
+        who = "; ".join(f"{p} by {busy[p]}" for p in (NODE_PORT, API_PORT) if p in busy)
+
+        if pair is None:
+            problems.append(f"The ports {NODE_PORT} and {API_PORT} are taken on this server ({who}) and no free pair was found between 62060 and 62299. Free them, or install the node by hand and add it with Add node.")
+        else:
+            o["port"], o["api_port"] = pair
+            warnings.append(f"The ports {NODE_PORT} and {API_PORT} are taken on this server ({who}): the node will use {pair[0]} and {pair[1]} - open them in the server's firewall if there is one.")
     nodes, clash, elsewhere = _node_on(c, srv, resolver)
 
     if clash:
@@ -1319,7 +1337,7 @@ def _make_story_steps(aid: int, panel_id: int, server_id: int, opts: dict) -> No
         _step(server_id, "1/4 Installing the node (Docker)", "installing")
 
         try:
-            inner = extras.start(server_id, ["pasarguard_node"], key)
+            inner = extras.start(server_id, ["pasarguard_node"], key if (opts["port"], opts["api_port"]) == (NODE_PORT, API_PORT) else f"{key}:{opts['port']}:{opts['api_port']}")
         except ValueError as e:
             say(aid, f"Stopped at step 1: the install could not start - {e}", done=True, ok=False)
             return

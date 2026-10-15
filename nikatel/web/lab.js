@@ -132,7 +132,15 @@ window.labNewProfile = () => {      // "Add profile": on the first page the card
   return false;
 };const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
 /* the categories are tags (the owner, 2026-10-14: "make me three categories: Marzban, PasarGuard, Iran"): they are on the page from the start, any other tag he types joins them, and Any is every profile */
-const labLogo = t => { const l = String(t).toLowerCase(); return l.startsWith("pasarguard") || l === "marzban" ? `<img class="lab-logo" src="/static/logos/${l.startsWith("pasarguard") ? "pasarguard" : l}.png" alt="" width="16" height="16">` : ""; };      // (the logos the owner sent: the lion of PasarGuard, the barbed wire of Marzban)
+const LAB_EMOJI = ["🔷", "🟣", "🟢", "🟠", "⭐", "🚀", "🔥", "💎", "🛰️", "📡", "🧭", "🎯"];      // the picture of a profile that has no logo of its own: one of these, the same one for the same name
+const labLogo = t => {      // the picture before a profile: the lion of PasarGuard, the barbed wire of Marzban, the flag of Iran, a globe for Foreign, and an emoji for any name of his own (the owner, 2026-10-15)
+  const l = String(t || "").trim().toLowerCase(); if (!l || l === "any") return "";
+  if (l.startsWith("pasarguard") || l === "marzban") return `<img class="lab-logo" src="/static/logos/${l.startsWith("pasarguard") ? "pasarguard" : l}.png" alt="" width="16" height="16">`;
+  if (l === "iran") return '<img class="lab-logo lab-flag" src="/flags/ir.png" alt="" width="16" height="16">';
+  if (l === "foreign") return '<span class="lab-emoji" aria-hidden="true">🌍</span>';
+  let h = 0; for (const ch of l) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return `<span class="lab-emoji" aria-hidden="true">${LAB_EMOJI[h % LAB_EMOJI.length]}</span>`;
+};
 window.labAddTag = () => labNewProfile();      // the "+" beside the tabs: the same Add profile box (the name and the suggested tags)
 window.labRenameTag = async () => {      // ✎ beside the tabs: the profile (category) that is open gets another name; its servers follow
   const cur = labKindNow(); if (cur === "any") return;

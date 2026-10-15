@@ -191,7 +191,7 @@ class FakeServers:
     def __init__(self):
         self.certs: dict[int, str] = {}
         self.silent: set[int] = set()
-        self.busy: dict[int, list[str]] = {}          # server -> who holds the ports of a node
+        self.busy: dict[int, dict[int, str]] = {}          # server -> {port: who holds it}
         self.stopped: set[int] = set()          # servers that have a certificate but no running node
         self.calls: list[int] = []
 
@@ -212,7 +212,7 @@ def world(monkeypatch):
     fake, ssh = FakePG(), FakeServers()
     monkeypatch.setattr(panels, "call", fake)
     monkeypatch.setattr(extras, "pasarguard_cert", ssh.cert)
-    monkeypatch.setattr(extras, "ports_busy", lambda sid: ssh.busy.get(sid, []))
+    monkeypatch.setattr(extras, "ports_busy", lambda sid: ssh.busy.get(sid, {}))
     monkeypatch.setattr(extras, "pgnode_running", lambda sid: sid not in ssh.stopped)
     monkeypatch.setattr(pg_nodes, "POLL", 0)
     monkeypatch.setattr(get_settings(), "read_only", False)
@@ -1334,15 +1334,21 @@ def test_every_route_has_one_short_sentence_for_a_docstring():
         assert r.path.startswith("/panels/{panel_id}/pg/nodes"), r.path
 
 
-def test_the_plan_names_a_taken_port_and_a_certificate_without_a_running_node_is_no_install(world, C):
-    """The owner, 2026-10-15: the install on a server ended after minutes with "port 62050 is already in use"; a failed install also leaves its certificate behind."""
+def test_a_taken_port_sends_the_node_to_a_free_pair_and_a_certificate_without_a_running_node_is_no_install(world, C):
+    """The owner, 2026-10-15: "when a port is busy it goes to a new port by itself"; a failed install also leaves its certificate behind."""
+    assert pg_nodes.pick_ports({}) == (62050, 62051) and pg_nodes.pick_ports({62050: "x"}) == (62060, 62061) and pg_nodes.pick_ports({62051: "x", 62060: "y", 62071: "z"}) == (62080, 62081)
+    assert pg_nodes.pick_ports({p: "x" for p in range(62000, 62300)}) is None
+
     a = add_server("busy1", "203.0.113.31")
     p = pg_nodes.make_plan(C, a)                                                     # no certificate: not installed, the ports are free
-    assert p["ok"] and p["installed"] is False
+    assert p["ok"] and p["installed"] is False and p["options"]["port"] == 62050 and p["warnings"] == []
 
-    world.ssh.busy[a] = ["port 62050 by python (pid 1004)"]
-    p = pg_nodes.make_plan(C, a)
-    assert not p["ok"] and "62050 by python (pid 1004)" in p["problems"][0] and "Nothing was changed" in p["problems"][0]
+    world.ssh.busy[a] = {62050: "python (pid 1004)"}
+    p = pg_nodes.make_plan(C, a)                                                     # taken: a new pair, said in a warning, nothing refused
+    assert p["ok"] and (p["options"]["port"], p["options"]["api_port"]) == (62060, 62061) and "62050 by python (pid 1004)" in p["warnings"][0] and "203.0.113.31:62060" in p["steps"][2]
+
+    world.ssh.busy[a] = {p_: "x" for p_ in range(62000, 62300)}
+    assert not pg_nodes.make_plan(C, a)["ok"]                                        # nothing free at all: a problem with the words
 
     b = add_server("half1", "203.0.113.32")
     world.ssh.certs[b] = CERT_A
@@ -1351,3 +1357,13 @@ def test_the_plan_names_a_taken_port_and_a_certificate_without_a_running_node_is
     assert p["installed"] is False and any("did not finish" in w for w in p["warnings"])
     world.ssh.stopped.discard(b)
     assert pg_nodes.make_plan(C, b)["installed"] is True
+
+
+def test_the_ports_of_the_install_travel_with_the_key_to_the_server(monkeypatch):
+    seen = []
+    monkeypatch.setattr(extras, "run_action", lambda node, action, params, timeout=60: seen.append((action, dict(params))) or "STARTED")
+    node = types.SimpleNamespace()
+    key = "123e4567-e89b-12d3-a456-426614174000"
+    extras._start_action(node, "pasarguard_node", key)
+    extras._start_action(node, "pasarguard_node", f"{key}:62060:62061")
+    assert seen[0][1] == {"KEY": key, "PORT": "62050", "APIPORT": "62051"} and seen[1][1] == {"KEY": key, "PORT": "62060", "APIPORT": "62061"}

@@ -15,7 +15,7 @@ NODE_KEY = "123e4567-e89b-12d3-a456-426614174000"
 
 
 def test_the_pasarguard_install_is_the_documented_command_and_answers_with_flags_not_with_stdin():
-    script = ssh.render_action("install_pasarguard_node", {"KEY": NODE_KEY})
+    script = ssh.render_action("install_pasarguard_node", {"KEY": NODE_KEY, "PORT": "62050", "APIPORT": "62051"})
     assert "PasarGuard/scripts/raw/main/pg-node.sh" in script and '@ install' in script and "shred" in script
     assert NODE_KEY in script                                       # the key is written to a 0600 file the installer reads it from ...
     # ... and every other answer is a flag: the questions of the installer change from one release to the next, so a stdin answer lands on the wrong one
@@ -24,7 +24,11 @@ def test_the_pasarguard_install_is_the_documented_command_and_answers_with_flags
     assert "printf '\\n\\n\\n\\n'" not in script and "< /dev/null" in script
     for bad in ("short", "has space in it", "x'; reboot; '", "a" * 300, "abcd1234efgh", "123e4567-e89b-12d3-a456-42661417400"):     # only a UUID is accepted (the installer refuses anything else)
         with pytest.raises(ValueError):
-            ssh.render_action("install_pasarguard_node", {"KEY": bad})
+            ssh.render_action("install_pasarguard_node", {"KEY": bad, "PORT": "62050", "APIPORT": "62051"})
+    assert " --service-port 62060" in ssh.render_action("install_pasarguard_node", {"KEY": NODE_KEY, "PORT": "62060", "APIPORT": "62061"}) and " --api-port 62061" in ssh.render_action("install_pasarguard_node", {"KEY": NODE_KEY, "PORT": "62060", "APIPORT": "62061"})
+    for bad_port in ("", "62050; reboot", "1", "123456"):
+        with pytest.raises(ValueError):
+            ssh.render_action("install_pasarguard_node", {"KEY": NODE_KEY, "PORT": bad_port, "APIPORT": "62051"})
 
 
 def test_the_update_of_the_system_is_apt_without_questions_and_never_reboots():

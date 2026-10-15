@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.56.5 - A taken port sends the node to a free pair by itself
+
+- **When 62050 or 62051 is taken on the server the node goes to a free pair by itself (the owner):** the plan reads the listeners of 62000-62300 over SSH, picks 62060/62061 (then 62070/62071 and so on), says so in a message ("open them in the firewall"), the installer is given those ports, and the node is added to the panel with them. Only when there is no free pair at all is it a problem.
+- **A message that cannot be missed:** when the node cannot be made, a dialog says why (it was a toast that went by).
+- **Every profile has a picture (the owner):** the flag of Iran for Iran, a globe for Foreign, the logos of PasarGuard and Marzban, and an emoji for any name of his own (the same one for the same name).
+
 ## 1.56.4 - A failed install is no install
 
 - **A certificate alone no longer means the node is installed:** the plan also asks whether a PasarGuard node container runs. A failed install leaves its certificate behind (found on a real server: the plan said "installed" after "port 62050 is already in use"), and the next make skipped the install and added a node that never started. Now such a server is not installed: the plan says an earlier install did not finish and does it again (the ports are checked first).

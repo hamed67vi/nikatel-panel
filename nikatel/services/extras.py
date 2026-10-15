@@ -57,7 +57,8 @@ def parse_status(out: str) -> tuple[str, str]:
 
 def _start_action(node: Node, item: str, cert: str) -> str:
     """Start the detached install; the first word of the answer: STARTED, ALREADY_RUNNING, MZNODE_EXISTS, BAD_CERT, NOT_ROOT or an error."""
-    params = {"B64": base64.b64encode(cert.encode()).decode()} if item == "marzban_node" else {"KEY": cert} if item == "pasarguard_node" else {"BACKUP": cert} if item == "pasarguard_panel" else {}      # for a PasarGuard node `cert` carries the API key of the panel, for the update of a PasarGuard panel 1 or 0 (a backup first)
+    key, *ports = str(cert).split(":")          # (a PasarGuard node: the API key, and - when 62050 / 62051 are taken - ":port:api_port" after it)
+    params = {"B64": base64.b64encode(cert.encode()).decode()} if item == "marzban_node" else {"KEY": key, "PORT": ports[0] if ports else "62050", "APIPORT": ports[1] if len(ports) > 1 else "62051"} if item == "pasarguard_node" else {"BACKUP": cert} if item == "pasarguard_panel" else {}      # for a PasarGuard node `cert` carries the API key of the panel, for the update of a PasarGuard panel 1 or 0 (a backup first)
     return run_action(node, ACTION[item], params, timeout=60).strip()
 
 
@@ -233,17 +234,17 @@ def resume_pending() -> None:
         threading.Thread(target=_work, args=(row["aid"], row["server_id"], row["items"], row.get("cert", ""), True), name=f"install-resume-{row['aid']}", daemon=True).start()
 
 
-def ports_busy(server_id: int) -> list[str]:
-    """Who already listens on the ports a PasarGuard node needs (62050, 62051) on this server, as sentences ("port 62050 by python (pid 1004)"); empty = both are free (read-only over SSH)."""
+def ports_busy(server_id: int) -> dict[int, str]:
+    """Who listens on the ports 62000-62300 of this server (where a PasarGuard node lives): {62050: "python (pid 1004)"}; empty = all free (read-only over SSH)."""
     node, _name, _ip = _node(server_id)
-    out = []
+    out: dict[int, str] = {}
 
     for ln in run_script(node, "ports_busy", timeout=30).splitlines():
         m = re.match(r"^(\d+)\s+(.*)$", ln.strip())
 
         if m:
             who = re.search(r'\(\("([^"]+)",pid=(\d+)', m.group(2))
-            out.append(f"port {m.group(1)} by {who.group(1)} (pid {who.group(2)})" if who else f"port {m.group(1)}")
+            out[int(m.group(1))] = f"{who.group(1)} (pid {who.group(2)})" if who else "another program"
 
     return out
 

@@ -267,8 +267,8 @@ done
 echo NO_CERT
 """, {}),
 
-    # read-only: who listens on the two ports of a PasarGuard node (62050 / 62051) - "62050 users:(("python",pid=1004,fd=6))" - so the plan can say a port is taken BEFORE anything is installed
-    "ports_busy": (r"""ss -ltnpH 2>/dev/null | awk '{n=split($4,a,":"); p=a[n]; if (p==62050 || p==62051) print p" "$6}' | sort -u | head -4; true
+    # read-only: who listens on the ports 62000-62300 (where a PasarGuard node lives) - "62050 users:(("python",pid=1004,fd=6))" - so the plan can say a port is taken, and pick a free pair, BEFORE anything is installed
+    "ports_busy": (r"""ss -ltnpH 2>/dev/null | awk '{n=split($4,a,":"); p=a[n]+0; if (p>=62000 && p<=62300) print p" "$6}' | sort -un | head -60; true
 """, {}),
     # read-only: is a PasarGuard node container running on this server? (a certificate alone is not an install: a failed install leaves one behind)
     "pgnode_running": (r"""docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | grep -i -E 'pasarguard|pg-node' | head -n 3; true
@@ -1184,14 +1184,14 @@ d=/var/lib/nikatel-install; cd $d
 command -v curl >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null; }
 curl -fsSL https://github.com/PasarGuard/scripts/raw/main/pg-node.sh -o pg-node.sh
 [ -s pg-node.sh ] || { echo DOWNLOAD_FAILED; shred -u pgnode.key 2>/dev/null; exit 1; }
-timeout 900 bash -c "$(cat pg-node.sh)" @ install -y --api-key "$(cat pgnode.key)" --self-signed --use-grpc --service-port 62050 --install-service --api-port 62051 < /dev/null > pg-install.log 2>&1 || true
+timeout 900 bash -c "$(cat pg-node.sh)" @ install -y --api-key "$(cat pgnode.key)" --self-signed --use-grpc --service-port @PORT@ --install-service --api-port @APIPORT@ < /dev/null > pg-install.log 2>&1 || true
 shred -u pgnode.key 2>/dev/null || unlink pgnode.key 2>/dev/null || true
 pkill -f 'docker.* logs' 2>/dev/null || true
 if command -v pg-node >/dev/null 2>&1; then echo "PGNODE_OK installed" > pgnode.out; else echo PGNODE_FAILED; tail -n 12 pg-install.log | cut -c1-200; exit 1; fi
 EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/pgnode.sh > /var/lib/nikatel-install/pgnode.log 2>&1 && touch /var/lib/nikatel-install/pgnode.ok || touch /var/lib/nikatel-install/pgnode.fail' >/dev/null 2>&1 &
 echo STARTED
-""", {"KEY": r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"}),      # the installer accepts only a UUID as the node's API key
+""", {"KEY": r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$", "PORT": r"^[0-9]{4,5}$", "APIPORT": r"^[0-9]{4,5}$"}),      # the installer accepts only a UUID as the node's API key; the ports are 62050 / 62051, or a free pair the plan picked when those are taken
 
     # update the system packages of the server (apt update + upgrade, no questions, old config files kept); the server is NOT rebooted. Detached.
     "install_os_update": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
