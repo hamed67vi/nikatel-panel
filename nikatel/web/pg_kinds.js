@@ -4,7 +4,8 @@
    written); Make it does them in order, reads each back, and takes the earlier ones back when one fails. Registers nothing in pgTabs: the button of the window sits in the bars of Access, Hosts and Core
    (pgKindBtn). Uses pg_common.js (pgApi), app.js (showModal, gconfirm, toast, esc, pn, refresh) and the cached state of pg_cores.js / pg_access.js to draw those tabs again. */
 const pgKind = {id: 0, o: null, k: "", res: null};
-window.pgKindBtn = () => pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgKindNew()" title="Make a whole kind of account in one step: choose the protocol, the panel makes the inbound, the group, the host and a user template">＋ Account type</button>`;
+const PG_KINDS_UI = false;      // the button "＋ Account type" is not shown in Access, Hosts and Core (the owner, 2026-10-15: "remove this completely"); the window and its routes stay: true brings the button back
+window.pgKindBtn = () => !PG_KINDS_UI || pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgKindNew()" title="Make a whole kind of account in one step: choose the protocol, the panel makes the inbound, the group, the host and a user template">＋ Account type</button>`;
 const pgKindRand = () => Math.random().toString(36).slice(2, 8);
 const pgKindOf = id => ((pgKind.o || {}).kinds || []).find(k => k.id === id) || {};
 window.pgKindNew = async () => {

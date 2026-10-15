@@ -269,3 +269,9 @@ def test_outbound_and_the_shop_bot_are_hidden_for_now_and_come_back_with_one_swi
     assert """document.querySelectorAll('#nav a[data-page="bot"]').forEach(a => { a.hidden = !SHOPBOT_UI; });""" in APP
     assert '(page === "bot" && !SHOPBOT_UI)' in APP and "if (SHOPBOT_UI) SB_TABS.forEach" in APP                      # (not reachable, not found by the search of the dashboard)
     assert "nav#nav a[hidden] { display: none !important; }" in _web("app.css")
+
+
+def test_the_account_type_button_is_not_shown_and_comes_back_with_one_switch():
+    """The owner, 2026-10-15: "remove this completely" (the ＋ Account type button): the bars of Access, Hosts and Core ask pgKindBtn(), which answers nothing while PG_KINDS_UI is false."""
+    js = _web("pg_kinds.js")
+    assert "const PG_KINDS_UI = false;" in js and 'window.pgKindBtn = () => !PG_KINDS_UI || pnType() !== "pasarguard" ? "" :' in js

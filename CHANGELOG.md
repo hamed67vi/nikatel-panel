@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.53.4 - The Account type button is not shown
+
+- **The ＋ Account type button is gone from Access, Hosts and Core (the owner: "remove this completely").** Nothing else was deleted: the window, its eleven kinds and its routes stay in the code, and `PG_KINDS_UI` at the top of `pg_kinds.js` brings the button back.
+
 ## 1.53.3 - Outbound and the Shop bot are hidden for now
 
 - **The Outbound tab of Network and the Shop bot item of the menu are not shown (the owner: "do not show them in the panel until we get to them later").** They were grey; now they are not there at all - not in the menu, not found by the search of the dashboard, and the Shop bot's page opens the Dashboard. Nothing is deleted: each has one switch at the top of `app.js` (`OUTBOUND_UI`, `SHOPBOT_UI`) that brings it back.
