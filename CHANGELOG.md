@@ -1,10 +1,12 @@
 # Changelog
 
-## 1.57.11 - Flyout menus, the Usage range in the lower row
+## 1.57.12 - Flyout menus, the Usage range in the lower row, autofill, the Doctor buttons
 
 - **Menus (the owner: *as much as you can like Move to profile, only the important actions on their own*):** the menu of a node has Overview, Check now, Edit and Restart on their own and *Move to profile*, *Monitor*, *Manage* and *Update* as flyouts; a server's menu keeps Check now, Console, Edit and Reboot on their own and opens *Access*, *Tests* and *Install* (and *PasarGuard node*) as flyouts.
 - **Usage:** the range button moved into the lower row, to the right of the section chips, and both rows are alike - the same segmented track and the same lifted blue open segment (the panel tabs above use it too).
 - **Lab:** the Status column shrinks to its content and has no word over the lamp, so the icon and the name stand close to their lamp.
+- **Autofill (the owner):** a field the browser fills in (a saved or suggested password) keeps the kit's dark well and light text - the browser's yellow made the text and the eye unreadable.
+- **Doctor page (the owner):** the two rows of tabs and the range (*In progress / Finished / Moves / Analyst*, *Best today / Tunnels / ...*, *6 hours / 24 hours / 7 days*) are the same kit segmented control, one size; the icons are quiet; *Explain* and the chips have the kit's corners.
 - **Panel page:** the two rows - the panels and the tabs - are one surface of the kit (the same dark card, edge, corners and height); the *Refresh* button of Usage is gone (the page reads itself again by itself).
 - **Panel tabs (the owner):** the tab buttons (Usage, System, Settings, Templates, Users ...) are ONE size on every tab - a 36 px track of the kit and 28 px buttons with the kit's corners; the open one is lifted and blue with no halo around it.
 

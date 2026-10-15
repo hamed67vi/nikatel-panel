@@ -557,3 +557,11 @@ def test_no_word_over_the_lamp_no_refresh_in_usage_and_the_two_rows_of_the_panel
     lab, css, js = _web("lab.js"), _web("lab.css"), _web("pg_usage.js")
     assert ">Status<" not in lab and "pgUsageRefresh" not in js and "↻ Refresh" not in js
     assert "td.lab-lp { padding: 0 6px 0 16px; }" in css and ".pn-top.pn-bar, #pn-body .pg-bar, #pn-body > .pn-bars > .toolbar) { background: #141a2b !important;" in css
+
+
+def test_an_autofilled_field_keeps_the_kits_colours_and_the_doctor_buttons_are_one_segmented_look():
+    """The owner, 2026-10-15: "the password field is yellow and the eye cannot be seen", "these buttons: size and style like a MacBook, alike"."""
+    uk, css, app = _web("uikit.css"), _web("lab.css"), _web("app.js")
+    assert "input:-webkit-autofill" in uk and "-webkit-text-fill-color: #e8ebf7 !important" in uk and "html body .eye { color: var(--uk-mut); }" in uk and "width:" not in uk
+    assert ".ap-ttabs, .ana-head .tabs, .bt-range) { display: inline-flex;" in css and ".ap-ttabs .tic {" in css and ".ap-thead button:not([data-k]) { height: 32px; border-radius: 11px;" in css
+    assert '<i class="tic">🔧</i> In progress' in app and '<i class="tic">📊</i> Analyst' in app
