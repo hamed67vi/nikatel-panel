@@ -117,6 +117,7 @@ function pgCoresShown(text) {
 
 /* ---- the tab */
 const pgCoresSt = {id: 0, list: null, at: 0, coreId: 0, d: null, view: "edit", draft: null, dry: null, dryFor: "", notice: null, seq: 0, ts: 0, busy: false, sel: new Set()};
+try { pgCoresSt.mode = localStorage.getItem("nk.cores.mode") === "list" ? "list" : "grid"; } catch (e) { pgCoresSt.mode = "grid"; }      // the cores are cards like the ones of PasarGuard itself (the owner, 2026-10-15); the table is the other view
 const pgCoresFirst = 1, pgCoresMaxMany = 20;                      // the panel's first core is its default one and is never deleted; most cores one delete call takes (twins: pg_cores.DEFAULT_CORE_ID, MAX_BULK_CORES)
 let pgCoresTimer = 0;
 const pgCoresCur = () => (pgCoresSt.draft === null ? pgCoresSt.d.text : pgCoresSt.draft);
@@ -137,7 +138,6 @@ async function pgCoresRender(id, box) {
       st.list = (await pgApi(id, "/cores")).cores;
       st.at = Date.now();
     }
-    if (!st.coreId && st.list.length === 1) st.coreId = st.list[0].id;                   // one core: open it at once
     if (st.coreId && !st.d) {
       pgLoading(box, "Reading the core…");
       await pgCoresLoad(id, st.coreId);
@@ -174,6 +174,7 @@ function pgCoresSelSync() {
   const st = pgCoresSt, n = pgCoresTicked().length, bar = $("#pg-cores-selbar"), all = $("#pg-cores-all"), can = (st.list || []).filter(c => c.id !== pgCoresFirst), k = can.filter(c => st.sel.has(c.id)).length;
   if (bar) { bar.hidden = !n; bar.innerHTML = `<span class="mut">${pgCoresPl(n, "core")} ticked</span><button class="sm danger" onclick="pgCoresDeleteMany()" title="Delete the ticked cores in one call: all of them or none; each is saved here first">Delete ${n} selected…</button><button class="sm" onclick="pgCoresUntick()">Clear</button>`; }
   if (all) { all.checked = k > 0 && k === can.length; all.indeterminate = k > 0 && k < can.length; }
+  const cnt = $("#pg-cores-cnt"); if (cnt) cnt.textContent = `${k}/${(st.list || []).length}`;
 }
 const pgCoresTickBoxes = on => document.querySelectorAll(".pg-cores-list input.ck[value]").forEach(i => { i.checked = on && !i.disabled; });
 window.pgCoresSel = el => { const st = pgCoresSt, id = +el.value; if (el.checked) st.sel.add(id); else st.sel.delete(id); pgCoresSelSync(); };
@@ -268,19 +269,34 @@ function pgCoresBackupsHtml(d) {
     <small class="mut">The last 20 are kept for this core, newest first. Restoring writes a new backup of the config it replaces, so a restore can be undone too.</small>`;
 }
 
-/* the first bar: one button per core (the open one is blue); the table with dates and counts is one click away, and it is the page itself while no core is open */
+/* the first bar, the way PasarGuard has it: no core open = a search, reload and the two views (cards, table) with Deleted… and ＋ New core; a core open = a way back to the cores and its name */
 function pgCoresBarHtml() {
-  const st = pgCoresSt, chips = st.list.map(c => `<button class="sm ${c.id === st.coreId ? "pri" : ""}" onclick="pgCoresOpen(${c.id})" title="${esc(c.type)} core #${c.id}">${esc(c.name || "(no name)")} <small>#${c.id}</small></button>`).join("");
-  return pgBar(`<b>Cores</b><span class="pill">${st.list.length}</span>${chips}`, `<button class="sm" onclick="pgCoresDeleted()" title="Cores that are gone from the panel but have a backup here: make one again">Deleted…</button>${st.d ? '<button class="sm" onclick="pgCoresAll()" title="All cores with their dates and counts">All cores…</button>' : ""}${window.pgKindBtn ? pgKindBtn() : ""}<button class="sm pri" onclick="pgCoresNew()" title="Make a new core (a name, a type, a config)">＋ New core</button>`);
+  const st = pgCoresSt, d = st.d;
+  const left = d ? `<button class="sm" onclick="pgCoresBack()" title="Back to the cores of the panel">← Cores</button><b>${esc(d.core.name || "(no name)")}</b>`
+    : `<input id="pg-cores-q" type="search" placeholder="Search…" oninput="pgCoresQ(this.value)" autocomplete="off" spellcheck="false"><button class="sm" onclick="pgCoresReloadAll()" title="Read the cores from the panel again">↻</button><span class="tabs pg-core-mode"><button class="${st.mode === "list" ? "" : "on"}" onclick="pgCoresMode('grid')" title="Cards" aria-label="Cards">▦</button><button class="${st.mode === "list" ? "on" : ""}" onclick="pgCoresMode('list')" title="Table" aria-label="Table">☰</button></span>`;
+  return pgBar(left, `<button class="sm" onclick="pgCoresDeleted()" title="Cores that are gone from the panel but have a backup here: make one again">Deleted…</button>${window.pgKindBtn ? pgKindBtn() : ""}<button class="sm pri" onclick="pgCoresNew()" title="Make a new core (a name, a type, a config)">＋ New core</button>`);
 }
-
+function pgCoresCardsHtml() {
+  const st = pgCoresSt, can = st.list.some(c => c.id !== pgCoresFirst);
+  const cards = st.list.map(c => `<div class="pg-core-card" data-q="${esc(((c.name || "") + " #" + c.id).toLowerCase())}" onclick="pgCoresOpen(${c.id})"><input type="checkbox" class="ck" value="${c.id}" ${st.sel.has(c.id) ? "checked" : ""} ${c.id === pgCoresFirst ? 'disabled title="The first core is the default one of the panel: it can not be deleted"' : ""} onclick="event.stopPropagation()" onchange="pgCoresSel(this)" aria-label="Tick ${esc(c.name || "core " + c.id)}">
+    <i class="pg-core-dot"></i><div class="pg-core-txt"><b>${esc(c.name || "(no name)")} <small class="mut">#${c.id}</small></b><span class="pg-core-meta">${esc(c.type)} · ${c.inbounds} inbounds · ${c.outbounds} outbounds · ${c.rules} rules</span></div><button class="sm pg-core-more" onclick="event.stopPropagation();pgCoresOpen(${c.id})" title="Open this core" aria-label="Open">⋮</button></div>`).join("");
+  return `<div class="pg-selbar" id="pg-cores-selbar" hidden></div><label class="pg-core-selall"><span><input type="checkbox" class="ck" id="pg-cores-all" ${can ? "" : "disabled"} onchange="pgCoresSelAll(this.checked)"> Select all</span><b id="pg-cores-cnt">0/${st.list.length}</b></label><div class="pg-core-grid pg-cores-list">${cards}</div>`;
+}
+window.pgCoresQ = v => { const q = String(v).trim().toLowerCase(); document.querySelectorAll(".pg-core-card, .pg-cores-list tbody tr").forEach(c => { c.hidden = !!q && !(c.dataset.q || c.textContent.toLowerCase()).includes(q); }); };
+window.pgCoresMode = m => { pgCoresSt.mode = m; try { localStorage.setItem("nk.cores.mode", m); } catch (e) { /* not kept */ } pgCoresRedraw(); };
+window.pgCoresBack = async () => {
+  const st = pgCoresSt;
+  if (st.draft !== null && !await gconfirm("Leave this core and lose your edits of its config?", {danger: true})) return;
+  Object.assign(st, {coreId: 0, d: null, draft: null, dry: null, dryFor: "", notice: null});
+  pgCoresRedraw();
+};
 window.pgCoresAll = () => { showModal("<b>Cores of this panel</b>", pgCoresListHtml(true), "wide"); pgCoresSelSync(); };
 
 function pgCoresDraw(box) {
   const st = pgCoresSt, d = st.d;
   let html = pgCoresBarHtml();
   if (d) html += pgCoresHeadHtml(d) + pgCoresNoticeHtml() + pgCoresSubHtml(d) + `<div class="pg-cores-body" id="pg-cores-body">${st.view === "edit" ? pgCoresEditHtml(d) : st.view === "over" ? pgCoresOverHtml(d) : pgCoresBackupsHtml(d)}</div>`;
-  else html += st.list.length ? pgCoresListHtml(false) + pgEmpty("Open a core to see and edit its config.") : pgEmpty("This panel has no core.");
+  else html += st.list.length ? (st.mode === "list" ? pgCoresListHtml(false) : pgCoresCardsHtml()) : pgEmpty("This panel has no core.");
   pgPaint(box, html);
   pgCoresSelSync();
   pgCoresFit();

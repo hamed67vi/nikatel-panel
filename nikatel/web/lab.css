@@ -180,3 +180,7 @@ html body #page .lab-tabact .lab-ib:hover { background: rgba(255,255,255,.16); }
 .lab-sec button.off { opacity: .4; cursor: not-allowed; }
 .lab-ip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mut); }      /* the IP column (1.53.2: it took the place of the state column) */
 .lab-first-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; max-width: 420px; } .lab-first-form input { width: 100%; height: 38px; }      /* the first page asks the name of the profile in its own card */
+/* 1.54.7 - the Add a server window fits its box (the owner's picture: the SSH box ran off the right edge): two columns while there is room, one when not; long lines wrap */
+html body #modal .srv-form2 { max-width: 100%; overflow-x: hidden; } html body #modal .srv-form2 .srv-two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important; }
+html body #modal .srv-form2 .sbox, html body #modal .srv-form2 .kv2, html body #modal .srv-form2 .bf { min-width: 0; } html body #modal .srv-form2 .bf-note, html body #modal .srv-form2 .bld-foot small, html body #modal .srv-form2 .srv-after small { white-space: normal; overflow-wrap: anywhere; }
+html body #modal .srv-form2 .srv-opts { flex-wrap: wrap; row-gap: 8px; } html body #modal .srv-form2 .bld-foot { flex-wrap: wrap; }

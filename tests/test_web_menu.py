@@ -249,7 +249,7 @@ def test_one_window_makes_a_whole_kind_of_account_and_the_three_tabs_open_it():
     assert '"pg_kinds.js"' in main and '"pg_kinds.css"' in main
     assert 'html body #modal .pg-kind-chip.on' in _web("pg_kinds.css")
     assert 'name="template" checked' in js and "const pgKindTplSync" in js and "b.template = f.elements.template.checked" in js       # the user template is a tick of the same window
-    assert "Choose the protocol. The panel does the rest" in js and "<details class=\"pg-kind-adv\">" in js and "const pgKindFill = auto =>" in js and "Chosen for you:" in js      # (1.53.2) only the protocol is asked: the details are folded and filled with what was chosen
+    assert "More (everything here is chosen for you)" in js and "<details class=\"pg-kind-adv\">" in js and "const pgKindFill = auto =>" in js and "Chosen for you:" in js      # (1.53.2, 1.55.0) only the protocol is asked (chips, or a pasted link): the details are folded and filled with what was chosen
     assert "required" not in js.split("pgKindDraw() {", 1)[1].split("window.pgKindPick", 1)[0]
 
 
@@ -309,3 +309,60 @@ def test_the_first_page_asks_the_name_of_the_profile_in_its_own_card():
     lab = _web("lab.js")
     assert 'const card = document.querySelector(".lab-first-card");' in lab and "Name of the new profile" in lab and 'onsubmit="return labNewProfileGo(event)"' in lab
     assert ".lab-first-form {" in _web("lab.css")
+
+
+def test_the_core_tab_is_cards_like_pasarguard_with_no_chips_bar():
+    """The owner, 2026-10-15: "remove this core section and bring PasarGuard's" (the cores as cards, a search, a way between cards and table)."""
+    js = _web("pg_cores.js")
+    assert "function pgCoresCardsHtml()" in js and "window.pgCoresBack = async () =>" in js and 'oninput="pgCoresQ(this.value)"' in js and "<b>Cores</b>" not in js.split("function pgCoresBarHtml()", 1)[1].split("function pgCoresCardsHtml", 1)[0]
+    assert "st.list.length === 1) st.coreId" not in js                      # (one core is no longer opened at once: the cards come first)
+    assert ".pg-core-card {" in _web("pg_cores.css")
+
+
+def test_the_ui_kit_is_the_last_stylesheet_and_holds_the_buttons_fields_and_menus_of_the_owners_sheet():
+    """The owner, 2026-10-15: "rebuild every element and button with this theme, and everything you build later too" (docs/design/ui-kit.md)."""
+    index, kit = _web("index.html"), _web("uikit.css")
+    assert index.rindex('href="/static/uikit.css"') > index.rindex('rel="stylesheet" href="/static/pg_usage.css"')           # loaded LAST: it only sets the look
+    assert "uikit" in (WEB.parent / "main.py").read_text(encoding="utf-8")
+    for part in ("button.pri", "button.danger", "button.ghost", ".tabs", ".lab-menu", "input:not([type=checkbox])", "--uk-blue", "--uk-ring"):
+        assert part in kit, part
+    assert "width:" not in kit and "height:" not in kit and "padding:" not in kit                  # the kit sets colour, border, shadow, radius - never a size or a place, so no page moves
+
+
+def test_the_users_menu_and_every_opener_use_the_one_column_grouped_menu():
+    """The owner, 2026-10-15: "all the options that open: this style, grouped, all in one column"."""
+    users = _web("pg_users.js")
+    assert 'onclick="nkMenu(this, pgUsersItems(), event)"' in users and "const pgUsersItems = () =>" in users
+    assert "window.nkMenu = (btn, items, ev) =>" in _web("lab.js")
+
+
+def test_the_add_tab_takes_a_pasted_link_and_picks_the_kind_of_it():
+    """The owner, 2026-10-15: "ready configs to add, and my own config can be added too, very simple"."""
+    js = _web("pg_kinds.js")
+    assert 'id="pg-kind-link"' in js and "pgKindUseLink" in js and "const pgKindParseLink = text =>" in js
+    kind_of = js.split("const pgKindLinkKind = p =>", 1)[1].split("const pgKindParseLink", 1)[0]
+    for kid in ("shadowsocks", "vmess-ws-tls", "trojan-ws-tls", "trojan-tcp-pin", "vless-reality-vision", "vless-reality", "vless-xhttp-reality", "vless-xhttp-tls", "vless-ws-pin", "vless-httpupgrade-tls", "vless-tcp-http", "vless-mlkem"):
+        assert f'"{kid}"' in kind_of, kid
+
+
+def test_a_panel_page_without_a_panel_keeps_its_boxes():
+    """The owner, 2026-10-15: "if no panel was added, the boxes stay" - the bar and the table of the Users tab are drawn empty, with the way to add a panel in General."""
+    app = _web("app.js")
+    assert "const pnEmptyPage = () =>" in app and "pnEmptyPage()" in app
+    page = app.split("const pnEmptyPage = () =>", 1)[1].split("const pnBar = ", 1)[0]
+    assert "usr-tbl" in page and "pn-sb" in page and "Add a panel in General" in page and "No PasarGuard panel is connected yet" in page
+
+
+def test_the_core_cards_count_the_selected_ones_in_the_select_all_row():
+    js = _web("pg_cores.js")
+    assert 'id="pg-cores-cnt"' in js and 'cnt.textContent = `${k}/${(st.list || []).length}`' in js
+
+
+def test_the_usage_tab_is_a_dashboard_of_two_columns_with_a_scale_on_its_chart():
+    """The owner, 2026-10-15: "make the Usage section very professional" - one bar with the range buttons, a band of counters, two columns of cards, a chart with a scale; the page scrolls."""
+    js, css = _web("pg_usage.js"), _web("pg_usage.css")
+    for part in ("function pgUsageNice(m)", "const pgUsageStat = ", "pg-ukpi", "pg-usage-main", "pg-usage-side", 'class="pg-useg"', "Busiest node", "Subscription apps", "Users over time", "Top users", "pg-usage-gl"):
+        assert part in js, part
+    assert "pgUsageFit" not in js                                              # (no fixed one-screen height any more: the page scrolls, the cards keep their own height)
+    assert ".main:has(.pg-usage) { overflow-y: auto; }" in css and ".pg-usage-grid {" in css and ".pg-useg button.on {" in css
+    assert js.count('class="pg-usage-grid"') == 1                              # (the class of the columns is not the class of a grid line of the SVG)

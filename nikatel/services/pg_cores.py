@@ -1392,8 +1392,18 @@ def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = Fal
         if network != "tcp" or security == "none":
             raise ValueError(f"the flow {flow} needs a TCP inbound with TLS or REALITY")
 
+    enc, dec = str(s.get("encryption") or "").strip(), str(s.get("decryption") or "").strip()
+
+    bad_enc = proto != "vless" or not (enc.startswith("mlkem768x25519plus.") and dec.startswith("mlkem768x25519plus.")) or re.search(r"\s", enc + dec)      # VLESS Encryption (ML-KEM): the server string (decryption) and the client string (encryption) of `xray vlessenc`
+
+    if (enc or dec) and bad_enc:
+        raise ValueError("VLESS Encryption needs a vless inbound and the two strings of `xray vlessenc` (both start with mlkem768x25519plus.)")
+
     if proto == "vless":
-        settings["decryption"] = "none"
+        settings["decryption"] = dec or "none"
+
+        if enc:
+            settings["encryption"] = enc                              # (PasarGuard reads the encryption of the links from the inbound)
 
         if flow:
             settings["flow"] = flow                                    # (PasarGuard reads the flow of the links from the inbound)
@@ -1403,7 +1413,14 @@ def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = Fal
     stream: dict = {"network": network, "security": security}
     path, host = str(s.get("path") or "").strip(), str(s.get("host") or "").strip()
 
-    if network == "tcp":
+    if network == "tcp" and str(s.get("header") or "").strip().lower() == "http":      # TCP with the HTTP header: the links say headerType=http and a path (and a Host)
+        req: dict = {"path": [path or "/"]}
+
+        if host:
+            req["headers"] = {"Host": [host]}
+
+        stream["tcpSettings"] = {"header": {"type": "http", "request": req}}
+    elif network == "tcp":
         stream["tcpSettings"] = {}
     elif network == "ws":
         ws: dict = {"path": path or "/"}
@@ -1423,6 +1440,9 @@ def build_inbound(spec: dict, taken: set[str] | None = None, preview: bool = Fal
             raise ValueError(f"the xhttp mode is one of {', '.join(XHTTP_MODES)}")
 
         stream["xhttpSettings"] = {"path": path or "/", "host": host, "mode": mode}
+
+        if s.get("xhttp_tuned"):                                        # the three settings the owner's links carry in their extra (the panel puts them into the link)
+            stream["xhttpSettings"].update({"scMaxEachPostBytes": "1000000", "scMinPostsIntervalMs": 30, "xPaddingBytes": "100-1000"})
 
     pub = None
 

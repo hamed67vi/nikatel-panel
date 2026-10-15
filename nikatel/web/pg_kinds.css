@@ -14,3 +14,20 @@ html body .pg-kind-lead { margin: 0 0 10px; font-size: 12.5px; color: var(--mut)
 html body .pg-kind-adv { margin: 4px 0 8px; } html body .pg-kind-adv > summary { margin: 4px 0 8px; font-size: 12px; color: var(--mut); cursor: pointer; }
 html body .pg-kind-notes { margin: 8px 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.04); font-size: 12px; color: var(--mut); } html body .pg-kind-notes b { color: #cfe3ff; }
 html body #page .pg-kind-page { max-width: 1180px; padding: 2px 2px 24px; } html body #page .pg-kind-done { margin: 0 0 8px; font-size: 15px; }      /* the Add tab of Configs (the same form as the window, in the page) */
+/* 1.54.7 - the Add tab rebuilt: the protocols in rows by family (small chips), ONE row of fields, the rest folded (the owner: "tidy, compact, one piece") */
+html body #page .pg-kind-groups { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; }
+html body #page .pg-kind-grp { display: flex; align-items: center; gap: 10px; } html body #page .pg-kind-gl { flex: none; width: 84px; font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--mut); }
+html body #page .pg-kind-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+html body #page .pg-kind-chip, html body #modal .pg-kind-chip { display: inline-flex; flex-direction: row; align-items: center; height: 30px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+html body #page .pg-kind-chip.on, html body #modal .pg-kind-chip.on { background: rgba(77,163,255,.24) !important; border-color: #4da3ff !important; box-shadow: inset 0 0 0 1px #4da3ff !important; color: #cfe3ff; }
+html body #page .pg-kind-note, html body #modal .pg-kind-note { min-height: 17px; margin: 0 0 8px; font-size: 12px; color: var(--mut); }
+html body #page .pg-kind-quick, html body #modal .pg-kind-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 10px; align-items: end; margin: 0 0 6px; }
+html body #page .pg-kind-quick label, html body #modal .pg-kind-quick label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--mut); min-width: 0; } html body #page .pg-kind-quick label.wide { grid-column: 1 / -1; }
+html body #page .pg-kind-quick input:not([type=checkbox]), html body #page .pg-kind-quick select, html body #modal .pg-kind-quick input:not([type=checkbox]), html body #modal .pg-kind-quick select { height: 32px; min-width: 0; font-size: 12.5px; }
+html body #page .pg-kind-tpl .chk { display: flex; align-items: center; gap: 6px; color: var(--txt, #e6e9f5); font-size: 12px; } html body #page .pg-kind-tplnum { display: flex; align-items: center; gap: 4px; font-size: 11.5px; } html body #page .pg-kind-tplnum input { width: 62px; }
+html body #page .pg-kind-adv { margin: 2px 0 8px; } html body #page .pg-kind-adv > summary { margin: 2px 0 6px; }
+html body #page .pg-kind-paste { display: flex; gap: 8px; margin: 0 0 10px; } html body #page .pg-kind-paste input { flex: 1; min-width: 0; height: 34px; font-size: 12.5px; }
+/* 1.55.1 - the form is a block (the generic .frm is a three-column grid: the quick row was squeezed into one column), a hidden field stays hidden, the family name sits on the line of its chips */
+html body #page .pg-kind-form, html body #modal .pg-kind-form { display: block; max-width: none; } html body .pg-kind-form [hidden] { display: none !important; }
+html body #page .pg-kind-grp { align-items: flex-start; } html body #page .pg-kind-gl { line-height: 30px; }
+html body #page .pg-kind-quick { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

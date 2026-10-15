@@ -61,6 +61,8 @@ class KindIn(BaseModel):
     reality_short_ids: str = Field("", max_length=400)
     reality_spx: str = Field("", max_length=200)
     fingerprint: str = Field("", max_length=20)
+    decryption: str = Field("", max_length=1500)
+    encryption: str = Field("", max_length=1500)
 
 
 class MakeIn(KindIn):

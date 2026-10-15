@@ -359,7 +359,7 @@ const labMenuKey = e => {
 window.labMenu = (btn, ctx, id, ev) => {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   const same = labMenuEl && labMenuBtn === btn; labMenuClose(); if (same) return;      // the same button again closes it
-  const items = labMenuItems(ctx, id); if (!items.length) return;
+  const items = ctx === "custom" ? (LAB.custom || []) : labMenuItems(ctx, id); if (!items.length) return;
   LAB.menu = items; labMenuBtn = btn; btn.setAttribute("aria-expanded", "true");
   const m = document.createElement("div"); m.setAttribute("role", "menu");
   /* the items are cut into blocks at every separator and group name; a menu of more than ten items is laid in TWO columns (each block goes to the shorter column), so it stays short */
@@ -381,6 +381,7 @@ window.labMenu = (btn, ctx, id, ev) => {
   document.addEventListener("mousedown", labMenuOut, true); document.addEventListener("keydown", labMenuKey, true); document.addEventListener("scroll", labMenuScroll, true); window.addEventListener("resize", labMenuClose);
   if (ev && ev.detail === 0) { const first = m.querySelector(".lab-mi:not(:disabled)"); if (first) first.focus(); }      // opened from the keyboard: the first item is ready
 };
+window.nkMenu = (btn, items, ev) => { LAB.custom = items; labMenu(btn, "custom", 0, ev); };      // any button can open the same menu: a list of labItem / labGrp / labSep (the owner: every menu in one column with groups)
 window.labMenuPick = i => { const it = (LAB.menu || [])[i]; labMenuClose(true); if (it && it.fn) it.fn(); };
 const labItem = (t, fn, o = {}) => ({t, fn, ...o}), labSep = {sep: 1}, labGrp = g => ({grp: g});
 function labMenuItems(ctx, id) {      // ctx "row" / "win": id = a profile; "node": id = a server whose Node section is open

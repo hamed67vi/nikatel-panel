@@ -44,6 +44,19 @@ KINDS: dict[str, dict] = {
                        "ports": (443, 2053, 8443), "needs": ("tls",)},
     "vmess-ws-tls": {"title": "VMess · WebSocket · TLS", "note": "VMess over WebSocket and TLS, for a CDN.", "protocol": "vmess", "network": "ws", "security": "tls",
                      "ports": (443, 2083, 8443), "needs": ("tls", "path")},
+    # the kinds of the owner's own links (2026-10-15): TCP with an HTTP header, xHTTP (plain, TLS, REALITY), httpupgrade over TLS, VLESS Encryption (ML-KEM)
+    "vless-tcp-http": {"title": "VLESS · TCP · HTTP header", "note": "Plain TCP that looks like an HTTP request (headerType=http), with a path.", "protocol": "vless", "network": "tcp", "security": "none", "header": "http",
+                       "ports": (1616, 2086, 80), "needs": ("path",)},
+    "vless-xhttp": {"title": "VLESS · xHTTP", "note": "xHTTP with no TLS of its own: for a CDN that does the TLS (a Host header and a path).", "protocol": "vless", "network": "xhttp", "security": "none", "tuned": True,
+                    "ports": (50335, 8080, 2082), "needs": ("path",)},
+    "vless-xhttp-tls": {"title": "VLESS · xHTTP · TLS", "note": "xHTTP over TLS (stream-up), for a CDN or a domain.", "protocol": "vless", "network": "xhttp", "security": "tls", "mode": "stream-up", "tuned": True,
+                        "ports": (8443, 443, 2053), "needs": ("tls", "path")},
+    "vless-xhttp-reality": {"title": "VLESS · xHTTP · REALITY", "note": "xHTTP with REALITY: no domain, no certificate.", "protocol": "vless", "network": "xhttp", "security": "reality", "tuned": True,
+                            "ports": (4433, 2052, 2085), "needs": ("reality", "spx", "path")},
+    "vless-httpupgrade-tls": {"title": "VLESS · HTTPUpgrade · TLS", "note": "HTTPUpgrade over TLS, for a CDN or a domain.", "protocol": "vless", "network": "httpupgrade", "security": "tls",
+                              "ports": (2096, 443, 2053), "needs": ("tls", "path")},
+    "vless-mlkem": {"title": "VLESS · Encryption (ML-KEM)", "note": "VLESS with post-quantum encryption (mlkem768x25519plus): paste the two strings that `xray vlessenc` prints - the panel cannot make them.", "protocol": "vless",
+                    "network": "tcp", "security": "none", "ports": (80, 8088, 2095), "needs": ("mlkem",)},
     "shadowsocks": {"title": "Shadowsocks", "note": "Shadowsocks on a port of its own: no domain, no certificate.", "protocol": "shadowsocks", "network": "tcp", "security": "none",
                     "ports": (8388, 2375, 9443), "needs": ()},
 }
@@ -245,7 +258,10 @@ def _inputs(c: dict, b: dict) -> dict:
          "kind_id": str(b["kind"]), "kind": kind, "name": name, "address": address, "port": port, "host_port": host_port, "core_id": core_id, "group_mode": mode, "group_id": int(b.get("group_id") or 0),
          "group_name": text("group_name") or name, "link": text("link_name") or f"{name} ({{USERNAME}})", "path": text("path"), "service": text("service"), "host_header": text("host_header"), "sni": text("sni"),
          "tls_cert": text("tls_cert"), "tls_key": text("tls_key"), "reality_dest": text("reality_dest"), "reality_names": text("reality_names"), "reality_short_ids": text("reality_short_ids"),
-         "reality_spx": text("reality_spx"), "fingerprint": text("fingerprint")}
+         "reality_spx": text("reality_spx"), "fingerprint": text("fingerprint"), "decryption": text("decryption"), "encryption": text("encryption")}
+
+    if "mlkem" in kind["needs"] and not (f["decryption"] and f["encryption"]):
+        raise ValueError("paste the two strings of `xray vlessenc` (decryption for the inbound, encryption for the links): the panel cannot make ML-KEM keys")
 
     if f["fingerprint"] and f["fingerprint"] not in FINGERPRINTS and f["fingerprint"] not in pg_hosts.FINGERPRINTS:
         raise ValueError("the fingerprint is one of " + ", ".join(FINGERPRINTS))
@@ -263,7 +279,7 @@ def _inputs(c: dict, b: dict) -> dict:
     if b.get("port") in (None, ""):
         auto["port"] = port
 
-    if kind["network"] in ("ws", "httpupgrade") and not f["path"]:
+    if (kind["network"] in ("ws", "httpupgrade", "xhttp") or kind.get("header")) and not f["path"]:
         f["path"] = auto["path"] = "/" + secrets.token_hex(3)
     elif kind["network"] == "grpc" and not f["service"]:
         f["service"] = auto["service"] = "g" + secrets.token_hex(3)
@@ -287,13 +303,25 @@ def _spec(f: dict, tag: str, cert: dict | None = None) -> dict:
     k = f["kind"]
     spec: dict = {"protocol": k["protocol"], "network": k["network"], "security": k["security"], "port": f["port"], "tag": tag}
 
-    if k["network"] == "ws" or k["network"] == "httpupgrade":
+    if k["network"] in ("ws", "httpupgrade", "xhttp") or k.get("header"):
         spec["path"] = f["path"] or "/"
 
         if f["host_header"]:
             spec["host"] = f["host_header"]
     elif k["network"] == "grpc":
         spec["service"] = f["service"] or "grpc"
+
+    if k.get("header"):
+        spec["header"] = k["header"]
+
+    if k["network"] == "xhttp":
+        spec["mode"] = k.get("mode", "auto")
+
+        if k.get("tuned"):
+            spec["xhttp_tuned"] = True
+
+    if "mlkem" in k["needs"]:
+        spec.update({"decryption": f["decryption"], "encryption": f["encryption"]})
 
     if k["security"] == "tls" and cert is not None:
         spec.update({"tls_cert_pem": cert["cert"], "tls_key_pem": cert["key"], "alpn": ALPN.get(k["network"], "")})
@@ -333,7 +361,7 @@ def _host_data(f: dict, tag: str, pin: str | None = None) -> dict:
         if sni:
             data["sni"] = [sni]
 
-    if k["network"] == "ws" and not own and not f["host_header"] and not _is_ip(first):
+    if k["network"] in ("ws", "xhttp", "httpupgrade") and not own and not f["host_header"] and not _is_ip(first):
         data["host"] = [first]                    # a WebSocket behind a CDN is found by its Host header: the domain of the link
 
     return data

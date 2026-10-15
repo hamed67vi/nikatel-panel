@@ -151,10 +151,13 @@ window.pgUserDevAll = async () => {
 };
 
 /* ---------------------------------------------------------------- the tools of the Users list */
-window.pgUsersMenu = () => pnType() !== "pasarguard" ? "" : `<select class="sm pgu-tools" title="More things to do with users" onchange="pgUsersTool(this)"><option value="">More…</option>
-  <optgroup label="The ticked users"><option value="owner">Set owner…</option><option value="template">Apply a template…</option><option value="reset">Reset usage…</option><option value="revoke">New subscription links…</option><option value="delete">Delete…</option></optgroup>
-  <optgroup label="Many users"><option value="expire">Shift end dates…</option><option value="data">Shift data limits…</option><option value="ssmethod">Shadowsocks method…</option><option value="clean">Clean up expired…</option></optgroup>
-  <optgroup label="New users"><option value="new1">New user from a template…</option><option value="newn">Many users from a template…</option></optgroup></select>`;
+window.pgUsersMenu = () => pnType() !== "pasarguard" ? "" : `<button type="button" class="sm pgu-tools" aria-haspopup="menu" title="More things to do with users" onclick="nkMenu(this, pgUsersItems(), event)">More… ▾</button>`;
+const pgUsersItems = () => {      // the menu of the Users list: one column, groups, a line between them (the owner's picture); an item answers pgUsersTool like the old list did
+  const it = (t, v, o) => labItem(t, () => pgUsersTool({value: v, selectedIndex: 0}), o);
+  return [labGrp("The ticked users"), it("Set owner…", "owner"), it("Apply a template…", "template"), it("Reset usage…", "reset"), it("New subscription links…", "revoke"), it("Delete…", "delete", {danger: true}), labSep,
+    labGrp("Many users"), it("Shift end dates…", "expire"), it("Shift data limits…", "data"), it("Shadowsocks method…", "ssmethod"), it("Clean up expired…", "clean"), labSep,
+    labGrp("New users"), it("New user from a template…", "new1"), it("Many users from a template…", "newn")];
+};
 const pgUTicked = () => [...document.querySelectorAll(".pn-uchk:checked")].map(x => x.value);
 const pgUOpts = async () => (pgUOpts.c && pgUOpts.c.id === pn.id && Date.now() - pgUOpts.c.at < 20000) ? pgUOpts.c.d : (pgUOpts.c = {id: pn.id, at: Date.now(), d: await pgApi(+pn.id, "/user-tools/options")}).d;
 const pgUList = names => names.slice(0, 3).join(", ") + (names.length > 3 ? ` and ${names.length - 3} more` : "");

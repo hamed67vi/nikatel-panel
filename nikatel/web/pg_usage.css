@@ -1,56 +1,75 @@
-/* PasarGuard tab: usage and live statistics of a panel. Every class starts with .pg-usage- */
+/* PasarGuard tab: usage and live statistics of a panel. Every class starts with .pg-usage- (or .pg-uk / .pg-ust / .pg-useg / .pg-ubar / .pg-uu).
+   Rebuilt in 1.55.0 as a dashboard (the owner: "very professional"): one bar, a band of counters, two columns of cards, a chart with a scale. The page scrolls; the lists inside keep their own height. */
 html body #page .pg-usage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-html body #page .pg-usage .pg-bar { margin: 0; } html body #page .pg-usage .pg-bar input[type=date] { width: 138px; }
+html body .main:has(.pg-usage) { overflow-y: auto; }
+html body #page .pg-usage [hidden] { display: none !important; }
+html body #page .pg-usage .pg-bar { margin: 0; padding: 6px 10px; gap: 8px; flex-wrap: wrap !important; } html body #page .pg-usage .pg-bar > *, html body #page .pg-usage .pg-bar .tabs button { flex: none; min-width: max-content; } html body #page .pg-usage .pg-bar > .sp { flex: 1 1 0; min-width: 0; } html body #page .pg-usage .pg-bar input[type=date] { width: 138px; }
+html body #page .pg-usage .pg-bar select, html body #page .pg-usage .pg-bar button.sm { height: 30px; }
 html body #page .pg-usage-j { font-size: 11.5px; color: var(--acc-2); margin: 0 6px 0 -2px; white-space: nowrap; }
 html body #page .pg-usage-dates { font-size: 12.5px; white-space: nowrap; } html body #page .pg-usage-dates small { color: var(--acc-2); font-size: 11.5px; }
-html body #page .pg-usage-tiles { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; margin: 0; padding: 8px; }
-html body #page .pg-usage-tiles .tile { padding: 6px 10px; } html body #page .pg-usage-tiles .tile b { font-size: 17px; margin-top: 1px; white-space: nowrap; }
-html body #page .pg-usage-ver { display: block; margin: 4px 2px 0; }
-html body #page .pg-usage-tiles .tile.wide { grid-column: span 2; }
-html body #page .pg-usage-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; } html body #page .pg-usage-look { order: -1; }
-html body #page .pg-usage-card { margin: 0; padding: 10px 12px; min-width: 0; } html body #page .pg-usage-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; } html body #page .pg-usage-card h3 .sp { flex: 1; }
+
+/* the segmented control (the UI kit: a dark track, the open one lifted) */
+html body #page .pg-useg { display: inline-flex; flex: none; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,.045); border: 1px solid var(--line); }
+html body #page .pg-useg button { height: 24px; padding: 0 11px; border: 0; border-radius: 7px; background: none; color: var(--mut); font-size: 12.5px; font-weight: 500; cursor: pointer; box-shadow: none; white-space: nowrap; }
+html body #page .pg-useg button:hover { color: var(--text); background: rgba(255,255,255,.06); }
+html body #page .pg-useg button.on { background: #2a3a5e; color: #fff; box-shadow: inset 0 0 0 1px rgba(120,170,255,.35); }
+
+/* the band of counters: two groups, users and server */
+html body #page .pg-ukpi { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px; }
+html body #page .pg-ukg { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+html body #page .pg-ukg h4 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); } html body #page .pg-ukg h4 small { margin-left: auto; font-size: 11px; letter-spacing: 0; text-transform: none; }
+html body #page .pg-ukr { display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 6px; }
+html body #page .pg-uk { position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 7px 10px 8px; border-radius: 9px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.05); }
+html body #page .pg-uk small { font-size: 10.5px; color: var(--mut); white-space: nowrap; } html body #page .pg-uk b { font-size: 18px; font-weight: 650; letter-spacing: -.2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html body #page .pg-uk b span { font-size: 13px; font-weight: 500; color: var(--mut); }
+html body #page .pg-uk.wide { grid-column: span 2; } html body #page .pg-uk.wide b { font-size: 15px; padding-top: 2px; }
+html body #page .pg-uk.ok b { color: var(--ok); } html body #page .pg-uk.warn b { color: var(--warn); } html body #page .pg-uk.bad b { color: var(--bad); }
+html body #page .pg-uk.ok::before, html body #page .pg-uk.warn::before, html body #page .pg-uk.bad::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: currentColor; }
+html body #page .pg-uk.ok { color: var(--ok); } html body #page .pg-uk.warn { color: var(--warn); } html body #page .pg-uk.bad { color: var(--bad); } html body #page .pg-uk small { color: var(--mut); }
+/* a meter (CPU, memory, disk; the limit of a user) */
+html body #page .pg-ubar { display: block; height: 4px; margin-top: 3px; border-radius: 2px; background: rgba(255,255,255,.09); overflow: hidden; } html body #page .pg-ubar u { display: block; height: 100%; border-radius: 2px; background: var(--acc); text-decoration: none; }
+html body #page .pg-uk.warn .pg-ubar u, html body #page .pg-ubar.warn u { background: var(--warn); } html body #page .pg-uk.bad .pg-ubar u, html body #page .pg-ubar.bad u { background: var(--bad); }
+
+/* the two columns of cards */
+html body #page .pg-usage-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 10px; align-items: start; }
+html body #page .pg-usage-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; } html body #page .pg-usage-col > div { min-width: 0; }
+html body #page .pg-usage-pair { display: flex; flex-direction: column; gap: 10px; }
+html body #page .pg-usage-card { margin: 0; padding: 12px 14px; min-width: 0; border-radius: 14px; }
+html body #page .pg-usage-ch { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 10px; } html body #page .pg-usage-ch h3 { margin: 0; font-size: 13.5px; font-weight: 650; } html body #page .pg-usage-ch small { font-size: 11.5px; text-align: right; }
+html body #page .pg-usage-sub { margin: 12px 0 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
+html body #page .pg-usage-busy { opacity: .55; transition: opacity .2s; }
+html body #page .pg-usage-look .pg-usage-ch { margin-bottom: 8px; }
+
+/* the four numbers of a card */
+html body #page .pg-ustats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 10px; }
+html body #page .pg-ust { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.05); }
+html body #page .pg-ust small { font-size: 10.5px; color: var(--mut); } html body #page .pg-ust b { font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+html body #page .pg-ust.big b { font-size: 22px; letter-spacing: -.4px; } html body #page .pg-ust > span { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html body #page .pg-usage-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 6px; } html body #page .pg-usage-head > span.mut { font-size: 12px; }
 html body #page .pg-usage-big { font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
-html body #page .pg-usage-chart { margin: 0 0 8px; } html body #page .pg-usage-svg { display: block; width: 100%; height: auto; max-height: 170px; }
-html body #page .pg-usage-bar { fill: var(--acc); opacity: .85; } html body #page .pg-usage-bar.top { fill: var(--acc-2); opacity: 1; }
-html body #page .pg-usage-hit { fill: transparent; } html body #page .pg-usage-hit:hover { fill: rgba(255,255,255,.07); }
-html body #page .pg-usage-ax { fill: var(--mut); font-size: 10px; } html body #page .pg-usage-line { stroke: var(--line); stroke-width: 1; }
-html body #page .pg-usage-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; } html body #page .pg-usage-row select, html body #page .pg-usage-row input, html body #page .pg-usage-row button { height: 30px; } html body #page .pg-usage-row input { flex: 1; min-width: 150px; }
-html body #page .pg-usage-nodes { max-height: 230px; overflow: auto; margin: 0; } html body #page .pg-usage-topbox { height: 330px; overflow: auto; margin: 0; }
+
+/* the chart: a scale on the left, bars that lift on hover */
+html body #page .pg-usage-chart { margin: 0 0 6px; } html body #page .pg-usage-svg { display: block; width: 100%; height: auto; max-height: 240px; }
+html body #page .pg-usage-bar { fill: var(--acc); opacity: .8; } html body #page .pg-usage-bar.top { fill: var(--acc-2); opacity: 1; }
+html body #page .pg-usage-hit { fill: transparent; } html body #page .pg-usage-hit:hover { fill: rgba(255,255,255,.06); }
+html body #page .pg-usage-ax { fill: var(--mut); font-size: 10px; } html body #page .pg-usage-none { fill: var(--mut); font-size: 12px; }
+html body #page .pg-usage-line { stroke: rgba(255,255,255,.22); stroke-width: 1; } html body #page line.pg-usage-gl { stroke: rgba(255,255,255,.07); stroke-width: 1; stroke-dasharray: 3 4; }
+
+/* controls of a card, tables */
+html body #page .pg-usage-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; } html body #page .pg-usage-row select, html body #page .pg-usage-row input, html body #page .pg-usage-row button.sm { height: 30px; font-size: 12.5px; } html body #page .pg-usage-row input { flex: 1; min-width: 130px; }
+html body #page .pg-usage-row > small { margin-left: auto; } html body #page .pg-usage-total { margin-left: auto; font-size: 12.5px; } html body #page .pg-usage-total b { font-size: 16px; }
+html body #page .pg-usage-nodes { max-height: 230px; overflow: auto; margin: 0; } html body #page .pg-usage-topbox { max-height: 400px; overflow: auto; margin: 0; }
 html body #page .pg-usage-th { cursor: pointer; user-select: none; white-space: nowrap; } html body #page .pg-usage-th.on { color: var(--acc-2); }
 html body #page .pg-usage-num { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
 html body #page .pg-usage-share { display: inline-block; width: 72px; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; vertical-align: middle; } html body #page .pg-usage-share i { display: block; height: 100%; background: var(--acc); }
-html body #page .pg-usage-hint { padding: 14px 4px; font-size: 12.5px; }
-html body #page .pg-usage-busy { opacity: .55; transition: opacity .2s; }
 html body #page .pg-usage-nw { white-space: nowrap; }
+html body #page .pg-usage-use { min-width: 150px; } html body #page .pg-uu { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; } html body #page .pg-uu b { font-weight: 600; } html body #page .pg-uu small { font-size: 11px; }
+html body #page .pg-usage-use .pg-ubar { margin-top: 3px; }
+html body #page .pg-usage-hint { padding: 12px 2px; font-size: 12.5px; }
 html body #page .pg-usage-stale { margin: 0 0 6px; padding: 5px 8px; border: 1px solid rgba(255,196,77,.45); border-radius: 8px; color: var(--warn); font-size: 12px; }
-/* the page of this tab is several blocks, taller than a screen: it scrolls (app.css switches the page scroll off for every page that has an .lbox, as the list pages fit the screen); the lists inside keep their own height */
-@media (max-width: 1099px), (max-height: 559px) { html body .main:has(.pg-usage) { overflow-y: auto; } }
-@media (min-width: 1560px) { html body #page .pg-usage-cols { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } html body #page .pg-usage-look { order: 0; } }
-/* users over time + subscription apps: two cards side by side as soon as the page has room for both */
-html body #page .pg-usage [hidden] { display: none !important; }
-html body #page .pg-usage-pair { grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 1100px) { html body #page .pg-usage-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* the rebuild (the owner: "compact it all, tidy and unified, so tight that nothing needs a scroll"): on a desktop window the tab is ONE screen - the bar, ONE row of counters, then three columns of cards that share the height */
-html body #page .pg-usage-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; align-items: stretch; }
-html body #page .pg-usage-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
-html body #page .pg-usage-col > div { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; min-width: 0; } html body #page .pg-usage-col > div > .card, html body #page .pg-usage-col > .card { flex: 1 1 0; min-height: 0; }
-html body #page .pg-usage-pair { grid-template-columns: none; }
-@media (min-width: 1100px) and (min-height: 560px) {
-  html body #page .pg-usage { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; overflow: hidden; }
-  html body #page .pg-usage .pg-bar { padding: 5px 8px; min-height: 0; } html body #page .pg-usage .pg-bar select, html body #page .pg-usage .pg-bar button { height: 28px; }
-  html body #page .pg-usage-tiles { display: flex; gap: 6px; padding: 5px 6px; margin: 0; } html body #page .pg-usage-tiles .tile { flex: 1 1 0; min-width: 0; padding: 3px 8px; } html body #page .pg-usage-tiles .tile.wide { flex: 2.1 1 0; }
-  html body #page .pg-usage-tiles .tile small { font-size: 9.5px; } html body #page .pg-usage-tiles .tile b { font-size: 14px; margin: 0; }
-  html body #page .pg-usage-ver { display: none; }
-  html body #page .pg-usage-grid { min-height: 0; }
-  html body #page .pg-usage-card { padding: 8px 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; } html body #page .pg-usage-card h3 { margin: 0 0 4px; font-size: 12px; }
-  html body #page .pg-usage-head { margin: 0 0 3px; } html body #page .pg-usage-big { font-size: 18px; } html body #page .pg-usage-head > span.mut { font-size: 11px; }
-  html body #page .pg-usage-chart { margin: 0 0 4px; flex: none; } html body #page .pg-usage-svg { max-height: 78px; }
-  html body #page .pg-usage-row { margin: 0 0 4px; gap: 6px; } html body #page .pg-usage-row select, html body #page .pg-usage-row input, html body #page .pg-usage-row button { height: 26px; font-size: 12px; }
-  html body #page .pg-usage-nodes, html body #page .pg-usage-topbox { height: auto; max-height: none; flex: 1 1 0; min-height: 0; overflow: hidden; }
-  html body #page .pg-usage-card .tbl th, html body #page .pg-usage-card .tbl td { padding: 3px 8px; font-size: 11.5px; line-height: 1.25; }
-  html body #page .pg-usage-share { width: 56px; }
-  html body #page .pg-usage-x { display: none; }
-  html body #page .pg-usage-col > .pg-usage-look { flex: 0 0 auto !important; } html body #page .pg-usage-hint { padding: 4px 2px; font-size: 11.5px; }
-  html body #page .pg-usage-look .pg-usage-nodes { max-height: 120px; flex: none; }
+
+/* a narrow window: one column, the four numbers in two rows */
+@media (max-width: 1099px) {
+  html body #page .pg-usage-grid, html body #page .pg-ukpi { grid-template-columns: minmax(0, 1fr); }
+  html body #page .pg-ustats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

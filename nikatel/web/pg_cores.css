@@ -80,3 +80,10 @@ html body #modal .pg-cores-go button { height: 28px; }
   html body #page .pg-cores-right { overflow: visible; margin-top: 10px; }
   html body .pg-cores-diff { max-height: 320px; overflow-y: auto; }
 }
+/* the cores as cards, like the Core Configs page of PasarGuard (1.54.5) */
+html body #page .pg-core-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; margin-top: 8px; }
+html body #page .pg-core-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.04); cursor: pointer; } html body #page .pg-core-card:hover { border-color: rgba(77,163,255,.55); }
+html body #page .pg-core-card[hidden] { display: none; } html body #page .pg-core-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #34d399; }
+html body #page .pg-core-txt { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; } html body #page .pg-core-txt b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pg-core-meta { font-size: 11px; color: var(--mut); }
+html body #page .pg-core-selall { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; font-size: 12.5px; color: var(--mut); }
+html body #page .pg-core-selall { justify-content: space-between; margin: 8px 0 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.03); } html body #page .pg-core-selall b { font-weight: 600; color: var(--mut); font-size: 12px; }

@@ -16,20 +16,23 @@ window.pgKindNew = async () => {
   pgKind.path = "/" + pgKindRand(); pgKind.svc = "g" + pgKindRand();
   pgKindDraw(); pgKindPick("vless-reality");
 };
-function pgKindFormHtml(inline) {      // the whole form: in a window (the old button) or as the Add tab of Configs (inline: no Cancel)
+function pgKindFormHtml(inline) {      // the whole form: in a window (the old button) or as the Add tab of Configs (inline: no Cancel); 1.54.7: the protocols in rows by family, one row of fields, the rest folded
   const o = pgKind.o, opt = (v, t, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(t)}</option>`, tls = o.tls || {};
-  const chips = o.kinds.map(k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}"><b>${esc(k.title)}</b><small>${esc(k.note)}</small></button>`).join("");
-  return `<p class="pg-kind-lead">Choose the protocol. The panel does the rest: the inbound, the group, the host and a user template - the name, the address, the port and the keys are chosen for you.</p>
-    <div class="pg-kind-chips">${chips}</div>
+  const chip = k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}">${esc(k.title.replace(/^(VLESS|Trojan|VMess) · /, ""))}</button>`;
+  const chips = [["VLESS", "vless"], ["Trojan", "trojan"], ["VMess", "vmess"], ["Shadowsocks", "shadowsocks"]].map(([label, proto]) => { const ks = o.kinds.filter(k => k.protocol === proto); return ks.length ? `<div class="pg-kind-grp"><span class="pg-kind-gl">${label}</span><div class="pg-kind-row">${ks.map(chip).join("")}</div></div>` : ""; }).join("");
+  return `<div class="pg-kind-paste"><input id="pg-kind-link" placeholder="Your own config: paste a vless:// trojan:// vmess:// or ss:// link to copy its type" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') pgKindUseLink()"><button type="button" class="sm" onclick="pgKindUseLink()">Use</button></div><div class="pg-kind-groups">${chips}</div><div class="pg-kind-note" id="pg-kind-note"></div>
     <form class="frm pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
-    <details class="pg-kind-adv"><summary>Details - all of them are chosen for you; open to change something</summary><div class="pg-cores-form">
-      <label>Name <small>the inbound, the group and the link are named from it</small><input name="name" maxlength="64" placeholder="chosen for you" autocomplete="off"></label>
-      <label>Address <small>domain or IP in the link</small><input name="address" list="pg-kind-addr" placeholder="${esc(o.addresses[0] ? "the first node: " + o.addresses[0] : "write it")}" autocomplete="off"><datalist id="pg-kind-addr">${o.addresses.map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
+    <div class="pg-kind-quick">
+      <label>Name<input name="name" maxlength="64" placeholder="chosen for you" autocomplete="off" title="The inbound, the group and the link are named from it"></label>
+      <label>Address<input name="address" list="pg-kind-addr" placeholder="${esc(o.addresses[0] ? "the first node: " + o.addresses[0] : "write it")}" autocomplete="off" title="Domain or IP written into the link"><datalist id="pg-kind-addr">${o.addresses.map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
       <label>Port <small id="pg-kind-portnote"></small><input name="port" type="number" min="1" max="65535"></label>
-      <label>Group <small>who gets it</small><select name="group">${opt("new", "A new group, named like this", true)}${o.groups.map(g => opt("g" + g.id, `Add to “${g.name}” (${g.tags.length} inbound${g.tags.length === 1 ? "" : "s"})`)).join("")}${opt("none", "No group (nobody gets it yet)")}</select></label>
-      <label class="chk wide"><input type="checkbox" name="template" checked> Also make a user template <small>so a new user of this kind is one choice (Users → More… → New user from a template)</small></label>
-      <label data-tpl>Data limit, GB <small>0 = unlimited</small><input name="tpl_gb" type="number" min="0" step="any" value="50"></label><label data-tpl>Days <small>0 = no end</small><input name="tpl_days" type="number" min="0" value="30"></label>
-      <label data-need="path">Path <small>of the WebSocket</small><input name="path" value="${esc(pgKind.path)}" autocomplete="off"></label>
+      <label>Group<select name="group">${opt("new", "A new group", true)}${o.groups.map(g => opt("g" + g.id, `Add to “${g.name}” (${g.tags.length})`)).join("")}${opt("none", "No group")}</select></label>
+      <label class="pg-kind-tpl"><span class="chk"><input type="checkbox" name="template" checked> User template</span><span class="pg-kind-tplnum" data-tpl><input name="tpl_gb" type="number" min="0" step="any" value="50" title="Data limit, GB (0 = unlimited)"> GB <input name="tpl_days" type="number" min="0" value="30" title="Days (0 = no end)"> days</span></label>
+      <label class="wide" data-need="mlkem">Decryption <small>the server string of <code>xray vlessenc</code>, for the inbound</small><input name="decryption" placeholder="mlkem768x25519plus.native.600s…" autocomplete="off" spellcheck="false"></label>
+      <label class="wide" data-need="mlkem">Encryption <small>the client string of <code>xray vlessenc</code>, written into the links</small><input name="encryption" placeholder="mlkem768x25519plus.native.0rtt…" autocomplete="off" spellcheck="false"></label>
+    </div>
+    <details class="pg-kind-adv"><summary>More (everything here is chosen for you)</summary><div class="pg-cores-form">
+      <label data-need="path">Path <small>of the WebSocket / xHTTP / HTTP header</small><input name="path" value="${esc(pgKind.path)}" autocomplete="off"></label>
       <label data-need="service">Service name <small>of gRPC</small><input name="service" value="${esc(pgKind.svc)}" autocomplete="off"></label>
       <label class="wide" data-need="tls">Certificate and key <small>${tls.guess ? "a guess: no TLS inbound of this panel to copy it from - they must exist on every node" : "the files the TLS inbounds of this panel use"}</small><span class="pg-kind-two"><input name="tls_cert" value="${esc(tls.cert || "")}" autocomplete="off" spellcheck="false"><input name="tls_key" value="${esc(tls.key || "")}" autocomplete="off" spellcheck="false"></span></label>
       <label class="wide" data-need="tls pin">SNI <small>the name the network sees; empty = chosen for you (a domain of your own links when the certificate is the panel's own, else the address)</small><input name="sni" list="pg-kind-snis" placeholder="chosen for you" autocomplete="off"><datalist id="pg-kind-snis">${(o.snis || []).map(a => `<option value="${esc(a)}">`).join("")}</datalist></label>
@@ -61,7 +64,7 @@ window.pgKindPick = k => {
   const f = $("#pg-kind-form"); if (!f) return;
   pgKind.k = k; pgKind.res = null;
   document.querySelectorAll(".pg-kind-chip").forEach(b => b.classList.toggle("on", b.dataset.k === k));
-  const kd = pgKindOf(k);
+  const kd = pgKindOf(k), nt = $("#pg-kind-note"); if (nt) nt.textContent = kd.note || "";
   f.querySelectorAll("[data-need]").forEach(l => { const on = l.dataset.need.split(" ").some(n => kd.needs.includes(n)); l.hidden = !on; l.querySelectorAll("input, select, button").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-sec]").forEach(l => { const on = kd.security !== "none"; l.hidden = !on; l.querySelectorAll("select, input").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-auto]").forEach(i => { i.value = ""; delete i.dataset.auto; });      // what the last check chose for another kind goes: this kind is chosen again
@@ -94,6 +97,45 @@ const pgKindBody = () => {
   b.group_mode = g === "new" ? "new" : g === "none" ? "none" : "existing"; if (g.startsWith("g")) b.group_id = +g.slice(1);
   b.template = f.elements.template.checked;
   return b;
+};
+/* ---- your own config: paste a client link (vless:// trojan:// vmess:// ss://) and the form is filled with its type, port, path, Host, SNI, fingerprint and the rest; the keys and ids are made new (a link holds only the public half of a REALITY key) */
+const pgKindLinkKind = p => {      // the kind that has this protocol, transport and security (null = no kind for it)
+  const {proto, net, sec, hdr, flow, pcs, enc} = p;
+  if (proto === "ss") return "shadowsocks";
+  if (proto === "vmess") return net === "ws" && sec === "tls" ? "vmess-ws-tls" : null;
+  if (proto === "trojan") return net === "ws" && sec === "tls" ? "trojan-ws-tls" : net === "tcp" && sec === "tls" ? (pcs ? "trojan-tcp-pin" : "trojan-tcp-tls") : null;
+  if (proto !== "vless") return null;
+  if (enc && enc.startsWith("mlkem768x25519plus.")) return "vless-mlkem";
+  if (sec === "reality") return net === "xhttp" ? "vless-xhttp-reality" : net === "tcp" ? (flow ? "vless-reality-vision" : "vless-reality") : null;
+  if (net === "ws") return sec === "tls" ? (pcs ? "vless-ws-pin" : "vless-ws-tls") : "vless-ws";
+  if (net === "xhttp") return sec === "tls" ? "vless-xhttp-tls" : "vless-xhttp";
+  if (net === "httpupgrade" && sec === "tls") return "vless-httpupgrade-tls";
+  if (net === "grpc" && sec === "tls") return "vless-grpc-tls";
+  if (net === "tcp" && sec === "none") return hdr === "http" ? "vless-tcp-http" : null;
+  return null;
+};
+const pgKindParseLink = text => {
+  const s = String(text || "").trim(); let m;
+  if ((m = /^vmess:\/\/(.+)$/i.exec(s))) {
+    let j; try { j = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/\s/g, ""))))); } catch (e) { return null; }
+    return {proto: "vmess", net: j.net || "tcp", sec: j.tls || "none", address: j.add, port: +j.port, path: j.path || "", host: j.host || "", sni: j.sni || "", fp: j.fp || "", name: j.ps || ""};
+  }
+  if ((m = /^ss:\/\/(?:[^@]+@)?([^:/?#]+):(\d+)/i.exec(s))) return {proto: "ss", net: "tcp", sec: "none", address: m[1], port: +m[2], name: decodeURIComponent((s.split("#")[1] || ""))};
+  let u; try { u = new URL(s); } catch (e) { return null; }
+  const proto = u.protocol.replace(":", "").toLowerCase(); if (!["vless", "trojan"].includes(proto)) return null;
+  const q = k => u.searchParams.get(k) || "";
+  return {proto, net: q("type") || "tcp", sec: q("security") || "none", hdr: q("headerType"), flow: q("flow"), pcs: q("pcs") || q("pinSHA256"), enc: q("encryption"), address: u.hostname, port: +u.port || 443, path: q("path"), host: q("host"), sni: q("sni").split(",")[0], snis: q("sni"), fp: q("fp"), spx: q("spx"), alpn: q("alpn"), mode: q("mode"), name: decodeURIComponent((u.hash || "").replace(/^#/, ""))};
+};
+window.pgKindUseLink = () => {
+  const box = $("#pg-kind-link"), res = $("#pg-kind-res"), p = pgKindParseLink(box && box.value); if (!p) { toast("✕ That is not a vless:// trojan:// vmess:// or ss:// link", "bad"); return; }
+  const kid = pgKindLinkKind(p); if (!kid) { toast(`✕ No kind for ${p.proto} · ${p.net} · ${p.sec} yet`, "bad"); return; }
+  pgKindPick(kid); const f = $("#pg-kind-form"), set = (n, v) => { const el = f.elements[n]; if (el && !el.disabled && v !== undefined && v !== "") { el.value = v; delete el.dataset.auto; } };
+  const clean = String(p.name || "").replace(/[^\w .\-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 48);
+  set("name", clean.length >= 3 ? clean : ""); set("address", p.address); set("port", p.port); set("path", p.path); set("host_header", p.host); set("sni", p.sni && p.sni !== p.address ? p.sni : ""); set("fingerprint", p.fp);
+  set("reality_spx", p.spx); if (p.sec === "reality" && p.sni) { set("reality_dest", p.sni + ":443"); set("reality_names", p.snis || p.sni); }
+  if (p.enc && p.enc.startsWith("mlkem768x25519plus.")) set("encryption", p.enc);
+  pgKindPort(true);
+  if (res) res.innerHTML = `<div class="pg-kind-notes"><b>Filled from the link:</b> ${esc(pgKindOf(kid).title)}, ${esc(p.address)}:${p.port}${p.path ? ", path " + esc(p.path) : ""}${p.host ? ", Host " + esc(p.host) : ""}. The keys and the user ids are new; press Check, then Make it.</div>`;
 };
 window.pgKindScan = async () => {
   const f = $("#pg-kind-form"), target = f.elements.reality_dest.value.trim(), res = $("#pg-kind-res"); if (!target) { toast("✕ Write the site first", "bad"); return; }

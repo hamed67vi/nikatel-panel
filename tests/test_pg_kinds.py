@@ -176,6 +176,7 @@ def fake(monkeypatch):
     return f
 
 
+ML = {"decryption": "mlkem768x25519plus.native.600s.PRIVATEPART", "encryption": "mlkem768x25519plus.native.0rtt.PUBLICPART"}
 REALITY = {"kind": "vless-reality", "name": "Reality home", "address": "203.0.113.21", "port": 443, "reality_dest": "www.example.test:443"}
 WS_TLS = {"kind": "vless-ws-tls", "name": "CDN socket", "address": "cdn.example.test", "port": 2083, "path": "/abc123"}
 
@@ -183,7 +184,7 @@ WS_TLS = {"kind": "vless-ws-tls", "name": "CDN socket", "address": "cdn.example.
 # ------------------------------------------------------------------ what the form chooses from
 def test_the_options_say_what_the_panel_already_uses(fake):
     o = pg_kinds.options(C)
-    assert [k["id"] for k in o["kinds"]] == list(pg_kinds.KINDS) and len(o["kinds"]) == 11
+    assert [k["id"] for k in o["kinds"]] == list(pg_kinds.KINDS) and len(o["kinds"]) == 17
     assert o["cores"] == [{"id": 1, "name": "Default Core Config", "ports": [80, 2053, 8443]}]
     assert o["groups"] == [{"id": 1, "name": "Main", "tags": ["VLESS WS 80"]}] and o["addresses"] == ["203.0.113.21"]
     assert o["tls"] == {"cert": "/etc/own/cert.pem", "key": "/etc/own/key.pem"}                          # the files its own TLS inbound uses
@@ -383,7 +384,7 @@ def test_every_route_is_described_in_one_sentence():
 
 def test_a_kind_of_every_protocol_builds_an_inbound_the_core_accepts(fake):
     for i, (kid, k) in enumerate(pg_kinds.KINDS.items()):
-        body = {"kind": kid, "name": f"Kind number {i}", "address": "cdn.example.test", "port": 30000 + i, "reality_dest": "www.example.test:443", "path": "/p", "service": "svc"}
+        body = {"kind": kid, "name": f"Kind number {i}", "address": "cdn.example.test", "port": 30000 + i, "reality_dest": "www.example.test:443", "path": "/p", "service": "svc", **(ML if kid == "vless-mlkem" else {})}
         p = pg_kinds.plan(C, body)
         assert p["valid"] is True, (kid, [s["errors"] for s in p["steps"]])
         ss = p["inbound"]["streamSettings"]
@@ -434,7 +435,7 @@ def test_a_template_that_fails_takes_everything_back(fake):
 # ------------------------------------------------------------------ the owner gives the protocol, the rest is chosen
 def test_the_kind_alone_is_enough_for_every_kind(fake):
     for kid in pg_kinds.KINDS:
-        p = pg_kinds.plan(C, {"kind": kid})
+        p = pg_kinds.plan(C, {"kind": kid, **(ML if kid == "vless-mlkem" else {})})
         assert p["valid"] is True, (kid, [s["errors"] for s in p["steps"]])
         assert p["auto"]["name"] and p["auto"]["address"] == "203.0.113.21" and p["auto"]["port"]
     assert fake.writes() == []
@@ -531,3 +532,37 @@ def test_the_flow_and_the_spiderx_are_checked_by_the_builder():
                      ({"reality_spx": "api"}, "starts with a slash")):
         with pytest.raises(ValueError, match=why):
             pg_cores.build_inbound({**base, **bad}, preview=True)
+
+
+# ------------------------------------------------------------------ the kinds of the owner's own links (xHTTP, TCP with an HTTP header, HTTPUpgrade, ML-KEM)
+def _ib(fake, out):
+    return next(i for i in fake.cores[1]["config"]["inbounds"] if i["tag"] == out["tag"])
+
+
+def test_tcp_with_the_http_header_has_the_header_and_a_path_the_xhttp_kinds_carry_the_tuning(fake):
+    ss = _ib(fake, pg_kinds.make(C, {"kind": "vless-tcp-http", "path": "/api/v2b", "host_header": "example.test"}, confirm=True))["streamSettings"]
+    assert ss["network"] == "tcp" and ss["tcpSettings"]["header"] == {"type": "http", "request": {"path": ["/api/v2b"], "headers": {"Host": ["example.test"]}}}
+    for kid, sec in (("vless-xhttp", "none"), ("vless-xhttp-tls", "tls"), ("vless-xhttp-reality", "reality")):
+        ib = _ib(fake, pg_kinds.make(C, {"kind": kid, "reality_dest": "play.google.com:443"}, confirm=True))
+        x = ib["streamSettings"]["xhttpSettings"]
+        assert ib["streamSettings"]["security"] == sec and x["scMaxEachPostBytes"] == "1000000" and x["scMinPostsIntervalMs"] == 30 and x["xPaddingBytes"] == "100-1000" and x["path"].startswith("/")
+        assert x["mode"] == ("stream-up" if kid == "vless-xhttp-tls" else "auto")
+
+
+def test_httpupgrade_over_tls_and_the_host_header_of_a_domain(fake):
+    out = pg_kinds.make(C, {"kind": "vless-httpupgrade-tls", "address": "cdn.example.test", "path": "/HellSevice1404"})
+    assert _ib(fake, out)["streamSettings"]["httpupgradeSettings"]["path"] == "/HellSevice1404"
+    h = fake.hosts[out["host"]["id"]]
+    assert h["host"] == ["cdn.example.test"] and h["sni"] == ["cdn.example.test"]
+
+
+def test_vless_encryption_needs_the_two_strings_and_writes_both_into_the_inbound(fake):
+    with pytest.raises(ValueError, match="xray vlessenc"):
+        pg_kinds.plan(C, {"kind": "vless-mlkem"})
+    out = pg_kinds.make(C, {"kind": "vless-mlkem", **ML}, confirm=True)
+    s = _ib(fake, out)["settings"]
+    assert s["decryption"] == ML["decryption"] and s["encryption"] == ML["encryption"]
+    with pytest.raises(ValueError, match="mlkem768x25519plus"):
+        pg_cores.build_inbound({"protocol": "vless", "network": "tcp", "security": "none", "port": 80, "decryption": "x", "encryption": "y"}, preview=True)
+    with pytest.raises(ValueError, match="mlkem768x25519plus"):
+        pg_cores.build_inbound({"protocol": "trojan", "network": "tcp", "security": "none", "port": 80, **ML}, preview=True)

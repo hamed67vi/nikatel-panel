@@ -882,13 +882,18 @@ def test_js_tehran_time_of_a_moment():
 def test_js_bar_chart_svg():
     svg = run_js("c => c.pgUsageBarsSvg([{label: '10-11', jalali: '1405/07/19', gb: 3}, {label: '10-12', jalali: '1405/07/20', gb: 12.345}, {label: '10-13', gb: 0}])")
     assert svg.startswith("<svg") and svg.endswith("</svg>") and svg.count('class="pg-usage-bar') == 2 and svg.count('class="pg-usage-bar top"') == 1 and svg.count("<title>") == 3
-    assert "10-12 · 1405/07/20: 12.35 GB" in svg and "max 12.35 GB" in svg and "script" not in svg
+    assert "10-12 · 1405/07/20: 12.35 GB" in svg and "script" not in svg
+    assert svg.count("pg-usage-gl") == 4 and svg.count("pg-usage-line") == 1 and all(f">{v}</text>" in svg for v in ("0", "5", "10", "15", "20"))      # a scale: 4 grid lines and the base, the top is the next 1 / 2 / 5 x 10^n (12.35 -> 20)
     empty = run_js("c => [c.pgUsageBarsSvg([]), c.pgUsageBarsSvg(null), c.pgUsageBarsSvg([{label: 'a', gb: 0}]), c.pgUsageBarsSvg([{label: 'a', gb: 'x'}])]")
-    assert "No data" in empty[0] and "No data" in empty[1] and "no traffic in this range" in empty[2] and "pg-usage-bar" not in empty[2] and "No data" in empty[3]
+    assert "No data" in empty[0] and "No data" in empty[1] and "No traffic in this range" in empty[2] and "pg-usage-bar" not in empty[2] and "No data" in empty[3]
     evil = run_js("c => c.pgUsageBarsSvg([{label: '<script>alert(1)</script>', jalali: '\"><img src=x>', gb: 1}])")
     assert "<script>" not in evil and "<img" not in evil and "&lt;script&gt;" in evil
     many = run_js("c => c.pgUsageBarsSvg(Array.from({length: 31}, (_, i) => ({label: String(i + 1), gb: i})))")
-    assert many.count("<title>") == 31 and many.count("<text") < 12                       # not a label on every bar
+    assert many.count("<title>") == 31 and many.count("<text") < 16                       # not a label on every bar (5 numbers of the scale and every 4th day)
+    nice = run_js("c => [0, -3, 0.3, 1, 1.2, 4.2, 12.345, 100, 760].map(v => c.pgUsageNice(v))")
+    assert nice == [1, 1, 0.5, 1, 2, 5, 20, 100, 1000]
+    whole = run_js("c => c.pgUsageBarsSvg([{label: 'a', gb: 1}, {label: 'b', gb: 3}], {int: true, axisText: v => String(Math.round(v))})")
+    assert all(f">{v}</text>" in whole for v in ("0", "1", "2", "3", "4"))                  # (counts of users: a whole-number scale, 0 to 4 at least)
 
 
 @needs_node

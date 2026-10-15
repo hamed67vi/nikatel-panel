@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.55.0 - The Usage dashboard, Add by pasting a link, the UI kit, menus in one column
+
+- **Usage is a dashboard (the owner: "very professional"):** ONE bar (the tabs, the range as buttons Today / 7 days / 30 days / this month / last month / Custom, the dates in both calendars, Refresh); a band of counters in two groups (users, with the colour of what needs a look; server, with meters that turn amber and red); then two columns - **Traffic** (total, average per day, busiest day, busiest node, a chart with a scale, the nodes with their share) and **Top users** (usage and limit in one column with a meter) | **Users over time**, **Subscription apps** and the **lookup** of an admin or a user (Admin | User buttons). The page scrolls; the old one-screen squeeze (empty areas, tiny charts) is gone.
+- **Add is simple (the owner):** ready kinds as chips grouped by family, one row for the few things you may change, the rest folded - and **paste a link** (vless:// trojan:// vmess:// ss://) of your own: the kind, port, path, Host, SNI and fingerprint are read from it and the form is filled; the keys and ids are made new.
+- **The UI kit (the owner's sheet):** `uikit.css`, loaded last, gives every button (primary, secondary, ghost, destructive), field, segmented control and menu ONE look; it sets colour, border, shadow and radius only, never a size, so no page moves. `docs/design/ui-kit.md` says it: everything new is built from these elements.
+- **Every menu that opens is the one-column grouped menu (the owner's picture):** the Users "More..." is now that menu (Overview-style groups, a line between them, the destructive item red) through `nkMenu(btn, items)`, the same opener the node rows use.
+- **A Panel tab with no panel connected keeps its boxes:** the bar and the table are drawn empty, with "Add a panel in General", instead of one line of text.
+- The "Add a server" window fits its box; the Core cards show the selected count (0/N) in the Select all row.
+## 1.54.6 - Six more kinds in Add (the owner's own links)
+
+- **Add has the other kinds of the owner's link list (17 in all):** VLESS TCP with the HTTP header (headerType=http, a path, a Host), VLESS xHTTP (plain, TLS, REALITY) with the three tuning settings his links carry, VLESS HTTPUpgrade over TLS, and VLESS Encryption (ML-KEM: the two strings of `xray vlessenc` are pasted - the panel cannot make those keys). The WebSocket, REALITY, Trojan and VMess kinds were there already. (This release also carries 1.54.5, the Core cards, which did not go out because of a quote error that the JS check caught.)
+
+## 1.54.5 - The Core tab is the cards of PasarGuard
+
+- **Configs → Core looks like the Core Configs page of PasarGuard (the owner):** the cores are cards (a green dot, the name, what is in it, a ⋮ to open) with a search, reload, Select all and a switch between cards and the table; the bar of chips (Cores 1 · Default Core Config · All cores…) is gone. Opening a card shows the editor with a ← Cores button to come back; one core is no longer opened at once.
+
 ## 1.54.4 - The first page asks the profile's name in its own card
 
 - **Add profile on a new panel asks the name in the same page (the owner):** the card turns into a name box (the name is also the tag) with Make the profile / Cancel; no window.
