@@ -647,7 +647,7 @@ const tunSev = t => { const d = t.detail || {}, loss = d.loss_pct || 0; if (t.st
 const srvBusy = s => { const b = (s.extra || {}).busy; return b && b.what && Date.now() / 1000 - b.at < 900 ? b : null; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
 /* a server added in the last hour is marked "new" (Nodes, and the server lists of Create tunnel / Tunnel test) */
-const isNew = s => s && s.created_at && Date.now() / 1000 - s.created_at < 3600;
+const isNew = s => s && s.created_at && Date.now() / 1000 - s.created_at < 900;      // "new" stays 15 minutes (the owner, 2026-10-15)
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };
 function srvModal(s) {   // while the edit form is open the header keeps only the name and the switch: the form has Save and Back
   const editing = state.edit === s.id, on = s.enabled !== false;

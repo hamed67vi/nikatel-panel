@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.18 - "new" goes after 15 minutes
+
+- The "new" pill of a server stays 15 minutes (it stayed an hour).
+
 ## 1.56.17 - The update card looks by itself
 
 - **No Check button (the owner):** the card looks for a new version by itself every minute. **An update that finishes is seen:** if the panel comes back as another version the bar runs to 100 % and the page reloads, whatever the log says (it used to stay on a few percent until the page was refreshed).
