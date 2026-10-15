@@ -218,3 +218,24 @@ html body #page .lab-tbl .lab-trf .ta { display: inline-flex; width: 12px; heigh
 html body #page .lab-tbl .lab-trf .ta.d { color: var(--ok); } html body #page .lab-tbl .lab-trf .ta.u { color: #ff7a8c; }
 /* 1.55.14 - the link of the update card: what changed in the new version */
 html body .ss-ht .about-notes { font-size: 12.5px; color: var(--acc-2); text-decoration: none; } html body .ss-ht .about-notes:hover { text-decoration: underline; }
+/* 1.55.15 - Add a server: a small window, three light sections (server / SSH login / install after), the button in the foot */
+html body #modal .lab-pfwin.lab-xwide { width: min(640px, 94vw); }
+html body #modal .srv-f3 { display: flex !important; flex-direction: column; gap: 18px; max-width: 100%; }
+html body #modal .srv-f3 .f3-sec { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+html body #modal .srv-f3 .f3-h { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); } html body #modal .srv-f3 .f3-h::after { content: ""; flex: 1; height: 1px; background: var(--line); order: 3; }
+html body #modal .srv-f3 .f3-h small { order: 2; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+html body #modal .srv-f3 .f3-g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } html body #modal .srv-f3 .f3-g3 { display: grid; grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1.6fr); gap: 10px; }
+html body #modal .srv-f3 label.f3 { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 11.5px; color: var(--mut); }
+html body #modal .srv-f3 label.f3 input:not([type=checkbox]), html body #modal .srv-f3 label.f3 select { width: 100%; height: 38px; min-width: 0; box-sizing: border-box; font-size: 13.5px; }
+html body #modal .srv-f3 .f3-where { display: flex; align-items: center; gap: 8px; min-height: 18px; margin-top: -4px; font-size: 11.5px; color: var(--mut); } html body #modal .srv-f3 .f3-where .srv-where { display: inline-flex; align-items: center; gap: 8px; }
+html body #modal .srv-f3 .f3-note { margin: -2px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--mut); }
+html body #modal .srv-f3 .f3-opts { display: flex; flex-wrap: wrap; gap: 10px 22px; padding: 2px 0; }
+html body #modal .srv-f3 .x-pg { display: flex; flex-direction: column; gap: 10px; margin: 0; } html body #modal .srv-f3 .x-pg.off { display: none; }
+html body #modal .srv-f3 .x-pg-auto { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid rgba(61,220,151,.32); border-radius: 12px; background: rgba(61,220,151,.07); font-size: 12.5px; line-height: 1.45; } html body #modal .srv-f3 .x-pg-auto i { flex: none; font-style: normal; font-weight: 700; color: var(--ok); }
+html body #modal .srv-f3 .x-pg-more > summary { margin: 0 0 8px; font-size: 12px; color: var(--mut); cursor: pointer; } html body #modal .srv-f3 .x-pg-more .x-pg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+html body #modal .srv-f3 .f3-foot { display: flex; align-items: center; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); } html body #modal .srv-f3 .f3-foot .sp { flex: 1; }
+@media (max-width: 560px) { html body #modal .srv-f3 .f3-g2, html body #modal .srv-f3 .f3-g3, html body #modal .srv-f3 .x-pg-more .x-pg-grid { grid-template-columns: minmax(0, 1fr); } }
+html body #modal .srv-f3 label.f3 { flex-wrap: nowrap; align-content: normal; align-items: stretch; }
+html body #modal .srv-f3 label.f3 > input, html body #modal .srv-f3 label.f3 > select { flex: 0 0 auto; }
+html body #modal .modal.keep:has(.srv-f3) { width: min(700px, 96vw); }
+html body #modal .lab-pfwin.lab-xwide { width: 100%; max-width: 640px; margin: 0 auto; }

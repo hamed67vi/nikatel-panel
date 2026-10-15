@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.55.15 - Add a server, designed again
+
+- **Add a server is a small window of three light sections (the owner):** Server (name, profile, host; where it is is found from the address), SSH login (user, port, password in one row) and Install after adding; the foot has the Checked toggle and the button.
+- **The PasarGuard node tick does everything by itself:** it says so in one line (Docker and the node over SSH, a random API key that is never shown, the certificate, added to your panel); the panel, node name, core and coefficient are folded under Options (the panel is shown only when there is more than one).
+
 ## 1.55.14 - The update card says the version and links to what changed
 
 - **About & update (the owner):** instead of the commit numbers and the long explanation, the card says **Version 1.55.14 is available** (or Up to date), with a link **What changed in v... on GitHub** that opens the release notes of that version. The panel reads the newest version tag of the repository for it.

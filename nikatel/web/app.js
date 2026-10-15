@@ -622,36 +622,28 @@ function eventsHtml(list, open) {
 
 /* ---- servers */
 window.NODE_CERT = "";   // the default Marzban certificate (Settings of the panel, loaded after sign-in)
-const SERVER_FORM = (s, role) => {   // one window, three boxes: the server, how the panel reaches it, what to install after; the foot has the button and the one-line help
-  const fl = (l, inner) => `<label class="kv2 kf bf"><span>${l}</span>${inner}</label>`;
-  return `<form class="frm srv-form2" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
-    <div class="sgrid two srv-two">
-      <div class="sbox"><h5><i>🖥</i>Server</h5>
-        ${fl("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" value="${esc(s ? s.name : ((state.prefill || {}).name || ""))}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)" oninput="pgSrvMirror(this.form)">`)}
-        ${!s && window.labTagInput ? fl("Tag", labTagInput()) : ""}
-        ${fl("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : ((state.prefill || {}).host || ""))}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
-        <label class="kv2 kf bf"><span>Where</span><input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></label>
-        <label class="kv2 kf bf"><span>Checked</span><span class="chkline"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> by the panel</span></label></div>
-      <div class="sbox"><h5><i>🔑</i>SSH access</h5>
-        ${fl("User", `<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}">`)}
-        ${fl("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}">`)}
-        ${fl("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to install the panel's key now" : "empty = the panel's key is already there"}" title="With a password the panel logs in once, installs its own key and forgets the password">`)}
-        <div class="bf-note mut">${s ? "A password here installs the panel's key now." : "With a password the panel logs in once, installs its key and forgets it."}</div></div>
-    </div>
+const SERVER_FORM = (s, role) => {   // one small window (1.55.15, the owner: "design this box again"): the server, the login, what to install after - in three light sections; the foot has the button
+  const f3 = (l, inner, cls = "") => `<label class="f3 ${cls}"><span>${l}</span>${inner}</label>`;
+  return `<form class="frm srv-form2 srv-f3" onsubmit="return saveServer(event, ${s ? s.id : "null"})">
+    <section class="f3-sec"><h5 class="f3-h">Server</h5>
+      <div class="f3-g2">${f3("Name", `<input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]*" value="${esc(s ? s.name : ((state.prefill || {}).name || ""))}" placeholder="ir7" title="Letters, digits . _ - (a name is never used twice)" oninput="pgSrvMirror(this.form)">`)}${!s && window.labTagInput ? f3("Profile", labTagInput()) : ""}</div>
+      ${f3("Host / IP", `<input name="host" required pattern="[A-Za-z0-9][A-Za-z0-9.\\-]*" value="${esc(s ? s.host : ((state.prefill || {}).host || ""))}" placeholder="203.0.113.10" onchange="srvWhere(this.form)" onblur="srvWhere(this.form)">`)}
+      <div class="f3-where">Where <input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></div></section>
+    <section class="f3-sec"><h5 class="f3-h">SSH login</h5>
+      <div class="f3-g3">${f3("User", `<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}">`)}${f3("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}">`)}${f3("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to install the panel's key now" : "empty = the panel's key is already there"}" title="With a password the panel logs in once, installs its own key and forgets the password">`)}</div>
+      <p class="f3-note">${s ? "A password here installs the panel's key now." : "With a password the panel logs in once, installs its key and forgets it. Without one, the panel's key must already be on the server (Settings shows it)."}</p></section>
     ${s ? `<input type="hidden" name="provider" value="${esc(s.provider)}">` : ""}
-    <div class="sbox srv-after"><h5><i>⚙</i>${s ? "Install after saving" : "Install after adding"}<small>optional · needs root · the server is ${s ? "saved" : "added"} first</small></h5>
-      <div class="srv-opts">
+    <section class="f3-sec srv-after"><h5 class="f3-h">${s ? "Install after saving" : "Install after adding"} <small>optional · needs root</small></h5>
+      <div class="f3-opts srv-opts">
         <label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>
         <label class="chk" title="Docker + the official Gozargah installer; ports 62050 / 62051"><input name="x_node" type="checkbox" onchange="srvNodeKind(this)"> Marzban node</label>
         ${window.pgSrvTick ? pgSrvTick() : ""}</div>
       <label class="x-cert off">Certificate of the Marzban panel <small>(Marzban → Nodes → Add node → the certificate to copy; paste all of it)</small><textarea name="x_cert" rows="4" disabled spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----">${esc(window.NODE_CERT || "")}</textarea></label>
       <label class="x-cert-save off"><input name="x_cert_save" disabled type="checkbox" ${window.NODE_CERT ? "" : "checked"}> remember this certificate as the default for the next servers</label>
-      ${window.pgSrvBox ? pgSrvBox() : ""}</div>
-    <div class="sbar bld-foot"><button class="pri" type="submit">${s ? "Save" : "Add server"}</button>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<span class="sp"></span>
-      <small class="mut">${s ? "Changing a server here only changes how the panel looks at it; a password or an install acts on the server itself." : "Without a password the panel's key must already be in the server's authorized_keys (Settings shows the key)."}</small></div>
+      ${window.pgSrvBox ? pgSrvBox() : ""}</section>
+    <div class="f3-foot"><label class="chk" title="The panel looks at this server every few minutes"><input name="enabled" type="checkbox" ${!s || s.enabled ? "checked" : ""}> Checked by the panel</label><span class="sp"></span>${s ? `<button type="button" onclick="state.edit = null; refresh()" title="Back to the details of the server without saving">← Back</button>` : ""}<button class="pri" type="submit">${s ? "Save" : "Add server"}</button></div>
   </form>`;
 };
-
 /* a server the panel cannot log in to: not online, and its last error is about the login (password / key), or it never answered */
 /* severity colours of the rows: red = fully down (or a server that cannot be reached / is critical), yellow = everything else that is wrong - packet loss of any size, degraded, slow, loaded */
 const srvSev = s => { if (!s.enabled) return ""; if (srvBusy(s)) return "sev-blue"; const f = s.facts || {}; if (s.online === false) return "sev-red"; return noLogin(s) || /^SSH does not answer/.test(s.last_error || "") || (f.cpu || 0) >= 80 || (f.ram || 0) >= 85 || (f.disk || 0) >= 85 || s.online == null ? "sev-yellow" : ""; };      // red = the server is cut (off); a server that is on but has a problem (a full disk, a high CPU, no login, SSH failing) is yellow
