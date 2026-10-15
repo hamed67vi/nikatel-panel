@@ -334,3 +334,22 @@ def test_a_node_deleted_in_pasarguard_goes_off_the_page_at_the_next_good_check(c
     assert [p["name"] for p in _profiles(client)] == ["n7"]
     panels.check_all()
     assert [p["name"] for p in _profiles(client)] == ["n7"]                                                      # and it does not come back
+
+def test_the_profile_of_a_connected_pasarguard_panel_cannot_be_renamed_or_deleted_while_the_panel_is_there(client):
+    """The owner, 2026-10-15: "while a PasarGuard panel is connected, its profile cannot be deleted or renamed"."""
+    pid = _panel()
+    r = client.post("/api/profiles", json={"kind": "node", "panel_id": pid, "node_ids": [7], "tag": "PasarGuard Nodes"})
+    assert r.status_code == 201
+
+    for name in ("PasarGuard%20Nodes", "pasarguard%20nodes"):
+        assert client.put(f"/api/profiles/tags/{name}", json={"tag": "Mine"}).status_code == 400
+        assert client.delete(f"/api/profiles/tags/{name}").status_code == 400
+
+    assert [p["tag"] for p in _profiles(client)] == ["PasarGuard Nodes"]
+    other = client.post("/api/profiles/tags", json={"tag": "Hetzner"})
+    assert other.status_code == 201 and client.put("/api/profiles/tags/Hetzner", json={"tag": "Backup"}).status_code == 200          # any other profile is free
+
+    with session() as db:
+        db.execute(Panel.__table__.delete())                                                                           # the panel is gone: the profile is a plain one again
+
+    assert client.put("/api/profiles/tags/PasarGuard%20Nodes", json={"tag": "Mine"}).status_code == 200

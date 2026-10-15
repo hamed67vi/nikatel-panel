@@ -61,7 +61,7 @@ function labServerRow(p) {
   const f = s.facts || {}, tone = labSrvTone(s), on = s.enabled, cc = s.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toLowerCase() : "";
   const q = [p.label, s.name, s.host, s.provider, s.role, s.country, f.hostname, ((s.extra || {}).geo || {}).provider, s.online === false ? "offline off down" : s.online ? "online up" : ""].filter(Boolean).join(" ").toLowerCase();
   /* the card of a row and its icons are the ones of the old Servers list (srv-tbl: the flag over the name, the server with its two lights); what is IN the columns is the new design */
-  return `<tr class="${labTrCls(tone, on, s.online)} clk" data-id="${p.id}" data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
+  return `<tr class="${labTrCls(tone, on, s.online)} clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
     <td class="name ${cc ? "has-flag" : ""}" ${cc ? `style="--flag:url(/flags/${cc}.png)" title="${cc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="${!on ? "disabled" : s.online ? "online" : s.online === false ? "offline" : "not checked yet"}">${SRV_IC}</i><div class="lab-nm"><b>${esc(s.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</b>${s.provider ? `<small title="${esc(s.provider)}">${esc(s.provider)}</small>` : ""}</div></div></td>
     <td class="lab-serves">${labServes(s)}</td>
     <td class="lab-ip mono" title="${esc(s.host)}">${esc(s.host)}</td>
@@ -77,7 +77,7 @@ function labNodeRowHtml(p) {
   const stTxt = p.missing || !I.r ? "Gone from the panel" : ({connected: "Connected", connecting: "Connecting", disabled: "Disabled", error: "Error"})[I.st] || (I.st ? I.st[0].toUpperCase() + I.st.slice(1) : "Unknown");
   const ncc = srv ? (srv.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(srv.country || "") ? srv.country.toLowerCase() : "") : "";      // (the location of the server it runs on, as on the old cards: the flag - in every profile)
   const q = ["pasarguard node", p.name, p.address, p.panel, I.st, srv && srv.name].filter(Boolean).join(" ").toLowerCase();
-  return `<tr class="${labTrCls(I.tone, I.tone !== "off", I.tone === "ok" ? true : I.tone === "bad" ? false : null)} clk" data-id="${p.id}" data-q="${esc(q)}" onclick="labOpen(${p.id})" title="Click for the node">
+  return `<tr class="${labTrCls(I.tone, I.tone !== "off", I.tone === "ok" ? true : I.tone === "bad" ? false : null)} clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="Click for the node">
     <td class="name ${ncc ? "has-flag" : ""}" ${ncc ? `style="--flag:url(/flags/${ncc}.png)" title="${ncc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="PasarGuard node">${labLogo("PasarGuard")}</i><div class="lab-nm"><b>${esc(p.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}</b>${ver ? `<small>${esc(ver.replace(/^ · /, ""))}</small>` : ""}</div></div></td>
     <td class="lab-serves"><span class="mchip ${I.tone === "ok" ? "ok" : I.tone === "bad" ? "bad" : ""}" onclick="event.stopPropagation();pgSrvOpenPanel(${p.panel_id}, 1)" title="The panel ${esc(p.panel)}: click to open it">${esc(p.panel)}</span>${srv ? `<span class="mchip" title="It runs on the server ${esc(srv.name)}">on ${esc(srv.name)}</span>` : ""}</td>
     <td class="lab-ip mono" title="${esc(I.msg || stTxt)}">${esc(addr) || "—"}</td>
@@ -85,7 +85,7 @@ function labNodeRowHtml(p) {
     <td class="lab-trf">${live && live.rx != null ? `<span class="trf"><i class="ta d">↓</i>${labMbps(live.rx)}</span><span class="trf"><i class="ta u">↑</i>${labMbps(live.tx)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 }
-const labGoneRow = p => `<tr class="down sev-red clk" data-id="${p.id}" data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
+const labGoneRow = p => `<tr class="down sev-red clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 const labRowOf = p => p.kind === "node" ? labNodeRowHtml(p) : labServerRow(p);
 
 /* ---------------------------------------------------------------- the page */
@@ -111,14 +111,19 @@ function labFirst() {      // no profile yet: nothing else works until one is ma
   return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a profile</h2>
     <p>A profile is a group of servers under one name - for example Iran, Marzban or Hetzner. Make one, then add its servers inside it.</p><div class="lab-pf-act"><button class="pri" onclick="labNewProfile()">＋ Add profile</button></div></div></div>`;
 }
-window.labNewProfile = () => {      // "Add profile": on the first page the card itself asks the name of the profile (its tag) - in the same page (the owner, 2026-10-15); later a box; it opens the profile, and the servers are added inside it
-  const card = document.querySelector(".lab-first-card");
-  if (card) { card.innerHTML = `<div class="lab-first-ic">${SI.server}</div><h2>Name of the new profile</h2><p>It is also its tag: the servers you add inside it are listed under this name.</p>
-    <form class="lab-first-form" onsubmit="return labNewProfileGo(event)" autocomplete="off"><input name="name" maxlength="40" placeholder="Iran" required autofocus><div class="lab-pf-act"><button class="pri" type="submit">Make the profile</button><button type="button" onclick="refresh()">Cancel</button></div></form>`; const i = card.querySelector("input"); if (i) i.focus(); return; }
-  showModal("<b>＋ Add profile</b>", `<form class="frm one" onsubmit="return labNewProfileGo(event)" autocomplete="off"><label>Name <small>also its tag: the servers inside are listed under it</small><input name="name" maxlength="40" placeholder="Iran" required autofocus></label>
-    <div class="frm-act"><button class="pri" type="submit">Add profile</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`);
+const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard", "Hetzner", "Backup"];      // the tags that are offered when a profile is named (the ones that exist already are left out)
+window.labNpFill = b => { const i = b.closest("form") && b.closest("form").querySelector("input[name=name]"); if (i) { i.value = b.dataset.t; i.focus(); } };
+const labNpForm = inCard => {      // the name of a new profile: a big field and the suggested tags under it, one click fills it
+  const have = new Set(labTags().map(t => t.toLowerCase())), chips = LAB_SUGGEST.filter(t => !have.has(t.toLowerCase())).map(t => `<button type="button" class="lab-np-chip" data-t="${esc(t)}" onclick="labNpFill(this)">${labLogo(t)}${esc(t)}</button>`).join("");
+  return `<form class="lab-first-form lab-np" onsubmit="return labNewProfileGo(event)" autocomplete="off"><label class="lab-np-l">Name <small>also its tag: the servers you add inside are listed under it</small></label><input name="name" class="lab-np-in" maxlength="40" placeholder="Iran" required autofocus>
+    ${chips ? `<div class="lab-np-sug"><small>Suggested</small><div class="lab-np-chips">${chips}</div></div>` : ""}<div class="lab-pf-act"><button class="pri" type="submit">Add profile</button><button type="button" onclick="${inCard ? "refresh()" : "closeModal()"}">Cancel</button></div></form>`;
 };
-window.labNewProfileGo = async ev => {
+window.labNewProfile = () => {      // "Add profile": on the first page the card itself asks the name of the profile (its tag) - in the same page (the owner, 2026-10-15); later a small box; it opens the profile, and the servers are added inside it
+  const card = document.querySelector(".lab-first-card");
+  if (card) { card.innerHTML = `<div class="lab-first-ic">${SI.server}</div><h2>Name of the new profile</h2>${labNpForm(true)}`; const i = card.querySelector("input"); if (i) i.focus(); return; }
+  showModal("<b>＋ Add profile</b>", labNpForm(false), "narrow");
+  const i = document.querySelector("#modal input[name=name]"); if (i) i.focus();
+};window.labNewProfileGo = async ev => {
   ev.preventDefault(); const name = new FormData(ev.target).get("name");
   try { const r = await api("/api/profiles/tags", {method: "POST", body: JSON.stringify({tag: name})}); LAB.kind = r.tag; localStorage.setItem("nk.lab.k", r.tag); labTagDraft.v = r.tag; closeModal(); toast("✓ Profile " + r.tag + " made: add its servers inside it", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
   return false;
@@ -131,14 +136,18 @@ window.labAddTag = async () => {      // the "+" beside the tabs: a new profile 
 };
 window.labRenameTag = async () => {      // ✎ beside the tabs: the profile (category) that is open gets another name; its servers follow
   const cur = labKindNow(); if (cur === "any") return;
+  if (labTagLocked(cur)) { toast("✕ " + LAB_LOCKED_TIP, "bad"); return; }
   const v = await gprompt(`New name of the profile ${cur}:`, cur); if (v == null || !String(v).trim() || String(v).trim() === cur) return;
   try { const r = await api(`/api/profiles/tags/${encodeURIComponent(cur)}`, {method: "PUT", body: JSON.stringify({tag: v})}); LAB.kind = r.tag; localStorage.setItem("nk.lab.k", r.tag); toast("✓ Renamed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.labDeleteTag = async () => {      // 🗑 beside the tabs: the profile (category) goes; its servers go to Any and nothing is done to them
   const cur = labKindNow(); if (cur === "any") return;
+  if (labTagLocked(cur)) { toast("✕ " + LAB_LOCKED_TIP, "bad"); return; }
   if (!await gconfirm(`Delete the profile ${cur}? Its servers stay on the page, under Any; nothing is done to them.`, {danger: true})) return;
   try { await api(`/api/profiles/tags/${encodeURIComponent(cur)}`, {method: "DELETE"}); LAB.kind = "any"; localStorage.setItem("nk.lab.k", "any"); toast("✓ Deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
+const labTagLocked = t => labHasPg() && String(t).toLowerCase() === "pasarguard nodes";      // the profile of the nodes of a connected PasarGuard panel: it cannot be renamed or deleted while the panel is connected (the owner, 2026-10-15)
+const LAB_LOCKED_TIP = "A PasarGuard panel is connected: this profile stays as it is";
 const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : [];      // (none from the start: the menu is only "+ Add profile" until a profile is made)
 const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind).toLowerCase()) || "any";
 function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }function labListInner(shown) {
@@ -156,7 +165,7 @@ function labPage() {
   const chip = (cls, id, ic, lab, val, tip) => `<span class="lab-chip ${cls} c-${id}" data-ic="${ic}" title="${esc(tip)}"><span>${lab}</span><b>${val}</b></span>`;
   const cnt = k => k === "any" ? all.length : all.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()).length;
   const IB = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;      // (the buttons beside the tabs are icons, like the rest of the panel)
-  const cur = labKindNow(), tabs = `<span class="lab-ksw"><div class="tabs lab-kinds">${["any", ...labTags()].map(k => `<button class="${cur === k ? "on" : ""}" data-k="${esc(k)}" onclick="labKind(this.dataset.k)">${k === "any" ? "" : labLogo(k)}${k === "any" ? "All" : esc(k)}<i class="cnt">${cnt(k)}</i></button>`).join("")}</div><span class="lab-tabact"><button class="lab-ib" onclick="labAddTag()" title="Add a profile: a new category" aria-label="Add a profile">${IB('<path d="M12 5v14M5 12h14"/>')}</button>${cur === "any" ? "" : `<button class="lab-ib" onclick="labRenameTag()" title="Rename the profile ${esc(cur)}" aria-label="Rename the profile">${IB('<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>')}</button><button class="lab-ib danger" onclick="labDeleteTag()" title="Delete the profile ${esc(cur)}" aria-label="Delete the profile">${IB('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')}</button>`}</span></span>`;
+  const cur = labKindNow(), tabs = `<span class="lab-ksw"><div class="tabs lab-kinds">${["any", ...labTags()].map(k => `<button class="${cur === k ? "on" : ""}" data-k="${esc(k)}" onclick="labKind(this.dataset.k)" ondragover="labDropOver(event)" ondragleave="labDropLeave(event)" ondrop="labDrop(event, this.dataset.k)" title="${k === "any" ? "Drop a row here to take it out of its profile" : "Drop a row here to move it to " + esc(k)}">${k === "any" ? "" : labLogo(k)}${k === "any" ? "All" : esc(k)}<i class="cnt">${cnt(k)}</i></button>`).join("")}</div><span class="lab-tabact"><button class="lab-ib" onclick="labAddTag()" title="Add a profile: a new category" aria-label="Add a profile">${IB('<path d="M12 5v14M5 12h14"/>')}</button>${cur === "any" ? "" : `<button class="lab-ib" onclick="labRenameTag()" ${labTagLocked(cur) ? "disabled" : ""} title="${labTagLocked(cur) ? LAB_LOCKED_TIP : "Rename the profile " + esc(cur)}" aria-label="Rename the profile">${IB('<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>')}</button><button class="lab-ib danger" onclick="labDeleteTag()" ${labTagLocked(cur) ? "disabled" : ""} title="${labTagLocked(cur) ? LAB_LOCKED_TIP : "Delete the profile " + esc(cur)}" aria-label="Delete the profile">${IB('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')}</button>`}</span></span>`;
   /* ONE row (the owner: "fit everything in one row", "take responsiveness into account"): the tabs, what the page says in small chips, the search and the buttons; as the box narrows the chips go one by one
      (CPU, Tunnels), then lose their words, then go; the buttons keep their icons only; nothing wraps (lab.css) */
   return `<div class="lab-root"><div class="lab-bar">${tabs}<span class="lab-stats">${chip(up + nUp < live.length + nLive.length ? "bad" : "ok", "on", "●", "Online", `${up + nUp}/${live.length + nLive.length}`, "Servers that answer and nodes that are connected, of those that are switched on")}${chip(bad ? "bad" : warn ? "warn" : "ok", "pb", "!", "Problems", bad + warn, "Profiles with something wrong (red: cut or critical, yellow: watch)")}${srvs.length ? chip(tdown ? "bad" : "ok", "tun", "⇄", "Tunnels", `${tuns.length - tdown}/${tuns.length}`, "Tunnels that touch these servers: up / all") : ""}${srvs.length ? chip((cpu ?? 0) >= 80 ? "bad" : (cpu ?? 0) >= 60 ? "warn" : "ok", "cpu", "◔", "CPU", cpu == null ? "—" : cpu + "%", "Average CPU of the servers that answer") : ""}</span><span class="lab-sp"></span>${searchSeg()}<button class="pri sm lab-add" onclick="labAdd()" title="Add a server: a name, a tag and its address" aria-label="Add server"><span class="lab-ic">＋</span><span class="lab-lb">Add server</span></button><button class="sm lab-chk" onclick="labCheck()" title="Look at every profile on the page now (one SSH look at each server, one question to each panel)" aria-label="Check"><span class="lab-ic">✓</span><span class="lab-lb">Check</span></button></div>
@@ -193,12 +202,28 @@ window.labAdd = (fill) => {      // the box is the one the Servers page always h
   try { const w = await api("/api/servers/where?host=" + encodeURIComponent(fill.host)); if (w.role === "iran") fill.tag = "Iran"; } catch (e) { /* no geo answer: abroad is the usual place of a node; the Tag field can be changed */ }
   LAB.pending = fill; if (labOn()) refresh(); else go("nodes", "lab");
 };
-window.labSetTag = async id => {      // ⋯ → Change tag…
+/* move a server (or a node) to ANOTHER profile (the owner, 2026-10-15: "a way to move a server to any profile we like"): ⋯ → Move to profile… (one click on the profile), or drag the row onto a tab */
+window.labMoveTo = async (id, tag) => {
   const p = LAB.profiles.find(x => x.id === id); if (!p) return;
-  const v = await gprompt(`Tag of ${p.name} (empty = Any). Iran, Foreign, PasarGuard, Marzban or a name of your own:`, p.tag || ""); if (v == null) return;
-  try { await api(`/api/profiles/${id}/tag`, {method: "PUT", body: JSON.stringify({tag: v})}); toast("✓ Tag changed", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  if (String(p.tag || "").toLowerCase() === String(tag || "").toLowerCase()) { closeModal(); return; }
+  try { await api(`/api/profiles/${id}/tag`, {method: "PUT", body: JSON.stringify({tag})}); closeModal(); toast(`✓ ${p.name} moved to ${tag || "Any"}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-window.labPickFilter = v => { document.querySelectorAll(".lab-pick-row").forEach(r => r.classList.toggle("q-hide", !nkHit(r.dataset.q, v))); labPickCount(); };
+window.labSetTag = id => {      // ⋯ → Move to profile…
+  const p = LAB.profiles.find(x => x.id === id); if (!p) return;
+  const cur = String(p.tag || "").toLowerCase(), item = (t, label) => { const on = t.toLowerCase() === cur; return `<button type="button" class="lab-mv ${on ? "on" : ""}" data-t="${esc(t)}" onclick="labMoveTo(${id}, this.dataset.t)" ${on ? "disabled" : ""}>${labLogo(t)}<span>${esc(label)}</span>${on ? "<i>here</i>" : ""}</button>`; };
+  showModal(`<b>Move ${esc(p.name)} to a profile</b>`, `<div class="lab-mv-list">${labTags().map(t => item(t, t)).join("")}${item("", "Any (no profile)")}<button type="button" class="lab-mv new" onclick="labMoveNew(${id})"><span>＋ New profile…</span></button></div>`);
+};
+window.labMoveNew = async id => {
+  const v = await gprompt("Name of the new profile:", ""); if (v == null || !String(v).trim()) return;
+  try { const r = await api("/api/profiles/tags", {method: "POST", body: JSON.stringify({tag: v})}); await labMoveTo(id, r.tag); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+let labDragId = null;      // the row that is being dragged (a drop on a tab moves it to that profile)
+const labDragAttrs = id => `draggable="true" ondragstart="labDragStart(event, ${id})" ondragend="labDragEnd()"`;
+window.labDragStart = (ev, id) => { labDragId = id; ev.dataTransfer.effectAllowed = "move"; try { ev.dataTransfer.setData("text/plain", String(id)); } catch (e) { /* the id is kept in labDragId */ } document.body.classList.add("lab-dragging"); };
+window.labDragEnd = () => { labDragId = null; document.body.classList.remove("lab-dragging"); document.querySelectorAll(".lab-kinds .drop").forEach(b => b.classList.remove("drop")); };
+window.labDropOver = ev => { if (labDragId == null) return; ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; ev.currentTarget.classList.add("drop"); };
+window.labDropLeave = ev => ev.currentTarget.classList.remove("drop");
+window.labDrop = (ev, k) => { ev.preventDefault(); const id = labDragId; labDragEnd(); if (id != null) labMoveTo(id, k === "any" ? "" : k); };window.labPickFilter = v => { document.querySelectorAll(".lab-pick-row").forEach(r => r.classList.toggle("q-hide", !nkHit(r.dataset.q, v))); labPickCount(); };
 window.labPickCount = () => {
   const n = document.querySelectorAll(".lab-pick-row input:checked").length, b = $("#lab-pick-go"), all = document.querySelector(".lab-all input"), open = [...document.querySelectorAll(".lab-pick-row:not(.q-hide):not(.off) input:not(:disabled)")];
   if (b) { b.disabled = !n; b.textContent = n ? `Add ${n} ${b.dataset.noun || "server"}${n === 1 ? "" : "s"}` : "Add"; }
@@ -401,7 +426,7 @@ const labSvg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${LAB_P[k] || "
 function labServerItems(p, s, ctx) {      // one column, an icon before each item, a line between the groups (the owner: every menu like the node's)
   const off = s.online === false && s.enabled !== false, nm = s.name, f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, tip = off ? "The server is off or does not answer" : "";
   const gone = p ? labIt("Off the page", "exit", () => labRemove(p.id)) : labIt("Put on the page", "plus", () => labAdopt(s.id)), del = labIt("Delete server…", "trash", () => deleteServer(s.id, nm), {danger: true});
-  if (ctx === "row") return [labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Change tag…", "tag", () => labSetTag(p.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
+  if (ctx === "row") return [labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Move to profile…", "tag", () => labSetTag(p.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
     labSep, gone, labSep, del];
   return [labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)),
     labSep, labIt("Connect SSH…", "key", () => srvConnect(s.id, nm)), labIt("Change SSH password…", "lock", () => srvPassword(s.id, nm)), labIt("Forget host key…", "forget", () => forgetKey(s.id, nm)), labIt("Open in an SSH program…", "ext", async () => { const v = await glassChoice(`Open ${nm} in:`, [{label: "Windows ssh", v: "ssh", note: "a .bat with your own key"}, {label: "PuTTY", v: "putty"}, {label: "MobaXterm", v: "mobaxterm"}]); if (v) srvOpen(s.id, v); }),
@@ -412,7 +437,7 @@ function labServerItems(p, s, ctx) {      // one column, an icon before each ite
 function labNodeItems(cur, p, ctx) {      // everything the Node view could do with its eight buttons, as items; `p` = the profile (a node profile), null in the Node section of a server
   const pid = cur.panel_id, id = cur.node_id, c = typeof pgNodesC !== "undefined" ? pgNodesC[pid] : null, d = c && c.data ? (c.data.nodes || []).find(n => n.id === id) : null, off = d && d.status === "disabled";
   const act = v => async () => { try { await pgNodesLoad(pid); } catch (e) { toast("✕ " + e.message, "bad"); return; } pgNodesGo(pid, id, v); };      // (the panel is read first when it was not: the node must be known to it)
-  const head = ctx === "row" && p ? [labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Change tag…", "tag", () => labSetTag(p.id)), labSep] : [];      // (a row: what is about the profile first, then the same menu as the node window - the owner, 2026-10-15: "like this one, in one column with groups")
+  const head = ctx === "row" && p ? [labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Move to profile…", "tag", () => labSetTag(p.id)), labSep] : [];      // (a row: what is about the profile first, then the same menu as the node window - the owner, 2026-10-15: "like this one, in one column with groups")
   const I = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, it = (t, d, fn, o) => labItem(t, fn, {ic: I(d), ...o});      // (the menu of a node: one column, an icon before each item, a line between the groups - the owner's picture)
   const look = [it("Log", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 12h5M9.5 15.5h5"/>', act("logs")), it("Usage", '<path d="M6 20V11M12 20V4M18 20v-7"/>', act("usage")), it("Resources", '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>', act("stats")), it("Latency", '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', act("latency")), it("Certificate…", '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>', act("cert")), labSep];
   const change = [it("Edit…", '<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>', act("edit")), it("Restart…", '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>', act("reconnect")), it(off ? "Enable…" : "Disable…", '<path d="M12 3v8M7 6.5a8 8 0 1010 0"/>', act(off ? "enable" : "disable")),

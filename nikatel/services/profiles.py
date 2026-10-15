@@ -198,9 +198,20 @@ def add_tag(tag) -> str:
     return t
 
 
+def _locked(db: Session, tag: str) -> bool:
+    """The profile of the nodes of a PasarGuard panel (PasarGuard Nodes) stays as it is while a PasarGuard panel is connected (the owner, 2026-10-15)."""
+    return tag.lower() == NODE_TAG.lower() and db.scalar(select(Panel.id).where(Panel.type == "pasarguard").limit(1)) is not None
+
+
+LOCKED_MSG = "A PasarGuard panel is connected: the profile PasarGuard Nodes stays as it is (it cannot be renamed or deleted)"
+
+
 def rename_tag(db: Session, old, new) -> str:
     """Rename a category: the profiles that carry it follow. Returns the new name."""
     o, n = check_tag(old), check_tag(new)
+
+    if _locked(db, o):
+        raise ValueError(LOCKED_MSG)
 
     if not o or not n:
         raise ValueError("give the profile a name")
@@ -229,6 +240,9 @@ def delete_tag(db: Session, tag) -> int:
 
     if not t:
         raise ValueError("Any cannot be deleted")
+
+    if _locked(db, t):
+        raise ValueError(LOCKED_MSG)
 
     settings.put("lab", {"tags": [x for x in _base() if x.lower() != t.lower()]})
     n = 0

@@ -184,3 +184,19 @@ html body #page .lab-tabact .lab-ib:hover { background: rgba(255,255,255,.16); }
 html body #modal .srv-form2 { max-width: 100%; overflow-x: hidden; } html body #modal .srv-form2 .srv-two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important; }
 html body #modal .srv-form2 .sbox, html body #modal .srv-form2 .kv2, html body #modal .srv-form2 .bf { min-width: 0; } html body #modal .srv-form2 .bf-note, html body #modal .srv-form2 .bld-foot small, html body #modal .srv-form2 .srv-after small { white-space: normal; overflow-wrap: anywhere; }
 html body #modal .srv-form2 .srv-opts { flex-wrap: wrap; row-gap: 8px; } html body #modal .srv-form2 .bld-foot { flex-wrap: wrap; }
+
+/* 1.55.4 - move a server to another profile: the list in the window of "Move to profile…", and the tab a row is dragged over */
+html body #modal .lab-mv-list { display: flex; flex-direction: column; gap: 6px; min-width: 260px; }
+html body #modal .lab-mv { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 12px; text-align: left; border-radius: 10px; font-size: 13px; } html body #modal .lab-mv > span { flex: 1; } html body #modal .lab-mv i { font-style: normal; font-size: 11px; color: var(--mut); }
+html body #modal .lab-mv.on { border-color: rgba(120,170,255,.45); background: rgba(77,163,255,.16); } html body #modal .lab-mv.new { justify-content: center; border-style: dashed; color: var(--acc-2); }
+html body #page .lab-tbl tbody tr[draggable="true"] { cursor: grab; } html body.lab-dragging #page .lab-tbl tbody tr { cursor: grabbing; }
+html body.lab-dragging #page .lab-kinds button { outline: 1px dashed rgba(120,170,255,.55); outline-offset: -2px; }
+html body #page .lab-kinds button.drop { outline: 2px solid var(--acc); outline-offset: -2px; background: rgba(77,163,255,.28); color: #fff; }
+/* 1.55.5 - the Add profile box: a small card, a big field, the suggested tags as chips */
+html body .lab-np { display: flex; flex-direction: column; gap: 10px; min-width: 0; text-align: left; }
+html body .lab-np .lab-np-l { font-size: 13px; font-weight: 650; color: var(--text); } html body .lab-np .lab-np-l small { margin-left: 6px; font-size: 11.5px; font-weight: 400; color: var(--mut); }
+html body .lab-np .lab-np-in { width: 100%; height: 44px; padding: 0 14px; font-size: 15px; border-radius: 12px; }
+html body .lab-np .lab-np-sug { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } html body .lab-np .lab-np-sug > small { font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--mut); }
+html body .lab-np .lab-np-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+html body .lab-np .lab-np-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; } html body .lab-np .lab-np-chip .lab-logo { width: 14px; height: 14px; }
+html body .lab-np .lab-pf-act { display: flex; gap: 8px; margin-top: 4px; }

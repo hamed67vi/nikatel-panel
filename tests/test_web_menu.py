@@ -124,7 +124,7 @@ def test_a_profile_is_added_in_one_box_with_no_tabs_that_asks_its_name_and_its_t
     assert '["Iran", "Foreign", ...labTags()]' in lab          # Iran and Foreign are suggested, then every tag there is
     assert 'onchange="labTagPick(this.value)"' in lab and 'window.labTagPick = v => { labTagDraft.v = v; if (String(v).trim().toLowerCase().startsWith("pasarguard")) labAddNode(); };' in lab          # the tag PasarGuard brings the node's settings
     assert "const labRoleOf = " in lab and "labRoleOf(f.get(\"tag\"))" in (WEB / "app.js").read_text(encoding="utf-8") and "tag: String(f.get(\"tag\")" in (WEB / "app.js").read_text(encoding="utf-8")          # the tags Iran / Foreign say where a new server is; the tag goes to the API
-    assert "window.labSetTag = " in lab and 'Change tag…' in lab and '`/api/profiles/${id}/tag`' in lab          # a tag can be changed from the ⋯ menu
+    assert "window.labSetTag = " in lab and 'Move to profile…' in lab and '`/api/profiles/${id}/tag`' in lab          # a tag can be changed from the ⋯ menu
 
 
 def test_the_pasarguard_node_settings_need_a_connected_pasarguard_panel_and_a_click_says_why():
@@ -299,7 +299,7 @@ def test_the_menu_of_a_node_row_is_the_menu_of_the_node_window_in_one_column_wit
     """The owner, 2026-10-15: "make this one like the other: in one column with groups" - the row of a node had a short menu without icons."""
     lab = _web("lab.js").split("function labNodeItems(", 1)[1].split("/* a section is drawn", 1)[0]
     assert 'ctx === "row" ? labItem(' not in lab and "ctx === \"row\" ? []" not in lab                                  # no short row version of any item any more
-    assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labIt("Change tag…", "tag"' in lab      # (a row: the profile's own items first, with icons)
+    assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labIt("Move to profile…", "tag"' in lab      # (a row: the profile's own items first, with icons)
     for item in ("Log", "Usage", "Resources", "Latency", "Certificate…", "Edit…", "Restart…", "Resync users…", "Reset counters…", "Update the node…", "Update Xray…", "Update geo files…", "Off the page", "Delete the node…"):
         assert f'it("{item}"' in lab or 'it(off ? "Enable…" : "Disable…"' in lab, item
 
@@ -366,3 +366,21 @@ def test_the_usage_tab_is_a_dashboard_of_two_columns_with_a_scale_on_its_chart()
     assert "pgUsageFit" not in js                                              # (no fixed one-screen height any more: the page scrolls, the cards keep their own height)
     assert ".main:has(.pg-usage) { overflow-y: auto; }" in css and ".pg-usage-grid {" in css and ".pg-useg button.on {" in css
     assert js.count('class="pg-usage-grid"') == 1                              # (the class of the columns is not the class of a grid line of the SVG)
+
+def test_a_server_or_node_can_be_moved_to_any_profile_from_the_menu_or_by_dragging_its_row_onto_a_tab():
+    """The owner, 2026-10-15: "a way to move a server to any profile we like"."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert 'labIt("Change tag…"' not in lab and lab.count('labIt("Move to profile…", "tag", () => labSetTag(p.id))') == 2             # (the row menu and the head of the node window)
+    assert "window.labMoveTo = async (id, tag) =>" in lab and "/api/profiles/${id}/tag" in lab and 'class="lab-mv new" onclick="labMoveNew(${id})"' in lab
+    assert lab.count("${labDragAttrs(p.id)}") == 3                                                      # (a server row, a node row, a row of what is gone)
+    assert 'ondragover="labDropOver(event)"' in lab and 'ondrop="labDrop(event, this.dataset.k)"' in lab and 'labMoveTo(id, k === "any" ? "" : k)' in lab
+    assert ".lab-mv-list {" in css and ".lab-kinds button.drop {" in css
+
+def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarguard_profile_is_locked():
+    """The owner, 2026-10-15: "make this box prettier, show the suggested tags" and "the PasarGuard profile cannot be deleted or renamed while its panel is connected"."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert 'const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard", "Hetzner", "Backup"]' in lab and "window.labNpFill = b =>" in lab and 'class="lab-np-chip"' in lab
+    assert 'showModal("<b>＋ Add profile</b>", labNpForm(false), "narrow")' in lab                                       # (a small box, not the wide one)
+    assert ".lab-np .lab-np-in {" in css and ".lab-np .lab-np-chip {" in css
+    assert 'const labTagLocked = t => labHasPg() && String(t).toLowerCase() === "pasarguard nodes"' in lab and lab.count("if (labTagLocked(cur)) {") == 2
+    assert lab.count('${labTagLocked(cur) ? "disabled" : ""}') == 2                                                      # (the two buttons beside the tabs are off)

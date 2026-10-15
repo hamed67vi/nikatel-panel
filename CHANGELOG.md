@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.55.5 - A prettier Add profile box, suggested tags, the PasarGuard profile stays
+
+- **The Add profile box** is a small card (it was as wide as the window): a big field and the **suggested tags** under it (Iran, Foreign, Marzban, PasarGuard, Hetzner, Backup - the ones that exist are left out); one click fills the name. The first page uses the same form.
+- **The profile of a connected PasarGuard panel (PasarGuard Nodes) cannot be renamed or deleted** while a PasarGuard panel is connected (the owner): the two buttons beside the tabs are off with a tip, and the server refuses it too. Once the panel is removed it is a plain profile again.
+
+## 1.55.4 - Move a server to any profile
+
+- **A server or a node can be moved to another profile (the owner):** ⋯ → **Move to profile…** opens a list of the profiles - one click moves it (the one it is in says "here"; Any takes it out of its profile; **+ New profile…** makes one and moves it there) - or **drag the row onto a tab** of the list. It replaces "Change tag…", where the name had to be typed. Nothing is done to the server or the node itself.
+
 ## 1.55.3 - A node deleted in PasarGuard goes off the Lab page too
 
 - **The Lab follows the node list of the PasarGuard panel both ways (the owner: he deleted the node in PasarGuard and the row stayed as "node 1"):** at the next good check (30 s) the profile of a node the panel no longer has is taken off the page, with an event; a check that could not read the node list removes nothing.
