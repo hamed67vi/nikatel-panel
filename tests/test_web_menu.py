@@ -439,7 +439,7 @@ def test_fixed_boxes_names_only_buttons_disabled_without_items_and_the_server_ic
     assert "function fxFit()" in app and 'class="lbox full fx-box dns-box"' in app and 'class="card ap-tasks fx-box"' in app
     assert '!accounts.length ? "accounts"' in app and '!accounts.length && k !== "accounts" ? \'disabled title="Add an account first"\'' in app
     assert "html body #page .fx-box { height: calc(100vh - 290px)" in css and ".toolbar.is-empty :is(.tf-tabs, .tb-search)" in css and ".toolbar.joined .tf-tabs { align-self: center" in css
-    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".srv-ic::before { content: \"\"; position: absolute; top: -1px;" in css and 'tr[data-lamp="warn"] { --lamp: #ffc44d' in css
+    assert "color: var(--text) !important" in css and "img.lab-logo { filter: grayscale(1)" in css and ".lab-lamp { display: block; width: 14px; height: 14px; border-radius: 50%;" in css and 'tr[data-lamp="warn"] { --lamp: #ffc44d' in css
     assert ".lab-cpu .bar { flex: 0 1 96px" in css and "linear-gradient(90deg, #0a62ff, #4aa8ff)" in css
 
 
@@ -447,8 +447,8 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th>Name</th><th data-prio="1">IP</th><th data-prio="3">Profile</th>' in lab
-    assert lab.count('<td class="lab-prof">${labTagChip(p.tag)}</td>') == 2 and "lab-tagp" not in lab
+    assert '<th></th><th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="2">Load</th>' in lab
+    assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
 
@@ -474,4 +474,13 @@ def test_move_to_profile_is_a_flyout_and_a_plain_server_can_be_made_a_pasarguard
     assert "const labMoveItems = id =>" in lab and 'labItem("＋ New profile…", () => labMoveNew(id))' in lab and "on: t.toLowerCase() === cur" in lab
     assert 'labIt("Make a PasarGuard node…", "box", () => labMakeNode(p.id)' in lab and "window.labMakeNode = async id =>" in lab and "labCanMakeNode(s)" in lab and "await pgSrvMake(s.id, s.name," in lab
     assert ".lab-menu.lab-submenu { z-index: 71" in css and ".lab-mi.has-sub .lab-chev" in css and ".lab-tbl td.name .lab-nmw { margin-left: 12px; }" in css
-    assert ".srv-ic::before { content: \"\"; position: absolute; top: -1px; right: -3px; width: 12px; height: 12px; border-radius: 50%; z-index: 0;" in css
+    assert "td.lab-lp { padding: 0 0 0 16px;" in css and "srv-ic::before" not in css
+
+
+def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_chart_traffic_and_two_buttons():
+    """The owner, 2026-10-15: "make the design like this" (a lamp, the flag and the icon, the name with its PROVIDER under it - not the country, the address with a globe, a small CPU chart with the number and RAM / Disk, the traffic in two lines, the menu and a chevron)."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert lab.count('<td class="lab-lp"><i class="lab-lamp"') == 3 and "const labSub = s =>" in lab and "s.provider ?" in lab
+    assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "function labSparkSvg(vals)" in lab and 'api("/api/profiles/spark")' in lab and "(LAB.spark || {})[s.id]" in lab
+    assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab and lab.count("${labGo(p.id)}</div></td></tr>`;") == 3 and "const labGo = id =>" in lab
+    assert ".lab-tbl td:nth-child(n+3)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk-l { fill: none; stroke: #3b82f6;" in css and ".lab-go svg {" in css

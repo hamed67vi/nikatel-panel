@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.1 - The Lab row like the drawing
+
+- **Rows (the owner's drawing):** a round lamp of its own at the left (green, yellow, red, blue), the flag and the icon, the name with its *provider* under it (not the country), then the address with a globe, a small chart of the CPU of the last hours with the number, a thin bar and RAM / Disk, the traffic in two lines (value over *Mb/s*), and the two buttons at the end - the menu and a chevron. The profile tag is a small chip beside the name.
+- **Backend:** GET /api/profiles/spark - the CPU of every profile's server averaged in cells over the last hours, from the samples (one grouped question).
+
 ## 1.57.0 - Usage as round stats; the lamp ignores the way to the server
 
 - **Usage (the owner):** rebuilt as round stats on ONE screen - a ring of the users by status (with the ones online now), three gauges for the server (CPU, memory, disk), the traffic with a strip of bars, a ring of the usage per node, a ring of the subscription apps and the five biggest users. Every card has a › that opens its own section.

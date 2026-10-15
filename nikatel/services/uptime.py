@@ -66,3 +66,23 @@ def strips(db: Session, server_ids: Iterable[int], hours: int = 24, buckets: int
         out[sid] = {"strip": s, "up": up_percent(s)}
 
     return out
+
+
+def cpu_series(db: Session, server_ids: Iterable[int], hours: int = 3, buckets: int = 24, now: int | None = None) -> dict[int, list[float | None]]:
+    """{server id: the CPU percent averaged in `buckets` cells over the last `hours`, oldest first, None where the server was not heard}: ONE grouped question to the table of samples."""
+    ids = sorted({int(i) for i in server_ids})
+    hours, buckets = max(1, min(MAX_HOURS, int(hours))), max(6, min(96, int(buckets)))
+
+    if not ids:
+        return {}
+
+    end = int(now if now is not None else time.time())
+    width = max(60, hours * 3600 // buckets)
+    start = end - buckets * width
+    q = text("SELECT server_id, CAST((ts - :s) / :w AS INTEGER) AS b, AVG(cpu) AS c FROM server_samples WHERE server_id IN :ids AND ts >= :s AND ts <= :e GROUP BY server_id, b").bindparams(bindparam("ids", expanding=True))
+    out: dict[int, list[float | None]] = {i: [None] * buckets for i in ids}
+
+    for sid, b, c in db.execute(q, {"s": start, "w": width, "e": end, "ids": ids}):
+        out[sid][min(buckets - 1, max(0, b))] = round(float(c), 1)
+
+    return out

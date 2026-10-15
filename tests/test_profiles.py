@@ -188,6 +188,21 @@ def test_the_strips_come_from_the_samples_for_the_servers_of_the_profiles_only(c
     assert client.get(f"/api/servers/{a['id']}/uptime?hours=9999").status_code == 422
 
 
+def test_the_cpu_spark_averages_the_samples_in_cells_for_the_servers_of_the_profiles_only(client):
+    a = _server(client, "ir1", "1.1.1.1")
+    _bare("ir2", "3.3.3.3")
+    now = int(time.time())
+
+    with session() as db:
+        for k in range(0, 3600, 120):                                       # the last hour: 10 % in the older half, 30 % in the newer half
+            db.add(ServerSample(server_id=a["id"], ts=now - k, cpu=30 if k < 1800 else 10, ram=1, disk=1, load1=0, rx_mbps=0, tx_mbps=0, conn=0))
+
+    r = client.get("/api/profiles/spark?hours=3&buckets=24").json()
+    assert list(r["servers"]) == [str(a["id"])]                              # ir2 has no profile: it is not asked about
+    cells = r["servers"][str(a["id"])]
+    assert len(cells) == 24 and all(c is None for c in cells[:16]) and cells[-1] == 30.0 and cells[-5] == 10.0 and all(c is not None for c in cells[16:])
+    assert uptime.cpu_series(None, []) == {} and client.get("/api/profiles/spark?hours=9999").status_code == 422
+
 # ------------------------------------------------------------------ tags (the owner, 2026-10-14: a name and a tag - Any unless he chooses one - and three categories from the start)
 def test_a_tag_is_free_text_empty_or_any_is_no_tag_and_the_three_categories_are_always_there(client):
     assert [svc.check_tag(v) for v in ("", None, " Any ", "ANY", "Iran", "  my  tag ")] == ["", "", "", "", "Iran", "my tag"]

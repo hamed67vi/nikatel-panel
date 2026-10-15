@@ -280,9 +280,8 @@ html body #page .srv-ic .b { stroke: currentColor !important; fill: color-mix(in
 html body #page .srv-ic .led { fill: currentColor !important; animation: none !important; opacity: 1 !important; }
 html body #page .srv-ic img.lab-logo { filter: grayscale(1) brightness(1.5); }
 html[data-mode="light"] body #page .srv-ic img.lab-logo { filter: brightness(0) opacity(.85); }
-html body #page .srv-ic::before { content: ""; position: absolute; top: -1px; right: -3px; width: 12px; height: 12px; border-radius: 50%; z-index: 0; pointer-events: none; background: var(--lamp, transparent); box-shadow: 0 0 9px color-mix(in srgb, var(--lamp, transparent) 65%, transparent); transition: background .3s, box-shadow .3s; }      /* the lamp: one small round light BEHIND the icon, peeking out at its corner, like the dots of "up / down / unstable" (no disc, no ring) */
 html body #page tr[data-lamp="ok"] { --lamp: #3ddc97; } html body #page tr[data-lamp="busy"] { --lamp: #4da3ff; } html body #page tr[data-lamp="warn"] { --lamp: #ffc44d; }      /* the lamp follows the server itself (labLampTone in lab.js), not the faults of the way to it */
-html body #page tr[data-lamp="bad"] { --lamp: #ff6b8b; } html body #page tr[data-lamp="off"] { --lamp: transparent; }
+html body #page tr[data-lamp="bad"] { --lamp: #ff6b8b; } html body #page tr[data-lamp="off"] { --lamp: #5e6a86; }
 html body #page .toolbar.joined { align-items: center; }
 html body #page .toolbar.joined .tf-tabs { align-self: center; display: inline-flex; align-items: center; height: 36px; margin: 0; }
 html body #page .toolbar.joined .tf-tabs button { height: 28px; line-height: 28px; }
@@ -337,3 +336,30 @@ html body .lab-submenu .lab-mi:hover .lab-ck { color: #fff; }
 html body .lab-menu .lab-mic .lab-logo { width: 15px; height: 15px; margin: 0; vertical-align: middle; filter: grayscale(1) brightness(1.3); }
 html body .lab-menu .lab-mic .lab-emoji { width: auto; margin: 0; font-size: 13px; filter: grayscale(1) brightness(1.15); }
 html[data-mode="light"] body .lab-menu .lab-mic img.lab-logo:not(.lab-flag) { filter: brightness(0) opacity(.8); }
+/* 1.57.1 - the row like the owner's drawing: a lamp of its own at the left, the flag and the icon, the name with its provider under it | the address with a globe | a small chart of the CPU with the number, a thin bar and RAM / Disk | the traffic in two lines | the menu and a chevron */
+html body #page .lab-tbl td { height: 56px; }
+html body #page .lab-tbl td:nth-child(n+3) { position: relative; }
+html body #page .lab-tbl td:nth-child(n+3)::before { content: ""; position: absolute; left: 0; top: 24%; bottom: 24%; width: 1px; background: rgba(255,255,255,.09); pointer-events: none; }
+html[data-mode="light"] body #page .lab-tbl td:nth-child(n+3)::before { background: rgba(30,50,100,.14); }
+html body #page .lab-tbl td.lab-lp { padding: 0 0 0 16px; width: 1%; }
+html body #page .lab-lamp { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--lamp, #5e6a86); box-shadow: 0 0 10px color-mix(in srgb, var(--lamp, transparent) 55%, transparent); transition: background .3s, box-shadow .3s; }
+html body #page tr[data-lamp="off"] .lab-lamp { box-shadow: none; opacity: .75; }
+html body #page .lab-tbl td.name .lab-tagc { height: 20px; margin-left: 8px; padding: 0 8px; font-size: 11px; vertical-align: 1px; }
+html body #page .lab-tbl td.name .lab-tagc .lab-logo { width: 12px; height: 12px; margin-right: 5px; } html body #page .lab-tbl td.name .lab-tagc .lab-emoji { font-size: 11px; margin-right: 5px; }
+html body #page .lab-tbl td.lab-ip { font-size: 13.5px; white-space: nowrap; }
+html body #page .lab-ip .lab-glb { display: inline-block; width: 20px; height: 20px; margin-right: 10px; vertical-align: middle; color: var(--mut); }
+html body #page .lab-ip .lab-glb svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+html body #page .lab-tbl .lab-ldw { display: flex; align-items: center; gap: 14px; min-width: 0; }
+html body #page .lab-spk { flex: none; display: block; width: 112px; height: 34px; }
+html body #page .lab-spk-l { fill: none; stroke: #3b82f6; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .lab-spk-a { fill: rgba(59,130,246,.16); stroke: none; }
+html body #page .lab-ldx { display: grid; gap: 3px; min-width: 0; }
+html body #page .lab-ldx .lab-cpu { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+html body #page .lab-ldx .lab-cpu b { order: -1; font-size: 14px; font-weight: 700; line-height: 1; }
+html body #page .lab-ldx .lab-cpu .bar { flex: none; width: 100%; max-width: 128px; min-width: 0; height: 6px; margin: 0; }
+html body #page .lab-tbl .lab-trf .trf { display: inline-flex; align-items: center; gap: 8px; margin-right: 20px; line-height: 1.1; }
+html body #page .lab-tbl .lab-trf .ta { width: 20px; height: 20px; } html body #page .lab-tbl .lab-trf .ta svg { width: 20px; height: 20px; stroke-width: 2.2; }
+html body #page .lab-trf .tv { display: grid; gap: 1px; } html body #page .lab-trf .tv b { font-size: 15px; font-weight: 700; } html body #page .lab-trf .tv small { font-size: 11px; font-weight: 400; color: var(--mut); }
+html body #page .lab-tbl .td-act { gap: 8px; }
+html body #page .lab-tbl .lab-kb { width: 38px; height: 38px; border-radius: 11px; }
+html body #page .lab-go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
