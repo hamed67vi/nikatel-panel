@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.32 - One admin emoji for every admin
+
+- **Admins:** every admin row has the same emoji (a person with a briefcase), not a different face per state - the state is told by the switch and the pill; the API keys all have a key.
+
 ## 1.57.31 - Faces instead of strips, a compact roles window, one switch size
 
 - **Admins and API keys:** a face (emoji) stands where the green strip was - a crown for the owner, a cool face for an active admin, a sleeping face for a disabled one, a stop sign for the rest, a key for an active API key.

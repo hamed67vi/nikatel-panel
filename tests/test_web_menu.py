@@ -755,7 +755,13 @@ def test_the_kit_switch_the_fixed_activity_box_and_the_save_row_of_the_user_wind
 def test_the_roles_window_is_compact_and_the_admin_rows_have_a_face():
     """The owner, 2026-10-16: "an emoji instead of the green lines", "compact these too, fix their buttons"."""
     css, adm = _web("lab.css"), _web("pg_admin.js")
-    assert "const pgAdminEmo = (st, owner, base) => owner" in adm and '<i class="pg-admin-emo"' in adm and adm.count("pgAdminEmo(") >= 2 and "\nfunction pgAdminRow(a) {" in adm
+    assert 'const pgAdminEmo = base => base || "🧑‍💼"' in adm and '<i class="pg-admin-emo"' in adm and adm.count("pgAdminEmo(") >= 2 and "\nfunction pgAdminRow(a) {" in adm
     assert "#page .pg-admin-box .tbl tbody tr td:first-child { border-left: 0 !important; box-shadow: none !important; }" in css and ".pg-admin-nm .pg-admin-emo {" in css
     assert "#modal .pg-admin-form2 .frm-act { position: sticky; bottom: 0;" in css and "flex-direction: row-reverse;" in css and "#modal .pg-admin-permwrap { max-height: none; overflow: visible;" in css and "#modal .pg-admin-win .modal-body { overflow-x: hidden; }" in css
     assert "#modal .pg-roles-form .pg-roles-lim .kf > span:first-child { min-width: 0;" in css and "#modal .modal-head button > .bt { margin-left: 6px; }" in css
+
+
+def test_every_admin_has_the_same_emoji():
+    """The owner, 2026-10-16: "one admin emoji, the same for all"."""
+    adm = _web("pg_admin.js")
+    assert adm.count("${pgAdminEmo()}") == 1 and 'pgAdminEmo("🔑")' in adm and "owner ? " not in adm.split("const pgAdminEmo")[1].split("\n")[0]
