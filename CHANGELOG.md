@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.14 - The update card says the version and links to what changed
+
+- **About & update (the owner):** instead of the commit numbers and the long explanation, the card says **Version 1.55.14 is available** (or Up to date), with a link **What changed in v... on GitHub** that opens the release notes of that version. The panel reads the newest version tag of the repository for it.
+
 ## 1.55.13 - Servers opens on All
 
 - **"All" is gone from the left menu under Servers (the owner):** pressing **Servers** opens the Lab on its All tab; the profiles stay in the menu, and the tabs of the page hold them too.

@@ -142,22 +142,50 @@ def _git(*args: str) -> str:
         return ""
 
 
+def _repo_url() -> str:
+    """The web address of the GitHub repository the panel was installed from ("" when it is not GitHub)."""
+    m = re.match(r"^(?:https?://(?:[^@/]+@)?github\.com/|git@github\.com:|ssh://git@github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?$", _git("remote", "get-url", "origin"))
+    return f"https://github.com/{m.group(1)}" if m else ""
+
+
+def _newest_tag() -> str:
+    """The highest version tag (v1.2.3) of the remote, as 1.2.3 ("" when it cannot be read)."""
+    best: tuple[int, ...] = ()
+
+    for ln in _git("ls-remote", "--tags", "--refs", "origin", "v*").splitlines():
+        m = re.fullmatch(r".*\trefs/tags/v(\d+)\.(\d+)\.(\d+)", ln.strip())
+
+        if m:
+            best = max(best, tuple(int(x) for x in m.groups()))
+
+    return ".".join(str(x) for x in best)
+
+
 @router.get("/system/update", dependencies=[Depends(current_user)])
 def update_status():
-    """Installed commit vs. the newest on GitHub, and the log of the last update run."""
+    """Installed commit vs. the newest on GitHub, the newest version number with the link of its release notes, and the log of the last update run."""
     from pathlib import Path
 
     cur = _git("rev-parse", "--short", "HEAD")
     remote = _git("ls-remote", "origin", "HEAD").split()
     newest = remote[0][:7] if remote else ""
+    latest = _newest_tag()
+    repo = _repo_url()
+
+    def key(v: str) -> tuple[int, ...]:
+        try:
+            return tuple(int(x) for x in v.split("."))
+        except ValueError:
+            return ()
+
     log_path = Path("/var/lib/nikatel/update.log")
     tail = ""
 
     if log_path.exists():
         tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-12:])
 
-    return {"ok": True, "version": __version__, "installed": cur, "newest": newest, "up_to_date": bool(newest) and cur != "" and newest.startswith(cur[:7]), "last_log": tail}
-
+    return {"ok": True, "version": __version__, "installed": cur, "newest": newest, "up_to_date": bool(newest) and cur != "" and newest.startswith(cur[:7]), "last_log": tail,
+            "latest": latest, "newer": bool(latest) and key(latest) > key(__version__), "notes_url": f"{repo}/releases/tag/v{latest}" if repo and latest else ""}
 
 @router.post("/system/update", dependencies=[Depends(current_user)])
 def update_now():
