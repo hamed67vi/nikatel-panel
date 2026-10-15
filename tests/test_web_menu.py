@@ -77,7 +77,7 @@ def test_a_tab_that_is_switched_off_is_in_the_menu_grey_and_cannot_be_clicked():
     """The owner asked to see the rest of the tabs of Tunnels: Outbound is switched off (roadmap #92) and shows grey, like the Shop bot, instead of missing from the group."""
     assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "act" ? "act" : false])' in APP
     assert 'class="nav-off" aria-disabled="true"' in APP and 'sub.querySelectorAll("a:not(.nav-off)")' in APP          # (and a click on it does nothing)
-    assert re.search(r'\["gateway", "[^"]*Outbound", INFO_GW, "off"\]', APP)
+    assert "...(OUTBOUND_UI ? [[\"gateway\", \"🌉 Outbound\", INFO_GW]] : [])" in APP           # (Outbound has no tab at the moment: it is hidden, see the next test)
 
 
 def test_the_old_foreign_and_iran_lists_are_out_of_the_project_and_the_lab_is_the_page_of_the_servers():
@@ -260,3 +260,12 @@ def test_the_list_of_servers_has_an_ip_column_in_place_of_the_state_column_and_s
     assert "/api/profiles/strips" not in lab                                                         # the list does not ask for the strips any more
     assert lab.count('<col style="width:') == 6 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
     assert ".lab-ip {" in _web("lab.css")
+
+
+def test_outbound_and_the_shop_bot_are_hidden_for_now_and_come_back_with_one_switch_each():
+    """The owner, 2026-10-15: "do not show the Outbound and the Shop bot in the panel until we get to them later". Not grey: not there."""
+    assert "const OUTBOUND_UI = false;" in APP and "const SHOPBOT_UI = false;" in APP
+    assert re.search(r'<a data-page="bot"[^>]* hidden[ >]', INDEX)                 # (the item is in the page but hidden: no flash before the script runs)
+    assert """document.querySelectorAll('#nav a[data-page="bot"]').forEach(a => { a.hidden = !SHOPBOT_UI; });""" in APP
+    assert '(page === "bot" && !SHOPBOT_UI)' in APP and "if (SHOPBOT_UI) SB_TABS.forEach" in APP                      # (not reachable, not found by the search of the dashboard)
+    assert "nav#nav a[hidden] { display: none !important; }" in _web("app.css")

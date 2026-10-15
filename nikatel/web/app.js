@@ -167,11 +167,13 @@ const NAV_ALIAS = {servers: "nodes", gateway: "tunnels", monitor: "nodes", actio
   pghosts: "pgpanel/hosts", pgaccess: "pgpanel/access", pgcore: "pgpanel/core", pgadmins: "pgpanel/admins"};      // (1.47.0: the sections of PasarGuard are the tabs of the Panel page)
 if (state.sub && state.sub.nodes === "monitor") state.sub.nodes = "lab";
 const SERVER_DOCTOR = false;   // the Server Doctor tab of Servers is switched off for now (PAGES.serverDoctor stays); set true to bring it back
+const OUTBOUND_UI = false;      // the Outbound tab of Network is hidden (the owner, 2026-10-15: "do not show Outbound and the Shop bot in the panel until we get to them later"); true brings it back
+const SHOPBOT_UI = false;       // the Shop bot item of the menu is hidden the same way (its page opens the Dashboard while this is false)
 const CONFIGS_UI = false;      // the Configs list is switched off and hidden (no tab, no card, no problem rows) until the project grows (the owner, 2026-10-14, roadmap #98); the probe and the routes keep running; set true to bring it back
 Object.assign(NAV_ALIAS, CONFIGS_UI ? {panels: "configs"} : {panels: "pgpanel/users", configs: "pgpanel/users"});      // (the Users of the panels are the first tab of the Panel page while the Configs list is off)
 const SUB = {
   nodes: [["lab", "All", "Every profile you added - Iran servers, foreign servers and PasarGuard nodes - in one list with their state, load and the last 24 hours. Open one for Overview, Node and Monitor; everything that can be done to it is in its ⋯ menu."], ["add", "＋ Add profile", "Add a profile: a server with its name, its tag (the profile it is listed under) and its address.", "act"], ...(SERVER_DOCTOR ? [["doctor", "🩺 Server Doctor", "Finds why a server is off or under pressure, in plain words, and says what to do: its SSH login, a changed identity, the load, a failing GRE link, a filtered address."]] : [])],
-  tunnels: [["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ["gateway", "🌉 Outbound", INFO_GW, "off"]],      // Outbound is the last tab and switched off for now, like the Shop bot (roadmap #92): take the "off" away to bring it back
+  tunnels: [["dns", "🌐 CDN", "The DNS records of your domains in every account (ArvanCloud, Cloudflare) and which server each one points at; point one at another Iran server by hand. The Doctor re-points them when it moves a server."], ["list", "⇄ Tunnel manager", "Every tunnel between an Iran and a foreign server: units, GRE link, peer ping, forwarded ports. Checked every minute, grouped by type. Create a new one with the button."], ["repairs", "🩺 Tunnel Doctor", "Finds why a tunnel is down and fixes it; in the mode that moves servers, the tunnels and DNS of a dead Iran server go to another Iran server by themselves."], ...(OUTBOUND_UI ? [["gateway", "🌉 Outbound", INFO_GW]] : [])],      // Outbound and the Shop bot are HIDDEN for now (the owner, 2026-10-15: "do not show them until we get to them later"; roadmap #92 / #79): OUTBOUND_UI / SHOPBOT_UI = true brings them back
   configs: [...(CONFIGS_UI ? [["configs", "⚡ Configs", "Every client config the probe keeps alive and tests from inside Iran: reachable, ping, daily speed. Add links or import a subscription."]] : []), ["panels", "🧩 Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."]],      // the page is called Users; with the Configs tab off it has one tab, so the tab bar is not drawn
 };
 /* the Panel page (1.47.0, the owner: "when we click Panel, show everything as tabs"): ONE page for the panel you pick, with a tab for each section of PasarGuard that was a page of its own (what PG_SUBS says about the tabs inside each) */
@@ -218,7 +220,7 @@ const TITLE_ANIM = {
     if ((SUB[target] || []).some(x => x[0] === k)) { state.sub[target] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); }      // (kept: a reload comes back to the same tab)
     page = target;
   }
-  if (!PAGES[page] || page === "bot") page = "dashboard";      // the Shop bot section is switched off for now (roadmap #79)
+  if (!PAGES[page] || (page === "bot" && !SHOPBOT_UI)) page = "dashboard";      // the Shop bot section is hidden for now (roadmap #79)
   if (page === "pgpanel" && window.labLocked && labLocked()) { labLockMsg(); return; }      // the Panel needs a connected panel: while there is none it says so instead of opening (lab.js)
   if (state.page !== page && !aliased) { delete state.sub[page]; TOP_TABS(); }   // a tab you come back to always opens on its first sub-tab (callers that want another one set it right after go())
   if (state.page !== page) {   // leaving a page: drop what it still waits for, start the new one at the top and show at once that it is loading (the old page never stays on screen)
@@ -282,6 +284,7 @@ PAGES.serverDoctor = async () => {
   $("#page").innerHTML = '<div class="card"><div class="err">The files of the Lab page (lab.js) did not load. Reload the page; if this stays, the upgrade of the panel was not complete.</div></div>';
 };
 document.querySelectorAll("#nav a").forEach(a => { a.onclick = () => { if (!a.classList.contains("nav-off")) go(a.dataset.page, a.dataset.sub); }; });
+document.querySelectorAll('#nav a[data-page="bot"]').forEach(a => { a.hidden = !SHOPBOT_UI; });      // (the Shop bot item: hidden, not greyed, while SHOPBOT_UI is false)
 /* the groups of the left menu (the owner, 2026-10-14: like the sidebar of PasarGuard). A group is a head (a page) with a list of sections under it. The little arrow at the right of the head opens and closes
    the list (what was chosen is kept in this browser), the head opens its page AND the list, and a page of a group opens it by itself (and it closes again when another page is opened). The sections of a group are the
    tabs the page already has (Servers: Foreign, Iran...; Tunnels; Panel: General, Users, Hosts, Access, Core, Admins; Settings), made by navBuild at the end of this file. The rail and the phone draw a group as
@@ -505,7 +508,7 @@ function dqSections() {   // every section of the panel by its name: the pages, 
   document.querySelectorAll("#nav a:not(.nav-off):not([data-sub])").forEach(a => { const n = strip(a.querySelector("span").textContent); pages[a.dataset.page] = n; out.push({page: a.dataset.page, name: n, sub: "Section"}); });      // (the pages; the tabs that hang under them in the menu come from SUB and SET_TABS below)
   Object.entries(SUB).forEach(([page, list]) => list.forEach(([k, label, , off]) => { if (off !== "off") out.push({page, subKey: k, name: strip(label), sub: pages[page] || page}); }));
   Object.entries(SET_TABS).forEach(([k, v]) => out.push({page: "settings", setTab: k, name: strip(v[0]), sub: "Settings"}));
-  SB_TABS.forEach(([k, l]) => out.push({page: "bot", sbTab: k, name: l, sub: "Shop bot"}));
+  if (SHOPBOT_UI) SB_TABS.forEach(([k, l]) => out.push({page: "bot", sbTab: k, name: l, sub: "Shop bot"}));
   return out;
 }
 function dqItems(q) {   // the sections whose name (or a word of it) starts with what was typed - names of servers, tunnels or configs are not searched here

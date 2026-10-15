@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.53.3 - Outbound and the Shop bot are hidden for now
+
+- **The Outbound tab of Network and the Shop bot item of the menu are not shown (the owner: "do not show them in the panel until we get to them later").** They were grey; now they are not there at all - not in the menu, not found by the search of the dashboard, and the Shop bot's page opens the Dashboard. Nothing is deleted: each has one switch at the top of `app.js` (`OUTBOUND_UI`, `SHOPBOT_UI`) that brings it back.
+
 ## 1.53.2 - The traffic numbers are right, an IP column in place of the state column
 
 - **The traffic of a server shows the right numbers (the owner: "show the numbers of this part right").** Two faults were found on the real servers: (1) on the servers whose awk is mawk (Ubuntu's) a big network counter was printed as `2.91282e+10`, so the speed over three seconds moved in steps of 1 MB or 10 MB - the strange 2.67, 5.33, 26.67, 266.67 of the list - and the CPU windows of a long-running server in steps of minutes; every counter is printed whole now; (2) the sum of every interface counted the bytes of a GRE link or a tunnel interface a second time (one server showed 3 TB more than its card carried); the speed is the card of the default route now. The numbers have two decimals under 10, one under 100, and the column says Mbit/s (it read "MB/S" in capitals, which is megabytes). They are right from the next sample of each server.
