@@ -130,10 +130,7 @@ window.labNewProfile = () => {      // "Add profile": on the first page the card
 };const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
 /* the categories are tags (the owner, 2026-10-14: "make me three categories: Marzban, PasarGuard, Iran"): they are on the page from the start, any other tag he types joins them, and Any is every profile */
 const labLogo = t => { const l = String(t).toLowerCase(); return l.startsWith("pasarguard") || l === "marzban" ? `<img class="lab-logo" src="/static/logos/${l.startsWith("pasarguard") ? "pasarguard" : l}.png" alt="" width="16" height="16">` : ""; };      // (the logos the owner sent: the lion of PasarGuard, the barbed wire of Marzban)
-window.labAddTag = async () => {      // the "+" beside the tabs: a new profile (category)
-  const v = await gprompt("Name of the new profile (a category on this page):", ""); if (v == null || !String(v).trim()) return;
-  try { const r = await api("/api/profiles/tags", {method: "POST", body: JSON.stringify({tag: v})}); LAB.kind = r.tag; localStorage.setItem("nk.lab.k", r.tag); toast("✓ Profile " + r.tag + " added", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
-};
+window.labAddTag = () => labNewProfile();      // the "+" beside the tabs: the same Add profile box (the name and the suggested tags)
 window.labRenameTag = async () => {      // ✎ beside the tabs: the profile (category) that is open gets another name; its servers follow
   const cur = labKindNow(); if (cur === "any") return;
   if (labTagLocked(cur)) { toast("✕ " + LAB_LOCKED_TIP, "bad"); return; }

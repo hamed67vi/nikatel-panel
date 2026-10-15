@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.10 - The plus beside the tabs offers the suggested names
+
+- The **+** beside the tabs of the Lab opens the same Add profile box as the menu (the name, and the suggested tags under it), not a plain question.
+
 ## 1.55.9 - Sync in a PasarGuard profile
 
 - **A PasarGuard profile has a Sync button (the owner: a panel is there but its nodes are not shown):** beside the tabs (and in the empty page of the profile) - it reads every PasarGuard panel NOW and puts each node that is not on the page into the open profile, the ones taken off the page on purpose too; it says how many were added, or why a panel did not answer.
