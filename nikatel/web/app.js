@@ -331,7 +331,7 @@ const navIcons = () => {      // the icons of the tabs of the menu (lab.js draws
 function navTabs() {      // the tabs that hang under their page: [key, name, icon]
   const ic = navIcons();
   const of = page => (SUB[page] || []).map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "act" ? "act" : false]);      // (a tab that is switched off is in the menu too, grey like Shop bot: the owner asked to see the rest of the tabs of Tunnels; an "act" is a door to an action, drawn in the accent colour with a + after its name, never the open tab)
-  return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};
+  return {nodes: of("nodes"), tunnels: of("tunnels"), pgpanel: of("pgpanel"), settings: Object.entries(SET_TABS).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear, SET_OFF.has(k) ? "off" : false])};
 }
 function navBuild() {
   const nav = $("#nav"); if (!nav) return;
@@ -4027,10 +4027,11 @@ const SET_TABS = {
   look: ["🎨 Appearance", "Theme, day / night, text size, animations.", ["Appearance"]],
   update: ["⬆ About & update", "Update this panel from GitHub with one click, the tunnel cores on your servers, the PasarGuard panels and their nodes, and the settings the service runs with.", ["About & update"]],
 };
+const SET_OFF = new Set(["bot"]);      // the tabs of Settings that are switched off for now - grey in the menu and in the bar, cannot be chosen (the owner, 2026-10-16: "disable this section in Settings": Shop bot)
 function settingsTabs() {
-  const cur = SET_TABS[state.stab] ? state.stab : "account";
+  const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";
   state.stab = cur;
-  const bar = `<div class="set-top"><div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}" onclick="setTab('${k}')">${TAB_SVG[k] ? `<i class="ti">${TAB_SVG[k]}</i>${v[0].replace(/^\S+\s*/, "")}` : v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
+  const bar = `<div class="set-top"><div class="tabs set-tabs">${Object.entries(SET_TABS).map(([k, v]) => `<button class="${k === cur ? "on" : ""}${SET_OFF.has(k) ? " sub-off" : ""}" ${SET_OFF.has(k) ? 'disabled aria-disabled="true" title="Switched off for now: the important work comes first"' : `onclick="setTab('${k}')"`}>${TAB_SVG[k] ? `<i class="ti">${TAB_SVG[k]}</i>${v[0].replace(/^\S+\s*/, "")}` : v[0]}</button>`).join("")}</div></div><div class="set-desc">${SET_TABS[cur][1]}</div>`;
   $("#page").insertAdjacentHTML("afterbegin", bar);
   const grid = $("#page .grid2"), byName = {};
   grid.querySelectorAll(":scope > .card").forEach(c => { const h = c.querySelector("h3"); const nm = c.dataset.name || (h ? h.childNodes[0].textContent.trim() : ""); c.dataset.name = nm; byName[nm] = c; c.classList.add("hidden"); });
@@ -4062,7 +4063,7 @@ settingsTabs.only = () => {   // switch the card without touching the server or 
   byName[pick].classList.remove("hidden");
   if (pick === "About & update") aboutLoad(); if (pick === "Core update") enginesLoad();
 };
-function tabSet(k) { state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); }      // (the tab of Settings that is open; the left menu calls it through go)
+function tabSet(k) { if (SET_OFF.has(k)) return; state.stab = k; state.sstab = null; localStorage.setItem("nk.stab", k); }      // (the tab of Settings that is open; the left menu calls it through go)
 window.setTab = k => { tabSet(k); refresh(); };
 state.stab = localStorage.getItem("nk.stab") || "account";
 window.onLangChange = () => { try { refresh(); } catch (e) { /* not signed in yet */ } };

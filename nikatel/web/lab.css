@@ -593,3 +593,6 @@ html[data-mode="light"] body #page .abt-h i { background: #f3f6fc; border-color:
 
 /* 1.57.35 - between the tabs of the Panel the tab that was open stays, dimmed, until the new one has its data (no spinner) */
 html body #page #pn-body.pn-busy > :not(.pn-bars) { opacity: .45; pointer-events: none; transition: opacity .12s; }
+
+/* 1.57.36 - a tab of Settings that is switched off (Shop bot): grey, nothing happens on it */
+html body #page .set-tabs button.sub-off { opacity: .38; filter: grayscale(1); pointer-events: none; cursor: default; box-shadow: none !important; }

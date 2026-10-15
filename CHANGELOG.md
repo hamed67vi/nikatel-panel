@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.36 - The Shop bot tab of Settings is switched off
+
+- **Settings:** the *Shop bot* tab is switched off for now - grey in the menu and in the bar, nothing happens on it (the Shop bot section itself was already hidden, roadmap #79).
+
 ## 1.57.35 - Smoother everywhere: one draw at a time, the bar with its page, no spinner between the Panel tabs
 
 - **One draw at a time:** a page or tab is drawn once at a time; a second call while that draw runs (the ticker, the Lab's busy timer, a window that closed) asks for one more draw after it, with the newest state - never two at once, never out of order.

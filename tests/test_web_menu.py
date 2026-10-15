@@ -804,3 +804,11 @@ def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_t
     assert "if (d.checking) { if (!box._follow) { box._follow = true; engineFollow(); } }" in app and 'finally { const b = $("#eng-box"); if (b) b._follow = false; }' in app
     assert "if (box.dataset.tab === pn.tab) return;" in com and "box._lt = setTimeout(() => { if (box.isConnected && box.classList.contains(\"pn-busy\")) pgSpin(box, text); }, 350);" in com and 'box.classList.remove("pn-busy"); box.dataset.tab = pn.tab;' in com
     assert "html body #page #pn-body.pn-busy > :not(.pn-bars) { opacity: .45; pointer-events: none;" in css
+
+
+def test_the_shop_bot_tab_of_settings_is_switched_off():
+    """The owner, 2026-10-16: "disable this section in Settings" - Shop bot: grey in the menu and in the bar, cannot be chosen, a saved choice of it falls back to Security."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert 'const SET_OFF = new Set(["bot"]);' in app and 'TAB_SVG[k] || SI.gear, SET_OFF.has(k) ? "off" : false])' in app
+    assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and '${SET_OFF.has(k) ? " sub-off" : ""}' in app
+    assert "html body #page .set-tabs button.sub-off { opacity: .38;" in css
