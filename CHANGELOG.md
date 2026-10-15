@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.21 - Smaller traffic type
+
+- **Lab (the owner):** the numbers (13 px), the units (10 px) and the arrows (14 px) of *Traffic used* and *Traffic Mbit/s* are smaller.
+
 ## 1.57.20 - The other uptime strip is blue too
 
 - **Lab (the owner):** the strip of the last days in the *Monitor* section has the same bright blue as *Heard over SSH* (1.57.19 changed only the Overview one; its test was red - fixed).

@@ -473,3 +473,7 @@ html body .lab-ban .lb-t > b { flex: none; font-size: 13px; font-weight: 650; }
 html body .lab-ban .lb-t > .lb-m { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; color: var(--mut); } html body .lab-ban .lb-t > .lb-m.err { color: var(--bad); }
 html body .lab-ban .lb-a { flex-wrap: nowrap; gap: 6px; } html body .lab-ban .lb-a button { height: 28px; padding: 0 12px; border-radius: 9px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 @media (max-width: 700px) { html body .lab-ban { flex-wrap: wrap; } html body .lab-ban .lb-t { white-space: normal; flex-wrap: wrap; } }
+/* 1.57.21 - smaller type and arrows in the two traffic columns (the owner): numbers 13 px, units 10 px, arrows 14 px */
+html body #page .lab-tbl .lab-trf .trf { gap: 6px; margin-right: 14px; }
+html body #page .lab-tbl .lab-trf .ta { width: 14px; height: 14px; } html body #page .lab-tbl .lab-trf .ta svg { width: 14px; height: 14px; stroke-width: 2; }
+html body #page .lab-trf .tv b { font-size: 13px; } html body #page .lab-trf .tv small, html body #page .lab-tbl td.lab-used .tv small { font-size: 10px; }

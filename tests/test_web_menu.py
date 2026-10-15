@@ -659,3 +659,9 @@ def test_the_kebab_dots_are_vertical_and_the_heard_over_ssh_strip_is_blue():
     lab, css = _web("lab.js"), _web("lab.css")
     assert '<circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>' in lab and 'cx="5" cy="12"' not in lab.split("const LAB_DOTS = ", 1)[1].split("\n", 1)[0]
     assert ".lab-ups-row .c2 { background: #4d87f2; }" in css and ".lab-ups-row .cn { background: #2b3858; }" in css and ".lab-strip .c2 { background: #4d87f2; }" in css and "var(--ok); opacity: .75" not in css
+
+
+def test_the_traffic_columns_have_smaller_type_and_arrows():
+    """The owner, 2026-10-15: "make the fonts and the arrows smaller"."""
+    css = _web("lab.css")
+    assert ".lab-trf .tv b { font-size: 13px; }" in css and ".lab-tbl .lab-trf .ta { width: 14px; height: 14px; }" in css and ".lab-tbl .lab-trf .ta svg { width: 14px; height: 14px; stroke-width: 2; }" in css
