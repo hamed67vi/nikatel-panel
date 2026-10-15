@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.56.16 - The update takes a minute, and the bar moves like a MacBook's
+
+- **Why it was slow (the owner):** every update ran the WHOLE test suite on the server that updates - about nine minutes - although the author had run it before publishing. scripts/deploy.sh now skips the tests when HEAD is a released version (a tag); the secrets check, the migration check on a copy of the database, the install, the health check and the rollback stay. FORCE_TESTS=1 runs them anyway. An update is about a minute now.
+- **The bar:** it grows smoothly (an easing step ten times a second, a soft light runs along it) and creeps on between the markers of the deploy, never promising the next one; the number rounds along with it, and at the end it runs to 100 % before the page reloads.
+
 ## 1.56.15 - The address writes Copied
 
 - A click on an address copies it and the cell itself says **✓ Copied** (in green) for a moment, then shows the address again.

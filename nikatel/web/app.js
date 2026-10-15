@@ -3856,22 +3856,28 @@ window.testAi = async () => {      // a key typed in the box is saved first (the
 window.forgetAi = async () => { if (!await gconfirm("Remove the saved API key?")) return; await api("/api/settings/ai/key", {method: "DELETE"}); toast("✓ Key removed", "ok"); refresh(); };
 window.aboutLoad = async () => { const box = $("#about-box"); if (!box) return; try { const u = await api("/api/system/update"); box.innerHTML = u.up_to_date ? `<span class="gw-ok">Up to date</span> <span class="mut">v${esc(u.version)}</span>` : `<span class="err">${u.newer && u.latest ? "Version " + esc(u.latest) + " is available" : "A newer build is available"}</span>`; const h = $("#about-hero"); if (h) { h.className = "ss-hero " + (u.up_to_date ? "s3" : "s1"); const sm = h.querySelector(".ss-ht small"); if (sm) sm.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : ""; } if (u.progress && u.progress.state === "running") aboutWatch(); } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; } };
 window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutWatch(true); } catch (e) { toast("✕ " + e.message, "bad"); } };
-let aboutTimer = null;      // the timer of the progress of an update
-window.aboutWatch = fresh => {      // the update runs: only its percentage (the owner, 2026-10-15: no log box); the bar waits while the panel restarts, and the page reloads when it is done
-  if (aboutTimer) return; let last = 3, stale = !!fresh; const t0 = Date.now();
+let aboutTimer = null;      // the timers of the progress of an update
+const ABOUT_STEPS = [3, 8, 15, 35, 60, 100];      // where the markers of the deploy stand: between two of them the bar creeps on its own but never promises the next one
+window.aboutWatch = fresh => {      // the update runs: only its percentage, moving smoothly like the update of a MacBook (the owner, 2026-10-15); the bar waits while the panel restarts, and the page reloads when it is done
+  if (aboutTimer) return; let server = 3, shown = 1, goal = 3, stale = !!fresh, end = "", failNote = ""; const t0 = Date.now();
   document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = true; });
-  const draw = (txt, cls, pct) => { const b = $("#about-box"); if (!b) return false; b.innerHTML = `<span class="${cls}">${txt}</span><i class="about-bar"><u style="width:${pct}%"></u></i>`; return true; };
-  const tick = async () => {
+  const paint = (txt, cls) => { const b = $("#about-box"); if (!b) return false; let bar = b.querySelector(".about-bar u"); if (!bar) { b.innerHTML = `<span></span><i class="about-bar"><u></u></i>`; bar = b.querySelector(".about-bar u"); } const sp = b.querySelector("span"); sp.className = cls; sp.textContent = txt; bar.style.width = shown.toFixed(2) + "%"; return true; };
+  const stop = () => { clearInterval(aboutTimer.frame); clearTimeout(aboutTimer.poll); aboutTimer = null; };
+  const poll = async () => {
     let u = null; try { u = await api("/api/system/update"); } catch (e) { /* the panel restarts: the bar waits */ }
     const p = u && u.progress;
     if (p && stale && (p.state === "running" || Date.now() - t0 > 20000)) stale = false;      // (what the log says of a run before the click is not this one: wait for the new run, at most 20 s)
-    if (p && !stale) last = Math.max(last, p.percent);
-    if (p && !stale && p.state === "done") { aboutTimer = null; draw("Updated 100%", "gw-ok", 100); setTimeout(() => location.reload(), 1200); return; }
-    if (p && !stale && p.state === "failed") { aboutTimer = null; draw("The update did not finish: the old version stays", "err", last); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
-    if (!draw(`Updating… ${last}%`, "mut", last)) { aboutTimer = null; return; }
-    aboutTimer = setTimeout(tick, 2000);
+    if (p && !stale) { server = Math.max(server, p.percent); if (p.state === "done") end = "done"; else if (p.state === "failed") end = "failed"; }
+    if (aboutTimer) aboutTimer.poll = setTimeout(poll, 1500);
   };
-  aboutTimer = setTimeout(tick, 600);
+  const frame = () => {
+    if (end === "done") { goal = 100; } else if (end === "failed") { goal = shown; } else { const next = ABOUT_STEPS.find(x => x > server) || 100, ceil = server >= 100 ? 100 : Math.max(server, next - 2); goal = Math.min(ceil, Math.max(goal, server) + 0.045); }      // (about 0.4 % a second between two markers)
+    shown += (goal - shown) * 0.09;
+    if (end === "failed") { if (!paint("The update did not finish: the old version stays", "err")) { stop(); return; } stop(); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
+    if (end === "done" && shown > 99.4) { shown = 100; paint("Updated 100%", "gw-ok"); stop(); setTimeout(() => location.reload(), 900); return; }
+    if (!paint(`Updating… ${Math.round(shown)}%`, "mut")) stop();
+  };
+  aboutTimer = {frame: setInterval(frame, 100), poll: setTimeout(poll, 500)};
 };
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview

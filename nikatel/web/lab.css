@@ -266,3 +266,9 @@ html body .nav-sub .ic .lab-emoji { width: auto; margin: 0; font-size: 16px; ver
 html body .lab-logo.lab-flag, html body .lab-emoji { filter: grayscale(1) brightness(1.15); opacity: .92; }
 /* 1.56.15 - the address says Copied in its own cell */
 html body #page .lab-tbl td.lab-ip.lab-ip-done { color: var(--ok) !important; font-weight: 700; text-decoration: none; }
+/* 1.56.16 - the bar of the update like a MacBook's: thin, round, it grows smoothly and a soft light runs along it */
+html body .ss-ht .about-bar { height: 5px; border-radius: 999px; background: rgba(255,255,255,.12); }
+html body .ss-ht .about-bar u { position: relative; border-radius: 999px; background: linear-gradient(90deg, #5aa9ff, #8ec5ff); transition: width .35s linear; overflow: hidden; }
+html body .ss-ht .about-bar u::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); transform: translateX(-100%); animation: aboutShine 1.6s ease-in-out infinite; }
+@keyframes aboutShine { to { transform: translateX(100%); } }
+html body .ss-ht #about-box .mut { font-variant-numeric: tabular-nums; }

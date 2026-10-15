@@ -26,7 +26,11 @@ fi
 
 PREV=$(cat "$STATE" 2>/dev/null || true)
 echo "== no secrets in the repo";  bash scripts/check_no_secrets.sh
-echo "== tests";                    "$VENV/bin/python" -m pytest -q
+if [ "${FORCE_TESTS:-0}" != 1 ] && git describe --exact-match --tags HEAD >/dev/null 2>&1; then
+    echo "== tests skipped: $(git describe --exact-match --tags HEAD) is a released version (the whole suite ran before it was published; FORCE_TESTS=1 runs it here too)"
+else
+    echo "== tests";                "$VENV/bin/python" -m pytest -q
+fi
 echo "== migrations on a copy of the live database"; "$VENV/bin/python" scripts/migrate_check.py /var/lib/nikatel/data
 echo "== install $(git rev-parse --short HEAD)"; install
 

@@ -5,11 +5,13 @@ from nikatel.api.system import update_progress
 def test_an_update_has_a_percentage_from_its_steps_and_the_tests_take_most_of_it():
     assert update_progress("") == {"state": "idle", "percent": 0}
     assert update_progress("== update started\n") == {"state": "running", "percent": 3}
-    assert update_progress("== update started\n== no secrets in the repo\nok\n")["percent"] == 5
+    assert update_progress("== update started\n== no secrets in the repo\nok\n")["percent"] == 8
     tests = "== update started\n== no secrets in the repo\n== tests\n" + "." * 70 + " [ 50%]\n"
-    assert update_progress(tests) == {"state": "running", "percent": 45}                                  # 10 + 0.7 * 50
-    assert update_progress(tests + "== migrations on a copy of the live database\n")["percent"] == 82
-    assert update_progress(tests + "== migrations\n== install abc1234\n")["percent"] == 88
+    assert update_progress(tests) == {"state": "running", "percent": 22}                                  # 10 + 0.25 * 50 (the tests are 10 to 35 %)
+    assert update_progress(tests + "== migrations on a copy of the live database\n")["percent"] == 35
+    skipped = "== update started\n== no secrets in the repo\n== tests skipped: v1.56.16 is a released version\n"
+    assert update_progress(skipped)["percent"] == 15 and update_progress(skipped + "== migrations on a copy\n")["percent"] == 35
+    assert update_progress(tests + "== migrations\n== install abc1234\n")["percent"] == 60
     assert update_progress(tests + "== install abc1234\nDEPLOY OK abc1234\n") == {"state": "done", "percent": 100}
 
 

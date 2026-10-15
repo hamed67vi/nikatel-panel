@@ -162,7 +162,7 @@ def _newest_tag() -> str:
 
 
 def update_progress(text: str, quiet_s: float = 0.0) -> dict:
-    """Pure: where the last update run is, from its log - {state: idle | running | done | failed, percent}. The steps of scripts/deploy.sh are the markers (tests take 10 to 80 %, from the percent pytest prints); `quiet_s` = seconds since the log last grew."""
+    """Pure: where the last update run is, from its log - {state: idle | running | done | failed, percent}. The steps of scripts/deploy.sh are the markers (a released version skips the tests; when they run they take 10 to 35 %, from the percent pytest prints); `quiet_s` = seconds since the log last grew."""
     i = max(text.rfind("== update started"), text.rfind("== no secrets in the repo"))
 
     if i < 0:
@@ -180,17 +180,18 @@ def update_progress(text: str, quiet_s: float = 0.0) -> dict:
         return {"state": "failed", "percent": 0}
 
     if "== install" in run:
-        pct = 88
+        pct = 60
     elif "== migrations" in run:
-        pct = 82
+        pct = 35
+    elif "== tests skipped" in run:
+        pct = 15
     elif "== tests" in run:
         found = re.findall(r"\[\s*(\d+)%\]", run.split("== tests", 1)[1])
-        pct = 10 + round(0.7 * min(100, int(found[-1]))) if found else 10
+        pct = 10 + round(0.25 * min(100, int(found[-1]))) if found else 10
     elif "== no secrets" in run:
-        pct = 5
+        pct = 8
     else:
         pct = 3
-
     return {"state": "running", "percent": pct}
 
 @router.get("/system/update", dependencies=[Depends(current_user)])
