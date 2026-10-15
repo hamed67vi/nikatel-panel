@@ -60,7 +60,7 @@ function pgUserShow() {      // the window of one user, made tight (1.47.0: the 
       <div class="pu-mid"><section class="pu-box"><h5 title="Starts by itself when the user runs out of data or time (or with “Next plan” above). Everything empty = no next plan.">Next plan</h5><div class="pu-grid">${plan}</div></section>
         <section class="pu-box"><h5 title="The groups decide which inbounds (and so which hosts) the user gets.">Groups <small class="mut pgu-gn"></small></h5><div class="pu-chips">${groups}</div></section></div>
       ${act}
-      <div class="frm-act pu-save"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide ue pgu", acts);
+      <div class="frm-act pu-save"><button type="button" onclick="closeModal()">Cancel</button><button class="pri" type="submit">Save</button></div></form>`, "wide ue pgu", acts);
   pgUserGn();
 }
 window.pgUserGn = () => { const xs = [...document.querySelectorAll('#modal input[name="grp"]')], c = document.querySelector("#modal .pgu-gn"); if (c) c.textContent = xs.length ? `${xs.filter(x => x.checked).length} of ${xs.length}` : ""; };

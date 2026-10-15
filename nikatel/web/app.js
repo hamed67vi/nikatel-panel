@@ -2116,7 +2116,7 @@ const pnCredHtml = edit => `<div class="pn-wide tabs pn-mode"><button type="butt
       <small class="pn-wide pn-hint"></small>`;
 window.pnAddWin = () => {
   showModal("<b>Add a panel</b>", `<form class="frm pn-win" data-mode="key" onsubmit="return pnAdd(event)">
-      <label>Name<input name="name" required placeholder="shop" autocomplete="off"></label><label>Type<select name="type" onchange="pnHint(this.form)"><option value="marzban">Marzban</option><option value="pasarguard">PasarGuard</option></select></label><label class="pn-wide">Address<input name="url" required placeholder="https://panel.example:8000" autocomplete="off"></label>
+      <label>Name<input name="name" required placeholder="shop" autocomplete="off"></label><label>Type<select name="type" onchange="pnHint(this.form)"><option value="pasarguard">PasarGuard</option><option value="marzban">Marzban</option></select></label><label class="pn-wide">Address<input name="url" required placeholder="https://panel.example:8000" autocomplete="off"></label>
       ${pnCredHtml(false)}
       <label class="chk"><input name="verify_tls" type="checkbox" checked> verify the TLS certificate</label>
       <div class="frm-act"><button class="pri" type="submit">Connect and add</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "narrow");

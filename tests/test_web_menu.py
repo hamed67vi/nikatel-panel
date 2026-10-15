@@ -741,3 +741,12 @@ def test_the_panel_page_helpers_each_start_their_own_line():
 
     for name in ("pnFirstCard", "pnEmptyPage", "pnBar", "pnTabBtns", "pnTabs"):
         assert re.search(rf"^(const|function) {name}\b", app, re.MULTILINE), name
+
+
+def test_the_kit_switch_the_fixed_activity_box_and_the_save_row_of_the_user_window():
+    """The owner, 2026-10-15: "fix that button" (the switch of the picture), "a fixed box for Activity", "put Save and Cancel right", "the default is PasarGuard"."""
+    css, users, app = _web("lab.css"), _web("pg_users.js"), _web("app.js")
+    assert "label.ob2-sw i { display: block; position: relative; width: 46px; height: 26px;" in css and "label.ob2-sw:has(input:checked) i::after { transform: translateX(20px); }" in css and "linear-gradient(180deg, #2f9dff, #0a6cf0)" in css
+    assert "#modal .pgu #pgu-actbody { height: 150px; max-height: none; overflow: auto; }" in css and "#modal .ue .pu-save { position: sticky; bottom: 0;" in css and "justify-content: flex-end;" in css
+    assert 'onclick="closeModal()">Cancel</button><button class="pri" type="submit">Save</button></div></form>`, "wide ue pgu"' in users
+    assert '<select name="type" onchange="pnHint(this.form)"><option value="pasarguard">PasarGuard</option><option value="marzban">Marzban</option></select>' in app

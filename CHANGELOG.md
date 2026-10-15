@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.57.30 - The kit switch, a fixed Activity box, Save at the foot, PasarGuard first
+
+- **Switches (the owner's picture):** one look everywhere, pages and windows - off a dark slate pill with a light knob, on the blue pill with a soft glow, the knob slides; the *Add the rest* switch of the user window had the old grey one with its knob off the middle.
+- **User window:** the *Activity* box has one fixed height (150 px, the list scrolls inside); *Cancel* and *Save* stand at the foot, at the right, *Save* last, in a bar that stays in view.
+- **Add panel:** the default type is *PasarGuard* (Marzban is the second choice).
+
 ## 1.57.29 - The other empty Panel tabs: one fixed card, nothing to press
 
 - **Panel > Users / Configs / Admins with no panel (the owner):** the same fixed card as General (an icon, *No panel connected*, one line saying panels are added in General); the *＋ Add a panel in General* button is gone from the middle of the page, and so is the dead copy of the Users table. A test keeps every helper of the Panel bar on its own line (a comment glued to the next declaration had swallowed one).
