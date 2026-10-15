@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.26 - Long profile names no longer push the buttons away
+
+- **Profile tabs (the owner):** the tabs give way when the room runs short - each box gets shorter and a long name ends with an ellipsis - and the buttons beside them (add, sync, rename, delete) always stay in view.
+
 ## 1.56.25 - Network: the tabs under the header
 
 - **Network (the owner):** when it is opened, its three tabs - *CDN*, *Tunnel manager*, *Tunnel Doctor* - stand in the bar under the header (as before they were only in the menu list).

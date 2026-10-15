@@ -455,3 +455,10 @@ def test_the_network_page_keeps_its_three_tabs_under_the_header_while_its_menu_l
     """The owner, 2026-10-15: "Network opens with three tabs under the header"."""
     app = _web("app.js")
     assert 'const NAV_BAR_TOO = new Set(["tunnels"]);' in app and '&& !NAV_BAR_TOO.has(state.page) ? "1" : ""' in app
+
+
+def test_the_profile_tabs_give_way_with_ellipsis_and_the_buttons_beside_them_stay_in_view():
+    """The owner, 2026-10-15: long profile names pushed Add profile out of the bar; the tab boxes shrink (the name ends with "...") and the buttons stay."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert '<span class="lab-kn">${k === "any" ? "All" : esc(k)}</span>' in lab
+    assert ".lab-bar .lab-ksw { flex: 0 1 auto; min-width: 0; }" in css and ".lab-bar .lab-tabact { flex: none; }" in css and ".lab-kinds .lab-kn { min-width: 0; overflow: hidden; text-overflow: ellipsis;" in css

@@ -317,3 +317,12 @@ html[data-mode="light"] body #page .lab-tbl .lab-tagc { background: rgba(30,50,1
 html[data-mode="light"] body #page .lab-tbl .lab-tagc img.lab-logo:not(.lab-flag) { filter: brightness(0) opacity(.8); }
 html body #page .lab-tbl .lab-nm small .lab-busy { max-width: 100%; overflow: hidden; white-space: nowrap; font-family: "Inter", system-ui, -apple-system, sans-serif; }
 html body #page .lab-tbl .lab-nm small .lab-busy > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+
+/* 1.56.26 - the tabs of the profiles are a box that gives way (the owner: "make it a fixed thing; as the room runs short, the boxes of the profiles get shorter and their names with them"): the tabs shrink, a name that does not fit ends with "...", and the buttons beside them (add, sync, rename, delete) always stay in view */
+html body #page .lab-bar .lab-ksw { flex: 0 1 auto; min-width: 0; }
+html body #page .lab-bar .lab-tabact { flex: none; }
+html body #page .tabs.lab-kinds { flex: 0 1 auto !important; min-width: 0; overflow-x: auto; }
+html body #page .tabs.lab-kinds > button { flex: 0 1 auto; min-width: 46px; max-width: 190px; overflow: hidden; }
+html body #page .tabs.lab-kinds > button[data-k="any"] { flex: none; }
+html body #page .tabs.lab-kinds .lab-kn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .tabs.lab-kinds > button .lab-logo, html body #page .tabs.lab-kinds > button .lab-emoji, html body #page .tabs.lab-kinds > button .cnt { flex: none; }
