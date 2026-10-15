@@ -350,9 +350,6 @@ html body #page .lab-tbl td.lab-ip { font-size: 13.5px; white-space: nowrap; }
 html body #page .lab-ip .lab-glb { display: inline-block; width: 20px; height: 20px; margin-right: 10px; vertical-align: middle; color: var(--mut); }
 html body #page .lab-ip .lab-glb svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 html body #page .lab-tbl .lab-ldw { display: flex; align-items: center; gap: 14px; min-width: 0; }
-html body #page .lab-spk { flex: none; display: block; width: 112px; height: 34px; }
-html body #page .lab-spk-l { fill: none; stroke: #3b82f6; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-html body #page .lab-spk-a { fill: rgba(59,130,246,.16); stroke: none; }
 html body #page .lab-ldx { display: grid; gap: 3px; min-width: 0; }
 html body #page .lab-ldx .lab-cpu { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 html body #page .lab-ldx .lab-cpu b { order: -1; font-size: 14px; font-weight: 700; line-height: 1; }

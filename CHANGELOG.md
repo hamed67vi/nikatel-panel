@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.2 - The small CPU charts are gone
+
+- **Lab rows (the owner):** the small chart of the CPU is removed again (the number, its thin bar and RAM / Disk stay); the GET /api/profiles/spark route of 1.57.1 is removed with it.
+
 ## 1.57.1 - The Lab row like the drawing
 
 - **Rows (the owner's drawing):** a round lamp of its own at the left (green, yellow, red, blue), the flag and the icon, the name with its *provider* under it (not the country), then the address with a globe, a small chart of the CPU of the last hours with the number, a thin bar and RAM / Disk, the traffic in two lines (value over *Mb/s*), and the two buttons at the end - the menu and a chevron. The profile tag is a small chip beside the name.

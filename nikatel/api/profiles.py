@@ -134,13 +134,6 @@ def delete_profile(profile_id: int):
         return {"ok": True, "removed": name}
 
 
-@router.get("/profiles/spark")
-def profile_spark(hours: int = Query(3, ge=1, le=uptime.MAX_HOURS), buckets: int = Query(24, ge=6, le=96)):
-    """For the server of every Iran / foreign profile the CPU percent averaged in a few cells over the last hours, oldest first (null where it was not heard), read from the samples."""
-    with session() as db:
-        ids = [i for i in db.scalars(select(Profile.server_id).where(Profile.server_id.is_not(None)))]
-        return {"ok": True, "hours": hours, "buckets": buckets, "servers": {str(k): v for k, v in uptime.cpu_series(db, ids, hours, buckets).items()}}
-
 @router.get("/profiles/strips")
 def profile_strips(hours: int = Query(24, ge=1, le=uptime.MAX_HOURS), buckets: int = Query(48, ge=6, le=168)):
     """For the server of every Iran / foreign profile a strip of cells over the last hours (2 answered, 1 now and then, 0 silent, - not added yet) and the share of the time it was heard; read from the samples."""
