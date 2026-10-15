@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.11 - The address says Copied where it was clicked
+
+- A click on an address of the Lab copies it and marks the address itself (a solid mark for a moment), as the old list did - not a message at the top.
+
 ## 1.56.10 - The torrent block takes a minute, and blocks something
 
 - **Why it stuck (found on a real server):** the public script makes six iptables calls for each of its 4634 tracker names - 27 000 process starts, 5 to 7 minutes - and then maps the names to 0.0.0.0 in /etc/hosts, so its rules only ever dropped 0.0.0.0 ("drop rules=7" was three rules and four).
