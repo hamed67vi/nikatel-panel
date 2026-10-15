@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.56.7 - The install says short steps from the first moment
+
+- **The row of the server says what is going on in one short line, from the first moment (the owner):** Connecting to the server... -> Checking the server... -> Starting the install... -> 1/4 Installing Docker and the node (minutes) -> 2/4 Reading the certificate -> 3/4 Adding the node to the panel -> 4/4 Waiting for the panel to connect (up to 2 min); the torrent block says "Torrent block: adding the rules (minutes)". The long lines of the installer are in the story only; the install inside the steps no longer overwrites them.
+- **The Profile field of Add a server is always Any when the box opens (the owner):** it no longer takes the profile of the open tab.
+
 ## 1.56.6 - The pictures of the profiles are grey
 
 - The flag of Iran and the emoji before a profile are not coloured any more (the owner): they are grey, like the logos of PasarGuard and Marzban.

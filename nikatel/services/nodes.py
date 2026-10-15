@@ -57,8 +57,15 @@ def _set_extra(server_id: int, **kw) -> None:
             s.extra = d
 
 
-def set_busy(server_id: int, what: str = "", detail: str = "") -> None:
-    """What the panel is doing with this server right now (connecting, installing): shown in the list instead of a dash. Empty `what` clears it."""
+def set_busy(server_id: int, what: str = "", detail: str = "", unless: str = "") -> None:
+    """What the panel is doing with this server right now (connecting, installing): shown in the list instead of a dash. Empty `what` clears it. `unless`: leave it alone when it is of that kind (the steps of making a node are not overwritten by the install inside them)."""
+    if unless:
+        with session() as db:
+            s = db.get(Server, server_id)
+
+            if s is not None and ((s.extra or {}).get("busy") or {}).get("what") == unless:
+                return
+
     _set_extra(server_id, busy=({"what": what, "detail": detail, "at": int(time.time())} if what else None))
 
 

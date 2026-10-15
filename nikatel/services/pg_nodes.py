@@ -1232,7 +1232,7 @@ def make_plan(c: dict, server_id: int, opts: dict | None = None, resolver: Resol
             "server": {"id": srv["id"], "name": srv["name"], "host": srv["host"], "role": srv["role"]}, "read_only": get_settings().read_only}
 
 
-def _step(server_id: int | None, text: str, what: str = "making a node") -> None:
+def _step(server_id: int | None, text: str, what: str = "node") -> None:
     """What the panel is doing on this server now, as a short line for its row on the Lab page (the owner: "show the steps of the install there"); "" clears it."""
     if server_id is None:
         return
@@ -1256,7 +1256,6 @@ def _follow(aid: int, inner: int, limit: float, server_id: int | None = None) ->
         for line in story[seen:]:
             if line.strip() and line.strip() != "Done." and "Next: in this server's Install view" not in line:
                 autopilot._say(aid, "    " + line)
-                _step(server_id, line, "installing")
 
         seen = len(story)
 
@@ -1332,9 +1331,10 @@ def _make_story_steps(aid: int, panel_id: int, server_id: int, opts: dict) -> No
 
     if opts.get("installed"):
         say(aid, "1/4 The PasarGuard node is on the server already: the install is skipped.")
+        _step(server_id, "1/4 The node is on the server already")
     else:
         say(aid, f"1/4 Installing the PasarGuard node on {srv['name']} (the official installer, Docker and the node; a few minutes)…")
-        _step(server_id, "1/4 Installing the node (Docker)", "installing")
+        _step(server_id, "1/4 Installing Docker and the node (minutes)")
 
         try:
             inner = extras.start(server_id, ["pasarguard_node"], key if (opts["port"], opts["api_port"]) == (NODE_PORT, API_PORT) else f"{key}:{opts['port']}:{opts['api_port']}")
@@ -1368,7 +1368,7 @@ def _make_story_steps(aid: int, panel_id: int, server_id: int, opts: dict) -> No
         return
 
     say(aid, "4/4 Waiting until the panel is connected to the node (up to two minutes)…")
-    _step(server_id, "4/4 Waiting for the panel to connect")
+    _step(server_id, "4/4 Waiting for the panel to connect (up to 2 min)")
     last = _wait_connected(c, made["id"])
 
     if last.get("status") == "connected":

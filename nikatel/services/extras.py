@@ -23,6 +23,7 @@ ITEMS = ("btblock", "marzban_node", "pasarguard_node", "os_update")
 LABEL = {"btblock": "torrent block", "marzban_node": "Marzban node", "pasarguard_node": "PasarGuard node", "os_update": "system update", "pasarguard_panel": "PasarGuard panel update"}      # (the last is not an install: services/pg_update.py runs it with _run_item, it is not in ITEMS)
 KEY = {"btblock": "btblock", "marzban_node": "mznode", "pasarguard_node": "pgnode", "os_update": "osupdate", "pasarguard_panel": "pgpanel"}          # the name of the install on the server
 ACTION = {"btblock": "install_btblock", "marzban_node": "install_marzban_node", "pasarguard_node": "install_pasarguard_node", "os_update": "install_os_update", "pasarguard_panel": "install_pgpanel_update"}
+BUSY_TEXT = {"btblock": "Torrent block: adding the rules (minutes)", "marzban_node": "Marzban node (minutes)", "pasarguard_node": "PasarGuard node (minutes)", "os_update": "System update (minutes)", "pasarguard_panel": "PasarGuard panel update (minutes)"}      # (the short line of the row of the server while the install runs)
 LIMIT = {"btblock": 2700, "marzban_node": 1500, "pasarguard_node": 1200, "os_update": 2700, "pasarguard_panel": 2400}                   # seconds the panel waits for each
 POLL = 10
 
@@ -171,7 +172,7 @@ def _work(aid: int, server_id: int, items: list[str], cert: str, resume: bool = 
 
     try:
         for item in items:
-            nodes.set_busy(server_id, "installing", LABEL[item])
+            nodes.set_busy(server_id, "installing", BUSY_TEXT.get(item, LABEL[item]), unless="node")
             results[item] = _run_item(aid, node, ip, item, cert, resume)
             resume = False
     except Exception as e:
@@ -179,7 +180,7 @@ def _work(aid: int, server_id: int, items: list[str], cert: str, resume: bool = 
         autopilot._say(aid, f"Stopped: {str(e)[:200]}", done=True, ok=False)
         results = {}
     finally:
-        nodes.set_busy(server_id, "")
+        nodes.set_busy(server_id, "", unless="node")
         _pending(lambda rows: [r for r in rows if r["aid"] != aid])
 
     if not results:

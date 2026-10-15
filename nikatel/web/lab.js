@@ -63,14 +63,14 @@ function labServerRow(p) {
   /* the card of a row and its icons are the ones of the old Servers list (srv-tbl: the flag over the name, the server with its two lights); what is IN the columns is the new design */
   return `<tr class="${labTrCls(tone, on, s.online)} clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc(q)}" onclick="labOpen(${p.id})" title="${esc(f.top ? "Busiest process: " + f.top + " · " : "")}Click for the details">
     <td class="name ${cc ? "has-flag" : ""}" ${cc ? `style="--flag:url(/flags/${cc}.png)" title="${cc.toUpperCase()}"` : ""}><div class="lab-nmw"><i class="srv-ic" title="${!on ? "disabled" : s.online ? "online" : s.online === false ? "offline" : "not checked yet"}">${labPgSrv(p, s) ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(s.name)}${p.tag ? `<span class="pill lab-tagp">${esc(p.tag)}</span>` : ""}${isNew(s) ? '<span class="pill new" title="Added in the last hour">new</span>' : ""}</b>${s.provider ? `<small title="${esc(s.provider)}">${esc(s.provider)}</small>` : ""}</div></div></td>
-    <td class="lab-serves">${srvBusy(s) ? labBusyHtml(srvBusy(s)) : labServes(s)}</td>
+    <td class="lab-serves">${srvBusy(s) ? labBusyHtml(srvBusy(s)) : (window.labMaking && labMaking[s.id]) ? labBusyHtml({what: "node", detail: labMaking[s.id]}) : labServes(s)}</td>
     <td class="lab-ip mono" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); copyText(this.dataset.ip)" title="Click to copy ${esc(s.host)}">${esc(s.host)}</td>
     <td>${on && s.online !== false && f.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(f.cpu, 80, 92)}</span><small>RAM ${labNum(f.ram, 85, 92)} · Disk ${labNum(f.disk, 85, 95)}</small></div>` : '<span class="mut">—</span>'}</td>
     <td class="lab-trf">${on && f.rx_mbps != null ? `<span class="trf"><i class="ta d">${LAB_AD}</i>${labRate(f.rx_mbps)}</span><span class="trf"><i class="ta u">${LAB_AU}</i>${labRate(f.tx_mbps)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + s.name)}</div></td></tr>`;
 }
 const LAB_AD = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v8.5M2.6 6.8L6 10.2l3.4-3.4"/></svg>', LAB_AU = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 10.5V2M2.6 5.2L6 1.8l3.4 3.4"/></svg>';      // (the arrows of the traffic column: drawn, so they have one size and one weight whatever the font is)
-const labBusyHtml = b => `<span class="lab-busy" title="${esc(b.what + (b.detail ? ": " + b.detail : ""))}"><i class="spin"></i><span>${esc(b.what)}${b.detail ? " · " + esc(b.detail) : ""}</span></span>`;      // what the panel is doing with the server now (the steps of an install), on its row\
+const labBusyHtml = b => { const nice = {connecting: "Connecting to the server…"}, txt = b.what === "node" ? b.detail : (nice[b.what] || b.what) + (b.detail ? " · " + b.detail : ""); return `<span class="lab-busy" title="${esc(txt)}"><i class="spin"></i><span>${esc(txt)}</span></span>`; };      // what the panel is doing with the server now (the steps of an install), on its row: short, from the first moment
 const labPgSrv = (p, s) => /^pasarguard/i.test(p.tag || "") || (typeof pgSrvOn === "function" && pgSrvOn(s).some(x => x.type === "pasarguard"));      // a server of the PasarGuard profile, or one that carries a PasarGuard node: the lion of PasarGuard is its icon (the owner, 2026-10-15)
 const labTrCls = (tone, on, online) => (!on ? "srv-off" : online ? "up" : online === false ? "down" : "") + " " + ({bad: "sev-red", warn: "sev-yellow", busy: "sev-blue"})[tone];      // (the classes the old list gave its rows: they colour the icon and the edge of the card)
 const LAB_NODE_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="b" d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path class="b" d="M4 7.5l8 4.5 8-4.5M12 12v9"/><circle class="led" cx="12" cy="12" r="1.2"/></svg>';      // (a node, drawn like the server of the old list: the same strokes, the same light)
@@ -206,7 +206,7 @@ window.labPgFirst = async () => {      // the option of a node is grey while no 
 };
 window.labConnect = () => labNodePanel(true);      // only the panel: the same screen as the node's first step, and no node is asked for
 const labBack = '<div class="wback"><button type="button" class="sm" onclick="labTagDraft.v = \'\'; labAdd()">← Back</button></div>';
-const labTagCur = () => labTagDraft.v || (labKindNow() !== "any" ? labKindNow() : "");      // the profile the new server goes to: what was chosen, else the tab that is open
+const labTagCur = () => labTagDraft.v;      // the profile the new server goes to: what was chosen - and Any (none) whenever the box is opened (the owner, 2026-10-15: "the default is always Any")
 window.labTagPick = v => {      // a profile is chosen in the form of Add a server (the owner, 2026-10-15): a PasarGuard profile brings the install options of a PasarGuard node (and Block public torrents); the others have none
   labTagDraft.v = v; const form = document.querySelector(".srv-f3"), sec = form && form.querySelector(".srv-after"); if (!sec) return;
   const on = labIsPgTag(v), bt = sec.querySelector("[name=x_bt]"), pg = sec.querySelector("[name=x_pgnode]");
@@ -217,7 +217,7 @@ window.labTagInput = () => {      // the Profile field: a drop-down of the profi
   const cur = labTagCur(), all = [...new Set([...labTags(), ...(cur ? [cur] : [])])];
   return `<select name="tag" id="lab-tag" onchange="labTagPick(this.value)"><option value="">Any (no profile)</option>${all.map(t => `<option value="${esc(t)}" ${t.toLowerCase() === cur.toLowerCase() ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
 };window.labAdd = (fill) => {      // the box is the one the Servers page always had (SERVER_FORM: the server, how the panel reaches it, what to install after) with ONE more field, the Tag; with the tag PasarGuard the settings of a node come instead
-  fill = fill && typeof fill === "object" ? fill : null; if (fill && fill.tag != null) labTagDraft.v = fill.tag;
+  fill = fill && typeof fill === "object" ? fill : null; labTagDraft.v = fill && fill.tag != null ? fill.tag : "";
   state.prefill = fill ? {name: fill.name || "", host: fill.host || ""} : null;
   labModal("<b>Add a server</b>", `<div class="lab-pfwin lab-xwide">${SERVER_FORM(null)}</div>`);
   setTimeout(() => { const i = document.querySelector(".srv-form2 input[name=name]"); if (i) i.focus(); const h = document.querySelector(".srv-form2 input[name=host]"); if (h && h.value && typeof srvWhere === "function") srvWhere(h.form); labTagPick(labTagCur()); }, 80);

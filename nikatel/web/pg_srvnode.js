@@ -180,20 +180,21 @@ window.pgSrvAsk = f => {
 window.pgSrvMake = async (sid, sname, o) => {
   const body = {server_id: sid, name: o.name, usage_coefficient: o.usage_coefficient}; if (o.core_config_id) body.core_config_id = o.core_config_id;
   const pname = (pgSrvPanels().find(p => p.id === o.panel_id) || {}).name || "the panel";
+  const say = text => { window.labMaking = window.labMaking || {}; if (text) window.labMaking[sid] = text; else delete window.labMaking[sid]; if (state.page === "nodes" && state.open == null && !state.nodeWin) refresh(); };      // (the row of the server says what is going on from the first moment, before the server itself has a step to say)
+  say("Checking the server…");
   try {
     const plan = await api(`/api/panels/${o.panel_id}/pg/nodes/make/plan`, {method: "POST", body: JSON.stringify(body)});
-    if (plan.problems.length) { await glassChoice(`${sname} is added, but it cannot be made a PasarGuard node yet: ${plan.problems[0]} Use its window → Node → Make a node when that is fixed.`, [{label: "OK", v: 1, cls: "pri"}]); return false; }      // (a dialog, not a toast: the owner did not see the toast and thought nothing happened)
+    if (plan.problems.length) { say(""); await glassChoice(`${sname} is added, but it cannot be made a PasarGuard node yet: ${plan.problems[0]} Use its window → Node → Make a node when that is fixed.`, [{label: "OK", v: 1, cls: "pri"}]); return false; }      // (a dialog, not a toast: the owner did not see the toast and thought nothing happened)
     const portNote = (plan.warnings || []).find(w => /ports/i.test(w)); if (portNote) toast("ℹ " + portNote);      // (the usual ports are taken: the node goes to a free pair by itself)
+    say("Starting the install…");
     const r = await api(`/api/panels/${o.panel_id}/pg/nodes/make`, {method: "POST", body: JSON.stringify(body)});
-    toast(`Installing the PasarGuard node on ${sname}: the steps show on its row`);      // (the owner, 2026-10-15: the steps are on the row of the server, not in a big window)
-    refresh();
     const fin = await followStory(r.action_id, document.createElement("div"), 1000), lastLine = fin && fin.story ? [...fin.story].reverse().find(l => l && l.trim() && !/^Done/.test(l.trim())) : "";
+    say("");
     toast(fin && fin.ok ? `✓ ${sname} is a node of ${pname} now` : "✕ " + String(lastLine || "Not finished").trim().slice(0, 200), fin && fin.ok ? "ok" : "bad");
     pgNodesLoad(o.panel_id, true).catch(() => {}); pgSrvLoad().then(() => { if (state.page === "nodes" && state.open == null && !state.nodeWin) refresh(); });
     return !!(fin && fin.ok);
-  } catch (e) { await glassChoice(`${sname} is added, but making it a node stopped: ${e.message}`, [{label: "OK", v: 1, cls: "pri"}]); return false; }
+  } catch (e) { say(""); await glassChoice(`${sname} is added, but making it a node stopped: ${e.message}`, [{label: "OK", v: 1, cls: "pri"}]); return false; }
 };
-
 /* ---- the Install tab of a server window: one PasarGuard card that makes the server a node of a panel of your choice (the old card asked for an API key and a certificate by hand) */
 window.pgSrvCard = s => {
   const ps = pgSrvPanels(), mine = pgSrvOn(s).filter(x => x.type === "pasarguard");
