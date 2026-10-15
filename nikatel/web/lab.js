@@ -336,11 +336,15 @@ window.labNodeGo = async pid => {
    A panel is connected when it is in the list of panels (its API key or its sign-in was tried and kept): not when a node of it is on the Lab page. For now the one that is made to be used is PasarGuard; others may come. */
 LAB.pg = null;      // null: not known yet (nothing is locked), true / false: whether a panel is connected
 window.labLocked = () => false;      // the Panel item is always open (the owner, 2026-10-15: "keep this section active entirely"); without a panel its page says so and offers to connect one
-const labLockedOld = () => LAB.pg === false && !document.getElementById("demo-pill");      // (the public demo has no panel to connect: its Panel page stays open)
+const labNoPanel = window.labNoPanel = () => LAB.pg === false && !document.getElementById("demo-pill");      // (the public demo has no panel to connect: its Panel page stays open)
 function labLockPaint() {
   const lock = labLocked();
   document.querySelectorAll('#nav a[data-page="pgpanel"]').forEach(a => { a.classList.toggle("nav-lock", lock); if (lock) { a.title = "No panel is connected: connect one first (Lab → Add profile → PasarGuard node)"; a.setAttribute("aria-disabled", "true"); } else a.removeAttribute("aria-disabled"); });
   if (!lock && typeof navTitles === "function") navTitles();      // (the tooltips the menu normally has)
+  const none = labNoPanel();      // no panel yet (the owner, 2026-10-16): the sections that need one (Users, Configs, Admins) are dim and do nothing - no message; General stays open, it is where a panel is added
+  document.querySelectorAll('#nav a[data-page="pgpanel"][data-sub]').forEach(a => { const dim = none && a.dataset.sub !== "settings"; a.classList.toggle("nav-nopanel", dim); if (dim) a.setAttribute("aria-disabled", "true"); });
+  if (none && state.page === "pgpanel" && sub("pgpanel") !== "settings") setSub("pgpanel", "settings");      // (a reload on one of them comes to General)
+  if (typeof renderSub === "function" && state.page === "pgpanel") renderSub();
 }
 window.labLockSet = has => { LAB.pg = !!has; LAB.pgAt = Date.now(); labLockPaint(); };
 window.labLockSync = async force => {      // asked at most every 30 s (every refresh calls it); a failure leaves what is known

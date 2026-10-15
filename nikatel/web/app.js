@@ -197,13 +197,17 @@ function renderSub() {
   if (!list) return;
   const cur = sub(state.page);
   const quiet = t => String(t).replace(/^((?:\p{Extended_Pictographic}\uFE0F?|[\u21C4\u26A1\u2713\u2714])\s*)/u, (m, ic) => `<span class="tab-ic">${ic.trim()}</span> `);      // the emoji of a tab is drawn in one quiet tone (see .tab-ic)
-  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : off === "act" ? `<button data-k="${k}" class="sub-act" onclick="subAct('${state.page}', '${k}')">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
+  const nop = k => k !== "settings" && state.page === "pgpanel" && window.labNoPanel && labNoPanel();      // (no panel yet: those tabs are dim and quiet)
+  box.innerHTML = `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => nop(k) ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true">${quiet(label)}</button>` : off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : off === "act" ? `<button data-k="${k}" class="sub-act" onclick="subAct('${state.page}', '${k}')">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`;
   $("#subtitle").textContent = list.find(x => x[0] === cur)[2];
 }
 function subSet(page, k) {      // what changes when a tab of a page is chosen (setSub = this and a redraw; the left menu calls it through go)
   if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = "";
 }
-window.setSub = (page, k) => { subSet(page, k); refresh(); };
+window.setSub = (page, k) => {      // a tab of the page (the owner, 2026-10-16: "the page jumps when I switch"): what the old tab still waited for is dropped - a late answer must never paint the old tab over the new one - and the new tab starts at the top
+  if (state.sub[page] !== k || state.page !== page) { navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(".main"); if (m) m.scrollTop = 0; }
+  subSet(page, k); refresh();
+};
 const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
 /* a small animated drawing beside the title of the main pages: lights of a server, packets in a tunnel, bars of a panel, the blink of the shop bot */
 const TITLE_ANIM = {
@@ -221,6 +225,7 @@ const TITLE_ANIM = {
     page = target;
   }
   if (!PAGES[page] || (page === "bot" && !SHOPBOT_UI)) page = "dashboard";      // the Shop bot section is hidden for now (roadmap #79)
+  if (page === "pgpanel" && window.labNoPanel && labNoPanel() && (tab || sub("pgpanel")) !== "settings") tab = "settings";      // (no panel yet: Users, Configs and Admins are closed - General opens instead, with no message)
   if (page === "pgpanel" && window.labLocked && labLocked()) { labLockMsg(); return; }      // the Panel needs a connected panel: while there is none it says so instead of opening (lab.js)
   if (state.page !== page && !aliased) { delete state.sub[page]; TOP_TABS(); }   // a tab you come back to always opens on its first sub-tab (callers that want another one set it right after go())
   if (state.page !== page) {   // leaving a page: drop what it still waits for, start the new one at the top and show at once that it is loading (the old page never stays on screen)
@@ -340,7 +345,7 @@ function navBuild() {
       ? `<a class="nav-act" data-page="${page}" data-sub="${k}" data-act="1"><i class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></i><span>${esc(name)}</span></a>`      // (an action: the + in front of its name is its icon - "+ Add profile" - and it is the last of the list)
       : `<a data-page="${page}" data-sub="${k}"${off === "off" ? ' class="nav-off" aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)"' : ""}><i class="ic">${icon}</i><span>${esc(name)}</span></a>`).join("");
     head.replaceWith(g); gh.append(head, tg); g.append(gh, sub);
-    sub.querySelectorAll("a:not(.nav-off)").forEach(a => { a.onclick = () => a.dataset.act ? subAct(a.dataset.page, a.dataset.sub) : go(a.dataset.page, a.dataset.sub); });      // (an "act" does what SUB_ACT says: the Lab's Add profile opens the choice of what to add)
+    sub.querySelectorAll("a:not(.nav-off)").forEach(a => { a.onclick = () => a.classList.contains("nav-nopanel") ? null : a.dataset.act ? subAct(a.dataset.page, a.dataset.sub) : go(a.dataset.page, a.dataset.sub); });      // (an "act" does what SUB_ACT says: the Lab's Add profile opens the choice of what to add)
   }
   const saved = navOpenMap();
   nav.querySelectorAll(".nav-g").forEach(g => {
@@ -410,7 +415,8 @@ async function refresh() {
     if (state.softSwap && pg0 && !pg0.classList.contains("enter")) { pg0.classList.remove("soft-in"); void pg0.offsetWidth; pg0.classList.add("soft-in"); }      // a tab was pressed: the new content comes in softly
     state.softSwap = false;
     scrollRestore(snap); pendScroll = snap.length ? snap : null; setTimeout(() => { pendScroll = null; }, 500);
-    document.body.classList.toggle("tabbed", !!SUB[state.page] && ((c) => !!c && c.matches(".toolbar, .fstrip, .tiles, .ap-pair, .ap-alert, .ap-intro, .tt-frame, .dr-head, .set-top"))([...$("#page").children].find(c => getComputedStyle(c).display !== "none")));   // the sub tabs stick to the box under them
+    document.body.classList.toggle("tabbed", !!SUB[state.page] && ((c) => !!c && c.matches(".toolbar, .fstrip, .tiles, .ap-pair, .ap-alert, .ap-intro, .tt-frame, .dr-head, .dr-top, .set-top"))([...$("#page").children].find(c => getComputedStyle(c).display !== "none")));   // the sub tabs stick to the box under them
+    if (pg0 && pg0.querySelector(".fx-box")) fxFit();      // (the bar above the page just took its final shape: the boxes fitted to the window are measured again)
     $("#updated").textContent = "updated " + new Date().toLocaleTimeString(undefined, {hour12: false});
     release();
   } catch (e) {
@@ -457,6 +463,48 @@ function showModal(title, body, cls = "", acts = "") {
   m.innerHTML = `<div class="overlay"${still} onmousedown="if(event.target===this && !this.querySelector('.modal.keep'))closeModal()"><div class="modal ${cls}"${still}><div class="modal-head">${head}</div><div class="hmsg"></div><div class="modal-body">${body}</div></div></div>`;
 }
 function hideModal() { const m = $("#modal"); if (m) m.innerHTML = ""; state.nodeWin = null; }      // (state.nodeWin: a window of the nodes that is not a server's is open - the Servers page does not close it, see pg_nodes.js)
+/* the kit menu for a select (the owner, 2026-10-16: "grouped like a MacBook, the same style and colours"): a select with data-dd opens a one-column menu - a heading for every group, a tick before the chosen item, the highlighted one in blue - instead of the browser's own list. The select stays in the form as it is (it holds the value and fires its own change), so nothing that reads it changes. */
+let nkDdEl = null, nkDdSel = null;
+function nkDdClose() {
+  const el = nkDdEl; nkDdEl = null; if (nkDdSel) nkDdSel.removeAttribute("aria-expanded"); nkDdSel = null;
+  document.removeEventListener("mousedown", nkDdOut, true); document.removeEventListener("keydown", nkDdKey, true); document.removeEventListener("scroll", nkDdScroll, true); window.removeEventListener("resize", nkDdClose);
+  if (el) { el.classList.remove("open"); setTimeout(() => el.remove(), 140); }
+}
+const nkDdOut = e => { if (nkDdEl && !nkDdEl.contains(e.target) && !(nkDdSel && nkDdSel.contains(e.target))) nkDdClose(); };
+const nkDdScroll = e => { if (nkDdEl && !nkDdEl.contains(e.target)) nkDdClose(); };
+const nkDdRows = () => nkDdEl ? [...nkDdEl.querySelectorAll(".nk-dd-i:not([disabled])")] : [];
+function nkDdKey(e) {
+  if (!nkDdEl) return; const rows = nkDdRows(), hl = rows.findIndex(r => r.classList.contains("hl"));
+  const go = i => { rows.forEach(r => r.classList.remove("hl")); const r = rows[(i + rows.length) % rows.length]; if (r) { r.classList.add("hl"); r.scrollIntoView({block: "nearest"}); } };
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); const s = nkDdSel; nkDdClose(); if (s) s.focus(); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); go(hl + 1); } else if (e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); go(hl < 0 ? -1 : hl - 1); }
+  else if (e.key === "Home") { e.preventDefault(); go(0); } else if (e.key === "End") { e.preventDefault(); go(rows.length - 1); }
+  else if (e.key === "Enter" || e.key === " " || e.key === "Tab") { if (e.key !== "Tab") { e.preventDefault(); e.stopPropagation(); } if (hl >= 0) nkDdPick(+rows[hl].dataset.i); else nkDdClose(); }
+}
+function nkDdPick(i) {
+  const s = nkDdSel; nkDdClose(); if (!s || !s.options[i] || s.options[i].disabled) return;
+  if (s.selectedIndex !== i) { s.selectedIndex = i; s.dispatchEvent(new Event("input", {bubbles: true})); s.dispatchEvent(new Event("change", {bubbles: true})); }
+  s.focus();
+}
+function nkDdItem(o, g) {
+  let text = o.textContent.trim(); if (g && text.startsWith(g + " · ")) text = text.slice(g.length + 3);      // (the group says it already: "Backhaul over GRE · TCP Mux" is "TCP Mux" under its heading)
+  const k = text.indexOf(" — "), title = k > 0 ? text.slice(0, k) : text, note = k > 0 ? text.slice(k + 3) : "";
+  return `<button type="button" role="option" class="nk-dd-i${o.selected ? " on hl" : ""}" data-i="${o.index}" aria-selected="${o.selected}" ${o.disabled ? "disabled" : ""} onclick="nkDdPick(${o.index})"><svg class="nk-dd-ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span class="nk-dd-t">${esc(title)}</span>${note ? `<span class="nk-dd-n">${esc(note)}</span>` : ""}</button>`;
+}
+function nkDdOpen(sel) {
+  if (nkDdSel === sel) { nkDdClose(); return; } nkDdClose();
+  const html = [...sel.children].map(ch => ch.tagName === "OPTGROUP" ? `<div class="nk-dd-g" role="presentation">${esc(ch.label)}</div>` + [...ch.children].map(o => nkDdItem(o, ch.label)).join("") : nkDdItem(ch, "")).join("");
+  const m = document.createElement("div"); m.className = "nk-dd"; m.setAttribute("role", "listbox"); m.innerHTML = html; document.body.appendChild(m); nkDdEl = m; nkDdSel = sel; sel.setAttribute("aria-expanded", "true");
+  const r = sel.getBoundingClientRect(), w = Math.min(innerWidth - 16, Math.max(r.width, +sel.dataset.ddw || 0));
+  m.style.width = w + "px"; m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+  const below = innerHeight - r.bottom - 14, above = r.top - 14, h = Math.min(m.scrollHeight + 14, Math.floor(innerHeight * 0.64)), up = below < Math.min(h, 260) && above > below;
+  m.style.maxHeight = Math.max(160, Math.min(h, up ? above : below)) + "px"; m.style.top = up ? Math.max(8, r.top - 6 - Math.min(h, above)) + "px" : r.bottom + 6 + "px";
+  const on = m.querySelector(".nk-dd-i.on"); if (on) on.scrollIntoView({block: "center"});
+  requestAnimationFrame(() => m.classList.add("open"));
+  document.addEventListener("mousedown", nkDdOut, true); document.addEventListener("keydown", nkDdKey, true); document.addEventListener("scroll", nkDdScroll, true); window.addEventListener("resize", nkDdClose);
+}
+document.addEventListener("mousedown", e => { const s = e.target.closest && e.target.closest("select[data-dd]"); if (s && !s.disabled && e.button === 0) { e.preventDefault(); s.focus(); nkDdOpen(s); } }, true);
+document.addEventListener("keydown", e => { const s = e.target; if (!nkDdEl && s && s.matches && s.matches("select[data-dd]") && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); nkDdOpen(s); } }, true);
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
 function glassAsk(text, {input = false, value = "", danger, password = false, check = null, generate = true} = {}) {      // check = {label, note}: a tick under the text; the answer is then {checked} (or false on Cancel)
@@ -957,7 +1005,12 @@ window.srvSet = async (id, on, undoing) => {
 };
 window.editServer = id => { state.edit = id; state.open = id; state.wtab = "overview"; refresh(); };      // Edit leaves the console: Back from the form returns to the main window, not to the console
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
-window.openBuild = () => { state.build = true; state.open = null; refresh(); };
+window.openBuild = async () => {      // the window opens ON the page that is there, with no redraw of the page behind it first (the owner, 2026-10-16: the page and its background jumped when Create tunnel was pressed); closing leaves the page as it is, too
+  if (state.build && $("#modal .modal")) return;
+  state.open = null;
+  if (state.page === "tunnels" && $("#page .tun-box")) { state.build = true; try { showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); } catch (e) { state.build = null; toast("✕ " + e.message, "bad"); } return; }
+  state.build = true; refresh();
+};
 window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "list") { go("tunnels", "list"); state.build = true; refresh(); } else openBuild(); };      // (go names the tab: CDN is the first tab of the section now, and a first draw of it must never land over the Tunnel manager)
 /* the SSH password was wrong (or the server did not answer): ask for it again, three tries, instead of leaving a server that silently has no login */
 async function connectWithPrompt(id, name, firstError) {
@@ -1264,22 +1317,22 @@ async function buildFormHtml() {
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
   const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(name in bk.chk ? bk.chk[name] : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
   const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
-  const sel = (name, label, list, dflt) => `<label>${label}<select name="${name}">${list.map(p => `<option ${val(name, dflt) === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>`;
+  const sel = (name, label, list, dflt) => `<label>${label}<select name="${name}" data-dd>${list.map(p => `<option ${val(name, dflt) === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>`;
   const muxed = BP_MUXED.includes(tr.key);
   let options = "";
   if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", muxed ? 24 : 32, 1, 256, "(client connections kept ready)") + (muxed ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + num("dial_timeout", "Dial timeout (s)", 10, 3, 60) + num("retry_interval", "Retry interval (s)", 2, 1, 30) + sel("log_level", "Log level", ["warn", "error", "info", "debug"], "warn") + nodelay + chk("aggressive_pool", "Aggressive pool", "reconnect lost pool connections at once") + chk("tune", "Tune the kernel", "BBR + fq + big buffers on both servers", true);
-  else if (K.key === "backpack") options = `<label>Preset<select name="preset">${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", BP_MUXED.includes(tr.key) ? 16 : 24, 1, 256, "(client connections kept ready)") + (BP_MUXED.includes(tr.key) ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + nodelay + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
+  else if (K.key === "backpack") options = `<label>Preset<select name="preset" data-dd>${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", BP_MUXED.includes(tr.key) ? 16 : 24, 1, 256, "(client connections kept ready)") + (BP_MUXED.includes(tr.key) ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + nodelay + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>SNI domain <small>(a domain your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "") + (tr.key === "pck" || tr.key === "sni" ? num("mtu", "Carrier MTU", 1380, 1000, 1500) : "") + chk("accept_udp", "Forward UDP too");
-  else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode">${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
+  else if (K.key === "paqet") options = `<label>KCP mode<select name="kcp_mode" data-dd>${["fast", "normal", "fast2", "fast3"].map(p => `<option ${val("kcp_mode", "fast") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("conn", "Connections", 4, 1, 32) + num("mtu", "KCP MTU", 1350, 500, 1500) + chk("accept_udp", "Forward UDP too");
   else options = chk("accept_udp", "Forward UDP too", "the same ports over UDP");
-  const typeSel = `<select name="ttype" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  const typeSel = `<select name="ttype" data-dd data-ddw="470" onchange="bkType(this.value)">${bk.kinds.map(k => `<optgroup label="${esc(k.title)}">${k.transports.map(t => `<option value="${k.key}|${t.key}" ${k.key === K.key && t.key === tr.key ? "selected" : ""}>${esc(k.title)} · ${esc(t.label)} — ${esc(BK_FOR[k.key + ":" + t.key] || BK_FOR[k.key] || "")}</option>`).join("")}</optgroup>`).join("")}</select>`;
   const fl = (label, inner) => `<label class="kv2 kf bf"><span>${label}</span>${inner}</label>`;
   const forHint = BK_FOR[K.key + ":" + tr.key] || "";
   return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
     <div class="sgrid bld-grid">
       <div class="sbox"><h5><i>🖧</i>Servers</h5>
-        ${fl(`Iran <a class="bf-auto" onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">auto</a>`, `<select name="iran_id" required onchange="bkCheck(this.closest('form'))"><option value="0" ${String(v.iran_id) === "0" ? "selected" : ""}>✨ Smart — the best one</option>${opt("iran", "iran_id")}</select>`)}
-        ${fl("Foreign", `<select name="foreign_id" required onchange="bkCheck(this.closest('form'))">${opt("foreign", "foreign_id")}</select>`)}
+        ${fl(`Iran <a class="bf-auto" onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">auto</a>`, `<select name="iran_id" required data-dd data-ddw="340" onchange="bkCheck(this.closest('form'))"><optgroup label="Automatic"><option value="0" ${String(v.iran_id) === "0" ? "selected" : ""}>✨ Smart — the best one</option></optgroup>${opt("iran", "iran_id") ? `<optgroup label="Iran servers">${opt("iran", "iran_id")}</optgroup>` : ""}</select>`)}
+        ${fl("Foreign", `<select name="foreign_id" required data-dd data-ddw="340" onchange="bkCheck(this.closest('form'))">${opt("foreign", "foreign_id") ? `<optgroup label="Foreign servers">${opt("foreign", "foreign_id")}</optgroup>` : ""}</select>`)}
         <div id="auto-iran" class="mut bf-note"></div></div>
       <div class="sbox"><h5><i>⇄</i>Tunnel</h5>
         ${fl("Type", typeSel)}
@@ -1515,10 +1568,25 @@ window.fixTunnel = async (id, dry) => {
   } catch (e) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
   state.edit = null;
 };
+/* why a build or a repair did not succeed, in plain words (the owner, 2026-10-16: "when it says it was not built, write the reason simply"): the summary of the job when it has one, else the last line of the story that says what went wrong - told in one simple sentence */
+const apWhy = s => {
+  const sm = s.summary || {}, lines = (s.story || []).filter(l => !/did not succeed|^Done\.?$|^Starting|^Working|^Trying|^Building/i.test(l));
+  const raw = String(sm.hint || sm.problem || lines.slice(-1)[0] || "").trim(); if (!raw) return "";
+  const P = [[/no Iran server is online/i, "None of your Iran servers is online right now: the panel cannot reach them over SSH. Turn one on, or fix its login, then build again."],
+    [/No Iran server can carry/i, "No Iran server can take this tunnel right now - " + raw.replace(/^.*?right now:?\s*/i, "") + "."],
+    [/already in use|port .*(busy|used)|is busy/i, "The port is already used on the server: pick another port, or replace the tunnel that holds it."],
+    [/read-only/i, "The panel runs read-only (NIKATEL_READ_ONLY): nothing is built until that is switched off."],
+    [/license/i, raw],
+    [/timed out|no route|refused|unreachable|ssh|does not answer/i, "The server did not answer over SSH: it is off, a firewall is in the way, or its login is wrong."],
+    [/GRE/i, "The GRE link between the two servers could not be made: the route blocks GRE. Try a BackPack type."],
+    [/did not work/i, "The tunnel was built but did not pass data (" + raw.replace(/\s*-\s*trying.*$/i, "") + ")."]];
+  const hit = P.find(([re]) => re.test(raw)); return hit ? hit[1] : raw;
+};
+const apWhyHtml = s => { const w = apWhy(s); return w ? `<em class="fx-why">${esc(w)}</em>` : ""; };
 function storyHtml(s) {
   const cls = l => /healthy|works|finished|succeeded/i.test(l) ? "ok" : /not repaired|failed|still|does not answer|No safe|read-only|Stopped/i.test(l) ? "bad" : /^Plan:|^\[dry run\]/.test(l) ? "plan" : "do";
   return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
-    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${["autopilot", "fix"].includes(s.action) && !s.dry_run ? (s.ok ? "All done - the problem is fixed." : "Repair did not succeed.") : `${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : s.action === "observe" ? "Look" : s.action === "pgupdate" ? "Update" : s.action === "pgnode" ? "Making the node" : s.action === "install" ? "Install" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.`}</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
+    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${["autopilot", "fix"].includes(s.action) && !s.dry_run ? (s.ok ? "All done - the problem is fixed." : "Repair did not succeed." + apWhyHtml(s)) : `${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : s.action === "observe" ? "Look" : s.action === "pgupdate" ? "Update" : s.action === "pgnode" ? "Making the node" : s.action === "install" ? "Install" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.${s.ok ? "" : apWhyHtml(s)}`}</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 /* ---- Tunnel Doctor: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
 const ARVAN_UI = true;    // the DNS accounts (ArvanCloud, Cloudflare) live under Tunnels → CDN; the Doctor (Tunnels → Tunnel Doctor) decides when a server is replaced
@@ -1537,7 +1605,7 @@ const tkSimple = a => { const s = a.summary || {}, ok = a.ok === true, stale = a
     <div class="tk-one">${esc(one)}</div>
     <div class="fix hidden">${s.problem ? `<div class="tk-line"><em>Problem</em><span>${esc(s.problem)}</span></div>` : ""}<div class="tk-line"><em>What was done</em><span>${did}</span></div>${(a.story || []).map(l => `<div class="fx-line do"><b>·</b><span>${esc(l)}</span></div>`).join("")}</div></div>`; };
 const tkWorking = w => `<div class="tk run"><div class="tk-head"><span class="tk-res">… Fixing it now</span><b>${esc(w.name)}</b></div><div class="tk-line"><em>Right now</em><span>${esc(w.line || (w.mode === "look" ? "looking at it" : "repairing"))}</span></div></div>`;
-window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "moves", "ana"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); if (k === "ana") anaLoad(); };
+window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "moves", "ana"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); const bd = $("#ap-t-" + k); if (bd) bd.scrollTop = 0; fxFit(); if (k === "ana") anaLoad(); };
 /* ---- Tunnel Doctor → Best today (a tab of the Doctor's box): the tunnels ranked by how they behaved (a check every minute, the latency / jitter / loss measured again every half hour) ---- */
 state.bestHours = +localStorage.getItem("nk.best.h") || 24;
 window.bestRange = h => { state.bestHours = h; try { localStorage.setItem("nk.best.h", h); } catch (e) { /* private window */ } document.querySelectorAll(".bt-range button").forEach(b => b.classList.toggle("on", b.textContent.trim() === ({6: "6 hours", 24: "24 hours", 168: "7 days"})[h])); bestLoad(); };
@@ -1556,58 +1624,79 @@ window.bestLoad = async () => {
     <div class="bt-list"><div class="bt-row bt-head"><span>#</span><span>Tunnel</span><span>Score</span><span>Up</span><span>Latency</span><span>Jitter</span><span>Loss</span><span>Breaks</span></div>${rows.map(row).join("") || '<div class="empty">No tunnel.</div>'}</div></div>`;
   clearTimeout(window.__btT); window.__btT = setTimeout(() => { if (state.page === "tunnels" && $("#ana-best")) bestLoad(); }, 60000);
 };
+/* the icons and small helpers of the Tunnel Doctor page (the owner's design picture, 2026-10-16) */
+const AP_IC = {bars: '<path d="M7 20V10M12 20V4M17 20v-7"/>', wrench: '<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>',
+  server: '<rect x="3" y="3" width="18" height="7.5" rx="2.2"/><rect x="3" y="13.5" width="18" height="7.5" rx="2.2"/><path d="M7 6.8h.01M7 17.2h.01"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', sync: '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.6a2.5 2.5 0 114 2c-.9.6-1.6 1-1.6 2.2M12 17h.01"/>', chat: '<path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4 3.5V17H5a2 2 0 01-2-2V7a2 2 0 012-2z"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', ring: '<circle cx="12" cy="12" r="6.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', up: '<path d="M7 14l5-5 5 5"/>', down: '<path d="M7 10l5 5 5-5"/>',
+  inbox: '<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 6.5L3 13v5a2 2 0 002 2h14a2 2 0 002-2v-5l-2.5-6.5a2 2 0 00-1.9-1.4H7.4a2 2 0 00-1.9 1.4z"/><path d="M17.5 1.5v3M16 3h3M5.5 1.5v2M4.5 2.5h2"/>'};
+const apIc = (k, cls = "") => `<svg${cls ? ` class="${cls}"` : ""} viewBox="0 0 24 24" aria-hidden="true">${AP_IC[k] || ""}</svg>`;
+let apRails = {max_per_day: 3, cooldown_hours: 2, back_after_hours: 3}, apCfgT = 0;
+const apNodeSel = () => { try { return localStorage.getItem("nk.apnode") || ""; } catch (e) { return ""; } };      // the server the lists are narrowed to ("All nodes" = none)
+window.apNodePick = v => { try { localStorage.setItem("nk.apnode", v); } catch (e) { /* private window */ } refresh(); };
+window.apStep = (btn, dir) => { const inp = btn.closest(".dr-num").querySelector("input"); if (!inp || inp.disabled) return; const lo = +inp.min || 0, hi = +inp.max || 1e9; inp.value = Math.min(hi, Math.max(lo, (+inp.value || lo) + dir * (+inp.dataset.st || 1))); clearTimeout(apCfgT); apCfgT = setTimeout(apCfg, 700); };      // (the little arrows of a number: saved when you stop pressing)
+window.apHow = () => { const r = apRails; showModal("<b>How the Tunnel Doctor works</b>", `<div class="dr-how">
+  <div><i>${apIc("bars")}</i><p><b>Doctor Mode</b> only watches and reports. You diagnose and fix by hand (<em>Diagnose</em>), or let the AI suggest what to do (<em>Fix with AI</em>, <em>Explain</em>).</p></div>
+  <div><i>${apIc("wrench")}</i><p><b>Auto Fix Tunnels</b> repairs a tunnel that stays down for the time you set: it restarts it, rebuilds it, makes a new GRE link or changes the tunnel type - one step at a time, and stops when the tunnel answers. A move to another Iran server is only suggested.</p></div>
+  <div><i>${apIc("server")}</i><p><b>Auto Move to Iran Server</b> does the same, and when an Iran server stays off for the time you set, its tunnels and DNS records go to another Iran server: built there first, the DNS follows, the old ones go after the TTL. They come back by themselves after ${r.back_after_hours} healthy hours. At most ${r.max_per_day} moves a day per tunnel, ${r.cooldown_hours} hours between two, one at a time; Telegram tells before and after. This mode needs the failover license.</p></div>
+  <div><i>${apIc("sync")}</i><p><b>Auto Moves</b> lists every move with a way back (<em>Return now</em>, <em>DNS back</em>); <b>What if</b> there shows the plan for a server that went off, without changing anything.</p></div></div>`, "mid"); };
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
   const [d, tl, srvs, rp, dc] = await Promise.all([api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse,move"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), api("/api/doctor").catch(() => null)]);
   state.tunnelsCache = tl;
   const mode = rp.mode || (rp.auto ? "fix" : "off"), on = mode !== "off", lic = dc ? dc.licensed !== false : rp.licensed_move !== false, ro = !!d.read_only;
-  const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
+  const node = (() => { const v = apNodeSel(); return v && (srvs || []).some(s => s.name === v) ? v : ""; })(), tlf = node ? tl.filter(t => t.iran_name === node || t.foreign_name === node) : tl, tlNames = new Set(tlf.map(t => t.name));      // "All nodes" (the owner's picture): the tunnels, fixes and moves of one server only
+  const bad = tlf.filter(t => t.state !== "up"), lossy = tlf.filter(t => t.state === "up" && ((t.detail || {}).loss_pct || 0) >= SHOW_LOSS);
   const row = (t, kind) => `<div class="ap-row"><span class="st ${kind === "lossy" ? "degraded" : t.state}">${kind === "lossy" ? "lossy" : esc(stName(t.state))}</span><b>${esc(t.name)}</b>${(() => { const w = outage && (outage.working || []).find(x => x.name === t.name); return w ? `<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span><span class="work-chip">${w.mode === "look" ? "looking at it" : "repairing"}</span>` : ((outage && outage.by_tunnel && outage.by_tunnel[t.name]) ? `<span class="mut work-chip watch" title="A server of this tunnel is off: the repair does nothing here until it is back">waiting for the server</span>` : `<span class="mut work-chip watch" title="the Tunnel Doctor watches it and starts by itself when needed">watching</span>`); })()}<span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} · ${esc(t.type)}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span>${(() => { const off = outage && outage.by_tunnel && outage.by_tunnel[t.name], loss = (t.detail || {}).loss_pct || 0, why = off ? `A server of this tunnel is off (${off.join(", ")}): nothing is done until it is back.` : kind === "lossy" ? `${Math.round(loss)} % of the data is lost on this link.` : t.state === "down" ? "The tunnel does not answer." : "Part of the link works, part does not."; return `<span class="ap-why ${off ? "mut" : ""}" title="${esc(why)}">${esc(why)}</span>` + (off || t.last_error || kind === "lossy" ? `<a class="ap-detail" onclick="apDetail(${t.id})" title="The full reason and the log">Detail</a>` : ""); })()}${on ? `<button class="sm pri" onclick="apLive(${t.id}, '${esc(t.name)}')" title="What the Tunnel Doctor is doing with this tunnel right now - its live log">📡 Live</button>` : `<button class="sm" onclick="apDiagnose(${t.id})">🩺 Diagnose</button><button class="sm pri" onclick="apDiagnose(${t.id}, {auto: true})">✨ Fix with AI</button>`}</div>`;
   const n = bad.length + lossy.length;
   let apTab = "now"; try { const v = localStorage.getItem("nk.aptab"); apTab = ["done", "moves", "ana"].includes(v) ? v : v === "cpu" ? "ana" : "now"; } catch (e) { /* private window */ }
-  const working = (outage && outage.working) || [], inList = w => bad.concat(lossy).some(t => t.name === w.name), workingRows = working.filter(w => !inList(w)).map(tkWorking).join(""), nowN = bad.length + lossy.length + working.filter(w => !inList(w)).length;
-  const doneList = histRows(d.actions), doneN = doneList.length, doneRows = doneList.map(tkSimple).join("");
+  const working = ((outage && outage.working) || []).filter(w => !node || tlNames.has(w.name)), inList = w => bad.concat(lossy).some(t => t.name === w.name), workingRows = working.filter(w => !inList(w)).map(tkWorking).join(""), nowN = bad.length + lossy.length + working.filter(w => !inList(w)).length;
+  const doneList = histRows(d.actions).filter(a => !node || tlNames.has(a.ref)), doneN = doneList.length, doneRows = doneList.map(tkSimple).join("");
   const mineOf = nm => tl.filter(t => t.iran_name === nm || t.foreign_name === nm).map(t => t.name);
-  const issues = [...(srvs || []).filter(s => s.enabled && s.online === false).map(s => ({kind: "off", role: s.role, name: s.name, why: s.last_error || "", tunnels: mineOf(s.name)})),
+  const issues0 = [...(srvs || []).filter(s => s.enabled && s.online === false).map(s => ({kind: "off", role: s.role, name: s.name, why: s.last_error || "", tunnels: mineOf(s.name)})),
     ...((nw && nw.items) || []).filter(i => !(srvs || []).some(s => s.name === i.server && s.enabled && s.online === false)).map(i => ({kind: "net", role: i.kind === "iran_server" ? "iran" : "foreign", name: i.server, text: i.text, tunnels: i.tunnels || []}))];
+  const issues = node ? issues0.filter(i => i.name === node) : issues0;
   const issueCard = i => `<div class="ap-iss ${i.kind}"><div class="ap-ih"><span class="ap-flag">${i.role === "iran" ? "🇮🇷" : "🌍"}</span><b>${i.role === "iran" ? "Iran server" : "Foreign server"} ${esc(i.name)}</b><span class="pill ${i.kind === "off" ? "err" : "warn"}">${i.kind === "off" ? "OFF" : "NETWORK DISTURBED"}</span></div>
       <div class="ap-it">${i.kind === "off" ? `It is off or does not answer${i.why ? ` <small class="mut">(${esc(String(i.why).slice(0, 80))})</small>` : ""}.` : `${esc(i.text.replace(/^.*?: /, ""))}.`}</div>
       ${i.tunnels.length ? `<div class="ap-tl"><small class="mut">${i.tunnels.length} tunnel${i.tunnels.length === 1 ? "" : "s"}:</small>${i.tunnels.map(n => `<span class="tchip">${esc(n)}</span>`).join("")}</div>` : ""}
       <div class="ap-do">${i.kind === "off" ? (i.role === "iran" && dc && dc.can_move ? `Its tunnels move to another Iran server after ${rp.server_minutes || 10} minutes off (the DNS follows); they come back after 3 healthy hours.` : "Nothing is done to its tunnels until it is back on: nothing to restart or rebuild.") : "The repair only watches: rebuilding would not help. It carries on by itself when the server answers well again."}</div></div>`;
   const disturb = issues.length ? `<div class="card ap-alert"><h3>⚠ Servers and network <span class="sp"></span><span class="pill err">${issues.length}</span></h3><div class="ap-issues">${issues.map(issueCard).join("")}</div></div>` : "";
   const storm = outage && outage.storm ? `<div class="storm-banner">⚠ <b>Mass disruption:</b> ${outage.servers_offline.length} server(s) offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down. While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.</div>` : "";
-  /* the Doctor's mode: three cards, one is on; the two settings under them */
+  /* the Doctor's mode (the owner's picture, 2026-10-16): three cards, the chosen one lit with a tick - Doctor Mode (the "Off" of the picture: it only watches), Auto Fix Tunnels, Auto Move to Iran Server; the number of a mode sits in its own card and is saved as soon as it changes */
   const irn = (srvs || []).filter(s => s.role === "iran" && s.enabled);
-  /* each setting lives in the card of the mode it belongs to and is saved as soon as it is changed: the waiting time of a tunnel in "Fix tunnels", the waiting time of a server in "Fix + move" */
-  const cfg = (name, before, after, val, min, max) => `<label class="ap-cf" onclick="event.stopPropagation()"><span>${before}</span><input name="${name}" type="number" min="${min}" max="${max}" value="${val}" ${ro ? "disabled" : ""} onchange="apCfg()"><span>${after}</span></label>`;
-  const mcard = (k, icon, title, text, extra, locked) => { const dis = ro && k !== "off" ? "The Doctor needs NIKATEL_READ_ONLY=false on the panel server first" : locked ? "The mode that moves servers needs the failover license (Settings → About → License)" : "";
-    return `<div class="ap-mode ${mode === k ? "on" : ""}${locked ? " locked" : ""}${dis ? " dis" : ""}" data-k="${k}" role="button" tabindex="0" ${dis ? `title="${dis}" aria-disabled="true"` : `onclick="apMode('${k}')" onkeydown="if (event.key === 'Enter') apMode('${k}')"`}><i class="ap-mi">${icon}</i><span class="ap-mt"><b>${title}</b><small>${text}</small>${extra}</span><em class="ap-mchk">${mode === k ? "✓" : locked ? "🔒" : ""}</em></div>`; };
-  const modes = `<div class="card ap-modes" data-tab="att" data-mode="${mode}"><div class="ap-mgrid">
-      ${mcard("off", "⏸", "Off", "The Doctor only watches and reports. You fix by hand: Diagnose, Fix with AI.", "")}
-      ${mcard("fix", "🔧", "Fix tunnels", "Restarts, rebuilds, a new GRE link, another tunnel type - by itself. A move to another Iran server is only suggested.", cfg("after_seconds", "a tunnel down for", "seconds is repaired", rp.after_seconds || 60, 30, 3600))}
-      ${mcard("move", "🔁", "Fix + move the Iran server", "The ladder, and an Iran server that is off gives its tunnels and DNS to another Iran server - by itself; back after 3 healthy hours.", cfg("server_minutes", "an Iran server off for", "minutes is replaced", rp.server_minutes || 10, 2, 60), !lic)}</div></div>`;
-  const acts = `<span class="ap-tacts">${bad.length && !on ? `<button type="button" class="sm pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">✨ Fix all (${bad.length})</button>` : ""}<button type="button" class="sm" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">💬 Explain</button><span class="pill ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></span>`;
+  const cfg = (name, before, after, val, min, max, st) => `<div class="dr-nf" onclick="event.stopPropagation()"><span>${before}</span><span class="dr-num"><input name="${name}" type="number" min="${min}" max="${max}" step="1" data-st="${st}" value="${val}" ${ro ? "disabled" : ""} onchange="apCfg()"><span class="dr-st"><button type="button" tabindex="-1" aria-label="More" ${ro ? "disabled" : ""} onclick="apStep(this, 1)">${apIc("up")}</button><button type="button" tabindex="-1" aria-label="Less" ${ro ? "disabled" : ""} onclick="apStep(this, -1)">${apIc("down")}</button></span></span><span>${after}</span></div>`;
+  const mcard = (k, ic, title, text, extra, locked) => { const dis = ro && k !== "off" ? "The Doctor needs NIKATEL_READ_ONLY=false on the panel server first" : locked ? "The mode that moves servers needs the failover license (Settings → About → License)" : "";
+    return `<div class="dr-card ${mode === k ? "on" : ""}${locked ? " locked" : ""}${dis ? " dis" : ""}" data-k="${k}" role="button" tabindex="0" ${dis ? `title="${dis}" aria-disabled="true"` : `onclick="apMode('${k}')" onkeydown="if (event.key === 'Enter') apMode('${k}')"`}><i class="dr-ic">${apIc(ic)}</i><div class="dr-tx"><div class="dr-h"><b>${title}</b>${k === "off" ? '<span class="dr-off">Off</span>' : ""}</div><p>${text}</p></div>${extra ? `<div class="dr-cf">${extra}</div>` : ""}<em class="dr-chk">${mode === k ? apIc("check") : locked ? "🔒" : ""}</em></div>`; };
+  const modes = `<div class="dr-modes" data-mode="${mode}">
+      ${mcard("off", "bars", "Doctor Mode", "Only monitors and reports. You diagnose and fix manually, or let AI suggest solutions.", "")}
+      ${mcard("fix", "wrench", "Auto Fix Tunnels", "Automatically restarts, rebuilds and changes GRE links or tunnel type if needed.", cfg("after_seconds", "If a tunnel is down for", "seconds, fix it automatically.", rp.after_seconds || 60, 30, 3600, 10))}
+      ${mcard("move", "server", "Auto Move to Iran Server", "If the main Iran server is down, move tunnels and DNS to another Iran server automatically.", cfg("server_minutes", "If an Iran server is down for", "minutes, move to another.", rp.server_minutes || 10, 2, 60, 1), !lic)}</div>`;
+  const drEmpty = (title, text) => `<div class="dr-empty"><i>${apIc("inbox")}</i><b>${title}</b><p>${text}</p></div>`;
+  const tabBtn = (k, ic, label, cnt, tip) => `<button type="button" data-k="${k}" class="${apTab === k ? "on" : ""}" onclick="apTasksTab('${k}')"${tip ? ` title="${tip}"` : ""}>${apIc(ic)}<span>${label}</span>${cnt ? `<i class="cnt">${cnt}</i>` : ""}</button>`;
+  const nodeOpts = g => (srvs || []).filter(s => s.enabled && s.role === g).sort((a, b) => a.name.localeCompare(b.name)).map(s => `<option value="${esc(s.name)}" ${s.name === node ? "selected" : ""}>${esc(s.name)}</option>`).join("");
+  const acts = `<span class="dr-tr">${bad.length && !on ? `<button type="button" class="dr-pill pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">${apIc("spark")}<span>Fix all (${bad.length})</span></button>` : ""}<button type="button" class="dr-pill" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">${apIc("chat")}<span>Explain</span></button><span class="dr-pill dr-state ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span><button type="button" class="dr-pill" onclick="apHow()">${apIc("help")}<span>How it works</span></button><span class="dr-node" title="Show the tunnels, the fixes and the moves of one server only">${apIc("ring")}<select onchange="apNodePick(this.value)"><option value="">All nodes</option><optgroup label="Iran">${nodeOpts("iran")}</optgroup><optgroup label="Foreign">${nodeOpts("foreign")}</optgroup></select>${apIc("chev")}</span></span>`;
   /* what the Doctor would do in the mode "move" but did not (a poor route, an exhausted server): one click does it */
-  const sugs = (dc && dc.suggestions) || [];
+  const sugs = ((dc && dc.suggestions) || []).filter(s => !node || s.from === node || s.to === node || tlNames.has(s.tunnel));
   const sugRow = s => `<div class="ap-row ap-sug"><span class="st degraded">${s.kind === "route" ? "route" : "load"}</span><b>${esc(s.tunnel)}</b><span class="ap-ft"><em>${esc(s.from)}</em> → <em>${esc(s.to || "?")}</em></span><span class="ap-why mut" title="${esc(s.why)}">${esc(s.why)}</span><time title="${when(s.at)}">${ago(s.at)} ago</time>${s.to_id ? `<button class="sm pri" onclick="apSugApply('${esc(s.id)}')" title="Build it on ${esc(s.to)} first, point its DNS, then remove the old one">🔁 Move now</button>` : `<button class="sm" onclick="apPickMove(${s.tunnel_id}, '${esc(s.tunnel)}')" title="Choose the Iran server yourself">Choose a server</button>`}<button class="sm" onclick="apSugDrop('${esc(s.id)}')">Dismiss</button></div>`;
   const sugBox = sugs.length ? `<div class="nw-box sug-box"><b class="nw-title">💡 The Doctor suggests${mode === "fix" ? ' <small class="mut">(in the mode “Fix + move” it would do this by itself)</small>' : ""}</b>${sugs.map(sugRow).join("")}</div>` : "";
   /* the ledger of moves: what went where and why, with the way back */
   const REASON = {down: "server off", resources: "exhausted", route: "bad route", return: "return", manual: "by hand", replace: "replaced"};
-  const mv = (dc && dc.moves) || [], back = (dc && dc.back) || {}, rails = (dc && dc.rails) || {max_per_day: 3, cooldown_hours: 2, back_after_hours: 3};
+  const mv = ((dc && dc.moves) || []).filter(m => !node || m.from === node || m.to === node), back = (dc && dc.back) || {}, rails = (dc && dc.rails) || {max_per_day: 3, cooldown_hours: 2, back_after_hours: 3};
   const mvRow = m => { const names = (m.tunnels || []).length ? m.tunnels : (m.asked || []), canBack = m.ok !== false && !m.returned && m.reason !== "return" && (m.tunnels || []).length && m.to_id;
     return `<div class="mv-row ${m.ok === false ? "bad" : m.returned ? "back" : m.reason === "return" ? "ret" : "ok"}"><time title="${when(m.at)}">${ago(m.at)} ago</time><span class="mv-k k-${esc(m.reason)}">${REASON[m.reason] || esc(m.reason)}</span><span class="mv-t">${names.map(x => `<span class="tchip">${esc(x)}</span>`).join("") || '<span class="mut">—</span>'}</span><span class="mv-ft"><em>${esc(m.from)}</em> → <em>${esc(m.to || "?")}</em></span><span class="mv-why mut" title="${esc(m.why)}">${esc(m.why)}</span><span class="mv-dns mut" title="DNS records re-pointed">${m.dns} DNS</span><span class="pill ${m.ok === false ? "err" : m.returned ? "" : "ok"}">${m.ok === false ? "failed" : m.returned ? "returned" : "done"}</span><span class="mv-act">${canBack ? `<button class="sm" onclick="apReturn('${esc(m.id)}')" title="Bring these tunnels back to ${esc(m.from)} now (built there first, the DNS follows)">↩ Return now</button>` : ""}${m.dns && m.ok !== false ? `<button class="sm" onclick="foUndo('${esc(m.id)}')" title="Point only the DNS records back at ${esc(m.from_ip)}; the tunnels stay">DNS back</button>` : ""}</span></div>`; };
   const backChips = irn.filter(s => back[String(s.id)] && mv.some(m => m.from_id === s.id && m.reason === "down" && !m.returned && m.ok !== false)).map(s => { const h = (Date.now() / 1000 - back[String(s.id)]) / 3600; return `<span class="pill ${h >= rails.back_after_hours ? "ok" : ""}" title="Its tunnels come back by themselves after ${rails.back_after_hours} healthy hours">${esc(s.name)}: back for ${h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " h"}</span>`; }).join("");
   const openN = mv.filter(m => !m.returned && m.ok !== false && m.reason !== "return").length;
   const movesTab = `<div class="mv-bar"><span class="mv-plan"><span class="mut">What if</span><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><span class="mut">went off?</span><button type="button" class="sm" onclick="foPreview()" title="The tunnels that would move, the server that would take them, the DNS records of every account that would change - nothing is changed">👁 Show the plan</button></span>${backChips}<span class="sp"></span><small class="mut">At most ${rails.max_per_day} moves a day per tunnel, ${rails.cooldown_hours} hours between two, one at a time; Telegram tells before and after.</small></div>
-    <div class="mv-list">${mv.map(mvRow).join("") || '<div class="tk-empty"><b>No move yet</b><span>When the Doctor moves the tunnels of an Iran server (or you do, from a tunnel window), it is written here with a way back.</span></div>'}</div>`;
-  $("#page").innerHTML = `<div data-tab="att" class="ap-top">${storm}${disturb}</div>${modes}
-    <div class="card ap-tasks fx-box" data-tab="att">
-      <div class="ap-thead"><div class="ap-ttabs"><button data-k="now" class="${apTab === "now" ? "on" : ""}" onclick="apTasksTab('now')"><span class="tab-ic">🔧</span> In progress${nowN ? ` <i class="cnt">${nowN}</i>` : ""}</button><button data-k="done" class="${apTab === "done" ? "on" : ""}" onclick="apTasksTab('done')"><span class="tab-ic">✔</span> Finished${doneN ? ` <i class="cnt">${doneN}</i>` : ""}</button><button data-k="moves" class="${apTab === "moves" ? "on" : ""}" onclick="apTasksTab('moves')" title="Every move of tunnels between Iran servers, with Return and DNS back"><span class="tab-ic">🔁</span> Moves${openN ? ` <i class="cnt">${openN}</i>` : ""}</button><button data-k="ana" class="${apTab === "ana" ? "on" : ""}" onclick="apTasksTab('ana')" title="What the history says about the tunnels and the servers, and the CPU cores"><span class="tab-ic">📊</span> Analyst</button></div><span class="sp"></span>${acts}</div>
+    <div class="mv-list">${mv.map(mvRow).join("") || drEmpty("No moves yet", "When the Doctor moves the tunnels of an Iran server (or you do, from a tunnel window), it is written here with a way back.")}</div>`;
+  apRails = rails;
+  $("#page").innerHTML = `<div class="dr-top">${storm}${disturb}${modes}</div>
+    <div class="card ap-tasks fx-box">
+      <div class="ap-thead"><div class="ap-ttabs">${tabBtn("now", "wrench", "Active Tasks", nowN, "")}${tabBtn("done", "check", "Completed", doneN, "")}${tabBtn("moves", "sync", "Auto Moves", openN, "Every move of tunnels between Iran servers, with Return and DNS back")}${tabBtn("ana", "bars", "Analytics", 0, "What the history says about the tunnels and the servers, and the CPU cores")}</div>${acts}</div>
       <div class="ap-tbody ${apTab === "now" ? "" : "hidden"}" id="ap-t-now">${sugBox}<div class="ap-att">${workingRows}${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}
-        ${nowN ? "" : '<div class="tk-empty"><b>✓ Nothing to fix right now</b></div>'}</div>
+        ${nowN || sugs.length ? "" : drEmpty("No active fixes right now", "Everything is running smoothly. Active tunnel issues and automatic fixes will appear here in real time.")}</div>
         <div id="ap-all" class="fix hidden" style="margin-top:10px"></div></div>
-      <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || '<div class="tk-empty"><b>Nothing yet</b></div>'}</div></div>
+      <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || drEmpty("No completed fixes yet", "Every fix the Doctor finishes, and how it ended, is listed here.")}</div></div>
       <div class="ap-tbody ${apTab === "moves" ? "" : "hidden"}" id="ap-t-moves">${movesTab}</div>
       <div class="ap-tbody ${apTab === "ana" ? "" : "hidden"}" id="ap-t-ana"><div id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div></div>
     </div>
@@ -1616,13 +1705,16 @@ PAGES.actions = async () => {
   apFit(null); fxFit();
 };
 /* the mode cards: a click on a card chooses the mode; a change of the number inside a card saves it at once (with the mode as it is) */
-const apNum = (nm, dflt) => { const el = document.querySelector(`.ap-modes [name=${nm}]`); return el && +el.value ? +el.value : dflt; };
+const apNum = (nm, dflt) => { const el = document.querySelector(`.dr-modes [name=${nm}]`); return el && +el.value ? +el.value : dflt; };
 window.apMode = async k => {
-  try { await api("/api/settings/repair", {method: "PUT", body: JSON.stringify({mode: k, after_seconds: apNum("after_seconds", 60), server_minutes: apNum("server_minutes", 10)})}); toast({off: "The Doctor is off - you fix by hand (Diagnose, Fix with AI)", fix: "✓ The Doctor fixes the tunnels by itself", move: "✓ The Doctor fixes the tunnels and replaces a dead Iran server by itself"}[k], "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
-  refresh();
+  const box = $(".dr-modes"), was = box && box.dataset.mode; if (box && was === k) return;
+  if (box) apModeDraw(box, k);      // the card is lit at once and nothing is redrawn (the owner, 2026-10-16: the page jumped when a mode was chosen); the server is told in the background
+  try { await api("/api/settings/repair", {method: "PUT", body: JSON.stringify({mode: k, after_seconds: apNum("after_seconds", 60), server_minutes: apNum("server_minutes", 10)})}); toast({off: "The Doctor is off - you fix by hand (Diagnose, Fix with AI)", fix: "✓ The Doctor fixes the tunnels by itself", move: "✓ The Doctor fixes the tunnels and replaces a dead Iran server by itself"}[k], "ok"); }
+  catch (e) { toast("✕ " + e.message, "bad"); if (box) apModeDraw(box, was); return; }
+  if (state.page === "tunnels" && $(".dr-modes")) PAGES.actions();      // what depends on the mode (the buttons of a row, Fix all) is drawn again in place - no dimming, no loading box
 };
-window.apCfg = async () => {
-  const box = $(".ap-modes"), mode = (box && box.dataset.mode) || "fix";
+const apModeDraw = (box, k) => { box.dataset.mode = k; box.querySelectorAll(".dr-card").forEach(c => { const on = c.dataset.k === k, chk = c.querySelector(".dr-chk"); c.classList.toggle("on", on); if (chk && !c.classList.contains("locked")) chk.innerHTML = on ? apIc("check") : ""; }); };window.apCfg = async () => {
+  const box = $(".dr-modes"), mode = (box && box.dataset.mode) || "fix";
   try { await api("/api/settings/repair", {method: "PUT", body: JSON.stringify({mode, after_seconds: apNum("after_seconds", 60), server_minutes: apNum("server_minutes", 10)})}); toast("✓ Doctor settings saved", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
 window.apSugApply = async id => { try { const r = await api("/api/doctor/suggestions/" + encodeURIComponent(id) + "/apply", {method: "POST"}); showModal("<b>🔁 Move</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.id, $("#ap-story"), 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); } };

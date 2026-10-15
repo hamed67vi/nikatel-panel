@@ -1,0 +1,80 @@
+/* The Tunnel Doctor page after the owner's design picture (2026-10-16): three mode cards (the chosen one lit, with a tick), a bar of tabs with How it works and All nodes on its right, and a dashed empty box.
+   LOOK only for the colours; every size is here. Classes start with .dr- (the old .ap-mode cards are gone from the page) */
+html body #page .dr-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 12px; margin: 0 0 12px; }
+html body #page .dr-card { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic tx" "cf cf"; column-gap: 14px; row-gap: 10px; align-content: start; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #121a2e, #0f1626); color: var(--text); text-align: left; cursor: pointer; transition: border-color .18s, box-shadow .18s, background .18s; }
+html body #page .dr-card:hover { border-color: rgba(120, 170, 255, .4); }
+html body #page .dr-card.on { border-color: #3d7bf0; background: linear-gradient(180deg, #15264f, #101c3c); box-shadow: 0 0 0 1px rgba(61, 123, 240, .5), 0 0 22px rgba(47, 125, 245, .2); }
+html body #page .dr-card.dis, html body #page .dr-card.locked { cursor: not-allowed; opacity: .6; }
+html body #page .dr-card.dis:hover, html body #page .dr-card.locked:hover { border-color: var(--uk-line); }
+html body #page .dr-ic { grid-area: ic; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 14px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; }
+html body #page .dr-card.on .dr-ic { background: linear-gradient(180deg, #27427f, #1d3568); border-color: rgba(120, 170, 255, .5); color: #e8f1ff; }
+html body #page .dr-ic svg, html body #page .dr-pill svg, html body #page .ap-ttabs > button svg, html body #page .dr-node svg, html body #page .dr-st svg, html body #page .dr-chk svg, html body #page .dr-how i svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+html body #page .dr-ic svg { width: 26px; height: 26px; }
+html body #page .dr-tx { grid-area: tx; min-width: 0; padding-right: 26px; }
+html body #page .dr-h { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+html body #page .dr-h b { font-size: 15px; font-weight: 700; color: var(--text); }
+html body #page .dr-off { display: inline-flex; align-items: center; height: 26px; padding: 0 13px; border-radius: 999px; background: #1b2236; box-shadow: inset 0 0 0 1px var(--uk-line); font-size: 12px; font-weight: 600; color: #aab4d0; }
+html body #page .dr-tx p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--mut); }
+html body #page .dr-chk { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #2a6df4; color: #fff; font-style: normal; font-size: 12px; }
+html body #page .dr-chk:empty { display: none; }
+html body #page .dr-card.locked .dr-chk { background: none; }
+html body #page .dr-chk svg { width: 14px; height: 14px; stroke-width: 3; }
+html body #page .dr-cf { grid-area: cf; }
+html body #page .dr-nf { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: var(--mut); cursor: default; }
+html body #page .dr-num { display: inline-flex; align-items: stretch; height: 34px; border-radius: 10px; background: #0b1020; border: 1px solid var(--uk-line); overflow: hidden; }
+html body #page .dr-num:focus-within { border-color: #5aa9ff; box-shadow: 0 0 0 3px rgba(90, 169, 255, .25); }
+html body #page .dr-num input { width: 48px; height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; text-align: center; font-size: 14px; font-weight: 600; color: var(--text); -moz-appearance: textfield; appearance: textfield; }
+html body #page .dr-num input::-webkit-inner-spin-button, html body #page .dr-num input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+html body #page .dr-st { display: flex; flex-direction: column; width: 20px; border-left: 1px solid var(--uk-line); }
+html body #page .dr-st button { flex: 1; display: grid; place-items: center; width: 100%; height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #8f9bbd; }
+html body #page .dr-st button:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+html body #page .dr-st svg { width: 12px; height: 12px; stroke-width: 2.4; }
+/* the box of the tabs */
+html body #page .ap-tasks .ap-thead { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0; padding: 10px 12px; border: 0; }
+html body #page .ap-tasks .ap-ttabs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+html body #page .ap-tasks .ap-ttabs > button { display: inline-flex; align-items: center; gap: 9px; height: 40px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--uk-line); background: #111829 !important; box-shadow: none !important; color: #c7d0e6; font-size: 13.5px; font-weight: 600; }
+html body #page .ap-tasks .ap-ttabs > button:hover { color: #fff; border-color: rgba(120, 170, 255, .4); }
+html body #page .ap-tasks .ap-ttabs > button.on { background: #20449c !important; border-color: #4f86ff; color: #fff; box-shadow: 0 0 0 1px rgba(79, 134, 255, .3), 0 0 16px rgba(47, 125, 245, .28) !important; }
+html body #page .ap-tasks .ap-ttabs > button svg { width: 18px; height: 18px; }
+html body #page .ap-tasks .ap-ttabs > button .cnt { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: rgba(255, 255, 255, .12); color: inherit; font-size: 12px; font-style: normal; }
+html body #page .ap-tasks .dr-tr { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+html body #page .ap-tasks .dr-pill { display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--uk-line); background: #111829; box-shadow: none; color: #e3e9f8; font-size: 13.5px; font-weight: 600; line-height: 1; }
+html body #page .ap-tasks button.dr-pill:hover { border-color: rgba(120, 170, 255, .4); color: #fff; }
+html body #page .ap-tasks .dr-pill.pri { background: #2f7bf5; border-color: transparent; color: #fff; }
+html body #page .ap-tasks .dr-pill.dr-state { cursor: default; background: transparent; }
+html body #page .ap-tasks .dr-pill.dr-state.ok { color: #3ddc97; border-color: rgba(61, 220, 151, .45); }
+html body #page .ap-tasks .dr-pill.dr-state.err { color: #ff7a85; border-color: rgba(255, 90, 105, .5); }
+html body #page .ap-tasks .dr-pill svg { width: 18px; height: 18px; }
+html body #page .ap-tasks .dr-node { position: relative; display: inline-flex; align-items: center; height: 40px; border-radius: 12px; border: 1px solid var(--uk-line); background: #111829; }
+html body #page .ap-tasks .dr-node select { appearance: none; -webkit-appearance: none; height: 100%; min-height: 0; min-width: 132px; padding: 0 34px 0 38px; border: 0; background: transparent; box-shadow: none; color: #e3e9f8; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+html body #page .ap-tasks .dr-node svg { position: absolute; width: 16px; height: 16px; pointer-events: none; }
+html body #page .ap-tasks .dr-node svg:first-child { left: 13px; stroke: #3ddc97; }
+html body #page .ap-tasks .dr-node svg:last-child { right: 11px; stroke: #aab4d0; }
+html body #page .ap-tasks .ap-tbody { padding: 0 12px 12px; scrollbar-gutter: stable; }
+html body #page .ap-tasks.fx-box { flex: none; overflow: hidden; }      /* the box is ONE size for every tab: the shown tab scrolls inside it, whatever it holds (the owner, 2026-10-16) */
+html body #page .ap-tasks .ap-tbody:not(.hidden) { animation: dr-in .16s ease-out; }
+@keyframes dr-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { html body #page .ap-tasks .ap-tbody:not(.hidden) { animation: none; } }
+/* the empty box */
+html body #page .dr-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 260px; box-sizing: border-box; padding: 26px 20px; text-align: center; border: 1.5px dashed rgba(130, 150, 200, .28); border-radius: 16px; }
+html body #page .dr-empty i { display: block; font-style: normal; color: #7f8db3; }
+html body #page .dr-empty i svg { width: 60px; height: 60px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .dr-empty b { font-size: 17px; font-weight: 700; color: var(--text); }
+html body #page .dr-empty p { max-width: 520px; margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--mut); }
+/* the window "How it works" */
+html body #modal .dr-how { display: grid; gap: 12px; }
+html body #modal .dr-how > div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; }
+html body #modal .dr-how i { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; }
+html body #modal .dr-how i svg { width: 22px; height: 22px; }
+html body #modal .dr-how p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--mut); }
+html body #modal .dr-how b { color: var(--text); }
+html[data-mode="light"] body #page .dr-card { background: #fff; border-color: rgba(30, 50, 100, .14); }
+html[data-mode="light"] body #page .dr-card.on { background: linear-gradient(180deg, #eef4ff, #e4eeff); border-color: #2f6fe0; }
+html[data-mode="light"] body #page :is(.dr-pill, .dr-node, .dr-off, .ap-ttabs > button) { background: #f3f6fc !important; color: #1b2540; border-color: rgba(30, 50, 100, .16); }
+html[data-mode="light"] body #page .ap-tasks .ap-ttabs > button.on { background: #2f6fe0 !important; color: #fff; }
+/* the top box of the page: the alerts and the three mode cards in ONE surface like the toolbar of the Tunnel manager, so the bar of tabs above it keeps one shape on all three tabs (the owner, 2026-10-16: "the page jumps when I switch") */
+html body #page .dr-top { box-sizing: border-box; margin: 0 0 12px; padding: 12px 14px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 16px; background: linear-gradient(rgba(255, 255, 255, .043), rgba(255, 255, 255, .024)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -1px 0 rgba(255, 255, 255, .04); }
+html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }
+html body #page .dr-top .dr-modes { margin: 0; }
+html body #page .dr-top .storm-banner, html body #page .dr-top .ap-alert { margin-bottom: 12px; }
+html[data-mode="light"] body #page .dr-top { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: none; }

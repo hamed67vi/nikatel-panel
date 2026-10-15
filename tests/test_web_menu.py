@@ -564,7 +564,7 @@ def test_an_autofilled_field_keeps_the_kits_colours_and_the_doctor_buttons_are_o
     uk, css, app = _web("uikit.css"), _web("lab.css"), _web("app.js")
     assert "input:-webkit-autofill" in uk and "-webkit-text-fill-color: #e8ebf7 !important" in uk and "html body .eye { color: var(--uk-mut); }" in uk and "width:" not in uk
     assert ".ap-ttabs, .ana-head .tabs, .bt-range) { display: inline-flex;" in css and ".ap-ttabs .tab-ic {" in css and ".ap-ttabs .tic" not in css and ".ap-thead button:not([data-k]) { height: 32px; border-radius: 11px;" in css
-    assert '<span class="tab-ic">🔧</span> In progress' in app and '<span class="tab-ic">📊</span> Analyst' in app and '<i class="tic">' not in app.split("class=\"card ap-tasks fx-box\"", 1)[1].split("ap-tbody", 1)[0]          # (.tic is the round flag of a tunnel: it drew a ring around every icon)
+    assert 'tabBtn("now", "wrench", "Active Tasks", nowN, "")' in app and 'tabBtn("ana", "bars", "Analytics", 0,' in app and '<i class="tic">' not in app.split("class=\"card ap-tasks fx-box\"", 1)[1].split("ap-tbody", 1)[0]          # (.tic is the round flag of a tunnel: it drew a ring around every icon; 1.57.33: the tabs after the owner's picture)
 
 
 def test_the_geometry_of_a_lab_row_is_three_numbers_and_every_row_has_one_cell_per_column():
@@ -765,3 +765,19 @@ def test_every_admin_has_the_same_emoji():
     """The owner, 2026-10-16: "one admin emoji, the same for all"."""
     adm = _web("pg_admin.js")
     assert adm.count("${pgAdminEmo()}") == 1 and 'pgAdminEmo("🔑")' in adm and "owner ? " not in adm.split("const pgAdminEmo")[1].split("\n")[0]
+
+
+def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump():
+    """The owner, 2026-10-16: the Tunnel Doctor after his design picture (three mode cards, Active Tasks / Completed / Auto Moves / Analytics, How it works, All nodes),
+    a switch between CDN / Tunnel manager / Tunnel Doctor that does not jump (one bar shape, one width, no late paint of the old tab), Create tunnel without a redraw, the kit menu of its selects, the why line of a failed build."""
+    app, lab, css, dr, index, main = _web("app.js"), _web("lab.js"), _web("lab.css"), _web("doctor.css"), INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
+    assert '<link rel="stylesheet" href="/static/doctor.css">' in index and '"doctor.css"' in main
+    assert 'mcard("off", "bars", "Doctor Mode", "Only monitors and reports.' in app and 'mcard("fix", "wrench", "Auto Fix Tunnels"' in app and 'mcard("move", "server", "Auto Move to Iran Server"' in app and "window.apHow = () =>" in app and 'window.apNodePick = v =>' in app and 'window.apStep = (btn, dir) =>' in app
+    assert "`<div class=\"dr-top\">${storm}${disturb}${modes}</div>" in app and ".dr-head, .dr-top, .set-top" in app and 'if (pg0 && pg0.querySelector(".fx-box")) fxFit();' in app
+    assert "navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(\".main\"); if (m) m.scrollTop = 0; }\n  subSet(page, k); refresh();" in app
+    assert "html body .main { scrollbar-gutter: stable; }" in css and "html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }" in dr and "html body #page .dr-card.on {" in dr and "html body #page .dr-empty {" in dr
+    assert "const apModeDraw = (box, k) =>" in app and 'const bd = $("#ap-t-" + k); if (bd) bd.scrollTop = 0; fxFit();' in app and "html body #page .ap-tasks.fx-box { flex: none; overflow: hidden; }" in dr
+    assert "window.openBuild = async () => {" in app and 'if (state.page === "tunnels" && $("#page .tun-box")) { state.build = true;' in app
+    assert "function nkDdOpen(sel) {" in app and 'select[data-dd]' in app and '<select name="ttype" data-dd data-ddw="470"' in app and '<select name="iran_id" required data-dd' in app and "html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }" in css
+    assert "const apWhy = s => {" in app and 'apWhyHtml(s)' in app and "html body .fx-line .fx-why {" in css
+    assert 'a.classList.toggle("nav-nopanel", dim)' in lab and "window.labNoPanel = () =>" in lab and "html body nav a.nav-nopanel { opacity: .38;" in css and 'const nop = k => k !== "settings" && state.page === "pgpanel" && window.labNoPanel && labNoPanel();' in app

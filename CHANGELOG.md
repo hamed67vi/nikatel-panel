@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.57.33 - The Tunnel Doctor after the picture, tab switches that do not jump, kit menus in Create tunnel
+
+- **Tunnel Doctor:** rebuilt after the owner's design picture - three mode cards (*Doctor Mode* with its Off chip, *Auto Fix Tunnels*, *Auto Move to Iran Server*; the chosen one lit, with a tick, the number of a mode in its own card with little arrows), the box of *Active Tasks / Completed / Auto Moves / Analytics* with *Explain*, the state chip, *How it works* (a window that explains the three modes and the moves) and *All nodes* (the lists narrowed to one server) on its right, and a dashed empty box with a friendly line. A mode is switched in place (no redraw), the box keeps ONE size for every tab.
+- **Switching CDN / Tunnel manager / Tunnel Doctor no longer jumps:** three causes - the bar of tabs changed shape on the Doctor page (its top is now one joined box like the toolbars of its sisters), a scrollbar came and went (the page area keeps one width now), and a refresh that had started on the old tab painted it over the new one a moment later (what the old tab waited for is dropped; a tab starts at the top).
+- **Create tunnel:** pressing the button opens the window on the page as it is (no redraw behind it); the selects of the form - the servers, the tunnel type, the presets - open a kit menu: a heading for every group, a tick before the chosen item, the highlighted one in blue; the Iran list has *Automatic* and *Iran servers* as groups.
+- **A failed build says why, in plain words:** under *Create did not succeed* one simple sentence (no Iran server online, the port is used, the server did not answer over SSH, GRE blocked, ...).
+- **Panel menu:** until a panel is added, *Users*, *Configs* and *Admins* are dim and do nothing; *General* stays, it is where a panel is added.
 ## 1.57.32 - One admin emoji for every admin
 
 - **Admins:** every admin row has the same emoji (a person with a briefcase), not a different face per state - the state is told by the switch and the pill; the API keys all have a key.
