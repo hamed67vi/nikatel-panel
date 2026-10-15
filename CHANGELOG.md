@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.55.1 - The Add form is one row, Top users fits
+
+- **Add tab:** the form was squeezed into one column of the page grid (and the fields a kind does not use were shown); it is a block now - one row of Name / Address / Port / Group / template, the rest folded, the family name on the line of its chips.
+- **Usage:** Top users has the admin under the name and the usage and limit in one column; the age of the counters is said only when they are old (the bar stays in one row); the chart scale shows plain numbers (20, 15, 10, 5).
+- The real test of ALL 17 kinds of account on a throw-away PasarGuard passed: each kind makes its inbound, group and host, the subscription carries a link with what the kind promises (flow, pin, xHTTP, header, ML-KEM), and the cleanup leaves the core as it was.
+
 ## 1.55.0 - The Usage dashboard, Add by pasting a link, the UI kit, menus in one column
 
 - **Usage is a dashboard (the owner: "very professional"):** ONE bar (the tabs, the range as buttons Today / 7 days / 30 days / this month / last month / Custom, the dates in both calendars, Refresh); a band of counters in two groups (users, with the colour of what needs a look; server, with meters that turn amber and red); then two columns - **Traffic** (total, average per day, busiest day, busiest node, a chart with a scale, the nodes with their share) and **Top users** (usage and limit in one column with a meter) | **Users over time**, **Subscription apps** and the **lookup** of an admin or a user (Admin | User buttons). The page scrolls; the old one-screen squeeze (empty areas, tiny charts) is gone.

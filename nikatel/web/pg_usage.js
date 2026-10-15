@@ -132,7 +132,7 @@ function pgUsageBarHtml() {
 function pgUsageDrawAge() {
   const a = $("#pg-usage-age"), s = pgUsageState; if (!a) return;
   const age = s.ov ? s.ov.age_s + (Date.now() - s.ovAt) / 1000 : 0;
-  a.textContent = !s.ov ? "" : age >= 1 ? `counters ${Math.round(age)} s old` : "counters just read";
+  a.textContent = !s.ov || age < 25 ? "" : `counters ${Math.round(age)} s old`;      // (said only when they are old: the bar stays in one row)
 }
 window.pgUsagePreset = v => {
   const s = pgUsageState;
@@ -218,10 +218,10 @@ function pgUsageTopHtml(d, busy) {
   const stCls = v => v === "active" ? "ok" : v === "on_hold" ? "" : "err";
   const sorts = (d.sorts || ["used_traffic"]).map(k => `<option value="${k}" ${s.topSort === k ? "selected" : ""}>${labels[k] || k}</option>`).join("");
   const adm = `<option value="">All admins</option>` + (s.admins || []).map(a => `<option ${s.topAdmin === a ? "selected" : ""}>${esc(a)}</option>`).join("");
-  const use = u => { const pct = u.percent == null ? null : Math.min(100, u.percent); return `<div class="pg-uu"><b>${esc(pgUsageGbText(u.used_gb))}</b><small class="mut">${u.limit_gb == null ? "no limit" : "of " + esc(pgUsageGbText(u.limit_gb)) + (u.percent == null ? "" : " · " + u.percent + "%")}</small></div>${pct == null ? "" : `<i class="pg-ubar ${pct >= 100 ? "bad" : pct >= 85 ? "warn" : ""}"><u style="width:${pct}%"></u></i>`}`; };
-  const rows = (d.users || []).map(u => `<tr class="clk" data-u="${esc(u.username)}" onclick="pgUsageLookupUser(this.dataset.u)" title="Show this user's usage in the chosen range"><td class="name">${esc(u.username)}</td><td class="pg-usage-use">${use(u)}</td><td><span class="pill ${stCls(u.status)}">${esc(u.status)}</span></td><td class="mut">${esc(u.admin)}</td><td class="mut mono" title="${esc(pgUsageJalaliOf(u.expire))}">${esc(u.expire || "—")}</td><td class="mut mono" title="${esc(pgUsageJalaliOf(pgUsageTehran(u.online_at).slice(0, 10)))}">${esc(pgUsageTehran(u.online_at) || "—")}</td></tr>`).join("");
+  const use = u => { const pct = u.percent == null ? null : Math.min(100, u.percent); return `<div class="pg-uu"><b>${esc(pgUsageGbText(u.used_gb))}</b><small class="mut">${u.limit_gb == null ? "no limit" : "of " + +Number(u.limit_gb).toFixed(2) + " GB" + (u.percent == null ? "" : " · " + u.percent + "%")}</small></div>${pct == null ? "" : `<i class="pg-ubar ${pct >= 100 ? "bad" : pct >= 85 ? "warn" : ""}"><u style="width:${pct}%"></u></i>`}`; };
+  const rows = (d.users || []).map(u => `<tr class="clk" data-u="${esc(u.username)}" onclick="pgUsageLookupUser(this.dataset.u)" title="Show this user's usage in the chosen range"><td class="name"><div class="ell">${esc(u.username)}</div>${u.admin ? `<small class="mut">${esc(u.admin)}</small>` : ""}</td><td class="pg-usage-use">${use(u)}</td><td><span class="pill ${stCls(u.status)}">${esc(u.status)}</span></td><td class="mut mono" title="${esc(pgUsageJalaliOf(u.expire))}">${esc(u.expire || "—")}</td><td class="mut mono" title="${esc(pgUsageTehran(u.online_at))} Tehran · ${esc(pgUsageJalaliOf(pgUsageTehran(u.online_at).slice(0, 10)))}">${esc(pgUsageTehran(u.online_at).slice(5) || "—")}</td></tr>`).join("");
   const ctl = `<div class="pg-usage-row"><select onchange="pgUsageTopSet('topSort', this.value)">${sorts}</select><select onchange="pgUsageTopSet('topAdmin', this.value)">${adm}</select><small class="mut">the panel's own counters, not the range</small></div>`;
-  return pgUsageCard("Top users", `${d.users.length} of ${Number(d.total).toLocaleString("en-US")}${pgUsageCached(d)}`, `${ctl}<div class="lbox full pg-usage-topbox" data-sk="top" onscroll="pgUsageState.scroll[this.dataset.sk] = this.scrollTop"><table class="tbl lift"><thead><tr><th>User</th><th>Usage</th><th>Status</th><th>Admin</th><th>Expires</th><th title="Tehran time">Last online</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="mut">No users</td></tr>'}</tbody></table></div>`, busy);
+  return pgUsageCard("Top users", `${d.users.length} of ${Number(d.total).toLocaleString("en-US")}${pgUsageCached(d)}`, `${ctl}<div class="lbox full pg-usage-topbox" data-sk="top" onscroll="pgUsageState.scroll[this.dataset.sk] = this.scrollTop"><table class="tbl lift"><thead><tr><th>User</th><th>Usage</th><th>Status</th><th>Expires</th><th title="Tehran time">Last online</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="mut">No users</td></tr>'}</tbody></table></div>`, busy);
 }
 function pgUsageDrawTop() {
   const s = pgUsageState;

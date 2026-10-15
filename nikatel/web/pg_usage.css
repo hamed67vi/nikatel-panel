@@ -58,7 +58,7 @@ html body #page .pg-usage-line { stroke: rgba(255,255,255,.22); stroke-width: 1;
 /* controls of a card, tables */
 html body #page .pg-usage-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; } html body #page .pg-usage-row select, html body #page .pg-usage-row input, html body #page .pg-usage-row button.sm { height: 30px; font-size: 12.5px; } html body #page .pg-usage-row input { flex: 1; min-width: 130px; }
 html body #page .pg-usage-row > small { margin-left: auto; } html body #page .pg-usage-total { margin-left: auto; font-size: 12.5px; } html body #page .pg-usage-total b { font-size: 16px; }
-html body #page .pg-usage-nodes { max-height: 230px; overflow: auto; margin: 0; } html body #page .pg-usage-topbox { max-height: 400px; overflow: auto; margin: 0; }
+html body #page .pg-usage-nodes { max-height: 270px; overflow: auto; margin: 0; } html body #page .pg-usage-topbox { max-height: 400px; overflow: auto; margin: 0; }
 html body #page .pg-usage-th { cursor: pointer; user-select: none; white-space: nowrap; } html body #page .pg-usage-th.on { color: var(--acc-2); }
 html body #page .pg-usage-num { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
 html body #page .pg-usage-share { display: inline-block; width: 72px; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; vertical-align: middle; } html body #page .pg-usage-share i { display: block; height: 100%; background: var(--acc); }
@@ -73,3 +73,4 @@ html body #page .pg-usage-stale { margin: 0 0 6px; padding: 5px 8px; border: 1px
   html body #page .pg-usage-grid, html body #page .pg-ukpi { grid-template-columns: minmax(0, 1fr); }
   html body #page .pg-ustats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+html body #page .pg-usage-card .tbl td.name small { display: block; font-size: 10.5px; line-height: 1.2; } html body #page .pg-usage-card .tbl td.name .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
