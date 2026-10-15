@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.54.1 - The menu of a node's row is the full menu
+
+- **The ⋯ menu of a node in the list is the same menu as the node window's (the owner: "like the other one, in one column with groups"):** icons, a line between the groups - Log, Usage, Resources, Latency, Certificate…; Edit…, Restart…, Disable…, Resync users…, Reset counters…; Update the node…, Update Xray…, Update geo files…; Off the page; Delete the node… - with Overview, Check now and Change tag… on top (they are about the profile).
+
 ## 1.54.0 - Hosts, Access and Core are ONE section: Configs
 
 - **One section to add an account to the panel (the owner: "make these three sections one"):** the menu of the Panel has General · Users · **Configs** · Admins now. Configs holds four tabs in the one row at the top: **Add** (choose a protocol; the inbound, the group, the host and a user template are made for you - the form that was a window is in the page now and the result stays in it, with "Make another"), **Hosts**, **Groups** and **Core**. An old link to Hosts, Access or Core opens its tab in Configs.

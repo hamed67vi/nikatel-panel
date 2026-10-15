@@ -293,3 +293,12 @@ def test_hosts_access_and_core_are_one_section_called_configs_with_an_add_tab_fi
     js = _web("pg_kinds.js")
     assert 'window.pgTabs.kinds = {label: "Add"' in js and "function pgKindFormHtml(inline)" in js and 'state.build = "kinds"' in js
     assert "configs: SI.cpu" in APP
+
+
+def test_the_menu_of_a_node_row_is_the_menu_of_the_node_window_in_one_column_with_groups():
+    """The owner, 2026-10-15: "make this one like the other: in one column with groups" - the row of a node had a short menu without icons."""
+    lab = _web("lab.js").split("function labNodeItems(", 1)[1].split("/* a section is drawn", 1)[0]
+    assert 'ctx === "row" ? labItem(' not in lab and "ctx === \"row\" ? []" not in lab                                  # no short row version of any item any more
+    assert 'labIt("Overview", "overview"' in lab and 'labIt("Check now", "check"' in lab and 'labIt("Change tag…", "tag"' in lab      # (a row: the profile's own items first, with icons)
+    for item in ("Log", "Usage", "Resources", "Latency", "Certificate…", "Edit…", "Restart…", "Resync users…", "Reset counters…", "Update the node…", "Update Xray…", "Update geo files…", "Off the page", "Delete the node…"):
+        assert f'it("{item}"' in lab or 'it(off ? "Enable…" : "Disable…"' in lab, item
