@@ -308,3 +308,29 @@ def test_a_node_added_in_pasarguard_later_is_found_by_the_check_and_put_on_the_p
         assert svc._skip(db) == {f"{pid}:9"}
         svc.drop_panel(db, pid)
         assert svc._skip(db) == set()                                                                              # a panel that is removed takes its notes with it
+
+def test_a_node_deleted_in_pasarguard_goes_off_the_page_at_the_next_good_check(client, monkeypatch):
+    """The owner, 2026-10-15: "I deleted the node in PasarGuard, it was removed there but not here"."""
+    seen = [{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected"}, {"id": 9, "name": "AS", "address": "203.0.113.9", "status": "connected"}]
+    _panel(nodes_=[dict(n) for n in seen])
+    answer = {"ok": True, "latency_ms": 5, "stats": {"version": "1"}, "error": ""}
+    monkeypatch.setattr(panels, "_cred", lambda p: {"id": p.id, "url": "https://p.example:8000", "type": p.type, "token": ""})
+    monkeypatch.setattr(panels, "check", lambda c: {**answer, "nodes": [dict(n) for n in seen]})
+    panels.check_all()
+    assert sorted(p["name"] for p in _profiles(client)) == ["AS", "n7"]
+
+    answer["nodes_error"] = "HTTP 500"                                                                           # the node list could not be read: that says nothing about the nodes
+    saved = list(seen)
+    seen.clear()
+    panels.check_all()
+    assert len(_profiles(client)) == 2                                                                           # (nothing is removed on a bad read)
+    answer.pop("nodes_error")
+    seen.extend(saved)
+    panels.check_all()
+    assert len(_profiles(client)) == 2
+
+    seen[:] = [n for n in saved if n["id"] != 9]                                                                 # the node is deleted in PasarGuard
+    panels.check_all()
+    assert [p["name"] for p in _profiles(client)] == ["n7"]
+    panels.check_all()
+    assert [p["name"] for p in _profiles(client)] == ["n7"]                                                      # and it does not come back

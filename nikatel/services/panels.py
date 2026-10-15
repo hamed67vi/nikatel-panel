@@ -604,6 +604,9 @@ def check_all() -> None:
                     nodes.append(n)
 
                 p.nodes = nodes
+                if "nodes_error" not in res:          # (only after a good read of the node list)
+                    profiles.drop_gone_nodes(db, p, {key: str(v.get("name") or key) for key, v in old_nodes.items()})          # (a node that was deleted in PasarGuard goes off the Lab page)
+
                 profiles.auto_nodes(db, p)          # (a node that was added in PasarGuard is put on the Lab page by the next check)
 
                 if p.status != "up":

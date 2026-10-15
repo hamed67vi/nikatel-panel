@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.3 - A node deleted in PasarGuard goes off the Lab page too
+
+- **The Lab follows the node list of the PasarGuard panel both ways (the owner: he deleted the node in PasarGuard and the row stayed as "node 1"):** at the next good check (30 s) the profile of a node the panel no longer has is taken off the page, with an event; a check that could not read the node list removes nothing.
+
 ## 1.55.2 - A node added in PasarGuard is found by the panel by itself
 
 - **The panel detects the nodes of a PasarGuard panel on every check, not only when the panel is connected (the owner: a node he added in PasarGuard was not seen in the panel):** a node that has no profile yet gets one at the next check (30 s), tagged PasarGuard Nodes, and an event says so. A node he takes off the page on purpose stays off (the check remembers it as skipped); adding it by hand again, or removing its panel, clears that note.

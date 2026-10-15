@@ -270,6 +270,26 @@ def auto_nodes(db: Session, panel: Panel) -> int:
 
     return made
 
+def drop_gone_nodes(db: Session, panel: Panel, names: dict[str, str] | None = None) -> int:
+    """A node that was taken out of the PasarGuard panel itself goes off the Lab page too (the owner: "I deleted the node in PasarGuard and it stayed here"): the profiles of this panel whose node the panel
+    no longer has are removed (nothing is changed anywhere). `names` = the names the nodes had at the last check, for the event. Call it only after a good read of the node list. Returns how many."""
+    if panel.type != "pasarguard":
+        return 0
+
+    alive = {n["id"] for n in panel.nodes or [] if isinstance(n, dict) and isinstance(n.get("id"), int)}
+    gone = [p for p in db.scalars(select(Profile).where(Profile.kind == "node", Profile.panel_id == panel.id)) if p.node_id not in alive]
+
+    for p in gone:
+        name = (names or {}).get(str(p.node_id)) or f"node {p.node_id}"
+        emit(db, "info", "servers", f"Node {name} is not in the panel {panel.name} any more: taken off the Lab page.", name)
+        db.delete(p)
+
+    if gone:
+        _set_skip(db, _skip(db) - {f"{panel.id}:{p.node_id}" for p in gone})
+
+    return len(gone)
+
+
 def rename_old_tag(db: Session) -> int:
     """The step of the upgrade to 1.52.0: the category that was called PasarGuard is called PasarGuard Nodes (the owner). Returns how many profiles followed."""
     n = 0
