@@ -492,3 +492,11 @@ def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is
     assert "labCheck()" not in lab and "window.labCheck = " not in lab and 'class="sm lab-chk"' not in lab and "window.labCheckOne = " in lab
     assert '<span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span>' in lab and "＋</span><span class=\"lab-lb\">Add server" not in lab
     assert ".lab-tbl td.name.has-flag::before { width: 168px; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 26%, #000 58%, transparent 100%);" in css and "button.lab-add::before" in css and ".lab-bar .lab-chk" not in css
+
+
+def test_the_bar_of_a_page_is_in_the_kits_look_primary_secondary_chip_segmented_and_field():
+    """The owner, 2026-10-15: "these buttons and this row: this style" (the sheet of the UI kit)."""
+    css = _web("uikit.css")
+    assert ".toolbar.joined :is(button.cta, button.pri) { border-radius: 11px !important; background-image: linear-gradient(180deg, #1a74ff 0%, #0a5cf2 100%)" in css and ".toolbar.joined .cta-ic::before" in css
+    assert ".toolbar.joined .tcount {" in css and ".toolbar.joined .tabs button.on { background: #2d3f68" in css and ".tb-search input:focus { border-color: var(--uk-blue)" in css
+    assert 'html[data-mode="light"] body #page .toolbar.joined .tabs {' in css

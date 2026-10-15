@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.4 - The bar of a page in the kit's own look
+
+- **Bars (the owner: Tunnels and the same bar of the other pages):** the primary button is the flat blue of the sheet's *Connect* with a line plus (no gloss, no circle); *Check all*, *Restart all* and the like are the dark card of *Settings*; the counters are the chip; *All / Problems* is the segmented control with the lifted open segment; *Search* is the text field with the blue ring. Light theme has its own colours.
+
 ## 1.57.3 - Flags that fade on both sides, no Check, the Add server of the kit
 
 - **Lab (the owner):** the flag behind a name fades on both sides; the chevron button at the end of a row and the *Check* button of the bar are gone; *Add server* is the button of the UI kit sheet - the blue of the primary button, a drawn plus, no sweep of light.
