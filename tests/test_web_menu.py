@@ -395,3 +395,7 @@ def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the
     assert branch.index("await delPanel()") < branch.index("/api/profiles/${prof.id}")
     assert "if (!prof) {" in branch                                                                                   # (a node with no profile keeps the plain question)
     assert ".ask-check {" in _web("lab.css")
+
+def test_a_pasarguard_profile_has_a_sync_button_beside_its_tabs_and_in_its_empty_page():
+    lab = _web("lab.js")
+    assert "window.labSyncNodes = async () =>" in lab and '"/api/profiles/sync"' in lab and lab.count("onclick=\"labSyncNodes()\"") == 2 and "${labSyncBtn(cur, IB)}" in lab

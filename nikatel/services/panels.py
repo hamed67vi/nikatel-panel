@@ -628,6 +628,39 @@ def check_all() -> None:
         log.info("panel %s ok=%s nodes=%s latency=%s %s", c["url"].split("//")[-1].split("/")[0].split(":")[0][:3] + "…", res["ok"], len(res["nodes"]), res["latency_ms"], res["error"])
 
 
+def sync_nodes(tag: str = "") -> dict:
+    """The Sync button of a PasarGuard profile (the owner: "a panel is there but its nodes are not shown"): every enabled PasarGuard panel is read NOW and each node that is not on the Lab page - the ones he took off too - is put into the profile `tag`."""
+    with session() as db:
+        items = [(p.id, p.name, _cred(p)) for p in db.scalars(select(Panel).where(Panel.type == "pasarguard", Panel.enabled.is_(True)))]
+
+    added, errors = 0, []
+
+    for pid, name, c in items:
+        res = check(c)
+
+        if not res["ok"] or "nodes_error" in res:
+            errors.append(f"{name}: {res.get('error') or res.get('nodes_error') or 'no answer'}")
+            continue
+
+        with session() as db:
+            p = db.get(Panel, pid)
+
+            if p is None:
+                continue
+
+            old = {str(n.get("id")): n for n in (p.nodes or [])}
+            nodes = []
+
+            for n in res["nodes"]:
+                n["fails"] = 0 if n["status"] in NODE_OK else int(old.get(str(n.get("id")), {}).get("fails", 0)) + 1
+                nodes.append(n)
+
+            p.nodes = nodes
+            profiles.drop_gone_nodes(db, p, {k: str(v.get("name") or k) for k, v in old.items()})
+            added += profiles.auto_nodes(db, p, tag=tag, force=True)
+
+    return {"panels": len(items), "added": added, "errors": errors}
+
 # ------------------------------------------------------------------ CRUD
 def public(p: Panel) -> dict:
     return {"id": p.id, "name": p.name, "type": p.type, "url": p.url, "username": p.username, "verify_tls": p.verify_tls, "enabled": p.enabled,

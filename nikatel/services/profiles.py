@@ -265,21 +265,24 @@ def set_tag(db: Session, pid: int, tag) -> str:
     return p.tag
 
 
-def auto_nodes(db: Session, panel: Panel) -> int:
+def auto_nodes(db: Session, panel: Panel, tag: str = NODE_TAG, force: bool = False) -> int:
     """The nodes of a PasarGuard panel are put on the Lab page by themselves (the owner: "the panel must detect a node that was added in PasarGuard"): when the panel is connected and on every
     check of it (30 s), a node that has no profile yet - and that he did not take off the page on purpose - gets one, tagged PasarGuard Nodes. Returns how many."""
     if panel.type != "pasarguard":
         return 0
 
-    made, skipped = 0, _skip(db)
+    made, skipped = 0, set() if force else _skip(db)          # (force = the Sync button: the nodes he took off the page are brought back too)
+
+    if force:
+        _set_skip(db, {k for k in _skip(db) if not k.startswith(f"{panel.id}:")})
 
     for n in panel.nodes or []:
         if not isinstance(n, dict) or not isinstance(n.get("id"), int) or f"{panel.id}:{n['id']}" in skipped:
             continue
 
         if db.scalar(select(Profile.id).where(Profile.kind == "node", Profile.panel_id == panel.id, Profile.node_id == n["id"])) is None:
-            db.add(Profile(kind="node", panel_id=panel.id, node_id=n["id"], tag=NODE_TAG))
-            emit(db, "info", "servers", f"Node {n.get('name') or n['id']} of the panel {panel.name} was found and put on the Lab page ({NODE_TAG}).", str(n.get("name") or n["id"]))
+            db.add(Profile(kind="node", panel_id=panel.id, node_id=n["id"], tag=tag))
+            emit(db, "info", "servers", f"Node {n.get('name') or n['id']} of the panel {panel.name} was found and put on the Lab page ({tag or 'Any'}).", str(n.get("name") or n["id"]))
             made += 1
 
     return made

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.9 - Sync in a PasarGuard profile
+
+- **A PasarGuard profile has a Sync button (the owner: a panel is there but its nodes are not shown):** beside the tabs (and in the empty page of the profile) - it reads every PasarGuard panel NOW and puts each node that is not on the page into the open profile, the ones taken off the page on purpose too; it says how many were added, or why a panel did not answer.
+
 ## 1.55.8 - The suggested tags are calmer
 
 - The suggested tags of Add profile are ONE quiet row: four (Iran, Foreign, Marzban, PasarGuard) as small outline pills of one height, no gloss, no second line (Hetzner and Backup are gone).

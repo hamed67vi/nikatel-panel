@@ -353,3 +353,25 @@ def test_the_profile_of_a_connected_pasarguard_panel_cannot_be_renamed_or_delete
         db.execute(Panel.__table__.delete())                                                                           # the panel is gone: the profile is a plain one again
 
     assert client.put("/api/profiles/tags/PasarGuard%20Nodes", json={"tag": "Mine"}).status_code == 200
+
+def test_the_sync_button_of_a_pasarguard_profile_reads_the_panels_now_and_brings_every_node_in_even_one_taken_off(client, monkeypatch):
+    """The owner, 2026-10-15: "in the PasarGuard profile an option to sync: a panel is there but its nodes are not shown"."""
+    pid = _panel(nodes_=[])
+    seen = [{"id": 7, "name": "n7", "address": "203.0.113.7", "status": "connected"}, {"id": 9, "name": "AS", "address": "203.0.113.9", "status": "connected"}]
+    monkeypatch.setattr(panels, "_cred", lambda p: {"id": p.id, "url": "https://p.example:8000", "type": p.type, "token": ""})
+    monkeypatch.setattr(panels, "check", lambda c: {"ok": True, "latency_ms": 5, "stats": {"version": "1"}, "nodes": [dict(n) for n in seen], "error": ""})
+    r = client.post("/api/profiles/sync", json={"tag": "PasarGuard"})
+    assert r.status_code == 200 and r.json()["added"] == 2 and r.json()["panels"] == 1 and r.json()["errors"] == []
+    assert sorted((p["name"], p["tag"]) for p in _profiles(client)) == [("AS", "PasarGuard"), ("n7", "PasarGuard")]
+    assert client.post("/api/profiles/sync", json={"tag": "PasarGuard"}).json()["added"] == 0                      # (nothing twice)
+
+    gone = next(p["id"] for p in _profiles(client) if p["name"] == "AS")
+    client.delete(f"/api/profiles/{gone}")                                                                         # taken off on purpose: the check leaves it, the Sync button brings it back
+    panels.check_all()
+    assert [p["name"] for p in _profiles(client)] == ["n7"]
+    assert client.post("/api/profiles/sync", json={"tag": "Mine"}).json()["added"] == 1 and sorted(p["tag"] for p in _profiles(client)) == ["Mine", "PasarGuard"]
+
+    monkeypatch.setattr(panels, "check", lambda c: {"ok": False, "latency_ms": None, "stats": {}, "nodes": [], "error": "no answer"})
+    r = client.post("/api/profiles/sync", json={"tag": ""})
+    assert r.json()["added"] == 0 and "no answer" in r.json()["errors"][0] and pid
+    assert client.post("/api/profiles/sync", json={"tag": "a/b"}).status_code == 400

@@ -5,8 +5,8 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Profile
+from ..services import panels, uptime
 from ..services import profiles as svc
-from ..services import uptime
 
 router = APIRouter(tags=["profiles"], dependencies=[Depends(current_user)])
 
@@ -62,6 +62,20 @@ def add_profiles(body: ProfilesIn):
 
     return {"ok": True, "added": added, "skipped": skipped}
 
+
+class SyncIn(BaseModel):
+    tag: str = Field("", max_length=40)
+
+
+@router.post("/profiles/sync")
+def sync_profiles(body: SyncIn):
+    """The Sync button of the PasarGuard profile: read the PasarGuard panels now and put every node that is not on the Lab page into the open profile (the ones taken off the page too)."""
+    try:
+        tag = svc.check_tag(body.tag)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+    return {"ok": True, **panels.sync_nodes(tag)}
 
 @router.post("/profiles/tags", status_code=201)
 def add_tag(body: TagIn):
