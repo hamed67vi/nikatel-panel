@@ -105,7 +105,7 @@ def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_t
     assert '<i class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></i><span>${esc(name)}</span>' in APP and "nav-ag" not in APP and "nav-act-k" not in APP          # ("+ Add profile": the + in front of its name, no arrow, no small group)
     assert "window.subAct = (page, k) =>" in APP and 'SUB[page].filter(x => x[3] !== "act")' in APP and "a.dataset.act ? subAct(a.dataset.page, a.dataset.sub)" in APP
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
-    assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
+    assert 'SUB_ACT["nodes/add"] = () => { if (labOn()) labNewProfile(); else { LAB.pending = "newprofile"; go("nodes", "lab"); } };' in lab and 'document.getElementById("nav-sub-nodes")' in lab
     assert 'for (const t of labTags())' in lab and 'any.onclick = () => labGoKind("any")' in lab          # (one item for each tag, drawn from the tags the page read)
     assert 'const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : [];' in lab and "any.hidden = !((LAB.profiles || []).length || labTags().length);" in lab          # (no category and no "All" before there is a profile: the menu is only + Add profile)
     assert lab.count("labNavSync();") >= 3          # (when the page is drawn, when a tab of the page is chosen, when the profiles were read in the background)
@@ -166,7 +166,7 @@ def test_the_panel_item_is_locked_only_while_no_panel_is_connected_and_says_why_
     assert "PAGES.pgpanel = async () => { if (window.labLockNow && await labLockNow()) return;" in APP
     assert "if (window.labLockSync) labLockSync();" in APP
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
-    assert "window.labLocked = () => LAB.pg === false" in lab and 'document.getElementById("demo-pill")' in lab          # (the public demo has no panel to connect: its Panel page stays open)
+    assert "window.labLocked = () => false;" in lab and "window.labNewProfile = () =>" in lab and "Start with a profile" in lab and 'document.getElementById("demo-pill")' in lab          # (the public demo has no panel to connect: its Panel page stays open)
     assert 'a.classList.toggle("nav-lock", lock)' in lab
     sync = lab.split("window.labLockSync", 1)[1].split("window.labLockNow", 1)[0]
     assert 'api("/api/panels")' in sync and "(r.panels || []).length > 0" in sync          # a panel is connected: it is in the list of panels

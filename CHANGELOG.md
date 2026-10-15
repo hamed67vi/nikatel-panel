@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.54.3 - Add profile makes the profile first; the Panel item is always open
+
+- **Add profile asks for a profile name first (the owner):** on a new panel the page says "Start with a profile" with **＋ Add profile** (the menu item does the same): a box asks the name, makes the profile and opens it; the servers are added inside it (its tag is already filled in).
+- **The Panel item of the menu is never locked any more (the owner: "keep this section active entirely").** Without a connected panel its page says so and shows how to connect one.
+
 ## 1.54.2 - A new panel's Servers menu is only "+ Add profile"
 
 - **No category and no "All" from the start (the owner: "delete all, only Add profile stays - the user makes a profile first, then can add a profile"):** the Marzban / PasarGuard Nodes / Iran items are not made for you any more. A new panel's Servers menu shows only **+ Add profile**; a category (a tag) appears when a profile that carries it is added, or with the + beside the tabs, and "All" appears when there is something to list. A panel that already has profiles keeps the tags they carry.

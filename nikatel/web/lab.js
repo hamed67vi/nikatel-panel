@@ -99,19 +99,27 @@ PAGES.lab = async () => {
   const openSrv = list.find(s => s.id === state.open);      // (any server: a shortcut of the dashboard or a diagnosis opens one that was taken off the page too)
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the Lab or of a node is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };
   if (list.some(srvBusy)) { clearTimeout(window.__busyT); window.__busyT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin) refresh(); }, 3000); }
-  pageTarget().innerHTML = LAB.profiles.length ? labPage() : labFirst();
+  pageTarget().innerHTML = LAB.profiles.length || labTags().length ? labPage() : labFirst();
   showWin();
   applyQ();
   if (openSrv && state.edit !== openSrv.id) labAfter(openSrv);
   labLoadNodes();
   labNavSync();      // (the menu: the kinds that have a profile, and which one is open)
-  if (LAB.pending) { const k = LAB.pending; LAB.pending = null; if (k === "connect") labConnect(); else if (typeof k === "object") labAdd("new", k); else labAdd(); }      // "Add profile" of the menu, "Add a PasarGuard profile" of the message the Panel item gives, a node outside our servers to add: the add flow opens at once
+  if (LAB.pending) { const k = LAB.pending; LAB.pending = null; if (k === "newprofile") labNewProfile(); else if (k === "connect") labConnect(); else if (typeof k === "object") labAdd("new", k); else labAdd(); }      // "Add profile" of the menu, "Add a PasarGuard profile" of the message the Panel item gives, a node outside our servers to add: the add flow opens at once
 };
-function labFirst() {      // no profile yet: nothing else works until one is added
-  return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a server</h2>
-    <p>Everything on this page starts with a server: its name, its tag - the profile (category) it is listed under - and its address.</p><div class="lab-pf-act"><button class="pri" onclick="labAdd()">＋ Add server</button></div></div></div>`;
+function labFirst() {      // no profile yet: nothing else works until one is made (the owner: "the user makes a profile first, then adds servers inside it")
+  return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a profile</h2>
+    <p>A profile is a group of servers under one name - for example Iran, Marzban or Hetzner. Make one, then add its servers inside it.</p><div class="lab-pf-act"><button class="pri" onclick="labNewProfile()">＋ Add profile</button></div></div></div>`;
 }
-const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
+window.labNewProfile = () => {      // "Add profile": a box asks its name; it opens the profile, and the servers are added inside it
+  showModal("<b>＋ Add profile</b>", `<form class="frm one" onsubmit="return labNewProfileGo(event)" autocomplete="off"><label>Name <small>also its tag: the servers inside are listed under it</small><input name="name" maxlength="40" placeholder="Iran" required autofocus></label>
+    <div class="frm-act"><button class="pri" type="submit">Add profile</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`);
+};
+window.labNewProfileGo = async ev => {
+  ev.preventDefault(); const name = new FormData(ev.target).get("name");
+  try { const r = await api("/api/profiles/tags", {method: "POST", body: JSON.stringify({tag: name})}); LAB.kind = r.tag; localStorage.setItem("nk.lab.k", r.tag); labTagDraft.v = r.tag; closeModal(); toast("✓ Profile " + r.tag + " made: add its servers inside it", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  return false;
+};const labHasPg = () => !!(window.pgSrvPanels && pgSrvPanels().length);      // a PasarGuard panel is connected: only then can a node be added (the owner: "this option is active when we have added a PasarGuard panel")
 /* the categories are tags (the owner, 2026-10-14: "make me three categories: Marzban, PasarGuard, Iran"): they are on the page from the start, any other tag he types joins them, and Any is every profile */
 const labLogo = t => { const l = String(t).toLowerCase(); return l.startsWith("pasarguard") || l === "marzban" ? `<img class="lab-logo" src="/static/logos/${l.startsWith("pasarguard") ? "pasarguard" : l}.png" alt="" width="16" height="16">` : ""; };      // (the logos the owner sent: the lion of PasarGuard, the barbed wire of Marzban)
 window.labAddTag = async () => {      // the "+" beside the tabs: a new profile (category)
@@ -247,7 +255,8 @@ window.labNodeGo = async pid => {
 /* ---------------------------------------------------------------- the Panel item of the menu: grey with a lock only while NO panel is connected (the owner: "we have a panel now, it must not be locked; the lock is for when no panel is connected").
    A panel is connected when it is in the list of panels (its API key or its sign-in was tried and kept): not when a node of it is on the Lab page. For now the one that is made to be used is PasarGuard; others may come. */
 LAB.pg = null;      // null: not known yet (nothing is locked), true / false: whether a panel is connected
-window.labLocked = () => LAB.pg === false && !document.getElementById("demo-pill");      // (the public demo has no panel to connect: its Panel page stays open)
+window.labLocked = () => false;      // the Panel item is always open (the owner, 2026-10-15: "keep this section active entirely"); without a panel its page says so and offers to connect one
+const labLockedOld = () => LAB.pg === false && !document.getElementById("demo-pill");      // (the public demo has no panel to connect: its Panel page stays open)
 function labLockPaint() {
   const lock = labLocked();
   document.querySelectorAll('#nav a[data-page="pgpanel"]').forEach(a => { a.classList.toggle("nav-lock", lock); if (lock) { a.title = "No panel is connected: connect one first (Lab → Add profile → PasarGuard node)"; a.setAttribute("aria-disabled", "true"); } else a.removeAttribute("aria-disabled"); });
@@ -472,7 +481,7 @@ async function labInsightFor(boxId, cur) {
 /* ---------------------------------------------------------------- the menu: the section is called Lab (the owner). Its list: Any (every profile), then ONE ITEM FOR EACH TAG (the categories: Marzban, PasarGuard, Iran from the start - the owner asked
    for them - and every other tag he types), and + Add profile at the END. Add profile is not a tab but a door to an action ("act" in the tabs of app.js, drawn by navBuild and by the bar of the page): it opens the box that asks the name and the tag.
    The tags follow the profiles: labNavSync draws them whenever the profiles were read. */
-SUB_ACT["nodes/add"] = () => { if (labOn()) labAdd(); else { LAB.pending = "add"; go("nodes", "lab"); } };
+SUB_ACT["nodes/add"] = () => { if (labOn()) labNewProfile(); else { LAB.pending = "newprofile"; go("nodes", "lab"); } };
 window.labGoKind = k => { if (labOn()) labKind(k); else { LAB.kind = k; localStorage.setItem("nk.lab.k", k); go("nodes", "lab"); } };      // (an item of the menu: the Lab, on that tag)
 function labNavSync() {
   const sub = document.getElementById("nav-sub-nodes"), any = sub ? sub.querySelector('a[data-sub="lab"]') : null; if (!any) return;
