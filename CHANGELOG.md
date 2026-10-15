@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.38 - About & update after the picture, Sign out of other devices
+
+- **Settings → About & update:** built after the owner's picture - four boxes of ONE fixed size (*About & Update* with the *Update from GitHub* row, *License* with its chips and the install id with a copy button, *Tunnel cores*, *PasarGuard*), what is longer scrolls inside its box, and under them a strip of the facts of the service, each with its little icon (the path of the env file can be copied).
+- **Settings → Security:** *Sign out of other devices* is a button under the password boxes (it asks for the password, ends every other session and keeps this one; the password does not change); changing the password still signs the others out. API: `POST /api/auth/logout-others`.
+- API tokens live in *Settings → API* (1.57.37).
 ## 1.57.37 - Settings → API: every API connection in one place
 
 - **Settings → API** (the tab that was *AI*): this panel's own API - its tokens (moved here from Security) and the link to /api/docs - and the state of every connection that works by an API key: the AI assistant (Anthropic), the Telegram bot, the probe, the DNS accounts (ArvanCloud, Cloudflare) and the Marzban / PasarGuard panels, each with the way to the place where it is managed. The AI assistant card stays under it.

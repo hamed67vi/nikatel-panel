@@ -111,6 +111,15 @@ def epoch() -> int:
     return int(load().get("epoch", 0))
 
 
+def bump_epoch() -> None:
+    """End every session made so far (the one that asked is given a new cookie by the caller): the password stays."""
+
+    with _LOCK:
+        d = load()
+        d["epoch"] = int(d.get("epoch", 0)) + 1
+        save(d)
+
+
 # ------------------------------------------------------------------ sessions
 def _serializer(salt: str = "session") -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().secret_key(), salt=salt)

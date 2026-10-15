@@ -127,8 +127,27 @@ def change_password(body: PasswordIn, request: Request, response: Response, user
     return {"ok": True}
 
 
-# ------------------------------------------------------------------ forgotten password
-@router.get("/auth/recovery-options")
+class OthersIn(BaseModel):
+    password: str = Field(max_length=256)
+
+
+@router.post("/auth/logout-others")
+def logout_others(body: OthersIn, request: Request, response: Response, user: str = Depends(auth.current_user)):
+    """End every other session (every other browser and device) and keep this one; the password is needed, so a stolen session cannot throw the owner out."""
+    ip = auth.client_ip(request)
+    auth.throttle_check(ip)
+
+    if not auth.verify(user, body.password):
+        auth.throttle_fail(ip)
+        raise HTTPException(400, "the password is wrong")
+
+    auth.bump_epoch()
+    _cookie(request, response, user)       # this browser stays signed in
+    _audit("warn", f"Every other session was signed out (from {ip}).")
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ forgotten password@router.get("/auth/recovery-options")
 def recovery_options():
     """What the login page may offer. Says nothing about the account itself."""
     t = st.get("telegram")

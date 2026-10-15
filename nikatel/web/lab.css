@@ -557,42 +557,61 @@ html[data-mode="light"] body .nk-dd .nk-dd-i { color: #1b2540; } html[data-mode=
 @media (min-width: 761px), (pointer: fine) { html body .main { scrollbar-gutter: stable; } }
 html body .fx-line .fx-why { display: block; margin-top: 3px; font-style: normal; font-weight: 400; line-height: 1.4; color: var(--mut); }
 
-/* 1.57.34 - Settings → About & update in two compact columns (the owner, 2026-10-16): the panel + license + tunnel cores on the left, PasarGuard (panels, nodes) on the right, the service facts in small print under both */
-html body #page .sf .abt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-html body #page .sf .abt-col { display: grid; gap: 10px; align-content: start; min-width: 0; }
-@media (max-width: 1000px) { html body #page .sf .abt-grid { grid-template-columns: minmax(0, 1fr); } }
-html body #page .abt-grid .ss-hero { width: auto; max-width: none; margin: 0 !important; padding: 8px 12px !important; }
-html body #page .abt-grid .ss-hero .ss-ic { width: 30px; height: 30px; }
-html body #page .abt-grid .ss { margin: 0; }
-html body #page .abt-grid .ss-rows .sr.x { padding: 6px 8px; }
-html body #page .abt-grid .eng-bar { margin-bottom: 4px; font-size: 11px; display: flex; align-items: center; gap: 8px; }
-html body #page .abt-grid .eng-bar button { margin-left: auto; height: 26px; }
-html body #page .abt-grid .eng-head, html body #page .abt-grid .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 8px; padding: 4px 10px; }
-html body #page .abt-grid .eng-head { font-size: 10px; }
-html body #page .abt-grid .eng-row { margin-bottom: 4px; font-size: 12px; }
-html body #page .abt-grid .eng-row .eng-act button { height: 26px; font-size: 11.5px; }
-html body #page .abt-grid .lic-top b { font-size: 12.5px; }
-html body #page .abt-grid .lic-feats { margin: 6px 0; }
-html body #page .abt-grid .lic-top small { font-size: 11px; }
-html body #page .abt-grid .lic-feats .pill { height: 22px; font-size: 11px; }
-html body #page .abt-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 30px; padding: 0 2px; font-size: 13px; }
-html body #page .abt-h i { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 9px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; }
-html body #page .abt-h i svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-html body #page .abt-h small { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
-html body #page .abt-h .pill { margin-left: auto; }
-html body #page .abt-pg #pgu-box { display: grid; gap: 10px; }
-html body #page .abt-pg .pgu-row { min-height: 30px; font-size: 12px; gap: 8px; }
-html body #page .abt-pg .pgu-row.pgu-hd { min-height: 24px; }
-html body #page .abt-pg .pgu-row button { height: 24px; font-size: 11.5px; }
-html body #page .abt-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; padding: 7px 12px; border: 1px solid var(--uk-line); border-radius: 12px; font-size: 11px; color: var(--mut); }
-html body #page .abt-foot span { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-html body #page .abt-foot em { font-style: normal; text-transform: uppercase; letter-spacing: .5px; font-size: 9.5px; }
-html body #page .abt-foot b { font-size: 11.5px; font-weight: 600; color: var(--text); }
-html body #page .abt-foot code { font-size: 10.5px; }
-html[data-mode="light"] body #page .abt-h i { background: #f3f6fc; border-color: rgba(30, 50, 100, .16); color: #4a5a7e; }
-
 /* 1.57.35 - between the tabs of the Panel the tab that was open stays, dimmed, until the new one has its data (no spinner) */
 html body #page #pn-body.pn-busy > :not(.pn-bars) { opacity: .45; pointer-events: none; transition: opacity .12s; }
 
 /* 1.57.36 - a tab of Settings that is switched off (Shop bot): grey, nothing happens on it */
 html body #page .set-tabs button.sub-off { opacity: .38; filter: grayscale(1); pointer-events: none; cursor: default; box-shadow: none !important; }
+
+/* 1.57.38 - Settings → About & update after the owner's design picture: four boxes of ONE fixed size (this panel, its license, the tunnel cores, the PasarGuard panels and nodes) and a strip of the facts of the service under them; what is longer scrolls inside its box; the buttons of the password card (Settings → Security) */
+html body #page .sf[data-name="About & update"] { background: none; border: 0; box-shadow: none; padding: 0; }
+html body #page .sf[data-name="About & update"] > h3 { display: none; }
+html body #page .abt-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+html body #page .abt-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 232px minmax(0, 1fr); gap: 12px; }
+@media (max-width: 1000px) { html body #page .abt-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: minmax(232px, auto); } html body #page .abt-wrap.fx-box { height: auto !important; } }
+html body #page .abt-card { display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
+html body #page .abt-ch { display: flex; align-items: flex-start; gap: 14px; flex: none; }
+html body #page .abt-ti { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border-radius: 13px; background: #1a2036; border: 1px solid var(--uk-line); color: #8fb4ff; font-style: normal; }
+html body #page .abt-ti.ok { color: #3ddc97; } html body #page .abt-ti.sm { width: 38px; height: 38px; border-radius: 11px; color: #e3e9f8; }
+html body #page .abt-ti svg, html body #page .abt-fi svg, html body #page .abt-chev svg, html body #page .abt-copy svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+html body #page .abt-ti svg { width: 24px; height: 24px; } html body #page .abt-ti.sm svg { width: 20px; height: 20px; }
+html body #page .abt-ct { flex: 1 1 auto; min-width: 0; }
+html body #page .abt-t1 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; min-height: 28px; }
+html body #page .abt-t1 b { font-size: 16px; font-weight: 700; color: var(--text); }
+html body #page .abt-ct small { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: var(--mut); }
+html body #page .abt-cb { flex: 1 1 auto; min-height: 0; margin-top: 12px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+html body #page .abt-pill { flex: none; display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box; height: 30px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(61, 220, 151, .4); background: rgba(61, 220, 151, .08); color: #3ddc97; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+html body #page .abt-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+html body #page .abt-pill.warn { color: #ffb84d; border-color: rgba(255, 184, 77, .45); background: rgba(255, 184, 77, .08); }
+html body #page .abt-row { display: flex; align-items: center; gap: 14px; box-sizing: border-box; width: 100%; height: 56px; padding: 0 14px 0 9px; border-radius: 13px; border: 1px solid var(--uk-line); background: #0f1626; box-shadow: none; color: var(--text); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+html body #page .abt-row b { flex: 1 1 auto; font-weight: 600; } html body #page .abt-row:hover { border-color: rgba(120, 170, 255, .45); background: #131d33; } html body #page .abt-row:disabled { opacity: .55; cursor: default; }
+html body #page .abt-chev { display: grid; place-items: center; color: #8f9bbd; font-style: normal; } html body #page .abt-chev svg { width: 18px; height: 18px; stroke-width: 2; }
+html body #page .abt-line:empty { display: none; } html body #page .abt-line { margin: 0 0 10px; font-size: 12.5px; }
+html body #page .abt-card .lic-feats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+html body #page .abt-card .lic-feats .pill { height: 28px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; font-size: 12.5px; }
+html body #page .abt-iid { display: flex; align-items: center; gap: 12px; box-sizing: border-box; padding: 7px 8px 7px 14px; border-radius: 12px; border: 1px solid var(--uk-line); background: #0f1626; color: var(--mut); font-size: 13px; }
+html body #page .abt-iid code { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; padding: 5px 10px; border-radius: 8px; background: #151d31; color: var(--text); font-size: 13px; }
+html body #page .abt-copy { display: inline-grid; place-items: center; flex: none; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; box-shadow: none; color: #8f9bbd; cursor: pointer; }
+html body #page .abt-copy:hover { color: #fff; background: rgba(255, 255, 255, .08); } html body #page .abt-copy svg { width: 17px; height: 17px; }
+html body #page .abt-note { display: block; margin-top: 8px; font-size: 12.5px; }
+html body #page .abt-card .lic-form { margin-top: 10px; }
+/* the cores */
+html body #page .abt-card .eng-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; } html body #page .abt-card .eng-bar button { margin-left: auto; height: 28px; }
+html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.5fr) auto; gap: 8px; padding: 5px 12px; }
+html body #page .abt-card .eng-head { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
+html body #page .abt-card .eng-row { margin-bottom: 5px; border-radius: 11px; background: #131b2e; font-size: 12.5px; }
+html body #page .abt-card .eng-row .eng-act button { height: 26px; font-size: 11.5px; }
+/* PasarGuard */
+html body #page .abt-pg #pgu-box { display: grid; gap: 10px; }
+html body #page .abt-pg .ss-hero { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: auto; max-width: none; margin: 0 !important; padding: 10px 12px !important; border-radius: 13px !important; border: 1px solid var(--uk-line) !important; background: #0f1626 !important; }
+html body #page .abt-pg .ss-hero .ss-ic { width: 38px; height: 38px; border-radius: 11px; }
+html body #page .abt-pg .pgu-row { min-height: 30px; font-size: 12px; gap: 8px; } html body #page .abt-pg .pgu-row.pgu-hd { min-height: 24px; } html body #page .abt-pg .pgu-row button { height: 24px; font-size: 11.5px; }
+html body #page .abt-pg .ss { margin: 0; }
+/* the facts of the service */
+html body #page .abt-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 0; box-sizing: border-box; padding: 8px 6px; border-radius: 14px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
+html body #page .abt-foot > span { display: inline-flex; align-items: center; gap: 8px; padding: 0 9px; } html body #page .abt-foot > span + span { border-left: 1px solid var(--uk-line); }
+html body #page .abt-fi { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; } html body #page .abt-fi svg { width: 15px; height: 15px; }
+html body #page .abt-fv { display: grid; gap: 1px; padding: 0; } html body #page .abt-fv em { font-style: normal; font-size: 10.5px; color: var(--mut); white-space: nowrap; } html body #page .abt-fv b { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
+html[data-mode="light"] body #page :is(.abt-card, .abt-foot) { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page :is(.abt-ti, .abt-fi, .abt-row, .abt-iid) { background: #f3f6fc; border-color: rgba(30, 50, 100, .16); }
+/* the buttons under the password boxes (Settings → Security) */
+html body #page .pwf-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; } html body #page .pwf-btns button { height: 32px; }

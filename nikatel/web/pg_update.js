@@ -5,7 +5,7 @@
    Routes used: GET /api/pg-updates, GET /api/pg-updates/panels/{id}/plan, POST /api/pg-updates/panels/{id}, POST /api/pg-updates/nodes, GET /api/actions/{id}.
    Uses the helpers of app.js: $, api, esc, toast, showModal, closeModal, gconfirm, gprompt, followStory, go, state, SI, sFrame, sHero, sGrp, sItem, sWide. */
 const pgu = {data: null, at: 0};
-window.pgUpdBody = () => `<div class="abt-pg"><div class="abt-h"><i>${SI.box}</i><b>PasarGuard</b><small class="mut">the panels and their nodes: the newest releases, what each one runs, one click</small><span class="pill" id="pgu-pill">…</span></div><div id="pgu-box"><div class="mut" style="padding:8px 4px">reading the panels and GitHub…</div></div></div>`;      // drawn by the About & update page of Settings (app.js), filled by pgUpdLoad
+window.pgUpdBody = () => `<div class="abt-card abt-pg"><div class="abt-ch"><i class="abt-ti">${SI.box}</i><div class="abt-ct"><div class="abt-t1"><b>PasarGuard</b></div><small>Manage the panels and their nodes: the newest releases, what each one runs, one click.</small></div><span class="abt-pill" id="pgu-pill">…</span></div><div class="abt-cb"><div id="pgu-box"><div class="mut" style="padding:8px 4px">reading the panels and GitHub…</div></div></div></div>`;      // the fourth box of Settings → About & update (app.js), filled by pgUpdLoad
 
 const pguShort = v => String(v || "").replace(/^v/, "");
 const pguVer = (now, latest, behind) => behind === true ? `<span class="pgu-v warn" title="${esc(`runs ${now || "?"}, the newest is ${latest}`)}">${esc(pguShort(now) || "?")} <i>→</i> <b>${esc(pguShort(latest))}</b></span>`
@@ -43,7 +43,7 @@ window.pgUpdLoad = async force => {
     pgu.data = await api(`/api/pg-updates${force ? "?force=true" : ""}`); pgu.at = Date.now();
     const b = $("#pgu-box"); if (!b) return; b.innerHTML = pgUpdHtml(pgu.data);
     const left = (pgu.data.panels || []).filter(p => p.behind === true).length + (pgu.data.nodes || []).filter(n => n.behind === true || n.xray_behind === true).length, pill = $("#pgu-pill");
-    if (pill) { pill.textContent = left ? `${left} behind` : "up to date"; pill.className = "pill " + (left ? "warn" : "ok"); }
+    if (pill) { pill.textContent = left ? `${left} behind` : "Up to date"; pill.className = "abt-pill" + (left ? " warn" : ""); }
   } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 };
 window.pgUpdAddHost = pid => { const p = ((pgu.data || {}).panels || []).find(x => x.id === pid); if (p) pgSrvAddServer(p.name, p.host_name); };      // the Add server form with the address of the panel filled in
