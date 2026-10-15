@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.13 - Servers opens on All
+
+- **"All" is gone from the left menu under Servers (the owner):** pressing **Servers** opens the Lab on its All tab; the profiles stay in the menu, and the tabs of the page hold them too.
+
 ## 1.55.12 - Every PasarGuard profile is locked while a panel is connected
 
 - The lock is not only for "PasarGuard Nodes": a profile called **PasarGuard** (or any name that starts with it) cannot be renamed or deleted either while a PasarGuard panel is connected - the two buttons are off with a tip, and the server refuses it.

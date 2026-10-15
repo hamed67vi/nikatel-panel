@@ -527,9 +527,10 @@ function labNavSync() {
     a.innerHTML = `<i class="ic">${labLogo(t) || (l === "iran" ? ic.iran : l === "foreign" ? ic.foreign : l.startsWith("pasarguard") ? ic.node : ic.access) || ""}</i><span>${esc(t)}</span>`; a.onclick = () => labGoKind(t); after.after(a); after = a;
   }
   any.onclick = () => labGoKind("any");
-  any.hidden = !((LAB.profiles || []).length || labTags().length);      // "All" only when there is something to list: a new panel shows nothing but + Add profile (the owner, 2026-10-15)
+  any.hidden = true;      // "All" is not an item of the menu any more (the owner, 2026-10-15): the head "Servers" opens the Lab on its All tab, the tabs of the page hold the profiles
   const cur = labOn() ? labKindNow() : null;      // (the open one is the tag the page shows)
   any.classList.toggle("on", cur === "any"); sub.querySelectorAll("a.nav-kind").forEach(a => a.classList.toggle("on", a.dataset.kind === cur));
   const g = sub.closest(".nav-g"); if (g) g.classList.toggle("has-on", !!sub.querySelector("a.on"));
   if (typeof navTitles === "function") navTitles();      // (the tooltips of the new items, where the menu is a rail of icons)
 }
+{ const h = document.querySelector('#nav .nav-gh > a[data-page="nodes"]'); if (h) h.onclick = () => labGoKind("any"); }      // the head "Servers": the All tab of the Lab (the owner, 2026-10-15)
