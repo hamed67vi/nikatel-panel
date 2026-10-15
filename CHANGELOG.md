@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.8 - The suggested tags are calmer
+
+- The suggested tags of Add profile are ONE quiet row: four (Iran, Foreign, Marzban, PasarGuard) as small outline pills of one height, no gloss, no second line (Hetzner and Backup are gone).
+
 ## 1.55.7 - The delete box is shorter
 
 - The tick of the delete-node box has no long explanation under it (the owner).

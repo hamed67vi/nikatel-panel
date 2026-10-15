@@ -379,7 +379,7 @@ def test_a_server_or_node_can_be_moved_to_any_profile_from_the_menu_or_by_draggi
 def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarguard_profile_is_locked():
     """The owner, 2026-10-15: "make this box prettier, show the suggested tags" and "the PasarGuard profile cannot be deleted or renamed while its panel is connected"."""
     lab, css = _web("lab.js"), _web("lab.css")
-    assert 'const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard", "Hetzner", "Backup"]' in lab and "window.labNpFill = b =>" in lab and 'class="lab-np-chip"' in lab
+    assert 'const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard"]' in lab and "window.labNpFill = b =>" in lab and 'class="ghost lab-np-chip"' in lab
     assert 'showModal("<b>＋ Add profile</b>", labNpForm(false), "narrow")' in lab                                       # (a small box, not the wide one)
     assert ".lab-np .lab-np-in {" in css and ".lab-np .lab-np-chip {" in css
     assert 'const labTagLocked = t => labHasPg() && String(t).toLowerCase() === "pasarguard nodes"' in lab and lab.count("if (labTagLocked(cur)) {") == 2

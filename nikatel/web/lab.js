@@ -111,10 +111,10 @@ function labFirst() {      // no profile yet: nothing else works until one is ma
   return `<div class="lab-first"><div class="lab-first-card"><div class="lab-first-ic">${SI.server}</div><h2>Start with a profile</h2>
     <p>A profile is a group of servers under one name - for example Iran, Marzban or Hetzner. Make one, then add its servers inside it.</p><div class="lab-pf-act"><button class="pri" onclick="labNewProfile()">＋ Add profile</button></div></div></div>`;
 }
-const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard", "Hetzner", "Backup"];      // the tags that are offered when a profile is named (the ones that exist already are left out)
+const LAB_SUGGEST = ["Iran", "Foreign", "Marzban", "PasarGuard"];      // the tags that are offered when a profile is named (the ones that exist already are left out)
 window.labNpFill = b => { const i = b.closest("form") && b.closest("form").querySelector("input[name=name]"); if (i) { i.value = b.dataset.t; i.focus(); } };
 const labNpForm = inCard => {      // the name of a new profile: a big field and the suggested tags under it, one click fills it
-  const have = new Set(labTags().map(t => t.toLowerCase())), chips = LAB_SUGGEST.filter(t => !have.has(t.toLowerCase())).map(t => `<button type="button" class="lab-np-chip" data-t="${esc(t)}" onclick="labNpFill(this)">${labLogo(t)}${esc(t)}</button>`).join("");
+  const have = new Set(labTags().map(t => t.toLowerCase())), chips = LAB_SUGGEST.filter(t => !have.has(t.toLowerCase())).map(t => `<button type="button" class="ghost lab-np-chip" data-t="${esc(t)}" onclick="labNpFill(this)">${labLogo(t)}${esc(t)}</button>`).join("");
   return `<form class="lab-first-form lab-np" onsubmit="return labNewProfileGo(event)" autocomplete="off"><label class="lab-np-l">Name <small>also its tag: the servers you add inside are listed under it</small></label><input name="name" class="lab-np-in" maxlength="40" placeholder="Iran" required autofocus>
     ${chips ? `<div class="lab-np-sug"><small>Suggested</small><div class="lab-np-chips">${chips}</div></div>` : ""}<div class="lab-pf-act"><button class="pri" type="submit">Add profile</button><button type="button" onclick="${inCard ? "refresh()" : "closeModal()"}">Cancel</button></div></form>`;
 };
