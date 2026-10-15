@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.11 - The traffic column of the Lab
+
+- The arrows are drawn (one size, one weight; green down, pink up) and the numbers are in the font and weight of the rest of the row, with tabular figures and a clear gap between the two.
+
 ## 1.55.10 - The plus beside the tabs offers the suggested names
 
 - The **+** beside the tabs of the Lab opens the same Add profile box as the menu (the name, and the suggested tags under it), not a plain question.

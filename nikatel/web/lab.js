@@ -66,9 +66,10 @@ function labServerRow(p) {
     <td class="lab-serves">${labServes(s)}</td>
     <td class="lab-ip mono" title="${esc(s.host)}">${esc(s.host)}</td>
     <td>${on && s.online !== false && f.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(f.cpu, 80, 92)}</span><small>RAM ${labNum(f.ram, 85, 92)} · Disk ${labNum(f.disk, 85, 95)}</small></div>` : '<span class="mut">—</span>'}</td>
-    <td class="lab-trf">${on && f.rx_mbps != null ? `<span class="trf"><i class="ta d">↓</i>${labRate(f.rx_mbps)}</span><span class="trf"><i class="ta u">↑</i>${labRate(f.tx_mbps)}</span>` : '<span class="mut">—</span>'}</td>
+    <td class="lab-trf">${on && f.rx_mbps != null ? `<span class="trf"><i class="ta d">${LAB_AD}</i>${labRate(f.rx_mbps)}</span><span class="trf"><i class="ta u">${LAB_AU}</i>${labRate(f.tx_mbps)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + s.name)}</div></td></tr>`;
 }
+const LAB_AD = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v8.5M2.6 6.8L6 10.2l3.4-3.4"/></svg>', LAB_AU = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 10.5V2M2.6 5.2L6 1.8l3.4 3.4"/></svg>';      // (the arrows of the traffic column: drawn, so they have one size and one weight whatever the font is)
 const labTrCls = (tone, on, online) => (!on ? "srv-off" : online ? "up" : online === false ? "down" : "") + " " + ({bad: "sev-red", warn: "sev-yellow", busy: "sev-blue"})[tone];      // (the classes the old list gave its rows: they colour the icon and the edge of the card)
 const LAB_NODE_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="b" d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path class="b" d="M4 7.5l8 4.5 8-4.5M12 12v9"/><circle class="led" cx="12" cy="12" r="1.2"/></svg>';      // (a node, drawn like the server of the old list: the same strokes, the same light)
 function labNodeRowHtml(p) {
@@ -82,7 +83,7 @@ function labNodeRowHtml(p) {
     <td class="lab-serves"><span class="mchip ${I.tone === "ok" ? "ok" : I.tone === "bad" ? "bad" : ""}" onclick="event.stopPropagation();pgSrvOpenPanel(${p.panel_id}, 1)" title="The panel ${esc(p.panel)}: click to open it">${esc(p.panel)}</span>${srv ? `<span class="mchip" title="It runs on the server ${esc(srv.name)}">on ${esc(srv.name)}</span>` : ""}</td>
     <td class="lab-ip mono" title="${esc(I.msg || stTxt)}">${esc(addr) || "—"}</td>
     <td>${live && live.cpu != null ? `<div class="lab-ldw"><span class="lab-cpu">${labBar(live.cpu, 80, 92)}</span><small>RAM ${labNum(live.ram, 85, 92)}${live.cores ? " · " + live.cores + (live.cores === 1 ? " core" : " cores") : ""}</small></div>` : '<span class="mut">—</span>'}</td>
-    <td class="lab-trf">${live && live.rx != null ? `<span class="trf"><i class="ta d">↓</i>${labMbps(live.rx)}</span><span class="trf"><i class="ta u">↑</i>${labMbps(live.tx)}</span>` : '<span class="mut">—</span>'}</td>
+    <td class="lab-trf">${live && live.rx != null ? `<span class="trf"><i class="ta d">${LAB_AD}</i>${labMbps(live.rx)}</span><span class="trf"><i class="ta u">${LAB_AU}</i>${labMbps(live.tx)}</span>` : '<span class="mut">—</span>'}</td>
     <td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;
 }
 const labGoneRow = p => `<tr class="down sev-red clk" data-id="${p.id}" ${labDragAttrs(p.id)} data-q="${esc((p.name + " gone").toLowerCase())}"><td class="name"><div class="lab-nmw"><i class="srv-ic">${p.kind === "node" ? labLogo("PasarGuard") : SRV_IC}</i><div class="lab-nm"><b>${esc(p.name)}</b><small>not in the panel any more</small></div></div></td><td></td><td></td><td></td><td></td><td><div class="td-act">${labKebab("row", p.id, "Actions of " + p.name)}</div></td></tr>`;

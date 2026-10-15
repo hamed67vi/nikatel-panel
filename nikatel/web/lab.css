@@ -210,3 +210,9 @@ html body .lab-np .lab-np-chips { flex-wrap: nowrap; gap: 6px; min-width: 0; ove
 html body .lab-np .lab-np-chip.ghost { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; background: transparent; box-shadow: none; font-size: 12px; font-weight: 500; color: var(--mut); white-space: nowrap; }
 html body .lab-np .lab-np-chip.ghost:hover { color: var(--text); border-color: rgba(120,170,255,.5); background: rgba(77,163,255,.10); }
 html body .lab-np .lab-np-chip.ghost .lab-logo { width: 13px; height: 13px; margin: 0; opacity: .85; }
+/* 1.55.11 - the traffic column: drawn arrows (green down, pink up) and numbers in the same font and weight as the rest of the row */
+html body #page .lab-tbl td.lab-trf { color: var(--text); font-size: 12.5px; white-space: nowrap; }
+html body #page .lab-tbl .lab-trf .trf { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .1px; line-height: 1; }
+html body #page .lab-tbl .lab-trf .trf:last-child { margin-right: 0; }
+html body #page .lab-tbl .lab-trf .ta { display: inline-flex; width: 12px; height: 12px; font-style: normal; } html body #page .lab-tbl .lab-trf .ta svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .lab-tbl .lab-trf .ta.d { color: var(--ok); } html body #page .lab-tbl .lab-trf .ta.u { color: #ff7a8c; }
