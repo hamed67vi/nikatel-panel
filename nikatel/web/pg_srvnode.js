@@ -184,9 +184,10 @@ window.pgSrvMake = async (sid, sname, o) => {
     const plan = await api(`/api/panels/${o.panel_id}/pg/nodes/make/plan`, {method: "POST", body: JSON.stringify(body)});
     if (plan.problems.length) { toast(`✕ ${sname} is added, but it cannot be made a node yet: ${plan.problems[0]} Use its window → Node → Make a node when that is fixed.`, "bad"); return false; }
     const r = await api(`/api/panels/${o.panel_id}/pg/nodes/make`, {method: "POST", body: JSON.stringify(body)});
-    showModal(`<b>Making ${esc(sname)} a node of ${esc(pname)}</b>`, '<div id="pg-srv-story" class="fix pg-nodes-story"><div class="fx-line run"><i></i>Starting…</div></div><div class="frm-act"><small class="mut">It keeps running if you close this window.</small><span class="sp"></span><button class="sm" onclick="closeModal()">Close</button></div>', "wide");
-    const fin = await followStory(r.action_id, $("#pg-srv-story"), 1000);
-    toast(fin && fin.ok ? `✓ ${sname} is a node of ${pname} now` : "✕ Not finished: read the last line of the story", fin && fin.ok ? "ok" : "bad");
+    toast(`Installing the PasarGuard node on ${sname}: the steps show on its row`);      // (the owner, 2026-10-15: the steps are on the row of the server, not in a big window)
+    refresh();
+    const fin = await followStory(r.action_id, document.createElement("div"), 1000), lastLine = fin && fin.story ? [...fin.story].reverse().find(l => l && l.trim() && !/^Done/.test(l.trim())) : "";
+    toast(fin && fin.ok ? `✓ ${sname} is a node of ${pname} now` : "✕ " + String(lastLine || "Not finished").trim().slice(0, 200), fin && fin.ok ? "ok" : "bad");
     pgNodesLoad(o.panel_id, true).catch(() => {}); pgSrvLoad().then(() => { if (state.page === "nodes" && state.open == null && !state.nodeWin) refresh(); });
     return !!(fin && fin.ok);
   } catch (e) { toast("✕ " + e.message, "bad"); return false; }

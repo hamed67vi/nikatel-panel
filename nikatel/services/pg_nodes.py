@@ -25,6 +25,7 @@ node to the panel, wait until it connects. The API key is not asked for and not 
 later and gives the same key."""
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import ipaddress
@@ -1198,7 +1199,18 @@ def make_plan(c: dict, server_id: int, opts: dict | None = None, resolver: Resol
             "server": {"id": srv["id"], "name": srv["name"], "host": srv["host"], "role": srv["role"]}, "read_only": get_settings().read_only}
 
 
-def _follow(aid: int, inner: int, limit: float) -> tuple[bool, str]:
+def _step(server_id: int | None, text: str, what: str = "making a node") -> None:
+    """What the panel is doing on this server now, as a short line for its row on the Lab page (the owner: "show the steps of the install there"); "" clears it."""
+    if server_id is None:
+        return
+
+    from . import nodes as srv_nodes
+
+    with contextlib.suppress(Exception):          # a line for the row must never stop the install
+        srv_nodes.set_busy(server_id, what if text else "", text.strip()[:80])
+
+
+def _follow(aid: int, inner: int, limit: float, server_id: int | None = None) -> tuple[bool, str]:
     """Follow the action of the install (extras.start) and repeat its lines in ours until it ends: (did it end well, its last line)."""
     end, seen = time.time() + limit, 0
 
@@ -1211,6 +1223,7 @@ def _follow(aid: int, inner: int, limit: float) -> tuple[bool, str]:
         for line in story[seen:]:
             if line.strip() and line.strip() != "Done." and "Next: in this server's Install view" not in line:
                 autopilot._say(aid, "    " + line)
+                _step(server_id, line, "installing")
 
         seen = len(story)
 
@@ -1264,7 +1277,14 @@ NOT_CONNECTED_HELP = ("The node is in the panel but the panel could not connect 
 
 
 def _make_story(aid: int, panel_id: int, server_id: int, opts: dict) -> None:
-    """The action: install (unless the node is there), read the certificate, add the node to the panel, wait for it to connect. Every step says what it does; a stop says what is left to do."""
+    """The action: install (unless the node is there), read the certificate, add the node to the panel, wait for it to connect. Every step says what it does (and says it on the row of the server); a stop says what is left to do."""
+    try:
+        _make_story_steps(aid, panel_id, server_id, opts)
+    finally:
+        _step(server_id, "")
+
+
+def _make_story_steps(aid: int, panel_id: int, server_id: int, opts: dict) -> None:
     say = autopilot._say
 
     try:
@@ -1281,6 +1301,7 @@ def _make_story(aid: int, panel_id: int, server_id: int, opts: dict) -> None:
         say(aid, "1/4 The PasarGuard node is on the server already: the install is skipped.")
     else:
         say(aid, f"1/4 Installing the PasarGuard node on {srv['name']} (the official installer, Docker and the node; a few minutes)…")
+        _step(server_id, "1/4 Installing the node (Docker)", "installing")
 
         try:
             inner = extras.start(server_id, ["pasarguard_node"], key)
@@ -1288,13 +1309,14 @@ def _make_story(aid: int, panel_id: int, server_id: int, opts: dict) -> None:
             say(aid, f"Stopped at step 1: the install could not start - {e}", done=True, ok=False)
             return
 
-        ok, last = _follow(aid, inner, INSTALL_LIMIT)
+        ok, last = _follow(aid, inner, INSTALL_LIMIT, server_id)
 
         if not ok:
             say(aid, f"Stopped at step 1: the install did not end well ({last[:160]}). Nothing was added to the panel. Fix the server and make it a node again - the install is skipped when it worked.", done=True, ok=False)
             return
 
     say(aid, "2/4 Reading the certificate the node made…")
+    _step(server_id, "2/4 Reading the certificate")
 
     try:
         pem = _cert_with_retry(server_id)
@@ -1303,6 +1325,7 @@ def _make_story(aid: int, panel_id: int, server_id: int, opts: dict) -> None:
         return
 
     say(aid, f"3/4 Adding the node {name} to the panel ({srv['host']}:{opts['port']})…")
+    _step(server_id, "3/4 Adding the node to the panel")
 
     try:
         made = node_add(c, {"name": name, "address": srv["host"], "port": opts["port"], "api_port": opts["api_port"], "usage_coefficient": opts["usage_coefficient"],
@@ -1312,6 +1335,7 @@ def _make_story(aid: int, panel_id: int, server_id: int, opts: dict) -> None:
         return
 
     say(aid, "4/4 Waiting until the panel is connected to the node (up to two minutes)…")
+    _step(server_id, "4/4 Waiting for the panel to connect")
     last = _wait_connected(c, made["id"])
 
     if last.get("status") == "connected":

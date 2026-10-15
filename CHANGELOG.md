@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.55.21 - The steps of the node install are on the row of the server
+
+- **While a PasarGuard node is installed, the row of the server says what is happening (the owner):** a spinner and the step - 1/4 Installing the node (Docker) with the lines of the installer, 2/4 Reading the certificate, 3/4 Adding the node to the panel, 4/4 Waiting for the panel to connect. The page looks again every 3 s. There is no big window any more; a stop says its last line in a message.
+
 ## 1.55.20 - No Checked switch in the server form
 
 - The "Checked by the panel" switch is gone from Add a server (a new server is always checked; an existing one keeps its state, and its window has the switch).
