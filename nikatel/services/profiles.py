@@ -8,7 +8,10 @@ servers the panel already had are picked in the "Already in the panel" tab of Ad
 only unlists the server - the panel still watches it, its tunnels go on - and the same tab brings it back."""
 from __future__ import annotations
 
+import ipaddress
 import re
+import threading
+import time
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -109,11 +112,60 @@ def row(p: Profile, servers: dict[int, Server], panels: dict[int, Panel]) -> dic
     return out
 
 
+_COUNTRY: dict[str, tuple[str, float]] = {}      # address -> (country code, when): the flag of a node that runs on no server of ours (the owner: a flag on every row, whatever the profile)
+_COUNTRY_BUSY: set[str] = set()
+COUNTRY_TTL, COUNTRY_RETRY = 7 * 86400, 600
+
+
+def _fill_country(host: str) -> None:
+    from . import nodes
+
+    code = ""
+
+    try:
+        code = str(nodes.where(host).get("country_code") or "")
+    except Exception:  # noqa: BLE001 - the geo services are outside: no answer is an answer
+        code = ""
+    finally:
+        _COUNTRY[host] = (code, time.time() - (0 if code else COUNTRY_TTL - COUNTRY_RETRY))          # (no answer is asked again after ten minutes)
+        _COUNTRY_BUSY.discard(host)
+
+
+def country_of(host: str) -> str:
+    """The country code of an address, from the cache; a miss starts ONE lookup in the background (the geo services are outside the box) and answers "" until it is done. Private and documentation addresses are not asked."""
+    host = (host or "").strip()
+
+    if not host:
+        return ""
+
+    try:
+        if not ipaddress.ip_address(host.strip("[]")).is_global:
+            return ""
+    except ValueError:
+        pass          # a name: the geo services resolve it
+
+    hit = _COUNTRY.get(host)
+
+    if hit and time.time() - hit[1] < COUNTRY_TTL:
+        return hit[0]
+
+    if host not in _COUNTRY_BUSY:
+        _COUNTRY_BUSY.add(host)
+        threading.Thread(target=_fill_country, args=(host,), daemon=True).start()
+
+    return hit[0] if hit else ""
+
 def list_all(db: Session) -> list[dict]:
     """Every profile, oldest first, with the name and address of what it points at."""
     servers = {s.id: s for s in db.scalars(select(Server))}
     panels = {p.id: p for p in db.scalars(select(Panel))}
-    return [row(p, servers, panels) for p in db.scalars(select(Profile).order_by(Profile.id))]
+    rows = [row(p, servers, panels) for p in db.scalars(select(Profile).order_by(Profile.id))]
+
+    for r in rows:
+        if r["kind"] == "node" and r.get("address"):
+            r["country"] = country_of(r["address"])          # (the flag of a node: its server's, or - when it runs on no server of ours - the country of its address)
+
+    return rows
 
 
 def get_row(db: Session, pid: int) -> dict:

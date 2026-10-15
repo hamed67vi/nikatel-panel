@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.55.22 - A flag on every row, the lion on PasarGuard servers
+
+- **Every row has its country flag, whatever the profile (the owner):** a node that runs on no server of ours (like a node added in PasarGuard by hand) gets the flag of the country of its address, found once in the background and kept for a week.
+- **A server in a PasarGuard profile - or one that carries a PasarGuard node - has the lion of PasarGuard as its icon,** like a node row.
+
 ## 1.55.21 - The steps of the node install are on the row of the server
 
 - **While a PasarGuard node is installed, the row of the server says what is happening (the owner):** a spinner and the step - 1/4 Installing the node (Docker) with the lines of the installer, 2/4 Reading the certificate, 3/4 Adding the node to the panel, 4/4 Waiting for the panel to connect. The page looks again every 3 s. There is no big window any more; a stop says its last line in a message.
