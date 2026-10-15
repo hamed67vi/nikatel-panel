@@ -911,7 +911,7 @@ def test_js_rings_gauges_strips_and_top_n():
     evil = run_js("c => c.pgUsageRingSvg([{v: 1, cls: '\"><img src=x>', label: '<script>alert(1)</script>'}], {big: '<b>'})")
     assert "<script>" not in evil and "<img" not in evil and "<b>" not in evil
     gauge = run_js("c => [c.pgUsageGaugeSvg(41, {name: 'Memory'}), c.pgUsageGaugeSvg(80, {warn: 70, bad: 85}), c.pgUsageGaugeSvg(95), c.pgUsageGaugeSvg(null)]")
-    assert 'class="pg-ring-arc ok"' in gauge[0] and ">41%</text>" in gauge[0] and 'pg-ring-arc warn' in gauge[1] and 'pg-ring-arc bad' in gauge[2] and "pg-ring-arc" not in gauge[3] and ">—</text>" in gauge[3]
+    assert 'class="pg-ring-arc cool"' in gauge[0] and ">41%</text>" in gauge[0] and 'pg-ring-arc warn' in gauge[1] and 'pg-ring-arc bad' in gauge[2] and "pg-ring-arc" not in gauge[3] and ">—</text>" in gauge[3]
     spark = run_js("c => [c.pgUsageSparkSvg([{label: '10-11', gb: 3}, {label: '10-12', gb: 12}, {label: '10-13', gb: 0}]), c.pgUsageSparkSvg([]), c.pgUsageSparkSvg(null)]")
     assert spark[0].count("<rect") == 3 and spark[0].count("pg-spark-b top") == 1 and "10-12: 12.00 GB" in spark[0] and spark[1] == "" and spark[2] == ""
     got = run_js("c => [c.pgUsageTopN([{name: 'a', v: 5}, {name: 'b', v: 1}, {name: 'c', v: 9}], 5).map(r => r.name), c.pgUsageTopN([{name: 'a', v: 5}, {name: 'b', v: 4}, {name: 'c', v: 3}, {name: 'd', v: 2}, {name: 'z', v: 0}], 3).map(r => [r.name, r.v]), c.pgUsageTopN(null, 3), c.pgUsageGbParts(12.345), c.pgUsageGbParts(250), c.pgUsageGbParts(2048), c.pgUsageGbParts('x')]")

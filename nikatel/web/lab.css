@@ -477,3 +477,7 @@ html body .lab-ban .lb-a { flex-wrap: nowrap; gap: 6px; } html body .lab-ban .lb
 html body #page .lab-tbl .lab-trf .trf { gap: 6px; margin-right: 14px; }
 html body #page .lab-tbl .lab-trf .ta { width: 14px; height: 14px; } html body #page .lab-tbl .lab-trf .ta svg { width: 14px; height: 14px; stroke-width: 2; }
 html body #page .lab-trf .tv b { font-size: 13px; } html body #page .lab-trf .tv small, html body #page .lab-tbl td.lab-used .tv small { font-size: 10px; }
+/* 1.57.22 - the load of a row is smaller (the owner): the number 12 px, the bar 120 px x 6 px, the line under it 10 px */
+html body #page .lab-ldx .lab-cpu b { font-size: 12px; }
+html body #page .lab-ldx .lab-cpu .bar { max-width: 120px; height: 6px; }
+html body #page .lab-ldw small { font-size: 10px; }

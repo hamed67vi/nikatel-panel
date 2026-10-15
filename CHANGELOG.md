@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.57.22 - The user template inside Settings, blue gauges
+
+- **Panel > General (the owner):** the *Templates* button is gone; its **user template** is the last section of *Settings* (the row of Settings sections ends with *User template*; *Settings* stays the lit button while it shows). The client templates have no door any more (their code in pg_client.js stays, unreachable).
+- **Lab (the owner):** the load of a row is smaller - the number 12 px, the bar 120 x 6 px, the line under it 10 px.
+- **Usage:** the gauges of CPU, memory and disk are the owner's soft blue while they are quiet (amber and red when busy); *Active* in the ring of the users stays green.
+
 ## 1.57.21 - Smaller traffic type
 
 - **Lab (the owner):** the numbers (13 px), the units (10 px) and the arrows (14 px) of *Traffic used* and *Traffic Mbit/s* are smaller.

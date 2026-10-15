@@ -665,3 +665,18 @@ def test_the_traffic_columns_have_smaller_type_and_arrows():
     """The owner, 2026-10-15: "make the fonts and the arrows smaller"."""
     css = _web("lab.css")
     assert ".lab-trf .tv b { font-size: 13px; }" in css and ".lab-tbl .lab-trf .ta { width: 14px; height: 14px; }" in css and ".lab-tbl .lab-trf .ta svg { width: 14px; height: 14px; stroke-width: 2; }" in css
+
+
+def test_the_user_template_is_the_last_section_of_settings_and_the_gauges_are_soft_blue():
+    """The owner, 2026-10-15: "remove the Templates tab and add only the user template inside Settings", "the green bars inside: blue like the bars I sent"."""
+    app, admin, access, ucss = _web("app.js"), _web("pg_admin.js"), _web("pg_access.js"), _web("pg_usage.css")
+    assert '.filter(([t]) => mine.includes(t) && t !== "templates")' in app and '(t === "settings" && pn.tab === "templates")' in app
+    assert '["utpl", "User template", false, "", "pnTab(\'templates\')"]' in admin and "window.pgSetSeg = () =>" in admin and 'if (pn.tab !== "settings") { pnTab("settings"); return; }' in admin and "if (S.S.sections[i]) b.classList.toggle" in admin
+    assert "render: (id, box) => pgAccessTemplates(id, box)}" in access and "pgCtplView" not in access and "pgSetSeg" in access
+    assert ".pg-leg i).cool { --pc: #8db4ff; }" in ucss and 'cls: v > bad ? "bad" : v > warn ? "warn" : "cool"' in _web("pg_usage.js")
+
+
+def test_the_load_of_a_row_is_smaller():
+    """The owner, 2026-10-15: "make these smaller" (the number, the bar and the line under it)."""
+    css = _web("lab.css")
+    assert ".lab-ldx .lab-cpu b { font-size: 12px; }" in css and ".lab-ldx .lab-cpu .bar { max-width: 120px; height: 6px; }" in css and ".lab-ldw small { font-size: 10px; }" in css

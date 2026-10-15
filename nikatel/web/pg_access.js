@@ -262,7 +262,7 @@ async function pgAccessTemplates(id, box, quiet) {
 function pgAccessTemplatesDraw(box) {
   const S = pgAccess;
   pgPaint(box, `<div id="pg-access" class="pg-access">${pgBar(
-    `${window.pgCtplSeg ? pgCtplSeg() : ""}<input id="pg-access-tq" type="search" placeholder="Search name or group…" value="${esc(S.tq)}" oninput="pgAccessTQ(this.value)" autocomplete="off" spellcheck="false"><span class="mut pn-cnt" id="pg-access-tcnt"></span><button class="sm" onclick="pgAccessReload()" title="Read the templates from the panel again">↻</button>`,
+    `${window.pgSetSeg ? pgSetSeg() : ""}<input id="pg-access-tq" type="search" placeholder="Search name or group…" value="${esc(S.tq)}" oninput="pgAccessTQ(this.value)" autocomplete="off" spellcheck="false"><span class="mut pn-cnt" id="pg-access-tcnt"></span><button class="sm" onclick="pgAccessReload()" title="Read the templates from the panel again">↻</button>`,
     `<span id="pg-access-tbulk" class="pg-access-bulk"></span><button class="sm" onclick="pgAccessBackups()" title="What was saved before each change, and the way back">Backups…</button><button class="sm pri" onclick="pgAccessTemplateForm(0)">＋ New template</button>`)}
     <div id="pg-access-tlist"></div></div>`);
   pgAccessTemplatesList();
@@ -426,4 +426,4 @@ window.pgAccessRestoreGo = async (name, only) => {
 
 /* ---- register the two tabs (app.js adds the buttons for a PasarGuard panel and calls render when one is opened) */
 pgTabs.groups = {label: "Groups", order: 30, types: ["pasarguard"], render: (id, box) => pgAccessGroups(id, box)};
-pgTabs.templates = {label: "Templates", order: 31, types: ["pasarguard"], render: (id, box) => (window.pgCtplView && pgCtplView() ? pgCtplRender(id, box) : pgAccessTemplates(id, box))};      // the second view (client templates) is pg_client.js
+pgTabs.templates = {label: "Templates", order: 31, types: ["pasarguard"], render: (id, box) => pgAccessTemplates(id, box)};      // (the owner, 2026-10-15: only the USER template stays, as the last section of Settings; the client templates of pg_client.js have no door any more)

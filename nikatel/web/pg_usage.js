@@ -103,7 +103,7 @@ function pgUsageRingSvg(parts, o = {}) {
 /* a gauge: ONE percentage on a ring that turns amber and red (warn / bad are the limits) */
 function pgUsageGaugeSvg(pct, o = {}) {
   const n = pct == null || pct === "" ? NaN : +pct, v = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0, warn = o.warn == null ? 75 : o.warn, bad = o.bad == null ? 90 : o.bad;
-  return pgUsageRingSvg([{v, cls: v > bad ? "bad" : v > warn ? "warn" : "ok", label: `${o.name || ""} ${v}%`.trim()}], {size: o.size || 84, stroke: o.stroke || 9, total: 100, big: Number.isFinite(n) ? Math.round(v) + "%" : "—", label: o.name});
+  return pgUsageRingSvg([{v, cls: v > bad ? "bad" : v > warn ? "warn" : "cool", label: `${o.name || ""} ${v}%`.trim()}], {size: o.size || 84, stroke: o.stroke || 9, total: 100, big: Number.isFinite(n) ? Math.round(v) + "%" : "—", label: o.name});
 }
 /* a strip of bars with no scale (the shape of a range at a glance); series = [{label, gb}] */
 function pgUsageSparkSvg(series, o = {}) {

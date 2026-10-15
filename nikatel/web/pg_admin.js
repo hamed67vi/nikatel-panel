@@ -490,7 +490,7 @@ function pgAdminFindSpec(fields, parts) {      // the description of the field a
 
 function pgAdminPaintSettings(box) {
   const S = pgAdminS, sec = S.sect, spec = pgAdminSpec(sec), d = pgAdminDraftOf(sec), dirty = pgAdminDirtyOf(sec);
-  const tabs = pgAdminSeg(S.S.sections.map(s => [s.key, s.label, s.key === sec, pgAdminDirtyOf(s.key) ? "dirty" : "", `pgAdminSect('${s.key}')`]));
+  const tabs = pgAdminSeg([...S.S.sections.map(s => [s.key, s.label, s.key === sec, pgAdminDirtyOf(s.key) ? "dirty" : "", `pgAdminSect('${s.key}')`]), ["utpl", "User template", false, "", "pnTab('templates')"]]);
   pgPaint(box, pgBar(tabs, `<button class="sm" onclick="pgAdminSetReload()" title="Read the settings from the panel again (your unsaved edits stay)">↻</button>`) + `<div class="pg-admin-sechead"><b>${esc(spec.label)}</b><span class="mut">${esc(spec.help)} One section is saved at a time.</span>${spec.confirm ? `<span class="pill warn" title="${esc(spec.confirm)}">asks first</span>` : ""}</div>
     <div class="lbox full pg-admin-formbox"><div class="pg-admin-fgrid pg-admin-top">${spec.fields.map(f => pgAdminFieldHtml(f, d, "", sec)).join("")}</div></div>
     <div class="frm-act pg-admin-foot"><button class="pri" id="pg-admin-save" ${dirty ? "" : "disabled"} onclick="pgAdminSaveSet()">Save ${esc(spec.label)}</button><button id="pg-admin-discard" ${dirty ? "" : "disabled"} onclick="pgAdminDiscard()">Discard edits</button>
@@ -505,9 +505,13 @@ function pgAdminDraw() {      // redraw after a row was added or a secret marked
 function pgAdminMark() {      // what changes while typing: the buttons and the dot of the section, not the form
   const S = pgAdminS, dirty = pgAdminDirtyOf(S.sect);
   const sv = $("#pg-admin-save"), dc = $("#pg-admin-discard"), t = $(".pg-admin-dirty"); if (sv) sv.disabled = !dirty; if (dc) dc.disabled = !dirty; if (t) t.textContent = dirty ? "unsaved edits" : "";
-  document.querySelectorAll(".pg-admin-seg button").forEach((b, i) => b.classList.toggle("dirty", pgAdminDirtyOf(S.S.sections[i].key)));
+  document.querySelectorAll(".pg-admin-seg button").forEach((b, i) => { if (S.S.sections[i]) b.classList.toggle("dirty", pgAdminDirtyOf(S.S.sections[i].key)); });
 }
-window.pgAdminSect = k => { pgAdminS.sect = k; pgAdminDraw(); };
+window.pgAdminSect = k => { pgAdminS.sect = k; if (pn.tab !== "settings") { pnTab("settings"); return; } pgAdminDraw(); };      // (from the user template a click on a section goes back to Settings)
+window.pgSetSeg = () => {      // the row of sections that leads the bar of the user template: the sections of Settings, and "User template" lit
+  const S = pgAdminS, secs = S && S.S ? S.S.sections : null;
+  return pgAdminSeg([...(secs ? secs.map(s => [s.key, s.label, false, "", `pgAdminSect('${s.key}')`]) : [["settings", "Settings", false, "", "pnTab('settings')"]]), ["utpl", "User template", true, "", "pnTab('templates')"]]);
+};
 window.pgAdminIn = el => {
   const S = pgAdminS, parts = el.dataset.p.split("."), k = el.dataset.k, last = parts.pop(), obj = pgAdminPathGet(pgAdminDraftOf(S.sect), parts); if (!obj) return;
   obj[last] = k === "bool" ? el.checked : k === "int" ? (el.value.trim() === "" ? null : Number(el.value)) : el.value;
