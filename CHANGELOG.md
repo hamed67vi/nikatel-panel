@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.2 - The IP column: no port, a click copies
+
+- The IP column of the Lab shows the address only (a node showed its port after it), and a click on an address **copies it** (the toast says what was copied), as the old list did.
+
 ## 1.56.1 - The update card waits for the new run
 
 - After the click on Update the percentage ignores what the log says of an older run (a finished or a failed one) until the new run has started (at most 20 s), so it never says Updated or Failed too early. Found by the full walk.

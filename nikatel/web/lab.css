@@ -257,3 +257,5 @@ html body #modal .srv-f3 select[name=tag] { width: 100%; height: 38px; box-sizin
 html body #page .lab-tbl .lab-busy { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; font-size: 11.5px; line-height: 1.3; color: var(--acc-2); white-space: normal; } html body #page .lab-tbl .lab-busy .spin { flex: none; }
 /* 1.55.23 - "All" is not an item of the Servers menu: hidden from the first paint (labNavSync keeps it hidden) */
 html body #nav a[data-page="nodes"][data-sub="lab"] { display: none !important; }
+/* 1.56.2 - an address in the IP column is copied by a click (the old list did it) */
+html body #page .lab-tbl td.lab-ip[data-ip] { cursor: copy; } html body #page .lab-tbl td.lab-ip[data-ip]:hover { color: var(--text); text-decoration: underline dotted; text-underline-offset: 3px; }
