@@ -10,7 +10,7 @@ let labAutoT = null;      // the timer of the automatic look again of the Lab pa
 const LAB = {kind: localStorage.getItem("nk.lab.k") || "any", profiles: [], tags: (() => { try { const v = JSON.parse(localStorage.getItem("nk.lab.tags") || "[]"); return Array.isArray(v) ? v.filter(x => typeof x === "string") : []; } catch (e) { return []; } })()};      // (the profiles of the last visit are in the menu at once after a refresh: no jump when the page has read them)
 // (the categories are TAGS now: Marzban, PasarGuard, Iran from the start and every other tag the owner types; "any" is no tag - see labTags)      // ("Any": every kind at once - the owner chose the name: any kind of server can be added)
 const LAB_SECS = [["overview", "Overview"], ["node", "Node"], ["monitor", "Monitor"]];      // (what can be done is in the "⋯" menu, not in a section of buttons)
-const LAB_DOTS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
+const LAB_DOTS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>';
 const labKebab = (ctx, id, label) => `<button type="button" class="lab-kb" onclick="labMenu(this, '${ctx}', ${id}, event)" aria-haspopup="menu" aria-label="${esc(label)}" title="${esc(label)}">${LAB_DOTS}</button>`;
 window.labOn = () => state.page === "nodes" && sub("nodes") === "lab";
 const labServer = p => (state.serversCache || []).find(s => s.id === p.server_id) || null;

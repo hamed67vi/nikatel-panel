@@ -652,3 +652,10 @@ def test_the_lookup_card_has_the_kits_look_and_an_icon_button_instead_of_show_us
     form = js.split("function pgUsageLookFormHtml() {", 1)[1].split("\n}", 1)[0]
     assert 'class="pg-ibtn"' in form and "Show usage</button>" not in form and 'aria-label="Show usage"' in form and "pgUsageIcon.search" in form
     assert ".pg-usage-look .pg-ibtn { flex: none; width: 36px; height: 36px;" in css and ".pg-usage-look .pg-usage-row input { flex: 1 1 auto;" in css and ".pg-usage-look .pg-useg { height: 36px;" in css
+
+
+def test_the_kebab_dots_are_vertical_and_the_heard_over_ssh_strip_is_blue():
+    """The owner, 2026-10-15: "make these dots vertical", "the green bar changes to this colour" (a bright blue, the quiet cells a slate blue)."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert '<circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>' in lab and 'cx="5" cy="12"' not in lab.split("const LAB_DOTS = ", 1)[1].split("\n", 1)[0]
+    assert ".lab-ups-row .c2 { background: #4d87f2; }" in css and ".lab-ups-row .cn { background: #2b3858; }" in css and "var(--ok); opacity: .75" not in css

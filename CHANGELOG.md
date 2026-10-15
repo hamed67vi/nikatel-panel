@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.19 - Vertical dots, a blue strip
+
+- **Menus (the owner):** the ⋯ button of every row and window has vertical dots now.
+- **Server window:** the *Heard over SSH* strip is the owner's bright blue (the quiet cells a slate blue) instead of green.
+
 ## 1.57.18 - The look-up card in the kit's look
 
 - **Usage > Look up (the owner: *like a MacBook, an icon in place of its button*):** the card is a kit card with a normal-case title; the segmented control, the field and the button are one 36 px row; the *Show usage* text button became an icon button (a slate rounded square with a magnifier, blue when pointed at; Enter in the field works too).
