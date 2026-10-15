@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.3 - Flags that fade on both sides, no Check, the Add server of the kit
+
+- **Lab (the owner):** the flag behind a name fades on both sides; the chevron button at the end of a row and the *Check* button of the bar are gone; *Add server* is the button of the UI kit sheet - the blue of the primary button, a drawn plus, no sweep of light.
+
 ## 1.57.2 - The small CPU charts are gone
 
 - **Lab rows (the owner):** the small chart of the CPU is removed again (the number, its thin bar and RAM / Disk stay); the GET /api/profiles/spark route of 1.57.1 is removed with it.

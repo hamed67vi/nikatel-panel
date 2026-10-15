@@ -21,7 +21,7 @@ html body #page .lab-bar .tb-search input { width: 100%; height: 30px; border-ra
 @container labbar (max-width: 1075px) { .lab-chip.c-tun { display: none; } }
 @container labbar (max-width: 900px) { .lab-kinds .cnt { display: none; } }
 @container labbar (max-width: 815px) { .lab-chip > span { display: none; } .lab-chip::before { content: attr(data-ic); font-size: 11px; color: var(--mut); } .lab-chip { padding: 0 9px; gap: 4px; } }
-@container labbar (max-width: 730px) { .lab-lb { display: none; } .lab-bar .lab-add, .lab-bar .lab-chk { padding: 0 11px; } }
+@container labbar (max-width: 730px) { .lab-lb { display: none; } .lab-bar .lab-add { padding: 0 11px; } }
 @container labbar (max-width: 630px) { .lab-stats { display: none; } }
 @container labbar (max-width: 540px) { .lab-bar .tb-search { display: none; } }
 @media (max-width: 760px) and (pointer: coarse) { .lab-bar { overflow-x: auto; scrollbar-width: none; } }
@@ -359,4 +359,9 @@ html body #page .lab-tbl .lab-trf .ta { width: 20px; height: 20px; } html body #
 html body #page .lab-trf .tv { display: grid; gap: 1px; } html body #page .lab-trf .tv b { font-size: 15px; font-weight: 700; } html body #page .lab-trf .tv small { font-size: 11px; font-weight: 400; color: var(--mut); }
 html body #page .lab-tbl .td-act { gap: 8px; }
 html body #page .lab-tbl .lab-kb { width: 38px; height: 38px; border-radius: 11px; }
-html body #page .lab-go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* 1.57.3 - (1) the flag behind a name fades on BOTH sides; (2) "Add server" is the button of the UI kit sheet (Button with Icon): the blue of the primary button, a line plus, no sweep of light; there is no Check button any more */
+html body #page .lab-tbl td.name.has-flag::before { width: 168px; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 26%, #000 58%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 26%, #000 58%, transparent 100%); }
+html body #page .lab-bar button.lab-add { height: 34px; padding: 0 16px 0 13px; gap: 8px; border-radius: 12px; font-size: 13.5px; font-weight: 600; letter-spacing: .1px; text-shadow: none; }
+html body #page .lab-bar button.lab-add::before, html body #page .lab-bar button.lab-add::after { content: none !important; display: none !important; }
+html body #page .lab-bar button.lab-add .lab-ic { display: inline-grid; place-items: center; width: 18px; height: 18px; font-size: 0; }
+html body #page .lab-bar button.lab-add .lab-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }

@@ -482,5 +482,13 @@ def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_c
     lab, css = _web("lab.js"), _web("lab.css")
     assert lab.count('<td class="lab-lp"><i class="lab-lamp"') == 3 and "const labSub = s =>" in lab and "s.provider ?" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
-    assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab and lab.count("${labGo(p.id)}</div></td></tr>`;") == 3 and "const labGo = id =>" in lab
-    assert ".lab-tbl td:nth-child(n+3)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go svg {" in css
+    assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
+    assert ".lab-tbl td:nth-child(n+3)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
+
+
+def test_the_flag_fades_on_both_sides_there_is_no_check_button_and_add_server_is_the_kit_button():
+    """The owner, 2026-10-15: "the flags fade on both sides", "remove Check", "the chevrons go", "Add server like the theme sheet: its theme, icon and style"."""
+    lab, css = _web("lab.js"), _web("lab.css")
+    assert "labCheck()" not in lab and "window.labCheck = " not in lab and 'class="sm lab-chk"' not in lab and "window.labCheckOne = " in lab
+    assert '<span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span>' in lab and "＋</span><span class=\"lab-lb\">Add server" not in lab
+    assert ".lab-tbl td.name.has-flag::before { width: 168px; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 26%, #000 58%, transparent 100%);" in css and "button.lab-add::before" in css and ".lab-bar .lab-chk" not in css
