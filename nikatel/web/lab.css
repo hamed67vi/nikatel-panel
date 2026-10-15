@@ -262,3 +262,5 @@ html body #page .lab-tbl td.lab-ip[data-ip] { cursor: copy; } html body #page .l
 /* 1.56.5 - the picture before a profile: an emoji (a globe for Foreign, one for any name of his own) and the flag of Iran, the size of the logos */
 html body .lab-emoji { display: inline-block; width: 16px; margin-right: 6px; font-size: 13px; line-height: 1; text-align: center; vertical-align: -1px; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; } html body .lab-logo.lab-flag { border-radius: 2px; object-fit: cover; }
 html body .nav-sub .ic .lab-emoji { width: auto; margin: 0; font-size: 16px; vertical-align: middle; }
+/* 1.56.6 - the pictures of the profiles are not coloured (the owner): the flag of Iran and the emoji are grey like the logos */
+html body .lab-logo.lab-flag, html body .lab-emoji { filter: grayscale(1) brightness(1.15); opacity: .92; }

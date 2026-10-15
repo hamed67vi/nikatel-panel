@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.56.6 - The pictures of the profiles are grey
+
+- The flag of Iran and the emoji before a profile are not coloured any more (the owner): they are grey, like the logos of PasarGuard and Marzban.
+
 ## 1.56.5 - A taken port sends the node to a free pair by itself
 
 - **When 62050 or 62051 is taken on the server the node goes to a free pair by itself (the owner):** the plan reads the listeners of 62000-62300 over SSH, picks 62060/62061 (then 62070/62071 and so on), says so in a message ("open them in the firewall"), the installer is given those ports, and the node is added to the panel with them. Only when there is no free pair at all is it a problem.
