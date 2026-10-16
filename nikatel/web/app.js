@@ -46,7 +46,7 @@ async function api(path, opts = {}) {
     try { fetch("/api/client-error", {method: "POST", headers: {"Content-Type": "application/json"}, keepalive: true, body: JSON.stringify({message: String(message).slice(0, 400), source: String(source || "").slice(0, 200), line: +line || 0, stack: String(stack || "").slice(0, 1500), page: page.slice(0, 60)})}).catch(() => {}); } catch (e) { /* nothing more can be done about it */ }
   };
   window.addEventListener("error", e => tell(e.message || "error", e.filename, e.lineno, e.error && e.error.stack));
-  window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && r.name === "AbortError") return; tell("unhandled rejection: " + ((r && r.message) || r), "", 0, r && r.stack); });
+  window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && r.name === "AbortError") return; if (/Failed to fetch|NetworkError|Load failed|not logged in/i.test(String((r && r.message) || r))) return; tell("unhandled rejection: " + ((r && r.message) || r), "", 0, r && r.stack); });
 })();
 /* Messages of the panel go to a status bar at the bottom (not into a pop-up in the corner): bright for a few seconds, then quiet but still readable. Click it for the last ones. */
 let toastT;
@@ -1302,7 +1302,7 @@ async function enginesLoad() {
   else if (!d.checked_at || Date.now() / 1000 - d.checked_at > 600) { if (!enginesLoad.busy) { enginesLoad.busy = true; api("/api/engines/check", {method: "POST"}).catch(() => {}).finally(() => { enginesLoad.busy = false; }).then(() => engineFollow()); } }   // checked by itself when the last check is older than ten minutes (the owner, 2026-10-16: no Check now button); the page never waits for it
 };
 async function engineFollow() {   // the check runs on the server; the box is redrawn when it is done (polled every 5 s, up to two minutes)
-  try { for (let i = 0; i < 24; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (!d || !d.checking) { enginesLoad(); return; } } } finally { const b = $("#eng-box"); if (b) b._follow = false; }
+  try { for (let i = 0; i < 24; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (!d || !d.checking) { enginesLoad().catch(() => {}); return; } } } finally { const b = $("#eng-box"); if (b) b._follow = false; }
 }
 window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); enginesLoad(); engineFollow(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };

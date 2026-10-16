@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.57.56 - The report of script errors keeps quiet about what is not an error
+
+- The page's error report (1.57.55) ignores the browser's harmless "ResizeObserver loop" note and the failed fetch of a panel that is restarting; the cores box of Settings → About no longer leaves an unhandled rejection when the panel is down at the moment it asks again. Its empty text and status no longer tell you to *press Check* (the check runs by itself since 1.57.52).
 ## 1.57.55 - Review: sign-out that really signs out, nothing leaks from an error, the panels are asked at the same time, and a report to copy when something is wrong
 
 Security (found by reading every layer, 2026-10-16):

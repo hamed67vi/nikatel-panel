@@ -1002,7 +1002,7 @@ def test_the_health_box_of_the_dashboard_keeps_each_detail_on_one_line():
 def test_the_page_tells_the_panel_about_its_script_errors_and_copies_the_diagnostics():
     """Review 2026-10-16: a script error vanished in the owner's browser; and a bug report had no single page of facts."""
     app, css = _web("app.js"), _web("lab.css")
-    assert 'fetch("/api/client-error", {method: "POST"' in app and 'window.addEventListener("unhandledrejection"' in app and 'window.addEventListener("error"' in app and "sent >= 5 || seen.has(key)" in app and "ResizeObserver loop" in app and 'r.name === "AbortError"' in app
+    assert 'fetch("/api/client-error", {method: "POST"' in app and 'window.addEventListener("unhandledrejection"' in app and 'window.addEventListener("error"' in app and "sent >= 5 || seen.has(key)" in app and "ResizeObserver loop" in app and "Failed to fetch|NetworkError|Load failed|not logged in" in app and "enginesLoad().catch(() => {}); return; }" in app and 'r.name === "AbortError"' in app
     assert "window.abtDiag = async () =>" in app and 'api("/api/system/diagnostics")' in app and "navigator.clipboard.writeText(txt)" in app and 'class="sm abt-diag" onclick="abtDiag()"' in app
     assert "html body #page .abt-foot > button.abt-diag {" in css and "html body #page .abt-foot > span:nth-last-child(2) {" in css
 
