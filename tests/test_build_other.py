@@ -111,3 +111,55 @@ def test_forced_name_leftovers_are_removed_before_the_port_check(monkeypatch):
     assert bo._clear_leftovers(auto, "i", "f", fi, ff) == (fi, ff) and len(calls) == 1      # no forced name: nothing is touched
     assert bo._owns("backpack-nkt1.service", "backpack", "nkt1") and bo._owns("backpack-nkt1-kharej.service", "backpack", "nkt1") and bo._owns("backpack-nkt1", "backpack", "nkt1")
     assert not bo._owns("backpack-nkt10.service", "backpack", "nkt1") and not bo._owns("chisel-nkt1.service", "backpack", "nkt1")
+
+def test_a_paqet_tunnel_that_carries_nothing_says_why_from_what_the_firewall_counted(monkeypatch):
+    """Real tests, 2026-10-16: Paqet passed between an Iran server and a Hetzner server and not between the same Iran server and another provider. The count of the raw port says which it is."""
+    from nikatel.ssh import SCRIPTS, SSHError
+
+    assert "Not one packet" in bo.paqet_diagnosis(0, 0, 9700) and "9700" in bo.paqet_diagnosis(0, 0, 9700) and "Another foreign server" in bo.paqet_diagnosis(0, 0, 9700)
+    assert "sends nothing back" in bo.paqet_diagnosis(40, 0, 9700) and "key must be the same" in bo.paqet_diagnosis(40, 0, 9700) and "both ways" in bo.paqet_diagnosis(40, 12, 9700)
+
+    class B:
+        port = 9701
+
+    monkeypatch.setattr(bo, "run_script", lambda node, name, params=None, timeout=40: "PAQET_IN=0 PAQET_OUT=0\n" if (name, params) == ("paqet_count", {"PORT": "9701"}) else "")
+    assert bo._paqet_why(B(), None).startswith("Not one packet")
+    monkeypatch.setattr(bo, "run_script", lambda *a, **k: "no counters here")
+    assert bo._paqet_why(B(), None) == ""
+    monkeypatch.setattr(bo, "run_script", lambda *a, **k: (_ for _ in ()).throw(SSHError("no route")))
+    assert bo._paqet_why(B(), None) == ""
+    script = SCRIPTS["paqet_count"][0]
+    assert "iptables -t raw -L PREROUTING -v -n -x" in script and "nikatel-paqet" in script and 'echo "PAQET_IN=$IN PAQET_OUT=$OUT"' in script
+
+
+def test_the_wait_for_data_puts_the_diagnosis_in_place_of_the_general_hint(monkeypatch):
+    monkeypatch.setattr(bo.time, "sleep", lambda s: None)
+    monkeypatch.setattr(bo, "_probe", lambda *a, **k: {"error": "timed out"})
+    monkeypatch.setattr(bo, "run_script", lambda *a, **k: "")
+    monkeypatch.setattr(bo, "_say", lambda *a, **k: None)
+
+    class B:
+        aid, test_port = 1, 39100
+
+    with pytest.raises(RuntimeError, match=r"timed out\)\. Not one packet of the tunnel"):
+        bo._wait_for_data(B(), None, "k", "the general hint", None, "unit", why=lambda: bo.paqet_diagnosis(0, 0, 9700))
+
+    with pytest.raises(RuntimeError, match=r"timed out\)\. the general hint"):
+        bo._wait_for_data(B(), None, "k", "the general hint", None, "unit", why=lambda: "")
+
+    with pytest.raises(RuntimeError, match=r"timed out\)\. the general hint"):
+        bo._wait_for_data(B(), None, "k", "the general hint", None, "unit")
+
+def test_paqet_windows_buffers_and_cipher_are_options_and_stay_off_by_default():
+    """The owner, 2026-10-16: "reach the best settings, especially Paqet": the KCP windows (packets) and the SMUX / stream buffers are what a 80 ms route needs more of; nothing changes unless they are asked."""
+    ni, nf = {"IF": "eth0", "IP": "203.0.113.5", "MAC": "aa:bb:cc:dd:ee:01"}, {"IF": "eth0", "IP": "198.51.100.9", "MAC": "aa:bb:cc:dd:ee:02"}
+    ports = parse_ports("8072")
+    iran0, foreign0 = bo.paqet_texts(ni, nf, 9700, "k", "198.51.100.9", ports, 39200)
+    assert "rcvwnd" not in iran0 and "smuxbuf" not in foreign0 and 'block: "aes-128-gcm"' in iran0 and "conn: 4" in iran0 and 'mode: "fast"' in iran0
+    iran, foreign = bo.paqet_texts(ni, nf, 9700, "k", "198.51.100.9", ports, 39200, {"rcvwnd": 4096, "sndwnd": "2048", "smuxbuf": 16777216, "streambuf": 8388608, "conn": 8, "kcp_block": "none", "kcp_mode": "fast3"})
+    for text in (iran, foreign):
+        assert "    rcvwnd: 4096\n" in text and "    sndwnd: 2048\n" in text and "    smuxbuf: 16777216\n" in text and "    streambuf: 8388608\n" in text and 'block: "none"' in text and "conn: 8" in text and 'mode: "fast3"' in text
+        assert text.index("mtu: 1350") < text.index("rcvwnd: 4096") < text.index('key: "k"')                      # (inside transport.kcp, before the key)
+
+    wild, _ = bo.paqet_texts(ni, nf, 9700, "k", "198.51.100.9", ports, 39200, {"rcvwnd": 1, "smuxbuf": 10**12, "conn": 5000, "kcp_block": "rot13"})
+    assert "rcvwnd: 128\n" in wild and "smuxbuf: 268435456\n" in wild and "conn: 64" in wild and 'block: "aes-128-gcm"' in wild            # clamped, an unknown cipher falls back

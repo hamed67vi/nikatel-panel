@@ -256,19 +256,26 @@ def forward_rows(ports: list[PortMap], test_port: int, udp: bool) -> list[tuple[
     return rows
 
 
+PAQET_BLOCKS = ("aes-128-gcm", "aes", "none")                        # the cipher of the KCP stream (none = no encryption at all: for a measurement of what the cipher costs)
+PAQET_TUNING = (("rcvwnd", "rcvwnd", 128, 65535), ("sndwnd", "sndwnd", 128, 65535), ("smuxbuf", "smuxbuf", 65536, 268435456), ("streambuf", "streambuf", 65536, 268435456))      # (option of the panel, key of Paqet, lowest, highest): the KCP windows (in packets) and the SMUX / stream buffers (in bytes)
+
+
 def paqet_texts(net_i: dict, net_f: dict, port: int, key: str, foreign_host: str, ports: list[PortMap], test_port: int, opts: dict | None = None) -> tuple[str, str]:
     """(Iran client yaml, foreign server yaml)."""
     o = opts or {}
     mode = str(o.get("kcp_mode") or "fast")
     mode = mode if mode in ("normal", "fast", "fast2", "fast3") else "fast"
+    block = str(o.get("kcp_block") or "aes-128-gcm")
+    block = block if block in PAQET_BLOCKS else "aes-128-gcm"
+    more = "".join(f"    {k}: {max(lo, min(hi, int(o[opt])))}\n" for opt, k, lo, hi in PAQET_TUNING if o.get(opt) not in (None, "", 0, False))      # (windows and buffers: left to Paqet's own defaults unless asked)
     kcp = f"""transport:
   protocol: "kcp"
-  conn: {int(o.get("conn", 4))}
+  conn: {max(1, min(64, int(o.get("conn", 4))))}
   kcp:
     mode: "{mode}"
-    block: "aes-128-gcm"
+    block: "{block}"
     mtu: {int(o.get("mtu", 1350))}
-    key: "{key}"
+{more}    key: "{key}"
 """
     foreign = f"""# Nikatel panel - Paqet server (foreign)
 role: "server"
@@ -632,7 +639,29 @@ def _probe(iran: Node, test_port: int, key: str, secs: float = 0, streams: int =
     return parse_probe(out)
 
 
-def _wait_for_data(b: Build, iran: Node, key: str, hint: str, log_node: Node, log_unit: str) -> dict:
+def paqet_diagnosis(pkts_in: int, pkts_out: int, port: int) -> str:
+    """Pure: why a Paqet tunnel carries nothing, from what the firewall of the foreign server counted on the raw port (real tests, 2026-10-16: the same Iran server passes it to one provider and not to another)."""
+    if pkts_in <= 0:
+        return (f"Not one packet of the tunnel reached the foreign server on port {port}: the route from this Iran server, or the provider of the foreign server, drops the raw packets Paqet sends "
+                "(it works only where they pass; BackPack and Chisel do not need that). Another foreign server may work.")
+
+    if pkts_out <= 0:
+        return f"The foreign server receives the packets on port {port} but sends nothing back: the key must be the same on both sides - see the log of the Paqet unit."
+
+    return f"Packets go both ways on port {port} but no data comes through: the answers are probably dropped on their way to the Iran server (its provider, or the route) - another foreign server may work."
+
+
+def _paqet_why(b: Build, foreign: Node) -> str:
+    try:
+        out = run_script(foreign, "paqet_count", {"PORT": str(b.port)}, timeout=25)
+    except (SSHError, ValueError):
+        return ""
+
+    m = re.search(r"PAQET_IN=(\d+) PAQET_OUT=(\d+)", out)
+    return paqet_diagnosis(int(m.group(1)), int(m.group(2)), b.port) if m else ""
+
+
+def _wait_for_data(b: Build, iran: Node, key: str, hint: str, log_node: Node, log_unit: str, why=None) -> dict:
     _say(b.aid, "Waiting for the tunnel to carry data")
     last = ""
 
@@ -657,7 +686,15 @@ def _wait_for_data(b: Build, iran: Node, key: str, hint: str, log_node: Node, lo
     except (SSHError, ValueError):
         pass
 
-    raise RuntimeError(f"the tunnel started but no data passes through it ({last}). {hint}" + (f" Log: {logs}" if logs else ""))
+    extra = ""
+
+    if why is not None:
+        try:
+            extra = why()
+        except (SSHError, ValueError, RuntimeError):
+            extra = ""
+
+    raise RuntimeError(f"the tunnel started but no data passes through it ({last}). {extra or hint}" + (f" Log: {logs}" if logs else ""))
 
 
 def _measure(b: Build, iran: Node, key: str) -> None:
@@ -669,6 +706,12 @@ def _measure(b: Build, iran: Node, key: str) -> None:
             _say(b.aid, "Measuring speed through the tunnel (8 connections each way)")
             b.quality = _probe(iran, b.test_port, key, secs=4, streams=8, pings=20, to=2.5)
 
+            try:      # ONE connection too (the owner, 2026-10-16: the closest to what a customer gets: a phone downloads over one connection)
+                one = _probe(iran, b.test_port, key, secs=4, streams=1, pings=1, to=2.5)
+                b.quality["down1_mbps"], b.quality["up1_mbps"] = one.get("down_mbps"), one.get("up_mbps")
+            except (SSHError, RuntimeError, ValueError) as e:
+                _say(b.aid, f"One connection not measured: {str(e)[:80]}")
+
         b.quality["score"] = quality_score(b.quality)
         b.quality["at"] = int(time.time())
         _say(b.aid, f"Quality: {b.quality.get('latency_ms')} ms, jitter {b.quality.get('jitter_ms')} ms, loss {b.quality.get('loss_pct')}%"
@@ -676,6 +719,9 @@ def _measure(b: Build, iran: Node, key: str) -> None:
 
         if b.quality.get("down_streams"):
             _say(b.aid, f"Per stream: ↓{b.quality['down_streams']} ↑{b.quality.get('up_streams')} Mb/s")
+
+        if b.quality.get("down1_mbps") is not None:
+            _say(b.aid, f"One connection: ↓{b.quality['down1_mbps']} ↑{b.quality.get('up1_mbps')} Mb/s")
     except (SSHError, RuntimeError, ValueError) as e:
         _say(b.aid, f"Measurement skipped: {str(e)[:100]}")
 
@@ -771,7 +817,7 @@ def _build(b: Build) -> None:
         _put(iran, f"/etc/systemd/system/paqet-{b.name}.service", paqet_unit(b.name, "Iran"), "0644")
         _start(iran, "Iran", f"paqet-{b.name}.service", b)
         _say(aid, "Paqet: services running on both servers")
-        _wait_for_data(b, iran, key, f"Raw sockets can be blocked by the provider, or TCP port {b.port} is closed between the servers.", iran, f"paqet-{b.name}.service")
+        _wait_for_data(b, iran, key, f"Raw sockets can be blocked by the provider, or TCP port {b.port} is closed between the servers.", iran, f"paqet-{b.name}.service", why=lambda: _paqet_why(b, foreign))
         direction, tlabel = "direct", "Paqet · KCP"
 
     else:

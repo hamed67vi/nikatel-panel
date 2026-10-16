@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.59.1 - Real tests with the door fixed: new random bytes, one connection too, Paqet that says why it fails and takes windows and buffers
+
+Found by the real tests between an Iran server and two foreign servers (2026-10-16):
+
+- **The numbers of the test door were not honest.** First it sent a pile of the same byte (squeezed to nothing by BackPack); then a pool of 32 random blocks over and over (found again by a compressor with a window of a few MB: the upload through BackPack still showed 1 - 2.7 Gb/s over a path that carries 100 Mb/s). Now **every block is new random data**. The pair test also measures **one connection** beside the eight (`down1_mbps`, `up1_mbps`) - a phone downloads over one - and says it in its story.
+- **Paqet says why it carries nothing.** After a failed build the panel reads what the firewall of the foreign server counted on the raw port: *not one packet arrived* (the route or the provider drops the raw packets: Paqet works only where they pass - it passed from one Iran server to a foreign server of one provider and not to a server of another), *arrived but nothing answers* (the key), or *both ways but no data* (the answers are dropped on their way back).
+- **Paqet takes the KCP windows and the SMUX / stream buffers** (`rcvwnd`, `sndwnd`, `smuxbuf`, `streambuf`, the cipher `kcp_block`) as options of a build; nothing changes unless they are asked.
 ## 1.59.0 - Line icons on the Add table, a host window with no overlapping switches, every API in its own box, nine AI models, prettier themes, one box of Backups, Usage cards that never move, and the speed a customer gets
 
 The owner (2026-10-16), nine requests:

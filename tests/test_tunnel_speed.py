@@ -181,5 +181,28 @@ def test_the_test_door_sends_random_data_so_a_compressing_tunnel_does_not_look_f
 
     sink = render_action("sink_install", {"NAME": "fi-ir1", "PORT": "39101", "KEY": "abcdef0123456789", "BIND": ""})
     probe_script = SCRIPTS["probe_run"][0]
-    assert "os.urandom(65536)" in sink and "POOL[k % 32]" in sink and 'b"x" * 65536' not in sink
-    assert "os.urandom(65536)" in probe_script and "POOL[k % 32]" in probe_script and 'b"x" * 65536' not in probe_script
+    assert "c.sendall(os.urandom(65536))" in sink and "POOL" not in sink and 'b"x" * 65536' not in sink
+    assert "s.sendall(os.urandom(65536))" in probe_script and "POOL" not in probe_script and 'b"x" * 65536' not in probe_script          # new random bytes for every block: a pool of the same blocks is found again by a compressor with a window of a few MB
+
+def test_the_pair_test_measures_one_connection_beside_the_eight(monkeypatch):
+    """The owner, 2026-10-16: "the closest to what the customer holds": a phone downloads over ONE connection, so the pair test says that number too."""
+    said, calls = [], []
+
+    class B:                                                    # the little of a Build that _measure uses
+        aid, test_port, measure, quality = 1, 39100, "full", {}
+
+    def fake(iran, port, key, secs=0, streams=8, pings=3, to=1.2):
+        calls.append((streams, secs))
+        return {"latency_ms": 80.0, "jitter_ms": 1.0, "loss_pct": 0.0, "down_mbps": 400.0, "up_mbps": 380.0} if streams == 8 else {"down_mbps": 55.0, "up_mbps": 41.0}
+
+    monkeypatch.setattr(build_other, "_probe", fake)
+    monkeypatch.setattr(build_other, "_say", lambda aid, line, **k: said.append(line))
+    b = B()
+    build_other._measure(b, None, "k")
+    assert calls == [(8, 4), (1, 4)] and b.quality["down1_mbps"] == 55.0 and b.quality["up1_mbps"] == 41.0 and b.quality["down_mbps"] == 400.0 and b.quality["score"] > 0
+    assert any(line.startswith("One connection: ↓55.0 ↑41.0") for line in said)
+    calls.clear()
+    b2 = B()
+    b2.measure, b2.quality = "latency", {}
+    build_other._measure(b2, None, "k")
+    assert calls == [(8, 0)] and "down1_mbps" not in b2.quality                    # (only the latency run, no seconds of speed)

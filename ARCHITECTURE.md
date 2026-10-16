@@ -67,7 +67,7 @@ nikatel/
                      dnscache.py: the ONE copy of the records of every account that the DNS page and the Outbound page share (read in the background, forgotten on every write)
     tokens.py        API tokens for machines: hashed at rest, shown once, scoped read / act / admin (`allowed` is pure), revocable
     license.py       owner / licensed / free: a signed NK1 token (Ed25519), features, the gates the rest of the panel asks
-    ai.py            Anthropic advice inside Fix (key in settings, never in the repo)
+    ai.py            the AI models of the assistant (1.59.0): Anthropic, OpenAI, Gemini, Grok, DeepSeek and every OpenAI-compatible service - a key and a model each (keys in settings, never in the repo), ONE in use; advice inside Fix, Explain, the Doctor; api/ai.py
     balance.py       CPU on the cores: a busy server whose packets sit on one core gets RPS (probe / judge pure, apply with before-after and rollback)
     analyst.py       what the history says: tunnel profiles (availability, outages, latency, weak hours), outages that come together, what fixes what,
                      servers at the peak (idle / redundant); hints the smart repair asks before it climbs (RepairCase rows)

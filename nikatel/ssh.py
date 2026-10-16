@@ -168,7 +168,7 @@ echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
     # (runs on the Iran server, talks to the sink on the foreign server through the tunnel)
     "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' <<'__NK_PY__'
 import socket, threading, time, json, sys, os
-POOL = [os.urandom(65536) for _ in range(32)]   # random bytes: a tunnel that compresses (BackPack) must not look faster than it is for the encrypted traffic of real customers
+# every block is NEW random bytes: a tunnel that compresses or de-duplicates (BackPack) must not look faster than it is for the encrypted traffic of real customers (a pool of the same blocks over and over is found again by a window of a few MB)
 P = int(sys.argv[1]); SECS = float(sys.argv[2]); N = int(sys.argv[3]); PINGS = int(sys.argv[4]); KEY = sys.argv[5].encode()
 TO = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5
 out = {"port": P}
@@ -218,9 +218,8 @@ def run(mode, results, i):
             end = time.time()
             rate = (n - nw) * 8 / (end - warm) / 1e6 if (warm and end > warm) else n * 8 / max(end - t0, 0.2) / 1e6
         else:
-            k = i * 7
             while time.time() - t0 < SECS:
-                s.sendall(POOL[k % 32]); k += 1
+                s.sendall(os.urandom(65536))
             s.settimeout(30)
             buf = b""
             while b"\n" not in buf:
@@ -246,6 +245,13 @@ if SECS > 0 and "error" not in out:
 print("NKPROBE " + json.dumps(out))
 __NK_PY__
 """, {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$"}),
+
+    # how many packets the firewall counted on the raw port of a Paqet tunnel (the rules of its own firewall script count): PAQET_IN = packets that arrived for the port, PAQET_OUT = packets the server sent from it. Read-only.
+    "paqet_count": (r"""P=@PORT@
+IN=$(iptables -t raw -L PREROUTING -v -n -x 2>/dev/null | awk -v p="dpt:$P" '/nikatel-paqet/ && index($0, p) {s += $1} END {print s + 0}')
+OUT=$(iptables -t raw -L OUTPUT -v -n -x 2>/dev/null | awk -v p="spt:$P" '/nikatel-paqet/ && index($0, p) {s += $1} END {print s + 0}')
+echo "PAQET_IN=$IN PAQET_OUT=$OUT"
+""", {"PORT": r"^\d{1,5}$"}),
 
     # can this server open a TCP connection to HOST:PORT (a tunnel's control port, seen from the other side)?
     "tcp_probe": (r"""if timeout 4 bash -c "exec 3<>/dev/tcp/@HOST@/@PORT@" 2>/dev/null; then echo OPEN; else echo CLOSED; fi
@@ -835,7 +841,6 @@ for u in $U; do systemctl restart "$u" || true; done; echo "SWAPPED units=$U"
     "sink_install": (r"""set -e; install -d /usr/local/sbin
 cat > /usr/local/sbin/nikatel-sink-@NAME@.py <<'__NK_SINK__'
 import socket, threading, time, sys, os
-POOL = [os.urandom(65536) for _ in range(32)]   # random bytes (see probe_run): what the sink sends cannot be squeezed by a compressing tunnel
 P = int(sys.argv[1]); KEY = sys.argv[2].encode()
 s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind((sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1", P)); s.listen(256)
@@ -857,9 +862,9 @@ def h(c):
                     break
                 c.sendall(d)
         elif m == b"D":
-            t = time.time(); k = int(t * 1000) % 32
+            t = time.time()
             while time.time() - t < 12:
-                c.sendall(POOL[k % 32]); k += 1
+                c.sendall(os.urandom(65536))      # (new random bytes every time: see probe_run)
         elif m == b"U":
             t_first = None; n = 0; n1 = 0; t1 = None; tl = None
             c.settimeout(2.0)

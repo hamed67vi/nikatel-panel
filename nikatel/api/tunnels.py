@@ -39,7 +39,7 @@ def build(body: BuildIn):
         if body.kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
             raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
-        other_opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+        other_opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
         measure = "full" if body.opts.get("measure") != "latency" else "latency"
 
         names = [n.strip().lower() for n in body.dns_names if n.strip()]

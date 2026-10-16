@@ -451,8 +451,8 @@ def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign
                 q = dict((t.record or {}).get("quality") or {}) if t else {}
 
             sc = int(q.get("score") or 0)
-            RESULTS[aid] = {"latency_ms": q.get("latency_ms"), "jitter_ms": q.get("jitter_ms"), "loss_pct": q.get("loss_pct"), "down_mbps": q.get("down_mbps"), "up_mbps": q.get("up_mbps"), "score": sc}
-            _say(aid, f"Built and measured: {q.get('latency_ms')} ms, jitter {q.get('jitter_ms')} ms, loss {q.get('loss_pct')}%, ↓{q.get('down_mbps')} ↑{q.get('up_mbps')} Mb/s")
+            RESULTS[aid] = {"latency_ms": q.get("latency_ms"), "jitter_ms": q.get("jitter_ms"), "loss_pct": q.get("loss_pct"), "down_mbps": q.get("down_mbps"), "up_mbps": q.get("up_mbps"), "down1_mbps": q.get("down1_mbps"), "up1_mbps": q.get("up1_mbps"), "score": sc}
+            _say(aid, f"Built and measured: {q.get('latency_ms')} ms, jitter {q.get('jitter_ms')} ms, loss {q.get('loss_pct')}%, ↓{q.get('down_mbps')} ↑{q.get('up_mbps')} Mb/s" + (f", one connection ↓{q['down1_mbps']} ↑{q.get('up1_mbps')}" if q.get("down1_mbps") is not None else ""))
             ok = sc >= 50
             verdict = f"Score {sc}/100 — {'excellent' if sc >= 75 else 'usable' if sc >= 50 else 'poor'}. Everything temporary was removed."
     except Exception as e:  # thread boundary

@@ -43,7 +43,7 @@ the request has been verified. Nothing that identifies the real infrastructure i
 1. Settings → Account: change the password (every other session ends). On the server, when you
    cannot sign in: `nikatel set-password '<new>'`.
 2. Set `NIKATEL_READ_ONLY=true` and restart — the panel can then change nothing.
-3. Revoke the SSH key on the servers (`authorized_keys`), the AI key at Anthropic, and the bot
+3. Revoke the SSH key on the servers (`authorized_keys`), the AI keys (Anthropic, OpenAI, Gemini, Grok, DeepSeek ... whichever you saved), and the bot
    token at BotFather if the bot server is in doubt.
 4. Read `/var/lib/nikatel/logs/nikatel.log` (every request has an id) and the Events page.
 
