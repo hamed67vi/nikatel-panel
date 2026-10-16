@@ -36,6 +36,7 @@ from .services import (
     facts,
     housekeeping,
     knowledge,
+    livebw,
     netwatch,
     nodes,
     outbound,
@@ -145,6 +146,7 @@ def _register_jobs() -> None:
     jobs.register("pulse", 5, pulse.run)                        # a server that is switched off is called off within ~12 s, a server that came back is put back within seconds
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
     jobs.register("tunnels-fast", 8, tunnels.check_unhealthy)   # the tunnels that are not up are looked at again every ~8 s (and at once when a server goes off or comes back)
+    jobs.register("livebw", 5, livebw.run)                      # what the users use of each tunnel RIGHT NOW: the counters of its card on the Iran server, every 5 s while the page looks at the tunnels, every 30 s otherwise (services/livebw.py)
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
     jobs.register("backup", 300, backup.scheduled)

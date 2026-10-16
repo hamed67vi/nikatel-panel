@@ -348,6 +348,12 @@ set -- @PORTS@; if [ -n "$1" ]; then C=$(curl -s -m 4 -o /dev/null -w '%{http_co
 echo "NOW $(date +%s)"
 """, {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS}),
 
+    # read-only: the byte counters of some network cards and the uptime, in one go - "IF <card> <rx_bytes> <tx_bytes>" for every card that exists and "UP <seconds>" - the live numbers of the tunnels (services/livebw.py).
+    # The uptime is the clock of the rate: it does not move with the time the ssh answer takes.
+    "iface_counters": (r"""for i in @IFACES@; do [ -r /sys/class/net/$i/statistics/rx_bytes ] && echo "IF $i $(cat /sys/class/net/$i/statistics/rx_bytes) $(cat /sys/class/net/$i/statistics/tx_bytes)"; done
+echo "UP $(cut -d' ' -f1 /proc/uptime)"
+""", {"IFACES": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39}$"}),
+
     # the users' path, looked at from another Iran server: one HTTP request to host:port (several at once, in parallel) - http first,
     # then https without verification for TLS ports. "REACH host port <http code> <seconds>": any code but 000 proves the port answers from Iran.
     "reach_many": (r"""i=0; for hp in @TARGETS@; do i=$((i+1)); [ $((i % 6)) -eq 0 ] && wait; ( h=${hp%:*}; p=${hp##*:}; r=$(curl -s -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "http://$h:$p/" 2>/dev/null); c=${r%% *}; if [ -z "$r" ] || [ "$c" = "000" ]; then r=$(curl -sk -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "https://$h:$p/" 2>/dev/null); fi; [ -n "$r" ] || r="000 0"; echo "REACH $h $p $r" ) & done; wait
@@ -631,6 +637,21 @@ def _exec_once(node: Node, script: str, timeout: int, jump: Node | None = None) 
 
 def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, timeout: int = 40) -> str:
     """Run one reviewed script with validated parameters."""
+    script = _script_text(name, params)
+    log.debug("run %s on %s", name, node.host)
+    return _exec(node, script, timeout)
+
+
+def run_light(node: Node, name: str, params: Mapping[str, str] | None = None, timeout: int = 8) -> str:
+    """Run one reviewed script that is repeated every few seconds (the live numbers of the tunnels). It never starts the search for a jump server - that belongs to the commands that matter, and a poll that
+    stalls must not send the panel round another server for ten minutes: it goes through the jump the server is ALREADY reached by, else direct."""
+    script = _script_text(name, params)
+    via = _VIA.get(node.host)
+    return _exec_once(node, script, timeout, via[0] if via is not None and via[1] > time.time() else None)
+
+
+def _script_text(name: str, params: Mapping[str, str] | None) -> str:
+    """The text of a reviewed script with its parameters checked against their rules and put in."""
     if name not in SCRIPTS:
         raise ValueError(f"unknown script {name!r}")
 
@@ -650,8 +671,7 @@ def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, t
     if unknown:
         raise ValueError(f"script {name} takes no parameter {unknown[0]!r}")
 
-    log.debug("run %s on %s", name, node.host)
-    return _exec(node, script, timeout)
+    return script
 
 
 # ---------------------------------------------------------------- reviewed actions (they change a server)

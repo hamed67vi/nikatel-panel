@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck, is_temp
-from ..services import builder
+from ..services import builder, livebw
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -117,6 +117,13 @@ def tunnel_kinds():
          "transports": [{"key": "ws", "label": "HTTP WebSocket", "note": "reverse, clear text"}, {"key": "wss", "label": "TLS WebSocket", "note": "reverse, self-signed certificate, key pinned"},
                         {"key": "fws", "label": "Forward HTTP WebSocket", "note": "the Iran server dials: the customers' downloads run at full speed"}, {"key": "fwss", "label": "Forward TLS WebSocket", "note": "the Iran server dials, TLS, key pinned"}]},
     ]}
+
+
+@router.get("/tunnels/live")
+def tunnels_live():
+    """What the users use of each tunnel right now (Mb/s down and up, from the counters of its link, counted over about 15 s and read every 5 s while this is asked). Only a read of memory: the servers are read by a job."""
+    livebw.ask()
+    return {"ok": True, "at": time.time(), "live": livebw.view()}
 
 
 class TestIn(BaseModel):

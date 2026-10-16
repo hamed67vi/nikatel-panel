@@ -446,6 +446,23 @@ def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
     return Side()
 
 
+MAX_RATE_GAP = 300           # the counters of two checks further apart than this say nothing about NOW (the panel was off, the tunnel was not checked): no rate
+
+
+def throughput(prev: dict, now: int | None, rx_bytes: int | None, tx_bytes: int | None) -> tuple[float | None, float | None]:
+    """Pure: (download, upload) in Mb/s from the counters of the previous check (`prev`: its detail) and of this one - None when one of them is missing, the checks are over MAX_RATE_GAP apart (an average over
+    a gap is not "now") or a counter went back (the card was made again)."""
+    if rx_bytes is None or tx_bytes is None or prev.get("rx_bytes") is None or prev.get("tx_bytes") is None or not now or not prev.get("now"):
+        return None, None
+
+    dt = now - int(prev["now"])
+
+    if not 5 < dt <= MAX_RATE_GAP or rx_bytes < prev["rx_bytes"] or tx_bytes < prev["tx_bytes"]:
+        return None, None
+
+    return round((rx_bytes - prev["rx_bytes"]) * 8 / dt / 1e6, 2), round((tx_bytes - prev["tx_bytes"]) * 8 / dt / 1e6, 2)
+
+
 _CHECKING: set[int] = set()
 _CK_LOCK = threading.Lock()
 
@@ -526,15 +543,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
     if ping_blocked and udp.get("pct") is not None and int(time.time()) - int(udp.get("at") or 0) <= bandwidth.LOSS_FRESH:
         loss, ping_blocked, ping_over = float(udp["pct"]), False, "udp"          # the provider drops ICMP: the loss of the link is what the UDP packets of the bandwidth test lost (the owner, 2026-10-16: "no ping, but it has bandwidth")
     now = int(time.time())
-    rx = tx = None
-
-    # throughput from the interface counters between two checks
-    if iran.rx_bytes is not None and prev.get("rx_bytes") is not None and iran.now and prev.get("now"):
-        dt = iran.now - int(prev["now"])
-
-        if dt > 5 and iran.rx_bytes >= prev["rx_bytes"] and iran.tx_bytes >= prev["tx_bytes"]:
-            rx = round((iran.rx_bytes - prev["rx_bytes"]) * 8 / dt / 1e6, 2)
-            tx = round((iran.tx_bytes - prev["tx_bytes"]) * 8 / dt / 1e6, 2)
+    rx, tx = throughput(prev, iran.now, iran.rx_bytes, iran.tx_bytes)      # what crossed the card between two checks
 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)

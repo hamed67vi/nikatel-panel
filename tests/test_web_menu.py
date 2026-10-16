@@ -1168,24 +1168,26 @@ def test_the_pages_read_the_loss_of_a_tunnel_through_one_function():
     app = _web("app.js")
     assert "const tunLoss = t => {" in app and "if (l != null && l >= 100 && t.state === \"up\") return {v: null, blocked: true};" in app
     assert 'lossy = tl.filter(t => t.state === "up" && (tunLoss(t).v || 0) >= SHOW_LOSS)' in app and "loss = tunLoss(t).v || 0, why =" in app and "(tunLoss(t).v || 0) >= LOSS_SEVERE" in app
-    assert 'tunLoss(t).blocked ? "no ping" : "—"' in app and "const lossTip = t =>" in app and "the path between its two servers (ping)" in app
+    assert 'l.blocked ? "no ping" : "—"' in app and "const l = tunLoss(t)" not in app.split("const pingCell = t => {", 1)[0] and "l = tunLoss(t)" in app.split("const pingCell = t => {", 1)[1].split("const row = t => {", 1)[0] and "const lossTip = t =>" in app and "the path between its two servers (ping)" in app
     assert "const tunSev = t => { const loss = tunLoss(t).v || 0;" in app
-    assert ".tlink .tl-top .loss.blk {" in _web("lab.css")
+    assert ".tlink .loss.blk {" in _web("lab.css")
 
 
 def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_place_of_the_status():
     """The owner, 2026-10-16: "the status lamp goes behind the name of every tunnel, and instead of the status show the bandwidth of the tunnel, very simply; when it drops, the Doctor looks at it by itself and we understand"."""
     app, css, lab = _web("app.js"), _web("lab.css"), _web("lab.js")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
-    assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc">', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
-    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and "<thead><tr><th>Tunnel</th><th>Type</th><th title=\"How much this tunnel can carry" in app and ">Bandwidth</th>" in app
+    assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc"', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
+    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and '<thead><tr><th>Tunnel</th><th>Type</th><th class="bwh" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<small><i>capacity</i><u>|</u><i>in use</i></small></span></th>' in app
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
-    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<i class="bwbar"><u style="width:' in cell and "▼ ${bwFmt(" in cell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in cell
+    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
+    capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
+    assert "▼${bwNum(usual" in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in capcell
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "(t.bw || {}).state === \"drop\"" in app
     assert 'slow = tl.filter(t => t.state === "up" && (t.bw || {}).state === "drop" && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
-    assert 'kv("Bandwidth", ' in app and 'onclick="bwMeasure(${t.id})"' in app
-    assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bw.drop b" in css and "html body #page .tun-tbl td.bwc" in css
+    assert 'kv("Capacity", ' in app and 'kv("In use now", ' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
+    assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bwcap.drop b" in css and "html body #page .tun-tbl td.bwc" in css
     assert "Speed test…" in lab                                                                   # (the menu of a tunnel is as it was)
 
 def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
@@ -1205,9 +1207,10 @@ def test_the_cut_of_a_tunnel_is_a_tiny_tag_that_says_which_end_and_a_tunnel_with
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "const CUT_TAGS = [" in app and "const cutTag = t =>" in app and "stShort" not in app and "WHY_SHORT" not in app
     assert '<span class="cut-tag ${t.state === "down" ? "" : "unk"}"' in cell and 'class="st ${t.state === "down" ? "down" : "unknown"} why"' not in cell
-    assert "bwPending(t)" in cell and "measuring…" in cell and "stall = b.down != null && b.down < 1" in cell and "<small>no data</small>" in cell and "stall || b.state === \"drop\" ? \"drop\"" in cell
+    capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
+    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && b.down < 1" in capcell and "<em>no data</em>" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell
     assert "const bwPending = t => !(t.bw || {}).error &&" in app and 'NO DATA moved in the test' in app and "No data moves through this tunnel under load" in app and 'b.error ? "Could not be measured: "' in app
-    assert ".tun-tbl .cut-tag {" in css and ".tun-tbl .cut-tag.unk" in css and ".tun-tbl .bw.pend" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag {' in css
+    assert ".tun-tbl .cut-tag {" in css and ".tun-tbl .cut-tag.unk" in css and ".tun-tbl .bwcap.pend" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag {' in css
     assert 'udp: "the GRE link of this tunnel, counted with UDP packets' in app                      # a link that drops ping shows the loss the bandwidth test counted with UDP, not "no ping"
 
 
@@ -1238,6 +1241,92 @@ def test_the_tag_of_a_cut_tunnel_names_the_end_that_is_cut(tmp_path):
     r = subprocess.run([node, str(driver)], input=json.dumps([{"last_error": e, "state": "down"} for e, _ in cases]), capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     assert json.loads(r.stdout) == [want for _, want in cases]
+
+
+def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_traffic_column_is_gone():
+    """The owner, 2026-10-17: "show the overall capacity and the bandwidth the users use; delete the traffic column; make the bandwidth column more useful and understandable; the numbers must be real, reliable and live"."""
+    app, css = _web("app.js"), _web("lab.css")
+    row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
+    assert "<th>Traffic</th>" not in app and 'class="num hide-sm"' not in row and row.count("<td") == 8                       # the table is eight columns now: name, type, bandwidth, Iran, ping, foreign, ports, the end
+    assert '<col style="width:22%"><col style="width:12%">' in app and app.count("<col ") >= 8
+    assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
+    assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" in app
+    assert "const liveAge = l => l.age + (Date.now() - (state.liveAt || Date.now())) / 1000;" in app                                # (the age comes from the server: no clock of the browser is compared with the server's)
+    for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", ".bwbar.hot u", ".bwbar.full u", "th.bwh small {"):
+        assert "html body #page .tun-tbl " + sel in css, sel
+    assert 'html[data-mode="light"] body #page .tun-tbl .bwsep {' in css
+
+
+def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_owner_reads_them(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    app = _web("app.js")
+    code = app[app.index("const bwNum = (v, gb)"): app.index("/* the numbers of what the users use change by themselves")]
+    driver = tmp_path / "bw.js"
+    driver.write_text(
+        "const esc = s => String(s == null ? '' : s); const mbps = v => v == null ? '-' : v.toFixed(1) + ' Mb/s'; const ago = () => '1m'; const bwPending = () => false; const bwTip = () => 'tip';\n"
+        "const state = {live: {}, liveAt: Date.now()};\n" + code + "\n"
+        "const now = Date.now() / 1000; const mk = (bw, rx, tx) => ({id: 7, state: 'up', bw, rx_mbps: rx, tx_mbps: tx, last_check_at: now - 30});\n"
+        "const live = (down, up, age) => { state.live = {7: {down, up, age}}; state.liveAt = Date.now(); };\n"
+        "const res = {};\n"
+        "res.nums = [bwNum(87.34, false), bwNum(8.4, false), bwNum(0.4, false), bwNum(0.02, false), bwNum(1234, true), bwNum(15000, true), bwPair(87.3, 12.1), bwPair(1234, 90)];\n"
+        "let t = mk({down: 312, state: 'ok'}, 5, 1); live(87, 12, 3);\n"
+        "res.live = {use: bwUse(t), bar: bwBar(t), util: bwUtil(t)};\n"
+        "live(250, 20, 3); res.hot = bwBar(t); live(300, 20, 3); res.full = bwBar(t); live(400, 20, 3); res.over = bwBar(t); live(1500, 20, 3); res.mixed = bwUse(t);\n"
+        "state.live = {}; res.cycle = bwUse(t);\n"
+        "t = mk({down: 312, state: 'ok'}, null, null); t.last_check_at = 0; res.none = {use: bwUse(t), bar: bwBar(t), util: bwUtil(t)};\n"
+        "live(87, 12, 200); res.stale = bwUse(mk({down: 312}, 40, 4));\n"
+        "res.capSame = bwCap(mk({down: 312, state: 'ok'}, 40, 4)); res.capDiff = bwCap(mk({down: 1234, state: 'ok'}, 40, 4));\n"
+        "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), none: bwCap(mk({}))};\n"
+        "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
+    r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    res = json.loads(r.stdout)
+    assert res["nums"] == ["87", "8.4", "0.40", "0", "1.2", "15", ["87", "12", "Mb/s", "Mb/s"], ["1.2", "90", "Gb/s", "Mb/s"]]      # each number in its own unit: a small upload beside a download in Gb/s is not a "0"
+    assert 'class="bwuse live"' in res["live"]["use"] and "<b>87</b>" in res["live"]["use"] and "<b>12</b>" in res["live"]["use"] and "<small>Mb/s</small>" in res["live"]["use"]
+    assert res["live"]["util"] == pytest.approx(87 / 312) and 'class="bwbar"' in res["live"]["bar"] and "width:28%" in res["live"]["bar"]      # the bar is the part of the capacity the users use
+    assert 'class="bwbar hot"' in res["hot"] and 'class="bwbar full"' in res["full"] and 'class="bwbar full"' in res["over"] and "width:100%" in res["over"]      # amber from 70 %, red from 90 %, never wider than the box
+    assert "<b>1.5</b><small>Gb/s</small>" in res["mixed"] and "<b>20</b><small>Mb/s</small>" in res["mixed"]                                                 # a download in Gb/s beside an upload in Mb/s: each has its own unit
+    assert 'class="bwuse old"' in res["cycle"] and "<b>5.0</b>" in res["cycle"] and "<b>1.0</b>" in res["cycle"]                                              # without a live number: the last check's, marked as not live
+    assert 'class="bwuse none"' in res["none"]["use"] and "—" in res["none"]["use"] and res["none"]["util"] is None and "width:0%" in res["none"]["bar"]    # no counter: a dash and an empty bar, never a made-up zero
+    assert 'class="bwuse old"' in res["stale"] and "<b>40</b>" in res["stale"]                                                                               # a live number older than two minutes is not shown
+    assert "<b>1.2</b><small>Gb/s</small>" in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<em>▼310</em>" in res["cap"]["drop"]
+    assert "<b>312</b>" in res["capSame"] and "<small>" not in res["capSame"]                      # the unit is written once ("312 | ↓ 40 ↑ 4.0 Mb/s") when the use has the same one ...
+    assert "<b>1.2</b><small>Gb/s</small>" in res["capDiff"]                                        # ... and by the capacity too when they differ
+    assert "<em>no data</em>" in res["cap"]["stall"] and 'class="bwcap drop"' in res["cap"]["stall"] and 'class="bwcap none"' in res["cap"]["none"] and "—" in res["cap"]["none"]
+
+
+def test_the_ping_cell_has_the_ping_above_an_arrow_at_each_end_of_a_dotted_line_and_the_loss_below():
+    """The owner, 2026-10-17: "fix this arrow and the way the ping and the packet loss are placed" (his picture: 78 ms, then <- . . . ->, then 0 %; a cut link is red with a cross and says nothing)."""
+    app, css = _web("app.js"), _web("lab.css")
+    cell = app.split("const pingCell = t => {", 1)[1].split("const row = t => {", 1)[0]
+    assert cell.index('<b class="ms') < cell.index('<i class="wire">') < cell.index('<small class="loss')              # ping, wire, loss: top to bottom
+    assert '${ARR_L}<u class="dots"></u>${ARR_R}' in cell and "tl-top" not in cell and 'class="pk' not in cell and '<td class="td-arrow">${pingCell(t)}</td>' in app
+    assert '${cut ? "" : t.rtt_ms != null' in cell and '${cut ? "" : l.v != null' in cell                                # a cut link says nothing above or below
+    for sel in (".tlink {", ".tlink.down, html body #page .tun-tbl .tlink.cut {", ".tlink .ah {", ".tlink .dots {", ".tlink .dots::before {", ".tlink .xx {", ".tlink .loss.hi {"):
+        assert "html body #page .tun-tbl " + sel in css, sel
+    assert "@keyframes tlFlow" in css and 'html[data-anim="rich"] body #page .tun-tbl .tlink.up .dots::before' in css          # (the dots flow only when the owner chose rich animations)
+    assert "container-type: inline-size" in css and "@container (max-width: 172px)" in css                                       # (the legend of the Bandwidth header goes when the column is too narrow for it - never cut in half)
+
+
+def test_the_password_box_of_the_sign_in_page_keeps_the_colour_of_the_field_when_the_browser_fills_it():
+    """The owner, 2026-10-17 (his picture: a white box with the dots of the password hardly visible): a saved password painted the box light blue and the light dots could not be read on it."""
+    css = _web("login.css")
+
+    for st in (":-webkit-autofill", ":-webkit-autofill:hover", ":-webkit-autofill:focus", ":-webkit-autofill:active"):
+        assert "html body .lg-in input:not([type=checkbox])" + st in css, st
+
+    assert "-webkit-box-shadow: 0 0 0 1000px var(--uk-field) inset !important;" in css and "-webkit-text-fill-color: var(--uk-text) !important;" in css
+    assert 'html[data-mode="light"] body .lg-in input:not([type=checkbox]):-webkit-autofill' in css and "0 0 0 1000px #f4f7fd inset !important" in css
 
 
 def test_the_doctor_page_has_a_knowledge_tab_for_what_it_knows_and_remembers():

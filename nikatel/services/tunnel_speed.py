@@ -16,7 +16,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Config, Tunnel
 from ..ssh import SSHError
-from . import probe
+from . import livebw, probe
 
 log = get_logger("tunnel-speed")
 MAX_CONFIGS = 3                  # the configs of one tunnel that are asked, the best looking first (each takes up to a minute on the probe)
@@ -146,19 +146,20 @@ def run_customer(aid: int, tunnel_id: int, say) -> dict:
     say(f"{len(opts['customer']['configs'])} config{'s' if len(opts['customer']['configs']) != 1 else ''} ride this tunnel; the probe measures {len(cfgs)} of them, one connection each way (about a minute for each).")
     runs = []
 
-    for c in cfgs:
-        say(f"«{c['name']}»: the probe downloads 25 MB and uploads 10 MB through it…")
+    with livebw.quiet(tunnel_id, 100.0 * len(cfgs) + 30):        # (the probe's downloads are the panel's own test: they are not the users' use of the tunnel)
+        for c in cfgs:
+            say(f"«{c['name']}»: the probe downloads 25 MB and uploads 10 MB through it…")
 
-        try:
-            sp = _ask_probe(c["name"], say)
-        except (RuntimeError, ValueError) as e:
-            say(f"«{c['name']}»: no answer ({str(e)[:100]})")
-            runs.append({"name": c["name"], "ok": False, "error": str(e)[:100]})
-            continue
+            try:
+                sp = _ask_probe(c["name"], say)
+            except (RuntimeError, ValueError) as e:
+                say(f"«{c['name']}»: no answer ({str(e)[:100]})")
+                runs.append({"name": c["name"], "ok": False, "error": str(e)[:100]})
+                continue
 
-        r = {"name": c["name"], "ok": bool(sp.get("ok", True)), "ping_ms": _num(sp.get("ping")), "down_mbps": _num(sp.get("download")), "up_mbps": _num(sp.get("upload"))}
-        runs.append(r)
-        say(f"«{c['name']}»: ↓ {r['down_mbps']} Mb/s · ↑ {r['up_mbps']} Mb/s · ping {r['ping_ms']} ms")
+            r = {"name": c["name"], "ok": bool(sp.get("ok", True)), "ping_ms": _num(sp.get("ping")), "down_mbps": _num(sp.get("download")), "up_mbps": _num(sp.get("upload"))}
+            runs.append(r)
+            say(f"«{c['name']}»: ↓ {r['down_mbps']} Mb/s · ↑ {r['up_mbps']} Mb/s · ping {r['ping_ms']} ms")
 
     good = [r for r in runs if r.get("ok") and r.get("down_mbps") is not None]
 
@@ -198,14 +199,17 @@ def run_door(aid: int, tunnel_id: int, say) -> dict:
         log.info("sink refresh: %s", str(e)[:80])
 
     say("One connection through the test door of the tunnel: 6 s down, 6 s up…")
-    one = build_other._probe(iran, port, key, secs=6, streams=1, pings=20, to=2.5)
 
-    if one.get("error") or one.get("latency_ms") is None:
-        raise RuntimeError("no data passes through the tunnel right now" + (f" ({one['error']})" if one.get("error") else ""))
+    with livebw.quiet(tunnel_id, 90):                             # (the two tests move data over the link: not the users')
+        one = build_other._probe(iran, port, key, secs=6, streams=1, pings=20, to=2.5)
 
-    say(f"One connection: ↓ {one.get('down_mbps')} Mb/s · ↑ {one.get('up_mbps')} Mb/s · ping {one.get('latency_ms')} ms")
-    say("Four connections together: 6 s down, 6 s up…")
-    four = build_other._probe(iran, port, key, secs=6, streams=4, pings=2, to=2.5)
+        if one.get("error") or one.get("latency_ms") is None:
+            raise RuntimeError("no data passes through the tunnel right now" + (f" ({one['error']})" if one.get("error") else ""))
+
+        say(f"One connection: ↓ {one.get('down_mbps')} Mb/s · ↑ {one.get('up_mbps')} Mb/s · ping {one.get('latency_ms')} ms")
+        say("Four connections together: 6 s down, 6 s up…")
+        four = build_other._probe(iran, port, key, secs=6, streams=4, pings=2, to=2.5)
+
     say(f"Four connections: ↓ {four.get('down_mbps')} Mb/s · ↑ {four.get('up_mbps')} Mb/s")
     runs = [{"name": "1 connection", "ok": True, "ping_ms": _num(one.get("latency_ms")), "down_mbps": _num(one.get("down_mbps")), "up_mbps": _num(one.get("up_mbps"))},
             {"name": "4 connections", "ok": True, "ping_ms": None, "down_mbps": _num(four.get("down_mbps")), "up_mbps": _num(four.get("up_mbps"))}]

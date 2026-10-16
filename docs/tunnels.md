@@ -169,3 +169,24 @@ the restart brought the speed back (at most once in six hours; the result goes t
 A raw-socket tunnel (BackPack · PCK, Paqet) reads its packets before the firewall: no rule of the firewall cuts it, which is why the second cut was made on a GRE tunnel.
 **What is not instant**: a tunnel type built from nothing takes about a minute to connect, so with this the users are connected again about three minutes after a cut instead of hours. Seconds need a tunnel that is
 already built and waiting (a standby), which is the next step.
+
+## The Bandwidth column: the capacity and what the users use (2026-10-17)
+
+The owner: "show the capacity, and beside it the bandwidth the users are using - the numbers must be real, reliable and live". Every running tunnel shows two numbers and a bar in one cell:
+
+| What | Number | Where it comes from | How fresh |
+|---|---|---|---|
+| **capacity** (blue) | the download speed the tunnel can carry | the Doctor's last light test (`services/bandwidth.py`): two connections over the GRE link from a sink on the foreign server, or the quality test through the test door of BackPack / Paqet / Chisel | every 90 minutes (every half hour with a door); it CANNOT be live - a test moves data over the tunnel the users are on - so its age is in the tooltip |
+| **in use** (↓ ↑) | what the users use of it now, down and up | the byte counters of the tunnel's own link on its Iran server (the GRE link, the `bp<N>` link of a BackPack Direct tunnel), counted over the last ~15 s (`services/livebw.py`) | every 5 s while the Tunnels page is open (the page asks `GET /api/tunnels/live` every 4 s and changes the cells in place), every 30 s otherwise |
+| **bar** | the part of the capacity the users use | in use (down) / capacity | blue; amber from 70 %, red from 90 % |
+
+What makes the numbers trustworthy:
+
+* They are the kernel's own counters (`/sys/class/net/<card>/statistics`), read by ONE light command per Iran server for all its cards, on the server's own uptime clock - the time an ssh answer takes does not move the rate.
+* Download is what comes IN over the link (foreign -> Iran: what the users download), upload what goes out.
+* A tunnel with **no card of its own** (a reverse proxy without a link) has no counter: its cell says "-", never a made-up zero. A server that does not answer is asked less and less (5 s, 10 s ... a minute) and never sends the panel round another server (`run_light`: no jump search).
+* The panel's own tests of the link (the bandwidth test, the quality test, the speed tests) are **left out** (`livebw.quiet`): what they move is not the users'. The numbers wait for them and start again a few seconds after.
+* A counter that went back (the card was made again), a clock that went back (a reboot) or a rate no card can carry starts the window again; a number older than two minutes is not shown; the number of the last check (about a minute old) fills in until the live one is there and is shown dimmed.
+* The check's own rate (`rx_mbps`, `tx_mbps` in the list) is no longer averaged over a gap: two checks more than five minutes apart (the panel was off) give no rate.
+
+The **Ping / Loss** cell beside it (the owner's picture): the ping on top, an arrow at each end of a dotted line, the loss below - pale blue while the link runs, pale red with a cross while it is cut (and then no numbers), the loss amber from the line the panel calls lossy, "no ping" where the provider drops ICMP (the loss is then counted with UDP packets through the bandwidth sink). The arrows are pale on purpose: the numbers are what is read.

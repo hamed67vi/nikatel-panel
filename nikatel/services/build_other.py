@@ -22,7 +22,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
-from . import engines
+from . import engines, livebw
 from .builder import (
     PortMap,
     _node,
@@ -931,7 +931,8 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
     except (SSHError, ValueError):
         pass
 
-    q = _probe(iran, port, key, secs=secs, streams=8, pings=30, to=2.5)
+    with livebw.quiet(tunnel_id, 60):                     # (the test moves data over the link: that is not the users' - the live numbers wait for it)
+        q = _probe(iran, port, key, secs=secs, streams=8, pings=30, to=2.5)
 
     if q.get("error") or q.get("latency_ms") is None:
         raise RuntimeError("no data passes through the tunnel right now" + (f" ({q['error']})" if q.get("error") else ""))

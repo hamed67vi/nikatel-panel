@@ -1,5 +1,6 @@
 from nikatel.models import Tunnel
 from nikatel.services.tunnels import (
+    MAX_RATE_GAP,
     Plan,
     Side,
     ext_for,
@@ -7,6 +8,7 @@ from nikatel.services.tunnels import (
     parse_side,
     plan_for,
     settle,
+    throughput,
 )
 
 
@@ -555,3 +557,13 @@ def test_a_confirmed_stall_is_a_degraded_tunnel_not_an_up_one():
     assert judge(_plan(), parse_side(IRAN_OK), parse_side(FOREIGN_OK), True, 0, ("404", 120.0, "ir9"), True, 0, stalled=stalled)[0] == "degraded"      # (also when another Iran server gets an answer)
     state, why = judge(_plan(), parse_side(IRAN_OK.replace("active", "inactive", 1)), parse_side(FOREIGN_OK), stalled=stalled)
     assert state == "down" and "inactive" in why                                                                                                    # a worse state is not hidden by it
+
+def test_throughput_is_what_crossed_the_card_between_two_checks_and_nothing_when_that_is_not_now():
+    prev = {"rx_bytes": 1_000_000, "tx_bytes": 500_000, "now": 1000}
+    assert throughput(prev, 1060, 8_500_000, 1_000_000) == (1.0, 0.07)                      # 7.5 MB in 60 s = 1 Mb/s down, 0.5 MB = 0.07 Mb/s up
+    assert throughput(prev, 1000 + MAX_RATE_GAP, 8_500_000, 1_000_000)[0] is not None
+    assert throughput(prev, 1000 + MAX_RATE_GAP + 1, 8_500_000, 1_000_000) == (None, None)  # an average over a gap (the panel was off) is not "now"
+    assert throughput(prev, 1003, 8_500_000, 1_000_000) == (None, None)                     # two checks seconds apart: too short to count
+    assert throughput(prev, 1060, 900_000, 1_000_000) == (None, None) and throughput(prev, 1060, 8_500_000, 400_000) == (None, None)      # a counter went back: the card was made again
+    assert throughput({}, 1060, 8_500_000, 1_000_000) == (None, None) and throughput(prev, None, 8_500_000, 1_000_000) == (None, None)
+    assert throughput(prev, 1060, None, None) == (None, None)                               # a tunnel with no card has no counter: no number, never a zero

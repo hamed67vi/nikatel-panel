@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.63.0 - The Bandwidth column shows the capacity AND what the users use of it, live; the ping cell after the owner's picture; the saved password can be read
+
+The owner (2026-10-17): "show the overall capacity and, beside it, the bandwidth the users are using; delete the traffic column; make the bandwidth column more useful and understandable - and the numbers it shows must be real,
+reliable and live"; "fix this arrow and the way the ping and the packet loss are placed" (his picture), then "the arrows paler, I do not want that place to look busy"; "fix how the numbers are shown in the white box" (the sign-in page).
+
+- **Two numbers and a bar in one cell.** The **capacity** (blue: what the tunnel can carry - the download speed of the Doctor's last light test), a thin line, and **what the users use now** (↓ down, ↑ up, each in its own unit), with a bar under both that is
+  the part of the capacity they use (blue, amber from 70 %, red from 90 %). The unit is written once ("312 | ↓ 87 ↑ 12 Mb/s"). A capacity that dropped keeps its "▼ usual", a test that moved nothing says "no data", a tunnel that has not
+  been measured says "measuring...", and a cut tunnel keeps its tag. The **Traffic column is gone** (its number is in this cell; the tunnel window says "In use now" and "Capacity"). The header says "capacity | in use" when the column is wide enough for it.
+- **The capacity cannot be live, so it says how old it is; the use IS live.** A test moves data over the tunnel the users are on, so it runs every 90 minutes (every half hour with a test door) and its age is in the tooltip. What the users
+  use comes from the **kernel's own byte counters of the tunnel's link on its Iran server** (the GRE link, the `bp<N>` link of a BackPack Direct tunnel) - `services/livebw.py`: ONE light command per Iran server for all its cards
+  (`iface_counters`; `run_light` never starts a jump search), every **5 s while the Tunnels page is open** (the page asks `GET /api/tunnels/live` every 4 s and the cells change in place; every 30 s otherwise, so the first number is ready
+  when the page opens), counted over the last ~15 s on the server's own uptime clock (the time an ssh answer takes does not move the rate). A tunnel with no card of its own (a reverse proxy without a link) has no counter: its cell says
+  "-", never a made-up zero; a server that does not answer is asked less and less; a number older than two minutes is not shown, and the number of the last check fills in until the live one is there (dimmed).
+- **The panel's own tests are not the users.** While the Doctor measures the capacity, runs the quality test or a speed test on a link, the live numbers of that tunnel wait (`livebw.quiet`) and start again a few seconds after.
+  The check's own rate (`rx_mbps`, `tx_mbps`) is no longer averaged over a gap: two checks more than five minutes apart (the panel was off) give no rate.
+- **Ping / Loss after the picture.** The ping above, an arrow at each end of a dotted line, the loss below; pale blue while the link runs, pale red with a cross while it is cut (no numbers then), the loss amber when it is high, "no ping" where the provider
+  drops ICMP. The arrows are pale on purpose and nothing glows.
+- **The saved password.** The browser paints a field it filled in light blue, and the light dots of the password could hardly be seen on it. The box of the sign-in page now keeps the colour of the field and the dots their own colour (dark and light theme).
+
+Tried for real on the test panel (a Backhaul tunnel from the Iran test server to the build server, a download from the Iran side limited to 5 MB/s by curl): curl itself said **42.0 Mb/s**, the panel's live number was **42.2 - 42.7 Mb/s**
+(within 1 %); the numbers followed the 15 s window up (14 -> 33 -> 42 Mb/s) and were never more than 5 s old; while the Doctor measured the capacity (1369 Mb/s) in the middle of the download the live number **did not jump** (it stayed at 42.7 and its
+age counted up to 18 s, then went on at 42.3 and 42.1); an unlimited download (curl 171.9 Mb/s over its 19 s) read 42 -> 102 -> 162 Mb/s on its way up. The counters of the card grew by the bytes curl received plus 0.8 % of headers
+(126.8 MB for 125.8 MB). The tunnel and everything it made were removed again; the live GRE and Backhaul of the Iran server were not touched.
+
 ## 1.62.1 - The update takes seconds, and the card tells the truth while it runs
 
 The owner (2026-10-17), with the About & update card in front of him ("Up to date", "Updating... 2%", the button grey): "the update is very slow; when the page is refreshed the percentage starts again from the beginning;

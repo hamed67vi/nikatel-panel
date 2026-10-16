@@ -23,6 +23,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ServerSample, Tunnel, TunnelCheck, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
+from . import livebw
 from .events import emit
 from .tunnels import link_of
 
@@ -325,17 +326,18 @@ def _measure(tunnel_id: int) -> tuple[dict, str]:
     _ensure_sink(tunnel_id, foreign, target["peer"], key)
     params = {"PORT": str(LINK_PORT), "SECS": str(SECS), "STREAMS": str(STREAMS), "PINGS": "5", "KEY": key, "TO": "2.0", "HOST": target["peer"], "BYTES": str(BYTES), "DIR": "d", "UDPN": str(UDP_PACKETS)}
 
-    try:
-        d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
+    with livebw.quiet(tunnel_id):                         # (what this test moves over the link is not the users': the live numbers wait for it)
+        try:
+            d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
 
-        if d.get("error") or d.get("down_mbps") is None:
-            raise RuntimeError(str(d.get("error") or "no answer from the sink"))
-    except (RuntimeError, SSHError):                      # the sink may have died with a reboot of the foreign server: put it back once and ask again
-        _ensure_sink(tunnel_id, foreign, target["peer"], key, force=True)
-        d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
+            if d.get("error") or d.get("down_mbps") is None:
+                raise RuntimeError(str(d.get("error") or "no answer from the sink"))
+        except (RuntimeError, SSHError):                  # the sink may have died with a reboot of the foreign server: put it back once and ask again
+            _ensure_sink(tunnel_id, foreign, target["peer"], key, force=True)
+            d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
 
-        if d.get("error") or d.get("down_mbps") is None:
-            raise RuntimeError("the sink does not answer through the link: " + str(d.get("error") or "no data")[:100])
+            if d.get("error") or d.get("down_mbps") is None:
+                raise RuntimeError("the sink does not answer through the link: " + str(d.get("error") or "no data")[:100])
 
     res = _store(tunnel_id, float(d["down_mbps"]), None, "link", d.get("latency_ms"), d.get("udp_loss_pct"))
 
