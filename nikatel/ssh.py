@@ -166,15 +166,19 @@ echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
 
     # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door
     # (runs on the Iran server, talks to the sink on the foreign server through the tunnel)
-    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' <<'__NK_PY__'
+    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' '@HOST@' '@BYTES@' '@DIR@' <<'__NK_PY__'
 import socket, threading, time, json, sys, os
 # every block is NEW random bytes: a tunnel that compresses or de-duplicates (BackPack) must not look faster than it is for the encrypted traffic of real customers (a pool of the same blocks over and over is found again by a window of a few MB)
 P = int(sys.argv[1]); SECS = float(sys.argv[2]); N = int(sys.argv[3]); PINGS = int(sys.argv[4]); KEY = sys.argv[5].encode()
 TO = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5
+# HOST: where the sink is (empty = the test door on this server); BYTES: stop a stream after this many bytes (0 = only the time limit); DIR: d = download only, u = upload only, du = both (the default)
+H = (sys.argv[7] if len(sys.argv) > 7 else "") or "127.0.0.1"
+LIM = int(sys.argv[8] or 0) if len(sys.argv) > 8 else 0
+DIRS = (sys.argv[9] if len(sys.argv) > 9 else "") or "du"
 out = {"port": P}
 rtts = []; lost = 0
 try:
-    s = socket.create_connection(("127.0.0.1", P), timeout=min(6, TO * 2 + 1))
+    s = socket.create_connection((H, P), timeout=min(6, TO * 2 + 1))
     s.sendall(KEY + b"E")
     for i in range(PINGS):
         t = time.time()
@@ -203,12 +207,12 @@ out["loss_pct"] = round(lost * 100.0 / max(PINGS, 1), 1)
 def run(mode, results, i):
     rate = 0.0
     try:
-        s = socket.create_connection(("127.0.0.1", P), timeout=6)
+        s = socket.create_connection((H, P), timeout=6)
         s.sendall(KEY + mode)
         t0 = time.time()
         if mode == b"D":
             n = 0; nw = 0; warm = None
-            while time.time() - t0 < SECS:
+            while time.time() - t0 < SECS and (not LIM or n < LIM):
                 d = s.recv(1 << 20)
                 if not d:
                     break
@@ -218,8 +222,9 @@ def run(mode, results, i):
             end = time.time()
             rate = (n - nw) * 8 / (end - warm) / 1e6 if (warm and end > warm) else n * 8 / max(end - t0, 0.2) / 1e6
         else:
-            while time.time() - t0 < SECS:
-                s.sendall(os.urandom(65536))
+            sent = 0
+            while time.time() - t0 < SECS and (not LIM or sent < LIM):
+                s.sendall(os.urandom(65536)); sent += 65536
             s.settimeout(30)
             buf = b""
             while b"\n" not in buf:
@@ -237,6 +242,8 @@ def run(mode, results, i):
     results[i] = rate
 if SECS > 0 and "error" not in out:
     for mode, key in ((b"D", "down_mbps"), (b"U", "up_mbps")):
+        if (mode == b"D" and "d" not in DIRS) or (mode == b"U" and "u" not in DIRS):
+            continue
         res = [0.0] * N
         th = [threading.Thread(target=run, args=(mode, res, i)) for i in range(N)]
         [x.start() for x in th]; [x.join() for x in th]
@@ -244,7 +251,8 @@ if SECS > 0 and "error" not in out:
         out[key.replace("mbps", "streams")] = [round(x, 1) for x in res]
 print("NKPROBE " + json.dumps(out))
 __NK_PY__
-""", {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$"}),
+""", {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$",
+       "HOST": r"^(\d{1,3}(\.\d{1,3}){3})?$", "BYTES": r"^\d{0,9}$", "DIR": r"^(d|u|du)?$"}),
 
     # how many packets the firewall counted on the raw port of a Paqet tunnel (the rules of its own firewall script count): PAQET_IN = packets that arrived for the port, PAQET_OUT = packets the server sent from it. Read-only.
     "paqet_count": (r"""P=@PORT@
@@ -917,7 +925,12 @@ WantedBy=multi-user.target
 __NK_UNIT__
 systemctl daemon-reload; systemctl enable nikatel-sink-@NAME@.service >/dev/null 2>&1; systemctl restart nikatel-sink-@NAME@.service; sleep 1
 systemctl is-active --quiet nikatel-sink-@NAME@.service && echo SINK_OK || echo SINK_DOWN
-""", {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "KEY": r"^[a-z0-9]{8,32}$", "BIND": r"^(0\.0\.0\.0)?$"}),
+""", {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "KEY": r"^[a-z0-9]{8,32}$", "BIND": r"^(\d{1,3}(\.\d{1,3}){3})?$"}),      # BIND: empty = this server only; 0.0.0.0 = the L3 link of BackPack Direct; the inner address of a GRE link = the bandwidth sink of services/bandwidth.py (reachable only through that link)
+
+    # the bandwidth sink of a GRE tunnel (services/bandwidth.py), removed with the tunnel: its unit and its script, nothing else
+    "bw_sink_remove": (r"""n='@NAME@'; systemctl disable --now "nikatel-sink-$n.service" >/dev/null 2>&1 || true
+rm -f "/etc/systemd/system/nikatel-sink-$n.service" "/usr/local/sbin/nikatel-sink-$n.py"; systemctl daemon-reload; echo "REMOVED $n"
+""", {"NAME": r"^bw\d{1,7}$"}),
 
     # open / close one port in ufw (only when ufw is active; otherwise a no-op)
     "ufw_allow": (r"""command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q active && ufw allow '@PORT@/@PROTO@' >/dev/null 2>&1; echo UFW_DONE

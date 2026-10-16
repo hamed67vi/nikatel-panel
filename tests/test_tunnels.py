@@ -419,3 +419,82 @@ def test_the_same_node_under_another_user_is_not_imported_twice():
 def test_a_flag_is_asked_from_the_panel_not_from_the_browser(client):
     assert client.get("/flags/abc.png").status_code == 404             # not a country code: nothing is fetched
     assert client.get("/flags/12.png").status_code == 404
+
+def test_a_ping_that_is_blocked_is_not_lost_data():
+    """The owner, 2026-10-16: the Tunnel Doctor listed a tunnel that carried its users as "100 % of the data is lost on this link" - the provider drops the pings inside GRE, the data passes."""
+    from nikatel.services.tunnels import ping_verdict
+
+    assert ping_verdict(None, "404", None) == (None, False)
+    assert ping_verdict(0.0, "404", None) == (0.0, False) and ping_verdict(12.0, "404", None) == (12.0, False)
+    assert ping_verdict(100.0, "404", None) == (None, True)                                  # every ping lost, the data passes through the port: ICMP is dropped
+    assert ping_verdict(100.0, "000", ("404", 90.0, "ir2")) == (None, True)                  # (proved from another Iran server)
+    assert ping_verdict(100.0, "000", ("000", None, "ir2")) == (100.0, False)                # nothing proves the data passes: the loss stays what it is
+    assert ping_verdict(100.0, "", None) == (100.0, False)
+    assert ping_verdict(60.0, "404", None) == (60.0, False)                                  # some pings answered: a real loss
+
+
+def test_a_tunnel_without_a_gre_link_is_measured_too():
+    """The owner, 2026-10-16: "the BackPack tunnel shows no packet loss" - only the GRE tunnels were measured."""
+    from nikatel.models import Server
+
+    fr = Server(name="f", host="203.0.113.9", role="foreign")
+
+    for typ, tr in (("backpack", "wssmux"), ("paqet", "kcp"), ("chisel", "fws")):
+        t = Tunnel(name="x1", type=typ, transport=tr, forwarded_ports=[8075])
+        t.foreign = fr
+        p = plan_for(t)
+        assert p.iface == "" and p.iran_peer == "" and p.ping == "203.0.113.9" and p.ping_iface == ""      # judged as before (no link), measured by a ping between the two servers
+
+    d = Tunnel(name="d1", type="backpack", transport="l3:udp", foreign_tunnel_ip="10.10.12.2", record={"inner_net": 12})
+    d.foreign = fr
+    q = plan_for(d)
+    assert q.ping_iface == "bp12" and q.ping == "10.10.12.2" and q.iface == "" and q.iran_peer == ""      # an L3 link is measured over the link itself
+    host = Server(name="g", host="fr.example.test", role="foreign")
+    h = Tunnel(name="h1", type="backpack", transport="tcp")
+    h.foreign = host
+    assert plan_for(h).ping == ""                                                                      # a name is not pinged (the script takes an address)
+    assert plan_for(Tunnel(name="a", type="backpack")).ping == ""                                      # no server to ask
+    g = Tunnel(name="g1", type="backhaul", transport="tcpmux", port=9901, foreign_tunnel_ip="10.2.1.2")
+    g.foreign = fr
+    assert plan_for(g).ping == "" and plan_for(g).iface == "g1"                                        # a GRE tunnel keeps its own link
+
+
+def test_the_check_keeps_the_loss_of_a_backpack_tunnel_and_calls_blocked_pings_what_they_are(monkeypatch):
+    from nikatel.db import session
+    from nikatel.models import Server
+    from nikatel.services import tunnels as tn
+
+    with session() as db:
+        ir, fr = Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="fr1", host="203.0.113.50", role="foreign", online=True)
+        db.add_all([ir, fr])
+        db.flush()
+        bp = Tunnel(name="bp1", type="backpack", transport="wssmux", port=9900, iran_server_id=ir.id, foreign_server_id=fr.id, state="up", forwarded_ports=[8075], record={})
+        gr = Tunnel(name="gr1", type="backhaul", transport="tcpmux", port=9901, iran_server_id=ir.id, foreign_server_id=fr.id, state="up", forwarded_ports=[8076], foreign_tunnel_ip="10.2.1.2", record={})
+        db.add_all([bp, gr])
+        db.flush()
+        ids = (bp.id, gr.id)
+
+    asked = []
+
+    def fake_query(node, plan, is_iran):
+        asked.append((is_iran, plan.iface, plan.ping_iface, plan.iran_peer, plan.ping))
+        units = plan.iran_units if is_iran else plan.foreign_units
+        text = "".join(f"UNIT {u} active\n" for u in units)
+
+        if is_iran and plan.iface:                                  # the GRE tunnel: every ping lost, the data passes
+            text += f"IFACE {plan.iface} UNKNOWN 10 20\nPEER {plan.iran_peer}  100\nLISTEN 8076 1\nDATA 8076 404 0.09\n"
+        elif is_iran:                                               # the BackPack tunnel: a ping between the two servers, 12 % lost
+            text += f"PEER {plan.ping} 95.2 12\nLISTEN 8075 1\nDATA 8075 404 0.2\n"
+
+        return tn.parse_side(text + "NOW 1000\n")
+
+    monkeypatch.setattr(tn, "_query", fake_query)
+    tn._check_tunnel(ids[0])
+    tn._check_tunnel(ids[1])
+
+    with session() as db:
+        b, g = db.get(Tunnel, ids[0]), db.get(Tunnel, ids[1])
+        assert b.state == "up" and b.detail["loss_pct"] == 12.0 and b.detail["ping_blocked"] is False and b.detail["ping_over"] == "servers" and b.rtt_ms == 95.2      # shown, and the state is not judged by it
+        assert g.state == "up" and g.detail["loss_pct"] is None and g.detail["ping_blocked"] is True and g.detail["ping_over"] == "link"                              # not "100 % lost"
+
+    assert (True, "", "", "", "203.0.113.50") in asked and (True, "gr1", "", "10.2.1.2", "") in asked

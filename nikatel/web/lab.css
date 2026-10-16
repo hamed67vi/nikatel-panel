@@ -887,3 +887,26 @@ html[data-mode="light"] body #modal .spd-res.smooth .spd-g, html[data-mode="ligh
 html[data-mode="light"] body #modal .spd-res.fair .spd-g { color: #7d5200; border-color: rgba(125, 82, 0, .4); background: rgba(255, 204, 102, .28); }
 html[data-mode="light"] body #modal .spd-res.slow .spd-g, html[data-mode="light"] body #modal .spd-res.bad .spd-g { color: #b4232f; border-color: rgba(200, 40, 60, .4); background: #fdecee; }
 html[data-mode="light"] body #modal .spd-b.cap u { background: linear-gradient(90deg, #9aa5c2, #7886a8); }
+/* 1.60.0 - a tunnel whose provider drops the pings: "no ping" (muted, as the plain number is), never a red "100 %" */
+.tlink .tl-top .loss.blk { background: none; color: var(--mut); padding: 0; font-weight: 600; font-style: italic; opacity: .85; }
+
+/* 1.60.1 - the Tunnel table: the lamp of a tunnel sits before its name (the lamp of a server in the Lab list is placed the same way: --pad from the left edge, --dot wide, --gap before the name), and the Status column became the Bandwidth column: a number, a bar against the usual level of the tunnel, "▼ usual" while it is dropped */
+html body #page .tun-tbl { --tun-pad: 14px; --tun-dot: 12px; --tun-gap: 12px; --tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap)); }
+html body #page .tun-tbl td.name, html body #page .tun-tbl th:first-child { padding-left: var(--tun-start); }
+html body #page .tun-tbl td.name { position: relative; }
+html body #page .tun-tbl td.name .tun-lamp { position: absolute; left: var(--tun-pad); top: 50%; width: var(--tun-dot); height: var(--tun-dot); margin: calc(var(--tun-dot) / -2) 0 0; border-radius: 50%; background: var(--lamp, #5e6a86); box-shadow: 0 0 10px color-mix(in srgb, var(--lamp, transparent) 55%, transparent); transition: background .3s, box-shadow .3s; }
+html body #page .tun-tbl td.name .tun-lamp.up { --lamp: var(--ok, #3ddc97); }
+html body #page .tun-tbl td.name .tun-lamp.degraded { --lamp: var(--warn, #ffc44d); }
+html body #page .tun-tbl td.name .tun-lamp.down { --lamp: var(--bad, #ff6b8b); }
+html body #page .tun-tbl td.name .tun-lamp.starting, html body #page .tun-tbl td.name .tun-lamp.unknown { --lamp: #7d8aa8; box-shadow: none; }
+html body #page .tun-tbl td.bwc { white-space: nowrap; }
+html body #page .tun-tbl .bw { display: inline-flex; flex-direction: column; gap: 4px; line-height: 1.1; vertical-align: middle; }
+html body #page .tun-tbl .bw b { font-size: 13px; font-weight: 800; letter-spacing: .2px; font-variant-numeric: tabular-nums; }
+html body #page .tun-tbl .bw small { font-size: 10px; font-weight: 700; color: var(--mut); letter-spacing: 0; }
+html body #page .tun-tbl .bw .bwbar { display: block; width: 66px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+html body #page .tun-tbl .bw .bwbar u { display: block; height: 100%; border-radius: 2px; background: var(--ok, #3ddc97); text-decoration: none; }
+html body #page .tun-tbl .bw.low b { color: var(--warn, #ffc44d); } html body #page .tun-tbl .bw.low .bwbar u { background: var(--warn, #ffc44d); }
+html body #page .tun-tbl .bw.drop b, html body #page .tun-tbl .bw.drop small { color: var(--bad, #ff6b8b); } html body #page .tun-tbl .bw.drop .bwbar u { background: var(--bad, #ff6b8b); }
+html body #page .tun-tbl .bw.none { color: var(--mut); font-weight: 700; }
+html[data-mode="light"] body #page .tun-tbl .bw .bwbar { background: rgba(30, 50, 100, .14); }
+html body #modal .bw-why { margin-top: 4px; color: var(--warn, #ffc44d); font-size: 12px; line-height: 1.35; }

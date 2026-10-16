@@ -947,4 +947,7 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
             rec["quality"] = q
             t.record = rec
 
+    from . import bandwidth
+
+    bandwidth.note_quality(tunnel_id, q)          # (the download of this measurement is a sample of the tunnel's bandwidth: the Doctor watches it for a drop)
     return {"name": name, **q}

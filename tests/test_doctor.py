@@ -118,6 +118,13 @@ def test_an_exhausted_server_is_a_suggestion_in_mode_fix_and_a_move_in_mode_move
     monkeypatch.setattr(doctor, "_tunnels_on", lambda sid: [{"id": 11, "name": "t-busy", "state": "up", "rx": 50, "tx": 5, "foreign_id": 9, "ports": "80"}, {"id": 12, "name": "t-idle", "state": "up", "rx": 1, "tx": 1, "foreign_id": 9, "ports": "81"}])
     monkeypatch.setattr(detect, "auto_iran", lambda foreign_id, ports="": [{"id": 1, "name": "ir1", "score": 50, "resources": 5, "quality": 90}, {"id": 2, "name": "ir2", "score": 80, "resources": 80, "quality": 85, "reason": "40 ms"}])
     st.put("repair", {"mode": "fix"})
+
+    with session() as db:                                                                    # (the tunnel the suggestion is about must exist: a suggestion for a tunnel that is gone is withdrawn)
+        ir, fx = Server(name="ir1", host="203.0.113.5", role="iran", online=True), Server(name="fx", host="203.0.113.50", role="foreign", online=True)
+        db.add_all([ir, fx])
+        db.flush()
+        db.add(Tunnel(name="t-busy", type="backhaul", transport="tcpmux", iran_server_id=ir.id, foreign_server_id=fx.id, state="up", forwarded_ports=[80]))
+
     doctor.resources()
     sug = doctor.state()["suggestions"]
     assert len(sug) == 1 and sug[0]["tunnel"] == "t-busy" and sug[0]["to"] == "ir2" and sug[0]["kind"] == "resources" and "busiest" in sug[0]["why"]
@@ -241,3 +248,48 @@ def test_when_the_new_tunnel_does_not_come_up_the_old_one_stays_and_the_dns_is_n
         assert db.get(Tunnel, ids["t2"]).iran_server_id == ids["ir1"]
 
     assert doctor.state()["moves"][0]["ok"] is False
+
+
+def test_a_suggestion_stands_only_while_its_problem_does():
+    """The owner, 2026-10-16: three suggestions of two days earlier ("the route loses too many packets") stood on the Doctor's page for tunnels that had been up and clean for a day."""
+    now = 1_000_000
+    route = {"id": "s-1", "kind": "route", "tunnel": "t1", "from_id": 4, "from": "ir1"}
+    up_long = {"state": "up", "state_since": now - 3600, "loss": 0.0}
+    assert "not in the list" in doctor.suggestion_valid(route, None, set(), now)                                       # the tunnel is gone
+    assert "problem is over" in doctor.suggestion_valid(route, up_long, set(), now)                                    # up and clean for an hour: withdrawn
+    assert "problem is over" in doctor.suggestion_valid(route, {**up_long, "loss": None}, set(), now)                  # (a loss that cannot be measured is not a loss)
+    assert doctor.suggestion_valid(route, {**up_long, "state_since": now - 120}, set(), now) == ""                     # only two minutes up: it may fall again
+    assert doctor.suggestion_valid(route, {**up_long, "state": "degraded"}, set(), now) == ""
+    assert doctor.suggestion_valid(route, {**up_long, "state": "down"}, set(), now) == ""
+    assert doctor.suggestion_valid(route, {**up_long, "loss": 30.0}, set(), now) == ""                                 # up, but it still loses what users feel
+    res = {"id": "s-2", "kind": "resources", "tunnel": "t1", "from_id": 4, "from": "ir1"}
+    assert doctor.suggestion_valid(res, {"state": "down", "state_since": 0, "loss": None}, {4}, now) == ""            # the server is still exhausted: the suggestion stands whatever the tunnel does
+    assert "no longer exhausted" in doctor.suggestion_valid(res, up_long, set(), now) and "no longer exhausted" in doctor.suggestion_valid(res, up_long, {9}, now)
+
+
+def test_the_page_and_the_job_withdraw_a_suggestion_whose_tunnel_is_healthy_again(monkeypatch):
+    from nikatel.models import Event
+
+    ids = _servers_and_tunnels()                                                                                       # t1 is down, t2 and t3 are up
+    now = int(time.time())
+
+    with session() as db:
+        for n in ("t2", "t3"):
+            t = db.scalar(select(Tunnel).where(Tunnel.name == n))
+            t.state_since, t.detail = now - 3 * 3600, {"loss_pct": 0.0}
+
+    monkeypatch.setattr(doctor, "saturated_servers", lambda now=None: [])
+    for n, tid in (("t1", ids["t1"]), ("t2", ids["t2"]), ("t3", ids["t3"])):
+        doctor.suggest("route", tid, n, ids["ir1"], "ir1", ids["ir2"], "ir2", "the route loses too many packets")
+
+    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t1"]                                              # the page: t2 and t3 are fine now, only the one that is down stays
+    assert doctor.refresh_suggestions() == []                                                                          # nothing more to withdraw
+    doctor.suggest("route", ids["t2"], "t2", ids["ir1"], "ir1", ids["ir2"], "ir2", "again")
+    st.put("repair", {"mode": "off"})
+    doctor.run()                                                                                                       # the job withdraws it too, in every mode
+    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t1"]
+
+    with session() as db:
+        said = [e.text for e in db.scalars(select(Event).where(Event.domain == "actions"))]
+
+    assert any("suggestion was withdrawn" in m and "t2" in m and "problem is over" in m for m in said)

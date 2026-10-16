@@ -856,7 +856,7 @@ def test_the_rows_of_active_tasks_after_the_picture():
     """The owner, 2026-10-16 (his picture): a dot with its word, buttons with icons - blue for what to do, dark for the rest."""
     app, dr = _web("app.js"), _web("doctor.css")
     assert '${apIc("wifi")}<span>Live</span>' in app and '${apIc("sync")}<span>Move now</span>' in app and '${apIc("spark")}<span>Fix with AI</span>' in app and "📡" not in app.split("PAGES.actions = async", 1)[1].split("window.apMode", 1)[0]
-    assert '"down" : "degraded") : t.state}">' in app
+    assert '"down" : "degraded") : kind === "slow" ? "degraded" : t.state}">' in app
     assert 'html body #page .ap-tasks .ap-row .st::before { content: ""; flex: none; width: 12px;' in dr and "html body #page .ap-tasks .ap-row button.pri { background: #2f7bf5;" in dr and "html body #page .ap-tasks .nw-box.sug-box {" in dr
 
 
@@ -1151,3 +1151,29 @@ def test_the_paqet_form_takes_the_window_and_the_buffer_and_the_mtu_stops_where_
     assert 'num("mtu", "KCP MTU", 1350, 500, 1400, "(1450 and more carry nothing)")' in app
     assert 'num("window", "Window (packets)", 4096, 128, 65535' in app and 'num("buffer_mb", "Buffer (MB)", 8, 1, 128' in app
     assert 'if (w) body.opts.rcvwnd = body.opts.sndwnd = w;' in app and 'body.opts.streambuf = mb * 1048576; body.opts.smuxbuf = mb * 2097152;' in app
+
+
+def test_the_pages_read_the_loss_of_a_tunnel_through_one_function():
+    """1.60.0: every ping lost while the tunnel carries data is "no ping", never "100 % of the data is lost" (the Doctor's page said so for a tunnel that worked)."""
+    app = _web("app.js")
+    assert "const tunLoss = t => {" in app and "if (l != null && l >= 100 && t.state === \"up\") return {v: null, blocked: true};" in app
+    assert 'lossy = tl.filter(t => t.state === "up" && (tunLoss(t).v || 0) >= SHOW_LOSS)' in app and "loss = tunLoss(t).v || 0, why =" in app and "(tunLoss(t).v || 0) >= LOSS_SEVERE" in app
+    assert 'tunLoss(t).blocked ? "no ping" : "—"' in app and "const lossTip = t =>" in app and "the path between its two servers (ping)" in app
+    assert "const tunSev = t => { const loss = tunLoss(t).v || 0;" in app
+    assert ".tlink .tl-top .loss.blk {" in _web("lab.css")
+
+
+def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_place_of_the_status():
+    """The owner, 2026-10-16: "the status lamp goes behind the name of every tunnel, and instead of the status show the bandwidth of the tunnel, very simply; when it drops, the Doctor looks at it by itself and we understand"."""
+    app, css, lab = _web("app.js"), _web("lab.css"), _web("lab.js")
+    row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
+    assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc">', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
+    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and "<thead><tr><th>Tunnel</th><th>Type</th><th title=\"How much this tunnel can carry" in app and ">Bandwidth</th>" in app
+    cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
+    assert "workMap.has(t.name)" in cell and "stShort(t)" in cell and '<i class="bwbar"><u style="width:' in cell and "▼ ${bwFmt(" in cell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in cell
+    assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "(t.bw || {}).state === \"drop\"" in app
+    assert 'slow = tl.filter(t => t.state === "up" && (t.bw || {}).state === "drop" && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
+    assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
+    assert 'kv("Bandwidth", ' in app and 'onclick="bwMeasure(${t.id})"' in app
+    assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bw.drop b" in css and "html body #page .tun-tbl td.bwc" in css
+    assert "Speed test…" in lab                                                                   # (the menu of a tunnel is as it was)

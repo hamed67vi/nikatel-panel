@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from .. import jobs
 from ..config import get_settings
@@ -47,6 +48,8 @@ class Plan:
     iface: str = ""
     iran_peer: str = ""       # the foreign end's overlay IP, pinged from Iran
     ports: list[int] = field(default_factory=list)
+    ping_iface: str = ""      # a tunnel with no GRE link is still measured (latency, loss, traffic): over its own L3 link when it has one (BackPack Direct) ...
+    ping: str = ""            # ... else by ping to the foreign server's address; only measured and shown: the state of the tunnel is never judged by it (see `judge`)
 
 
 def link_of(t: Tunnel) -> tuple[str, str]:
@@ -72,6 +75,26 @@ def servers_off(t: Tunnel) -> list[str]:
     return [f"{role} server {s.name} is off or does not answer" for role, s in (("Iran", t.iran), ("Foreign", t.foreign)) if s is not None and s.enabled and s.online is False]
 
 
+_IPV4 = re.compile(r"\d{1,3}(\.\d{1,3}){3}")
+
+
+def ping_target(t: Tunnel) -> tuple[str, str]:
+    """(interface, address) a tunnel WITHOUT a GRE link is measured over (latency, packet loss, traffic): its own L3 link when it has one (BackPack Direct: the interface bp<N> and the
+    other end's inner address), else the foreign server's address (a ping between the two servers). ('', '') when there is nothing to ping. Real tests, 2026-10-16: a BackPack tunnel showed no loss at all,
+    because only the GRE tunnels were measured."""
+    rec = t.record or {}
+
+    if str(t.transport or "").startswith("l3:") and rec.get("inner_net") and t.foreign_tunnel_ip and _IPV4.fullmatch(str(t.foreign_tunnel_ip)):
+        return f"bp{int(rec['inner_net'])}", str(t.foreign_tunnel_ip)
+
+    try:
+        host = str(t.foreign.host) if t.foreign is not None else ""
+    except (AttributeError, DetachedInstanceError):       # (a tunnel that is not in the database, or whose session is closed: no relation to read)
+        host = ""
+
+    return "", host if _IPV4.fullmatch(host) else ""
+
+
 def plan_for(t: Tunnel) -> Plan:
     name, typ, tr, port = sname(t), t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
     ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
@@ -89,13 +112,15 @@ def plan_for(t: Tunnel) -> Plan:
         return Plan([f"nikatel-gre-{name}.service"], [f"nikatel-gre-{name}.service"], iface=name,
                     iran_peer=t.foreign_tunnel_ip or "", ports=ports)
 
+    p_iface, p_addr = ping_target(t)
+
     if typ == "paqet":
-        return Plan([f"paqet-{name}.service"], [f"paqet-{name}.service"], ports=ports)
+        return Plan([f"paqet-{name}.service"], [f"paqet-{name}.service"], ports=ports, ping_iface=p_iface, ping=p_addr)
 
     if typ == "chisel":
-        return Plan([f"chisel-{name}.service"], [f"chisel-{name}-kharej.service"], ports=ports)
+        return Plan([f"chisel-{name}.service"], [f"chisel-{name}-kharej.service"], ports=ports, ping_iface=p_iface, ping=p_addr)
 
-    return Plan([f"backpack-{name}.service"], [f"backpack-{name}-kharej.service"], ports=ports)
+    return Plan([f"backpack-{name}.service"], [f"backpack-{name}-kharej.service"], ports=ports, ping_iface=p_iface, ping=p_addr)
 
 
 @dataclass
@@ -222,6 +247,21 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
         return ("down" if data_fails >= DATA_DOWN_AFTER else "degraded"), why
 
     return "up", ""
+
+
+def ping_verdict(loss_pct: float | None, data_code: str, ext: tuple | None) -> tuple[float | None, bool]:
+    """Pure: (the packet loss to keep and show, ping_blocked). The pings only MEASURE the link; the users' path - an HTTP answer through the forwarded port, on the server or from another Iran
+    server - is the proof that data passes. Every ping lost while that proof is there means the provider drops ICMP: that is not "100 % of the data is lost" (real case, 2026-10-16: a tunnel that
+    carried its users for days stood in the Tunnel Doctor as losing all of its data). Without the proof, or with some of the pings answered, the measured number stays as it is."""
+    if loss_pct is None:
+        return None, False
+
+    path_ok = data_code not in ("", "000") or (ext is not None and ext[0] != "000")
+
+    if loss_pct >= 100 and path_ok:
+        return None, True
+
+    return loss_pct, False
 
 
 def settle(old_state: str, judged: str, streak: dict | None) -> tuple[str, dict]:
@@ -382,8 +422,8 @@ def external_probe_all() -> None:
 
 def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
     params = {"UNITS": " ".join(plan.iran_units if is_iran else plan.foreign_units),
-              "IFACE": plan.iface if is_iran else "",
-              "PEER": plan.iran_peer if is_iran else "",
+              "IFACE": (plan.iface or plan.ping_iface) if is_iran else "",
+              "PEER": (plan.iran_peer or plan.ping) if is_iran else "",
               "PORTS": " ".join(str(p) for p in plan.ports) if is_iran else ""}
 
     for attempt in (1, 2):
@@ -473,6 +513,8 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
     ext_seen = bool(prev.get("ext_seen")) or (ext is not None and ext[0] != "000")
     ext_fails = (int(prev.get("ext_fails", 0)) + 1 if ext[0] == "000" else 0) if ext is not None else int(prev.get("ext_fails", 0))
     state, reason = judge(plan, iran, foreign, data_seen, data_fails, ext, ext_seen, ext_fails)
+    loss, ping_blocked = ping_verdict(iran.loss_pct, iran.data_code, ext)
+    ping_over = "link" if plan.iface else "iface" if plan.ping_iface else "servers" if plan.ping else ""      # what the pings crossed: the GRE link, another L3 link, or the open internet between the two servers
     now = int(time.time())
     rx = tx = None
 
@@ -515,7 +557,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
         t.rtt_ms = iran.rtt_ms if iran.rtt_ms is not None else (ext[1] if ext is not None and ext[1] is not None else iran.data_ms)
         t.rx_mbps, t.tx_mbps = rx, tx
         t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state,
-                    "loss_pct": iran.loss_pct, "listen": {str(k): v for k, v in iran.listen.items()},
+                    "loss_pct": loss, "ping_blocked": ping_blocked, "ping_over": ping_over, "listen": {str(k): v for k, v in iran.listen.items()},
                     "rx_bytes": iran.rx_bytes, "tx_bytes": iran.tx_bytes, "now": iran.now,
                     "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak,
                     "data_seen": data_seen, "data_fails": data_fails, "data_code": iran.data_code, "data_ms": iran.data_ms,
@@ -536,7 +578,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
             elif state == "unknown":
                 emit(db, "warn", "tunnels", f"Tunnel {label} cannot be checked: {reason}", t.name)
 
-        log.info("check name=%s state=%s judged=%s loss=%s rtt=%s rx=%s tx=%s %s", t.name, state, judged, iran.loss_pct, iran.rtt_ms, rx, tx, reason)
+        log.info("check name=%s state=%s judged=%s loss=%s%s rtt=%s rx=%s tx=%s %s", t.name, state, judged, loss, " (ping blocked)" if ping_blocked else "", iran.rtt_ms, rx, tx, reason)
 
 
 def check_unhealthy() -> None:

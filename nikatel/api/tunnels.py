@@ -212,6 +212,29 @@ def speed_start(tunnel_id: int, body: SpeedIn):
         raise HTTPException(400, str(e))
 
 
+@router.get("/tunnels/{tunnel_id}/bandwidth")
+def bandwidth_get(tunnel_id: int):
+    """The bandwidth of a tunnel, kept by the Doctor: the last number (Mb/s down), the usual level, the verdict (learning / ok / low / drop), the drop with its explanation and the history (60 samples)."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise HTTPException(404, "tunnel not found")
+
+        return {"ok": True, "name": t.name, **((t.record or {}).get("bw") or {})}
+
+
+@router.post("/tunnels/{tunnel_id}/bandwidth", status_code=202)
+def bandwidth_measure(tunnel_id: int):
+    """Measure the bandwidth of this tunnel now, as an action (follow /api/actions/{action_id}): a GRE tunnel with one light connection (40 MB at most) over its link, a tunnel with a test door with its quality test. A drop is looked at by the Doctor in the same story."""
+    from ..services import bandwidth
+
+    try:
+        return {"ok": True, "action_id": bandwidth.measure_start(tunnel_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/tunnels/retune", status_code=202)
 def retune():
     """Apply the newer Backhaul defaults to the tunnels that exist - one at a time, at quiet moments, each checked and rolled back if worse."""
@@ -359,6 +382,7 @@ class TunnelOut(BaseModel):
     detail: dict
     units: dict
     quality: dict = {}
+    bw: dict = {}           # the bandwidth the Doctor keeps (services/bandwidth.py) without its history; GET /tunnels/{id}/bandwidth has the history
     record: dict = {}       # port mapping, direction, test door, engine options - never secrets
 
 
@@ -370,7 +394,8 @@ def _out(t: Tunnel) -> TunnelOut:
                      forwarded_ports=t.forwarded_ports or [], enabled=t.enabled, created_at=t.created_at,
                      state=t.state, state_since=t.state_since, last_check_at=t.last_check_at, last_error=t.last_error,
                      rtt_ms=t.rtt_ms, rx_mbps=t.rx_mbps, tx_mbps=t.tx_mbps, detail=t.detail or {}, quality=(t.record or {}).get("quality") or {},
-                     record={k: v for k, v in (t.record or {}).items() if k != "quality"},
+                     bw={k: v for k, v in ((t.record or {}).get("bw") or {}).items() if k != "hist"},
+                     record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw")},
                      units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface})
 
 

@@ -844,6 +844,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
         off = {side for side, s in (("Iran", t.iran), ("foreign", t.foreign)) if skip_offline and s is not None and s.online is False}
         nodes = [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
         other = (t.type or "").lower() in ("backpack", "paqet", "chisel")
+        rec_now = dict(t.record or {})          # (the bandwidth sink of a GRE tunnel is on the foreign server: it goes with the tunnel)
         snap = trash_snapshot(t) if trash and not keep_record else None
         entry = ActionLog(ref=name, action="delete", source="manual", story=[f"Removing {label} from both servers"])
         db.add(entry)
@@ -867,6 +868,11 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
                 results.append(f"{side}: removed")
             except (SSHError, ValueError) as e:
                 results.append(f"{side}: not removed ({e})")
+
+            if side == "foreign" and rec_now.get("bw_sink"):
+                from . import bandwidth
+
+                bandwidth.remove_sink(tunnel_id, node, rec_now)
 
     with session() as db:
         if not keep_record:

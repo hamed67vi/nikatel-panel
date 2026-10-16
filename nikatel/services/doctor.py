@@ -70,7 +70,59 @@ def _save(s: dict) -> None:
     st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"]})
 
 
+HEALTHY_FOR = 600           # a suggestion to move a tunnel is withdrawn once the tunnel has been up, without loss, for this long: the problem it was written for is over
+
+
+def suggestion_valid(e: dict, tunnel: dict | None, saturated: set[int], now: int) -> str:
+    """Pure: '' when the suggestion still stands, else the sentence that says why it is withdrawn. `tunnel`: {"state", "state_since", "loss"} of the tunnel it is about, None when that tunnel is gone;
+    `saturated`: the ids of the Iran servers that are exhausted now. (The owner, 2026-10-16: three suggestions of two days earlier stood on the Doctor's page for tunnels that had been up and clean for a day.)"""
+    if tunnel is None:
+        return "the tunnel is not in the list any more"
+
+    if e.get("kind") == "resources":
+        return "" if int(e.get("from_id") or 0) in saturated else f"{e.get('from') or 'the server'} is no longer exhausted"
+
+    healthy = tunnel.get("state") == "up" and (tunnel.get("loss") or 0) < autopilot.ACT_FROM and now - int(tunnel.get("state_since") or now) >= HEALTHY_FOR
+
+    return f"{e.get('tunnel')} has been up without loss for {(now - int(tunnel.get('state_since') or now)) // 60} minutes: the problem is over" if healthy else ""
+
+
+def refresh_suggestions(now: int | None = None) -> list[str]:
+    """Withdraw the suggestions whose problem is over (see `suggestion_valid`); returns the sentences. Called by the job and whenever the Doctor's state is read, so the page never shows an old verdict."""
+    s = _state()
+
+    if not s["suggestions"]:
+        return []
+
+    now = now or int(time.time())
+
+    with session() as db:
+        rows = {t.name: {"state": t.state, "state_since": t.state_since, "loss": (t.detail or {}).get("loss_pct")} for t in db.scalars(select(Tunnel))}
+
+    sat = {x["id"] for x in saturated_servers(now)}
+    kept, told = [], []
+
+    for e in s["suggestions"]:
+        why = suggestion_valid(e, rows.get(e.get("tunnel")), sat, now)
+
+        if why:
+            told.append(f"{e.get('tunnel')}: {why}")
+        else:
+            kept.append(e)
+
+    if told:
+        s["suggestions"] = kept
+        _save(s)
+
+        with session() as db:
+            for line in told:
+                emit(db, "info", "actions", f"Doctor: a suggestion was withdrawn - {line}.", line.split(":")[0])
+
+    return told
+
+
 def state() -> dict:
+    refresh_suggestions()
     s = _state()
     conf = st.get("repair")
     return {"mode": mode(), "can_move": can_move(), "licensed": license.has("failover"), "server_minutes": int(conf.get("server_minutes", 10)), "after_seconds": int(conf.get("after_seconds", 60)),
@@ -452,7 +504,12 @@ def returns() -> None:
 
 
 def run() -> None:
-    """The job (every minute): the clock of the servers that came back, the dead servers (mode move), and - every five minutes - the exhausted servers and the returns."""
+    """The job (every minute): the suggestions whose problem is over are withdrawn, the clock of the servers that came back, the dead servers (mode move), and - every five minutes - the exhausted servers and the returns."""
+    try:
+        refresh_suggestions()
+    except Exception:       # (a job that must go on: the rest below does not depend on it)
+        log.exception("doctor: suggestions")
+
     if mode() == "off":
         return
 
