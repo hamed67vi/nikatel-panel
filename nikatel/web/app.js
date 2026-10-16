@@ -829,7 +829,7 @@ const tunSev = t => { const loss = tunLoss(t).v || 0; if (t.state === "down") re
 const bwFmt = v => v == null ? "—" : v >= 1000 ? (v / 1000).toFixed(1) + " Gb/s" : Math.round(v) + " Mb/s";
 const bwTip = t => {
   const b = t.bw || {};
-  if (b.down == null) return (t.record || {}).test_port ? "The Doctor measures it with its quality test every half hour - nothing yet" : (t.type === "backhaul" || t.type === "gre") ? "The Doctor measures it with one light connection over the GRE link, about every 90 minutes - nothing yet" : "This tunnel has no link or test door to measure";
+  if (b.down == null) return (t.record || {}).test_port ? "The Doctor measures it with its quality test every half hour - nothing yet" : (t.type === "backhaul" || t.type === "gre") ? "The Doctor measures it with two light connections over the GRE link, about every 90 minutes - nothing yet" : "This tunnel has no link or test door to measure";
   const parts = [`Download speed of this tunnel: ${bwFmt(b.down)}`, b.ref ? `usually ${bwFmt(b.ref)}` : "the usual level is still being learnt", `measured ${ago(b.at)} ago`];
   if (b.state === "drop") parts.push("DROPPED" + ((b.why || {}).text ? ": " + b.why.text : ""));
   if (t.rx_mbps != null) parts.push(`carrying now ↓${mbps(t.rx_mbps)} ↑${mbps(t.tx_mbps)}`);
@@ -1417,7 +1417,7 @@ function tunGrid(t) {
     kv("Score", q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score} / 100</b> <small class="mut">${q.at ? ago(q.at) + " ago" : ""}</small>` : '<span class="mut">not measured</span>')]);
   const link = box(SI.link, "Link", [kv("Latency", t.rtt_ms != null ? `${t.rtt_ms.toFixed(0)} ms${q.jitter_ms != null ? ` <small class="mut">jitter ${q.jitter_ms} ms</small>` : ""}` : "—"), kv("Packet loss", `<span title="${esc(lossTip(t))}">${tunLoss(t).v != null ? tunLoss(t).v + " %" : tunLoss(t).blocked ? "ping blocked <small class=\"mut\">(the data passes)</small>" : "—"}</span>`),
     kv("Speed", q.down_mbps != null ? `↓ ${q.down_mbps} ↑ ${q.up_mbps} Mb/s` : "—"),
-    kv("Bandwidth", ((t.bw || {}).down != null ? `<b class="${t.bw.state === "drop" ? "err" : t.bw.state === "low" ? "warn" : ""}" title="${esc(bwTip(t))}">${bwFmt(t.bw.down)}</b> <small class="mut">usually ${t.bw.ref ? bwFmt(t.bw.ref) : "…"} · ${ago(t.bw.at)} ago</small>${t.bw.state === "drop" ? `<div class="bw-why">${esc(bwWhy(t))}</div>` : ""}` : '<span class="mut">not measured yet</span>') + ` <a class="mini" onclick="bwMeasure(${t.id})" title="One light connection (40 MB at most) over the link; a tunnel with a test door: its quality test">measure now</a>`),
+    kv("Bandwidth", ((t.bw || {}).down != null ? `<b class="${t.bw.state === "drop" ? "err" : t.bw.state === "low" ? "warn" : ""}" title="${esc(bwTip(t))}">${bwFmt(t.bw.down)}</b> <small class="mut">usually ${t.bw.ref ? bwFmt(t.bw.ref) : "…"} · ${ago(t.bw.at)} ago</small>${t.bw.state === "drop" ? `<div class="bw-why">${esc(bwWhy(t))}</div>` : ""}` : '<span class="mut">not measured yet</span>') + ` <a class="mini" onclick="bwMeasure(${t.id})" title="Two light connections (120 MB at most) over the link; a tunnel with a test door: its quality test">measure now</a>`),
     kv(gre ? "GRE" : "Engine", gre ? (t.iran_tunnel_ip ? `<span class="mono">${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</span>` : "—") : esc(rec.transport_label || t.type)), kv("Iran side", chips("iran", u.iran)), kv("Foreign side", chips("foreign", u.foreign))]);
   return `<div class="sgrid">${servers}${status}${link}</div>`;
 }

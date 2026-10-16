@@ -226,7 +226,7 @@ def bandwidth_get(tunnel_id: int):
 
 @router.post("/tunnels/{tunnel_id}/bandwidth", status_code=202)
 def bandwidth_measure(tunnel_id: int):
-    """Measure the bandwidth of this tunnel now, as an action (follow /api/actions/{action_id}): a GRE tunnel with one light connection (40 MB at most) over its link, a tunnel with a test door with its quality test. A drop is looked at by the Doctor in the same story."""
+    """Measure the bandwidth of this tunnel now, as an action (follow /api/actions/{action_id}): a GRE tunnel with two light connections (120 MB at most) over its link, a tunnel with a test door with its quality test. A drop is looked at by the Doctor in the same story."""
     from ..services import bandwidth
 
     try:

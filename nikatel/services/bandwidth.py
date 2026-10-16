@@ -1,7 +1,7 @@
 """The bandwidth of a tunnel, kept fresh: what it can carry TODAY, measured often and lightly, so that a drop is seen in minutes, understood and told in plain words.
 (The owner, 2026-10-16: "show the bandwidth of the tunnel very simply - and when it drops, the Doctor checks it by itself and we understand".)
 
-  how it is measured   a GRE tunnel (Backhaul): ONE connection pulls 40 MB over the link from a small sink the panel keeps on the foreign server, bound to the link's inner address (nothing public);
+  how it is measured   a GRE tunnel (Backhaul): TWO connections pull 60 MB each at most (3 s) over the link from a small sink the panel keeps on the foreign server, bound to the link's inner address (nothing public);
                        a tunnel with a test door (BackPack, Paqet, Chisel): the quality job of every half hour already measures it through the door - its number is taken from there.
   where it is kept     the record of the tunnel, `bw`: the last number, the history (60 samples), the usual level (`ref`), a verdict (learning / ok / low / drop) and, while it lasts, the drop.
   what is a drop       a sample under 60 % of the usual level (the 75th percentile of the last 7 days), confirmed by a second sample three minutes later; it ends when a sample is back over 80 %.
@@ -38,8 +38,9 @@ DROP_RATIO = 0.6             # under this share of the usual level: a drop
 LOW_RATIO = 0.8              # a drop ends over this share
 KEEP = 60                    # samples kept
 LINK_PORT = 39777            # the sink of a GRE tunnel listens on its inner address (never a public one) on this port
-BYTES = 40_000_000           # one connection pulls this much at most, for 6 s at most
-SECS = 6
+BYTES = 60_000_000           # each of the two connections pulls this much at most ...
+SECS = 3                     # ... and for 3 s at most (real tests, 2026-10-16, over a GRE link: one connection scattered by 16 % from run to run, two by 9 %, four by 7 % - and one connection of 4 s stalled once)
+STREAMS = 2
 BUSY_CPU = 85.0              # a server this busy is not measured (the test would be slowed by it, and would slow the users more)
 _LOCK = threading.Lock()
 _RUNNING: set[int] = set()
@@ -272,7 +273,7 @@ def measure(tunnel_id: int) -> tuple[dict, str]:
             t.secrets = {**(t.secrets or {}), "bw_key": key}
 
     _ensure_sink(tunnel_id, foreign, target["peer"], key)
-    params = {"PORT": str(LINK_PORT), "SECS": str(SECS), "STREAMS": "1", "PINGS": "5", "KEY": key, "TO": "2.0", "HOST": target["peer"], "BYTES": str(BYTES), "DIR": "d"}
+    params = {"PORT": str(LINK_PORT), "SECS": str(SECS), "STREAMS": str(STREAMS), "PINGS": "5", "KEY": key, "TO": "2.0", "HOST": target["peer"], "BYTES": str(BYTES), "DIR": "d"}
 
     try:
         d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
@@ -455,7 +456,7 @@ def measure_start(tunnel_id: int) -> int:
         name = t.name
 
     def work(aid: int) -> None:
-        autopilot._say(aid, "Measuring the bandwidth: one light connection, 40 MB at most (a tunnel with a test door: its quality test)…")
+        autopilot._say(aid, "Measuring the bandwidth: two light connections, 120 MB at most (a tunnel with a test door: its quality test)…")
         bw, change = measure(tunnel_id)
         ref = bw.get("ref")
         autopilot._say(aid, f"Bandwidth: {bw.get('down')} Mb/s" + (f", usually {ref:.0f}" if ref else ", the usual level is still being learnt") + f" - {bw.get('state')}.")

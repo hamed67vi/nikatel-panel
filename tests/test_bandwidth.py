@@ -181,7 +181,7 @@ def test_a_gre_tunnel_is_measured_over_its_link_through_a_sink_on_the_inner_addr
     sink = next(c for c in calls if c[1] == "sink_install")[2]
     assert sink["NAME"] == f"bw{tid}" and sink["PORT"] == "39777" and sink["BIND"] == peer and len(sink["KEY"]) == 16                       # (bound to the inner address: reachable only through the link)
     probe = next(c for c in calls if c[1] == "probe_run")[2]
-    assert probe["HOST"] == peer and probe["PORT"] == "39777" and probe["STREAMS"] == "1" and probe["DIR"] == "d" and probe["BYTES"] == "40000000" and probe["KEY"] == sink["KEY"]
+    assert probe["HOST"] == peer and probe["PORT"] == "39777" and probe["STREAMS"] == "2" and probe["SECS"] == "3" and probe["DIR"] == "d" and probe["BYTES"] == "60000000" and probe["KEY"] == sink["KEY"]
 
     with session() as db:
         t = db.get(Tunnel, tid)
