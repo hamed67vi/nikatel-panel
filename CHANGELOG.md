@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.49 - Settings → Security back to the single column of the owner's picture
+
+- **Settings → Security:** one column again, as in the owner's picture - the state strip, *Two-step sign-in*, *Recovery codes*, *Secret entry path* and *Password* one under the other, each in its own size; *Sign out of other devices* is a button with an open padlock beside *Change password* (the two-column grid of 204 px rows and the switch are gone; changing the password signs the other sessions out again). *Api & Key* keeps what it gathered (probe, DNS accounts, panels).
+
 ## 1.57.48 - The Add tab in one frame, with the subscription configs on the right
 
 - **Panel → Configs → Add:** the paste-a-link row and the three columns sit in ONE frame; the columns are cards of one fixed height (they scroll inside), so opening another protocol drawer (VLESS, Trojan, VMess, Shadowsocks) moves nothing.
