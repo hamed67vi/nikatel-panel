@@ -166,8 +166,8 @@ echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
 
     # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door
     # (runs on the Iran server, talks to the sink on the foreign server through the tunnel)
-    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' '@HOST@' '@BYTES@' '@DIR@' <<'__NK_PY__'
-import socket, threading, time, json, sys, os
+    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' '@HOST@' '@BYTES@' '@DIR@' '@UDPN@' <<'__NK_PY__'
+import socket, threading, time, json, sys, os, select
 # every block is NEW random bytes: a tunnel that compresses or de-duplicates (BackPack) must not look faster than it is for the encrypted traffic of real customers (a pool of the same blocks over and over is found again by a window of a few MB)
 P = int(sys.argv[1]); SECS = float(sys.argv[2]); N = int(sys.argv[3]); PINGS = int(sys.argv[4]); KEY = sys.argv[5].encode()
 TO = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5
@@ -175,6 +175,7 @@ TO = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5
 H = (sys.argv[7] if len(sys.argv) > 7 else "") or "127.0.0.1"
 LIM = int(sys.argv[8] or 0) if len(sys.argv) > 8 else 0
 DIRS = (sys.argv[9] if len(sys.argv) > 9 else "") or "du"
+UDPN = int(sys.argv[10] or 0) if len(sys.argv) > 10 else 0          # UDP packets to echo through the link (0 = none): the loss of a link that drops ICMP
 out = {"port": P}
 rtts = []; lost = 0
 try:
@@ -204,6 +205,29 @@ if rtts:
     out["p95_ms"] = round(rtts[int(len(rtts) * 0.95) - 1] if len(rtts) > 1 else rtts[0], 1)
     out["jitter_ms"] = round(sum(abs(r - avg) for r in rtts) / len(rtts), 1)
 out["loss_pct"] = round(lost * 100.0 / max(PINGS, 1), 1)
+if UDPN > 0 and "error" not in out:
+    # UDP packets at 20 ms, the echoes collected on the side: what does not come back (the packet or its echo) is lost - the way ping counts, over a path that may drop ICMP but carries UDP
+    try:
+        u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); u.connect((H, P)); u.setblocking(False)
+        got = set(); sent = 0; t0 = time.time()
+        while True:
+            now = time.time()
+            if sent < UDPN and now - t0 >= sent * 0.02:
+                u.send(KEY + b"%05d" % sent); sent += 1
+            r, _, _ = select.select([u], [], [], 0.005)
+            if r:
+                try:
+                    d = u.recv(64)
+                    if d[:len(KEY)] == KEY:
+                        got.add(d[len(KEY):])
+                except Exception:
+                    pass
+            if sent >= UDPN and now - t0 > UDPN * 0.02 + 1.2:
+                break
+        if got:
+            out["udp_loss_pct"] = round((UDPN - len(got)) * 100.0 / UDPN, 1)
+    except Exception:
+        pass
 def run(mode, results, i):
     rate = 0.0
     try:
@@ -252,7 +276,7 @@ if SECS > 0 and "error" not in out:
 print("NKPROBE " + json.dumps(out))
 __NK_PY__
 """, {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$",
-       "HOST": r"^(\d{1,3}(\.\d{1,3}){3})?$", "BYTES": r"^\d{0,9}$", "DIR": r"^(d|u|du)?$"}),
+       "HOST": r"^(\d{1,3}(\.\d{1,3}){3})?$", "BYTES": r"^\d{0,9}$", "DIR": r"^(d|u|du)?$", "UDPN": r"^\d{0,3}$"}),
 
     # how many packets the firewall counted on the raw port of a Paqet tunnel (the rules of its own firewall script count): PAQET_IN = packets that arrived for the port, PAQET_OUT = packets the server sent from it. Read-only.
     "paqet_count": (r"""P=@PORT@
@@ -904,6 +928,21 @@ def h(c):
             c.close()
         except Exception:
             pass
+def echo_udp():
+    # the same port over UDP: the packets that start with the key come back as they are (the loss of a link that drops ICMP is counted with them)
+    u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        u.bind((sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1", P))
+    except Exception:
+        return
+    while True:
+        try:
+            d, a = u.recvfrom(512)
+            if d[:len(KEY)] == KEY:
+                u.sendto(d, a)
+        except Exception:
+            pass
+threading.Thread(target=echo_udp, daemon=True).start()
 while True:
     c, _ = s.accept()
     threading.Thread(target=h, args=(c,), daemon=True).start()

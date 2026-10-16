@@ -187,11 +187,12 @@ DATA_DOWN_AFTER = 4          # this many failed data probes in a row (4 minutes)
 
 
 def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_fails: int = 0,
-          ext: tuple | None = None, ext_seen: bool = False, ext_fails: int = 0) -> tuple[str, str]:
+          ext: tuple | None = None, ext_seen: bool = False, ext_fails: int = 0, stalled: str = "") -> tuple[str, str]:
     """(state, reason). Pure, so the rules are testable. `data_seen`: this tunnel has answered an HTTP request before (so silence now
     is a fault, not a port that speaks another protocol); `data_fails`: consecutive probes without an answer, this one included.
     `ext`: (http code, ms, vantage name) of the same request made from ANOTHER Iran server - the path the users take; `ext_seen` /
-    `ext_fails` like data_seen / data_fails for it."""
+    `ext_fails` like data_seen / data_fails for it. `stalled`: the sentence of a CONFIRMED stall (the last tests of the bandwidth carried no data, services/bandwidth.py): a tunnel that answers every
+    check and moves nothing under load is degraded, not up."""
     if iran.error and foreign.error:
         return "unknown", f"both servers do not answer ({iran.error})"
 
@@ -225,7 +226,7 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
         if lossy:
             return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
 
-        return "up", ""
+        return ("degraded", stalled) if stalled else ("up", "")
 
     if ext_silent and local_ok:
         why = f"port {iran.data_port} answers on the server but not from {ext[2] if ext and len(ext) > 2 and ext[2] else 'another Iran server'}: blocked in front of the server"
@@ -246,7 +247,7 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
         why = f"port {iran.data_port} accepts connections but no data comes back through the tunnel"
         return ("down" if data_fails >= DATA_DOWN_AFTER else "degraded"), why
 
-    return "up", ""
+    return ("degraded", stalled) if stalled else ("up", "")
 
 
 def ping_verdict(loss_pct: float | None, data_code: str, ext: tuple | None) -> tuple[float | None, bool]:
@@ -480,6 +481,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         prev = dict(t.detail or {})
+        bw = dict((t.record or {}).get("bw") or {})
         iran_host, iran_id = t.iran.host, t.iran_server_id
         iran_off, foreign_off = t.iran.enabled and t.iran.online is False, t.foreign.enabled and t.foreign.online is False
 
@@ -512,9 +514,17 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
     ext = ext_for((iran_host, iran.data_port or (plan.ports[0] if plan.ports else 0)), time.time(), _EXT["at"], _EXT["res"], _EXT.get("one") or {})
     ext_seen = bool(prev.get("ext_seen")) or (ext is not None and ext[0] != "000")
     ext_fails = (int(prev.get("ext_fails", 0)) + 1 if ext[0] == "000" else 0) if ext is not None else int(prev.get("ext_fails", 0))
-    state, reason = judge(plan, iran, foreign, data_seen, data_fails, ext, ext_seen, ext_fails)
+
+    # (the bandwidth watch imports this module: so this one is imported here, not at the top)
+    from . import bandwidth
+
+    state, reason = judge(plan, iran, foreign, data_seen, data_fails, ext, ext_seen, ext_fails, stalled=bandwidth.stalled(bw, int(time.time())))
     loss, ping_blocked = ping_verdict(iran.loss_pct, iran.data_code, ext)
     ping_over = "link" if plan.iface else "iface" if plan.ping_iface else "servers" if plan.ping else ""      # what the pings crossed: the GRE link, another L3 link, or the open internet between the two servers
+    udp = bw.get("loss") or {}
+
+    if ping_blocked and udp.get("pct") is not None and int(time.time()) - int(udp.get("at") or 0) <= bandwidth.LOSS_FRESH:
+        loss, ping_blocked, ping_over = float(udp["pct"]), False, "udp"          # the provider drops ICMP: the loss of the link is what the UDP packets of the bandwidth test lost (the owner, 2026-10-16: "no ping, but it has bandwidth")
     now = int(time.time())
     rx = tx = None
 

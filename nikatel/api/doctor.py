@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..config import get_settings
-from ..services import doctor, failover
+from ..services import doctor, failover, knowledge
 
 router = APIRouter(tags=["doctor"], dependencies=[Depends(current_user)])
 
@@ -64,4 +65,53 @@ def doctor_apply(sid: str):
 def doctor_dismiss(sid: str):
     """Drop a suggestion."""
     doctor.dismiss_suggestion(sid)
+    return {"ok": True}
+
+class KnowledgeIn(BaseModel):
+    on: bool | None = None
+    from_hour: int | None = Field(None, ge=0, le=23)
+    to_hour: int | None = Field(None, ge=0, le=23)
+
+
+class SurveyIn(BaseModel):
+    iran_id: int
+    foreign_id: int
+
+
+@router.get("/doctor/knowledge")
+def doctor_knowledge():
+    """What the Doctor knows about every pair of servers: the tunnel types that work between them (best first), those that did not, how old the knowledge is, the night survey (on, its hours) and the survey that runs now."""
+    return {"ok": True, **knowledge.state()}
+
+
+@router.put("/doctor/knowledge")
+def doctor_knowledge_set(body: KnowledgeIn):
+    """Switch the night survey on or off and set the local hours it may run in (equal hours = any time)."""
+    try:
+        return {"ok": True, **knowledge.configure(body.on, body.from_hour, body.to_hour)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/doctor/knowledge/survey", status_code=202)
+def doctor_survey(body: SurveyIn):
+    """Test every tunnel type between an Iran server and a foreign server now, one after the other (about two minutes each; temporary tunnels, removed again) and keep what they gave."""
+    _writable()
+
+    try:
+        return {"ok": True, "id": knowledge.survey_start(body.iran_id, body.foreign_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.post("/doctor/knowledge/stop")
+def doctor_survey_stop():
+    """Stop the survey that runs; the tunnel it is testing is removed."""
+    try:
+        knowledge.stop()
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
     return {"ok": True}

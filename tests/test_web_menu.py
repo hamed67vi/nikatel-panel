@@ -1170,7 +1170,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc">', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
     assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and "<thead><tr><th>Tunnel</th><th>Type</th><th title=\"How much this tunnel can carry" in app and ">Bandwidth</th>" in app
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
-    assert "workMap.has(t.name)" in cell and "stShort(t)" in cell and '<i class="bwbar"><u style="width:' in cell and "▼ ${bwFmt(" in cell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in cell
+    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<i class="bwbar"><u style="width:' in cell and "▼ ${bwFmt(" in cell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in cell
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "(t.bw || {}).state === \"drop\"" in app
     assert 'slow = tl.filter(t => t.state === "up" && (t.bw || {}).state === "drop" && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
@@ -1187,3 +1187,52 @@ def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
     assert "const usersNote = u => u && u.total > u.linked ?" in app and "${usersNote(dc && dc.users)}" in app and 'onclick="apLinkConfigs()"' in app
     assert "window.apLinkConfigs = async () =>" in app and "window.apLinkSave = async () =>" in app and 'api("/api/configs/" + s.dataset.cid, {method: "PUT", body: JSON.stringify({tunnel: s.value})})' in app
     assert 'api("/api/doctor"), api("/api/configs"), api("/api/tunnels")' in app
+
+
+def test_the_cut_of_a_tunnel_is_a_tiny_tag_that_says_which_end_and_a_tunnel_without_a_number_says_why():
+    """The owner, 2026-10-16: not a red dot and "GRE link cut" but a small red tag that says which end is cut ("GRE foreign"); "some tunnels show no bandwidth", "it shows connected but has no bandwidth"."""
+    app, css = _web("app.js"), _web("lab.css")
+    cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
+    assert "const CUT_TAGS = [" in app and "const cutTag = t =>" in app and "stShort" not in app and "WHY_SHORT" not in app
+    assert '<span class="cut-tag ${t.state === "down" ? "" : "unk"}"' in cell and 'class="st ${t.state === "down" ? "down" : "unknown"} why"' not in cell
+    assert "bwPending(t)" in cell and "measuring…" in cell and "stall = b.down != null && b.down < 1" in cell and "<small>no data</small>" in cell and "stall || b.state === \"drop\" ? \"drop\"" in cell
+    assert "const bwPending = t => !(t.bw || {}).error &&" in app and 'NO DATA moved in the test' in app and "No data moves through this tunnel under load" in app and 'b.error ? "Could not be measured: "' in app
+    assert ".tun-tbl .cut-tag {" in css and ".tun-tbl .cut-tag.unk" in css and ".tun-tbl .bw.pend" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag {' in css
+    assert 'udp: "the GRE link of this tunnel, counted with UDP packets' in app                      # a link that drops ping shows the loss the bandwidth test counted with UDP, not "no ping"
+
+
+def test_the_tag_of_a_cut_tunnel_names_the_end_that_is_cut(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+
+    if node is None:
+        import pytest
+
+        pytest.skip("node is not installed here")
+
+    app = _web("app.js")
+    code = app[app.index("const CUT_TAGS = ["): app.index("\n", app.index("const cutTag = t =>"))]
+    driver = tmp_path / "tag.js"
+    driver.write_text("const stText = t => t.state === 'up' ? 'ACTIVE' : t.state === 'down' ? 'DOWN' : 'UNKNOWN';\n" + code + "\nconst cases = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
+                      "process.stdout.write(JSON.stringify(cases.map(c => cutTag(c))));\n", encoding="utf-8")
+    cases = [("no answer from the foreign end over the GRE link", "GRE foreign"), ("the GRE interface pl-ir3 is DOWN on the Iran server", "GRE Iran"),
+             ("Iran: nikatel-gre-pl-ir3.service is inactive", "GRE Iran"), ("foreign: nikatel-gre-pl-ir3.service is failed", "GRE foreign"),
+             ("Iran: backhaul-iran-tcpmux-9906.service is inactive", "Iran service"), ("foreign: backhaul-kharej-tcpmux-9906.service is dead", "foreign service"),
+             ("both servers do not answer (timeout)", "both servers off"), ("the Iran server does not answer (timeout after 35s)", "Iran server off"), ("the foreign server does not answer (x)", "foreign server off"),
+             ("port 8072 answers on the server but not from ir9: blocked in front of the server", "port blocked"), ("port 8075 is not listening on the Iran server", "port closed"),
+             ("port 8075 accepts connections but no data comes back through the tunnel", "no data"), ("no data moves through the tunnel under load: the last tests carried 0 Mb/s", "no data"),
+             ("the link flaps: 5 of the last 10 checks failed, users see cuts", "flapping"), ("something odd happened here that is long", "something odd happ…"), ("", "down")]
+    r = subprocess.run([node, str(driver)], input=json.dumps([{"last_error": e, "state": "down"} for e, _ in cases]), capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    assert json.loads(r.stdout) == [want for _, want in cases]
+
+
+def test_the_doctor_page_has_a_knowledge_tab_for_what_it_knows_and_remembers():
+    app, kn, index, main = _web("app.js"), _web("knowledge.js"), _web("index.html"), (Path(__file__).resolve().parent.parent / "nikatel" / "main.py").read_text(encoding="utf-8")
+    assert 'tabBtn("know", "spark", "Knowledge"' in app and 'id="ap-t-know"' in app and 'id="kn-box"' in app and '["now", "done", "moves", "ana", "know"]' in app and 'if (k === "know") knLoad();' in app and 'if (apTab === "know") knLoad();' in app
+    assert '<script src="/static/knowledge.js"></script>' in index and '"knowledge.js"' in main
+    assert 'api("/api/doctor/knowledge")' in kn and '/api/doctor/knowledge/survey' in kn and '/api/doctor/knowledge/stop' in kn and 'window.knSet = async body =>' in kn and "What the Doctor remembers of cuts" in kn
+    assert all(f'"{k}"' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] or f'{k}:' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] for k in ("bp:wss", "bp:ws", "bp:wsmux", "bp:kcp", "bp:quic", "bp:pck", "bp:xdi", "bpd:quic", "bpd:pck", "bpd:xdi", "tcpmux", "paqet", "chisel:fwd"))

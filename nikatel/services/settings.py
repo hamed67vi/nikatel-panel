@@ -52,6 +52,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "license": {"token": ""},
     # the Add tab of a PasarGuard panel (services/pg_kinds.py): the protocols the owner added to the table, and the drawers he made for them
     "pg_kinds": {"custom": [], "families": []},
+    # what the Doctor knows about every pair of servers (services/knowledge.py): the night survey (on, the local hours it may run in) and the tests kept per pair and tunnel kind
+    "knowledge": {"on": True, "from_hour": 2, "to_hour": 6, "pairs": {}, "incidents": []},      # the night survey (temporary tunnels, tested one pair at a time, only at night, only on quiet servers) and what the Doctor remembers of every cut
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}

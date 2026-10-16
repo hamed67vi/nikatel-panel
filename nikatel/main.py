@@ -35,6 +35,7 @@ from .services import (
     extras,
     facts,
     housekeeping,
+    knowledge,
     netwatch,
     nodes,
     outbound,
@@ -67,7 +68,7 @@ def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for name in ("app.js", "analyst.js", "outbound.js", "pg_common.js", "pg_access.js", "pg_nodes.js", "pg_srvnode.js", "pg_cores.js", "pg_admin.js", "pg_roles.js", "pg_client.js", "pg_users.js", "pg_hosts.js", "pg_kinds.js", "pg_usage.js", "pg_update.js", "lab.js", "pg.css", "pg_access.css", "pg_nodes.css", "pg_cores.css", "pg_admin.css", "pg_usage.css", "pg_kinds.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "login.css", "light.css", "app.css", "mobile.css", "mobile2.css", "early.js", "fluid.js", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
+    for name in ("app.js", "analyst.js", "knowledge.js", "outbound.js", "pg_common.js", "pg_access.js", "pg_nodes.js", "pg_srvnode.js", "pg_cores.js", "pg_admin.js", "pg_roles.js", "pg_client.js", "pg_users.js", "pg_hosts.js", "pg_kinds.js", "pg_usage.js", "pg_update.js", "lab.js", "pg.css", "pg_access.css", "pg_nodes.css", "pg_cores.css", "pg_admin.css", "pg_usage.css", "pg_kinds.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "login.css", "light.css", "app.css", "mobile.css", "mobile2.css", "early.js", "fluid.js", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
         try:
             stamp = int((WEB / name).stat().st_mtime)
         except OSError:
@@ -153,6 +154,7 @@ def _register_jobs() -> None:
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
     jobs.register("userq", 300, userq.run)                      # what the USERS get through every tunnel: the probe's tests of the configs that ride it, each against its own week; the grade of the tunnel, a look by the Doctor when it falls (services/userq.py)
+    jobs.register("knowledge", 600, knowledge.run)              # what the Doctor KNOWS about every pair of servers: the night survey of the tunnel types, one pair at a time, when nothing else needs the servers (services/knowledge.py)
     jobs.register("bandwidth", 60, bandwidth.run)               # the bandwidth of every GRE tunnel: one light measurement per minute (two connections, 120 MB at most), each tunnel about every 90 minutes; a drop is looked at by the Doctor (services/bandwidth.py)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back

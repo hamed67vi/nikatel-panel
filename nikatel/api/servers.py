@@ -218,7 +218,11 @@ def delete_server(server_id: int):
         emit(db, "warn", "servers", f"Server {s.name} removed from the panel (nothing was changed on the server).", s.name)
         profiles.drop_server(db, server_id)          # (its profile on the Lab page goes with it)
         db.delete(s)
-        return {"ok": True}
+
+    from ..services import knowledge
+
+    knowledge.forget_server(server_id)               # (what the Doctor knew about its pairs goes with it)
+    return {"ok": True}
 
 
 @router.post("/servers/{server_id}/check", response_model=ServerOut)

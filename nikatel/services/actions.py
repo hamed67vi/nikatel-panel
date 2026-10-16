@@ -43,6 +43,14 @@ _RUNNING: dict[str, int] = {}
 _LOCK = threading.Lock()
 
 
+ROUTE_FAULT = re.compile(r"no answer from the foreign end over the GRE link|blocked in front of the server")
+
+
+def is_route_fault(last_error: str) -> bool:
+    """The route is silent (the GRE link does not answer, or the port is cut in front of the server): when it was like this before, no restart is tried first - the Doctor goes to the tunnel type that connects."""
+    return bool(ROUTE_FAULT.search(last_error or ""))
+
+
 def grace_for(last_error: str, after_seconds: int) -> int:
     """Pure: how long a down tunnel waits before its plain restart. A tunnel service that is not running (inactive, failed, dead) or a GRE
     interface that is missing is no network blip - it is restarted at the next minute; anything else waits `after_seconds` so a short
@@ -53,16 +61,20 @@ def grace_for(last_error: str, after_seconds: int) -> int:
 def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: int = 4) -> tuple[str, str]:
     """After a restart: wait, ask another Iran server about the users' port again (the cycle's answer is from BEFORE the restart and
     would call a healed tunnel still down), check the tunnel; up to `tries` times, about 40 s in all - a tunnel service needs a few
-    seconds to dial in again. Returns (state, reason) of the last check."""
+    seconds to dial in again. The tunnel must be up in TWO checks in a row: one that answers for an instant (the services dial in, a stale connection still carries a
+    request) is not healed - the owner, 2026-10-16: "it says fixed and the tunnel is not connected". Returns (state, reason) of the last check."""
     port = int(plan.ports[0]) if plan.ports and str(plan.ports[0]).isdigit() else 0
-    state, why = "unknown", ""
+    state, why, ups = "unknown", "", 0
 
-    for i in range(tries):
+    for i in range(tries + 1):
         time.sleep(8 if i == 0 else 10)
 
         if port:
             external_probe_one(iran_host, port, owner_id)
 
+        from . import bandwidth
+
+        bandwidth.recheck(tunnel_id)       # (a tunnel whose last tests moved no data is measured again now: it is healed when the users get data, not when a check answers)
         check_tunnel(tunnel_id)
 
         with session() as db:
@@ -73,10 +85,12 @@ def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: i
 
             state, why = t.state, t.last_error or ""
 
-        if state == "up":
+        ups = ups + 1 if state == "up" else 0
+
+        if ups >= 2:
             return state, ""
 
-    return state, why
+    return ("degraded", "it answered once but not steadily (the next check failed again)") if state == "up" else (state, why)
 
 
 def _plan_steps(plan: Plan, iran, foreign) -> list[dict]:
@@ -193,6 +207,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         name, label = t.name, f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
         plan = plan_for(t)
         prev = dict(t.detail or {})
+        bw = dict((t.record or {}).get("bw") or {})
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         iran_host, owner_id = t.iran.host, t.iran_server_id
@@ -213,7 +228,9 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
     # the same rule as the monitor: a tunnel that once passed data and now passes none is not healthy, even when every service is active
     data_seen = bool(prev.get("data_seen")) or iran.data_code not in ("", "000")
     data_fails = int(prev.get("data_fails", 0)) + 1 if iran.data_code == "000" else 0
-    state, reason = judge(plan, iran, foreign, data_seen, data_fails)
+    from . import bandwidth
+
+    state, reason = judge(plan, iran, foreign, data_seen, data_fails, stalled=bandwidth.stalled(bw, int(time.time())))
     _say(aid, f"Found: {reason or 'everything looks fine on both servers'} (state {state})")
 
     if iran.error or foreign.error:
@@ -267,6 +284,8 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
     with session() as db:
         emit(db, "warn", "actions", f"Repair of {label} started ({source}): {reason}", name)
 
+    batch = state == "down"        # a tunnel that is cut loses nothing by being restarted whole: every step is run, then it is checked once (four restarts with a look after each took three minutes)
+
     for st_ in steps:
         node = iran_node if st_["side"] == "iran" else foreign_node
 
@@ -276,6 +295,9 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
             _say(aid, f"{st_['side']}: restarted {', '.join(st_['units'])} because {st_['why']} → {states or 'no answer'}")
         except (SSHError, ValueError) as e:
             _say(aid, f"{st_['side']}: restart of {', '.join(st_['units'])} failed: {e}")
+            continue
+
+        if batch:
             continue
 
         now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id)
@@ -290,7 +312,20 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
 
         _say(aid, f"Checked again: still {now_state} ({now_reason}). Next step.")
 
-    _say(aid, "Every step was tried; the tunnel is still not up. A human should look at it.", done=True, ok=False)
+    if batch:
+        now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id, tries=3)
+
+        if now_state == "up":
+            _say(aid, "Checked again: the tunnel works.", done=True, ok=True)
+
+            with session() as db:
+                emit(db, "ok", "actions", f"Repair of {label} succeeded.", name)
+
+            return
+
+        _say(aid, f"Checked again: still {now_state} ({now_reason}).")
+
+    _say(aid, "Every step was tried; the tunnel is still not up. The smart repair goes on from here.", done=True, ok=False)
 
     with session() as db:
         emit(db, "bad", "actions", f"Repair of {label} did not help.", name)
@@ -343,10 +378,13 @@ def auto_repair() -> None:
 
     muted = set(st.get("alerts").get("muted") or [])
 
-    with session() as db:
-        down = [(t.id, t.name, t.state_since, t.last_error or "") for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down")) if not servers_off(t)]      # a server that is off: nothing to restart until it is back
+    from . import knowledge
 
     now = int(time.time())
+
+    with session() as db:
+        down = [(t.id, t.name, t.state_since, t.last_error or "") for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down")) if not servers_off(t)       # a server that is off: nothing to restart until it is back
+                and not (is_route_fault(t.last_error) and knowledge.cut_before(t.iran_server_id, t.foreign_server_id, ("gre_blocked", "route_cut"), now))]       # a route that was filtered before: no restart, the smart repair builds what connects
 
     down.sort(key=lambda r: r[2])
 
@@ -354,7 +392,7 @@ def auto_repair() -> None:
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 
-        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 60))) or name in _RUNNING or recent_fixes(name) >= MAX_PER_HOUR:
+        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 60))) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
             continue
 
         log.info("auto repair of %s (down for %ss)", name, now - since)

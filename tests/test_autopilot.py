@@ -29,8 +29,10 @@ def test_ladder_is_limited_by_the_level():
     assert ap.ladder_for("units_down", "tcpmux", "rebuild") == ["restart", "rebuild"]
     assert ap.ladder_for("gre_blocked", "tcpmux", "restart") == []
     assert ap.ladder_for("gre_blocked", "tcpmux", "rebuild") == ["relink"]                                  # the link again from scratch: new inner network, new GRE key
-    assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["relink", "switch"] and ap.ladder_for("port_blocked", "bp:tcp", "switch") == ["relink", "switch"]
-    assert ap.ladder_for("route_cut", "tcpmux", "switch") == ["move"]          # the move goes through the failover, which asks first
+    assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["switch"] and ap.ladder_for("port_blocked", "bp:tcp", "switch") == ["relink", "switch"]      # GRE is filtered: a new GRE link would be too, so no Backhaul method is tried again
+    assert ap.ladder_for("route_cut", "tcpmux", "switch") == ["switch", "move"]          # the foreign address is filtered from Iran: another type (a tunnel the foreign server dials in) may still connect; the move goes through the failover, which asks first
+    assert ap.ladder_for("route_cut", "tcpmux", "switch", ext_blocked=True) == ["move"] and ap.ladder_for("route_cut", "tcpmux", "rebuild") == ["move"]          # (the port cut in front of the Iran server: no tunnel type helps)
+    assert ap.ladder_for("unknown", "tcpmux", "switch") == ["restart", "rebuild", "switch"] and ap.ladder_for("units_down", "tcpmux", "switch") == ["restart", "rebuild", "switch"]      # still cut after both: whichever type connects
     assert ap.ladder_for("lossy_route", "tcpmux", "switch") == ["switch", "move"] and ap.ladder_for("lossy_route", "tcpmux", "restart") == ["move"]      # a lossy tunnel is never cut for a relink
     assert ap.ladder_for("healthy", "tcpmux") == [] and ap.ladder_for("server_unreachable", "tcpmux") == []
 
@@ -183,14 +185,18 @@ def test_clean_ping_but_dead_gre_is_a_gre_filter_not_a_flapping_route():
 
 
 def test_a_swap_needs_a_clearly_better_candidate_and_a_quiet_moment():
-    res = [{"kind": "tcpmux", "ok": True, "score": 62}, {"kind": "bp:tcpmux", "ok": True, "score": 55}, {"kind": "chisel:tls", "ok": False, "score": 90}]
-    assert ap.choose_better(None, res)["kind"] == "tcpmux"                      # a dead tunnel: the best working candidate
+    res = [{"kind": "tcpmux", "ok": True, "score": 62, "loss_pct": 0.0}, {"kind": "bp:tcpmux", "ok": True, "score": 55, "loss_pct": 0.0}, {"kind": "chisel:tls", "ok": False, "error": "no data passes"}]
+    assert ap.choose_better(None, res, cut=True)["kind"] == "tcpmux"            # a dead tunnel: the best candidate that connected
+    assert ap.choose_better(None, res)["kind"] == "tcpmux"                      # (the same for a tunnel whose own score could not be measured)
     assert ap.choose_better(50, res)["kind"] == "tcpmux"                        # 62 beats 50 by 12
     assert ap.choose_better(55, res) is None                                    # only 7 better: it stays
-    assert ap.choose_better(None, [{"kind": "x", "ok": True, "score": 40}]) is None                              # nothing good enough
+    assert ap.choose_better(None, [{"kind": "x", "ok": False, "score": 40, "loss_pct": 0.0}], cut=True)["kind"] == "x"      # a POOR tunnel (36 - 42 on a 150 ms route: nothing is to be done about the delay) carries users: for a CUT tunnel it counts
+    assert ap.choose_better(None, [{"kind": "x", "ok": True, "score": 40, "loss_pct": 12.0}]) is None          # a tunnel that still carries data is not swapped for one that loses 12 %
+    assert ap.choose_better(None, [{"kind": "x", "ok": False, "error": "no data passes"}], cut=True) is None      # nothing connected
+    assert ap.choose_better(None, [{"kind": "x", "score": 30, "loss_pct": 70.0}], cut=True) is None          # connected, but it loses most of what it carries
+    assert ap.connected({"score": 12, "loss_pct": 0.0}) and not ap.connected({"ok": True}) and not ap.connected({"score": 5, "loss_pct": 50.0})
     assert ap.quiet_ok(0.4, 0.3, 12.0) is True and ap.quiet_ok(9.0, 1.0, 12.0) is False       # busy: wait
     assert ap.quiet_ok(9.0, 1.0, 35.0) is True and ap.quiet_ok(None, None, 20.0) is True        # very bad loss, or no traffic data: go
-
 
 def test_mass_disruption_is_detected_and_holds_the_repair_back(client, monkeypatch):
     from nikatel.config import get_settings
@@ -279,7 +285,7 @@ def test_one_repair_job_runs_the_slow_steps_every_five_minutes(monkeypatch):
     monkeypatch.setattr(autopilot, "_SLOW_AT", [0.0])
     autopilot.repair_cycle()
     autopilot.repair_cycle()
-    assert seen == ["restart", "escalate", "observe", "restart"]                 # the restarts every time, the slow steps once
+    assert seen == ["restart", "escalate", "observe", "restart", "escalate"]      # the restarts and the climb of a cut tunnel every turn, the look at the lossy ones once in five minutes
     autopilot._SLOW_AT[0] = _t.time() - 301
     autopilot.repair_cycle()
     assert seen[-3:] == ["restart", "escalate", "observe"]

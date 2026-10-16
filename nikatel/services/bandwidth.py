@@ -43,6 +43,15 @@ SECS = 3                     # ... and for 3 s at most (real tests, 2026-10-16, 
 STREAMS = 2
 METHOD = 2                   # the way a sample is taken (streams, seconds): another way is another scale, so samples of another method never mix with these (the samples of 1.60.0 / 1.60.1 were one connection)
 BUSY_CPU = 85.0              # a server this busy is not measured (the test would be slowed by it, and would slow the users more)
+STALL_MBPS = 0.5             # a test that moved less than this moved NOTHING: the tunnel answers its checks but carries no data under load (never noise, never "still learning")
+ALIVE_MBPS = 5.0             # a drop whose usual level is not known yet is over when a test moves at least this much
+STALL_FRESH = 2400           # a confirmed stall counts for the state of the tunnel this long after its last test (the job measures a dropped tunnel every twenty minutes)
+SINK_V = 2                   # the version of the sink on the foreign server: 2 echoes UDP too (the loss of a link that drops ICMP); a sink of an older version is put again at the next measurement
+UDP_PACKETS = 30             # the UDP packets that measure the loss (20 ms apart, about two seconds in all)
+LOSS_FRESH = 3 * 3600        # the loss measured with UDP shows for this long (the job measures a tunnel about every 90 minutes)
+ENGINE_GAP = 6 * 3600           # the engine of a slow tunnel is restarted at most this often
+ENGINE_FIXED = 0.8           # ... and it is fixed when the test after it gives this share of the usual level
+FIRST_BATCH = 4              # tunnels that were never measured: this many in one turn of the job (the first round after an update would take twenty minutes at one a minute)
 _LOCK = threading.Lock()
 _RUNNING: set[int] = set()         # the tunnel the job is measuring (one at a time)
 _MEASURING: set[int] = set()       # every tunnel being measured now (the job or a click: never two at once on the same tunnel)
@@ -64,6 +73,9 @@ def verdict(down: float | None, ref: float | None) -> str:
     if down is None:
         return "none"
 
+    if down < STALL_MBPS:
+        return "drop"                          # nothing moved: it needs no usual level to be a fault
+
     if ref is None:
         return "learning"
 
@@ -74,7 +86,7 @@ def verdict(down: float | None, ref: float | None) -> str:
     return "drop" if ratio < DROP_RATIO else "low" if ratio < LOW_RATIO else "ok"
 
 
-def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None) -> tuple[dict, str]:
+def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None, loss: float | None = None) -> tuple[dict, str]:
     """Pure: (the new `bw` of the tunnel, what changed: "" | "drop" | "recovered") after one sample. The sample is judged against the level BEFORE it, so a drop never pulls its own reference down."""
     bw = dict(bw or {})
 
@@ -101,7 +113,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
     else:
         suspect = False
 
-        if drop and v == "ok":
+        if drop and (v == "ok" or (v == "learning" and down >= ALIVE_MBPS)):
             drop, change = None, "recovered"
         elif drop:
             drop = {**drop, "now": round(down, 1)}
@@ -110,8 +122,11 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
     hist.append([now, round(down, 1), None if up is None else round(up, 1)])
     hist = hist[-KEEP:]
     state = "drop" if drop else v if v in ("low", "learning") else "ok"
+    old_loss = (bw.get("loss") or {})
+    keep = {"pct": old_loss["pct"], "at": old_loss["at"]} if loss is None and old_loss.get("pct") is not None and now - int(old_loss.get("at") or 0) <= LOSS_FRESH else None      # (a test without UDP keeps the last number for a while)
+
     return {"m": METHOD, "down": round(down, 1), "up": None if up is None else round(up, 1), "at": now, "how": how, "ping": ping, "ref": reference(hist, now), "state": state, "drop": drop, "suspect": suspect,
-            "next_at": next_at, "hist": hist}, change
+            "next_at": next_at, "hist": hist, "loss": {"pct": float(loss), "at": now} if loss is not None else keep}, change
 
 
 def explain(f: dict) -> tuple[str, str]:
@@ -135,6 +150,10 @@ def explain(f: dict) -> tuple[str, str]:
     if same.get("total", 0) >= 2 and same.get("dropped", 0) >= max(2, 0.6 * same["total"]):
         return "foreign_wide", f"{same['dropped']} of the {same['total']} tunnels that end on {(f.get('foreign') or {}).get('name', '')} dropped together: that foreign server or its provider is the cause."
 
+    if now < STALL_MBPS:
+        return "stalled", ("The test moved no data at all although the checks of the tunnel pass: the data path is stalled - the services run and nothing flows under load. "
+                           "A restart of the tunnel, or another tunnel type for this pair, is the way.")
+
     live = f.get("live")
 
     if live is not None and now > 0 and live >= 0.8 * now:
@@ -154,8 +173,19 @@ def explain(f: dict) -> tuple[str, str]:
                          "A restart of the tunnel, or another tunnel type for this pair, may bring the speed back.")
 
 
+def stalled(bw: dict | None, now: int) -> str:
+    """The sentence that says why the tunnel is not healthy when its last tests moved NO data (a CONFIRMED stall: two tests three minutes apart), "" otherwise. The state of the tunnel follows it:
+    a tunnel that answers every check and carries nothing is not "up" (the owner, 2026-10-16: "it shows connected but has no bandwidth")."""
+    bw = bw or {}
+
+    if bw.get("drop") and bw.get("down") is not None and float(bw["down"]) < STALL_MBPS and now - int(bw.get("at") or 0) <= STALL_FRESH:
+        return f"no data moves through the tunnel under load: the last tests carried {bw['down']:g} Mb/s"
+
+    return ""
+
+
 # ------------------------------------------------------------------ storing a sample
-def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None) -> tuple[dict, str] | None:
+def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None, loss: float | None = None) -> tuple[dict, str] | None:
     now = int(time.time())
 
     with session() as db:
@@ -165,7 +195,7 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
             return None
 
         rec = dict(t.record or {})
-        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping)
+        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss)
 
         if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
@@ -209,7 +239,7 @@ def _ensure_sink(tunnel_id: int, foreign: Node, peer: str, key: str, force: bool
         t = db.get(Tunnel, tunnel_id)
         have = (t.record or {}).get("bw_sink") if t is not None else None
 
-    if have and have.get("ip") == peer and not force:
+    if have and have.get("ip") == peer and int(have.get("v") or 1) >= SINK_V and not force:
         return
 
     out = run_action(foreign, "sink_install", {"NAME": f"bw{tunnel_id}", "PORT": str(LINK_PORT), "KEY": key, "BIND": peer}, timeout=60)
@@ -221,7 +251,7 @@ def _ensure_sink(tunnel_id: int, foreign: Node, peer: str, key: str, force: bool
         t = db.get(Tunnel, tunnel_id)
 
         if t is not None:
-            t.record = {**(t.record or {}), "bw_sink": {"name": f"bw{tunnel_id}", "ip": peer, "port": LINK_PORT}}
+            t.record = {**(t.record or {}), "bw_sink": {"name": f"bw{tunnel_id}", "ip": peer, "port": LINK_PORT, "v": SINK_V}}
 
 
 def _server_busy(server_id: int, now: int) -> bool:
@@ -274,7 +304,7 @@ def _measure(tunnel_id: int) -> tuple[dict, str]:
     if target is None:
         raise ValueError("this tunnel has no GRE link or test door to measure")
 
-    if state != "up":
+    if state not in ("up", "degraded"):
         raise ValueError("the tunnel is not up")
 
     now = int(time.time())
@@ -293,7 +323,7 @@ def _measure(tunnel_id: int) -> tuple[dict, str]:
             t.secrets = {**(t.secrets or {}), "bw_key": key}
 
     _ensure_sink(tunnel_id, foreign, target["peer"], key)
-    params = {"PORT": str(LINK_PORT), "SECS": str(SECS), "STREAMS": str(STREAMS), "PINGS": "5", "KEY": key, "TO": "2.0", "HOST": target["peer"], "BYTES": str(BYTES), "DIR": "d"}
+    params = {"PORT": str(LINK_PORT), "SECS": str(SECS), "STREAMS": str(STREAMS), "PINGS": "5", "KEY": key, "TO": "2.0", "HOST": target["peer"], "BYTES": str(BYTES), "DIR": "d", "UDPN": str(UDP_PACKETS)}
 
     try:
         d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
@@ -307,12 +337,27 @@ def _measure(tunnel_id: int) -> tuple[dict, str]:
         if d.get("error") or d.get("down_mbps") is None:
             raise RuntimeError("the sink does not answer through the link: " + str(d.get("error") or "no data")[:100])
 
-    res = _store(tunnel_id, float(d["down_mbps"]), None, "link", d.get("latency_ms"))
+    res = _store(tunnel_id, float(d["down_mbps"]), None, "link", d.get("latency_ms"), d.get("udp_loss_pct"))
 
     if res is None:
         raise ValueError("tunnel not found")
 
     return res
+
+
+def recheck(tunnel_id: int) -> None:
+    """After a repair of a tunnel whose last tests moved no data: measure it again at once, so that its state does not wait for the next turn of the job - a repair is judged by what the users feel."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        stalled_now = t is not None and bool(stalled((t.record or {}).get("bw"), int(time.time())))
+
+    if not stalled_now:
+        return
+
+    try:
+        measure(tunnel_id)
+    except (ValueError, RuntimeError, SSHError) as e:
+        log.info("bandwidth of tunnel %s not measured after the repair: %s", tunnel_id, str(e)[:120])
 
 
 def remove_sink(tunnel_id: int, foreign: Node, rec: dict) -> None:
@@ -332,8 +377,10 @@ def _due(now: int) -> list[int]:
     out = []
 
     with session() as db:
-        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "up")):
-            if is_temp(t.name) or _target(t) is None or t.iran.online is False or t.foreign.online is False:
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("up", "degraded")))):         # (a tunnel that is only unstable carries its users: its bandwidth is the thing to see)
+            has_door = bool((t.record or {}).get("test_port") and (t.secrets or {}).get("test_key"))       # (a tunnel with a test door is measured by its quality test: the job only repeats it to confirm and to watch a drop)
+
+            if is_temp(t.name) or (_target(t) is None and not has_door) or t.iran.online is False or t.foreign.online is False:
                 continue
 
             bw = (t.record or {}).get("bw") or {}
@@ -343,6 +390,21 @@ def _due(now: int) -> list[int]:
                 out.append((int(bw.get("at") or 0), t.id))
 
     return [i for _, i in sorted(out)]
+
+
+def _no_sample(tunnel_id: int) -> bool:
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        return t is not None and not ((t.record or {}).get("bw") or {}).get("down") and not ((t.record or {}).get("bw") or {}).get("at")
+
+
+def _server_busy_for(tunnel_id: int, now: int) -> bool:
+    """Is a server of this tunnel too busy to be measured (the measurement would be slowed by it and would slow the users more)?"""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        ids = (t.iran_server_id, t.foreign_server_id) if t is not None else ()
+
+    return any(_server_busy(i, now) for i in ids)
 
 
 def _failed(tunnel_id: int, why: str) -> None:
@@ -366,28 +428,33 @@ def run() -> None:
         if _RUNNING:
             return
 
-    ids = _due(int(time.time()))
+    now = int(time.time())
+    ids = _due(now)
 
     if not ids:
         return
 
-    tid = ids[0]
+    fresh = [i for i in ids if _no_sample(i)][:FIRST_BATCH]         # a tunnel that was never measured is shown with a dash: the first round goes faster (a few light measurements in a turn), the rest one by one
 
-    with _LOCK:
-        _RUNNING.add(tid)
+    for tid in fresh or ids[:1]:
+        if jobs.stopping() or _server_busy_for(tid, now):
+            continue
 
-    try:
-        bw, change = measure(tid)
-        log.info("bandwidth of tunnel %s: %s Mb/s (usual %s) %s", tid, bw.get("down"), bw.get("ref"), bw.get("state"))
-
-        if change == "drop":
-            _investigate_later(tid)
-    except (ValueError, RuntimeError, SSHError) as e:
-        log.info("bandwidth of tunnel %s not measured: %s", tid, str(e)[:140])
-        _failed(tid, str(e))
-    finally:
         with _LOCK:
-            _RUNNING.discard(tid)
+            _RUNNING.add(tid)
+
+        try:
+            bw, change = measure(tid)
+            log.info("bandwidth of tunnel %s: %s Mb/s (usual %s) %s", tid, bw.get("down"), bw.get("ref"), bw.get("state"))
+
+            if change == "drop":
+                _investigate_later(tid)
+        except (ValueError, RuntimeError, SSHError) as e:
+            log.info("bandwidth of tunnel %s not measured: %s", tid, str(e)[:140])
+            _failed(tid, str(e))
+        finally:
+            with _LOCK:
+                _RUNNING.discard(tid)
 
 
 # ------------------------------------------------------------------ the look at a drop
@@ -420,6 +487,65 @@ def _facts(tunnel_id: int) -> dict:
         return {"name": t.name, "now": bw.get("down"), "ref": (bw.get("drop") or {}).get("from") or bw.get("ref"), "loss": loss, "live": live, "iran": sides["iran"], "foreign": sides["foreign"],
                 "rtt": t.rtt_ms, "rtt_ref": rtts[len(rtts) // 2] if len(rtts) >= 20 else None, "same_iran": share(Tunnel.iran_server_id, t.iran_server_id), "same_foreign": share(Tunnel.foreign_server_id, t.foreign_server_id)}
 
+
+def _engine_fix(tunnel_id: int, say) -> None:
+    """The servers are idle, the line is clean, its delay is as usual and ONLY this tunnel is slower: the fault is in the tunnel itself or its engine (a stale multiplexed session, a stuck buffer) - the Doctor
+    fixes the tunnel itself (the owner, 2026-10-16): it restarts the tunnel service on both servers (about thirty seconds; the users reconnect at once) and measures again. Not while the Doctor is off or the
+    panel is read-only, not twice in six hours; what came of it is kept in the Doctor's memory."""
+    from . import actions, knowledge
+
+    now = int(time.time())
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            return
+
+        bw, name, iran_id, foreign_id = dict((t.record or {}).get("bw") or {}), t.name, t.iran_server_id, t.foreign_server_id
+
+    if actions.doctor_mode() == "off" or get_settings().read_only:
+        say("The Doctor is off (or the panel is read-only): it is told, not repaired.")
+        return
+
+    if now - int(bw.get("engine_fix_at") or 0) < ENGINE_GAP:
+        say(f"The engine of this tunnel was restarted less than {ENGINE_GAP // 3600} hours ago: not again now.")
+        return
+
+    with session() as db:                                           # (stamped before it starts: a crash in the middle must not repeat it)
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is not None:
+            rec = dict(t.record or {})
+            rec["bw"] = {**(rec.get("bw") or {}), "engine_fix_at": now}
+            t.record = rec
+
+    say("Only this tunnel is slower: the Doctor restarts its engine (the tunnel service on both servers) - about thirty seconds, the users reconnect at once - and measures it again.")
+
+    try:
+        res = actions.restart_now(tunnel_id, source="auto")
+        say(f"Restart: {res['state']}" + (f" ({res['why']})" if res.get("why") else "") + ".")
+    except ValueError as e:
+        say(f"The engine could not be restarted: {str(e)[:120]}")
+        return
+
+    fixed = False
+
+    try:
+        bw2, _ = measure(tunnel_id)
+        ref = (bw2.get("drop") or {}).get("from") or bw2.get("ref")
+        down = float(bw2.get("down") or 0)
+        fixed = down >= ENGINE_FIXED * float(ref) if ref else down >= ALIVE_MBPS
+        say(f"Measured again: {down:.0f} Mb/s" + (f" (usually {float(ref):.0f})" if ref else "") + ".")
+    except (ValueError, RuntimeError, SSHError) as e:
+        say(f"It could not be measured again: {str(e)[:120]}")
+
+    say("The restart brought the speed back." if fixed else "The restart did not bring the speed back: the Doctor keeps measuring, and it offers another tunnel type only when a better one is known for this pair (Doctor page, Knowledge).")
+
+    try:
+        knowledge.remember(iran_id, foreign_id, "slow", name, [{"step": "restart", "ok": fixed}], fixed, int(time.time()) - now)
+    except Exception:
+        log.exception("the slow tunnel %s could not be kept in the Doctor's memory", name)
 
 def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
     """The story of the look (the Doctor's Live window shows it): what dropped, what was checked, where the problem is."""
@@ -459,6 +585,9 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
             emit(db, "warn", "tunnels", f"Tunnel {t.name}: the bandwidth dropped - {sentence}", t.name)
 
     say("Where the problem is: " + sentence)
+
+    if code == "this_only":
+        _engine_fix(tunnel_id, say)
 
     if finish:
         autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)

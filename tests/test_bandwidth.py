@@ -185,7 +185,7 @@ def test_a_gre_tunnel_is_measured_over_its_link_through_a_sink_on_the_inner_addr
 
     with session() as db:
         t = db.get(Tunnel, tid)
-        assert t.record["bw_sink"] == {"name": f"bw{tid}", "ip": peer, "port": 39777} and t.secrets["bw_key"] == sink["KEY"]
+        assert t.record["bw_sink"] == {"name": f"bw{tid}", "ip": peer, "port": 39777, "v": bandwidth.SINK_V} and t.secrets["bw_key"] == sink["KEY"]
 
     calls.clear()
     bandwidth.measure(tid)                                                                               # the second time the sink is there: only the probe runs
@@ -439,3 +439,97 @@ def test_the_traffic_users_carry_is_the_middle_of_the_last_ten_minutes():
         db.add_all([TunnelCheck(tunnel_id=other, ts=now - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=50.0, tx_mbps=1.0, error="") for i in range(4)])
 
     assert bandwidth._facts(other)["live"] is None                                                       # fewer than five readings: nothing is said about the users
+
+
+# ------------------------------------------------------------------ a tunnel that answers every check and moves nothing (the owner, 2026-10-16: "it shows connected but has no bandwidth")
+def test_a_test_that_moved_nothing_is_a_stall_with_or_without_a_usual_level_and_a_sign_of_life_ends_it():
+    assert bandwidth.verdict(0.0, None) == "drop" and bandwidth.verdict(0.2, 300) == "drop" and bandwidth.verdict(0.6, None) == "learning" and bandwidth.verdict(5, 15) == "ok"
+    bw, change = bandwidth.add_sample(None, NOW, 0.0, None, "door")                                  # the first test: measured again soon before anybody is told
+    assert change == "" and bw["suspect"] is True and bw["drop"] is None and bandwidth.stalled(bw, NOW + 10) == ""
+    bw, change = bandwidth.add_sample(bw, NOW + 180, 0.0, None, "door")
+    assert change == "drop" and bw["state"] == "drop" and bw["drop"] == {"since": NOW + 180, "from": 0.0, "now": 0.0}
+    assert bandwidth.stalled(bw, NOW + 200) == "no data moves through the tunnel under load: the last tests carried 0 Mb/s"
+    assert bandwidth.stalled(bw, NOW + 180 + bandwidth.STALL_FRESH + 1) == "" and bandwidth.stalled(None, NOW) == "" and bandwidth.stalled({}, NOW) == ""        # an old stall says nothing about now
+    bw, change = bandwidth.add_sample(bw, NOW + 1500, 3.0, None, "door")                              # 3 Mb/s: almost nothing, the drop stays (but it is no stall any more)
+    assert change == "" and bw["drop"] is not None and bandwidth.stalled(bw, NOW + 1500) == ""
+    bw, change = bandwidth.add_sample(bw, NOW + 2700, 40.0, None, "door")                             # a sign of life, though the usual level is not known yet
+    assert change == "recovered" and bw["drop"] is None
+
+
+def test_the_look_at_a_stall_says_the_data_path_is_stalled():
+    base = {"now": 0.0, "ref": 0.0, "loss": 0.0, "live": 0.0, "iran": {"name": "ir1", "cpu": 20}, "foreign": {"name": "fr1", "cpu": 30}, "rtt": 80.0, "rtt_ref": 78.0, "same_iran": {"total": 3, "dropped": 1}, "same_foreign": {"total": 1, "dropped": 1}}
+    code, text = bandwidth.explain(base)
+    assert code == "stalled" and "no data at all" in text and "stalled" in text and "another tunnel type" in text
+    assert bandwidth.explain({**base, "iran": {"name": "ir1", "cpu": 95}})[0] == "iran_busy"          # (a server that is on its knees explains it first)
+
+
+def test_a_stalled_tunnel_is_measured_again_after_its_repair_and_only_then(monkeypatch):
+    stalled, _, _, _ = make_tunnel("st-a", bw={**good_history(), "down": 0.0, "state": "drop", "drop": {"since": int(time.time()) - 300, "from": 300.0, "now": 0.0}, "at": int(time.time()) - 200})
+    fine, _, _, _ = make_tunnel("st-b", bw=good_history())
+    done = []
+    monkeypatch.setattr(bandwidth, "measure", lambda tid: done.append(tid) or ({}, ""))
+    bandwidth.recheck(stalled)
+    bandwidth.recheck(fine)
+    bandwidth.recheck(424242)
+    assert done == [stalled]                                                                           # a tunnel that is not stalled, or not there, is left alone
+    monkeypatch.setattr(bandwidth, "measure", lambda tid: (_ for _ in ()).throw(ValueError("a server of this tunnel is busy right now")))
+    bandwidth.recheck(stalled)                                                                         # (a refusal is only logged)
+
+
+# ------------------------------------------------------------------ the first round, the tunnels with a door, the loss counted with UDP
+def test_the_first_round_measures_a_few_tunnels_that_were_never_measured_in_one_turn(monkeypatch):
+    fresh = [make_tunnel(f"fb-{c}")[0] for c in "abcde"]
+    old, _, _, _ = make_tunnel("fb-old", bw={**good_history(), "at": NOW - 9000, "next_at": NOW - 3000})
+    done = []
+    monkeypatch.setattr(bandwidth, "measure", lambda tid: done.append(tid) or ({"down": 300.0, "ref": 300.0, "state": "ok"}, ""))
+    monkeypatch.setattr(bandwidth.time, "time", lambda: NOW)
+    monkeypatch.setattr(bandwidth.jobs, "stopping", lambda: False)
+    monkeypatch.setattr(bandwidth, "_server_busy", lambda sid, now: False)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    bandwidth.run()
+    assert done == fresh[: bandwidth.FIRST_BATCH] and old not in done                                  # (a dash on the page for twenty minutes after an update was too long)
+
+
+def test_a_tunnel_with_a_test_door_and_an_unstable_one_are_in_the_watch_too(monkeypatch):
+    door, _, _, _ = make_tunnel("dw-door", "backpack", door=True)
+    unstable, _, _, _ = make_tunnel("dw-deg", state="degraded")
+    make_tunnel("dw-down", state="down")
+    make_tunnel("dw-none", "paqet")                                                                    # no link and no door
+    monkeypatch.setattr(bandwidth.time, "time", lambda: NOW)
+    assert sorted(bandwidth._due(NOW)) == sorted([door, unstable])                                     # (the door is measured by its quality test; the job repeats it to confirm and to watch a drop)
+    assert bandwidth._no_sample(door) is True and bandwidth._no_sample(424242) is False
+
+
+def test_the_loss_of_a_link_that_drops_ping_is_counted_with_udp_packets_through_a_sink_that_echoes_them(monkeypatch):
+    tid, _, _, _ = make_tunnel("gr-udp")
+    calls = fake_world(monkeypatch, answers=[{"latency_ms": 81.0, "loss_pct": 0.0, "down_mbps": 310.5, "udp_loss_pct": 6.7}, {"latency_ms": 80.0, "loss_pct": 0.0, "down_mbps": 305.0}, {"latency_ms": 80.0, "loss_pct": 0.0, "down_mbps": 300.0}])
+    bw, _ = bandwidth.measure(tid)
+    probe = next(c for c in calls if c[1] == "probe_run")[2]
+    assert probe["UDPN"] == str(bandwidth.UDP_PACKETS) == "30" and bw["loss"] == {"pct": 6.7, "at": bw["at"]}
+    nxt, _ = bandwidth.add_sample(bw, bw["at"] + 600, 300.0, None, "link", 80.0, None)                 # a test without UDP keeps the number for a while ...
+    assert nxt["loss"] == {"pct": 6.7, "at": bw["at"]}
+    gone, _ = bandwidth.add_sample(bw, bw["at"] + bandwidth.LOSS_FRESH + 1, 300.0, None, "link", 80.0, None)
+    assert gone["loss"] is None                                                                        # ... and then forgets it
+    clean, _ = bandwidth.add_sample(bw, bw["at"] + 600, 300.0, None, "link", 80.0, 0.0)
+    assert clean["loss"]["pct"] == 0.0                                                                 # a new number replaces it, a clean 0 included
+
+    with session() as db:                                                                              # a sink of the old version has no UDP echo: it is put again
+        t = db.get(Tunnel, tid)
+        t.record = {**t.record, "bw_sink": {**t.record["bw_sink"], "v": 1}}
+
+    calls.clear()
+    bandwidth.measure(tid)
+    assert [c[1] for c in calls] == ["sink_install", "probe_run"]
+    calls.clear()
+    bandwidth.measure(tid)
+    assert [c[1] for c in calls] == ["probe_run"]                                                      # the new one stays
+
+
+def test_the_probe_and_the_sink_echo_udp_and_take_the_new_argument():
+    import re
+
+    probe, rules = SCRIPTS["probe_run"]
+    assert "'@UDPN@'" in probe and "UDPN = int(sys.argv[10] or 0)" in probe and 'out["udp_loss_pct"]' in probe and "import socket, threading, time, json, sys, os, select" in probe
+    assert all(re.fullmatch(rules["UDPN"], v) for v in ("", "0", "30", "120")) and not any(re.fullmatch(rules["UDPN"], v) for v in ("1000", "3x", "-1", "30; id"))
+    sink = render_action("sink_install", {"NAME": "bw7", "PORT": "39777", "KEY": "abcdef0123456789", "BIND": "10.2.1.2"})
+    assert "def echo_udp():" in sink and "socket.SOCK_DGRAM" in sink and "if d[:len(KEY)] == KEY:" in sink and "u.sendto(d, a)" in sink

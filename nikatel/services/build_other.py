@@ -655,7 +655,7 @@ def _start(node: Node, label: str, unit: str, b: Build) -> None:
 
 
 def _probe(iran: Node, test_port: int, key: str, secs: float = 0, streams: int = 8, pings: int = 3, to: float = 1.2) -> dict:
-    out = run_script(iran, "probe_run", {"PORT": str(test_port), "SECS": str(secs), "STREAMS": str(streams), "PINGS": str(pings), "KEY": key, "TO": str(to)}, timeout=int(60 + secs * 4))
+    out = run_script(iran, "probe_run", {"PORT": str(test_port), "SECS": str(secs), "STREAMS": str(streams), "PINGS": str(pings), "KEY": key, "TO": str(to), "UDPN": "0"}, timeout=int(60 + secs * 4))
     return parse_probe(out)
 
 
@@ -947,7 +947,13 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
             rec["quality"] = q
             t.record = rec
 
-    from . import bandwidth
+    from . import bandwidth, knowledge
 
     bandwidth.note_quality(tunnel_id, q)          # (the download of this measurement is a sample of the tunnel's bandwidth: the Doctor watches it for a drop)
+
+    try:
+        knowledge.note_quality(tunnel_id, q)      # (and a full measurement of this kind on this pair, for what the Doctor knows)
+    except Exception:
+        log.exception("the quality of tunnel %s could not be kept in the Doctor's knowledge", tunnel_id)
+
     return {"name": name, **q}

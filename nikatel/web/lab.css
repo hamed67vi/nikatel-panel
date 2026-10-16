@@ -910,3 +910,30 @@ html body #page .tun-tbl .bw.drop b, html body #page .tun-tbl .bw.drop small { c
 html body #page .tun-tbl .bw.none { color: var(--mut); font-weight: 700; }
 html[data-mode="light"] body #page .tun-tbl .bw .bwbar { background: rgba(30, 50, 100, .14); }
 html body #modal .bw-why { margin-top: 4px; color: var(--warn, #ffc44d); font-size: 12px; line-height: 1.35; }
+
+/* 1.62.0 - what is cut is a tiny tag in the Bandwidth cell (the owner, 2026-10-16: not a red dot and "GRE link cut" but a small red tag that says which end: "GRE foreign"); a tunnel that waits for its first measurement says so */
+html body #page .tun-tbl .cut-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 9px; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; line-height: 1; white-space: nowrap; color: #ff8a9b; background: rgba(255, 69, 58, .12); border: 1px solid rgba(255, 69, 58, .32); }
+html body #page .tun-tbl .cut-tag.unk { color: #aeb7ca; background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .14); }
+html[data-mode="light"] body #page .tun-tbl .cut-tag { color: #b4232f; background: #fdecee; border-color: rgba(200, 40, 60, .4); }
+html[data-mode="light"] body #page .tun-tbl .cut-tag.unk { color: #4a566e; background: rgba(30, 50, 100, .07); border-color: rgba(30, 50, 100, .22); }
+html body #page .tun-tbl .bw.pend { flex-direction: row; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; }
+html body #page .tun-tbl .bw.pend .spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .18); border-top-color: var(--mut); animation: spin .8s linear infinite; }
+html[data-mode="light"] body #page .tun-tbl .bw.pend .spin { border-color: rgba(30, 50, 100, .18); border-top-color: var(--mut); }
+
+/* 1.62.0 - the Knowledge tab of the Tunnel Doctor: what it knows about every pair of servers and what it remembers of the cuts */
+html body #page .kn-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 4px 2px 10px; }
+html body #page .kn-bar .sp { flex: 1; }
+html body #page .kn-hour { width: 52px; height: 28px; box-sizing: border-box; text-align: center; border-radius: 8px; }
+html body #page .kn-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+html body #page .kn-row > b { min-width: 150px; }
+html body #page .kn-best { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; flex: 1 1 260px; min-width: 0; }
+html body #page .kn-k { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 9px; border-radius: 10px; font-size: 11px; white-space: nowrap; color: var(--mut); background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12); }
+html body #page .kn-k b { font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+html body #page .kn-k.full { border-color: rgba(61, 220, 151, .4); }
+html body #page .kn-bad { font-size: 11px; color: #ff8a9b; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .kn-h { margin: 16px 2px 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); }
+html body #page .kn-inc { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+html body #page .kn-fix { font-size: 12px; }
+html body #page .kn-none { padding: 6px 2px; font-size: 12px; }
+html[data-mode="light"] body #page .kn-k { background: rgba(30, 50, 100, .06); border-color: rgba(30, 50, 100, .2); }
+html[data-mode="light"] body #page .kn-bad { color: #b4232f; }

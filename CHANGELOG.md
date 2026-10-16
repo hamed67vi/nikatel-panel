@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.62.0 - A cut tunnel gets a tunnel that connects, the Doctor knows its pairs before a route is cut, and remembers every cut
+
+The owner (2026-10-16), with two real tunnels in front of him: a tunnel whose foreign server is filtered stayed cut for hours while the Doctor said it had fixed things, another one flapped, and the table showed
+"no ping" for a tunnel that carried 552 Mb/s and "connected" for one that moved nothing. "When the foreign server is filtered the Doctor must go for a method that connects, not try Backhaul again; it must know before
+the cut what answers and is more stable; the problem must be found and solved in seconds; it must keep in its memory why a tunnel was cut; it must fix the tunnel itself when its engine drops traffic; no case may stay unsolved."
+
+What was found in the real logs, and what is different now:
+
+- **Three tunnel types connected and none was built.** The Doctor tested four types between the two servers (BackPack TCP Mux 159 ms, BackPack WSS Mux 150 ms, Chisel TLS 165 ms all connected), scored them by delay alone (36 - 42,
+  a route of 150 ms cannot reach more without a speed number), compared them with a line of 45 and said "no other tunnel type works well". A tunnel that is **cut** now takes the first type that connects, whatever its score.
+- **No Backhaul retry where GRE is filtered.** A route where ping passes and GRE does not no longer tests a new GRE link (a filter on the protocol does not care about the key): the ladder goes straight to another type. A restart is
+  tried **once** (every unit of both sides in one go, one look after it - about 50 s; it was four restarts with a look after each, three minutes), and not at all for a silent route that was cut like this in the last 14 days.
+- **Built as the real tunnel, one type after the other.** There is nothing to test beside a cut tunnel and nothing to lose, so each candidate is built as the tunnel itself (same name, same ports) and the build checks that data passes;
+  the first that carries data stays. What each type answered is kept: one that failed here is not tried again for two weeks, one that connected goes first.
+- **Who can still dial whom.** The diagnosis asks both servers whether they can still open a TCP connection to the other one. When only the foreign server can (its address is filtered from Iran) the reverse kinds - BackPack
+  WebSocket TLS Mux, Chisel TLS, BackPack TCP ... - go first; when the Iran server can, the fast forward kinds go first. A route cut (the two servers cannot reach each other) now climbs to *switch* too; it was only *move*.
+- **"Fixed" now means connected.** A repair counted as healed after one check; the tunnel was cut again a minute later and the same restart was tried again and again. Now two checks in a row, a 60 s hold after a restart / rebuild,
+  and a step that healed the tunnel less than 30 minutes ago is not repeated when it is cut again. The repair also stopped dead with "no data passes through the tunnel right now" when the live measurement of a flapping tunnel
+  refused; the busy-test-slot wait caught the wrong error (`ValueError` where the tests raise `RuntimeError`) and a repair collided with a running test.
+- **By rules, not by luck.** The smart repair starts after one failed restart (none for a route cut like this before), a tunnel that is down is tried again every 10 minutes (it was 30), no tunnel waits more than 5 minutes past its
+  grace for a restart that never came, and the climb is looked at every 20 s (it was every 5 minutes).
+- **The Doctor knows its pairs before a route is cut (Knowledge, a new tab of the Doctor page).** Every pair test, the quality test of every live tunnel with a test door and a **night survey** (02:00 - 06:00, one pair at a time, only
+  on quiet servers - under 60 % CPU, under 150 Mb/s of users - and never while a repair needs the place; ten tunnel types per pair, delay and loss only; *Test now* tests all 24 with a speed test) feed one memory per pair; the night survey is on by default and can be switched off.
+- **It remembers every cut.** The cause it found, the steps in order with the type each built, what healed it and how long it took (`knowledge.incidents`, shown in the Knowledge tab). The next cut of the pair starts with the type
+  that healed it; the other pairs of the same foreign server lend what they know.
+- **It fixes the tunnel itself.** When only one tunnel is slower (the servers idle, the line clean, its delay as usual) the Doctor restarts its engine on both servers, measures again and says whether the speed is back (at most
+  once in six hours).
+- **A tunnel that answers every check and moves nothing is not "connected".** Two tests three minutes apart that carry no data are a stall: the tunnel turns *degraded* ("no data moves through the tunnel under load"), the Doctor repairs
+  it, and a repair is judged by a new measurement. The bandwidth cell shows a red 0 with an empty bar, never a green one.
+- **The table.** What is cut is a **tiny tag** that says which end: *GRE foreign*, *GRE Iran*, *Iran service*, *port blocked*, *no data*, *flapping* ... (instead of a red dot and "GRE link cut"). A tunnel that was not measured yet says
+  *measuring...* (the first round after an update measures four tunnels a turn instead of one; unstable tunnels and tunnels with a test door are in the watch too). A provider that drops ping no longer means "no ping": the loss is counted
+  with **UDP packets** through the bandwidth sink (an older sink is replaced at the next measurement).
+
+Tested for real on two test servers (docs/tunnels.md): GRE filtered - the users were connected again after 3 min 12 s once the Doctor remembered the pair (6 min 27 s the first time, before the last two changes: one plain restart per cut,
+and a diagnosis that asks everything at once - 9 s instead of 51 s); the foreign server filtered from Iran - 3 min 36 s, no restart, the first reverse type connected on the first try.
+
+Seconds need a tunnel that is already built and waiting; a type built from nothing takes about a minute to connect, and a cut is seen within a check cycle (about 40 - 50 s). That standby, and a faster pulse, are the next step.
 ## 1.61.0 - The Doctor reads what the USERS get, not only what the tunnel does
 
 The owner (2026-10-16): "I want the Doctor to truly say whether the user gets a quality internet". A tunnel can be perfect - up, no loss, its whole bandwidth - and its users can still suffer: the foreign server's own internet, its Xray, the CDN in front of the Iran server. The probe tests every config from inside Iran every few minutes, and that is the only place where the user's view exists, so the Doctor now reads it (`services/userq.py`, a job every five minutes):

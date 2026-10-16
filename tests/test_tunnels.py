@@ -498,3 +498,60 @@ def test_the_check_keeps_the_loss_of_a_backpack_tunnel_and_calls_blocked_pings_w
         assert g.state == "up" and g.detail["loss_pct"] is None and g.detail["ping_blocked"] is True and g.detail["ping_over"] == "link"                              # not "100 % lost"
 
     assert (True, "", "", "", "203.0.113.50") in asked and (True, "gr1", "", "10.2.1.2", "") in asked
+
+
+def test_the_check_counts_the_loss_with_udp_when_the_provider_drops_ping_and_a_confirmed_stall_makes_an_answering_tunnel_degraded(monkeypatch):
+    import time as _t
+
+    from nikatel.db import session
+    from nikatel.models import Server
+    from nikatel.services import bandwidth
+    from nikatel.services import tunnels as tn
+
+    now = int(_t.time())
+
+    with session() as db:
+        ir, fr = Server(name="ir2", host="203.0.113.7", role="iran", online=True), Server(name="fr2", host="203.0.113.70", role="foreign", online=True)
+        db.add_all([ir, fr])
+        db.flush()
+        udp = Tunnel(name="gu1", type="backhaul", transport="tcpmux", port=9911, iran_server_id=ir.id, foreign_server_id=fr.id, state="up", forwarded_ports=[8077], foreign_tunnel_ip="10.2.3.2",
+                     record={"bw": {"down": 500.0, "at": now - 600, "loss": {"pct": 6.7, "at": now - 600}}})
+        old = Tunnel(name="gu2", type="backhaul", transport="tcpmux", port=9912, iran_server_id=ir.id, foreign_server_id=fr.id, state="up", forwarded_ports=[8078], foreign_tunnel_ip="10.2.4.2",
+                     record={"bw": {"down": 500.0, "at": now - 9 * 3600, "loss": {"pct": 6.7, "at": now - 9 * 3600}}})            # a number of nine hours ago is not shown
+        stall = Tunnel(name="gs1", type="backhaul", transport="tcpmux", port=9913, iran_server_id=ir.id, foreign_server_id=fr.id, state="up", forwarded_ports=[8079], foreign_tunnel_ip="10.2.5.2",
+                       record={"bw": {"down": 0.0, "at": now - 300, "state": "drop", "drop": {"since": now - 400, "from": 0.0, "now": 0.0}}})
+        db.add_all([udp, old, stall])
+        db.flush()
+        ids = (udp.id, old.id, stall.id)
+
+    def fake_query(node, plan, is_iran):
+        units = plan.iran_units if is_iran else plan.foreign_units
+        text = "".join(f"UNIT {u} active\n" for u in units)
+
+        if is_iran:                                                  # every ping lost (ICMP is dropped on this route), the users' request answers
+            text += f"IFACE {plan.iface} UNKNOWN 10 20\nPEER {plan.iran_peer}  100\nLISTEN {plan.ports[0]} 1\nDATA {plan.ports[0]} 404 0.09\n"
+
+        return tn.parse_side(text + "NOW 1000\n")
+
+    monkeypatch.setattr(tn, "_query", fake_query)
+
+    for _ in range(tn.CONFIRM_CHECKS):
+        tn._check_tunnel(ids[2])
+
+    tn._check_tunnel(ids[0])
+    tn._check_tunnel(ids[1])
+
+    with session() as db:
+        u, o, s = (db.get(Tunnel, i) for i in ids)
+        assert u.state == "up" and u.detail["loss_pct"] == 6.7 and u.detail["ping_blocked"] is False and u.detail["ping_over"] == "udp"        # a number, not "no ping": counted with UDP packets by the bandwidth test
+        assert o.detail["loss_pct"] is None and o.detail["ping_blocked"] is True and o.detail["ping_over"] == "link"                          # too old: "no ping"
+        assert s.state == "degraded" and s.last_error == bandwidth.stalled(s.record["bw"], now)                                              # it answers every check and moves nothing: not "up"
+
+
+def test_a_confirmed_stall_is_a_degraded_tunnel_not_an_up_one():
+    stalled = "no data moves through the tunnel under load: the last tests carried 0 Mb/s"
+    assert judge(_plan(), parse_side(IRAN_OK), parse_side(FOREIGN_OK), stalled=stalled) == ("degraded", stalled)
+    assert judge(_plan(), parse_side(IRAN_OK), parse_side(FOREIGN_OK)) == ("up", "")
+    assert judge(_plan(), parse_side(IRAN_OK), parse_side(FOREIGN_OK), True, 0, ("404", 120.0, "ir9"), True, 0, stalled=stalled)[0] == "degraded"      # (also when another Iran server gets an answer)
+    state, why = judge(_plan(), parse_side(IRAN_OK.replace("active", "inactive", 1)), parse_side(FOREIGN_OK), stalled=stalled)
+    assert state == "down" and "inactive" in why                                                                                                    # a worse state is not hidden by it

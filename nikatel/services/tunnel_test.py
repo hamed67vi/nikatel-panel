@@ -481,7 +481,7 @@ def explain_failure(kind: str, error: str) -> str:
     return e
 
 
-def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full") -> str:
+def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full", source: str = "manual") -> str:
     from . import license
 
     kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
@@ -496,7 +496,7 @@ def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str 
         raise RuntimeError("another tunnel test is still running")
 
     jid = f"cmp{int(time.time())}"
-    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time())}
+    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "source": source, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time())}
     _COMPARE[jid] = job
 
     for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
@@ -545,6 +545,13 @@ def _compare_worker(job: dict) -> None:
             r = dict(RESULTS.get(aid) or {})
             r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else explain_failure(kind, (story[-1] if story else "no result")[:160]))   # a failed build says why
             job["results"].append(r)
+
+            try:
+                from . import knowledge
+
+                knowledge.record(job["iran_id"], job["foreign_id"], r, job.get("measure", "full"))       # (every pair test teaches the Doctor what works between these two servers)
+            except Exception:
+                log.exception("the result of %s could not be kept in the Doctor's knowledge", kind)
     finally:
         job["current"], job["current_aid"], job["done"] = "", None, True
 

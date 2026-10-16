@@ -128,3 +128,44 @@ repair level *switch*). What the panel did, by itself:
 Two things the tests also showed: a GRE filter inside the server's own firewall is undone by the watchdog within a
 minute (it re-inserts its ACCEPT rules above anything else), and a repair never deletes a tunnel unless the
 replacement already carries data.
+
+
+## The Doctor and a tunnel that is cut (2026-10-16)
+
+Found on a real panel: the foreign server of a Backhaul tunnel was filtered (GRE dropped). Three other tunnel types **did** connect to it, but the Doctor scored them by delay alone (36 - 42, a route of 150 ms cannot do
+better without a speed number) against a line of 45, said "no other tunnel type works well" and left the tunnel cut for hours; a restart "fixed" another tunnel that was cut again a minute later and was restarted
+again and again. What the Doctor does now:
+
+| Step | What | Why |
+|---|---|---|
+| detect | a tunnel is *down* at once when its services stop or the GRE link is silent; the Doctor acts after the grace of *Auto Fix Tunnels* (60 s by default) | a blip is not a cut |
+| one restart, only where it can help | a stopped service or a stuck data path gets **one** plain restart (every unit of both sides in one go, then ONE look - about 50 s, it used to be four restarts with a look after each, three minutes). A silent route (GRE does not answer, the port is cut in front of the server) that was cut like this in the last 14 days gets **none** | a restart cannot undo a filter |
+| diagnose | ping both ways, the GRE link, and **can each server still open a TCP connection to the other** (the SSH port): it decides which tunnel types can work | the foreign address filtered from Iran = only the foreign server can dial |
+| switch | the cut tunnel is replaced by the first tunnel type that **connects**, each one built as the real tunnel (same name, same ports) and checked for data - there is nothing to test beside a cut tunnel. The order: what healed this pair last time (the playbook), what is known to connect on this pair, what connects on the other pairs of the same foreign server, then the order of a cut tunnel (below). A type that failed here is not tried again for two weeks | the GRE link is not tested again where GRE is filtered; any tunnel that connects beats none (no score line) |
+| hold | a repair counts only when the tunnel is up in two checks in a row, and a restart or rebuild that healed it must still be up 60 s later; a step that healed the tunnel less than 30 minutes ago and it is cut again is not repeated | "fixed" must mean connected |
+| retry | a tunnel that is down gets a new smart repair every 10 minutes, and none waits more than 5 minutes past its grace for a restart that never came | nothing is left unrepaired |
+| remember | every cut is kept (`knowledge.incidents`): the cause the Doctor found, the steps in order with the type each built, what healed it, how long it took. The next cut of the pair starts with the type that healed it | "keep it in memory so that next time it knows what to do" |
+
+**The order of a cut tunnel** (robustness first, speed afterwards): when only the foreign server can dial (the Iran server cannot open a TCP connection to it) the reverse kinds go first - BackPack WebSocket TLS Mux, Chisel TLS,
+BackPack TCP Mux, BackPack WebSocket TLS, BackPack TCP, Chisel, Stealth ... - and the forward kinds last; when the Iran server can dial, the fast forward kinds go first (BackPack Direct PCK, Chisel forward, Paqet ...). GRE
+kinds are left out where GRE (or the whole route) is cut.
+
+**Readiness - the night survey** (Doctor page, Knowledge; on by default): between 02:00 and 06:00 (the report time zone), when no repair runs, no server is over 60 % CPU and the tunnels of the two servers carry under
+150 Mb/s, the pair with the least knowledge is tested - ten tunnel types (`READY`: the ones a repair reaches for), one pair at a time, temporary tunnels that are removed again, **delay and loss only** (a few pings
+through the temporary tunnel - no speed test on a server that carries users; the speed of a type is known from the quality test of the live tunnels and from *Test now*). A repair takes the place of a running
+survey at once. Every pair test the panel runs and the quality test of every live tunnel with a test door feed the same knowledge. *Test now* surveys all 24 types of a pair by hand (about 40 minutes).
+
+**The engine of a slow tunnel**: when only one tunnel is slower (the servers are idle, the line is clean, its delay is as usual) the Doctor restarts its tunnel service on both servers, measures again and writes whether
+the restart brought the speed back (at most once in six hours; the result goes to the memory as the cause `slow`).
+
+**Tested for real (2026-10-17, a Backhaul tunnel between two test servers, the Doctor in *Auto Fix*, grace 30 s):**
+
+| Cut | Detected | The repair | Users connected again |
+|---|---|---|---|
+| GRE (protocol 47) filtered, first time (this release without its last two changes) | 41 s | two plain restarts (80 s each), diagnosis 51 s, then BackPack Direct · PCK built as the real tunnel | 6 min 27 s |
+| the same, after the Doctor remembered it (the final code) | 41 s | **no restart** (this pair was cut like this before), diagnosis 9 s, the type that healed it last time first: BackPack Direct · PCK | **3 min 12 s** |
+| the foreign server filtered from Iran (what the Iran server starts - GRE, new TCP connections, pings - dropped; what the foreign server starts passes) | 51 s | no restart; the Iran server cannot dial, so the reverse kinds first: BackPack WebSocket TLS Mux connected on the first try | **3 min 36 s** |
+
+A raw-socket tunnel (BackPack · PCK, Paqet) reads its packets before the firewall: no rule of the firewall cuts it, which is why the second cut was made on a GRE tunnel.
+**What is not instant**: a tunnel type built from nothing takes about a minute to connect, so with this the users are connected again about three minutes after a cut instead of hours. Seconds need a tunnel that is
+already built and waiting (a standby), which is the next step.

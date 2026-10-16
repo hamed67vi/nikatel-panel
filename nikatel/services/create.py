@@ -195,7 +195,7 @@ def smart_test(foreign_id: int, ports: str, kind: str) -> int:
                 try:
                     jid = tunnel_test.compare_start(r["id"], foreign_id, [kind], measure="full")
                     break
-                except ValueError as e:
+                except (ValueError, RuntimeError) as e:
                     if "still running" not in str(e):
                         autopilot._say(aid, f"{r['name']}: not tested - {str(e)[:120]}")
                         jid = None
