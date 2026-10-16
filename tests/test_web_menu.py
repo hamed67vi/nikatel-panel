@@ -925,3 +925,19 @@ def test_the_update_and_xray_buttons_of_the_nodes_have_one_size():
     """The owner, 2026-10-16: the sizes of the Update / Xray buttons of the PasarGuard nodes are fixed."""
     css = _web("lab.css")
     assert "html body #page .abt-pg .pgu-a .sm, html body #page .abt-pg .pgu-a button { flex: none; box-sizing: border-box; width: 58px; height: 24px;" in css and "html body #page .abt-pg .pgu-prow > button { flex: none; box-sizing: border-box; width: 66px; height: 24px;" in css
+
+
+def test_the_cards_of_the_kit_menu_stand_apart():
+    """The owner, 2026-10-16: a gap between the cards of the kit menus (the server lists of Create tunnel)."""
+    css = _web("lab.css")
+    assert "html body .nk-dd .nk-dd-i { margin: 0 0 6px; border: 1px solid rgba(255, 255, 255, .07); border-radius: 14px; background: #141c2f; }" in css
+
+
+def test_the_tunnel_window_is_built_like_the_server_window():
+    """The owner, 2026-10-16: "rebuild this box and make it exactly like the server box": the avatar, the name, the two servers and the type in the header; the alerts switch and ONE menu; the tabs Overview | Monitor; the banner, the boxes, the strip."""
+    app, lab, css = _web("app.js"), _web("lab.js"), _web("lab.css")
+    assert 'showModal(who, `<div id="tun-detail-${t.id}">${tunWinHtml(t)}</div>`, "wide srvwin tunwin"' in app and 'labKebab("tun", t.id, "Actions of " + t.name)' in app and 'class="srv-sw ${muted ? "" : "on"}"' in app
+    assert "const TUN_SECS = [[\"overview\", \"Overview\"], [\"monitor\", \"Monitor\"]];" in app and "function tunBanner(t) {" in app and "async function tunStrip(id) {" in app and "window.tunWtab = k =>" in app and "function tunAfter(t)" in app
+    assert "function tunBar(" not in app and "function detailRow(" not in app and "function tunPartHtml(" not in app and "loadTunnelCharts(id); return; } }" not in app
+    assert 'if (ctx === "tun") return tunMenuItems(id);' in lab and "function tunMenuItems(id) {" in lab and 'labIt("Remove tunnel…", "trash"' in lab and "{danger: true}" in lab
+    assert "html body #modal .modal.srvwin.tunwin { min-height: min(776px, calc(100vh - 96px)); }" in css and "html body #modal .mh-flag.mh-tun {" in css

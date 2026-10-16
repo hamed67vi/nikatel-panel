@@ -479,7 +479,8 @@ window.labSubOpen = (i, btn, focus) => {
   if (focus) { const f = m.querySelector(".lab-mi"); if (f) f.focus(); }
 };
 const labItem = (t, fn, o = {}) => ({t, fn, ...o}), labSep = {sep: 1}, labGrp = g => ({grp: g}), labSubItem = (t, k, sub, o) => ({t, sub, ic: labSvg(k), ...o});
-function labMenuItems(ctx, id) {      // ctx "row" / "win": id = a profile; "node": id = a server whose Node section is open
+function labMenuItems(ctx, id) {      // ctx "row" / "win": id = a profile; "node": id = a server whose Node section is open; "tun": a tunnel (its window has the same menu as a server window)
+  if (ctx === "tun") return tunMenuItems(id);
   if (ctx === "node") { const s = (state.serversCache || []).find(x => x.id === id), cur = s && typeof pgNodeCurrent === "function" ? pgNodeCurrent(pgSrvOn(s)) : null; return cur && cur.type === "pasarguard" && cur.node_id != null ? labNodeItems(cur, null) : []; }
   if (ctx === "swin") { const s = (state.serversCache || []).find(x => x.id === id); return s ? labServerItems(null, s, "win") : []; }      // (a server that is on no profile: its window has the same menu, with "Put on the page" in place of "Off the page")
   const p = LAB.profiles.find(x => x.id === id); if (!p) return [];
@@ -490,6 +491,7 @@ const LAB_P = {      // the icons of the menus (24 px, drawn with a line): one s
   overview: '<rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M9 9.5V20"/>', check: '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>', console: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
   edit: '<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>', tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>', reboot: '<path d="M12 3v8M7 6.5a8 8 0 1010 0"/>', exit: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>', key: '<circle cx="8" cy="14" r="4"/><path d="M11 11l9-8M16 6l3 3M14 8l2 2"/>', lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>', forget: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+  fix: '<path d="M14.5 6.5a4 4 0 00-5.2 5.2L3.5 17.5a2 2 0 003 3l5.8-5.8a4 4 0 005.2-5.2l-2.5 2.5-2.3-.6-.6-2.3z"/>', eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>', pulse: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>', bell: '<path d="M6 16v-5a6 6 0 1112 0v5l1.5 2h-15zM10 20a2 2 0 004 0"/>', history: '<path d="M3.5 12a8.5 8.5 0 102.6-6.1M3.5 4v4.5H8M12 7.5V12l3 2"/>', ports: '<path d="M5 8h13M15 4l4 4-4 4M19 16H6M9 12l-4 4 4 4"/>', rebuild: '<path d="M7 7h10l-2-2M17 17H7l2 2M17 7v4M7 17v-4"/>',
   ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>', gre: '<path d="M7 7h12M16 3l4 4-4 4M17 17H5M8 13l-4 4 4 4"/>', shield: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
   abuse: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>', box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>', up: '<path d="M7 18a4.5 4.5 0 01-.5-9A6 6 0 0118 10a4 4 0 01-1 8"/><path d="M12 20v-8M9 14.5l3-3 3 3"/>', plus: '<path d="M12 5v14M5 12h14"/>', monitor: '<path d="M6 20V11M12 20V4M18 20v-7"/>', manage: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'};
 const labSvg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${LAB_P[k] || ""}</svg>`, labIt = (t, k, fn, o) => labItem(t, fn, {ic: labSvg(k), ...o});
@@ -508,6 +510,14 @@ function labServerItems(p, s, ctx) {      // a server's menu: what is done most 
   return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
     labSep, labSubItem("Access", "key", access), labSubItem("Tests", "gre", tests, {off, tip}), labSubItem("Install", "box", install, {off, tip}),
     labSep, gone, labSep, del];
+}
+function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
+  const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return [];
+  const up = t.state === "up", offs = typeof tunOffServers === "function" ? tunOffServers(t) : "", muted = (state.mutedSet || new Set()).has(t.name), tipOff = offs ? "A server of this tunnel is off (" + offs + ")" : "", tipUp = up ? "Nothing to fix: the tunnel is healthy" : "";
+  return [labGrp("Repair"), labIt("Fix…", "fix", () => fixTunnel(t.id, false), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Dry run", "eye", () => fixTunnel(t.id, true), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Health check", "pulse", () => healthTunnel(t.id), {off: !!offs, tip: tipOff}), labIt("Restart…", "check", () => restartTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
+    labSep, labIt("History", "history", () => tunHistory(t.id, t.name)), labIt(muted ? "Unmute alerts" : "Mute alerts", "bell", () => muteRef(t.name, !muted)),
+    labSep, labIt("Rename…", "edit", () => renameTunnel(t.id, t.name)), ...(t.type === "backhaul" ? [labIt("Ports…", "ports", () => editPorts(t.id, (t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")))] : []), labIt("Rebuild…", "rebuild", () => rebuildTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
+    labSep, labIt("Remove tunnel…", "trash", () => deleteTunnel(t.id, t.name), {danger: true})];
 }
 function labNodeParts(cur) {      // the actions of a node in short lists: the important ones (Edit, Restart), Monitor, Manage, Update - and its Delete
   const pid = cur.panel_id, id = cur.node_id, c = typeof pgNodesC !== "undefined" ? pgNodesC[pid] : null, d = c && c.data ? (c.data.nodes || []).find(n => n.id === id) : null, off = d && d.status === "disabled";

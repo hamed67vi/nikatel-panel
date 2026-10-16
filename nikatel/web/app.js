@@ -756,10 +756,46 @@ function srvModal(s) {   // while the edit form is open the header keeps only th
   showModal(who, `<div id="srv-detail-${s.id}">${editing ? SERVER_FORM(s) : serverDetailHtml(s)}</div>`, "wide srvwin", window.labOn && labOn() && window.labActs ? labActs(s, sw, editing) : acts);      // (the Lab swaps Delete for "Out of profile")      // details and edit form are ONE window of ONE fixed size (see .srvwin): the charts area is reserved, so nothing grows when the charts arrive, and Edit / Back / Console never shrink it
   const mdl = $("#modal .modal"); if (mdl) { mdl.classList.toggle("editing", editing); const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // Edit / Back / Console never make the window shorter than it has been
 }
+const TUN_SECS = [["overview", "Overview"], ["monitor", "Monitor"]];
+const tunOffServers = t => ["iran", "foreign"].map(r => (state.serversCache || []).find(x => x.name === t[r + "_name"])).filter(x => x && x.enabled !== false && x.online === false).map(x => x.name).join(", ");      // the servers of this tunnel that are off
+/* a tunnel window built EXACTLY like the window of a server (the owner, 2026-10-16: "rebuild it and make it like the server box"): the avatar with the state, the name, its two servers and its type; the alerts switch and ONE "⋯" menu in the header (Fix, Dry run, Health check, Restart, History, Mute, Rename, Ports, Rebuild, Remove); the tabs Overview | Monitor; the same banner, boxes and strip */
 function tunModal(t) {
-  showModal(`<span class="st ${t.state}"></span><b>${esc(t.name)}</b> <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span> <span class="pill">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span>`, detailRow(t), "wide tunwin",
-    `<button class="sm" onclick="renameTunnel(${t.id}, '${esc(t.name)}')" title="Change the name of this tunnel: only what you see changes, nothing on the servers" aria-label="Rename"><i class="bi">${SI.edit}</i><span class="bt">Rename</span></button>${t.type === "backhaul" ? `<button class="sm" onclick="editPorts(${t.id}, '${esc((t.record || {}).port_mapping || (t.forwarded_ports || []).join(","))}')" title="Change the forwarded ports" aria-label="Ports"><i class="bi">${SI.swap}</i><span class="bt">Ports</span></button>` : ""}<button class="sm danger" onclick="deleteTunnel(${t.id}, '${esc(t.name)}')" title="Remove it from both servers; users lose their connection" aria-label="Remove"><i class="bi">${SI.trash}</i><span class="bt">Remove</span></button>`);
+  const muted = (state.mutedSet || new Set()).has(t.name), nm = esc(t.name);
+  const who = `<span class="mh-who"><span class="mh-flag mh-tun"><i class="mh-tic">${SI.swap}</i><span class="st ${t.state}"></span></span><span class="mh-txt"><b>${nm}</b><span class="mh-meta"><span class="mono mh-ip">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span><span class="mchip">${esc(t.type)}${t.transport ? " · " + esc(t.transport) : ""}</span></span></span></span>`;
+  const sw = `<label class="srv-sw ${muted ? "" : "on"}" title="${muted ? "Muted: no Telegram alerts about this tunnel. Switch on to get them again." : "Alerts on: Telegram tells you when this tunnel goes down. Switch off to mute it."}"><input type="checkbox" ${muted ? "" : "checked"} data-n="${nm}" onchange="muteRef(this.dataset.n, ${!muted})" aria-label="Alerts about ${nm}"><i></i><b>${muted ? "Muted" : "Alerts"}</b></label>`;
+  showModal(who, `<div id="tun-detail-${t.id}">${tunWinHtml(t)}</div>`, "wide srvwin tunwin", `${sw}<i class="mh-sep"></i>${typeof labKebab === "function" ? labKebab("tun", t.id, "Actions of " + t.name) : ""}<i class="mh-sep"></i>`);
 }
+function tunWinHtml(t) {
+  const sec = state.tsec === "monitor" ? "monitor" : "overview", c = (state.chartCache || {})["t" + t.id + ":" + state.mrange];
+  const bar = `<div class="tabs lab-sec">${TUN_SECS.map(([k, l]) => `<button class="${k === sec ? "on" : ""}" onclick="tunWtab('${k}')">${l}</button>`).join("")}</div>`;
+  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunGrid(t) + tunUpBox(t) + tunResBox(t);
+  return bar + `<div class="lab-body" data-sec="${sec}">${body}</div><div id="fix-${t.id}" class="fix hidden"></div>`;
+}
+function tunBanner(t) {      // one box that says how the tunnel is, in plain words, with the buttons that fix it
+  const offs = tunOffServers(t), d = t.detail || {}, up = t.state === "up";
+  const btn = (label, click, pri) => offs ? `<button class="sm" disabled title="${esc("A server of this tunnel is off (" + offs + "): " + label + " works when it is back")}">${label}</button>` : `<button class="sm ${pri ? "pri" : ""}" onclick="${click}">${label}</button>`;
+  if (up) return `<div class="lab-ban ok"><i class="lb-i">✓</i><div class="lb-t"><b>Healthy</b><span class="lb-m">Both ends answer and data passes${d.loss_pct != null ? ` · ${d.loss_pct} % lost` : ""}${t.rtt_ms != null ? ` · ${Math.round(t.rtt_ms)} ms` : ""}${t.state_since ? " · up " + ago(t.state_since) : ""}. Nothing needs attention.</span></div><div class="lb-a">${btn("Health check", `healthTunnel(${t.id})`)}</div></div>`;
+  const bad = t.state === "down", head = bad ? "Needs attention" : t.state === "degraded" ? "Unstable" : t.state === "starting" ? "Starting" : "Not checked yet";
+  const msg = offs ? `${offs} is off or does not answer: nothing can be repaired until it is back.` : (t.last_error ? outWhy(t.last_error) : "The tunnel has not answered its last check.");
+  return `<div class="lab-ban ${bad ? "bad" : "warn"}"><i class="lb-i">${bad ? "✕" : "!"}</i><div class="lb-t"><b>${head}</b><span class="lb-m ${bad ? "err" : ""}" title="${esc(t.last_error || "")}">${esc(msg)}</span></div><div class="lb-a">${btn("Fix", `fixTunnel(${t.id}, false)`, true)}${btn("Dry run", `fixTunnel(${t.id}, true)`)}${btn("Health check", `healthTunnel(${t.id})`)}</div></div>`;
+}
+const tunUpBox = t => `<div class="sbox lab-upbox" data-b="uptime"><h5><i>${SI.pulse}</i>Answered the checks<small id="tun-ov-pct-${t.id}" class="mut"></small></h5><div class="lab-ups" id="tun-ov-${t.id}"><span class="mut">reading…</span></div></div>`;
+function tunResBox(t) {      // the last results, like the box of a server
+  const q = t.quality || {}, d = t.detail || {}, row = (l, v) => `<div class="res-row"><span class="mut">${l}</span><span>${v}</span></div>`;
+  return `<div class="wgroup"><h4>Last results</h4><div class="ibox res-box">${row("Last check", t.last_check_at ? `${ago(t.last_check_at)} ago` : '<span class="mut">never</span>')}${row("Quality", q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score} / 100</b>${q.at ? " · " + ago(q.at) + " ago" : ""}` : '<span class="mut">not measured yet - Health check measures it</span>')}${row("Last error", t.last_error ? `<span class="err" title="${esc(t.last_error)}">${esc(outWhy(t.last_error))}</span>` : '<span class="mut">none</span>')}${d.iran_error ? row("Iran side", `<span class="err">${esc(d.iran_error)}</span>`) : ""}${d.foreign_error ? row("Foreign side", `<span class="err">${esc(d.foreign_error)}</span>`) : ""}</div></div>`;
+}
+async function tunStrip(id) {      // the strip of the last 24 hours (48 cells): blue = answered, yellow = now and then, red = no answer
+  const box = document.getElementById("tun-ov-" + id); if (!box) return;
+  try {
+    const d = await api(`/api/tunnels/${id}/checks?hours=24`), ci = n => d.columns.indexOf(n), rows = d.checks, N = 48, span = 24 * 3600, w = span / N, s0 = Date.now() / 1000 - span, ok = new Array(N).fill(0), all = new Array(N).fill(0);
+    rows.forEach(r => { const i = Math.floor((r[0] - s0) / w); if (i >= 0 && i < N) { all[i]++; if (r[ci("ok")]) ok[i]++; } });
+    const cell = i => `<i class="c${!all[i] ? "n" : ok[i] === all[i] ? 2 : ok[i] ? 1 : 0}" title="${esc(fmtT(s0 + i * w, span) + " - " + fmtT(s0 + (i + 1) * w, span) + ": " + (!all[i] ? "no check" : ok[i] === all[i] ? "answered" : ok[i] ? "answered now and then" : "no answer"))}"></i>`;
+    box.innerHTML = `<div class="lab-ups-row">${Array.from({length: N}, (_, i) => cell(i)).join("")}</div><div class="lab-ups-x"><span>${esc(fmtT(s0, span))}</span><span>now</span></div>`;
+    const pc = document.getElementById("tun-ov-pct-" + id), up = rows.filter(r => r[ci("ok")]).length; if (pc) pc.textContent = rows.length ? `${Math.round(up * 1000 / rows.length) / 10} % of the last 24 h · the panel looks every minute` : "";
+  } catch (e) { box.innerHTML = `<span class="mut">${esc(e.message)}</span>`; }
+}
+function tunAfter(t) { if (state.tsec === "monitor") loadTunnelCharts(t.id); else tunStrip(t.id); }      // what a section loads by itself
+window.tunWtab = k => { state.tsec = k === "monitor" ? "monitor" : "overview"; const t = (state.tunnelsCache || []).find(x => x.id === state.open), body = $("#modal .modal-body"); if (!t || !body) { refresh(); return; } body.innerHTML = `<div id="tun-detail-${t.id}">${tunWinHtml(t)}</div>`; tunAfter(t); };
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="/flags/${cc.toLowerCase()}.png" width="24" height="24" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
 const flag = cc => cc && /^[A-Z]{2}$/.test(cc) ? flagImg(cc) + " " + cc : "";
@@ -863,7 +899,7 @@ window.wtab = k => {
   const body = $("#modal .modal-body");
   if (body && state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === state.open); if (s) { const mdl = body.closest(".modal"); if (mdl) { const w = state.winH && state.winH.id === s.id ? state.winH : (state.winH = {id: s.id, h: 0}); w.h = Math.max(w.h, mdl.offsetHeight); mdl.style.minHeight = w.h + "px"; }      // the window never gets shorter while its tabs change, so Console → Back does not jump
     body.innerHTML =`<div id="srv-detail-${s.id}">${serverDetailHtml(s)}</div>`; if (k !== "console" && k !== "install" && k !== "node") loadServerCharts(s.id); if (k === "console") { const c = $(`#con-cmd-${s.id}`); if (c) c.focus(); } return; } }
-  if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = detailRow(t); loadTunnelCharts(t.id); return; } }
+  if (body && state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === state.open); if (t) { body.innerHTML = `<div id="tun-detail-${t.id}">${tunWinHtml(t)}</div>`; tunAfter(t); return; } }
   if (body && state.page === "configs" && cf.open) { const c = (cf.cache || []).find(x => x.id === cf.open); if (c) { body.innerHTML = `<div id="cf-detail-${c.id}">${cfDetailHtml(c)}</div>`; cfLoadChart(c.id); return; } }
   refresh();
 };
@@ -1247,27 +1283,8 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
  
   else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
   else hideModal();
-  if (state.open) loadTunnelCharts(state.open);
+  if (state.open) { const ot = (state.tunnelsCache || []).find(x => x.id === state.open); if (ot) tunAfter(ot); }
 };
-/* a tunnel window like the server window: ONE button bar (Ports and Remove are in the header), THREE boxes of six rows (Servers, Status, Link), the charts */
-function detailRow(t) {
-  return tunBar(t) + tunGrid(t) + `<div id="fix-${t.id}" class="fix hidden"></div><div class="wsec"><h4>Last 24 hours</h4>${tunPartHtml(t, "charts")}</div>`;
-}
-const TIC = {"🛠": '<svg viewBox="0 0 16 16"><path d="M10.5 2.5a3 3 0 00-2.8 4L2.8 11.4a1.4 1.4 0 002 2L9.7 8.5a3 3 0 004-2.8l-1.8 1.8-1.7-.5-.5-1.7z"/></svg>', "👁": '<svg viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 9.8a1.8 1.8 0 100-3.6 1.8 1.8 0 000 3.6z"/></svg>', "🩺": '<svg viewBox="0 0 16 16"><path d="M1.5 8h3l1.5-3.5 3 7L11 8h3.5"/></svg>', "↻": '<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.6-3.7M13 2.5v3h-3"/></svg>', "📊": '<svg viewBox="0 0 16 16"><path d="M4 12.5V8.5M8 12.5V3.5M12 12.5V6.5" stroke-width="1.8"/></svg>', "🔔": '<svg viewBox="0 0 16 16"><path d="M4 11.5V7a4 4 0 118 0v4.5l1 1H3zM6.5 14h3"/></svg>', "♻": '<svg viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 019.5-3.8M13.5 2.5v3.2h-3.2M13.5 8a5.5 5.5 0 01-9.5 3.8M2.5 13.5v-3.2h3.2"/></svg>', "📜": '<svg viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5M2 8a6 6 0 101.8-4.3M2 2.5v3h3"/></svg>'};      // the action row of a link window: line icons (colours in the CSS)
-function tunBar(t) {
-  const up = t.state === "up", nm = esc(t.name), muted = (state.mutedSet || new Set()).has(t.name);
-  const offs = ["iran", "foreign"].map(r => (state.serversCache || []).find(x => x.name === t[r + "_name"])).filter(x => x && x.enabled !== false && x.online === false).map(x => x.name).join(", ");   // the servers of this tunnel that are off
-  const needsSrv = ["Fix", "Dry run", "Health", "Restart", "Rebuild"];
-  const b = (icon, title, tip, click, cls = "") => offs && needsSrv.includes(title) ? `<button class="sm abtn" data-t="${title}" disabled title="${esc("A server of this tunnel is off (" + offs + "): " + title + " works when it is back")}"><i class="bi">${TIC[icon] || icon}</i>${title}</button>` : `<button class="sm abtn ${cls}" data-t="${title}" ${click ? `onclick="${click}"` : "disabled"} title="${esc(tip)}"><i class="bi">${TIC[icon] || icon}</i>${title}</button>`;
-  const groups = [
-    [b("🛠", "Fix", up ? "Nothing to fix: the tunnel is healthy" : "Diagnose and repair step by step: restarts only what is not working", up ? "" : `fixTunnel(${t.id}, false)`),
-     b("👁", "Dry run", up ? "Nothing to fix: the tunnel is healthy" : "Show what Fix would do, change nothing", up ? "" : `fixTunnel(${t.id}, true)`)],
-    [b("🩺", "Health", "Check the tunnel now and measure it: up or down, does data pass, loss, latency, jitter and a score (about 10 s)", `healthTunnel(${t.id})`), b("↻", "Restart", "Restart the tunnel service on both servers (the GRE link stays)", `restartTunnel(${t.id}, '${nm}')`)],
-    [b("🔔", "Mute alerts", muted ? "Muted: no Telegram alerts about this tunnel. Click to unmute" : "No Telegram alerts about this tunnel until unmuted", `muteRef('${nm}', ${!muted})`, muted ? "is-muted" : "")],
-    [b("♻", "Rebuild", "Remove it and build it again: same name, same ports", `rebuildTunnel(${t.id}, '${nm}')`), b("📜", "History", "Every repair of this tunnel", `tunHistory(${t.id}, '${nm}')`)],
-  ];
-  return `<div class="sbar">${groups.map(g => `<span class="sg">${g.join("")}</span>`).join('<i class="sep"></i>')}</div>`;
-}
 function tunGrid(t) {
   const d = t.detail || {}, u = t.units || {}, rec = t.record || {}, q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre";
   const kv = (l, v) => `<div class="kv2"><span>${l}</span><div>${v}</div></div>`;
@@ -1285,26 +1302,6 @@ function tunGrid(t) {
     kv("Speed", q.down_mbps != null ? `↓ ${q.down_mbps} ↑ ${q.up_mbps} Mb/s` : "—"),
     kv(gre ? "GRE" : "Engine", gre ? (t.iran_tunnel_ip ? `<span class="mono">${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</span>` : "—") : esc(rec.transport_label || t.type)), kv("Iran side", chips("iran", u.iran)), kv("Foreign side", chips("foreign", u.foreign))]);
   return `<div class="sgrid">${servers}${status}${link}</div>`;
-}
-function tunPartHtml(t, tab) {
-  const d = t.detail || {}, u = t.units || {};
-  const unit = (side, name) => `<div><span>${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b></div>`;
-  const tabs = "";
-  const tool = (icon, title, sub, click, cls = "") => `<a class="wtool ${cls}" onclick="${click}" title="${esc(sub)}"><i>${icon}</i><b>${title}</b></a>`;   // the note is a tooltip: the tiles stay small
-  if (tab === "charts") { const c = (state.chartCache || {})["t" + t.id + ":" + state.mrange]; return tabs + `<div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading 24 h…</div>'}</div>`; }
-  if (tab === "actions") return tabs + `<div class="wgroup"><h4>Repair</h4><div class="wtools">${t.state === "up" ? tool("🛠", "Fix", "nothing to fix: the tunnel is healthy", "", "disabled") + tool("👁", "Dry run", "nothing to fix: the tunnel is healthy", "", "disabled") : tool("🛠", "Fix", "diagnose and repair step by step: restarts only what is not working", `fixTunnel(${t.id}, false)`) + tool("👁", "Dry run", "show what Fix would do, change nothing", `fixTunnel(${t.id}, true)`)}${tool("📊", "Quality", "latency, jitter, loss, speed, score", `qualityOne(${t.id})`)}${tool("🔔", "Mute alerts", "no Telegram alerts until unmuted in Settings", `muteRef('${esc(t.name)}', true)`)}</div></div>
-    <div class="wgroup"><h4>Change</h4><div class="wtools">${tool("♻", "Rebuild", "remove and build again, same name and ports", `rebuildTunnel(${t.id}, '${esc(t.name)}')`)}${tool("📜", "History", "every repair of this tunnel", "go('actions')")}</div></div>
-    <div id="fix-${t.id}" class="fix hidden"></div>`;
-  const rec = t.record || {}, q = t.quality || {}, gre = t.type === "backhaul" || t.type === "gre";
-  const unitRow = (side, label, name) => irow(label, `<span class="mono">${esc(name)}</span> <b class="${(d[side + "_units"] || {})[name] === "active" ? "gw-ok" : "err"}">${esc((d[side + "_units"] || {})[name] || "?")}</b>`);
-  const boxes = [
-    ibox(SI.swap, "Servers", [irow("Iran", `<b>${esc(t.iran_name)}</b> <span class="mono mut">${esc(t.iran_host)}</span>`), irow("Foreign", `<b>${esc(t.foreign_name)}</b> <span class="mono mut">${esc(t.foreign_host)}</span>`), irow("Type", `${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}`), irow("Direction", esc(rec.direction || "reverse"))]),
-    ibox("📈", "Quality", q.score != null ? [irow("Score", `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score} / 100</b>`), irow("Latency", q.latency_ms + " ms"), irow("Jitter / loss", `${q.jitter_ms} ms · ${q.loss_pct}%`), irow("Speed", q.down_mbps != null ? `↓ ${q.down_mbps} ↑ ${q.up_mbps} Mb/s` : "—"), irow("Measured", q.at ? ago(q.at) + " ago" : "—")] : [irow("Not measured yet", '<button class="sm" onclick="qualityOne(' + t.id + ')">Measure now</button>')]),
-    ibox(SI.link, "Link", [gre ? irow("GRE", `${esc(u.iface || "—")} ${d.iface && d.iface !== "UNKNOWN" ? "· " + esc(d.iface) : ""}`) : irow("Engine", esc(rec.transport_label || t.type)), irow("Tunnel IPs", t.iran_tunnel_ip ? `<span class="mono">${esc(t.iran_tunnel_ip)} ⇄ ${esc(t.foreign_tunnel_ip)}</span>` : "—"), irow("Control port", t.port || "—"), irow("Ports", `<div class="td-ports">${(t.forwarded_ports || []).map(p => `<i class="${d.listen && d.listen[p] === false ? "bad" : ""}">${p}</i>`).join("") || "—"}</div>`), irow("Packet loss", d.loss_pct != null ? d.loss_pct + "%" : "—")]),
-    ibox(SI.clock, "Status", [irow("State", `<span class="st ${t.state}">${esc(stName(t.state))}</span>`), irow("Since", t.state_since ? ago(t.state_since) + " ago" : "—"), irow("Checked", when(t.last_check_at)), irow("Created", when(t.created_at)), irow("RTT", t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"), irow("Traffic", t.rx_mbps != null ? `↓ ${mbps(t.rx_mbps)} ↑ ${mbps(t.tx_mbps)}` : "—"), d.iran_error ? irow("Iran error", `<span class="err">${esc(d.iran_error)}</span>`) : "", d.foreign_error ? irow("Foreign error", `<span class="err">${esc(d.foreign_error)}</span>`) : "", t.last_error ? irow("Last error", `<span class="err">${esc(t.last_error)}</span>`) : ""]),
-    ibox("⚙", "Services", [...(u.iran || []).map(n => unitRow("iran", "Iran", n)), ...(u.foreign || []).map(n => unitRow("foreign", "Foreign", n))]),
-  ].join("");
-  return tabs + `<div class="iboxes">${boxes}</div>`;
 }
 /* the "times the tunnel was down" box, in plain words: when, how long, and why (the technical message stays in the tooltip) */
 const outWhen = ts => { const d = new Date(ts * 1000); return d.toLocaleDateString(undefined, {month: "short", day: "numeric"}) + ", " + d.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit", hour12: false}); };
@@ -1566,7 +1563,7 @@ window.tunHistory = async (id, name) => {      // the history opens INSIDE the t
     body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button><b style="margin-left:10px">History of ${esc(name)}</b></div>` + (rows.length ? `<div class="th-list">${rows.map(a => { const tx = ((a.story || []).slice(-1)[0] || "").trim(), d = new Date(a.ts * 1000); return `<div class="th-row ${a.ok === false ? "bad" : "ok"}" title="${esc(tx)}"><time>${d.toLocaleDateString(undefined, {month: "2-digit", day: "2-digit"})} ${d.toLocaleTimeString(undefined, {hour12: false})}</time><i></i><b>${esc(a.action)}</b><span>${esc(tx)}</span></div>`; }).join("")}</div>` : '<div class="empty">Nothing was done to this tunnel yet.</div>'); }
   catch (e) { body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button></div><div class="err">${esc(e.message)}</div>`; }
 };
-window.tunBack = id => { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) tunModal(t); };
+window.tunBack = id => { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); tunAfter(t); } };
 window.trashRestore = async id => {
   const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
   if (!await gconfirm(`Restore the tunnel ${it.title}? It is built again between ${it.sub} with the ports ${it.ports} (a new GRE key; the services start by themselves; about a minute).`)) return;
@@ -1596,7 +1593,7 @@ window.toggleDetail = id => {
   if (state.open === id) { state.open = null; hideModal(); return; }
   state.open = id;
   if (state.page === "nodes") { const s = (state.serversCache || []).find(x => x.id === id); if (s) { srvModal(s); loadServerCharts(id); return; } }      // the window is one view: its charts load with it
-  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t && t.state === "starting") { state.open = null; openBuilding(t).then(ok => { if (!ok) { state.open = id; tunModal(t); loadTunnelCharts(id); } }); return; } if (t) { tunModal(t); loadTunnelCharts(id); return; } }
+  if (state.page === "tunnels") { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t && t.state === "starting") { state.open = null; openBuilding(t).then(ok => { if (!ok) { state.open = id; state.tsec = null; tunModal(t); tunAfter(t); } }); return; } if (t) { state.tsec = null; tunModal(t); tunAfter(t); return; } }
   refresh();
 };
 window.fixTunnel = async (id, dry) => {

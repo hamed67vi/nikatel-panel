@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.53 - The window of a tunnel is built like the window of a server
+
+- **Tunnel window (Network → Tunnel manager → a tunnel):** rebuilt after the window of a server - the same size and the same pieces: in the header the avatar with the state, the name, the two servers (*Iran ⇄ foreign*) and the type; the *Alerts* switch (mute / unmute) and ONE ⋯ menu (Fix…, Dry run, Health check, Restart…, History, Mute alerts, Rename…, Ports…, Rebuild…, Remove tunnel… in red) in place of the row of seven buttons and the three in the header; the tabs **Overview** (the banner - *Healthy* or *Needs attention* with the reason in plain words and Fix / Dry run / Health check -, the three boxes Servers, Status, Link, the strip *Answered the checks* of the last 24 hours, the last results) and **Monitor** (the range, the four tiles, the charts and the times the tunnel was down).
+- **Create tunnel menus:** the cards of the server lists have a gap between them and are rounded cards (they stood flush).
 ## 1.57.52 - Api & Key one slim line per connection; the About boxes without buttons that ask for a check
 
 - **Api & Key:** every connection is ONE slim box - a tile, the name, its state, and its fields and buttons on the SAME line (they fold under the name only on a narrow page): *This panel's API*, *API tokens* (the line that makes a token is in the head), *Anthropic key* (key, model, Remove, Test, Save), *Telegram bot* (token, chat id, the Send switch, Test, Save; Rules / Daily report / Maintenance windows under it), *Probe*, *Install a probe*, *DNS accounts*, *Marzban / PasarGuard panels*. The tab is about 40 % of its former height.

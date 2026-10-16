@@ -731,3 +731,15 @@ html body #page .eng-head .spin { display: inline-block; width: 12px; height: 12
 html body #page .abt-pg .pgu-a { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; }
 html body #page .abt-pg .pgu-a .sm, html body #page .abt-pg .pgu-a button { flex: none; box-sizing: border-box; width: 58px; height: 24px; padding: 0; border-radius: 8px; font-size: 11.5px; line-height: 1; }
 html body #page .abt-pg .pgu-prow > button { flex: none; box-sizing: border-box; width: 66px; height: 24px; padding: 0; border-radius: 8px; font-size: 11.5px; line-height: 1; }
+/* 1.57.53 - the cards of the kit menu stand apart: a gap between them, each one a rounded card (the owner, 2026-10-16: "fix the space between the cards") */
+html body .nk-dd .nk-dd-i { margin: 0 0 6px; border: 1px solid rgba(255, 255, 255, .07); border-radius: 14px; background: #141c2f; }
+html body .nk-dd .nk-dd-i:last-child, html body .nk-dd .nk-dd-i:has(+ .nk-dd-g) { margin-bottom: 0; }
+html body .nk-dd .nk-dd-i:hover:not([disabled]), html body .nk-dd .nk-dd-i.hl:not([disabled]) { background: #1a2338; border-color: rgba(255, 255, 255, .12); }
+html body .nk-dd .nk-dd-i.on { background: rgba(70, 120, 230, .20); border-color: rgba(100, 150, 255, .35); }
+html[data-mode="light"] body .nk-dd .nk-dd-i { background: #f4f7fd; border-color: rgba(30, 50, 100, .10); } html[data-mode="light"] body .nk-dd .nk-dd-i:hover:not([disabled]), html[data-mode="light"] body .nk-dd .nk-dd-i.hl:not([disabled]) { background: #e9effb; } html[data-mode="light"] body .nk-dd .nk-dd-i.on { background: #e3edff; border-color: rgba(20, 86, 200, .35); }
+/* 1.57.53 - the window of a tunnel is built like the window of a server (the owner, 2026-10-16): the same size, the avatar with the state, the tabs, the banner, the boxes, the strip; ONE "⋯" menu in place of the row of buttons */
+html body #modal .modal.srvwin.tunwin { min-height: min(776px, calc(100vh - 96px)); }
+html body #modal .mh-flag.mh-tun { display: grid; place-items: center; border-radius: 50%; background: linear-gradient(180deg, #1d2745, #131b30); color: #9fc0ff; box-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 0 0 4px rgba(255, 255, 255, .05), 0 6px 16px rgba(0, 0, 0, .45); }
+html body #modal .mh-tic { display: grid; place-items: center; font-style: normal; } html body #modal .mh-tic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html body #modal .tunwin .lab-body .sgrid { margin-bottom: 8px; }
+html[data-mode="light"] body #modal .mh-flag.mh-tun { background: linear-gradient(180deg, #eef3fd, #dde7fa); color: #2f5fc4; box-shadow: 0 0 0 1px rgba(30, 50, 100, .18), 0 0 0 4px rgba(30, 50, 100, .05); }
