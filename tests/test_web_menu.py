@@ -822,12 +822,12 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     the state of the AI key, the Telegram bot, the probe, the DNS accounts and the panels, each with the way to its place; the AI assistant card stays under it."""
     app = _web("app.js")
     assert 'ai: ["🔌 Api & Key",' in app and '["Api & Key"]],' in app and "ai: SI.link," in app
-    assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and 'title: "API tokens"' not in app and '<div class="ab-list">${apiBox}${aiBox}${tgBox}${probeBox}${dnsBox}${panelsBox}</div>' in app and "const abBox = o =>" in app
+    assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and 'const tokBox = abBox({icon: SI.key, title: "API tokens"' in app and 'const instBox = abBox({icon: SI.down, title: "Install a probe"' in app and '<div class="ab-list">${apiBox}${tokBox}${aiBox}${tgBox}${probeBox}${instBox}${dnsBox}${panelsBox}</div>' in app and "const abBox = o =>" in app
     assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
-    assert 'const aiBody = sCat(' not in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app and 'form="ai-form"' in app and 'onsubmit="return saveAi(event)"' in app
-    assert 'title: "Telegram bot", pill: tg.has_token' in app and 'form="tg-form"' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and "alertsWin('rules')" in app and "alertsWin('report')" in app and "alertsWin('windows')" in app and 'async function setData() {' in app and '${security}${backups}' in app
+    assert 'const aiBody = sCat(' not in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app and 'form: {id: "ai-form", submit: "saveAi(event)"}' in app and 'id="${f.id}"' in app
+    assert 'title: "Telegram bot", pill: tg.has_token' in app and 'form: {id: "tg-form", submit: "saveTelegram(event)"}' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and "alertsWin('rules')" in app and "alertsWin('report')" in app and "alertsWin('windows')" in app and 'async function setData() {' in app and '${security}${backups}' in app
     assert "Manage in" not in app and 'const dnsBox = abBox({icon: SI.cloud, title: "DNS accounts"' in app and 'const panelsBox = abBox({icon: SI.cube, title: "Marzban / PasarGuard panels"' in app and 'const probeBox = abBox({icon: SI.probe, title: "Probe"' in app and 'form="probe-form"' in app and 'const aiBody' not in app and 'const probeBody' not in app and 'html body #page .ab-list {' in _web("lab.css") and 'html body #page .ab {' in _web("lab.css")
-    assert "window.apiPanelEdit = id =>" in app and 'onclick="dnsAccForm()">＋ Add account' in app and 'onclick="pnAddWin()">＋ Add panel' in app and 'probe: ["🛰 Probe"' not in app and 'const probe = sFrame' not in app and "html body #page .sf .ss .sr.li" not in _web("lab.css") and "Open Settings → Api & Key" in app
+    assert "window.apiPanelEdit = id =>" in app and 'onclick="dnsAccForm()">${ib(SI.plus, "Add account")}' in app and 'onclick="pnAddWin()">${ib(SI.plus, "Add panel")}' in app and 'probe: ["🛰 Probe"' not in app and 'const probe = sFrame' not in app and "html body #page .sf .ss .sr.li" not in _web("lab.css") and "Open Settings → Api & Key" in app
 
 
 def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_timers():
@@ -898,10 +898,30 @@ def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxe
     app, css = _web("app.js"), _web("lab.css")
     assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
     assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'ub.disabled = !!u.up_to_date;' in app and 'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
-    assert "grid-template-columns: 84px 66px 70px minmax(0, 1fr) auto; gap: 5px; padding: 5px 10px; }" in css and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+    assert "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr) auto; gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
 
 
 def test_the_add_form_starts_the_plain_websocket_at_80():
     """The owner, 2026-10-16: the default port of ws is 80, not 8080."""
     js = _web("pg_kinds.js")
     assert "kd.first_port ? kd.ports[0] : kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];" in js
+
+
+def test_the_cores_and_the_pasarguard_lists_sit_in_one_fixed_box_that_scrolls():
+    """The owner, 2026-10-16: the panels and nodes of PasarGuard (and the cores) in ONE box of a fixed size that scrolls inside."""
+    app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
+    assert '<div class="eng-list"><div class="eng-head" title=' in app and 'onclick="engineCheck()"' not in app and 'Date.now() / 1000 - d.checked_at > 600' in app and '<div class="pgu-list"><div class="pgu-cap">Panels</div>' in upd and "${nodesHtml}</div>`;" in upd
+    assert "html body #page :is(.eng-list, .pgu-list) { flex: 1 1 auto; min-height: 0;" in css and "overflow-y: auto;" in css
+
+
+def test_no_check_buttons_in_the_about_boxes_they_look_by_themselves():
+    """The owner, 2026-10-16: Tunnel cores and PasarGuard have no Check button - they are asked again by themselves."""
+    app, upd = _web("app.js"), _web("pg_update.js")
+    assert 'onclick="engineCheck()"' not in app and "> 600)" in app and 'onclick="pgUpdLoad(true)"' not in upd
+    assert "pgu.timer = setTimeout(() => { if ($(\"#pgu-box\")) pgUpdLoad(true); }, 600000);" in upd and "Date.now() - pgu.at > 600000" in upd
+
+
+def test_the_update_and_xray_buttons_of_the_nodes_have_one_size():
+    """The owner, 2026-10-16: the sizes of the Update / Xray buttons of the PasarGuard nodes are fixed."""
+    css = _web("lab.css")
+    assert "html body #page .abt-pg .pgu-a .sm, html body #page .abt-pg .pgu-a button { flex: none; box-sizing: border-box; width: 58px; height: 24px;" in css and "html body #page .abt-pg .pgu-prow > button { flex: none; box-sizing: border-box; width: 66px; height: 24px;" in css

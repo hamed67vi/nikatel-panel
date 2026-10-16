@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.57.52 - Api & Key one slim line per connection; the About boxes without buttons that ask for a check
+
+- **Api & Key:** every connection is ONE slim box - a tile, the name, its state, and its fields and buttons on the SAME line (they fold under the name only on a narrow page): *This panel's API*, *API tokens* (the line that makes a token is in the head), *Anthropic key* (key, model, Remove, Test, Save), *Telegram bot* (token, chat id, the Send switch, Test, Save; Rules / Daily report / Maintenance windows under it), *Probe*, *Install a probe*, *DNS accounts*, *Marzban / PasarGuard panels*. The tab is about 40 % of its former height.
+- **Tunnel cores:** the *Installed* column is gone; an engine that is on no server says **not installed** in the Status column. The *Check now* bar is gone too - the servers are asked by themselves (when the last check is older than ten minutes), with a small spinner in the head of the table while it runs.
+- **PasarGuard (About & update):** the *Check* button is gone (GitHub and the panels are asked again by themselves every ten minutes); the panels and the nodes sit in ONE box of a fixed size that scrolls inside (the cores table the same); the *Update* / *Xray* buttons of a node are one size (58 x 24), *Update…* of a panel 66 x 24.
 ## 1.57.51 - About & update and Api & Key built tight
 
 - **Settings:** the frame of every tab is never narrower than 880 px (it was 880 when the row had eight tabs; with the Alerts, Probe and Shop bot tabs gone it had shrunk to 726 / 789).
