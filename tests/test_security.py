@@ -157,3 +157,65 @@ def test_api_docs_need_a_session_and_every_answer_carries_a_csp(client):
     r = anon.get("/api/health")
     assert r.status_code == 200 and "frame-ancestors 'none'" in r.headers["Content-Security-Policy"] and "connect-src 'self'" in r.headers["Content-Security-Policy"]
     assert r.headers["X-Frame-Options"] == "DENY"
+
+
+def test_sign_out_ends_that_session_on_the_server(client):
+    """Review 2026-10-16: Sign out only dropped the cookie in the browser, a copied cookie stayed good until its own end."""
+    cookie = client.cookies.get(auth.COOKIE)
+    other = TestClient(client.app)
+    assert other.post("/api/auth/login", json={"user": "admin", "password": PW}).status_code == 200
+    thief = TestClient(client.app)
+    thief.cookies.set(auth.COOKIE, cookie)
+    assert thief.get("/api/auth/me").status_code == 200
+    assert client.post("/api/auth/logout").status_code == 200
+    assert thief.get("/api/auth/me").status_code == 401               # the copy is dead as well
+    assert other.get("/api/auth/me").status_code == 200               # another browser is not touched
+    assert not auth.revoke_session(cookie) and not auth.revoke_session("not-a-cookie") and not auth.revoke_session(None)
+
+
+def test_the_session_registry_is_capped_and_an_old_cookie_without_an_id_still_works(client):
+    legacy = auth._serializer().dumps({"u": "admin", "e": auth.epoch()})       # a cookie made before the registry existed
+    old = TestClient(client.app)
+    old.cookies.set(auth.COOKIE, legacy)
+    assert old.get("/api/auth/me").status_code == 200
+
+    for _ in range(auth.SESSION_CAP + 5):
+        newest = auth.make_session("admin")
+
+    assert len(auth.load()["sessions"]) == auth.SESSION_CAP
+    fresh = TestClient(client.app)
+    fresh.cookies.set(auth.COOKIE, newest)
+    assert fresh.get("/api/auth/me").status_code == 200
+    auth.bump_epoch()                                                          # a new epoch empties the registry and ends every cookie
+    assert auth.load()["sessions"] == {} and fresh.get("/api/auth/me").status_code == 401 and old.get("/api/auth/me").status_code == 401
+
+
+def test_a_500_never_carries_the_exception_text_and_a_huge_body_is_refused(client):
+    from nikatel.main import create_app
+
+    app = create_app(run_jobs=False)
+
+    @app.get("/api/_boom", include_in_schema=False)
+    def boom():
+        raise RuntimeError("secret detail: /root/.ssh/id_ed25519 on 203.0.113.9")
+
+    c = TestClient(app, raise_server_exceptions=False)
+    assert c.post("/api/auth/login", json={"user": "admin", "password": PW}).status_code == 200
+    r = c.get("/api/_boom")
+    assert r.status_code == 500 and "request id" in r.json()["error"] and "secret detail" not in r.text and "id_ed25519" not in r.text and r.headers["x-request-id"] in r.json()["error"]
+    big = c.post("/api/auth/password", content=b"x" * 10, headers={"content-length": str(9 * 1024 * 1024), "content-type": "application/json"})
+    assert big.status_code == 413 and big.json()["code"] == "too_large"
+
+def test_the_health_check_tells_a_stranger_only_that_it_answers(client):
+    """Review 2026-10-16: /api/health gave the version to everyone."""
+    anon = TestClient(client.app)
+    assert anon.get("/api/health").json() == {"ok": True}
+    mine = client.get("/api/health").json()
+    assert mine["ok"] is True and mine["version"] and "uptime" in mine
+
+def test_the_data_folder_is_for_the_panel_alone(client):
+    import stat
+
+    from nikatel.config import get_settings
+
+    assert stat.S_IMODE(get_settings().data_dir.stat().st_mode) == 0o700

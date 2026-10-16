@@ -98,8 +98,9 @@ def login_2fa(body: CodeIn, request: Request, response: Response):
 
 
 @router.post("/auth/logout")
-def logout(response: Response):
-    """Sign out: the session cookie is dropped."""
+def logout(request: Request, response: Response):
+    """Sign out: the session ends on the server (its id leaves the registry, a copied cookie is dead too) and the cookie is dropped."""
+    auth.revoke_session(request.cookies.get(auth.COOKIE))
     response.delete_cookie(auth.COOKIE)
     return {"ok": True}
 

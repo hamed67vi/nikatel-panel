@@ -98,20 +98,35 @@ def _wake_tunnels() -> None:
 
 
 def sample_server(server_id: int) -> None:
-    """One server: ssh, parse, store. Errors become the server's last_error, never an exception."""
+    """One server: ssh, parse, store. Errors become the server's last_error, never an exception.
+
+    The database is NOT held while the server is asked (up to 35 s): the connection goes back to the pool at once, so a slow server never holds one of the few connections the other jobs and the pages need (review 2026-10-16)."""
     with session() as db:
         srv = db.get(Server, server_id)
 
         if srv is None or not srv.enabled:
             return
 
-        node = Node(srv.host, srv.ssh_user, srv.ssh_port)
-        was_online = srv.online
+        node, name, host = Node(srv.host, srv.ssh_user, srv.ssh_port), srv.name, srv.host
 
-        try:
-            facts = parse_facts(run_script(node, "facts", timeout=35))
-        except (SSHError, ValueError) as e:
-            log.warning("sample failed name=%s host=%s err=%s", srv.name, srv.host, e)
+    facts, failure = None, None
+
+    try:
+        facts = parse_facts(run_script(node, "facts", timeout=35))
+    except (SSHError, ValueError) as e:
+        failure = e
+
+    with session() as db:
+        srv = db.get(Server, server_id)
+
+        if srv is None or not srv.enabled:          # (removed or switched off while it was being asked)
+            return
+
+        was_online = srv.online          # what it is NOW: pulse may have changed it meanwhile, and an event is written only for a real change
+
+        if failure is not None:
+            e = failure
+            log.warning("sample failed name=%s host=%s err=%s", name, host, e)
             from . import pulse
 
             if pulse.tcp_ok_recently(srv.id) and "key is not accepted" not in str(e) and "host key" not in str(e):

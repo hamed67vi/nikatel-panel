@@ -132,6 +132,9 @@ def _download(engine: str) -> tuple[str, bytes]:
     if lt["digest"] and hashlib.sha256(data).hexdigest() != lt["digest"]:
         raise RuntimeError("the download does not match the checksum published by the release: nothing was changed")
 
+    if not lt["digest"]:          # an older release publishes no digest: it is used (the size and the archive are still checked), but the log says it was not verified
+        log.warning("engine %s %s: the release publishes no sha256 digest - the download could not be verified", engine, lt["version"])
+
     member = ENGINES[engine]["member"]
 
     if lt["url"].endswith(".zip"):

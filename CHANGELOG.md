@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.57.55 - Review: sign-out that really signs out, nothing leaks from an error, the panels are asked at the same time, and a report to copy when something is wrong
+
+Security (found by reading every layer, 2026-10-16):
+
+- **Sign out ends the session on the server.** Every cookie now carries an id that is kept in a registry; *Sign out* removes it, so a copied cookie is dead too (before, only the browser forgot it and a stolen cookie lived until its own end). A password change, the two-step switch and *Sign out of other devices* still end every other session. A cookie from before this version has no id and lives until its own end.
+- **A 500 carries only its request id** - the exception text (a path, a host, a query) is in the log under the same id, not in the answer. A request body above 8 MB is refused with `413` before it is read; the backup upload is read piece by piece and stopped at its limit (a body with no length could fill the memory).
+- **A panel's saved key / login is never sent to another address.** Changing only the address of a Marzban / PasarGuard panel to another host, port or scheme now asks for the key (or the login) again, and it is tried at the new address first - before, the next check sent the saved one there. Adding, changing or removing a panel is `admin` for an API token (an `act` token can still read and use every panel).
+- `GET /api/health` tells a stranger only `{"ok": true}` (the version and the uptime need a session or a token); the data folder is `0700`; a fresh install pins its libraries to the versions the tests ran on (`requirements.lock`, used as constraints by `install.sh`); an engine release with no published digest is said in the log.
+
+Parallel and structure:
+
+- **The panels are checked at the same time** (`panels.check_all`): a panel that does not answer cost its own 20 s *and made every panel after it wait*. **A server sample no longer holds a database connection** while the server is asked (up to 35 s), and the pool is 20 + 40 (it was SQLAlchemy's 5 + 10: the 16th thread waited 30 s and failed when slow servers held theirs).
+- The severe packet loss line of the Tunnel Doctor is one named constant (`LOSS_SEVERE`).
+
+Finding what went wrong:
+
+- **Script errors of the page are told to the panel** (`POST /api/client-error`): one warning line in the log with the request id, at most 5 per page load and 20 a minute - before they vanished in the owner's browser.
+- **Settings → About → Copy diagnostics** (`GET /api/system/diagnostics`): versions, the health checks, every job (last run, failures, last error), the counts and the newest problems with their request ids - no key, no password, no server address (the log lines have theirs cut to two numbers) - one click, to paste where help is asked for.
 ## 1.57.54 - The dashboard redesigned, a getting-started card that asks the API keys first, the light theme made clear
 
 - **Dashboard:** the number chips are slim, the three boxes (*Infrastructure health*, *Problems*, *Activity*) are one size with rounded rows in the look of the kit, the empty *free space* slots are gone.

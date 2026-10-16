@@ -309,7 +309,17 @@ async def backup_restore_upload(request: Request):
     """Restore from a backup file the operator chose on their computer (raw body; the passphrase, when it is another one, is the X-Backup-Passphrase header)."""
     from starlette.concurrency import run_in_threadpool
 
-    blob = await request.body()
+    chunks, size = [], 0
+
+    async for part in request.stream():          # read piece by piece and stop at the limit: a body without a Content-Length (chunked) must not fill the memory either
+        size += len(part)
+
+        if size > backup.MAX_RESTORE:
+            raise HTTPException(413, "the file is too big for a backup")
+
+        chunks.append(part)
+
+    blob = b"".join(chunks)
 
     if not blob:
         raise HTTPException(400, "no file received")

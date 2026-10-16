@@ -12,6 +12,10 @@ def test_allowed_is_the_scope_rule():
     assert not tokens.allowed("read", "GET", "/api/settings") and not tokens.allowed("act", "GET", "/api/logs") and not tokens.allowed("act", "DELETE", "/api/tokens/1")
     assert tokens.allowed("admin", "DELETE", "/api/tokens/1") and tokens.allowed("admin", "GET", "/api/auth/security-log")
     assert tokens.allowed("read", "GET", "/api/settingsx")          # only the prefix as a path, not as a string
+    # the credentials of a panel: read and act may look and may use the panel, only admin may add, change or remove one
+    assert tokens.allowed("read", "GET", "/api/panels") and tokens.allowed("act", "GET", "/api/panels/3") and tokens.allowed("act", "POST", "/api/panels/3/check")
+    assert not tokens.allowed("act", "POST", "/api/panels") and not tokens.allowed("act", "PATCH", "/api/panels/3") and not tokens.allowed("act", "DELETE", "/api/panels/3") and not tokens.allowed("act", "POST", "/api/panels/3/forget-login")
+    assert tokens.allowed("admin", "PATCH", "/api/panels/3") and tokens.allowed("admin", "POST", "/api/panels")
 
 
 def test_tokens_are_made_with_the_password_shown_once_and_scoped(client):

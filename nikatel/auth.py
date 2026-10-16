@@ -4,6 +4,7 @@ Security features kept here (pure, tested):
 * two-factor login with a time-based code (Google Authenticator and compatible apps, RFC 6238),
   one-time recovery codes, replay protection for the codes
 * a session epoch: changing the password or the 2FA setup signs every other session out
+* a registry of live sessions: every cookie carries an id, "Sign out" ends THAT session on the server too (a stolen cookie is no longer good after it)
 * login throttling per client address (5 failures -> locked for 15 minutes)
 * password reset by a code sent to Telegram, or by a recovery code
 """
@@ -88,6 +89,10 @@ def set_password(password: str, logout_others: bool = True) -> None:
         d = load()
         salt = os.urandom(16)
         d.update({"user": "admin", "salt": salt.hex(), "hash": _hash(password, salt).hex(), "epoch": int(d.get("epoch", 0)) + (1 if logout_others else 0), "changed_at": int(time.time())})
+
+        if logout_others:
+            d["sessions"] = {}
+
         save(d)
 
     try:
@@ -117,6 +122,7 @@ def bump_epoch() -> None:
     with _LOCK:
         d = load()
         d["epoch"] = int(d.get("epoch", 0)) + 1
+        d["sessions"] = {}
         save(d)
 
 
@@ -125,8 +131,57 @@ def _serializer(salt: str = "session") -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().secret_key(), salt=salt)
 
 
+SESSION_CAP = 100          # live sessions kept (the newest); a browser that is not used for a day or two falls out by its own age
+
+
 def make_session(user: str) -> str:
-    return _serializer().dumps({"u": user, "e": epoch()})
+    """A signed cookie for the browser: the user, the epoch, and an id that is also written into the registry (auth.json) - the session is good only while its id is there."""
+    jti = secrets.token_urlsafe(9)
+    now = int(time.time())
+    horizon = get_settings().session_hours * 3600 + 3600
+
+    with _LOCK:
+        d = load()
+        live = {k: int(v) for k, v in (d.get("sessions") or {}).items() if now - int(v) < horizon}
+        live[jti] = now
+
+        if len(live) > SESSION_CAP:
+            live = dict(sorted(live.items(), key=lambda kv: kv[1])[-SESSION_CAP:])
+
+        d["sessions"] = live
+        save(d)
+        e = int(d.get("epoch", 0))
+
+    return _serializer().dumps({"u": user, "e": e, "j": jti})
+
+
+def revoke_session(token: str | None) -> bool:
+    """Sign out ONE session on the server: its id leaves the registry, so the cookie is dead even if somebody copied it. True when it was a live session."""
+    if not token:
+        return False
+
+    try:
+        data = _serializer().loads(token, max_age=get_settings().session_hours * 3600)
+    except (BadSignature, SignatureExpired):
+        return False
+
+    jti = data.get("j")
+
+    if not jti:
+        return False
+
+    with _LOCK:
+        d = load()
+        live = dict(d.get("sessions") or {})
+
+        if jti not in live:
+            return False
+
+        live.pop(jti)
+        d["sessions"] = live
+        save(d)
+
+    return True
 
 
 def current_user(request: Request, nikatel_session: str | None = Cookie(default=None), authorization: str | None = Header(default=None)) -> str:
@@ -158,8 +213,13 @@ def current_user(request: Request, nikatel_session: str | None = Cookie(default=
     except BadSignature:
         raise HTTPException(401, "bad session")
 
-    if int(data.get("e", 0)) != epoch():
+    d = load()
+
+    if int(data.get("e", 0)) != int(d.get("epoch", 0)):
         raise HTTPException(401, "session ended (the password or the security settings changed)")
+
+    if data.get("j") is not None and data["j"] not in (d.get("sessions") or {}):      # (a cookie made before the registry existed has no id: it lives until its own end)
+        raise HTTPException(401, "session ended (signed out)")
 
     return str(data.get("u", ""))
 
@@ -329,6 +389,7 @@ def totp_enable(code: str) -> list[str]:
         d["totp"] = t
         codes = _new_recovery(d)
         d["epoch"] = int(d.get("epoch", 0)) + 1
+        d["sessions"] = {}
         save(d)
 
     return codes
@@ -339,6 +400,7 @@ def totp_disable() -> None:
         d = load()
         d.pop("totp", None)
         d["epoch"] = int(d.get("epoch", 0)) + 1
+        d["sessions"] = {}
         save(d)
 
 

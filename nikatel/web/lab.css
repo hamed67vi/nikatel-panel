@@ -637,7 +637,7 @@ html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }      /* (
 
 html body #page .abt-foot .abt-copy { width: 26px; height: 26px; margin-left: 2px; } html body #page .abt-foot .abt-copy svg { width: 15px; height: 15px; }      /* (one row, always: a narrow window scrolls it sideways - the owner, 2026-10-16) */
 html body #page .si.pw .si-b { padding-right: 46px; }      /* (the rows above keep the room of their chevron: the boxes end where those rows end) */
-html body #page .abt-foot > span:last-child { flex: 0 1 auto; min-width: 0; } html body #page .abt-foot > span:last-child .abt-fv { min-width: 0; } html body #page .abt-foot #abt-env { display: block; overflow: hidden; text-overflow: ellipsis; }
+html body #page .abt-foot > span:nth-last-child(2) { flex: 0 1 auto; min-width: 0; } html body #page .abt-foot > span:nth-last-child(2) .abt-fv { min-width: 0; } html body #page .abt-foot #abt-env { display: block; overflow: hidden; text-overflow: ellipsis; }
 
 /* 1.57.40 - Settings → Backups: the backup password is a switch row under the list, the schedule is ONE compact row (the owner, 2026-10-16) */
 html body #page .bpw-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--uk-line); border-radius: 12px; background: #0f1626; }
@@ -780,3 +780,4 @@ html[data-mode="light"] body #page .dash-setup { background: #f4f8ff; border-col
 
 /* 1.57.55 - the health box of the Dashboard: the line under a name is ONE line that is cut with an ellipsis (the whole text is its tooltip) - a long list of stale jobs was three lines high and ran over the row below */
 html body #page .dash-cols .dash-name { min-width: 0; } html body #page .dash-cols .dash-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .abt-foot > button.abt-diag { flex: none; margin-left: 10px; height: 28px; }

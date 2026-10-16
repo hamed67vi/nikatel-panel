@@ -84,7 +84,8 @@ def engine() -> Engine:
     if _engine is None:
         s = get_settings()
         s.data_dir.mkdir(parents=True, exist_ok=True)
-        _engine = create_engine(s.db_url, connect_args={"check_same_thread": False, "timeout": 30}, future=True)
+        # the pool: ~20 job threads, the page requests (a pool of 40) and the pools inside the jobs all ask for a connection; SQLAlchemy's default (5 + 10 overflow) made the 16th wait 30 s and then fail
+        _engine = create_engine(s.db_url, connect_args={"check_same_thread": False, "timeout": 30}, future=True, pool_size=20, max_overflow=40, pool_timeout=30)
 
         @event.listens_for(_engine, "connect")
         def _pragmas(conn, _):

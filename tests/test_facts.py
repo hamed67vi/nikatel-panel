@@ -62,3 +62,28 @@ def test_the_facts_script_runs_here_and_its_answer_parses():
     assert len(net) == 4 and all(x.isdigit() for x in net)                                         # whole numbers, never 1.23e+10
     f = parse_facts(out)
     assert f["rx_mbps"] >= 0 and f["tx_mbps"] >= 0 and 0 <= f["cpu"] <= 100
+
+
+def test_a_sample_does_not_hold_a_database_connection_while_the_server_is_asked(client, monkeypatch):
+    """Review 2026-10-16: sample_server kept its session (a pool connection) for the whole SSH answer - up to 35 s - and a few slow servers used up the pool."""
+    from nikatel import db
+    from nikatel.db import session
+    from nikatel.models import Server
+    from nikatel.services import facts
+
+    with session() as s:
+        s.add(Server(name="s1", host="203.0.113.5", role="iran", online=True))
+        sid = s.query(Server).one().id
+
+    held = []
+
+    def ask(node, script, *a, **k):
+        held.append(db.engine().pool.checkedout())          # connections handed out right now, while "the server" answers
+        raise facts.SSHError("ssh connection lost")
+
+    monkeypatch.setattr(facts, "run_script", ask)
+    facts.sample_server(sid)
+    assert held == [0]
+    with session() as s:
+        srv = s.query(Server).one()
+        assert srv.online is False and "ssh connection lost" in srv.last_error

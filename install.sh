@@ -68,7 +68,9 @@ fi
 say "python environment"
 [ -d "$VENV" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip
-"$VENV/bin/pip" install -q -e "$SRC"
+CONSTRAINTS=""
+[ -f "$SRC/requirements.lock" ] && CONSTRAINTS="-c $SRC/requirements.lock"      # a fresh install gets exactly the library versions the tests ran on
+"$VENV/bin/pip" install -q $CONSTRAINTS -e "$SRC"
 
 say "directories and config"
 mkdir -p "$DATA"/{data,backups,logs} "$ETC"

@@ -2,27 +2,35 @@ import re
 import time
 from collections import deque
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from .. import __version__, jobs
-from ..auth import current_user
+from ..auth import current_user, session_user
 from ..config import get_settings
 from ..db import session
-from ..models import Job, Server, Tunnel
+from ..log import get_logger, mask
+from ..models import Job, Panel, Server, Tunnel
 
 router = APIRouter(tags=["system"])
 _STARTED = int(time.time())
 _LOG_LINE = re.compile(r"^(\S+) (\w+)\s+(\S+)\s+(.*?)(?: rid=(\S+))?$")
+_IPV4 = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}\b")
+clog = get_logger("client")
+_CLIENT_HITS: deque = deque()          # when the browser last told about a script error (a loop of errors must not fill the log)
 
 
 @router.get("/health")
-def health():
-    """Unauthenticated liveness check for deploy scripts and uptime monitors."""
+def health(request: Request):
+    """Liveness check for deploy scripts and uptime monitors: `{"ok": true}` for everyone; the version and the uptime only to a signed-in session or token (they tell a stranger what to try)."""
     with session() as db:
         db.execute(select(func.count(Server.id)))
 
-    return {"ok": True, "version": __version__, "uptime": int(time.time()) - _STARTED}
+    if session_user(request):
+        return {"ok": True, "version": __version__, "uptime": int(time.time()) - _STARTED}
+
+    return {"ok": True}
 
 
 @router.get("/health/detail", dependencies=[Depends(current_user)])
@@ -88,6 +96,79 @@ def health_detail():
 
     note("errors", errors < 20, f"{errors} errors in the log in the last hour", "Many errors: Logs → What went wrong shows where they come from (the panel itself, a server, or outside).")
     return {"ok": not problems, "version": __version__, "uptime": now - _STARTED, "problems": problems, "checks": checks}
+
+
+class ClientError(BaseModel):
+    message: str = Field(max_length=400)
+    source: str = Field("", max_length=200)
+    line: int = Field(0, ge=0, le=10_000_000)
+    stack: str = Field("", max_length=1500)
+    page: str = Field("", max_length=60)
+
+
+@router.post("/client-error", dependencies=[Depends(current_user)])
+def client_error(body: ClientError):
+    """The page tells the panel about a script error (window.onerror / unhandled rejection): ONE warning line in the log with the request id, so what the owner saw can be found. At most 20 a minute."""
+    now = time.time()
+
+    while _CLIENT_HITS and now - _CLIENT_HITS[0] > 60:
+        _CLIENT_HITS.popleft()
+
+    if len(_CLIENT_HITS) >= 20:
+        return {"ok": True, "dropped": True}
+
+    _CLIENT_HITS.append(now)
+    clog.warning("browser error on %s: %s (%s:%s) %s", body.page or "?", body.message, body.source.rsplit("/", 1)[-1][:60], body.line, body.stack.replace("\n", " | ")[:700])
+    return {"ok": True}
+
+
+def _recent_problems(limit: int = 25) -> list[dict]:
+    """The newest warnings and errors of the log (the last 400 KB of it), secret-masked, with their request ids and the addresses cut to their first two numbers."""
+    path = get_settings().log_dir / "nikatel.log"
+
+    if not path.exists():
+        return []
+
+    size = path.stat().st_size
+
+    with path.open("rb") as f:
+        f.seek(max(0, size - 400_000))
+        raw = f.read().decode("utf-8", errors="replace")
+
+    out: list[dict] = []
+
+    for ln in raw.splitlines():
+        m = _LOG_LINE.match(ln)
+
+        if m and m.group(2) in ("WARNING", "ERROR"):
+            out.append({"ts": m.group(1), "level": m.group(2), "domain": m.group(3), "text": _IPV4.sub(r"\1.\2.x.x", mask(m.group(4)))[:300], "rid": m.group(5) or ""})
+
+    return out[-limit:][::-1]
+
+
+@router.get("/system/diagnostics", dependencies=[Depends(current_user)])
+def diagnostics():
+    """Everything needed to describe a problem, in one answer to copy: versions, the health checks, every job, the counts, the newest warnings and errors. No key, no password, no address of a server (the log lines have theirs cut)."""
+    import platform
+    import sys
+
+    s = get_settings()
+    now = int(time.time())
+    health = health_detail()
+
+    with session() as db:
+        servers = list(db.scalars(select(Server)))
+        tunnels = list(db.scalars(select(Tunnel)))
+        job_rows = list(db.scalars(select(Job)))
+        n_panels = db.scalar(select(func.count(Panel.id))) or 0
+
+    return {"ok": True, "generated": now, "version": __version__, "python": sys.version.split()[0], "platform": platform.platform(), "uptime_s": now - _STARTED, "read_only": s.read_only,
+            "settings": {"log_level": s.log_level, "session_hours": s.session_hours, "tunnel_check_interval": s.tunnel_check_interval, "server_sample_interval": s.server_sample_interval, "ssh_workers": s.ssh_workers},
+            "health": {"ok": health["ok"], "problems": health["problems"], "checks": health["checks"]},
+            "counts": {"servers": len(servers), "servers_online": sum(1 for x in servers if x.online), "tunnels": len(tunnels), "tunnels_up": sum(1 for x in tunnels if x.state == "up"), "panels": n_panels},
+            "jobs": [{"name": j.name, "interval": j.interval, "enabled": j.enabled, "running": j.running, "runs": j.runs, "failures": j.failures, "last_ok_ago_s": (now - j.last_ok) if j.last_ok else None,
+                      "last_duration_ms": j.last_duration_ms, "last_error": mask(j.last_error or "")[:200]} for j in sorted(job_rows, key=lambda x: x.name)],
+            "dead_job_threads": jobs.dead(), "recent_problems": _recent_problems()}
 
 
 @router.get("/overview", dependencies=[Depends(current_user)])

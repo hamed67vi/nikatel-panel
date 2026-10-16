@@ -48,7 +48,7 @@ from .services import (
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
 ERROR_CODES = {400: "bad_request", 401: "not_signed_in", 402: "license_needed", 403: "forbidden", 404: "not_found", 409: "conflict", 422: "invalid",
-               429: "too_many_requests", 500: "internal", 502: "upstream_failed", 503: "unavailable"}      # docs/api.md: one error shape, these codes
+               413: "too_large", 429: "too_many_requests", 500: "internal", 502: "upstream_failed", 503: "unavailable"}      # docs/api.md: one error shape, these codes
 
 
 def error_json(status: int, message: str, code: str | None = None, headers: dict | None = None) -> JSONResponse:
@@ -57,6 +57,7 @@ def error_json(status: int, message: str, code: str | None = None, headers: dict
 
 
 SLOW_MS = 3000          # an API answer slower than this is written to the log, so the slow routes are found instead of guessed
+MAX_BODY = 8 * 1024 * 1024      # a request body this big is never a real one (the biggest honest JSON is a core config); the backup upload has its own, larger limit
 
 
 def _index_html() -> str:
@@ -160,6 +161,12 @@ def _register_jobs() -> None:
 async def _lifespan(app: FastAPI):
     s = get_settings()
     s.data_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        s.data_dir.chmod(0o700)          # the database, the session secret, the sign-in file: not for any other account of the machine (review 2026-10-16)
+    except OSError:
+        pass
+
     backup.apply_pending_restore()          # a restore asked for in the Backups card: the files are put in place before the database is opened
     init_db()
     pw = auth.ensure_admin()
@@ -243,6 +250,11 @@ def create_app(run_jobs: bool = True) -> FastAPI:
             if not gate.allowed(request):
                 return error_json(404, "Not Found", headers={"X-Request-Id": rid})   # looks exactly like a missing page
 
+            declared = request.headers.get("content-length", "")
+
+            if declared.isdigit() and int(declared) > (backup.MAX_RESTORE + 1_000_000 if p == "/api/backup/restore-upload" else MAX_BODY):      # refused before one byte is read into memory
+                return error_json(413, "the request is too big", headers={"X-Request-Id": rid})
+
             if p in ("/api/docs", "/api/openapi.json") and not auth.session_user(request):   # the API description is for the signed-in operator only
                 return error_json(401, "not logged in", headers={"X-Request-Id": rid})
 
@@ -297,8 +309,20 @@ def create_app(run_jobs: bool = True) -> FastAPI:
 
     @app.exception_handler(Exception)
     async def _any(request: Request, exc: Exception):
-        log.error("error in %s %s: %s", request.method, request.url.path, exc, exc_info=exc)
-        return error_json(500, "internal error: " + str(exc)[:160])
+        """What got past every other handler: the log has the whole story under this request id; the browser gets only the id (an exception text can carry a path, a query, a host)."""
+        rid, token = logmod.request_id.get(), None
+
+        if rid == "-":          # (the request id of the middleware is already gone here: a new one is made and put on the log line, so the id the browser shows finds the story)
+            rid = secrets.token_hex(3)
+            token = logmod.request_id.set(rid)
+
+        try:
+            log.error("error in %s %s: %s", request.method, request.url.path, exc, exc_info=exc)
+        finally:
+            if token is not None:
+                logmod.request_id.reset(token)
+
+        return error_json(500, "internal error (request id " + rid + ")", headers={"X-Request-Id": rid})
 
     if WEB.exists():
         app.mount("/static", StaticFiles(directory=WEB), name="static")

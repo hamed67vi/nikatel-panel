@@ -46,3 +46,11 @@ def test_add_column_is_idempotent():
     with session() as s:
         dbmod._add_column(s, "jobs", "last_failure", "VARCHAR(300) DEFAULT ''")
         dbmod._add_column(s, "jobs", "last_failure", "VARCHAR(300) DEFAULT ''")
+
+
+def test_the_connection_pool_is_big_enough_for_the_jobs_and_the_pages():
+    """Review 2026-10-16: SQLAlchemy's default (5 + 10) let the 16th thread wait 30 s and fail while slow jobs held their connections."""
+    from nikatel import db
+
+    pool = db.engine().pool
+    assert pool.size() == 20 and pool._max_overflow == 40

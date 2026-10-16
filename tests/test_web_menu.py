@@ -74,6 +74,7 @@ def test_the_groups_of_the_menu_are_built_from_the_tabs_of_their_pages():
 def test_go_takes_the_tab_the_menu_asks_for():
     assert re.search(r"function go\(page, tab\)", APP) and "navMark(true)" in APP and "function subSet(page, k)" in APP and "function tabSet(k)" in APP
 
+
 def test_a_tab_that_is_switched_off_is_in_the_menu_grey_and_cannot_be_clicked():
     """The owner asked to see the rest of the tabs of Tunnels: Outbound is switched off (roadmap #92) and shows grey, like the Shop bot, instead of missing from the group."""
     assert '.map(t => [t[0], navPlain(t[1]), ic[t[0]] || SI.doc, t[3] === "off" ? "off" : t[3] === "act" ? "act" : false])' in APP
@@ -92,6 +93,7 @@ def test_the_old_foreign_and_iran_lists_are_out_of_the_project_and_the_lab_is_th
     assert 'if (PAGES.lab) return PAGES.lab();' in APP and "lab.js) did not load" in APP          # (and a page that says so when lab.js did not load, never the old list)
     assert 'window.docOpen = (id, sec) => { go("nodes", "lab");' in APP and "state.tab = s.role" not in APP
     assert '"arch"' not in APP and "nav-arch" not in APP and "sub-arch" not in APP and "arch-tag" not in (WEB / "lab.css").read_text(encoding="utf-8")          # (no archive mark: there is no archive in the project)
+
 
 def test_the_section_that_was_called_servers_is_called_lab_its_list_is_any_the_tags_and_add_profile_plus_at_the_end():
     """The owner (2026-10-14): "the Servers section is called Lab", "the profiles item is called any", "+ Add profile" as the last item, then "make me three categories: Marzban, PasarGuard, Iran". The group
@@ -175,6 +177,7 @@ def test_the_panel_item_is_locked_only_while_no_panel_is_connected_and_says_why_
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     assert "nav a.nav-lock" in css and "pointer-events" not in css.split("nav a.nav-lock", 1)[1].split("}", 1)[0]          # (unlike a switched-off item, a click on it must arrive)
 
+
 def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_of_many_buttons():
     """The owner (2026-10-14): "the model of the cards and their icons as before, only the contents of the columns new", "the flags as before, for my Iran servers too", "instead of many buttons"
     (the picture of a single ⋯ menu), "much more compact"."""
@@ -198,6 +201,7 @@ def test_the_lab_files_are_loaded_and_versioned_like_the_others():
     assert '"lab.js"' in main and '"lab.css"' in main
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     assert "PAGES.lab = async () =>" in lab and "window.labOn = " in lab and "window.labWinHtml = " in lab and "window.labWtab = " in lab
+
 
 def test_the_lab_names_the_button_add_server_has_a_plus_beside_the_tabs_and_the_logos_of_the_panels():
     """The owner (2026-10-14): the button is "Add server"; "a + beside the other profiles" (the tabs) makes a new profile (category); the emoji of PasarGuard is the winged lion, of Marzban the barbed wire; the menu of
@@ -370,6 +374,7 @@ def test_the_usage_tab_is_round_stats_in_sections_with_a_nodes_only_view():
     assert "const labLampTone = s =>" in lab and "labIssues(s).some(i => !i.path)" in lab and lab.count(", false, true);") == 3 and "true, true);" in lab and lab.count('data-lamp="') == 3
     assert 'tr[data-lamp="bad"] { --lamp: #ff6b8b; }' in labcss and 'tr[data-lamp="warn"] { --lamp: #ffc44d; }' in labcss
 
+
 def test_a_server_or_node_can_be_moved_to_any_profile_from_the_menu_or_by_dragging_its_row_onto_a_tab():
     """The owner, 2026-10-15: "a way to move a server to any profile we like"."""
     lab, css = _web("lab.js"), _web("lab.css")
@@ -379,6 +384,7 @@ def test_a_server_or_node_can_be_moved_to_any_profile_from_the_menu_or_by_draggi
     assert 'ondragover="labDropOver(event)"' in lab and 'ondrop="labDrop(event, this.dataset.k)"' in lab and 'labMoveTo(id, k === "any" ? "" : k)' in lab
     assert ".lab-mv-list {" in css and ".lab-kinds button.drop {" in css
 
+
 def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarguard_profile_is_locked():
     """The owner, 2026-10-15: "make this box prettier, show the suggested tags" and "the PasarGuard profile cannot be deleted or renamed while its panel is connected"."""
     lab, css = _web("lab.js"), _web("lab.css")
@@ -387,6 +393,7 @@ def test_the_add_profile_box_is_small_and_offers_the_suggested_tags_and_a_pasarg
     assert ".lab-np .lab-np-in {" in css and ".lab-np .lab-np-chip {" in css
     assert 'const labTagLocked = t => labHasPg() && String(t).toLowerCase().startsWith("pasarguard")' in lab and lab.count("if (labTagLocked(cur)) {") == 2
     assert lab.count('${labTagLocked(cur) ? "disabled" : ""}') == 2                                                      # (the two buttons beside the tabs are off)
+
 
 def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the_pasarguard_panel():
     """The owner, 2026-10-15: "when we press Delete a box opens with a checkbox: if ticked, the node is deleted from the PasarGuard panel itself"."""
@@ -399,9 +406,11 @@ def test_deleting_a_node_asks_in_a_box_with_a_tick_that_also_deletes_it_from_the
     assert "if (!prof) {" in branch                                                                                   # (a node with no profile keeps the plain question)
     assert ".ask-check {" in _web("lab.css")
 
+
 def test_a_pasarguard_profile_has_a_sync_button_beside_its_tabs_and_in_its_empty_page():
     lab = _web("lab.js")
     assert "window.labSyncNodes = async () =>" in lab and '"/api/profiles/sync"' in lab and lab.count("onclick=\"labSyncNodes()\"") == 2 and "${labSyncBtn(cur, IB)}" in lab
+
 
 def test_deleting_a_server_that_carries_a_pasarguard_node_has_the_tick_in_its_own_box():
     """The owner, 2026-10-15: "when I press Delete server it did not bring the tick that deletes the node from the PasarGuard panel too"."""
@@ -411,6 +420,7 @@ def test_deleting_a_server_that_carries_a_pasarguard_node_has_the_tick_in_its_ow
     after = srv.split("window.pgSrvAfterDelete = async (sname, nodes, alsoNode) => {", 1)[1].split("/* ----", 1)[0]
     assert "if (alsoNode)" in after and "gconfirm" not in after          # (no second question: the tick of the first box says)
 
+
 def test_a_server_that_carries_a_pasarguard_node_keeps_the_actions_of_the_node_in_its_menu():
     """The owner, 2026-10-15: "I did not say remove these capabilities" - the node was merged into the row of its server, and the Log, Usage, Certificate, Restart ... of the node were gone from the menu."""
     lab = _web("lab.js")
@@ -418,12 +428,14 @@ def test_a_server_that_carries_a_pasarguard_node_keeps_the_actions_of_the_node_i
     assert 'x.type === "pasarguard" && x.node_id != null' in row and 'labNodeParts({panel_id: pgn.panel_id, node_id: pgn.node_id})' in row and 'labSubItem("PasarGuard node", "box", [' in row
     assert "...nodeFly, gone, labSep, del]" in lab
 
+
 def test_one_list_of_the_left_menu_is_open_at_a_time():
     """The owner, 2026-10-15: "two collapsible lists must not be open together: when I press Servers and Panel was open, it closes"."""
     app = _web("app.js")
     body = app.split("function navGroup(g, open, keep) {", 1)[1].split("\n}", 1)[0]
     assert 'if (open) document.querySelectorAll("#nav .nav-g").forEach(o => { if (o !== g && o.dataset.open === "1") navGroupSet(o, false, true); });' in body
     assert "function navGroupSet(g, open, keep) {" in app and "only the first stays" in app
+
 
 def test_the_lab_looks_again_by_itself_so_a_new_server_does_not_stay_with_dashes():
     """The owner, 2026-10-15: "I added a normal server and it stayed like this" (dashes until the page was refreshed)."""
@@ -868,6 +880,7 @@ def test_create_tunnel_waits_for_the_second_server():
     assert "const nSrv = (srvAll || state.serversCache || []).length;" in app and '${nSrv >= 2 ? "" : "disabled"}' in app and "add an Iran server and a foreign server first (Servers)" in app
     assert "if (Array.isArray(state.serversCache) && state.serversCache.length < 2) { toast(" in app and "html body #page .toolbar.joined button.cta:disabled {" in css
 
+
 def test_add_tab_is_one_frame_with_the_subscription_configs():
     """The owner, 2026-10-16: the Add sections in one frame of one size whichever drawer is open, and the empty right side shows the subscription configs (the hosts)."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
@@ -961,6 +974,7 @@ def test_the_dashboard_has_the_getting_started_card_and_no_empty_slots():
     assert 'onsubmit="return setupSave(event, \'telegram\')"' in app and 'onsubmit="return setupSave(event, \'ai\')"' in app and 'onclick="setupShow()"' in app and "su && su.dismissed && su.done < su.total" in app
     assert "html body #page .dash-setup {" in css and "html body #page .su-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: start;" in css and "html body #page .dash-cols > .card { height: 376px;" in css
 
+
 def test_the_light_theme_sheet_holds_only_light_rules_and_loads_last():
     """The owner, 2026-10-16: every element and font of the light theme clear. light.css is loaded after every sheet and every rule in it is a light-mode rule (the dark theme is untouched)."""
     index, main = INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
@@ -983,3 +997,17 @@ def test_the_health_box_of_the_dashboard_keeps_each_detail_on_one_line():
     app, css = _web("app.js"), _web("lab.css")
     assert '<small title="${sub}">${sub}</small>' in app
     assert "html body #page .dash-cols .dash-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+
+
+def test_the_page_tells_the_panel_about_its_script_errors_and_copies_the_diagnostics():
+    """Review 2026-10-16: a script error vanished in the owner's browser; and a bug report had no single page of facts."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert 'fetch("/api/client-error", {method: "POST"' in app and 'window.addEventListener("unhandledrejection"' in app and 'window.addEventListener("error"' in app and "sent >= 5 || seen.has(key)" in app and "ResizeObserver loop" in app and 'r.name === "AbortError"' in app
+    assert "window.abtDiag = async () =>" in app and 'api("/api/system/diagnostics")' in app and "navigator.clipboard.writeText(txt)" in app and 'class="sm abt-diag" onclick="abtDiag()"' in app
+    assert "html body #page .abt-foot > button.abt-diag {" in css and "html body #page .abt-foot > span:nth-last-child(2) {" in css
+
+
+def test_the_cores_box_does_not_ask_for_a_button_that_is_gone():
+    """The Check button of the cores was taken away (the check runs by itself): its empty text and its status no longer say "press Check"."""
+    app = _web("app.js")
+    assert "press Check" not in app and "Press “Check for updates”" not in app and "it happens by itself, in a moment" in app

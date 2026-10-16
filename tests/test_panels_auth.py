@@ -381,3 +381,51 @@ def test_panels_json_may_carry_a_key_or_a_token():
         rows = {p.name: dict(p.secrets or {}) for p in db.scalars(select(Panel))}
 
     assert rows == {"one": {"token": KEY}, "two": {"token": t}, "three": {"password": "pw"}}
+
+
+def test_the_saved_key_is_never_sent_to_another_address(client, monkeypatch):
+    """Review 2026-10-16: changing only the address of a panel kept the saved key and the next check sent it to the new machine."""
+    monkeypatch.setattr(panels, "call", PanelApi())
+    monkeypatch.setattr(panels, "_login", lambda c: jwt(exp=int(time.time()) + 600 * DAY))
+    pid = client.post("/api/panels", json={"name": "pg", "type": "pasarguard", "url": URL, "token": KEY}).json()["panel"]["id"]
+    assert client.patch(f"/api/panels/{pid}", json={"url": URL + "/dashboard"}).status_code == 200        # the same machine: a path is not another address
+    assert client.patch(f"/api/panels/{pid}", json={"name": "pg2", "verify_tls": False}).status_code == 200
+
+    for other in ("https://evil.example.test", "https://panel.example.test:8443", "http://panel.example.test"):         # another host, port or scheme
+        r = client.patch(f"/api/panels/{pid}", json={"url": other})
+        assert r.status_code == 400 and "another address" in r.json()["error"], other
+
+    assert client.get("/api/panels").json()["panels"][0]["url"] == URL and secrets_of(pid)["token"] == KEY
+    r = client.patch(f"/api/panels/{pid}", json={"url": "https://new.example.test", "token": OTHER_KEY})      # with the key typed again it is tried at the new address first
+    assert r.status_code == 200 and r.json()["panel"]["url"] == "https://new.example.test" and secrets_of(pid)["token"] == OTHER_KEY
+    assert panels.origin("https://A.example.test/x") == ("https", "a.example.test", 443) and panels.origin("http://h:81") == ("http", "h", 81)
+
+
+def test_the_panels_are_checked_at_the_same_time(monkeypatch):
+    """A panel that does not answer costs its own timeout, not the timeout of every panel after it."""
+    import threading
+
+    for i in range(4):
+        make_panel(f"p{i}", "pasarguard", token=KEY)
+
+    seen = {"now": 0, "max": 0}
+    lock = threading.Lock()
+
+    def slow(c):
+        with lock:
+            seen["now"] += 1
+            seen["max"] = max(seen["max"], seen["now"])
+
+        time.sleep(0.2)
+
+        with lock:
+            seen["now"] -= 1
+
+        return {"ok": True, "error": "", "nodes": [], "stats": {"version": "5.4.1"}, "latency_ms": 5}
+
+    monkeypatch.setattr(panels, "check", slow)
+    t0 = time.time()
+    panels.check_all()
+    assert seen["max"] >= 3 and time.time() - t0 < 0.7          # four checks of 0.2 s one after the other would be 0.8 s
+    with session() as db:
+        assert [p.status for p in db.scalars(select(Panel))] == ["up"] * 4

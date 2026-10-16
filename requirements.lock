@@ -1,0 +1,34 @@
+# The versions this panel is built and tested with (2026-10-16): the runtime dependencies of pyproject.toml and everything they need, pinned.
+# A FRESH install uses them as constraints (install.sh: pip install -c requirements.lock -e .), so a new machine gets exactly what the tests ran on and a new
+# major release of a library cannot change the panel by itself. An update of a running panel (scripts/deploy.sh) leaves its libraries alone.
+# To renew it: install the new versions in a test environment, run the whole suite, then regenerate this file from that environment.
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+cffi==2.1.1
+click==8.5.0
+cryptography==50.0.2
+fastapi==0.143.0
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.9.0
+httpx==0.28.1
+idna==3.20
+itsdangerous==2.2.0
+opentelemetry-api==1.45.1
+pycparser==3.11
+pydantic==2.14.0
+pydantic-core==2.50.0
+pydantic-settings==2.15.0
+python-dotenv==1.2.4
+pyyaml==6.0.3
+qrcode==8.2
+sqlalchemy==2.1.4
+starlette==1.7.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+uvicorn==0.54.0
+uvloop==0.23.0
+watchfiles==1.3.0
+websockets==17.2

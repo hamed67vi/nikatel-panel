@@ -108,12 +108,16 @@ the token is shown once; the panel keeps only its hash) and sent on every reques
 | scope | may |
 |---|---|
 | `read` | every GET except the settings, the sign-in, the tokens, the log and the licence |
-| `act` | `read`, plus the routes that start work: checks, repairs, builds, tests, DNS records |
+| `act` | `read`, plus the routes that start work: checks, repairs, builds, tests, DNS records - but not adding, changing or removing a Marzban / PasarGuard panel (its key, login and address: `admin` only) |
 | `admin` | everything, including settings, tokens (it may make tokens without a password), the log |
 
 A token that is revoked stops at once. Every use is logged on the token (`last_used_at`); making and revoking are written to the
 security log. A valid token passes the secret entry path; a wrong one sees the missing page like everyone else. The answer to a
 request a token may not make is `403` with `"code": "token_scope"`.
+
+`Sign out` ends the session on the server (the id of the cookie leaves the registry), so a copied cookie is dead too; every other session ends when the
+password or the two-step settings change. Errors that were not foreseen answer `500` with only `request id <id>`: the id finds the whole story in the log.
+A request body above 8 MB is refused with `413` (`too_large`); the backup upload has its own limit.
 
 ## 4. Versions
 

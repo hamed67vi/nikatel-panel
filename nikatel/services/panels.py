@@ -18,7 +18,9 @@ import json
 import re
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import select
@@ -62,6 +64,12 @@ def base_url(url: str) -> str:
         raise ValueError("the address is not valid")
 
     return u
+
+
+def origin(url: str) -> tuple[str, str, int]:
+    """(scheme, host, port) of an address - what "the same panel" means: a path may change, a host or a port is another machine."""
+    u = urlsplit(str(url or "").strip().lower())
+    return u.scheme, u.hostname or "", u.port or (443 if u.scheme == "https" else 80)
 
 
 def _pick(d, *keys, default=None):
@@ -558,8 +566,10 @@ def check_all() -> None:
 
     rw = not get_settings().read_only
 
-    for pid, c in items:
-        res = check(c)
+    with ThreadPoolExecutor(max_workers=max(1, min(8, len(items)))) as ex:          # every panel is asked at the same time: one that does not answer costs its own 20 s, not 20 s of the others
+        answers = list(ex.map(lambda it: check(it[1]), items))
+
+    for (pid, c), res in zip(items, answers):
         now = int(time.time())
 
         with session() as db:
@@ -747,6 +757,13 @@ def update(panel_id: int, changes: dict) -> dict:
     New credentials are tried on the panel first; nothing is replaced when the panel does not accept them."""
     token, password = str(changes.get("token") or "").strip(), str(changes.get("password") or "")
     sec, admin = None, ""
+
+    if changes.get("url") and not (token or password):          # the saved key / login is never sent to ANOTHER machine: a new host or port needs the credential typed again (it is tried there first)
+        with session() as db:
+            cur = db.get(Panel, panel_id)
+
+        if cur is not None and origin(base_url(changes["url"])) != origin(cur.url):
+            raise ValueError("this is another address (host or port): type the panel's API key (or sign in) again - the saved one is not sent to a new address")
 
     if token or password:
         c = cred_for(panel_id)
