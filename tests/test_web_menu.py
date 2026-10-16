@@ -856,7 +856,7 @@ def test_the_rows_of_active_tasks_after_the_picture():
     """The owner, 2026-10-16 (his picture): a dot with its word, buttons with icons - blue for what to do, dark for the rest."""
     app, dr = _web("app.js"), _web("doctor.css")
     assert '${apIc("wifi")}<span>Live</span>' in app and '${apIc("sync")}<span>Move now</span>' in app and '${apIc("spark")}<span>Fix with AI</span>' in app and "📡" not in app.split("PAGES.actions = async", 1)[1].split("window.apMode", 1)[0]
-    assert '"down" : "degraded") : kind === "slow" ? "degraded" : t.state}">' in app
+    assert '"down" : "degraded") : kind === "slow" ? "degraded" : kind === "users" ? (t.ux.grade === "bad" ? "down" : "degraded") : t.state}">' in app
     assert 'html body #page .ap-tasks .ap-row .st::before { content: ""; flex: none; width: 12px;' in dr and "html body #page .ap-tasks .ap-row button.pri { background: #2f7bf5;" in dr and "html body #page .ap-tasks .nw-box.sug-box {" in dr
 
 
@@ -1177,3 +1177,13 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     assert 'kv("Bandwidth", ' in app and 'onclick="bwMeasure(${t.id})"' in app
     assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bw.drop b" in css and "html body #page .tun-tbl td.bwc" in css
     assert "Speed test…" in lab                                                                   # (the menu of a tunnel is as it was)
+
+def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
+    """1.61.0 (the owner, 2026-10-16: "I want the Doctor to truly say whether the user gets a quality internet"): the grade of what the configs through a tunnel do comes into the tunnel window, the
+    tip of the bandwidth cell and the Doctor page (a row "users"); the configs that ride no known tunnel are counted with a button that ties them to one (the Configs page is switched off)."""
+    app = _web("app.js")
+    assert "const uxTip = t =>" in app and "const uxWhy = t =>" in app and "+ uxTip(t);" in app and 'kind === "users" ? uxWhy(t)' in app
+    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and '${users.map(t => row(t, "users")).join("")}' in app and 'kv("Users", ' in app
+    assert "const usersNote = u => u && u.total > u.linked ?" in app and "${usersNote(dc && dc.users)}" in app and 'onclick="apLinkConfigs()"' in app
+    assert "window.apLinkConfigs = async () =>" in app and "window.apLinkSave = async () =>" in app and 'api("/api/configs/" + s.dataset.cid, {method: "PUT", body: JSON.stringify({tunnel: s.value})})' in app
+    assert 'api("/api/doctor"), api("/api/configs"), api("/api/tunnels")' in app

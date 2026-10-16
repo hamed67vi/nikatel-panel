@@ -382,6 +382,7 @@ class TunnelOut(BaseModel):
     detail: dict
     units: dict
     quality: dict = {}
+    ux: dict = {}           # what the users get through it (services/userq.py): the grade, the configs with a problem, the Doctor's reading
     bw: dict = {}           # the bandwidth the Doctor keeps (services/bandwidth.py) without its history; GET /tunnels/{id}/bandwidth has the history
     record: dict = {}       # port mapping, direction, test door, engine options - never secrets
 
@@ -395,7 +396,8 @@ def _out(t: Tunnel) -> TunnelOut:
                      state=t.state, state_since=t.state_since, last_check_at=t.last_check_at, last_error=t.last_error,
                      rtt_ms=t.rtt_ms, rx_mbps=t.rx_mbps, tx_mbps=t.tx_mbps, detail=t.detail or {}, quality=(t.record or {}).get("quality") or {},
                      bw={k: v for k, v in ((t.record or {}).get("bw") or {}).items() if k != "hist"},
-                     record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw")},
+                     ux={k: v for k, v in ((t.record or {}).get("ux") or {}).items() if k != "pend"},
+                     record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw", "ux")},
                      units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface})
 
 

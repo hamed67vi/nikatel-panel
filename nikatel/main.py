@@ -45,6 +45,7 @@ from .services import (
     tunnel_test,
     tunnels,
     underuse,
+    userq,
 )
 
 log = logmod.get_logger("http")
@@ -151,6 +152,7 @@ def _register_jobs() -> None:
     jobs.register("cpu-balance", 600, balance.run)              # a busy server whose network work sits on one core gets RPS (the Doctor does it by itself; no tunnel is touched)
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
+    jobs.register("userq", 300, userq.run)                      # what the USERS get through every tunnel: the probe's tests of the configs that ride it, each against its own week; the grade of the tunnel, a look by the Doctor when it falls (services/userq.py)
     jobs.register("bandwidth", 60, bandwidth.run)               # the bandwidth of every GRE tunnel: one light measurement per minute (two connections, 120 MB at most), each tunnel about every 90 minutes; a drop is looked at by the Doctor (services/bandwidth.py)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back

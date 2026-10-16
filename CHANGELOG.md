@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.61.0 - The Doctor reads what the USERS get, not only what the tunnel does
+
+The owner (2026-10-16): "I want the Doctor to truly say whether the user gets a quality internet". A tunnel can be perfect - up, no loss, its whole bandwidth - and its users can still suffer: the foreign server's own internet, its Xray, the CDN in front of the Iran server. The probe tests every config from inside Iran every few minutes, and that is the only place where the user's view exists, so the Doctor now reads it (`services/userq.py`, a job every five minutes):
+
+- **Which configs ride which tunnel.** In this order: the label the owner put on the config (Tunnel), the address of the config when it is the address of the tunnel's Iran server (and its port is forwarded by that tunnel), or - for a CDN name - the A record of that name in the DNS accounts (the Iran server it points at, and the port the record sends to). A config that cannot be placed for sure is left out: nothing is guessed.
+- **Each config is judged against itself.** Its tests of the last two hours against its own week: *down* (off for 10 minutes), *unstable* (answered under 85 % of its tests), *slow ping* (twice its usual and 200 ms more), *slow speed* (its last speed test under half of its usual - the probe's speed tests now keep a history of thirty per config). A config that was never quick is not blamed for staying so.
+- **The grade of the tunnel** - good / fair / poor / bad / unknown - changes only after two looks in a row; *bad* only when every config through it is down or unstable. One event when it changes, one when it is good again.
+- **Where the problem is.** When a tunnel falls to poor or bad the Doctor starts a look by itself (the Live window, the story in *Completed*) and says it in one sentence: the tunnel is down, slow, loses packets, its delay rose, a server of it is busy - or, when all that is fine, that the problem is **beyond the tunnel** (the foreign server's own internet or Xray, or the CDN in front of the Iran server).
+- **Shown** in the tunnel window (*Users*), in the tip of the bandwidth cell and on the Doctor page (a row *users*). `GET /api/tunnels` carries `ux`.
+- **The links the Doctor lacks.** The Doctor page counts the configs that ride no known tunnel ("N of the M configs ride no known tunnel ...") and its button *Link them...* opens a window to pick the tunnel of each (the Configs page is switched off, so it is done here). `GET /api/doctor` carries `users`.
 ## 1.60.2 - Found by throttling a real tunnel: the Doctor no longer calls a test of its own "users", and two scales never mix
 
 The real test of the bandwidth watch (2026-10-16): a Backhaul tunnel between an Iran server and a foreign server, its link shaped to 40 Mbit on the foreign server. The watch saw 37 Mb/s against a usual 474, confirmed the drop with the second sample, wrote the story, the events and the *slow* row - and showed three faults that are fixed here:

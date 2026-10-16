@@ -346,6 +346,9 @@ def _sync(settle: bool = True) -> list[str]:
                 c.last_error = r["error"]
 
             if r["down_mbps"] is not None:
+                if r["speed_at"] and r["speed_at"] != c.speed_at:           # a NEW speed test of the probe: its number joins the history the Doctor compares the next one with (services/userq.py)
+                    meta["speed_hist"] = [*(meta.get("speed_hist") or []), [now, r["down_mbps"], r["up_mbps"]]][-30:]
+
                 c.down_mbps, c.up_mbps, c.speed_at = r["down_mbps"], r["up_mbps"], r["speed_at"]
 
             if status != old:

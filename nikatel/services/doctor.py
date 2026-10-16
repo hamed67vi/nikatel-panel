@@ -122,12 +122,14 @@ def refresh_suggestions(now: int | None = None) -> list[str]:
 
 
 def state() -> dict:
+    from . import userq
+
     refresh_suggestions()
     s = _state()
     conf = st.get("repair")
     return {"mode": mode(), "can_move": can_move(), "licensed": license.has("failover"), "server_minutes": int(conf.get("server_minutes", 10)), "after_seconds": int(conf.get("after_seconds", 60)),
             "moves": list(reversed(s["moves"]))[:40], "suggestions": list(reversed(s["suggestions"])), "back": {k: v for k, v in s["back"].items()},
-            "rails": {"max_per_day": MAX_PER_DAY, "cooldown_hours": COOLDOWN // 3600, "back_after_hours": BACK_AFTER // 3600, "saturated": SATURATED, "saturated_minutes": SATURATED_FOR // 60}}
+            "users": userq.linked_state(), "rails": {"max_per_day": MAX_PER_DAY, "cooldown_hours": COOLDOWN // 3600, "back_after_hours": BACK_AFTER // 3600, "saturated": SATURATED, "saturated_minutes": SATURATED_FOR // 60}}
 
 
 # ------------------------------------------------------------------ pure decisions
