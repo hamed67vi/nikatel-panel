@@ -91,7 +91,7 @@ def test_the_verdict_says_where_the_speed_is_lost():
 
 
 def test_a_slow_reverse_tcp_tunnel_is_pointed_at_the_ones_the_iran_server_dials(monkeypatch):
-    """Real tests, 2026-10-16: through a reverse tunnel one customer connection got about 10 Mb/s, through a forward one 109."""
+    """Real tests, 2026-10-16: four customer connections together got 19 - 109 Mb/s through a reverse Chisel and 526 - 730 through a forward one."""
     text = ts.verdict("door", 9.5, 9.0, 100.0, None, 1, True)[1]
     assert "foreign server dials this tunnel" in text and "Chisel forward" in text and "Paqet" in text and "Test this pair" in text
     assert "foreign server dials" not in ts.verdict("door", 9.5, 9.0, 100.0, None, 1, False)[1]              # (Backhaul over GRE, Paqet, forward Chisel: not told)

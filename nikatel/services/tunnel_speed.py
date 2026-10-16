@@ -77,13 +77,13 @@ REVERSE_SLOW = 30      # Mb/s of ONE connection under which a tunnel that the fo
 
 def verdict(mode: str, down: float | None, up: float | None, ping: float | None, cap: dict | None, runs: int = 1, reverse_tcp: bool = False) -> tuple[str, str]:
     """(grade, the text under the numbers): what it feels like, and where the speed is lost when the tunnel can carry much more than one customer gets.
-    `reverse_tcp`: a TCP tunnel that the foreign server dials (real tests, 2026-10-16: the route slows the data that flows away from the side that opened the connection, about 10 Mb/s for each connection)."""
+    `reverse_tcp`: a TCP tunnel that the foreign server dials (real tests, 2026-10-16: the route slows the data that flows away from the side that opened the connection - 20 - 130 Mb/s for all the connections together)."""
     grade, text = feel(down)
     parts = [text]
     cd = (cap or {}).get("down_mbps")
 
     if reverse_tcp and down is not None and down < REVERSE_SLOW:
-        parts.append("The foreign server dials this tunnel, and some routes slow the data that flows away from the side that opened the connection (about 10 Mb/s for each connection on the route this was measured on). A tunnel the Iran server dials - Chisel forward, Paqet - can give each customer much more: try them with Test this pair.")
+        parts.append("The foreign server dials this tunnel, and some routes slow the data that flows away from the side that opened the connection (on the route this was measured on, 20 - 130 Mb/s for all connections together). A tunnel the Iran server dials - Chisel forward, Paqet, BackPack Direct - can give customers much more: try them with Test this pair.")
 
     if down is not None and cd and cd > 0:
         if down < 0.25 * cd and mode == "customer" and grade != "smooth":

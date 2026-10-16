@@ -1432,7 +1432,7 @@ const BK_GUIDE = [
   ["TCP throttled, a whitelisted domain exists", "BackPack Direct · PCK / SNI", "backpack_direct", "sni", "raw TCP frames that look like a normal flow; SNI adds a TLS hello naming the allowed domain."],
   ["Provider stalls ordinary TCP", "Paqet · KCP over raw sockets", "paqet", "kcp", "one KCP session in raw packets, aes-128-gcm; good on lossy routes, needs raw sockets on both sides."],
   ["Small group, simplest setup", "Chisel · TLS WebSocket", "chisel", "wss", "one HTTPS port on the Iran server, key pinned; fine for tens of users, CDN-able."],
-  ["Customers' downloads are slow", "Chisel · Forward WebSocket", "chisel", "fws", "the Iran server dials the foreign one. On the routes we measured, the data that flows away from the side that opened the connection is throttled: a reverse tunnel gave each customer connection about 10 Mb/s down, a forward one far more. Test your pair first."],
+  ["Customers' downloads are slow", "Chisel · Forward WebSocket", "chisel", "fws", "the Iran server dials the foreign one. On the route we measured, the data that flows away from the side that opened the connection is slowed: all customers of a reverse tunnel together got 20 - 130 Mb/s down, a forward one 400 - 730. Test your pair first."],
   ["Everything else is blocked", "BackPack · xDi (ICMP)", "backpack", "xdi", "KCP inside ping packets; slow, last resort."],
 ];
 /* two or three words per type, shown in the drop-down */

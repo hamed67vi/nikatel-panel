@@ -365,8 +365,8 @@ WantedBy=multi-user.target
 
 def chisel_mode(transport: str) -> tuple[bool, bool]:
     """(tls, forward) of a Chisel transport. Reverse (ws / wss): the foreign server dials the Iran server and the Iran server opens the user ports.
-    Forward (fws / fwss): the Iran server dials the foreign server and opens the user ports itself (real tests, 2026-10-16: the route throttles the data that flows
-    from the side that opened the connection, so a customer's download is fast only when the Iran side is the one that dials)."""
+    Forward (fws / fwss): the Iran server dials the foreign server and opens the user ports itself (real tests, 2026-10-16: the route slows the data that flows
+    away from the side that opened the connection, so a customer's download runs at full speed only when the Iran side is the one that dials)."""
     return transport in ("wss", "fwss"), transport in ("fws", "fwss")
 
 

@@ -64,6 +64,27 @@ Tuned for many users (channel size, connection pool, keepalive, heartbeat, TCP n
 * **Paqet** — KCP over raw sockets: the foreign server listens, the Iran server opens the user ports. Server key pinned on the client.
 * **Chisel** — a tunnel over one WebSocket port, plain HTTP or TLS (self-signed certificate, key pinned). **Reverse** (`ws` / `wss`): the port is on the Iran server and the foreign server dials it. **Forward** (`fws` / `fwss`): the port is on the foreign server, the Iran server dials it and opens the user ports itself (Chisel server on the foreign side, client with its own listeners on the Iran side).
 
+## Which side opens the connection - real tests
+
+Measured on one pair (an Iran server and a foreign server 114 ms away, 78 ms through GRE) with the test door and random data (a tunnel that compresses must not look faster than it is): what a **customer downloads** (foreign → Iran), in Mb/s, over one connection, four together and eight together. Another route gives other numbers - use *Test this pair* before you decide.
+
+| Tunnel | Who dials | 1 | 4 | 8 |
+|---|---|--:|--:|--:|
+| Backhaul · TCP Mux over GRE | inside GRE | 174 | 601 | 1079 |
+| BackPack Direct · PCK | Iran | 665 | — | 666 |
+| BackPack Direct · UDP | Iran | 432 | — | 324 |
+| Chisel · forward WebSocket | Iran | 110 – 159 | 526 – 730 | 668 – 748 |
+| Chisel · forward TLS WebSocket | Iran | 134 | 400 | 700 |
+| Paqet (the defaults of 1.59.2) | Iran | 165 – 210 | 308 – 351 | 301 – 327 |
+| BackPack · TCP Mux / TCP / WebSocket TLS (pool 16 – 64, three presets) | foreign | 9 – 142 | 26 – 130 | 60 – 130 |
+| Chisel · WebSocket / TLS WebSocket | foreign | 82 – 86 | 19 – 109 | 44 – 65 |
+
+(BackPack Direct · QUIC did not come up on this route.)
+
+* **The route slows the data that flows away from the side that opened a TCP connection**, whichever of the two servers opened it. A tunnel that the **foreign server dials** (BackPack, Chisel) gives one customer connection 10 – 140 Mb/s, and all customers together stayed at 20 – 130 whatever the settings (pool, mux, preset were all tried); the "upload" of the same test shows 400 – 1000 because that data runs the fast way, and means nothing for customers. A tunnel that the **Iran server dials** (Chisel forward, Paqet, BackPack Direct) and the GRE link of Backhaul get the download the fast way; the customers' upload of a forward tunnel is slowed in its turn (70 – 110 Mb/s for Chisel forward), which matters less.
+* **Prefer GRE where it passes.** Otherwise a tunnel the Iran server dials: Chisel forward needs no root and no raw sockets; BackPack Direct · PCK needs root and is the fastest for one connection; Paqet needs raw sockets and a provider that passes them.
+* **Paqet** is bound by one CPU core on each server (about 320 Mb/s here; the cipher costs nothing, more connections change nothing). The window (4096 packets) and the buffers (16 MB / 8 MB) are what lift one connection from 52 to 200; MTU 1450 and more carries nothing - the panel stops at 1400.
+
 ## What the panel does with each tunnel
 
 | Stage | What happens |
@@ -82,6 +103,7 @@ Tuned for many users (channel size, connection pool, keepalive, heartbeat, TCP n
 | Situation | Start with |
 |---|---|
 | Normal route, many users | Backhaul · TCP Mux |
+| Customers' downloads are slow through a reverse tunnel | Chisel · forward, BackPack Direct · PCK, Paqet (the Iran server dials) |
 | Provider throttles or stalls plain TCP | BackPack · TCP + PCK, Paqet |
 | Deep packet inspection | BackPack · TCP + Stealth, WebSocket TLS (behind a CDN) |
 | Lossy route, games, voice | BackPack · UDP + KCP + FEC, BackPack Direct · UDP |

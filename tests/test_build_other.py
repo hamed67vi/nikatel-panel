@@ -187,8 +187,8 @@ def test_the_paqet_mtu_stays_where_a_packet_still_fits():
 
 
 def test_a_forward_chisel_tunnel_is_dialled_by_the_iran_server():
-    """The owner, 2026-10-16: the route throttles the data that flows away from the side that opened the connection (a reverse tunnel gave a customer about 10 Mb/s down,
-    a forward one 109 Mb/s on one connection and 621 on eight). Forward = the foreign server is the Chisel server, the Iran server the client with its own listeners."""
+    """The owner, 2026-10-16: the route slows the data that flows away from the side that opened the connection (four customer connections through a reverse Chisel got 19 - 109 Mb/s
+    together, through a forward one 526 - 730). Forward = the foreign server is the Chisel server, the Iran server the client with its own listeners."""
     assert bo.chisel_mode("ws") == (False, False) and bo.chisel_mode("wss") == (True, False) and bo.chisel_mode("fws") == (False, True) and bo.chisel_mode("fwss") == (True, True)
     assert bo.CHISEL_TRANSPORTS == ("ws", "wss", "fws", "fwss")
     ports = parse_ports("443=2096")
