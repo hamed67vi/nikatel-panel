@@ -743,3 +743,40 @@ html body #modal .mh-flag.mh-tun { display: grid; place-items: center; border-ra
 html body #modal .mh-tic { display: grid; place-items: center; font-style: normal; } html body #modal .mh-tic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 html body #modal .tunwin .lab-body .sgrid { margin-bottom: 8px; }
 html[data-mode="light"] body #modal .mh-flag.mh-tun { background: linear-gradient(180deg, #eef3fd, #dde7fa); color: #2f5fc4; box-shadow: 0 0 0 1px rgba(30, 50, 100, .18), 0 0 0 4px rgba(30, 50, 100, .05); }
+/* 1.57.54 - the Dashboard in the look of the kit (the owner, 2026-10-16: "redesign the dashboard", and a first-run card that asks the API keys first): slim number chips, three boxes of ONE size with rounded rows, the getting-started card on top; the empty "free space" slots are gone */
+html body #page .dash-top { align-items: center; gap: 12px; margin-bottom: 12px; }
+html body #page .dash-kpis { gap: 8px; }
+html body #page .kpi { height: 44px; box-sizing: border-box; padding: 0 16px 0 12px; border-radius: 13px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #131b30, #0f1627); box-shadow: none; }
+html body #page .kpi b { font-size: 15.5px; font-weight: 650; } html body #page .kpi small { font-size: 10px; letter-spacing: .5px; }
+html body #page .dash-cols { gap: 12px; }
+html body #page .dash-cols > .card { height: 376px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); box-shadow: none; }
+html body #page .dash-cols > .card > h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13.5px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--uk-text); }
+html body #page .dash-cols .hl-list, html body #page .dash-cols .pb-list { display: grid; align-content: start; gap: 6px; padding-right: 2px; }
+html body #page .dash-cols .dash-row, html body #page .dash-cols .pb-row { box-sizing: border-box; min-height: 44px; margin: 0; padding: 6px 12px; gap: 10px; border: 1px solid var(--uk-line); border-radius: 12px; background: #131b2e; }
+html body #page .dash-cols .dash-row:first-of-type, html body #page .dash-cols .pb-row:first-of-type { border-top: 1px solid var(--uk-line); }
+html body #page .dash-cols .dash-name { font-size: 12.5px; font-weight: 600; } html body #page .dash-cols .dash-name small { font-size: 11px; font-weight: 400; }
+html body #page .dash-cols .pb-row.click:hover { background: #18223a; }
+html body #page .dash-cols .act-list { padding-right: 2px; }
+html body #page .dash-cols .ev { border-radius: 10px; }
+html[data-mode="light"] body #page .kpi { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .dash-cols > .card { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .dash-cols :is(.dash-row, .pb-row) { background: #f4f7fd; border-color: rgba(30, 50, 100, .12); }
+/* the getting-started card */
+html body #page .dash-setup { box-sizing: border-box; margin: 0 0 12px; padding: 12px 14px 14px; border-radius: 16px; border: 1px solid rgba(77, 140, 255, .35); background: linear-gradient(180deg, #121c36, #0e1628); box-shadow: 0 0 0 1px rgba(77, 140, 255, .06), 0 14px 36px rgba(0, 0, 0, .28); }
+html body #page .dash-setup.shut { padding-bottom: 12px; }
+html body #page .su-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+html body #page .su-ic { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: rgba(77, 140, 255, .18); border: 1px solid rgba(77, 140, 255, .4); color: #8fb6ff; font-style: normal; } html body #page .su-ic svg, html body #page .su-t svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .su-ht { display: grid; line-height: 1.25; } html body #page .su-ht b { font-size: 14.5px; font-weight: 650; } html body #page .su-ht small { font-size: 11.5px; color: var(--uk-mut); }
+html body #page .su-bar { display: block; flex: 0 1 220px; min-width: 90px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .09); overflow: hidden; } html body #page .su-bar u { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #2f8bff, #55d6a4); transition: width .4s ease; }
+html body #page .su-h .sm { height: 30px; font-size: 12px; }
+html body #page .su-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: start; margin-top: 12px; }
+html body #page .su-i { display: flex; gap: 10px; box-sizing: border-box; min-width: 0; padding: 10px 11px; border-radius: 13px; border: 1px solid var(--uk-line); background: #131b2e; }
+html body #page .su-t { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; }
+html body #page .su-i.done { opacity: .8; } html body #page .su-i.done .su-t { background: rgba(61, 220, 151, .14); border-color: rgba(61, 220, 151, .4); color: #3ddc97; }
+html body #page .su-b { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; align-content: start; } html body #page .su-b b { font-size: 13px; font-weight: 650; } html body #page .su-b small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--uk-mut); }
+html body #page .su-a { margin-top: 6px; } html body #page .su-a .sm { height: 28px; font-size: 12px; }
+html body #page .su-f { display: grid; gap: 6px; } html body #page .su-f input { height: 30px; box-sizing: border-box; border-radius: 9px; font-size: 12px; } html body #page .su-f .sm { justify-self: start; }
+@media (max-width: 1250px) { html body #page .su-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { html body #page .su-grid { grid-template-columns: minmax(0, 1fr); } }
+html[data-mode="light"] body #page .dash-setup { background: #f4f8ff; border-color: rgba(20, 86, 200, .35); box-shadow: none; } html[data-mode="light"] body #page :is(.su-i, .su-t) { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .su-ic { color: #1456c8; background: #e3edff; }
+
+/* 1.57.55 - the health box of the Dashboard: the line under a name is ONE line that is cut with an ellipsis (the whole text is its tooltip) - a long list of stale jobs was three lines high and ran over the row below */
+html body #page .dash-cols .dash-name { min-width: 0; } html body #page .dash-cols .dash-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

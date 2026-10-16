@@ -45,6 +45,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "nodes": {"marzban_cert": ""},
     # the Lab page (services/profiles.py): the categories (tags) the owner made by hand, kept even while no profile carries them
     "lab": {"tags": None, "skip_nodes": []},      # tags: None = none from the start; a list = his own set (made, renamed, deleted by hand). skip_nodes: "panel:node" of the nodes he took off the page on purpose (the check does not put them back)
+    # the first-run checklist of the Dashboard (services/setup.py): hidden by the owner or not
+    "setup": {"dismissed": False},
     # the license token (see services/license.py); empty = the free tier, unless NIKATEL_LICENSE=owner
     "license": {"token": ""},
 }

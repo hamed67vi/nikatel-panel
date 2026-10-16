@@ -1,0 +1,108 @@
+/* The light theme, the corrections found by the contrast audit of 2026-10-16 (the owner: "check every element and font in the light theme; change them so they are clear"). Loaded LAST, after every sheet. Each rule here is a LIGHT-ONLY rule: a text colour that was a dark-theme colour, a dark box left dark, a text too faint. The rule of the audit (scratchpad audit.js, run on every page and window with the animations off): every visible text 4.5 : 1 against the colour under it (3 : 1 when large). How a rule here beats the dark rule it corrects: it repeats that rule's selector with html[data-mode="light"] added, which is one step more specific, so it wins whatever the order. */
+
+/* the colours of meaning, as TEXT: darker than the dark theme's, so they read on white and on their own pale tint (a dot or a bar in these colours is still plainly green / red / amber) */
+html[data-mode="light"][data-theme], html[data-theme="calm"][data-mode="light"] { --mut: #4d5b7c; --ok: #0a7a52; --bad: #c4153f; --warn: #a15c00; }
+html[data-mode="light"] body input::placeholder, html[data-mode="light"] body textarea::placeholder { color: #5a6788 !important; opacity: 1 !important; }
+html[data-mode="light"] body :is(.gw-ok, b.gw-ok) { color: #066a45; } html[data-mode="light"] body :is(b.err, .err) { color: #c0213b; } html[data-mode="light"] body b.warn { color: #8a5a00; }
+
+/* the sidebar: the brand, the footer (the signature was 22 % opaque - dim on purpose in the dark theme, unreadable on white) */
+html[data-mode="light"] body aside.side .side-ver, html[data-mode="light"] body aside.side .side-ver:hover { opacity: 1; transform: none; }
+html[data-mode="light"] body aside.side .side-ver .sc-by { color: #4d5b7c; }
+html[data-mode="light"] body .brand b { background-image: linear-gradient(135deg, #1a4db8 0%, #2a66d6 100%); }
+html[data-mode="light"] body .act-cats button small { opacity: 1; }
+
+/* tables and pills */
+html[data-mode="light"] body #page .tbl td.mut, html[data-mode="light"] body #page .tbl td .mut, html[data-mode="light"] body #page .tbl td small.mut { color: #4d5b7c !important; }
+html[data-mode="light"] body .spill.active, html[data-mode="light"] body .epill.ok { color: #066a45; }
+html[data-mode="light"] body .spill.on_hold, html[data-mode="light"] body .epill.warn { color: #8f5400; }
+html[data-mode="light"] body #page .pn-bar .dns-stat.ok b { color: #0a7a52; } html[data-mode="light"] body #page .pn-bar .dns-stat.bad b { color: #c4153f; }
+html[data-mode="light"] body #page .pgu-row.off { opacity: .9; }
+
+/* Tunnel Doctor */
+html[data-mode="light"] body #page .dr-num { background: #fff; }
+html[data-mode="light"] body #page .dr-st button { color: #5a6788; } html[data-mode="light"] body #page .dr-st button:hover { color: #1456c8; background: rgba(20, 86, 200, .08); }
+html[data-mode="light"] body #page .ap-tasks .ap-ttabs > button.on { color: #fff !important; }
+html[data-mode="light"] body #page .ap-tasks .dr-pill.dr-state.ok { color: #0a7a52; border-color: rgba(10, 122, 82, .45); }
+html[data-mode="light"] body #page .ap-tasks .dr-pill.dr-state.err { color: #c4153f; border-color: rgba(196, 21, 63, .45); }
+
+/* Settings - About and update */
+html[data-mode="light"] body #page .abt-pill { color: #0a7a52; border-color: rgba(10, 122, 82, .4); background: rgba(10, 122, 82, .08); }
+html[data-mode="light"] body #page .abt-pill.warn { color: #8f5400; border-color: rgba(143, 84, 0, .45); background: rgba(161, 92, 0, .08); }
+html[data-mode="light"] body #page .abt-iid code { background: #fff; color: #14213d; }
+html[data-mode="light"] body #page .abt-card .eng-row { background: #f3f6fc; }
+html[data-mode="light"] body #page .pgu-v.ok { color: #0a7a52; }
+
+/* Panel - Configs - Add (pg_kinds.css is dark-first) */
+html[data-mode="light"] body #page .pg-kind-frame .pg-kind-side { background: #fff; border-color: rgba(30, 50, 100, .14); }
+html[data-mode="light"] body #page .pg-kf { background: #fff; border-color: rgba(30, 50, 100, .22); }
+html[data-mode="light"] body #page .pg-kind-side .pg-kind-note { background: #f3f6fd; border-color: rgba(30, 50, 100, .14); color: #3d4a6b; }
+html[data-mode="light"] body #page .pg-kind-side .pg-kind-note::before { border-color: #5a6788; color: #5a6788; }
+html[data-mode="light"] body #page .pg-kind-side .pg-kind-quick label { color: #4d5b7c; }
+html[data-mode="light"] body #page .pg-kind-side #pg-kind-portnote { color: #4d5b7c; }
+html[data-mode="light"] body #page .pg-kind-side .pg-kind-adv > summary { color: #3d4a6b; }
+html[data-mode="light"] body #page :is(.pg-kf-i, .pg-dr-i) { background: #e6ecf8; color: #3d4a6b; }
+html[data-mode="light"] body #page .pg-kind-side .frm-act button:not(.pri) { background: #fff; border-color: rgba(30, 50, 100, .22); color: #1b2540; }
+html[data-mode="light"] body #page .pg-ks-s { background: rgba(10, 122, 82, .12); color: #0a7a52; }
+html[data-mode="light"] body #page .pg-ks-r.off .pg-ks-s { background: rgba(30, 50, 100, .08); color: #4d5b7c; }
+html[data-mode="light"] body #page :is(.pg-kind-step.ok > i, .pg-kind-chk.ok) { color: #0a7a52; } html[data-mode="light"] body #page :is(.pg-kind-step.bad > i, .pg-kind-chk.bad) { color: #c4153f; }
+html[data-mode="light"] body #page .pg-kind-dr .pg-dr-c, html[data-mode="light"] body #page .pg-ks-h .pg-dr-c { background: rgba(30, 50, 100, .08); }
+/* the window of a server */
+html[data-mode="light"] body .kv2 .mut, html[data-mode="light"] body .kv2 small.mut { color: #4d5b7c !important; }
+html[data-mode="light"] body svg.lc .lt { fill: #4d5b7c; }
+html[data-mode="light"] body #modal .mh-meta .mh-ip { color: #3d4a6b; background: rgba(30, 50, 100, .06); border-color: rgba(30, 50, 100, .16); }
+html[data-mode="light"] body .mh-ip::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235a6788' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='11' height='11' rx='2'/%3E%3Cpath d='M5 15V6a2 2 0 0 1 2-2h8'/%3E%3C/svg%3E"); }
+/* the primary button: the kit's blue is too light at its top edge for white text (3.4 : 1) - a little deeper so the text reads (4.8 : 1) */
+html[data-mode="light"] body :is(#page, #ask) :is(button.pri, button.primary, .cta, button.cta-server, button.cta-tunnel), html[data-mode="light"] body #page .toolbar.joined :is(button.cta, button.pri) { background-image: linear-gradient(180deg, #2a6ceb, #0b46ab) !important; }
+/* in a window the small buttons are pale (a light twin in app.css) and the blue primary was pale with dark text too - the primary is the blue one, with white text, like the primary of a page */
+html[data-mode="light"] body #modal :is(button.pri, button.primary, .cta) { background: #1456c8 !important; background-image: linear-gradient(180deg, #2a6ceb, #0b46ab) !important; color: #fff !important; border-color: transparent !important; }
+html[data-mode="light"] body #modal :is(button.pri, button.primary):hover:not(:disabled) { background: #0b46ab !important; background-image: linear-gradient(180deg, #2a62d8, #0a3e96) !important; color: #fff !important; }
+html[data-mode="light"] body #modal :is(button.pri, button.primary):disabled { opacity: .55; }
+html[data-mode="light"] body .ask-ic { background: linear-gradient(135deg, #1a4db8, #2a66d6); }
+
+/* small things: the time in the status bar, the picture of a tab, the headings of a kit menu and of a row menu */
+html[data-mode="light"] body .statusbar .sb-time { opacity: .9; }
+html[data-mode="light"] body .tab-ic, html[data-mode="light"] body #subnav .tic { opacity: 1; }
+html[data-mode="light"] body .nk-dd :is(.nk-dd-g, .nk-dd-n) { color: #4d5b7c; }
+html[data-mode="light"] body .lab-menu.lab-menu .lab-mgrp { color: #4d5b7c; }
+
+/* hover: the dark theme lifts a button or a row with a darker navy; on white that is unreadable (dark text on navy, or white text on white) - the lift is a pale blue here */
+html[data-mode="light"] body #page .toolbar.joined button:not(.cta):not(.pri):not(.danger):not(.del):not(.ghost):not([class*="tab"]):not([role="tab"]):not(.lab-kb):not(.dns-chip):not(.dns-x):not(:disabled):hover { background-color: #eaf1fe !important; border-color: rgba(20, 86, 200, .35) !important; }
+html[data-mode="light"] body #page .toolbar.joined > button.cta:hover:not(:disabled) { background: #1f5fd6 !important; background-image: linear-gradient(180deg, #2a62d8, #0b46ab) !important; }
+html[data-mode="light"] body #page .pg-kind-chip:not(.on):hover { background: #eaf1fe !important; border-color: rgba(20, 86, 200, .35) !important; }
+html[data-mode="light"] body .pg-pop button.pg-pc:hover { background: #eaf1fe !important; border-color: rgba(20, 86, 200, .35) !important; }
+html[data-mode="light"] body #page .pg-usec-row :is(.pg-rng, .pg-lk):hover { background-color: #eaf1fe !important; border-color: rgba(20, 86, 200, .35) !important; }
+html[data-mode="light"] body #page :is(.abt-row, .pwf-btns .pwf-out):hover { border-color: rgba(20, 86, 200, .35); background: #eaf1fe; }
+html[data-mode="light"] body .nk-dd .nk-dd-i:hover:not([disabled]), html[data-mode="light"] body .nk-dd .nk-dd-i.hl:not([disabled]) { background: #eaf1fe; border-color: rgba(20, 86, 200, .2); }
+html[data-mode="light"] body #page .dash-cols .pb-row.click:hover { background: #eaf1fe; }
+html[data-mode="light"] body #page .ap-tasks .ap-row:hover { background-color: #eaf1fe; }
+html[data-mode="light"] body #page .pn-chips.many .dns-cw:hover .dns-x { background: #eaf1fe !important; }
+html[data-mode="light"] body :is(#page, #modal) input.ck[type="checkbox"]:hover { border-color: #1456c8; background-color: #eaf1fe; }
+html[data-mode="light"] body #page .ap-tasks .ap-ttabs > button:not(.on):hover, html[data-mode="light"] body #page .ap-tasks button.dr-pill:not(.pri):hover { color: #1456c8; border-color: rgba(20, 86, 200, .4); }
+html[data-mode="light"] body #page :is(.ap-ttabs, .ana-head .tabs, .bt-range) button:not(.on):hover { color: #1456c8; }
+html[data-mode="light"] body :is(.dup, .loss.hi) { color: #8f5400; }
+html[data-mode="light"][data-theme], html[data-theme="calm"][data-mode="light"] { --bad: #b3123a; }
+
+/* text made for the dark theme (a pale grey, near-white, a bright green / red / amber / blue), on the light one: each gets its dark twin. The synthetic audit (every colour rule built into a sample element, light theme on) found them; the shop bot and the Outbound page are off in the menu and are not touched */
+html[data-mode="light"] body :is(.brand small, .ll.DEBUG b, .tlink, .srv-ic, .usr-av, .sg-i small, .set-tabs button i, .qp-sub, .qp-prev, .qp-hint, .qp-f > label, .qp-f label small, .pg-pr > span small, .pg-pa label > span:first-child, .trashbox h5, .wtool small, .bt-pod small, .qp-prev #qp-ptxt, .qp-f label code, .ins-mini) { color: #4d5b7c; }
+html[data-mode="light"] body .cf-sub { color: #4d5b7c; opacity: .9; }
+html[data-mode="light"] body #page :is(.dns-tbl .cl-ic, .dns-chip small, .cf-list thead th, .abt-chev, .abt-copy, .abt-fi, .su-t, .dr-empty i, .bt-pod .bt-s em, .pg-ks-r.off .pg-ks-s) { color: #4d5b7c; }
+html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x { color: #5a6788 !important; }
+html[data-mode="light"] body #modal :is(.wsec .err, .mcard .err) { color: #4d5b7c; }
+html[data-mode="light"] body :is(.ap-tasks .tk-one, .ins-ico, .bt-s.ok, .bt-chips span, .dns-tbl .mchip.srvtag, .sg-i b) { color: #1b2540; }
+html[data-mode="light"] body #modal .kv2 a.ext { color: #1456c8; }
+html[data-mode="light"] body .copied { color: #0a7a52 !important; }
+html[data-mode="light"] body :is(.ana-v.stable, .ana-v.light, .ok-t, .usr-av.active, .ap-tasks .tk.ok .tk-one, .hist-res.ok) { color: #0a7a52; }
+html[data-mode="light"] body #page :is(.mchip.port, .dns-tbl .cl-ic.on, .abt-ti.ok, .su-i.done .su-t, .bal-row .ap-why.good, .pg-cores-dl.add i) { color: #0a7a52; }
+html[data-mode="light"] body #modal .sbox[data-b="resources"] .ta.d { color: #0a7a52; }
+html[data-mode="light"] body :is(.bad-t, .ana-v.chronic, .ana-v.busy, .usr-av.expired, .hist-res.bad, .ca-stop, .tk-or.o-panel, .ls-chip.o-panel b) { color: #b3123a; }
+html[data-mode="light"] body #page .dns-tbl td.dr-act .ic.danger { color: #b3123a; }
+html[data-mode="light"] body :is(.ana-v.watch, .ana-v.ok, .usr-av.limited, .bt-s.mid, .hist-res.run, .tk-or.o-server, .ls-chip.o-server b) { color: #8f5400; }
+html[data-mode="light"] body #page :is(.pg-cores-ws li b, .pg-admin-own) { color: #8f5400; }
+html[data-mode="light"] body :is(.usr-av.on_hold, .ana-v.idle, .ana-v.redundant, .bp-s .pill, .ss-ic, .tk-or.o-outside, .ls-chip.o-outside b, tr.sev-blue .srv-ic, .tbl tr.sev-blue .st) { color: #1456c8; }
+html[data-mode="light"] body #page :is(.lab-nodeic, .pn-first-ic, .abt-ti, .ap-tasks .sug-box .nw-title, .pn-actbtn:not(:disabled), .nav-sub a.nav-act) { color: #1456c8; }
+html[data-mode="light"] body #page .abt-ti.sm { color: #3d4a6b; }
+html[data-mode="light"] body #ask .ask-gen { color: #0b46ab; }
+html[data-mode="light"] body .pwi .eye { color: #4d5b7c; } html[data-mode="light"] body .pwi .eye:hover { color: #1456c8; }
+/* the sparklines of the nodes: lines drawn with currentColor, on white */
+html[data-mode="light"] body .pg-nodes-spark, html[data-mode="light"] body .pg-nodes-spark.tx { color: #1456c8; } html[data-mode="light"] body .pg-nodes-spark.cpu { color: #a35a00; } html[data-mode="light"] body .pg-nodes-spark.mem { color: #6b32c8; } html[data-mode="light"] body .pg-nodes-spark.rx { color: #0a7a52; }
+html[data-mode="light"] body :is(.ip-copy, .mh-ip):hover, html[data-mode="light"] body #page :is(.ip-copy, .srv-tbl td:nth-child(4)):hover { color: #1456c8 !important; }

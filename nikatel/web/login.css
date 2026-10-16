@@ -1,0 +1,46 @@
+/* The sign-in page, built from scratch in the look of the UI kit (the owner, 2026-10-16: "build it again from the start, MacBook style"; docs/design/ui-kit.md). Loaded after uikit.css and takes its tokens (--uk-*).
+   A centred card: the mark and the name, then ONE step at a time (password -> authenticator code, or "forgot the password"). Every password box has its eye (show / hide). Logical properties only (left / right flip in Persian). */
+html body .login { min-height: 100%; display: grid; place-items: center; padding: 28px 14px; box-sizing: border-box; }
+html body .login.hidden { display: none; }
+html body .lg-card { position: relative; box-sizing: border-box; width: min(392px, 100%); display: grid; gap: 16px; padding: 30px 28px 24px; border-radius: 26px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #151c32 0%, #0f1526 100%); box-shadow: 0 34px 90px rgba(0, 0, 0, .58), 0 0 0 .5px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .06); animation: lgRise .45s cubic-bezier(.2, .9, .25, 1) both; }
+@keyframes lgRise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+html body .lg-lang { position: absolute; inset-block-start: 14px; inset-inline-end: 14px; width: 38px; height: 38px; padding: 0; border-radius: 11px; font-size: 13px; }
+html body .lg-brand { display: grid; justify-items: center; gap: 7px; padding-block: 4px 2px; text-align: center; }
+html body .lg-mark { display: block; width: 56px; height: 56px; border-radius: 16px; box-shadow: 0 12px 30px rgba(70, 110, 255, .34), 0 0 0 1px rgba(255, 255, 255, .12); }
+html body .lg-word { font-size: 20px; font-weight: 800; letter-spacing: .34em; padding-inline-start: .34em; background: linear-gradient(90deg, #9bb9ff, #5f8bff 55%, #7fd0ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+html body .lg-sub { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: var(--uk-mut); }
+html body .lstep { display: grid; gap: 14px; } html body .lstep.hidden { display: none; } html body .lstep:not(.hidden) { animation: lgStep .24s ease both; }
+@keyframes lgStep { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+html[dir="rtl"] body .lstep:not(.hidden) { animation-name: lgStepRtl; } @keyframes lgStepRtl { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+html body .lg-f { display: grid; gap: 7px; margin: 0; }
+html body .lg-l { font-size: 12.5px; font-weight: 600; color: var(--uk-mut); }
+html body .lg-in { display: flex; align-items: stretch; box-sizing: border-box; height: 46px; border-radius: 13px; border: 1px solid var(--uk-line); background: var(--uk-field); overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+html body .lg-in:focus-within { border-color: var(--uk-blue); box-shadow: 0 0 0 3px var(--uk-ring); }
+html body .lg-ic { display: grid; place-items: center; flex: none; width: 44px; border-inline-end: 1px solid var(--uk-line); background: #131a2e; color: #aab4d0; font-style: normal; } html body .lg-ic svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html body .lg-in input:not([type=checkbox]) { flex: 1 1 auto; min-width: 0; height: 100%; box-sizing: border-box; padding: 0 12px; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; color: var(--uk-text); font-size: 15px; }
+html body .lg-in input::placeholder { font-size: 14px; }
+html body .lg-in .lg-eye { display: grid; place-items: center; flex: none; width: 44px; height: auto; padding: 0; border: 0 !important; border-radius: 0 !important; background: none !important; box-shadow: none !important; color: var(--uk-mut); cursor: pointer; }
+html body .lg-in .lg-eye:hover { color: var(--uk-text); } html body .lg-in .lg-eye:focus-visible { outline: 2px solid var(--uk-blue); outline-offset: -3px; }
+html body .lg-eye svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } html body .lg-eye .e-off { display: none; } html body .lg-eye[aria-pressed="true"] .e-on { display: none; } html body .lg-eye[aria-pressed="true"] .e-off { display: block; } html body .lg-eye[aria-pressed="true"] { color: #6fa8ff; }
+html body .lg-caps { display: flex; align-items: center; gap: 8px; margin-top: -4px; font-size: 12.5px; color: #ffc44d; } html body .lg-caps.hidden { display: none; } html body .lg-caps svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body .lg-go { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 46px; border-radius: 13px; font-size: 15px; font-weight: 650; }
+html body .lg-card[data-busy] .lg-go > span::before { content: ""; display: inline-block; width: 15px; height: 15px; margin-inline-end: 9px; vertical-align: -2px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .4); border-top-color: #fff; animation: lgSpin .7s linear infinite; }
+@keyframes lgSpin { to { transform: rotate(360deg); } }
+html body .lg-sec { width: 100%; height: 42px; border-radius: 12px; font-size: 14px; } html body .lg-sec.hidden { display: none; }
+html body .login .lnk { justify-self: center; padding: 4px 8px; border-radius: 8px; font-size: 13px; color: var(--uk-mut); cursor: pointer; text-decoration: none; } html body .login .lnk:hover { color: var(--uk-text); text-decoration: underline; } html body .login .lnk:focus-visible { outline: 2px solid var(--uk-blue); }
+html body .lhint { margin: 0; font-size: 13px; line-height: 1.55; color: var(--uk-mut); } html body .lhint b { color: var(--uk-text); }
+html body .lg-msg { display: none; box-sizing: border-box; padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.45; border: 1px solid transparent; }
+html body .lg-msg.bad, html body .lg-msg.ok, html body .lg-msg.info { display: block; animation: lgStep .2s ease both; }
+html body .lg-msg.bad { background: var(--uk-red-bg); border-color: var(--uk-red-line); color: #ffb3bd; }
+html body .lg-msg.ok { background: rgba(48, 209, 88, .12); border-color: rgba(48, 209, 88, .4); color: #86e6a1; }
+html body .lg-msg.info { background: rgba(77, 163, 255, .12); border-color: rgba(77, 163, 255, .4); color: #a9cdff; }
+html[dir="rtl"] body .lg-in input[type="password"], html[dir="rtl"] body .lg-in input[name="user"], html[dir="rtl"] body .lg-in input[name="code"], html[dir="rtl"] body .lg-in input[name="rcode"] { direction: ltr; text-align: start; }
+@media (max-width: 460px) { html body .lg-card { padding: 26px 20px 20px; border-radius: 22px; } }
+@media (prefers-reduced-motion: reduce) { html body .lg-card, html body .lstep:not(.hidden), html body .lg-msg { animation: none; } }
+/* the light theme */
+html[data-mode="light"] body .lg-card { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 30px 80px rgba(30, 50, 100, .22), 0 0 0 .5px rgba(30, 50, 100, .12); }
+html[data-mode="light"] body .lg-in { background: #f4f7fd; border-color: rgba(30, 50, 100, .2); } html[data-mode="light"] body .lg-ic { background: #e9eef9; border-color: rgba(30, 50, 100, .16); color: #4a5b86; }
+html[data-mode="light"] body .lg-in input:not([type=checkbox]) { color: #1b2540; } html[data-mode="light"] body .lg-l, html[data-mode="light"] body .lhint, html[data-mode="light"] body .login .lnk, html[data-mode="light"] body .lg-sub { color: #55618a; } html[data-mode="light"] body .lhint b, html[data-mode="light"] body .login .lnk:hover { color: #1b2540; }
+html[data-mode="light"] body .lg-word { background: linear-gradient(90deg, #2f5fc4, #1456c8 55%, #1f86d6); -webkit-background-clip: text; background-clip: text; }
+html[data-mode="light"] body .lg-msg.bad { background: #fdecee; border-color: rgba(200, 40, 60, .4); color: #a3202e; } html[data-mode="light"] body .lg-msg.ok { background: #e6f6ec; border-color: rgba(26, 150, 80, .4); color: #14753a; } html[data-mode="light"] body .lg-msg.info { background: #e3edff; border-color: rgba(20, 86, 200, .4); color: #1456c8; }
+html[data-mode="light"] body .lg-caps { color: #9a5b00; } html[data-mode="light"] body .lg-eye[aria-pressed="true"] { color: #1456c8; }

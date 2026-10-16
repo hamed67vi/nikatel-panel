@@ -941,3 +941,45 @@ def test_the_tunnel_window_is_built_like_the_server_window():
     assert "function tunBar(" not in app and "function detailRow(" not in app and "function tunPartHtml(" not in app and "loadTunnelCharts(id); return; } }" not in app
     assert 'if (ctx === "tun") return tunMenuItems(id);' in lab and "function tunMenuItems(id) {" in lab and 'labIt("Remove tunnel…", "trash"' in lab and "{danger: true}" in lab
     assert "html body #modal .modal.srvwin.tunwin { min-height: min(776px, calc(100vh - 96px)); }" in css and "html body #modal .mh-flag.mh-tun {" in css
+
+
+def test_the_sign_in_page_is_rebuilt_in_the_kit_look_with_an_eye_on_every_password_box():
+    """The owner, 2026-10-16: the sign-in page built again from the start in the look of the kit, an eye (show / hide) on the password boxes; no inline handler on it."""
+    index, app, css = INDEX, _web("app.js"), _web("login.css")
+    main = (WEB.parent / "main.py").read_text(encoding="utf-8")
+    block = index[index.index('<div id="login"'):index.index('<div id="app"')]
+    assert 'class="lg-card"' in block and block.count('class="lg-eye"') == 3 and 'href="/static/login.css"' in index and '"login.css"' in main
+    assert "onclick=" not in block and "onsubmit=" not in block and 'autocomplete="current-password"' in block and block.count('autocomplete="new-password"') == 2 and 'autocomplete="one-time-code"' in block and 'name="user" value="admin" autocomplete="username"' in block
+    assert "function lgEye(b, on) {" in app and "if (ls.busy) return;" in app and 'getModifierState("CapsLock")' in app and 'btns.forEach(b => { b.disabled = true; });' in app and "lgMsg(" in app and "go(state.page);" in app and "go = [...form" not in app
+    assert "html body .lg-in:focus-within { border-color: var(--uk-blue);" in css and "html body .lg-eye[aria-pressed=\"true\"] .e-off { display: block; }" in css and 'html[data-mode="light"] body .lg-card' in css and "inset-inline-end" in css
+
+
+def test_the_dashboard_has_the_getting_started_card_and_no_empty_slots():
+    """The owner, 2026-10-16: redesign the dashboard; a new panel asks the API keys at the start (GET /api/setup)."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert "function setupCard(su) {" in app and 'api("/api/setup").catch(() => null)' in app and "${setupCard(su)}" in app and "window.setupSave = async (e, kind) =>" in app and "dashFree" not in app and "free space" not in app
+    assert 'onsubmit="return setupSave(event, \'telegram\')"' in app and 'onsubmit="return setupSave(event, \'ai\')"' in app and 'onclick="setupShow()"' in app and "su && su.dismissed && su.done < su.total" in app
+    assert "html body #page .dash-setup {" in css and "html body #page .su-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: start;" in css and "html body #page .dash-cols > .card { height: 376px;" in css
+
+def test_the_light_theme_sheet_holds_only_light_rules_and_loads_last():
+    """The owner, 2026-10-16: every element and font of the light theme clear. light.css is loaded after every sheet and every rule in it is a light-mode rule (the dark theme is untouched)."""
+    index, main = INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
+    css = _web("light.css")
+    assert index.index('href="/static/login.css"') < index.index('href="/static/light.css"') and '"light.css"' in main
+    assert all(index.index('href="/static/light.css"') > index.index(f'href="/static/{n}"') for n in ("app.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "pg_kinds.css"))
+    body = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    for chunk in body.split("}"):
+        if "{" not in chunk:
+            continue
+        selector = chunk.split("{", 1)[0].strip()
+        assert 'data-mode="light"' in selector, selector[:120]      # a rule that is not scoped to the light theme would change the dark one
+    assert "--mut: #4d5b7c" in css and "--bad: #b3123a" in css and "--warn: #a15c00" in css and "--ok: #0a7a52" in css
+    assert ".toolbar.joined button:not(.cta)" in css and ":hover { background-color: #eaf1fe !important;" in css      # the dark navy hover of the toolbar buttons was dark text on navy
+    assert 'html[data-mode="light"] body #modal :is(button.pri, button.primary, .cta) {' in css and "color: #fff !important;" in css
+
+
+def test_the_health_box_of_the_dashboard_keeps_each_detail_on_one_line():
+    """A long list of stale jobs was three lines high and ran over the next row: one line, an ellipsis, the whole text as the tooltip."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert '<small title="${sub}">${sub}</small>' in app
+    assert "html body #page .dash-cols .dash-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css

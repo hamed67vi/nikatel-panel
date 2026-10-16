@@ -107,21 +107,34 @@ function demoBanner() {
 }
 function showApp() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); api("/api/settings/nodes").then(r => { window.NODE_CERT = r.marzban_cert || ""; }).catch(() => {}); }
 
-/* sign-in has three steps: password -> (authenticator code) ; or "forgot the password" */
-const ls = {step: "pass", ticket: ""};
+/* sign-in has three steps: password -> (authenticator code) ; or "forgot the password". The page is built from scratch in the look of the UI kit (the owner, 2026-10-16): a card, one step at a time, an eye (show / hide) on every password box, a Caps Lock hint,
+   the button shows it is working and cannot be pressed twice, the message is a box (red = wrong, green = done). No inline handlers: the page works with a strict Content-Security-Policy. */
+const ls = {step: "pass", ticket: "", busy: false};
+const lgMsg = (text, kind) => { const el = $("#login-err"); if (!el) return; el.textContent = text || ""; el.className = "lg-msg" + (text ? " " + (kind || "bad") : ""); };
+function lgEye(b, on) {      // the eye of a password box: on = the password is shown
+  const inp = b.closest(".lg-in").querySelector("input"), t = on ? "Hide password" : "Show password";
+  inp.type = on ? "text" : "password"; b.setAttribute("aria-pressed", on ? "true" : "false"); b.title = t; b.setAttribute("aria-label", t);
+}
 function loginStep(s) {
   ls.step = s;
   for (const k of ["pass", "2fa", "recover"]) $("#ls-" + k).classList.toggle("hidden", k !== s);
-  $("#login-err").textContent = "";
+  lgMsg("");
+  document.querySelectorAll("#login-form .lg-eye").forEach(b => lgEye(b, false));      // every eye is shut again: a password never stays on show from one step to the next
+  const caps = $("#lg-caps"); if (caps) caps.classList.add("hidden");
   const first = $("#ls-" + s + " input:not([type=hidden])"); if (first) setTimeout(() => first.focus(), 30);
 }
-$("#to-recover").onclick = async () => { loginStep("recover"); try { const o = await fetch("/api/auth/recovery-options").then(r => r.json()); $("#rc-tg").classList.toggle("hidden", !o.telegram); } catch (e) { /* offline */ } };
-document.querySelectorAll("#login-form [data-back]").forEach(a => a.onclick = () => { ls.ticket = ""; loginStep("pass"); });
-$("#rc-tg").onclick = async () => { try { await api("/api/auth/recover/telegram", {method: "POST"}); $("#login-err").textContent = "A code was sent to your Telegram (valid 10 minutes)."; } catch (err) { $("#login-err").textContent = err.message; } };
+const lgPress = (el, fn) => { el.addEventListener("click", fn); el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }); };      // a link that acts as a button: Enter and Space work too
+document.querySelectorAll("#login-form .lg-eye").forEach(b => b.addEventListener("click", () => lgEye(b, b.getAttribute("aria-pressed") !== "true")));
+document.querySelectorAll("#login-form input").forEach(i => { if (i.dataset.pw !== undefined || i.type === "password") { i.dataset.pw = "1"; const caps = e => { const on = !!(e.getModifierState && e.getModifierState("CapsLock")), c = $("#lg-caps"); if (c && ls.step === "pass") c.classList.toggle("hidden", !on); }; i.addEventListener("keydown", caps); i.addEventListener("keyup", caps); i.addEventListener("blur", () => { const c = $("#lg-caps"); if (c) c.classList.add("hidden"); }); } });
+lgPress($("#to-recover"), async () => { loginStep("recover"); try { const o = await fetch("/api/auth/recovery-options").then(r => r.json()); $("#rc-tg").classList.toggle("hidden", !o.telegram); } catch (e) { /* offline */ } });
+document.querySelectorAll("#login-form [data-back]").forEach(a => lgPress(a, () => { ls.ticket = ""; loginStep("pass"); }));
+$("#rc-tg").addEventListener("click", async () => { try { await api("/api/auth/recover/telegram", {method: "POST"}); lgMsg("A code was sent to your Telegram (valid 10 minutes).", "ok"); } catch (err) { lgMsg(err.message, "bad"); } });
+$("#lg-lang").addEventListener("click", () => { if (window.toggleLang) toggleLang(); });
 $("#login-form").onsubmit = async e => {
-  e.preventDefault();
-  const f = new FormData(e.target), err = $("#login-err");
-  err.textContent = "";
+  e.preventDefault(); if (ls.busy) return;      // (a second press while the first answer is awaited does nothing)
+  const form = e.target, f = new FormData(form), btns = [...form.querySelectorAll(".lg-go")];
+  lgMsg("");
+  ls.busy = true; form.dataset.busy = "1"; btns.forEach(b => { b.disabled = true; });
   try {
     if (ls.step === "pass") {
       const r = await api("/api/auth/login", {method: "POST", body: JSON.stringify({user: f.get("user"), password: f.get("password")})});
@@ -129,13 +142,16 @@ $("#login-form").onsubmit = async e => {
     } else if (ls.step === "2fa") {
       await api("/api/auth/login/2fa", {method: "POST", body: JSON.stringify({ticket: ls.ticket, code: f.get("code")})});
     } else {
-      if (f.get("rnew") !== f.get("rnew2")) { err.textContent = "the two passwords differ"; return; }
+      if (f.get("rnew") !== f.get("rnew2")) { lgMsg("the two passwords differ", "bad"); return; }
       await api("/api/auth/recover", {method: "POST", body: JSON.stringify({code: f.get("rcode"), new: f.get("rnew")})});
-      loginStep("pass"); err.textContent = "✓ The password is changed. Sign in with the new one."; err.style.color = "var(--ok)"; return;
+      form.reset(); loginStep("pass"); lgMsg("✓ The password is changed. Sign in with the new one.", "ok"); return;
     }
-    ls.ticket = ""; e.target.reset(); loginStep("pass");
+    ls.ticket = ""; form.reset(); loginStep("pass");
     showApp(); go(state.page);
-  } catch (er) { err.style.color = ""; err.textContent = er.message; }
+  } catch (er) {
+    lgMsg(er.message, "bad");
+    const field = ls.step === "pass" ? form.elements.password : ls.step === "2fa" ? form.elements.code : null; if (field) { field.focus(); field.select(); }      // the wrong one is selected: typing again replaces it
+  } finally { ls.busy = false; delete form.dataset.busy; btns.forEach(b => { b.disabled = false; }); }
 };
 api("/api/health").then(h => { const v = $("#version"); if (v && h && h.version && !v.textContent) v.textContent = "v" + h.version; }).catch(() => {});
 $("#logout").onclick = async () => {
@@ -632,14 +648,53 @@ window.dqPick = i => {
   refresh();
 };
 /* the numbers at a glance, beside the search; and a row of free slots under the cards, kept empty for whatever is added to the dashboard later */
-const dashKpis = (o, cfg, cUp) => {
+const dashKpis = (o, cfg, cUp, su) => {
   const nProb = (o.tunnels.down || 0) + (o.tunnels.degraded || 0) + (o.servers.offline || 0) + (CONFIGS_UI ? cfg.configs.length - cUp : 0);
   const k = (label, val, cls, to) => `<a class="kpi" ${to ? `onclick="go('${to}')"` : ""}><i class="dash-dot ${cls}"></i><span><b>${val}</b><small>${label}</small></span></a>`;
-  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Servers online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${CONFIGS_UI ? k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs") : ""}${k("Problems", nProb, nProb ? "red" : "green", "")}</div>`;
+  return `<div class="dash-kpis">${k("Tunnels up", `${o.tunnels.up}/${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green", "tunnels")}${k("Servers online", `${o.servers.online}/${o.servers.total}`, o.servers.offline ? "red" : "green", "nodes")}${CONFIGS_UI ? k("Configs up", `${cUp}/${cfg.configs.length}`, cfg.configs.length && cUp === cfg.configs.length ? "green" : cUp ? "yellow" : "red", "configs") : ""}${k("Problems", nProb, nProb ? "red" : "green", "")}${su && su.dismissed && su.done < su.total ? `<a class="kpi" onclick="setupShow()" title="Show the setup checklist again"><i class="dash-dot yellow"></i><span><b>${su.done}/${su.total}</b><small>Setup</small></span></a>` : ""}</div>`;
 };
-const dashFree = () => `<div class="dash-free"><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div><div class="dash-slot">＋ free space</div></div>`;
+/* the first-run checklist (the owner, 2026-10-16: "a new user who installs the panel is asked for the API keys at the start"): a card above the three boxes while the panel is not set up; GET /api/setup says what is done.
+   Open for a new panel (fewer than three done), a thin strip after that, hidden when the owner hides it (a small Setup chip then brings it back). The API keys come first and are typed right here. */
+const SU_IC = {panel: () => SI.cube, telegram: () => SI.send, ai: () => SI.bot, dns: () => SI.cloud, servers: () => SI.server, probe: () => SI.probe, backup: () => SI.save, security: () => SI.shield(false)};
+const suIn = (name, ph, type = "text") => `<input name="${name}" type="${type}" placeholder="${ph}" autocomplete="off" spellcheck="false" data-lpignore="true">`;
+function setupCard(su) {
+  if (!su || su.dismissed || su.done >= su.total) return "";
+  const open = state.setupOpen != null ? state.setupOpen : su.done < 3, pct = Math.round(su.done * 100 / su.total); state.setupShown = open;
+  const head = `<div class="su-h"><i class="su-ic">${SI.check}</i><div class="su-ht"><b>Getting started</b><small>${su.done} of ${su.total} done · the API keys first</small></div><i class="su-bar"><u style="width:${pct}%"></u></i><span class="sp"></span><button type="button" class="sm" onclick="setupToggle()">${open ? "Collapse" : "Continue setup"}</button><button type="button" class="sm ghost" onclick="setupHide()" title="Hide this card - everything in it stays in Settings">Hide</button></div>`;
+  if (!open) return `<div class="dash-setup shut">${head}</div>`;
+  const act = {
+    panel: `<button type="button" class="pri sm" onclick="pnAddWin()">＋ Add a panel</button>`,
+    dns: `<button type="button" class="pri sm" onclick="dnsAccForm()">＋ Add an account</button>`,
+    servers: `<button type="button" class="pri sm" onclick="SUB_ACT['nodes/add']()">＋ Add a server</button>`,
+    probe: `<button type="button" class="sm" onclick="setupGo('ai')">Set it in Api &amp; Key</button>`,
+    backup: `<button type="button" class="sm" onclick="setupGo('backup')">Set the passphrase</button>`,
+    security: `<button type="button" class="sm" onclick="setupGo('account')">Turn it on</button>`,
+    telegram: `<form class="su-f" onsubmit="return setupSave(event, 'telegram')">${suIn("token", "bot token 123456789:AA…", "password")}${suIn("chat_id", "chat id -100…")}<button class="pri sm" type="submit">Save</button></form>`,
+    ai: `<form class="su-f" onsubmit="return setupSave(event, 'ai')">${suIn("api_key", "Anthropic API key", "password")}<button class="pri sm" type="submit">Save</button></form>`,
+  };
+  const card = it => `<div class="su-i ${it.done ? "done" : ""}"><span class="su-t">${it.done ? SI.check : (SU_IC[it.key] || (() => SI.cube))()}</span><div class="su-b"><b>${esc(it.title)}</b><small title="${esc(it.hint)}">${esc(it.done ? it.detail : it.hint)}</small>${it.done ? "" : `<div class="su-a">${act[it.key] || ""}</div>`}</div></div>`;
+  return `<div class="dash-setup">${head}<div class="su-grid">${[...su.items.filter(i => !i.done), ...su.items.filter(i => i.done)].map(card).join("")}</div></div>`;      // (what is still to do first - the API keys at the top - and what is done after it)
+}
+window.setupToggle = () => { state.setupOpen = !state.setupShown; refresh(); };
+window.setupHide = async () => { try { await api("/api/setup/dismiss", {method: "POST"}); toast("Hidden - the Setup chip at the top brings it back", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.setupShow = async () => { try { await api("/api/setup/reopen", {method: "POST"}); state.setupOpen = true; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.setupGo = tab => { go("settings"); state.stab = tab; state.sstab = null; localStorage.setItem("nk.stab", tab); refresh(); };      // (the tab of Settings that holds it)
+window.setupSave = async (e, kind) => {
+  e.preventDefault(); const f = e.target, b = f.querySelector("button[type=submit]"); if (b) b.disabled = true;
+  try {
+    if (kind === "telegram") {
+      if (!f.token.value.trim() || !f.chat_id.value.trim()) { toast("Type the bot token and the chat id", "bad"); return false; }
+      await api("/api/settings/telegram", {method: "PUT", body: JSON.stringify({enabled: true, token: f.token.value.trim(), chat_id: f.chat_id.value.trim()})}); toast("✓ Telegram saved - the alerts go to that chat", "ok");
+    } else {
+      if (!f.api_key.value.trim()) { toast("Paste the Anthropic API key", "bad"); return false; }
+      await api("/api/settings/ai", {method: "PUT", body: JSON.stringify({enabled: true, actions: true, api_key: f.api_key.value.trim(), model: "claude-sonnet-5-5"})}); toast("✓ AI key saved - the panel tests it now", "ok");
+    }
+    refresh();
+  } catch (err) { toast("✕ " + err.message, "bad"); } finally { if (b) b.disabled = false; }
+  return false;
+};
 PAGES.dashboard = async () => {
-  const [o, ev, cfg, srv, tl] = await Promise.all([api("/api/overview"), api("/api/events?limit=" + state.actLimit), CONFIGS_UI ? api("/api/configs").catch(() => ({configs: []})) : {configs: []}, api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => [])]);
+  const [o, ev, cfg, srv, tl, su] = await Promise.all([api("/api/overview"), api("/api/events?limit=" + state.actLimit), CONFIGS_UI ? api("/api/configs").catch(() => ({configs: []})) : {configs: []}, api("/api/servers").catch(() => []), api("/api/tunnels").catch(() => []), api("/api/setup").catch(() => null)]);
   if (!CONFIGS_UI) ev.events = ev.events.filter(e => e.domain !== "configs");      // what the probe says about configs is not shown while the Configs list is off
   state.tunnelsCache = tl; state.cfgCache = cfg.configs; state.serversCache = srv;
   $("#version").textContent = "v" + o.version; $("#ro-badge").classList.toggle("hidden", !o.read_only);
@@ -648,9 +703,10 @@ PAGES.dashboard = async () => {
   const clean = checked.filter(s => s.extra.iran_filter.level === "clean"), bad = checked.filter(s => ["filtered", "blocked"].includes(s.extra.iran_filter.level));
   const hd = await api("/api/health/detail").catch(() => null);      // the panel itself: what to look at when it does not run well (database, jobs, SSH key, disk, backup, errors)
   const dot = cls => `<i class="dash-dot ${cls}"></i>`;
-  const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small>${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
+  const hrow = (name, sub, val, cls) => `<div class="dash-row">${dot(cls)}<div class="dash-name">${name}<small title="${sub}">${sub}</small></div><b class="${cls === "red" ? "err" : cls === "green" ? "gw-ok" : ""}">${val}</b></div>`;
   $("#page").innerHTML = `
-    <div class="dash-top">${dashSearch()}${dashKpis(o, cfg, cUp)}</div>
+    <div class="dash-top">${dashSearch()}${dashKpis(o, cfg, cUp, su)}</div>
+    ${setupCard(su)}
     <div class="dash-cols ${state.actBig ? "exp" : ""}"><div class="card health"><h3>Infrastructure health</h3><div class="hl-list">
       ${hrow("Iran ↔ Foreign tunnels", o.tunnels.down ? o.tunnels.down + " down" : (o.tunnels.degraded ? o.tunnels.degraded + " unstable" : "all carrying users"), `${o.tunnels.up} / ${o.tunnels.total}`, o.tunnels.down ? "red" : o.tunnels.degraded ? "yellow" : "green")}
       ${hrow("SSH connected nodes", o.servers.offline ? o.servers.offline + " offline" : o.servers.iran + " Iran · " + o.servers.foreign + " foreign", `${o.servers.online} / ${o.servers.total}`, o.servers.offline ? "red" : "green")}
@@ -661,7 +717,7 @@ PAGES.dashboard = async () => {
        ${hd ? hrow("The panel itself", hd.problems.length ? esc(hd.problems.map(p => p.text).join(" · ")) : "database, jobs, SSH key, disk, backup and log are fine", hd.ok ? "ok" : hd.problems.length + " to look at", hd.ok ? "green" : "yellow") : ""}</div></div>
     ${problemsCard(o, tl, srv, cfg.configs, bad)}
     <div class="card act ${state.actBig ? "big" : ""}"><h3>Activity <span class="sp"></span><a class="mut" onclick="actBig()" title="${state.actBig ? "Back to the three boxes" : "The activity alone, the whole width"}">${state.actBig ? "⤡ Collapse" : "⤢ Expand"}</a></h3>${actHead(ev.events)}<div class="act-list">${eventsHtml(actFilter(ev.events))}</div>${actFoot(ev)}</div></div>
-    ${state.actBig ? "" : dashFree()}`;
+`;
 };
 /* ---- the Problems box: only what is wrong right now (read from the live state, so a solved problem leaves it by itself), each with its way to fix it */
 /* the raw error of a check in plain words (the full text stays as the tooltip) */

@@ -75,6 +75,7 @@ nikatel/
     besttoday.py     the best tunnels of the day: ranked from the checks of the last hours (up, latency, jitter, loss, breaks); a job measures every tunnel again each half hour
     checkall.py      check every server in one go (answers, GRE through a temporary link, filtering in Iran): ONE action on the panel server, progress from the
                      action log, Stop ends it, a page reload does not
+    setup.py         the first-run checklist of the Dashboard (1.57.54): the API keys and the rest a new panel still needs (panel, Telegram, AI key, DNS account, servers, probe, backup passphrase, two-step sign-in), each with what is done; reads only, the owner can hide it; api/setup.py, web/app.js (setupCard)
     housekeeping.py  the growing tables trimmed (events 60 days, finished stories 90 days), the write-ahead log folded back
     demo.py          the public demo: invented data, no sign-in, every change refused (NIKATEL_DEMO=true; docs/demo.md)
     alerts.py        flapping control → Telegram; report.py daily report; telegram.py; backup.py (encrypted)
@@ -112,7 +113,7 @@ nikatel/
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
                    (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot,
-                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, system = health, logs, update of the panel itself)
+                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, setup, system = health, logs, update of the panel itself)
   web/             plain JS and CSS, no build step. index.html loads everything; app.js: PAGES.<name> per page, SUB tabs, glass modal windows (showModal), themes (LOOK),
                    a loading box on every page change and automatic retry when a load fails, a status bar for messages; pg_*.js: one file per PasarGuard tab, each
                    registers itself in pgTabs (pg_common.js) and is drawn by the pages of the PasarGuard group (see 2b); app.css + pg_*.css: the looks.

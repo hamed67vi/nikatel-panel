@@ -23,38 +23,40 @@
   <link rel="stylesheet" href="/static/doctor.css">
   <link rel="stylesheet" href="/static/fluid.css">
 <link rel="stylesheet" href="/static/uikit.css">
+<link rel="stylesheet" href="/static/login.css">
+<link rel="stylesheet" href="/static/light.css">
 </head>
 <body>
 <div class="bg-scene" aria-hidden="true"></div>
 <div id="login" class="login hidden">
-  <form id="login-form" class="login-box" autocomplete="on">
-    <button type="button" class="lang-btn login-lang" data-notr onclick="toggleLang()" title="فارسی">فا</button>
-    <div class="brand"><div><b data-notr>NIKATEL</b><small>Network operations</small></div></div>
+  <form id="login-form" class="lg-card" autocomplete="on" novalidate>
+    <button type="button" class="lang-btn lg-lang" id="lg-lang" data-notr title="فارسی" aria-label="Language">فا</button>
+    <div class="lg-brand"><img class="lg-mark" src="/static/favicon.svg" width="56" height="56" alt=""><b class="lg-word" data-notr>NIKATEL</b><small class="lg-sub">Network operations</small></div>
+    <div id="login-err" class="lg-msg" role="alert" aria-live="polite"></div>
     <div id="ls-pass" class="lstep">
-      <label>User<input name="user" value="admin" autocomplete="username"></label>
-      <label>Password<input name="password" type="password" autocomplete="current-password" autofocus></label>
-      <button class="pri" type="submit">Sign in</button>
-      <a class="lnk" id="to-recover">Forgot the password?</a>
+      <label class="lg-f"><span class="lg-l">User</span><span class="lg-in"><i class="lg-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-3.8 3.8-6 7.5-6s6.7 2.2 7.5 6"/></svg></i><input name="user" value="admin" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next"></span></label>
+      <label class="lg-f"><span class="lg-l">Password</span><span class="lg-in"><i class="lg-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></i><input name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" autofocus><button type="button" class="lg-eye" aria-label="Show password" aria-pressed="false" title="Show password" tabindex="-1"><svg class="e-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="e-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.7A9.4 9.4 0 0112 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 01-3.2 3.9M6.3 6.8A16 16 0 002.5 12S6 18.5 12 18.5a9.4 9.4 0 003.2-.6"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg></button></span></label>
+      <div id="lg-caps" class="lg-caps hidden" role="status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l7 8h-4v4H9v-4H5zM9 20h6"/></svg><span>Caps Lock is on</span></div>
+      <button class="pri lg-go" type="submit"><span>Sign in</span></button>
+      <a class="lnk" id="to-recover" role="button" tabindex="0">Forgot the password?</a>
     </div>
     <div id="ls-2fa" class="lstep hidden">
-      <p class="lhint">Two-step sign-in. Open your authenticator app and type the 6-digit code for <b>Nikatel</b> - or one of your recovery codes.</p>
-      <label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></label>
-      <button class="pri" type="submit">Verify</button>
-      <a class="lnk" data-back>← Back</a>
+      <p class="lhint lg-hint">Two-step sign-in. Open your authenticator app and type the 6-digit code for <b>Nikatel</b> - or one of your recovery codes.</p>
+      <label class="lg-f"><span class="lg-l">Code</span><span class="lg-in"><i class="lg-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg></i><input name="code" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="123456" maxlength="20" enterkeyhint="go"></span></label>
+      <button class="pri lg-go" type="submit"><span>Verify</span></button>
+      <a class="lnk" data-back role="button" tabindex="0">← Back</a>
     </div>
     <div id="ls-recover" class="lstep hidden">
-      <p class="lhint">Set a new password. You need a <b>recovery code</b>, or a code sent to your Telegram. Two-step sign-in stays on.</p>
-      <button type="button" id="rc-tg" class="hidden">Send a code to my Telegram</button>
-      <label>Code<input name="rcode" autocomplete="off" placeholder="Telegram code or recovery code"></label>
-      <label>New password<input name="rnew" type="password" autocomplete="new-password"></label>
-      <label>Repeat<input name="rnew2" type="password" autocomplete="new-password"></label>
-      <button class="pri" type="submit">Set the new password</button>
-      <a class="lnk" data-back>← Back</a>
+      <p class="lhint lg-hint">Set a new password. You need a <b>recovery code</b>, or a code sent to your Telegram. Two-step sign-in stays on.</p>
+      <button type="button" id="rc-tg" class="lg-sec hidden">Send a code to my Telegram</button>
+      <label class="lg-f"><span class="lg-l">Code</span><span class="lg-in"><i class="lg-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="14" r="4"/><path d="M11 11l9-8M16 6l3 3M14 8l2 2"/></svg></i><input name="rcode" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Telegram code or recovery code" maxlength="24"></span></label>
+      <label class="lg-f"><span class="lg-l">New password</span><span class="lg-in"><i class="lg-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></i><input name="rnew" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false"><button type="button" class="lg-eye" aria-label="Show password" aria-pressed="false" title="Show password" tabindex="-1"><svg class="e-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="e-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.7A9.4 9.4 0 0112 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 01-3.2 3.9M6.3 6.8A16 16 0 002.5 12S6 18.5 12 18.5a9.4 9.4 0 003.2-.6"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg></button></span></label>
+      <label class="lg-f"><span class="lg-l">Repeat</span><span class="lg-in"><i class="lg-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></i><input name="rnew2" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"><button type="button" class="lg-eye" aria-label="Show password" aria-pressed="false" title="Show password" tabindex="-1"><svg class="e-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="e-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.7A9.4 9.4 0 0112 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 01-3.2 3.9M6.3 6.8A16 16 0 002.5 12S6 18.5 12 18.5a9.4 9.4 0 003.2-.6"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg></button></span></label>
+      <button class="pri lg-go" type="submit"><span>Set the new password</span></button>
+      <a class="lnk" data-back role="button" tabindex="0">← Back</a>
     </div>
-    <div id="login-err" class="err"></div>
   </form>
 </div>
-
 <div id="app" class="app hidden">
   <aside class="side">
     <div class="brand"><span class="logo-orb"><svg viewBox="0 0 128 128" width="44" height="44" aria-hidden="true" shape-rendering="geometricPrecision">

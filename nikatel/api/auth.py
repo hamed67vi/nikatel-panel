@@ -17,6 +17,11 @@ def _audit(level: str, text: str) -> None:
         emit(db, level, "security", text, "")
 
 
+def _who(user: str) -> str:
+    """How a user name is written into the log and the security events: "admin" as it is, any other text only by its length - people type their PASSWORD into the user box by mistake, and a log must never keep it."""
+    return repr(user) if user == str(auth.load().get("user") or "admin") else f"<another name, {len(user)} characters>"
+
+
 def _cookie(request: Request, response: Response, user: str) -> None:
     response.set_cookie(auth.COOKIE, auth.make_session(user), httponly=True, samesite="strict",
                         secure=auth.is_https(request), max_age=auth.get_settings().session_hours * 3600)
@@ -56,8 +61,8 @@ def login(body: LoginIn, request: Request, response: Response):
 
     if not auth.verify(body.user, body.password):
         auth.throttle_fail(ip)
-        log.warning("login failed user=%s ip=%s", body.user[:32], ip)
-        _audit("warn", f"Failed sign-in as {body.user[:32]!r} from {ip}.")
+        log.warning("login failed user=%s ip=%s", _who(body.user), ip)
+        _audit("warn", f"Failed sign-in as {_who(body.user)} from {ip}.")
         raise HTTPException(401, "wrong user or password")
 
     if auth.totp_enabled():            # password right: the second step decides

@@ -59,3 +59,17 @@ def test_the_demo_does_not_serve_backups_tokens_or_the_security_page():
 def test_the_log_masks_a_pasarguard_key_and_a_panel_token():
     out = log.mask("key pg_key_0123456789abcdef and token nkt_ABCDEFGHIJKLMNOPQRSTUVWX1234567890abcd here")
     assert "pg_key_" not in out and "nkt_" not in out and "<api-key>" in out and "<token>" in out
+
+
+def test_a_failed_sign_in_never_writes_the_typed_name_when_it_is_not_the_admin(client, caplog):
+    """The owner, 2026-10-16 (the sign-in check): the user box is often filled with the password by mistake - the log and the security events keep only its length."""
+    from nikatel.api import auth as api_auth
+
+    assert api_auth._who("admin") == "'admin'" and api_auth._who("my-secret-pass-1") == "<another name, 16 characters>"
+    client.cookies.clear()
+    with caplog.at_level("WARNING"):
+        assert client.post("/api/auth/login", json={"user": "my-secret-pass-1", "password": "x" * 12}).status_code == 401
+    assert "my-secret-pass-1" not in caplog.text and "another name, 16 characters" in caplog.text
+    client.post("/api/auth/login", json={"user": "admin", "password": "test-password-1"})
+    events = client.get("/api/auth/security-log").json()["events"]
+    assert any("another name, 16 characters" in e["text"] for e in events) and not any("my-secret-pass-1" in e["text"] for e in events)
