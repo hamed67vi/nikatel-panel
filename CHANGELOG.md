@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.58.1 - Putting the tunnel cores on a server never replaces one that is there
+
+Found by the first real run on a server that already had a BackPack tunnel of the old panel (2026-10-16): the cores that the panel puts on a new server (and *Install → Tunnel cores…*, and the **Install** button of Settings → About) are put **only where they are missing**; a core that is there is left exactly as it is (another build may be what its tunnels run). Changing a build stays the job of **Update** (and of building a tunnel, which keeps the node on the panel's build as before). *Install* in About no longer also updates the outdated servers: it is for the servers that have not got the core, nothing is restarted, and it copies the panel's own cached build instead of downloading the release again.
+
 ## 1.58.0 - Adding a server moves nothing and says what is being done, the tunnel cores install by themselves, the Add table gets short names, an emoji per protocol, protocols of your own and a menu on every config
 
 The owner (2026-10-16), five requests:

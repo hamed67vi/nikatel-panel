@@ -200,11 +200,16 @@ def prefetch() -> dict:
     return out
 
 
-def ensure_on_node(node: Node, engine: str, say=None) -> bool:
-    """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed."""
+def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False) -> bool:
+    """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed. With `only_missing` a core that is there is left exactly as it is (another build may be what
+    the tunnels of that server run - a server added to the panel often has tunnels already): it is put there only when it is not."""
+    e = ENGINES[engine]
+
+    if only_missing and "SHA=none" not in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
+        return False
+
     f = cache_file(engine)
     sha = hashlib.sha256(f.read_bytes()).hexdigest()
-    e = ENGINES[engine]
 
     if f"SHA={sha}" in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
         return False
@@ -232,7 +237,8 @@ def ensure_on_node(node: Node, engine: str, say=None) -> bool:
 
 def install_on(server_id: int, names=None, step=None) -> dict:
     """Put the tunnel cores on ONE server from the panel's cache (a core the cache lacks is downloaded and verified first): {engine: "installed" | "present" | "failed: why"}.
-    A core that fails does not stop the next one. `step(title, i, n)` is told before each core (the row of the server shows it)."""
+    Only the cores that are NOT there are put: one that is there stays as it is (Update, in Settings → About, is the way to change a build). A core that fails does not stop the next one.
+    `step(title, i, n)` is told before each core (the row of the server shows it)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only")
 
@@ -252,15 +258,16 @@ def install_on(server_id: int, names=None, step=None) -> dict:
             step(ENGINES[name]["title"], i, len(todo))
 
         try:
-            out[name] = "installed" if ensure_on_node(node, name) else "present"
+            out[name] = "installed" if ensure_on_node(node, name, only_missing=True) else "present"
         except (SSHError, RuntimeError, ValueError, OSError, httpx.HTTPError, subprocess.SubprocessError) as e:
             out[name] = "failed: " + str(e)[:120]
 
     return out
 
 
-def update(engine: str, include_missing: bool = False) -> dict:
-    """Download, verify, copy to every server that runs this core and is outdated (and, with `include_missing`, to every server that has not got it), restart its units. Synchronous; takes minutes."""
+def update(engine: str, only_missing: bool = False) -> dict:
+    """Download, verify, copy to every server that runs this core and is outdated and restart its units - or, with `only_missing`, copy it to the servers that have not got it (nothing is restarted: no
+    unit uses it yet). Synchronous; takes minutes."""
     if engine not in ENGINES:
         raise ValueError("unknown engine")
 
@@ -270,22 +277,27 @@ def update(engine: str, include_missing: bool = False) -> dict:
     if _STATE["job"] and not _STATE["job"].get("done"):
         raise RuntimeError("an update is already running")
 
-    job: dict = {"engine": engine, "started": int(time.time()), "items": [], "done": False, "version": ""}
+    job: dict = {"engine": engine, "started": int(time.time()), "items": [], "done": False, "version": "", "kind": "install" if only_missing else "update"}
     _STATE["job"] = job
 
     try:
-        version, binary = _download(engine)
+        if only_missing:
+            cache_file(engine)                                          # (the panel's own build - downloaded and verified when it has none; the servers that have not got the core get THAT one)
+            binary, sha, version = b"", "", ""
+        else:
+            version, binary = _download(engine)
+            sha = hashlib.sha256(binary).hexdigest()
+            cache = get_settings().data_dir.parent / "engines" / f"{engine}-{version}"
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_bytes(binary)
+            cache.chmod(0o755)
+            newest = cache.parent / engine                              # (the cache of the panel follows the update: a tunnel built later must not put the older build back on a server)
+            newest.write_bytes(binary)
+            newest.chmod(0o755)
+
         job["version"] = version
-        sha = hashlib.sha256(binary).hexdigest()
-        cache = get_settings().data_dir.parent / "engines" / f"{engine}-{version}"
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_bytes(binary)
-        cache.chmod(0o755)
-        newest = cache.parent / engine                                  # (the cache of the panel follows the update: a tunnel built later must not put the older build back on a server)
-        newest.write_bytes(binary)
-        newest.chmod(0o755)
         info = (_STATE["result"] or {}).get(engine) or check()["engines"][engine]
-        targets = [n["name"] for n in info["nodes"] if n["state"] == "outdated" or (include_missing and n["state"] == "not installed")]
+        targets = [n["name"] for n in info["nodes"] if n["state"] == ("not installed" if only_missing else "outdated")]
 
         with session() as db:
             nodes = [(s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.name.in_(targets)))]
@@ -294,19 +306,25 @@ def update(engine: str, include_missing: bool = False) -> dict:
             name, node = item
 
             try:
+                if only_missing:
+                    ensure_on_node(node, engine, only_missing=True)
+                    return {"name": name, "state": "ok", "detail": "installed"}
+
                 import base64
 
                 run_action(node, "put_file", {"PATH": ENGINES[engine]["bin"] + ".nikatel.new", "B64": base64.b64encode(binary).decode(), "MODE": "0755"}, timeout=240)
                 out = run_action(node, "engine_swap", {"BIN": ENGINES[engine]["bin"], "SHA": sha, "UNITS": ENGINES[engine]["units"]}, timeout=120)
                 return {"name": name, "state": "ok" if "SWAPPED" in out else "failed", "detail": out.strip()[-120:]}
-            except (SSHError, ValueError) as e:
+            except (SSHError, ValueError, RuntimeError, OSError, subprocess.SubprocessError) as e:
                 return {"name": name, "state": "failed", "detail": str(e)[:140]}
 
         with ThreadPoolExecutor(4) as ex:
             job["items"] = list(ex.map(one, nodes))
 
+        done = sum(1 for i in job["items"] if i["state"] == "ok")
+
         with session() as db:
-            emit(db, "info", "engines", f"{ENGINES[engine]['title']} {version}: {sum(1 for i in job['items'] if i['state'] == 'ok')} of {len(targets)} servers updated.", engine)
+            emit(db, "info", "engines", f"{ENGINES[engine]['title']}: put on {done} of {len(targets)} servers." if only_missing else f"{ENGINES[engine]['title']} {version}: {done} of {len(targets)} servers updated.", engine)
     except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
         job["error"] = str(e)[:200]
     finally:

@@ -144,10 +144,11 @@ def test_the_api_starts_the_steps_in_the_background_and_answers_at_once(client, 
 # ------------------------------------------------------------------ the cores
 def test_install_on_reports_what_happened_to_each_core(sid, monkeypatch):
     monkeypatch.setattr(get_settings(), "read_only", False)
-    done = []
+    done, flags = [], []
 
-    def fake(node, name, say=None):
+    def fake(node, name, say=None, only_missing=False):
         done.append(name)
+        flags.append(only_missing)
 
         if name == "paqet":
             raise RuntimeError("no GitHub from here")
@@ -159,6 +160,7 @@ def test_install_on_reports_what_happened_to_each_core(sid, monkeypatch):
     res = engines.install_on(sid, step=lambda t, i, n: steps.append((t, i, n)))
     assert res == {"backhaul": "installed", "backpack": "installed", "paqet": "failed: no GitHub from here", "chisel": "present", "xray": "installed"}
     assert done == list(engines.ENGINES) and steps[0] == ("Backhaul", 1, 5) and steps[-1] == ("Xray", 5, 5)
+    assert all(flags)                                                                                  # only what is NOT there is put: a core that is there is left as it is
     assert engines.install_on(sid, ["paqet", "nope"]) == {"paqet": "failed: no GitHub from here"}      # an unknown name is left out
     monkeypatch.setattr(get_settings(), "read_only", True)
 
@@ -194,6 +196,33 @@ def test_the_xray_gateway_directory_is_made_before_its_copy_and_the_others_need_
     calls.clear()
     assert engines.ensure_on_node(node, "paqet") is True
     assert [c[1] for c in calls] == ["engine_sha", "engine_swap"] and calls[0][2] == {"BIN": "/usr/local/bin/paqet"}
+
+
+def test_a_core_that_is_there_is_left_exactly_as_it_is_by_an_install(monkeypatch, tmp_path):
+    """A server added to the panel often has tunnels of the old panel: a BackPack of another build must not be replaced behind their back (found on a real server, 2026-10-16)."""
+    f = tmp_path / "core"
+    f.write_bytes(b"x" * 1_500_000)
+    calls, answer = [], {"v": "SHA=" + "a" * 64}
+
+    def script(node, name, params=None, timeout=0):
+        calls.append(("script", name))
+        return answer["v"]
+
+    monkeypatch.setattr(engines, "cache_file", lambda e: (calls.append(("cache", e)), f)[1])
+    monkeypatch.setattr(engines, "run_script", script)
+    monkeypatch.setattr(engines, "run_action", lambda node, name, params=None, timeout=0: (calls.append(("action", name)), "SWAPPED units=")[1])
+    monkeypatch.setattr(engines.subprocess, "run", lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""))
+    node = Node("203.0.113.9", "root", 22)
+    assert engines.ensure_on_node(node, "backpack", only_missing=True) is False                           # another build is there: nothing is read from the cache, nothing is copied
+    assert calls == [("script", "engine_sha")]
+    calls.clear()
+    answer["v"] = "SHA=none"
+    assert engines.ensure_on_node(node, "backpack", only_missing=True) is True                            # not there: put
+    assert ("cache", "backpack") in calls and ("action", "engine_swap") in calls
+    calls.clear()
+    answer["v"] = "SHA=" + "b" * 64
+    assert engines.ensure_on_node(node, "backpack") is True                                               # the build of a tunnel still follows the cache, as before
+    assert ("action", "engine_swap") in calls
 
 
 def test_the_checksum_script_accepts_the_two_places_a_core_lives_and_nothing_else():
@@ -233,17 +262,20 @@ def test_install_puts_a_core_on_the_servers_that_have_not_got_it_and_update_leav
     monkeypatch.setattr(engines, "run_action", lambda node, name, params=None, timeout=0: (wrote.append((node.host, name)), "SWAPPED units=")[1])
     engines._STATE["result"] = {"paqet": {"nodes": [{"name": "a1", "state": "not installed"}, {"name": "b1", "state": "current"}, {"name": "c1", "state": "outdated"}]}}
     only = engines.update("paqet")
-    assert sorted(i["name"] for i in only["items"]) == ["c1"]                                           # Update: the outdated ones only
-    wrote.clear()
-    engines._STATE["job"] = None
-    both = engines.update("paqet", include_missing=True)
-    assert sorted(i["name"] for i in both["items"]) == ["a1", "c1"] and all(i["state"] == "ok" for i in both["items"])      # Install: the ones that have not got it as well
+    assert sorted(i["name"] for i in only["items"]) == ["c1"] and only["kind"] == "update"               # Update: the outdated ones only
     assert (tmp_path / "engines" / "paqet").read_bytes() == b"b" * 1_200_000                           # the panel's cache follows the update: a tunnel built later does not put the old build back
+    put = []
+    monkeypatch.setattr(engines, "ensure_on_node", lambda node, name, say=None, only_missing=False: put.append((node.host, name, only_missing)) or True)
+    monkeypatch.setattr(engines, "cache_file", lambda e: tmp_path / "engines" / e)
+    engines._STATE["job"] = None
+    both = engines.update("paqet", only_missing=True)
+    assert [i["name"] for i in both["items"]] == ["a1"] and both["items"][0]["state"] == "ok" and both["kind"] == "install"      # Install: the servers that have not got it - and only them
+    assert put == [("203.0.113.61", "paqet", True)]
 
 
 def test_the_install_button_asks_for_the_servers_that_have_not_got_the_core(client, monkeypatch):
     seen = []
-    monkeypatch.setattr(engines, "update", lambda engine, include_missing=False: seen.append((engine, include_missing)) or {"engine": engine, "items": [], "done": True})
+    monkeypatch.setattr(engines, "update", lambda engine, only_missing=False: seen.append((engine, only_missing)) or {"engine": engine, "items": [], "done": True})
     assert client.post("/api/engines/paqet/update").json()["ok"] is True and client.post("/api/engines/paqet/update?missing=true").json()["ok"] is True
     assert seen == [("paqet", False), ("paqet", True)]
 
