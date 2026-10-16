@@ -1134,3 +1134,20 @@ def test_the_tunnel_menu_has_a_speed_test_that_opens_inside_the_window():
     assert "window.tunSpeed = async (id, name) =>" in app and "window.tunSpeedRun = async id =>" in app and "function tunSpeedResult(r, cap) {" in app and 'name="sp-mode"' in app
     assert 'api(`/api/tunnels/${id}/speed`, {method: "POST", body: JSON.stringify({mode})})' in app and "followStory(r.action_id, box, 400)" in app and 'onclick="tunBack(${id})"' in app.split("window.tunSpeed = ", 1)[1]
     assert "html body #modal .spd-opts {" in css and "html body #modal .spd-b.cap u" in css and "html body #modal .spd-res.fair .spd-g" in css
+
+
+def test_the_forward_chisel_is_offered_in_the_build_form_and_known_by_the_tests():
+    """The forward Chisel (the Iran server dials) of 1.59.2: a row in the guide, a hint in the drop-down, the kind keys of the pair test, and the label of the column."""
+    app = _web("app.js")
+    assert '"chisel:fws": "Iran dials: fast downloads", "chisel:fwss": "Iran dials: fast downloads, TLS"' in app and 'Customers\' downloads are slow", "Chisel · Forward WebSocket", "chisel", "fws"' in app
+    assert '{wss: "chisel:tls", fws: "chisel:fwd", fwss: "chisel:fwdtls"}[trn] || "chisel"' in app
+    assert '"chisel:fwd": "Chisel · forward WebSocket", "chisel:fwdtls": "Chisel · forward TLS WebSocket"' in app
+    assert '["direct", "forward"].includes((t.record || {}).direction)' in app
+
+
+def test_the_paqet_form_takes_the_window_and_the_buffer_and_the_mtu_stops_where_it_carries():
+    """1.59.2: the Paqet window and buffer are fields of the form (one window for both directions, one buffer for a stream, the SMUX buffer twice that); the MTU stops at 1400."""
+    app = _web("app.js")
+    assert 'num("mtu", "KCP MTU", 1350, 500, 1400, "(1450 and more carry nothing)")' in app
+    assert 'num("window", "Window (packets)", 4096, 128, 65535' in app and 'num("buffer_mb", "Buffer (MB)", 8, 1, 128' in app
+    assert 'if (w) body.opts.rcvwnd = body.opts.sndwnd = w;' in app and 'body.opts.streambuf = mb * 1048576; body.opts.smuxbuf = mb * 2097152;' in app

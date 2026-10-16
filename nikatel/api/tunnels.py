@@ -113,8 +113,9 @@ def tunnel_kinds():
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_DIRECT.items()]},
         {"key": "paqet", "title": "Paqet", "note": "KCP over raw sockets: the foreign server listens, the Iran server opens the ports", "direction": "direct",
          "transports": [{"key": "kcp", "label": "KCP", "note": "modes normal / fast / fast2 / fast3"}]},
-        {"key": "chisel", "title": "Chisel", "note": "reverse tunnel over one WebSocket port on the Iran server", "direction": "reverse",
-         "transports": [{"key": "ws", "label": "HTTP WebSocket", "note": "clear text"}, {"key": "wss", "label": "TLS WebSocket", "note": "self-signed certificate, key pinned"}]},
+        {"key": "chisel", "title": "Chisel", "note": "one WebSocket port: on the Iran server (reverse, the foreign server dials) or on the foreign server (forward, the Iran server dials)", "direction": "reverse",
+         "transports": [{"key": "ws", "label": "HTTP WebSocket", "note": "reverse, clear text"}, {"key": "wss", "label": "TLS WebSocket", "note": "reverse, self-signed certificate, key pinned"},
+                        {"key": "fws", "label": "Forward HTTP WebSocket", "note": "the Iran server dials: the customers' downloads run at full speed"}, {"key": "fwss", "label": "Forward TLS WebSocket", "note": "the Iran server dials, TLS, key pinned"}]},
     ]}
 
 

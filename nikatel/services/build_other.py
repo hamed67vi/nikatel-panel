@@ -1,6 +1,6 @@
 """The other tunnel engines, ported from the old panel: BackPack (reverse, many transports), BackPack
 Direct (an L3 link the Iran server dials: udp / quic / pck / sni / xdi), Paqet (KCP over raw sockets)
-and Chisel (reverse tunnel over a WebSocket). Same shape as `builder`: validate, action_log entry,
+and Chisel (a tunnel over a WebSocket: reverse, or forward when the Iran server dials). Same shape as `builder`: validate, action_log entry,
 build in a thread, every file through `put_file`, every service through `unit_enable_restart`, a
 failed build removes what it created. Every tunnel gets a *test door*: a port on the Iran side that
 leads to a small sink on the foreign server, so quality (latency / jitter / loss / speed) can be
@@ -63,6 +63,7 @@ BP_DIRECT = {
 }
 KINDS = ("backpack", "backpack_direct", "paqet", "chisel")
 KIND_TITLE = {"backpack": "BackPack", "backpack_direct": "BackPack Direct", "paqet": "Paqet", "chisel": "Chisel"}
+CHISEL_TRANSPORTS = ("ws", "wss", "fws", "fwss")          # ws / wss: reverse (the foreign server dials the Iran server); fws / fwss: forward (the Iran server dials the foreign server)
 _LOCK = threading.Lock()
 _BUILDING: set[str] = set()
 
@@ -104,11 +105,14 @@ def parse_probe(out: str) -> dict:
 
 
 def quality_score(q: dict) -> int:
-    """0-100: speed counts most, then latency, jitter and loss."""
+    """0-100: speed counts most, then latency, jitter and loss. The speed is what an Iranian CUSTOMER gets - the download (foreign -> Iran), eight connections together and one connection by itself - and the upload only up to the download
+    (real tests, 2026-10-16: the "upload" of a reverse tunnel ran at 700 - 2700 Mb/s over a path that carries 100 and made BackPack look the best while a customer downloaded at 10 Mb/s per connection)."""
     if not q or q.get("error") or q.get("latency_ms") is None:
         return 0
 
-    speed = min(100.0, ((q.get("down_mbps") or 0) * 0.7 + (q.get("up_mbps") or 0) * 0.3) / 8.0)
+    d8, d1, up = q.get("down_mbps") or 0, q.get("down1_mbps"), q.get("up_mbps") or 0
+    down = d8 if d1 is None else (d8 + d1) / 2
+    speed = min(100.0, (down * 0.85 + min(up, down) * 0.15) / 6.0)
     lat = max(0.0, 100.0 - max(0.0, q["latency_ms"] - 40) / 2.0)
     jit = max(0.0, 100.0 - (q.get("jitter_ms") or 0) * 5)
     loss = max(0.0, 100.0 - (q.get("loss_pct") or 0) * 10)
@@ -256,8 +260,14 @@ def forward_rows(ports: list[PortMap], test_port: int, udp: bool) -> list[tuple[
     return rows
 
 
-PAQET_BLOCKS = ("aes-128-gcm", "aes", "none")                        # the cipher of the KCP stream (none = no encryption at all: for a measurement of what the cipher costs)
+PAQET_MAX_MTU = 1400                                                   # real tests, 2026-10-16: 1200 and 1350 carry data, 1450 carries NOTHING (the KCP packet, its cipher and the IP / TCP headers no longer fit one 1500 byte frame)
+PAQET_BLOCKS = ("aes-128-gcm", "aes", "none")                      # the cipher of the KCP stream (none = no encryption at all: for a measurement of what the cipher costs)
 PAQET_TUNING = (("rcvwnd", "rcvwnd", 128, 65535), ("sndwnd", "sndwnd", 128, 65535), ("smuxbuf", "smuxbuf", 65536, 268435456), ("streambuf", "streambuf", 65536, 268435456))      # (option of the panel, key of Paqet, lowest, highest): the KCP windows (in packets) and the SMUX / stream buffers (in bytes)
+# What the panel writes when nothing is asked. Real tests, 2026-10-16 (an Iran server -> a Hetzner server, 114 ms, door with random data, one connection / four connections together, Mb/s down):
+#   Paqet's own defaults (window 1024, 4 MB / 2 MB)  52 / 184;   window 2048: 92 / 283 - 153 / 368;   window 4096 + 16 MB / 8 MB: 199 - 210 / 330 - 301;   window 8192 + 32 MB / 16 MB: 185 / 309 (no better).
+# The window raised the speed of one connection to 92, the stream buffer (2 MB / 114 ms = 140 Mb/s at most) to 200. With them: mode fast 199 / 330, normal 153 / 193, fast3 127 / 155; 1 connection 165 / 172, 2: 193 / 308, 8: 191 / 327;
+# MTU 1400 176 / 351 (1450 carries nothing). The cipher ("none") and the mode, with the old window, changed nothing - the cipher costs no speed.
+PAQET_DEFAULTS = {"rcvwnd": 4096, "sndwnd": 4096, "smuxbuf": 16 * 1048576, "streambuf": 8 * 1048576}
 
 
 def paqet_texts(net_i: dict, net_f: dict, port: int, key: str, foreign_host: str, ports: list[PortMap], test_port: int, opts: dict | None = None) -> tuple[str, str]:
@@ -267,14 +277,14 @@ def paqet_texts(net_i: dict, net_f: dict, port: int, key: str, foreign_host: str
     mode = mode if mode in ("normal", "fast", "fast2", "fast3") else "fast"
     block = str(o.get("kcp_block") or "aes-128-gcm")
     block = block if block in PAQET_BLOCKS else "aes-128-gcm"
-    more = "".join(f"    {k}: {max(lo, min(hi, int(o[opt])))}\n" for opt, k, lo, hi in PAQET_TUNING if o.get(opt) not in (None, "", 0, False))      # (windows and buffers: left to Paqet's own defaults unless asked)
+    more = "".join(f"    {k}: {max(lo, min(hi, int(o[opt] if o.get(opt) not in (None, '', 0, False) else PAQET_DEFAULTS[opt])))}\n" for opt, k, lo, hi in PAQET_TUNING)
     kcp = f"""transport:
   protocol: "kcp"
   conn: {max(1, min(64, int(o.get("conn", 4))))}
   kcp:
     mode: "{mode}"
     block: "{block}"
-    mtu: {int(o.get("mtu", 1350))}
+    mtu: {max(500, min(PAQET_MAX_MTU, int(o.get("mtu", 1350))))}
 {more}    key: "{key}"
 """
     foreign = f"""# Nikatel panel - Paqet server (foreign)
@@ -353,24 +363,32 @@ WantedBy=multi-user.target
 """
 
 
-def chisel_remotes(ports: list[PortMap], test_port: int, udp: bool) -> list[str]:
-    """R: remotes of the client - the Iran server opens every user port and forwards it to the foreign side."""
-    return [f"R:{ls}:{t}" + ("/udp" if p == "udp" else "") for ls, t, p in forward_rows(ports, test_port, udp)]
+def chisel_mode(transport: str) -> tuple[bool, bool]:
+    """(tls, forward) of a Chisel transport. Reverse (ws / wss): the foreign server dials the Iran server and the Iran server opens the user ports.
+    Forward (fws / fwss): the Iran server dials the foreign server and opens the user ports itself (real tests, 2026-10-16: the route throttles the data that flows
+    from the side that opened the connection, so a customer's download is fast only when the Iran side is the one that dials)."""
+    return transport in ("wss", "fwss"), transport in ("fws", "fwss")
 
 
-def chisel_unit(name: str, side: str, port: int, remotes: list[str], iran_host: str, tls: bool, fingerprint: str = "") -> str:
+def chisel_remotes(ports: list[PortMap], test_port: int, udp: bool, forward: bool = False) -> list[str]:
+    """The remotes of the client. Reverse: `R:` - the Iran server (the server there) opens every user port and sends it to the foreign side. Forward: no R: - the client IS the Iran server and opens the ports itself."""
+    return [("" if forward else "R:") + f"{ls}:{t}" + ("/udp" if p == "udp" else "") for ls, t, p in forward_rows(ports, test_port, udp)]
+
+
+def chisel_unit(name: str, side: str, port: int, remotes: list[str], server_host: str, tls: bool, fingerprint: str = "", forward: bool = False) -> str:
+    """The unit of one side. `server_host` is the address the client dials: the Iran server for a reverse tunnel, the foreign one for a forward tunnel."""
     base = "/etc/nikatel-chisel"
     bin_ = "/usr/local/bin/nikatel-chisel"
 
-    if side == "iran":
+    if (side == "iran") != forward:                                 # the server side: Iran when reverse, foreign when forward
         tls_args = f" --tls-key {base}/{name}.tls.key --tls-cert {base}/{name}.crt" if tls else ""
-        exec_line = f"{bin_} server --host 0.0.0.0 --port {port} --reverse --keyfile {base}/{name}.key --keepalive 25s{tls_args}"
+        exec_line = f"{bin_} server --host 0.0.0.0 --port {port}{'' if forward else ' --reverse'} --keyfile {base}/{name}.key --keepalive 25s{tls_args}"
         env = f"{base}/{name}.srv.env"
     else:
         fp = f" --fingerprint {fingerprint}" if fingerprint else ""
         skip = " --tls-skip-verify" if tls else ""
         rem = " ".join(f"'{r}'" for r in remotes)
-        exec_line = f"{bin_} client --keepalive 25s --max-retry-interval 5s{fp}{skip} {'https' if tls else 'http'}://{iran_host}:{port} {rem}"
+        exec_line = f"{bin_} client --keepalive 25s --max-retry-interval 5s{fp}{skip} {'https' if tls else 'http'}://{server_host}:{port} {rem}"
         env = f"{base}/{name}.cli.env"
 
     return f"""[Unit]
@@ -448,8 +466,10 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
             raise ValueError("SNI spoofing needs a domain your route allows (for example a CDN domain)")
     elif kind == "paqet":
         transport = "kcp"
+    elif transport in CHISEL_TRANSPORTS:
+        pass
     else:
-        transport = "wss" if transport in ("wss", "tls", "1", "true") else "ws"
+        transport = "wss" if transport in ("tls", "1", "true") else "ws"
 
     ports = parse_ports(ports_text)
 
@@ -607,13 +627,13 @@ def _plan(b: Build, fi: dict, ff: dict) -> None:
         b.port = free_port(9700, 9800, taken_f)                   # raw port on the foreign server
         b.test_port = free_port(39200, 39300, taken_i | {b.port})
     else:
-        b.port = free_port(9600, 9700, taken_i)                   # control port on the Iran server
+        b.port = free_port(9600, 9700, taken_f if chisel_mode(b.transport)[1] else taken_i)       # control port: on the Iran server, on the foreign one when the Iran server dials (forward)
         b.test_port = free_port(39000, 39100, taken_i | {b.port})
 
     if not b.port or not b.test_port:
         raise RuntimeError("no free control / test port")
 
-    where = "the foreign server" if b.kind in ("backpack_direct", "paqet") else "the Iran server"
+    where = "the foreign server" if b.kind in ("backpack_direct", "paqet") or (b.kind == "chisel" and chisel_mode(b.transport)[1]) else "the Iran server"
     _say(b.aid, f"Plan: {b.name}, {'UDP' if b.udp else 'TCP'} port {b.port} on {where}, test door {b.test_port}" + (f", tunnel network 10.10.{b.net}.0/30" if b.net else ""))
 
 
@@ -821,26 +841,31 @@ def _build(b: Build) -> None:
         direction, tlabel = "direct", "Paqet · KCP"
 
     else:
-        tls = b.transport == "wss"
-        _say(aid, "Chisel · reverse tunnel over " + ("TLS WebSocket" if tls else "HTTP WebSocket"))
-        remotes = chisel_remotes(b.ports, b.test_port, bool(b.opts.get("accept_udp")))
+        tls, fwd = chisel_mode(b.transport)
+        wire = "TLS WebSocket" if tls else "HTTP WebSocket"
+        _say(aid, f"Chisel · forward tunnel: the Iran server dials the foreign server, over {wire}" if fwd else f"Chisel · reverse tunnel over {wire}")
+        remotes = chisel_remotes(b.ports, b.test_port, bool(b.opts.get("accept_udp")), fwd)
         _install_sink(b, foreign, key)
-        b.created.append(iran)
-        run_action(iran, "chisel_prepare", {"NAME": b.name, "TLS": "1" if tls else "0"}, timeout=60)
-        _put(iran, f"/etc/nikatel-chisel/{b.name}.srv.env", f"AUTH=nikatel:{token}\n", "0600")
-        _put(iran, f"/etc/systemd/system/chisel-{b.name}.service", chisel_unit(b.name, "iran", b.port, remotes, b.iran.host, tls), "0644")
+        # the server side holds the control port: the Iran server (reverse) or the foreign one (forward); the client side dials it
+        srv, cli, srv_label, cli_label, srv_facts = (foreign, iran, "foreign", "Iran", ff) if fwd else (iran, foreign, "Iran", "foreign", fi)
+        srv_unit, cli_unit = (f"chisel-{b.name}-kharej.service", f"chisel-{b.name}.service") if fwd else (f"chisel-{b.name}.service", f"chisel-{b.name}-kharej.service")
+        server_host = b.foreign.host if fwd else b.iran.host
+        b.created.append(srv)
+        run_action(srv, "chisel_prepare", {"NAME": b.name, "TLS": "1" if tls else "0"}, timeout=60)
+        _put(srv, f"/etc/nikatel-chisel/{b.name}.srv.env", f"AUTH=nikatel:{token}\n", "0600")
+        _put(srv, f"/etc/systemd/system/{srv_unit}", chisel_unit(b.name, srv_label.lower(), b.port, remotes, server_host, tls, forward=fwd), "0644")
 
-        if fi["ufw"]:
-            run_action(iran, "ufw_allow", {"PORT": str(b.port), "PROTO": "tcp"})
+        if srv_facts["ufw"]:
+            run_action(srv, "ufw_allow", {"PORT": str(b.port), "PROTO": "tcp"})
 
-        _start(iran, "Iran", f"chisel-{b.name}.service", b)
-        fp = (re.search(r"FP=(\S+)", run_script(iran, "chisel_fp", {"NAME": b.name}, timeout=20)) or [None, ""])[1]
-        _say(aid, "Iran side running" + (", server key pinned on the client" if fp else ""))
-        _put(foreign, f"/etc/nikatel-chisel/{b.name}.cli.env", f"AUTH=nikatel:{token}\n", "0600")
-        _put(foreign, f"/etc/systemd/system/chisel-{b.name}-kharej.service", chisel_unit(b.name, "foreign", b.port, remotes, b.iran.host, tls, fp), "0644")
-        _start(foreign, "foreign", f"chisel-{b.name}-kharej.service", b)
-        _wait_for_data(b, iran, key, f"The control port {b.port} may be closed between the servers.", foreign, f"chisel-{b.name}-kharej.service")
-        direction, tlabel = "reverse", "Chisel · " + ("TLS WebSocket" if tls else "WebSocket")
+        _start(srv, srv_label, srv_unit, b)
+        fp = (re.search(r"FP=(\S+)", run_script(srv, "chisel_fp", {"NAME": b.name}, timeout=20)) or [None, ""])[1]
+        _say(aid, f"{srv_label} side running" + (", server key pinned on the client" if fp else ""))
+        _put(cli, f"/etc/nikatel-chisel/{b.name}.cli.env", f"AUTH=nikatel:{token}\n", "0600")
+        _put(cli, f"/etc/systemd/system/{cli_unit}", chisel_unit(b.name, cli_label.lower(), b.port, remotes, server_host, tls, fp, forward=fwd), "0644")
+        _start(cli, cli_label, cli_unit, b)
+        _wait_for_data(b, iran, key, f"The control port {b.port} may be closed between the servers (it is on the {srv_label.lower()} server).", cli, cli_unit)
+        direction, tlabel = ("forward" if fwd else "reverse"), "Chisel · " + ("forward " if fwd else "") + ("TLS WebSocket" if tls else "WebSocket")
 
     _measure(b, iran, key)
 

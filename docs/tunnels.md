@@ -13,7 +13,7 @@ repairs them. Names of the real servers and tunnels live only in the panel's dat
 | **BackPack** | foreign server dials the Iran server | TCP, UDP, WebSocket, QUIC, raw TCP, ICMP (12 transports) | some | heavy filtering, lossy or throttled routes |
 | **BackPack Direct** | Iran server dials the foreign server | an L3 link on a private `/30` network | PCK, SNI, xDi | routes where the foreign side cannot dial in |
 | **Paqet** | foreign server listens, Iran server opens the ports | KCP over raw sockets | yes | routes that stall ordinary TCP |
-| **Chisel** | Iran server accepts, foreign client dials | HTTP / TLS WebSocket, one inbound port | no | places only HTTP(S)-looking traffic passes |
+| **Chisel** | reverse: the Iran server accepts, the foreign client dials · **forward**: the foreign server accepts, the Iran client dials | HTTP / TLS WebSocket, one inbound port | no | places only HTTP(S)-looking traffic passes; **forward = fast downloads for customers** |
 | **Legacy GRE** | (found on the servers) | adopted tunnels built outside the panel | — | tunnels that existed before the panel; judged by backhaul + data path |
 
 ## Backhaul over GRE
@@ -62,7 +62,7 @@ Tuned for many users (channel size, connection pool, keepalive, heartbeat, TCP n
 ## Paqet and Chisel
 
 * **Paqet** — KCP over raw sockets: the foreign server listens, the Iran server opens the user ports. Server key pinned on the client.
-* **Chisel** — reverse tunnel over one WebSocket port on the Iran server, plain HTTP or TLS (self-signed certificate, key pinned).
+* **Chisel** — a tunnel over one WebSocket port, plain HTTP or TLS (self-signed certificate, key pinned). **Reverse** (`ws` / `wss`): the port is on the Iran server and the foreign server dials it. **Forward** (`fws` / `fwss`): the port is on the foreign server, the Iran server dials it and opens the user ports itself (Chisel server on the foreign side, client with its own listeners on the Iran side).
 
 ## What the panel does with each tunnel
 

@@ -160,8 +160,8 @@ MAC=$(ip neigh show "$GW" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="lladdr"
 echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
 """, {}),
 
-    # the fingerprint the Chisel server printed when it started (the client pins it)
-    "chisel_fp": (r"""echo "FP=$(journalctl -u 'chisel-@NAME@.service' -n 60 --no-pager 2>/dev/null | grep -o 'Fingerprint [A-Za-z0-9+/=]*' | tail -1 | cut -d' ' -f2)"
+    # the fingerprint the Chisel server printed when it started (the client pins it); the server is the unit of the Iran server (reverse) or the -kharej unit of the foreign one (forward): the other unit is a client and prints none
+    "chisel_fp": (r"""echo "FP=$(journalctl -u 'chisel-@NAME@.service' -u 'chisel-@NAME@-kharej.service' -n 60 --no-pager 2>/dev/null | grep -o 'Fingerprint [A-Za-z0-9+/=]*' | tail -1 | cut -d' ' -f2)"
 """, {"NAME": r"^[a-z0-9][a-z0-9-]{0,14}$"}),
 
     # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door

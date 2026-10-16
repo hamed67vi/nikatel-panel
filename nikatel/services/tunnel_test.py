@@ -366,6 +366,8 @@ KINDS = [
     ("paqet", "Paqet · KCP raw sockets", "needs raw sockets", "Paqet", True),
     ("chisel", "Chisel · WebSocket", "HTTP WebSocket, one inbound port", "Chisel", True),
     ("chisel:tls", "Chisel · TLS WebSocket", "TLS WebSocket, one inbound port", "Chisel", False),
+    ("chisel:fwd", "Chisel · forward WebSocket", "the Iran server dials: a customer's download is fast", "Chisel", True),
+    ("chisel:fwdtls", "Chisel · forward TLS WebSocket", "the Iran server dials, TLS", "Chisel", False),
 ]
 KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}
@@ -385,7 +387,7 @@ def kind_parts(kind: str) -> tuple[str, str]:
     if kind == "paqet":
         return "paqet", "kcp"
 
-    return "chisel", "wss" if kind == "chisel:tls" else "ws"
+    return "chisel", {"chisel:tls": "wss", "chisel:fwd": "fws", "chisel:fwdtls": "fwss"}.get(kind, "ws")
 
 
 def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full") -> int:

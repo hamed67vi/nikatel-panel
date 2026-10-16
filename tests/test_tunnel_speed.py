@@ -90,6 +90,29 @@ def test_the_verdict_says_where_the_speed_is_lost():
     assert "lost beyond" not in text                                           # the door measures the tunnel alone: nothing "beyond" it
 
 
+def test_a_slow_reverse_tcp_tunnel_is_pointed_at_the_ones_the_iran_server_dials(monkeypatch):
+    """Real tests, 2026-10-16: through a reverse tunnel one customer connection got about 10 Mb/s, through a forward one 109."""
+    text = ts.verdict("door", 9.5, 9.0, 100.0, None, 1, True)[1]
+    assert "foreign server dials this tunnel" in text and "Chisel forward" in text and "Paqet" in text and "Test this pair" in text
+    assert "foreign server dials" not in ts.verdict("door", 9.5, 9.0, 100.0, None, 1, False)[1]              # (Backhaul over GRE, Paqet, forward Chisel: not told)
+    assert "foreign server dials" not in ts.verdict("door", 80.0, 9.0, 100.0, None, 1, True)[1]             # (a fast one needs no advice)
+    monkeypatch.setattr(build_other, "_probe", lambda iran, port, key, secs=0, streams=8, pings=3, to=1.2: {"latency_ms": 90.0, "down_mbps": 9.5 if streams == 1 else 40.0, "up_mbps": 20.0})
+    monkeypatch.setattr("nikatel.ssh.run_action", lambda node, name, params=None, timeout=60: "SINK_OK")
+    verdicts = {}
+
+    for direction, udp in (("reverse", False), ("forward", False), ("reverse", True), ("direct", False)):
+        tid = make_tunnel(f"tun-{direction}{'-udp' if udp else ''}", door=True)
+
+        with session() as db:
+            t = db.get(Tunnel, tid)
+            t.record = {**t.record, "direction": direction, "udp_carrier": udp}
+
+        verdicts[(direction, udp)] = ts.run_door(1, tid, lambda s: None)["verdict"]
+
+    assert "foreign server dials this tunnel" in verdicts[("reverse", False)]
+    assert all("foreign server dials" not in verdicts[k] for k in (("forward", False), ("reverse", True), ("direct", False)))
+
+
 def test_the_customer_speed_asks_the_probe_through_each_config_and_keeps_the_best(monkeypatch):
     tid = make_tunnel("tun-a")
     for n, p in (("c1", 120.0), ("c2", 90.0), ("c3", 150.0), ("c4", 400.0)):
@@ -206,3 +229,13 @@ def test_the_pair_test_measures_one_connection_beside_the_eight(monkeypatch):
     b2.measure, b2.quality = "latency", {}
     build_other._measure(b2, None, "k")
     assert calls == [(8, 0)] and "down1_mbps" not in b2.quality                    # (only the latency run, no seconds of speed)
+
+def test_the_score_counts_what_a_customer_downloads_and_not_the_upload_of_a_reverse_tunnel():
+    """Real tests, 2026-10-16: a tunnel whose foreign server dials the Iran server gives a customer about 10 Mb/s per connection (the middle of the route holds back the flow of the party that dials) while its "upload" read 2100; a tunnel that the Iran server dials gave 600 and 38."""
+    slow_reverse = {"latency_ms": 75.0, "jitter_ms": 1.0, "loss_pct": 0.0, "down_mbps": 124.0, "up_mbps": 2117.0, "down1_mbps": 10.0}
+    fast_forward = {"latency_ms": 75.0, "jitter_ms": 1.0, "loss_pct": 0.0, "down_mbps": 621.0, "up_mbps": 38.0, "down1_mbps": 109.0}
+    assert build_other.quality_score(fast_forward) >= build_other.quality_score(slow_reverse) + 15
+    base = {"latency_ms": 75.0, "jitter_ms": 1.0, "loss_pct": 0.0, "down_mbps": 100.0}
+    assert build_other.quality_score({**base, "up_mbps": 5000.0}) == build_other.quality_score({**base, "up_mbps": 100.0})        # a huge upload never lifts a small download
+    assert build_other.quality_score({**base, "down1_mbps": 500.0}) > build_other.quality_score({**base, "down1_mbps": 5.0})       # one connection counts too
+    assert build_other.quality_score({"latency_ms": 20, "jitter_ms": 0, "loss_pct": 0, "down_mbps": 900, "up_mbps": 900}) == 100

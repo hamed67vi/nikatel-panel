@@ -36,7 +36,7 @@ nikatel/
     tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
     builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports; pending rebuilds that survive a
                      restart of the panel; follow_server_rename / follow_server_host (a server's new name or address)
-    build_other.py   the other engines: BackPack (reverse and direct), Paqet, Chisel - plan, install, units, proof, rollback
+    build_other.py   the other engines: BackPack (reverse and direct), Paqet, Chisel (reverse, or forward = the Iran server dials, transports fws / fwss) - plan, install, units, proof, rollback
     create.py        the Create story: precheck of ports and conflicts, Smart choice of the Iran side, replace, DNS follow
     detect.py        find tunnels already running on the servers and adopt them; auto choice of the Iran side
     trash.py         removed tunnels kept for a while with everything needed to put them back

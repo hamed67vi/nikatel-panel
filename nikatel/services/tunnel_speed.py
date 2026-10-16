@@ -72,11 +72,18 @@ def options(tunnel_id: int) -> dict:
             "door": {"ok": door, "why": "" if door else "this tunnel has no test door (BackPack, Paqet and Chisel have one)"}, "last": last, "capacity": cap}
 
 
-def verdict(mode: str, down: float | None, up: float | None, ping: float | None, cap: dict | None, runs: int = 1) -> tuple[str, str]:
-    """(grade, the text under the numbers): what it feels like, and where the speed is lost when the tunnel can carry much more than one customer gets."""
+REVERSE_SLOW = 30      # Mb/s of ONE connection under which a tunnel that the foreign server dials is told about the ones the Iran server dials
+
+
+def verdict(mode: str, down: float | None, up: float | None, ping: float | None, cap: dict | None, runs: int = 1, reverse_tcp: bool = False) -> tuple[str, str]:
+    """(grade, the text under the numbers): what it feels like, and where the speed is lost when the tunnel can carry much more than one customer gets.
+    `reverse_tcp`: a TCP tunnel that the foreign server dials (real tests, 2026-10-16: the route slows the data that flows away from the side that opened the connection, about 10 Mb/s for each connection)."""
     grade, text = feel(down)
     parts = [text]
     cd = (cap or {}).get("down_mbps")
+
+    if reverse_tcp and down is not None and down < REVERSE_SLOW:
+        parts.append("The foreign server dials this tunnel, and some routes slow the data that flows away from the side that opened the connection (about 10 Mb/s for each connection on the route this was measured on). A tunnel the Iran server dials - Chisel forward, Paqet - can give each customer much more: try them with Test this pair.")
 
     if down is not None and cd and cd > 0:
         if down < 0.25 * cd and mode == "customer" and grade != "smooth":
@@ -207,10 +214,13 @@ def run_door(aid: int, tunnel_id: int, say) -> dict:
 
 def _finish(tunnel_id: int, mode: str, down, up, ping, runs: list[dict], say, via: str) -> dict:
     with session() as db:
-        cap = (_tunnel(db, tunnel_id).record or {}).get("quality")
+        t = _tunnel(db, tunnel_id)
+        rec = t.record or {}
+        cap = rec.get("quality")
+        reverse_tcp = t.type in ("backpack", "chisel") and rec.get("direction") == "reverse" and not rec.get("udp_carrier")
 
     cap = {"down_mbps": cap.get("down_mbps"), "up_mbps": cap.get("up_mbps"), "at": cap.get("at")} if cap and cap.get("down_mbps") else None
-    grade, text = verdict(mode, down, up, ping, cap, len(runs))
+    grade, text = verdict(mode, down, up, ping, cap, len(runs), reverse_tcp)
     res = {"mode": mode, "at": int(time.time()), "via": via, "ping_ms": ping, "down_mbps": down, "up_mbps": up, "runs": runs, "capacity": cap, "grade": grade, "verdict": text}
     _keep(tunnel_id, res)
     say(f"Result: ↓ {down} Mb/s · ↑ {up} Mb/s" + (f" · ping {ping} ms" if ping is not None else "") + f" - {text.split(':')[0]}.")

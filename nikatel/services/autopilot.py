@@ -58,7 +58,7 @@ def kind_of(typ: str, transport: str, record: dict) -> str:
         return "paqet"
 
     if typ == "chisel":
-        return "chisel:tls" if transport in ("wss", "chisel-tls") else "chisel"
+        return {"fws": "chisel:fwd", "fwss": "chisel:fwdtls"}.get(transport) or ("chisel:tls" if transport in ("wss", "chisel-tls") else "chisel")
 
     if (record or {}).get("kind") == "backpack_direct" or transport.startswith("l3:"):
         return "bpd:" + transport.replace("l3:", "")
@@ -193,7 +193,8 @@ def diagnose(tunnel_id: int) -> dict:
             facts["under_loss_i"], facts["under_loss_f"] = fi.result(), ff.result()
 
         if not gre and info["port"] and not (rec.get("udp_carrier") or str(info["transport"]).startswith("l3:")):
-            probe_from, probe_to = (foreign, info["iran_host"]) if info["type"] in ("backpack", "chisel") else (iran, info["foreign_host"])
+            reverse = info["type"] in ("backpack", "chisel") and not build_other.chisel_mode(str(info["transport"]))[1]        # who dials the control port: the foreign server (reverse) or the Iran server (Paqet, a forward Chisel)
+            probe_from, probe_to = (foreign, info["iran_host"]) if reverse else (iran, info["foreign_host"])
 
             try:
                 facts["port_open"] = "OPEN" in run_script(probe_from, "tcp_probe", {"HOST": probe_to, "PORT": str(info["port"])}, timeout=20)
