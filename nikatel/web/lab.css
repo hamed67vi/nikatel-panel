@@ -586,6 +586,7 @@ html body #page .abt-cb { flex: 1 1 auto; min-height: 0; margin-top: 12px; overf
 html body #page .abt-pill { flex: none; display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box; height: 30px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(61, 220, 151, .4); background: rgba(61, 220, 151, .08); color: #3ddc97; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 html body #page .abt-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 html body #page .abt-pill.warn { color: #ffb84d; border-color: rgba(255, 184, 77, .45); background: rgba(255, 184, 77, .08); }
+html body #page .abt-pill.busy { color: #7aa7f0; border-color: rgba(122, 167, 240, .45); background: rgba(122, 167, 240, .08); }
 html body #page .abt-row { display: flex; align-items: center; gap: 14px; box-sizing: border-box; width: 100%; height: 56px; padding: 0 14px 0 9px; border-radius: 13px; border: 1px solid var(--uk-line); background: #0f1626; box-shadow: none; color: var(--text); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
 html body #page .abt-row b { flex: 1 1 auto; font-weight: 600; } html body #page .abt-row:hover { border-color: rgba(120, 170, 255, .45); background: #131d33; } html body #page .abt-row:disabled { opacity: .55; cursor: default; }
 html body #page .abt-chev { display: grid; place-items: center; color: #8f9bbd; font-style: normal; } html body #page .abt-chev svg { width: 18px; height: 18px; stroke-width: 2; }

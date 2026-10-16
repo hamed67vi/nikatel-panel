@@ -28,6 +28,7 @@ html[data-mode="light"] body #page .ap-tasks .dr-pill.dr-state.err { color: #c41
 /* Settings - About and update */
 html[data-mode="light"] body #page .abt-pill { color: #0a7a52; border-color: rgba(10, 122, 82, .4); background: rgba(10, 122, 82, .08); }
 html[data-mode="light"] body #page .abt-pill.warn { color: #8f5400; border-color: rgba(143, 84, 0, .45); background: rgba(161, 92, 0, .08); }
+html[data-mode="light"] body #page .abt-pill.busy { color: #1456c8; border-color: rgba(20, 86, 200, .4); background: rgba(20, 86, 200, .08); }
 html[data-mode="light"] body #page .abt-iid code { background: #fff; color: #14213d; }
 html[data-mode="light"] body #page .abt-card .eng-row { background: #f3f6fc; }
 html[data-mode="light"] body #page .pgu-v.ok { color: #0a7a52; }

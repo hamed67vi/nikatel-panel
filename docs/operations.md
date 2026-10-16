@@ -53,8 +53,18 @@ server's `~/.ssh/authorized_keys`.
 cd /opt/nikatel/src && git pull --ff-only && bash scripts/deploy.sh
 ```
 
-Secrets check → tests → reinstall → restart → `/api/health`. On failure it returns to the last
-good commit by itself. Manual: `bash scripts/deploy.sh --rollback`.
+Secrets check → compile → libraries (only when `pyproject.toml` changed) → the whole panel is imported and
+its migrations run on a **copy** of the live database → unit file → restart → `/api/health`. About fifteen
+seconds. The tests are **not** run here: the whole suite runs on the build server before a version is
+published (a server that ran it again spent ten minutes of its two cores on it); `FORCE_TESTS=1 bash
+scripts/deploy.sh` runs it here too. On failure the files **and the branch** go back to the last good
+commit by itself, so the next update is a plain fast-forward again. Manual: `bash scripts/deploy.sh --rollback`.
+
+The panel's **Update** button runs the same script in its own systemd unit (so the panel can restart under
+it) after `git pull --ff-only`. The script writes where it is to `/var/lib/nikatel/update-progress.json`
+at every step (`GET /api/system/update/progress` reads it): the percentage on the card is counted by the
+server's clock, so a refreshed page or a second tab shows the same number, and a run whose last step is
+older than seven minutes counts as stopped. The log of the runs is `/var/lib/nikatel/update.log`.
 
 ## Backup
 

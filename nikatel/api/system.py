@@ -12,6 +12,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger, mask
 from ..models import Job, Panel, Server, Tunnel
+from ..services import updater
 
 router = APIRouter(tags=["system"])
 _STARTED = int(time.time())
@@ -211,117 +212,22 @@ def settings_view():
             "env_file": "/etc/nikatel/nikatel.env"}
 
 
-def _git(*args: str) -> str:
-    import subprocess
-    from pathlib import Path
-
-    src = Path(__file__).resolve().parent.parent.parent
-
-    try:
-        return subprocess.run(["git", "-C", str(src), *args], check=False, capture_output=True, text=True, timeout=40).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return ""
-
-
-def _repo_url() -> str:
-    """The web address of the GitHub repository the panel was installed from ("" when it is not GitHub)."""
-    m = re.match(r"^(?:https?://(?:[^@/]+@)?github\.com/|git@github\.com:|ssh://git@github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?$", _git("remote", "get-url", "origin"))
-    return f"https://github.com/{m.group(1)}" if m else ""
-
-
-def _newest_tag() -> str:
-    """The highest version tag (v1.2.3) of the remote, as 1.2.3 ("" when it cannot be read)."""
-    best: tuple[int, ...] = ()
-
-    for ln in _git("ls-remote", "--tags", "--refs", "origin", "v*").splitlines():
-        m = re.fullmatch(r".*\trefs/tags/v(\d+)\.(\d+)\.(\d+)", ln.strip())
-
-        if m:
-            best = max(best, tuple(int(x) for x in m.groups()))
-
-    return ".".join(str(x) for x in best)
-
-
-def update_progress(text: str, quiet_s: float = 0.0) -> dict:
-    """Pure: where the last update run is, from its log - {state: idle | running | done | failed, percent}. The steps of scripts/deploy.sh are the markers (a released version skips the tests; when they run they take 10 to 35 %, from the percent pytest prints); `quiet_s` = seconds since the log last grew."""
-    i = max(text.rfind("== update started"), text.rfind("== no secrets in the repo"))
-
-    if i < 0:
-        return {"state": "idle", "percent": 0}
-
-    run = text[i:]
-
-    if "DEPLOY OK" in run:
-        return {"state": "done", "percent": 100}
-
-    if "HEALTH CHECK FAILED" in run or "STILL DOWN" in run or "rolled back" in run or ("== no secrets" not in run and ("fatal:" in run or "error:" in run)):
-        return {"state": "failed", "percent": 90}
-
-    if quiet_s > 240:          # nothing was written for four minutes and it did not finish: it stopped (a failed test or step ends the script)
-        return {"state": "failed", "percent": 0}
-
-    if "== install" in run:
-        pct = 60
-    elif "== migrations" in run:
-        pct = 35
-    elif "== tests skipped" in run:
-        pct = 15
-    elif "== tests" in run:
-        found = re.findall(r"\[\s*(\d+)%\]", run.split("== tests", 1)[1])
-        pct = 10 + round(0.25 * min(100, int(found[-1]))) if found else 10
-    elif "== no secrets" in run:
-        pct = 8
-    else:
-        pct = 3
-    return {"state": "running", "percent": pct}
-
 @router.get("/system/update", dependencies=[Depends(current_user)])
 def update_status():
-    """Installed commit vs. the newest on GitHub, the newest version number with the link of its release notes, and the log of the last update run."""
-    from pathlib import Path
+    """The version that runs, what GitHub has, and where an update run is (while one runs it is never "up to date" and never "a new version is available")."""
+    return updater.status()
 
-    cur = _git("rev-parse", "--short", "HEAD")
-    remote = _git("ls-remote", "origin", "HEAD").split()
-    newest = remote[0][:7] if remote else ""
-    latest = _newest_tag()
-    repo = _repo_url()
 
-    def key(v: str) -> tuple[int, ...]:
-        try:
-            return tuple(int(x) for x in v.split("."))
-        except ValueError:
-            return ()
-
-    log_path = Path("/var/lib/nikatel/update.log")
-    tail = ""
-
-    if log_path.exists():
-        tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-12:])
-
-    quiet = time.time() - log_path.stat().st_mtime if log_path.exists() else 0.0
-    progress = update_progress(log_path.read_text(errors="replace")[-60000:] if log_path.exists() else "", quiet)
-
-    return {"ok": True, "version": __version__, "installed": cur, "newest": newest, "up_to_date": bool(newest) and cur != "" and newest.startswith(cur[:7]), "last_log": tail, "progress": progress,
-            "latest": latest, "newer": bool(latest) and key(latest) > key(__version__), "notes_url": f"{repo}/releases/tag/v{latest}" if repo and latest else ""}
+@router.get("/system/update/progress", dependencies=[Depends(current_user)])
+def update_progress():
+    """Only where the update run is: one small file, no GitHub. The page asks it every second while the update runs, and it answers the same after a refresh."""
+    return {"ok": True, "version": __version__, "progress": updater.read_progress()}
 
 
 @router.post("/system/update", dependencies=[Depends(current_user)])
 def update_now():
-    """Pull the newest code and run deploy.sh (tests, restart, health check, rollback) in a transient unit,
-    so the panel can restart under it. Watch /system/update for the log."""
-    import subprocess
-    from pathlib import Path
-
-    src = Path(__file__).resolve().parent.parent.parent
-    cmd = f"cd {src} && echo '== update started' && git pull -q --ff-only origin main && bash scripts/deploy.sh"
-
-    try:
-        subprocess.run(["systemd-run", "--no-block", "--unit", f"nikatel-update-{int(time.time())}", "--property=StandardOutput=append:/var/lib/nikatel/update.log",
-                        "--property=StandardError=append:/var/lib/nikatel/update.log", "bash", "-c", cmd], check=True, capture_output=True, timeout=20)
-    except (OSError, subprocess.SubprocessError) as e:
-        return {"ok": False, "error": "could not start the update: " + str(e)[:160]}
-
-    return {"ok": True, "started": True}
+    """Download the newest version and run scripts/deploy.sh (checks, restart, health check, rollback) in its own unit, so the panel can restart under it. Watch /system/update/progress."""
+    return updater.start()
 
 
 @router.get("/logs", dependencies=[Depends(current_user)])

@@ -4199,39 +4199,43 @@ window.aiAddMenu = (btn, ev) => {      // "Add another AI": the ones without a r
   const open = state.aiOpen || (state.aiOpen = new Set()), more = (aiCur().catalog || []).filter(c => !c.has_key && !AI_MAIN.includes(c.id) && !open.has(c.id));
   nkMenu(btn, [labGrp("Add another AI"), ...more.map(c => labItem(c.name, () => { open.add(c.id); refresh(); let n = 0; const t = setInterval(() => { const f = document.getElementById("aim-" + c.id); if (f || ++n > 25) { clearInterval(t); if (f) { f.scrollIntoView({block: "center", behavior: "smooth"}); const i = f.querySelector("input[name=api_key]"); if (i) i.focus({preventScroll: true}); } } }, 120); }, {ic: `<i class="aim-mono" style="--c:${AIM_C[c.id] || "#98a2bd"}">${AIM_M[c.id] || "AI"}</i>`}))], ev);
 };
-let aboutAuto = null, aboutV0 = "";      // the timer of the automatic look for a new version, and the version that runs
+let aboutAuto = null, aboutV0 = "", aboutTimer = null;      // the timer of the automatic look for a new version, the version that runs, and the timer of the progress of an update
+const aboutPill = (txt, cls, tip) => { const p = $("#about-pill"); if (p) { p.className = "abt-pill" + (cls ? " " + cls : ""); p.textContent = txt; p.title = tip || ""; } };
+const aboutBtn = (off, tip) => { const b = document.querySelector("#about-hero .abt-row"); if (b) { b.disabled = off; b.title = tip; } };      // (the owner, 2026-10-16: the button is off while this is the newest version)
 window.aboutLoad = async () => { const box = $("#about-box"); if (!box || aboutTimer) return; clearTimeout(aboutAuto); aboutAuto = setTimeout(() => { if ($("#about-box")) aboutLoad(); }, 60000);      // (it looks again by itself every minute: no Check button - the owner, 2026-10-15)
   try {
     const u = await api("/api/system/update"); aboutV0 = u.version || aboutV0;
-    const pill = $("#about-pill"); if (pill) { pill.className = "abt-pill" + (u.up_to_date ? "" : " warn"); pill.textContent = u.up_to_date ? "Up to date" : u.newer && u.latest ? "Version " + u.latest + " is available" : "A newer build is available"; }
-    const ub = document.querySelector("#about-hero .abt-row"); if (ub) { ub.disabled = !!u.up_to_date; ub.title = u.up_to_date ? "This panel is already the newest version" : "Update this panel from GitHub now"; }      // (the owner, 2026-10-16: the button is off while this is the newest version)
-    box.innerHTML = !u.up_to_date && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : "";
-    if (u.progress && u.progress.state === "running") aboutWatch();
-  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; const ub = document.querySelector("#about-hero .abt-row"); if (ub) ub.disabled = false; } };
-window.abtCopy = id => { const el = document.getElementById(id); if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent.trim()).then(() => toast("Copied", "ok"), () => toast("✕ could not copy", "bad")); };window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutWatch(true); } catch (e) { toast("✕ " + e.message, "bad"); } };
-let aboutTimer = null;      // the timers of the progress of an update
-const ABOUT_STEPS = [3, 8, 15, 35, 60, 100];      // where the markers of the deploy stand: between two of them the bar creeps on its own but never promises the next one
-window.aboutWatch = fresh => {      // the update runs: only its percentage, moving smoothly like the update of a MacBook (the owner, 2026-10-15); the bar waits while the panel restarts, and the page reloads when it is done
-  if (aboutTimer) return; let server = 3, shown = 1, goal = 3, stale = !!fresh, end = "", failNote = ""; const t0 = Date.now();
+    const p = u.progress || {};
+    if (p.state === "running") { aboutPill(p.to ? "Updating to " + p.to : "Updating", "busy"); aboutBtn(true, "An update is running"); aboutWatch(p); return; }      // (opened or refreshed in the middle of an update: the bar goes on from where the SERVER says it is, and while it runs the card says neither "up to date" nor "a new version" - the owner, 2026-10-17)
+    const failed = p.state === "failed" && Date.now() / 1000 - (p.at || 0) < 86400;
+    if (!u.checked) aboutPill("Could not reach GitHub", "warn", "The panel could not ask GitHub for the newest version just now; it asks again by itself");
+    else if (u.up_to_date) aboutPill("Up to date");
+    else aboutPill(u.newer && u.latest ? "Version " + u.latest + " is available" : "A newer build is available", "warn");
+    aboutBtn(!!u.up_to_date, u.up_to_date ? "This panel is already the newest version" : "Update this panel from GitHub now");
+    box.innerHTML = (failed ? `<div class="err" title="${esc(u.last_log || "")}">The last update did not finish (${ago(p.at)} ago): ${esc(p.reason || "it stopped")}. The version that was running stays.</div>` : "") + (!u.up_to_date && u.newer && u.notes_url ? `<a class="about-notes" href="${esc(u.notes_url)}" target="_blank" rel="noopener">What changed in v${esc(u.latest)} on GitHub ↗</a>` : "");
+  } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; aboutBtn(false, "Update this panel from GitHub now"); } };
+window.abtCopy = id => { const el = document.getElementById(id); if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent.trim()).then(() => toast("Copied", "ok"), () => toast("✕ could not copy", "bad")); };window.panelUpdate = async () => { if (!await gconfirm("Update the panel from GitHub now? It restarts for a few seconds; a version that fails its health check is rolled back.")) return; try { const r = await api("/api/system/update", {method: "POST"}); if (!r.ok) { toast("✕ " + r.error, "bad"); return; } aboutPill(r.to ? "Updating to " + r.to : "Updating", "busy"); aboutWatch({percent: 2}); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.aboutWatch = p0 => {      // the update runs: only its percentage, moving smoothly like the update of a MacBook (the owner, 2026-10-15). The percentage is the SERVER's - it counts by its own clock and keeps it in a file - so a refreshed page, a second tab, or the restart of the panel in the middle of the run all show the same number and nothing starts again from 1 (the owner, 2026-10-17); the page only eases towards it
+  if (aboutTimer) return; let server = (p0 && p0.percent) || 2, shown = server, down = 0, end = "", why = ""; const t0 = Date.now();
   document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = true; });
   const paint = (txt, cls) => { const b = $("#about-box"); if (!b) return false; let bar = b.querySelector(".about-bar u"); if (!bar) { b.innerHTML = `<span></span><i class="about-bar"><u></u></i>`; bar = b.querySelector(".about-bar u"); } const sp = b.querySelector("span"); sp.className = cls; sp.textContent = txt; bar.style.width = shown.toFixed(2) + "%"; return true; };
   const stop = () => { clearInterval(aboutTimer.frame); clearTimeout(aboutTimer.poll); aboutTimer = null; };
   const poll = async () => {
-    let u = null; try { u = await api("/api/system/update"); } catch (e) { /* the panel restarts: the bar waits */ }
+    let u = null; try { u = await api("/api/system/update/progress"); down = 0; } catch (e) { down++; /* the panel restarts: the bar waits */ }
     const p = u && u.progress;
-    if (p && stale && (p.state === "running" || Date.now() - t0 > 20000)) stale = false;      // (what the log says of a run before the click is not this one: wait for the new run, at most 20 s)
-    if (p && !stale) { server = Math.max(server, p.percent); if (p.state === "done") end = "done"; else if (p.state === "failed") end = "failed"; }
-    if (u && u.version && aboutV0 && u.version !== aboutV0 && !end) end = "done";      // (the panel came back as ANOTHER version: the update is done, whatever the log says)
-    if (aboutTimer) aboutTimer.poll = setTimeout(poll, 1500);
+    if (p && p.state === "running") server = Math.max(server, p.percent); else if (p && p.state === "done") end = "done"; else if (p && p.state === "failed") { end = "failed"; why = p.reason || ""; }
+    if (u && u.version && aboutV0 && u.version !== aboutV0 && !end) end = "done";      // (the panel came back as ANOTHER version: the update is done)
+    if (aboutTimer) aboutTimer.poll = setTimeout(poll, 1000);
   };
   const frame = () => {
-    if (end === "done") { goal = 100; } else if (end === "failed") { goal = shown; } else { const next = ABOUT_STEPS.find(x => x > server) || 100, ceil = server >= 100 ? 100 : Math.max(server, next - 2); goal = Math.min(ceil, Math.max(goal, server) + 0.045); }      // (about 0.4 % a second between two markers)
-    shown += (goal - shown) * 0.09;
-    if (end === "failed") { if (!paint("The update did not finish: the old version stays", "err")) { stop(); return; } stop(); document.querySelectorAll("#about-hero button").forEach(b => { b.disabled = false; }); return; }
+    if (down) server = Math.min(Math.max(server, 90), server + 0.02);      // (the panel restarts: the bar waits, and creeps a little so that it does not look frozen)
+    shown += ((end === "done" ? 100 : end === "failed" ? shown : server) - shown) * (end === "done" ? 0.2 : 0.12);
+    if (end === "failed") { stop(); aboutLoad(); return; }      // (the card draws what went wrong from the same file, and the button is free again)
     if (end === "done" && shown > 99.4) { shown = 100; paint("Updated 100%", "gw-ok"); stop(); setTimeout(() => location.reload(), 900); return; }
+    if (!end && Date.now() - t0 > 600000) { stop(); aboutLoad(); return; }      // (ten minutes without an end: look again at what the server says)
     if (!paint(`Updating… ${Math.round(shown)}%`, "mut")) stop();
   };
-  aboutTimer = {frame: setInterval(frame, 100), poll: setTimeout(poll, 500)};
+  aboutTimer = {frame: setInterval(frame, 100), poll: setTimeout(poll, 300)};
 };
 /* the look: theme, day/night, text size, animations - kept in this browser */
 const THEMES = [   // key, name, note, page colour, accent, second accent, flat preview

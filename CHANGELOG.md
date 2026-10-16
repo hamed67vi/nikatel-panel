@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.62.1 - The update takes seconds, and the card tells the truth while it runs
+
+The owner (2026-10-17), with the About & update card in front of him ("Up to date", "Updating... 2%", the button grey): "the update is very slow; when the page is refreshed the percentage starts again from the beginning;
+and while the update is not finished it already shows that a new update exists".
+
+- **Slow: the whole test suite ran on the panel's own server.** `scripts/deploy.sh` skipped the tests only for a commit that carries a release tag, and the panel's `git pull origin main` does not download tags (his copy had stopped
+  at v1.57.56), so every update ran about 1,300 tests on the two cores that also watch the tunnels: 7 to 15 minutes. The suite now runs where a version is built, before it is published. The server keeps what only that machine can
+  answer: the secrets check (0.3 s), the compile (0.1 s), **the whole panel is imported with the libraries installed there and its migrations run on a copy of the live database** (4 s), the restart and the health check. The libraries
+  are installed only when `pyproject.toml` changed. About fifteen seconds in all (measured step by step on the real box); `FORCE_TESTS=1 bash scripts/deploy.sh` still runs the suite there.
+- **A stop leaves the files and the branch of the version that runs.** A check that failed before the restart used to leave the new files on the disk (a reboot would have started them), and a rollback after a failed health check
+  left the branch on the new commit with the old files in the tree - so the next `git pull --ff-only` refused ("local changes would be overwritten") and the Update button was stuck. Both now go back with `git reset --hard` to the
+  last good commit (uncommitted work is put aside first, `git stash pop` brings it back), the manual `--rollback` no longer detaches the head, and the libraries are reinstalled only if `pyproject.toml` differs.
+  The compiled files of the version that was put away are deleted too: found in the real test, a file of the same size rewritten in the same second looks unchanged to python, and the panel printed the version that had failed.
+- **The percentage is the server's.** `deploy.sh` writes one small file (`update-progress.json`: the step, the time, the version it goes to) at every step; the percentage creeps by the **clock of the server** between two steps, so a
+  refreshed page, a second tab or the restart of the panel in the middle of the run shows the same number, and the bar goes on from there instead of from 1 %. The page asks only this file (`GET /api/system/update/progress`),
+  every second, not GitHub; a run whose last step is older than seven minutes counts as stopped, not as running for ever.
+- **While a run goes the card says neither "Up to date" nor "a new version is available".** The pill says "Updating to 1.62.1", the button is off, the bar shows. After the files are pulled the commit on the disk equals the newest
+  commit on GitHub, which is what made it say "Up to date" while the old version still ran; "up to date" is now decided by the **version that runs** against the newest version tag, only when GitHub answered and no run goes, and
+  after a failed update the card offers the version again. When GitHub cannot be reached it says "Could not reach GitHub" instead of claiming anything. A failed run stays on the card for a day: why it failed, and the log in its tooltip.
+- **Smaller.** The card asks GitHub once (`ls-remote` for the commit and the tags together, kept 30 s, 10 s limit) instead of twice at 1.4 s each, a second click while a run goes is refused, and a download that fails answers at once with
+  git's own words instead of failing later in a unit nobody watches. The older log markers are kept in the script's output, so an update started by an older panel still draws its bar.
+
+Tried for real on the test panel with a throw-away origin (the Update button, a real restart, the real health check): an update from 1.62.0 (the old page, the new script) took **13 s**, from 1.62.1 to 1.62.2 with the new page
+**10 s** (the bar: 14 % -> 39 % -> waits for the restart -> 92 % -> 100 %), a version with a syntax error stopped in **under a second** with the old files back and the panel not touched, and a version that does not start was
+rolled back after the 90 s the health check waits (**101 s** in all) with the old version running again. The three states of the card were checked in the browser against a scripted server (running at 45 % and refreshed at 52 %,
+failed with its reason, up to date, GitHub not reached, a new version).
+
+The new `deploy.sh` runs at the first update that pulls this version (the script is the one that was just downloaded); the new card and progress file work after that update.
+
 ## 1.62.0 - A cut tunnel gets a tunnel that connects, the Doctor knows its pairs before a route is cut, and remembers every cut
 
 The owner (2026-10-16), with two real tunnels in front of him: a tunnel whose foreign server is filtered stayed cut for hours while the Doctor said it had fixed things, another one flapped, and the table showed

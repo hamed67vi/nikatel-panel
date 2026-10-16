@@ -912,7 +912,7 @@ def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxe
     """The owner, 2026-10-16: the sizes of About & update got mixed up (cut texts, a table running into itself) and the frame must be longer; every tab's frame is one height."""
     app, css = _web("app.js"), _web("lab.css")
     assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'ub.disabled = !!u.up_to_date;' in app and 'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'aboutBtn(!!u.up_to_date, ' in app and'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
     assert "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr) auto; gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
 
 
@@ -934,6 +934,16 @@ def test_no_check_buttons_in_the_about_boxes_they_look_by_themselves():
     app, upd = _web("app.js"), _web("pg_update.js")
     assert 'onclick="engineCheck()"' not in app and "> 600)" in app and 'onclick="pgUpdLoad(true)"' not in upd
     assert "pgu.timer = setTimeout(() => { if ($(\"#pgu-box\")) pgUpdLoad(true); }, 600000);" in upd and "Date.now() - pgu.at > 600000" in upd
+
+
+def test_the_update_card_goes_on_from_the_server_and_never_claims_a_new_version_while_it_runs():
+    """The owner, 2026-10-17: "the percentage starts again from the beginning when the page is refreshed" and "while the update is not finished it shows that a new update exists"."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert 'api("/api/system/update/progress")' in app and "ABOUT_STEPS" not in app and "aboutWatch(p);" in app and "aboutWatch({percent: 2});" in app      # (only the file is asked while it runs, not GitHub)
+    assert "window.aboutWatch = p0 =>" in app and "shown = server" in app                      # (the bar starts at the number the server says, not at 1)
+    assert 'if (p.state === "running") { aboutPill(p.to ? "Updating to " + p.to : "Updating", "busy"); aboutBtn(true, "An update is running"); aboutWatch(p); return; }' in app
+    assert 'aboutPill("Could not reach GitHub", "warn"' in app and "The last update did not finish (" in app and "u.checked" in app
+    assert "html body #page .abt-pill.busy {" in css and 'html[data-mode="light"] body #page .abt-pill.busy {' in _web("light.css")
 
 
 def test_the_update_and_xray_buttons_of_the_nodes_have_one_size():
