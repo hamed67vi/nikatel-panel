@@ -138,7 +138,7 @@ echo "ENGINE chisel $([ -x /usr/local/bin/nikatel-chisel ] && /usr/local/bin/nik
 
     # checksum of one core binary (is the same build installed as the one in the panel's cache?)
     "engine_sha": (r"""if [ -x '@BIN@' ]; then echo "SHA=$(sha256sum '@BIN@' | awk '{print $1}')"; else echo SHA=none; fi
-""", {"BIN": r"^/usr/local/bin/[A-Za-z0-9._-]{1,40}$"}),
+""", {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$"}),
 
     # what the BackPack / Paqet / Chisel builders must know about a server
     "simple_facts": (r"""echo "LISTEN=$(ss -ltnH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"

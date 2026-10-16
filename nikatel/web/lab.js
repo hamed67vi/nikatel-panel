@@ -53,7 +53,9 @@ const labNum = (v, warn, bad) => v == null ? "—" : `<span class="${v >= bad ? 
 
 /* ---------------------------------------------------------------- the rows */
 const labTagChip = (t, quiet) => t ? `<span class="pill lab-tagc" title="Profile: ${esc(t)}">${labLogo(t)}<span>${esc(t)}</span></span>` : quiet ? "" : '<span class="mut">—</span>';      // the profile (tag) of a row, in its own column (the owner, 2026-10-15: no Serves column)
-const labSub = s => { const b = srvBusy(s) ? labBusyHtml(srvBusy(s)) : (window.labMaking && labMaking[s.id]) ? labBusyHtml({what: "node", detail: labMaking[s.id]}) : ""; return b ? `<small>${b}</small>` : s.provider ? `<small title="${esc(s.provider)}">${esc(s.provider)}</small>` : ""; };      // under the name: what the panel is doing with the server now (the steps of an install), else its provider
+const labUnread = s => s.enabled && s.online == null && !(s.facts && s.facts.cpu != null);      // a server that has not been looked at yet (just added): its numbers are still to come
+const labWaiting = s => !!srvBusy(s) || labUnread(s);      // the page follows such a server closely (every second and a half) until it is quiet
+const labSub = s => { const b = srvBusy(s) ? labBusyHtml(srvBusy(s)) : (window.labMaking && labMaking[s.id]) ? labBusyHtml({what: "node", detail: labMaking[s.id]}) : labUnread(s) && !noLogin(s) ? labBusyHtml({what: "node", detail: "Waiting for the first reading…"}) : ""; return b ? `<small>${b}</small>` : s.provider ? `<small title="${esc(s.provider)}">${esc(s.provider)}</small>` : ""; };      // under the name: what the panel is doing with the server now (the steps of an install), else its provider; a server that was never read says so (the owner, 2026-10-16: "the status of the server is not clear at all - from the very first moment show what is being done")
 function labServerRow(p) {
   const s = labServer(p); if (!s) return labGoneRow(p);
   const f = s.facts || {}, tone = labSrvTone(s), on = s.enabled, cc = s.role === "iran" ? "ir" : /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toLowerCase() : "";
@@ -111,8 +113,7 @@ PAGES.lab = async () => {
   LAB.kind = labKindNow();
   const openSrv = list.find(s => s.id === state.open);      // (any server: a shortcut of the dashboard or a diagnosis opens one that was taken off the page too)
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the Lab or of a node is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };
-  clearTimeout(labAutoT); const waiting = list.some(s => srvBusy(s) || (s.enabled && !(s.facts && s.facts.cpu != null)));      // the page looks again by itself: every 3-4 s while a server is busy or has not been read yet (a server just added), else every 30 s (the owner, 2026-10-15: a new server stayed with dashes until the page was refreshed)
-  labAutoT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin && !document.querySelector("#modal .modal")) refresh(); }, waiting ? 3500 : 30000);
+  if (list.some(labWaiting)) labFollow(); else labSchedule();      // the page looks again by itself: closely (a quiet patch of the rows every second and a half) while a server is busy or has not been read yet, else a full look every 30 s (the owner, 2026-10-15: a new server stayed with dashes until the page was refreshed; 2026-10-16: the page jumped several times when a server was added)
   pageTarget().innerHTML = LAB.profiles.length || labTags().length ? labPage() : labFirst();
   showWin();
   applyQ();
@@ -177,39 +178,87 @@ window.labSyncNodes = async () => {      // the Sync button of a PasarGuard prof
 const LAB_LOCKED_TIP = "A PasarGuard panel is connected: this profile stays as it is";
 const labTags = () => LAB.tags && LAB.tags.length ? LAB.tags : [];      // (none from the start: the menu is only "+ Add profile" until a profile is made)
 const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind).toLowerCase()) || "any";
-function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }function labListInner(shown) {
-  if (!shown.length) return `<div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button>${labIsPgTag(labKindNow()) ? `<button onclick="labSyncNodes()" title="Read the PasarGuard panels now and bring their nodes here">⟳ Sync the nodes</button>` : ""}</div>`;
-  const rows = shown.slice().sort((a, b) => labRank(a) - labRank(b) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, undefined, {sensitivity: "base"}));
+function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }
+const labCmp = (a, b) => labRank(a) - labRank(b) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, undefined, {sensitivity: "base"});      // the order of the rows: what is wrong first, then what is busy, then the rest by name
+function labListInner(shown) {
+  if (!shown.length) return `<div class="lbox lab-box0"><div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button>${labIsPgTag(labKindNow()) ? `<button onclick="labSyncNodes()" title="Read the PasarGuard panels now and bring their nodes here">⟳ Sync the nodes</button>` : ""}</div></div>`;      // (the empty page is a box of the SAME kind and size as the list: the first row that comes changes nothing around it - the owner, 2026-10-16: the page jumped when a server was added)
+  const rows = shown.slice().sort(labCmp);
   return `<table class="tbl lift srv-tbl joined lab-tbl"><colgroup><col style="width:21%"><col style="width:15%"><col style="width:15%"><col style="width:18%"><col style="width:13%"><col style="width:12%"><col style="width:6%"></colgroup>
     <thead><tr><th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="3" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" class="lab-ld">Load</th><th data-prio="3" title="Everything the network card has carried since the server started (the traffic the panel counted, for a node)">Traffic used</th><th data-prio="4" title="Megabits per second on the network card of the default route, over three seconds">Traffic Mbit/s</th><th></th></tr></thead><tbody>${rows.map(labRowOf).join("")}</tbody></table>`;      // (the table of the old Servers list: its cards, its icons, and the fluid layer that drops the less important columns when the box is narrow)
 }
-function labPage() {
-  const all = LAB.profiles, shown = labShown(), srvs = shown.filter(p => p.kind !== "node").map(labServer).filter(Boolean), nodes = shown.filter(p => p.kind === "node");
+const labBox = shown => shown.length ? `<div class="lbox">${labListInner(shown)}</div>` : labListInner(shown);      // (the table is in its box from the first moment: no frame without it, so the page never shows a scrollbar for an instant)
+const labChip = (cls, id, ic, lab, val, tip) => `<span class="lab-chip ${cls} c-${id}" data-ic="${ic}" title="${esc(tip)}"><span>${lab}</span><b>${val}</b></span>`;
+function labStatsHtml(shown) {      // what the page says in small chips (their numbers have a fixed room: lab.css): the servers that answer, the problems, the tunnels, the CPU
+  const srvs = shown.filter(p => p.kind !== "node").map(labServer).filter(Boolean), nodes = shown.filter(p => p.kind === "node");
   const live = srvs.filter(s => s.enabled), up = live.filter(s => s.online === true).length, nLive = nodes.filter(p => labNodeInfo(p).tone !== "off"), nUp = nLive.filter(p => labNodeInfo(p).tone === "ok").length;
   const bad = shown.filter(p => labTone(p) === "bad").length, warn = shown.filter(p => labTone(p) === "warn").length;
   const ids = new Set(srvs.map(s => s.id)), tuns = (state.tunnelsCache || []).filter(t => ids.has(t.iran_server_id) || ids.has(t.foreign_server_id) || srvs.some(s => s.name === t.iran_name || s.name === t.foreign_name)), tdown = tuns.filter(t => t.state === "down").length;
   const cpuv = live.filter(s => s.online && s.facts && s.facts.cpu != null).map(s => s.facts.cpu), cpu = cpuv.length ? Math.round(cpuv.reduce((a, b) => a + b, 0) / cpuv.length) : null;
-  const chip = (cls, id, ic, lab, val, tip) => `<span class="lab-chip ${cls} c-${id}" data-ic="${ic}" title="${esc(tip)}"><span>${lab}</span><b>${val}</b></span>`;
-  const cnt = k => k === "any" ? all.length : all.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()).length;
+  return `${labChip(up + nUp < live.length + nLive.length ? "bad" : "ok", "on", "●", "Online", `${up + nUp}/${live.length + nLive.length}`, "Servers that answer and nodes that are connected, of those that are switched on")}${labChip(bad ? "bad" : warn ? "warn" : "ok", "pb", "!", "Problems", bad + warn, "Profiles with something wrong (red: cut or critical, yellow: watch)")}${srvs.length ? labChip(tdown ? "bad" : "ok", "tun", "⇄", "Tunnels", `${tuns.length - tdown}/${tuns.length}`, "Tunnels that touch these servers: up / all") : ""}${srvs.length ? labChip((cpu ?? 0) >= 80 ? "bad" : (cpu ?? 0) >= 60 ? "warn" : "ok", "cpu", "◔", "CPU", cpu == null ? "—" : cpu + "%", "Average CPU of the servers that answer") : ""}`;
+}
+const labCount = k => k === "any" ? LAB.profiles.length : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()).length;
+function labPage() {
+  const shown = labShown(), cnt = labCount;
   const IB = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;      // (the buttons beside the tabs are icons, like the rest of the panel)
   const cur = labKindNow(), tabs = `<span class="lab-ksw"><div class="tabs lab-kinds">${["any", ...labTags()].map(k => `<button class="${cur === k ? "on" : ""}" data-k="${esc(k)}" onclick="labKind(this.dataset.k)" ondragover="labDropOver(event)" ondragleave="labDropLeave(event)" ondrop="labDrop(event, this.dataset.k)" title="${k === "any" ? "Drop a row here to take it out of its profile" : "Drop a row here to move it to " + esc(k)}">${k === "any" ? "" : labLogo(k)}<span class="lab-kn">${k === "any" ? "All" : esc(k)}</span><i class="cnt">${cnt(k)}</i></button>`).join("")}</div><span class="lab-tabact"><button class="lab-ib" onclick="labAddTag()" title="Add a profile: a new category" aria-label="Add a profile">${IB('<path d="M12 5v14M5 12h14"/>')}</button>${labSyncBtn(cur, IB)}${cur === "any" ? "" : `<button class="lab-ib" onclick="labRenameTag()" ${labTagLocked(cur) ? "disabled" : ""} title="${labTagLocked(cur) ? LAB_LOCKED_TIP : "Rename the profile " + esc(cur)}" aria-label="Rename the profile">${IB('<path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/><path d="M14.5 6.5l3 3"/>')}</button><button class="lab-ib danger" onclick="labDeleteTag()" ${labTagLocked(cur) ? "disabled" : ""} title="${labTagLocked(cur) ? LAB_LOCKED_TIP : "Delete the profile " + esc(cur)}" aria-label="Delete the profile">${IB('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')}</button>`}</span></span>`;
   /* ONE row (the owner: "fit everything in one row", "take responsiveness into account"): the tabs, what the page says in small chips, the search and the buttons; as the box narrows the chips go one by one
      (CPU, Tunnels), then lose their words, then go; the buttons keep their icons only; nothing wraps (lab.css) */
-  return `<div class="lab-root"><div class="lab-bar">${tabs}<span class="lab-stats">${chip(up + nUp < live.length + nLive.length ? "bad" : "ok", "on", "●", "Online", `${up + nUp}/${live.length + nLive.length}`, "Servers that answer and nodes that are connected, of those that are switched on")}${chip(bad ? "bad" : warn ? "warn" : "ok", "pb", "!", "Problems", bad + warn, "Profiles with something wrong (red: cut or critical, yellow: watch)")}${srvs.length ? chip(tdown ? "bad" : "ok", "tun", "⇄", "Tunnels", `${tuns.length - tdown}/${tuns.length}`, "Tunnels that touch these servers: up / all") : ""}${srvs.length ? chip((cpu ?? 0) >= 80 ? "bad" : (cpu ?? 0) >= 60 ? "warn" : "ok", "cpu", "◔", "CPU", cpu == null ? "—" : cpu + "%", "Average CPU of the servers that answer") : ""}</span><span class="lab-sp"></span>${searchSeg()}<button class="pri sm lab-add" onclick="labAdd()" title="Add a server: a name, a tag and its address" aria-label="Add server"><span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span></button></div>
-    <div id="lab-list" class="${shown.length ? "" : "lab-list"}">${labListInner(shown)}</div></div>`;
+  return `<div class="lab-root"><div class="lab-bar">${tabs}<span class="lab-stats">${labStatsHtml(shown)}</span><span class="lab-sp"></span>${searchSeg()}<button class="pri sm lab-add" onclick="labAdd()" title="Add a server: a name, a tag and its address" aria-label="Add server"><span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span></button></div>
+    <div id="lab-list">${labBox(shown)}</div></div>`;
 }
 window.labKind = k => { LAB.kind = k; localStorage.setItem("nk.lab.k", k); const pg = $("#page"); if (pg && labOn()) { pageTarget().innerHTML = labPage(); applyQ(); } labNavSync(); };      // the tabs filter what is already read: no call, no wait (the menu marks the same kind)
 async function labLoadNodes() {      // the panels of the node profiles are asked (what they report about each node: its load and speed), then the list is drawn again with it
   const pids = [...new Set(LAB.profiles.filter(p => p.kind === "node").map(p => p.panel_id))];
   if (!pids.length || typeof pgNodesLoad !== "function") return;
   await Promise.all(pids.map(pid => pgNodesLoad(pid).catch(() => null)));
-  const el = $("#lab-list"); if (el && labOn() && !state.open && !state.nodeWin) { const sh = labShown(); el.className = sh.length ? "" : "lab-list"; el.innerHTML = labListInner(sh); applyQ(); }
+  if ($("#lab-list") && labOn() && !state.open && !state.nodeWin) labRedraw();
+}
+function labRedraw() {      // the list drawn again from what is read: the rows in place when the same rows are there, else from scratch
+  const el = $("#lab-list"); if (!el) return;
+  if (!labPatch()) { el.innerHTML = labBox(labShown()); applyQ(); }
+}
+function labPatch() {      // the rows, the chips and the counts of the tabs are rewritten WHERE THEY STAND: only what changed moves (the owner, 2026-10-16: the page jumped several times when a server was added). false = the set of rows is not the one on the screen: draw it again
+  const el = $("#lab-list"), shown = labShown(), tb = el && el.querySelector("table.lab-tbl tbody");
+  if (!tb || !shown.length) return false;
+  const trs = [...tb.querySelectorAll(":scope > tr[data-id]")];
+  if (trs.length !== shown.length || shown.some(p => !trs.some(t => +t.dataset.id === p.id))) return false;
+  const tpl = document.createElement("tbody");
+  for (const p of shown) { const tr = trs.find(t => +t.dataset.id === p.id); tpl.innerHTML = labRowOf(p); if (tpl.firstElementChild && !morphNode(tr, tpl.firstElementChild)) return false; }
+  const st = $(".lab-stats"); if (st) morphHtml(st, labStatsHtml(shown));
+  document.querySelectorAll(".lab-kinds button .cnt").forEach(c => { const b = c.closest("button"); if (b) c.textContent = labCount(b.dataset.k); });
+  applyQ();
+  return true;
+}
+async function labTick() {      // a quiet look at the servers: what was read is patched into the rows where they stand (no redraw of the page)
+  if (!labOn()) return;
+  const [list, pr] = await Promise.all([api("/api/servers"), api("/api/profiles")]);
+  if (!labOn()) return;
+  state.serversCache = list; LAB.profiles = pr.profiles; LAB.tags = pr.tags || [];
+  if (!labPatch()) refresh();
+}
+window.srvCores = async (id, name) => {      // ⋯ → Install → Tunnel cores…: the cores (Backhaul, BackPack, Paqet, Chisel, Xray) are put on ONE server from the panel's cache; the steps are on its row
+  if (!await gconfirm(`Put the tunnel cores on ${name}?\n\nBackhaul, BackPack, Paqet, Chisel and Xray are copied from the panel's cache (downloaded first when the panel has not got them yet). A core that is there already is left alone; no tunnel is restarted.`)) return;
+  try { const r = await api(`/api/servers/${id}/onboard`, {method: "POST", body: JSON.stringify({steps: ["cores"]})}); toast(r.started ? `Installing the tunnel cores on ${name}: the steps are on its row` : `${name} is being prepared already`, r.started ? "ok" : ""); labFollow(20); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+let labFollowT = null, labFollowUntil = 0;
+const labSchedule = () => { clearTimeout(labAutoT); labAutoT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin && !document.querySelector("#modal .modal")) refresh(); }, 30000); };      // a full look every 30 s while nothing is going on
+window.labFollow = (secs = 0) => {      // follow the servers closely: a quiet look every second and a half while one is busy or has not been read yet - and for `secs` seconds at least (a server that was just added)
+  labFollowUntil = Math.max(labFollowUntil, Date.now() + secs * 1000); clearTimeout(labAutoT);
+  if (!labFollowT) labFollowT = setTimeout(labFollowStep, 400);
+};
+async function labFollowStep() {
+  labFollowT = null;
+  if (!labOn()) return;                                                        // another page: it draws itself
+  try { await labTick(); } catch (e) { /* the next step tries again */ }
+  if (!labOn()) return;
+  if ((state.serversCache || []).some(labWaiting) || Date.now() < labFollowUntil) { if (!labFollowT) labFollowT = setTimeout(labFollowStep, 1500); } else labSchedule();
 }
 
 /* ---------------------------------------------------------------- adding a profile: ONE box (the owner, 2026-10-14: "first we add a profile; a box opens and asks its name and its tag - Any unless I choose one, a name of my own is allowed, Iran and Foreign are suggested") */
 const labModal = (title, body) => { state.nodeWin = state.nodeWin || {lab: 1}; showModal(title, body, "keep"); };
 const labTagDraft = {v: ""};      // (what was typed in the Tag field stays while the tabs of the box are changed)
 const labRoleOf = tag => { const t = String(tag || "").trim().toLowerCase(); return t === "iran" ? "iran" : t === "foreign" ? "foreign" : ""; };      // (the tags Iran and Foreign say where a new server is; any other tag: the panel finds it from the address)
+window.labRoleOf = labRoleOf;      // (a top-level const is not a property of window: saveServer asks window.labRoleOf, so it never found it and the tag was never used - the page waited for the geo lookup at the moment of Add)
 window.labAddNode = () => { if (labHasPg()) labNodePanel(); else labPgFirst(); };      // a node needs a connected PasarGuard panel
 window.labPgFirst = async () => {      // the option of a node is grey while no PasarGuard panel is connected: asking for it says why and leads to connecting one
   const v = await glassChoice("A PasarGuard node belongs to a PasarGuard panel, so the panel comes first: connect it with its API key (or its username and password). This option opens as soon as one is connected.", [{label: "Connect a PasarGuard panel", v: "go", cls: "pri"}]);
@@ -493,7 +542,8 @@ const LAB_P = {      // the icons of the menus (24 px, drawn with a line): one s
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>', key: '<circle cx="8" cy="14" r="4"/><path d="M11 11l9-8M16 6l3 3M14 8l2 2"/>', lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>', forget: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
   fix: '<path d="M14.5 6.5a4 4 0 00-5.2 5.2L3.5 17.5a2 2 0 003 3l5.8-5.8a4 4 0 005.2-5.2l-2.5 2.5-2.3-.6-.6-2.3z"/>', eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>', pulse: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>', bell: '<path d="M6 16v-5a6 6 0 1112 0v5l1.5 2h-15zM10 20a2 2 0 004 0"/>', history: '<path d="M3.5 12a8.5 8.5 0 102.6-6.1M3.5 4v4.5H8M12 7.5V12l3 2"/>', ports: '<path d="M5 8h13M15 4l4 4-4 4M19 16H6M9 12l-4 4 4 4"/>', rebuild: '<path d="M7 7h10l-2-2M17 17H7l2 2M17 7v4M7 17v-4"/>',
   ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>', gre: '<path d="M7 7h12M16 3l4 4-4 4M17 17H5M8 13l-4 4 4 4"/>', shield: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
-  abuse: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>', box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>', up: '<path d="M7 18a4.5 4.5 0 01-.5-9A6 6 0 0118 10a4 4 0 01-1 8"/><path d="M12 20v-8M9 14.5l3-3 3 3"/>', plus: '<path d="M12 5v14M5 12h14"/>', monitor: '<path d="M6 20V11M12 20V4M18 20v-7"/>', manage: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'};
+  abuse: '<path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9.5-4-1.8-7-5.1-7-9.5V6z"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>', box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>', up: '<path d="M7 18a4.5 4.5 0 01-.5-9A6 6 0 0118 10a4 4 0 01-1 8"/><path d="M12 20v-8M9 14.5l3-3 3 3"/>', plus: '<path d="M12 5v14M5 12h14"/>', monitor: '<path d="M6 20V11M12 20V4M18 20v-7"/>', manage: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+  off: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>', on: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>', copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path d="M15.5 8.5V6.7a2.2 2.2 0 00-2.2-2.2H6.7a2.2 2.2 0 00-2.2 2.2v6.6a2.2 2.2 0 002.2 2.2h1.8"/>'};      // (off / on / copy: the menu of a config on the Add tab - the owner's picture: Modify, Disable, Duplicate, Remove)
 const labSvg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${LAB_P[k] || ""}</svg>`, labIt = (t, k, fn, o) => labItem(t, fn, {ic: labSvg(k), ...o});
 function labServerItems(p, s, ctx) {      // a server's menu: what is done most stands on its own, the rest opens flyouts (the owner: like Move to profile)
   const off = s.online === false && s.enabled !== false, nm = s.name, f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, tip = off ? "The server is off or does not answer" : "";
@@ -506,7 +556,7 @@ function labServerItems(p, s, ctx) {      // a server's menu: what is done most 
   }
   const access = [labIt("Connect SSH…", "key", () => srvConnect(s.id, nm)), labIt("Change SSH password…", "lock", () => srvPassword(s.id, nm)), labIt("Forget host key…", "forget", () => forgetKey(s.id, nm)), labIt("Open in an SSH program…", "ext", async () => { const v = await glassChoice(`Open ${nm} in:`, [{label: "Windows ssh", v: "ssh", note: "a .bat with your own key"}, {label: "PuTTY", v: "putty"}, {label: "MobaXterm", v: "mobaxterm"}]); if (v) srvOpen(s.id, v); })];
   const tests = [labIt("GRE test", "gre", () => greCheck(s.id)), ...(s.role === "foreign" ? [labIt("Is it filtered in Iran?", "shield", () => srvFilter(s.id)), labIt(abuseOn ? "Abuse-Defender: remove…" : "Abuse-Defender: install…", "abuse", () => srvAbuse(s.id, abuseOn ? "remove" : "install"))] : [])];
-  const install = [labIt("Nodes and tools…", "box", () => wtab("install")), labIt("Update the server…", "up", () => srvInstall(s.id, "os_update"))];
+  const install = [labIt("Nodes and tools…", "box", () => wtab("install")), labIt("Tunnel cores…", "box", () => srvCores(s.id, nm)), labIt("Update the server…", "up", () => srvInstall(s.id, "os_update"))];
   return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
     labSep, labSubItem("Access", "key", access), labSubItem("Tests", "gre", tests, {off, tip}), labSubItem("Install", "box", install, {off, tip}),
     labSep, gone, labSep, del];

@@ -440,7 +440,8 @@ def test_one_list_of_the_left_menu_is_open_at_a_time():
 def test_the_lab_looks_again_by_itself_so_a_new_server_does_not_stay_with_dashes():
     """The owner, 2026-10-15: "I added a normal server and it stayed like this" (dashes until the page was refreshed)."""
     lab = _web("lab.js")
-    assert "labAutoT = setTimeout(() =>" in lab and "waiting ? 3500 : 30000" in lab and "s.enabled && !(s.facts && s.facts.cpu != null)" in lab and "!document.querySelector(\"#modal .modal\")" in lab
+    assert "labAutoT = setTimeout(() =>" in lab and "}, 30000); };" in lab and "const labUnread = s => s.enabled && s.online == null && !(s.facts && s.facts.cpu != null);" in lab and "!document.querySelector(\"#modal .modal\")" in lab      # (a full look every 30 s; a server that is busy or never read is followed every second and a half by patching its row - 1.58.0)
+    assert "if (list.some(labWaiting)) labFollow(); else labSchedule();" in lab and "setTimeout(labFollowStep, 1500)" in lab
 
 
 def test_fixed_boxes_names_only_buttons_disabled_without_items_and_the_server_icon_is_never_coloured():
@@ -713,7 +714,7 @@ def test_autofill_stays_dark_inside_windows_and_the_panel_mode_switch_shows_the_
 def test_the_add_form_has_a_drawer_per_protocol_a_core_field_and_the_user_template_tick():
     """The owner, 2026-10-15: "arrange the make-a-config part, the suggested configs in order, VLESS in a drawer, the core can be chosen from there" - and, a little later, "bring the user template back"."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
-    assert '<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"' in js and 'class="pg-dr-sel"' not in js and "if (own) d.open = true;" in js and "const pgKindShort = k =>" in js
+    assert '<details class="pg-kind-dr" name="pg-kind-acc" data-p="${esc(f.id)}"' in js and 'class="pg-dr-sel"' not in js and "if (own) d.open = true;" in js and "const pgKindShort = k =>" in js      # (a drawer per family: 1.58.0 - the four protocols and the ones the owner added)
     assert 'name="template" checked' in js and "pgKindTplSync();" in js and "b.template = f.elements.template.checked;" in js and ".pg-kind-tpl .chk" in css
     form = js.split("function pgKindFormHtml(inline) {", 1)[1].split("</form>", 1)[0]
     assert form.count('name="core_id"') == 1 and form.index('name="core_id"') < form.index('<details class="pg-kind-adv">') and form.index('name="address"') < form.index('name="core_id"') < form.index('name="port"')
@@ -869,7 +870,7 @@ def test_the_add_account_type_form_in_two_columns_with_pictures():
     """The owner, 2026-10-16 (his picture): the drawers on the left, one card with the note and the fields in pairs on the right; one drawer open at a time."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
     assert '<div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side">' in js and '</div></div>${inline ? subs : ""}</div>${inline ? "</div>" : ""}`;\n}' in js and "const PKI = {};" in js and "const pgKindIc = k =>" in js
-    assert '<i class="pg-dr-i">${PKI.cube}</i>' in js and '<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i>' in js and 'name="core_id" data-dd' in js and 'name="group" data-dd' in js and '${PKI.spark}<span>Make it…</span>${PKI.chev}' in js
+    assert '<i class="pg-dr-i pg-dr-e" aria-hidden="true">${esc(f.emoji)}</i>' in js and '<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i>' in js and 'name="core_id" data-dd' in js and 'name="group" data-dd' in js and '${PKI.spark}<span>Make it…</span>${PKI.chev}' in js
     assert 'document.addEventListener("toggle", e => {' in js and ".pg-kind-dr[open]" in js
     assert "html body #page .pg-kind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);" in css and "html body #page .pg-kind-side .pg-kind-quick { grid-template-columns: repeat(2, minmax(0, 1fr));" in css
 
@@ -1011,3 +1012,59 @@ def test_the_cores_box_does_not_ask_for_a_button_that_is_gone():
     """The Check button of the cores was taken away (the check runs by itself): its empty text and its status no longer say "press Check"."""
     app = _web("app.js")
     assert "press Check" not in app and "Press “Check for updates”" not in app and "it happens by itself, in a moment" in app
+
+
+def test_the_add_table_has_an_emoji_on_every_drawer_short_names_and_a_row_to_add_a_protocol():
+    """The owner, 2026-10-16: "write the names short, e.g. ws+tls", "every protocol its own emoji (VLESS, VMess ...)" and "let the user add other protocols to the table too"."""
+    js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
+    assert "function pgKindDrawers(o)" in js and 'class="pg-dr-i pg-dr-e"' in js and "${esc(f.emoji)}" in js and "(o.families || [])" in js and "o.kinds.filter(k => k.family === f.id)" in js          # one drawer per family, its own emoji
+    assert 'const pgKindShort = k => String((k && (k.short || k.title)) || "");' in js and "<span>${esc(pgKindShort(k))}</span>" in js and 'title="${esc(k.title + (k.note ? " — " + k.note : ""))}"' in js      # the short name on the button, the long one in its tooltip
+    assert 'onclick="pgKindCustom()"' in js and "Add protocol</span></button>" in js and 'd.dataset.p' in js and "kd.family === d.dataset.p" in js          # the last row of the drawers adds a protocol; the drawer of a chosen kind opens
+    for fn in ("pgKindCustom", "pgCustSave", "pgCustSync", "pgCustVia", "pgCustExample", "pgKindCustomDel"):
+        assert f"window.{fn} = " in js, fn
+
+    assert 'class="sm danger" onclick="pgKindCustomDel(pgKind.k)"' in js and "kd.custom ?" in js          # Edit and Delete sit on the note of a protocol of your own, and only there
+    assert "protocol: g(\"protocol\"), network: g(\"network\")" in js and "b.text = f.elements.text.value" in js and '"/kinds/custom"' in js and "`/kinds/custom/${encodeURIComponent(kid)}`" in js
+    assert "const pgKindLinkOwn = p =>" in js and "pgKindLinkKind(p) || pgKindLinkOwn(p)" in js          # a pasted link finds a protocol of your own too
+    assert ".pg-kind-addp {" in css and ".pg-dr-e {" in css and ".pg-kn-a {" in css and ".pg-cust-via {" in css
+    assert js.index("window.pgKindCustom = ") > js.index("function pgKindDone(out)")          # (the form of a protocol of your own comes after the Add form: its fields are not part of the one the Add form tests read)
+
+
+def test_every_subscription_config_has_a_switch_and_the_menu_modify_disable_duplicate_remove():
+    """The owner, 2026-10-16: "for every config an on/off switch, edit and delete", and his picture of the menu: Modify, Disable, Duplicate, a line, Remove in red."""
+    js, hosts, lab, app = _web("pg_kinds.js"), _web("pg_hosts.js"), _web("lab.js"), _web("app.js")
+    row = js.split("const pgKindRow = x =>", 1)[1].split("const pgKindHostOf", 1)[0]
+    assert "pgSw(!x.disabled, \"pgKindHostSw(this)\"" in row and 'onclick="pgKindHostMenu(this, event)"' in row and "${LAB_DOTS}" in row and 'class="lab-kb"' in row and "pg-ks-s" not in js          # the switch and the "⋯" button; the old on/off badge is gone
+    menu = js.split("window.pgKindHostMenu = ", 1)[1].split("const pgKindHostSet", 1)[0]
+    assert menu.index('labIt("Modify", "edit"') < menu.index('x.disabled ? "Enable" : "Disable"') < menu.index('labIt("Duplicate", "copy"') < menu.index("labSep") < menu.index('labIt("Remove", "trash"') and "{danger: true}" in menu
+    assert "pgHostOpen(+pn.id, +x.key)" in menu and "pgHostClone(+pn.id, +x.key)" in menu and "pgHostDelete(+pn.id, +x.key, x.remark" in menu          # the same windows and calls as the Hosts tab: nothing is written twice
+    icons = lab.split("const LAB_P = {", 1)[1].split("};", 1)[0]
+    assert " off: '" in icons and " on: '" in icons and " copy: '" in icons
+    assert hosts.count("pgHostsDone();") == 4 and "refresh(); } catch" not in hosts and "const pgHostsDone = () => { if (!(window.pgKindHostsDone && pgKindHostsDone())) refresh(); };" in hosts          # after a save, a copy, a delete or a restore the Add tab reads its list again - the form keeps what was typed
+    assert "window.pgKindHostsDone = () => { if (!$(\"#pg-kind-subs\")) return false;" in js and "l.scrollTop = top;" in js
+    assert 'state.build = document.querySelector("#pg-kind-page #pg-kind-form") ? "kinds" : null;' in app          # closing a window never lets the page draw itself again over the Add form
+
+
+def test_adding_a_server_moves_nothing_and_says_what_is_being_done_from_the_first_moment():
+    """The owner, 2026-10-16: "when you add a server the page jumps several times" and "the status of the server is not clear at all - from the very first moment show what is being done"."""
+    lab, css, app = _web("lab.js"), _web("lab.css"), _web("app.js")
+    assert 'class="lbox lab-box0"' in lab and "const labBox = shown =>" in lab and '<div id="lab-list">${labBox(shown)}</div>' in lab and ".lab-box0 { display: grid; place-items: center; }" in css      # the empty page is a box like the list: the first row changes nothing around it
+    assert 'class="lab-list"' not in lab and '"lab-list"' not in lab.replace('id="lab-list"', "") and "\n.lab-list {" not in css      # (no second look for the empty page)
+    assert "function labPatch()" in lab and "morphNode(tr, tpl.firstElementChild)" in lab and "morphHtml(st, labStatsHtml(shown))" in lab and "async function labTick()" in lab and "if (!labPatch()) refresh();" in lab      # the rows are rewritten where they stand
+    assert "window.labFollow = (secs = 0) =>" in lab and "async function labFollowStep()" in lab and "setTimeout(labFollowStep, 1500)" in lab and "const labWaiting = s =>" in lab
+    assert 'labBusyHtml({what: "node", detail: "Waiting for the first reading…"})' in lab and "labUnread(s) && !noLogin(s)" in lab      # a server that was never read says so
+    assert ".lab-chip b { display: inline-block; min-width: var(--cw, 3ch);" in css and ".lab-chip.c-cpu b { --cw: 4ch; }" in css      # the numbers of the chips have their own room
+    assert "window.labRoleOf = labRoleOf;" in lab      # the tag Iran / Foreign decides the role at once (it was never found: a top-level const is not on window)
+    save = app.split("window.saveServer = async (e, id) => {", 1)[1].split("window.srvPassword", 1)[0]
+    assert "/onboard" in save and 'const first = id ? ["gre"] : ["read", "gre"]' in save and 'f.get("x_cores") === "on"' in save and "labFollow(30)" in save and "labFollow(20)" in save and "/gre-check" not in save
+    assert "if (later && cores && connected) await prep([\"cores\"]);" in save and "submit.textContent = id ? \"Saving…\" : \"Adding…\"" in save and "r.online === true" in save      # the cores come last after a node or extras; the button says Adding…; a key that does not log in is told
+    assert 'name="x_cores" type="checkbox" checked' in app and "Put the tunnel cores on it" in app      # the tick of the Add form (on by default: "they must install by themselves")
+
+
+def test_the_cores_box_has_an_install_button_and_a_server_has_tunnel_cores_in_its_menu():
+    """The owner, 2026-10-16: "why are Paqet, Chisel and Xray not installed? They should install by themselves": a new server gets them at once; the ones added before get them from here."""
+    app, lab = _web("app.js"), _web("lab.js")
+    assert "⬇ Install</button>" in app and "engineUpdate('${k}', true)" in app and "window.engineUpdate = async (k, missing) =>" in app and "/update${missing ? \"?missing=true\" : \"\"}" in app and "enginesLoad.last = eng;" in app
+    assert 'labIt("Tunnel cores…", "box", () => srvCores(s.id, nm))' in lab and "window.srvCores = async (id, name) =>" in lab and 'steps: ["cores"]' in lab
+    install = (WEB.parent.parent / "install.sh").read_text(encoding="utf-8")
+    assert "downloads the tunnel cores" in install and "engines" in install

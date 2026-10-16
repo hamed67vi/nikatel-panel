@@ -375,7 +375,7 @@ def test_the_api_is_for_pasarguard_panels_only(client, fake):
 def test_every_route_is_described_in_one_sentence():
     from nikatel.api import pg_kinds as api_mod
 
-    assert len(api_mod.router.routes) == 3
+    assert len(api_mod.router.routes) == 5
 
     for r in api_mod.router.routes:
         doc = (r.endpoint.__doc__ or "").strip()
@@ -576,3 +576,151 @@ def test_the_form_starts_the_plain_websocket_at_port_80_but_the_api_still_picks_
     assert pg_kinds._auto_port(pg_kinds.KINDS["vless-ws"], [80, 2053]) == 8080
     p = pg_kinds.plan(C, {"kind": "vless-ws", "name": "Plain ws", "address": "203.0.113.21", "path": "/abc123", "port": 80})
     assert p["valid"] is False and "port 80 is used" in " ".join(e for s in p["steps"] for e in s["errors"])
+
+
+# ------------------------------------------------------------------ the table: a short name on every button, an emoji on every drawer, and protocols of the owner's own
+GRPC_REALITY = {"family": "vless", "short": "grpc+reality", "via": "builder", "protocol": "vless", "network": "grpc", "security": "reality", "ports": "4443, 8444", "note": "gRPC behind REALITY"}
+VLESS_JSON = {"tag": "template", "port": 31000, "protocol": "vless", "settings": {"clients": [], "decryption": "none"}, "streamSettings": {"network": "tcp", "security": "none"}}
+EMPTY_STORE = {"custom": [], "families": []}
+
+
+def test_every_button_has_a_short_name_and_every_drawer_an_emoji_of_its_own(fake):
+    """The owner, 2026-10-16: "write the names short, e.g. ws+tls" and "every protocol its own emoji"."""
+    o = pg_kinds.options(C)
+    assert [f["id"] for f in o["families"]] == ["vless", "trojan", "vmess", "shadowsocks"] and [f["label"] for f in o["families"]] == ["VLESS", "Trojan", "VMess", "Shadowsocks"]
+    assert [f["emoji"] for f in o["families"]] == ["⚡", "🐴", "💬", "👻"] and not any(f["custom"] for f in o["families"])
+    assert next(k for k in o["kinds"] if k["id"] == "vless-ws-tls")["short"] == "ws+tls" and next(k for k in o["kinds"] if k["id"] == "vless-reality-vision")["short"] == "reality+vision"
+
+    for k in o["kinds"]:
+        assert 0 < len(k["short"]) <= 16 and k["short"] != k["title"] and k["family"] == k["protocol"] and k["custom"] is False and "saved" not in k, k["id"]
+
+    assert len({(k["family"], k["short"]) for k in o["kinds"]}) == len(o["kinds"])          # no two buttons of one drawer carry the same name
+
+
+def test_a_protocol_of_your_own_joins_the_table_and_builds_like_the_built_in_ones(fake):
+    r = pg_kinds.save_custom(GRPC_REALITY)
+    k = next(x for x in r["kinds"] if x["id"] == r["id"])
+    assert r["id"].startswith("c-") and k["custom"] is True and k["short"] == "grpc+reality" and k["title"] == "VLESS · grpc+reality" and k["family"] == "vless" and k["note"] == "gRPC behind REALITY"
+    assert k["ports"] == [4443, 8444] and k["needs"] == ["reality", "spx", "service"] and k["saved"]["via"] == "builder" and r["kinds"][-1]["id"] == r["id"] and len(r["kinds"]) == 18      # after the built-in ones
+    assert pg_kinds.options(C)["kinds"][-1]["id"] == r["id"] and fake.writes() == []                                                       # (the form reads it; saving it touches no panel)
+    plain = pg_kinds.plan(C, {"kind": r["id"]})                                                                                              # nothing but the protocol: the rest is chosen, as for every kind
+    assert plain["valid"] is True and plain["auto"]["port"] == 4443 and plain["auto"]["name"] == "VLESS grpc+reality" and plain["auto"]["service"].startswith("g")
+    out = pg_kinds.make(C, {"kind": r["id"], "name": "Grpc reality", "address": "203.0.113.21", "reality_dest": "www.example.test:443"})
+    ss = _ib(fake, out)["streamSettings"]
+    assert _ib(fake, out)["port"] == 4443 and _ib(fake, out)["protocol"] == "vless" and ss["network"] == "grpc" and ss["security"] == "reality" and ss["grpcSettings"]["serviceName"] and out["core"]["public_key"]
+    assert all(c["ok"] for c in out["checks"]) and pg_cores.check_config(fake.cores[1]["config"]) == []
+
+
+def test_the_needs_of_a_protocol_of_your_own_follow_its_transport_and_security(fake):
+    for body, needs in (({"network": "ws", "security": "tls"}, ["tls", "path"]), ({"network": "ws", "security": "none"}, ["path"]), ({"network": "tcp", "security": "tls-pin", "protocol": "trojan"}, ["pin"]), ({"network": "xhttp", "security": "reality"}, ["reality", "spx", "path"]),
+                        ({"network": "tcp", "security": "none", "header": "http"}, ["path"]), ({"network": "tcp", "security": "reality", "flow": "xtls-rprx-vision"}, ["reality", "spx"]), ({"network": "httpupgrade", "security": "tls", "protocol": "vmess"}, ["tls", "path"])):
+        r = pg_kinds.save_custom({**GRPC_REALITY, "short": "x" + str(len(needs)) + body["network"] + body["security"], "ports": "", **body, "family": body.get("protocol", "vless")})      # (a group of the four holds its own protocol only)
+        k = next(x for x in r["kinds"] if x["id"] == r["id"])
+        assert k["needs"] == needs, body
+        p = pg_kinds.plan(C, {"kind": r["id"], "reality_dest": "www.example.test:443"})                                                      # and the inbound the builder makes is accepted by the core
+        assert p["valid"] is True, (body, [s["errors"] for s in p["steps"]])
+        assert (p["inbound"]["protocol"], p["inbound"]["streamSettings"]["network"], p["inbound"]["streamSettings"]["security"]) == (k["protocol"], k["network"], k["security"]), body
+
+
+def test_a_protocol_written_as_json_gets_the_tag_and_the_port_of_the_account(fake):
+    r = pg_kinds.save_custom({"family": "", "family_label": "Mine", "family_emoji": "🚀", "short": "raw", "via": "json", "text": json.dumps(VLESS_JSON)})
+    kid = r["id"]
+    assert r["families"][-1] == {"id": "mine", "label": "Mine", "emoji": "🚀", "custom": True}
+    k = next(x for x in r["kinds"] if x["id"] == kid)
+    assert k["ports"] == [31000] and k["needs"] == [] and k["family"] == "mine" and (k["protocol"], k["network"], k["security"]) == ("vless", "tcp", "none") and k["title"] == "Mine · raw"
+    p = pg_kinds.plan(C, {"kind": kid, "name": "Raw one", "address": "203.0.113.21"})
+    assert p["valid"] is True and p["inbound"]["tag"] == "Raw one" and p["inbound"]["port"] == 31000 and "path" not in p["auto"]            # (the tag and the port of the account, not the ones of the template)
+    out = pg_kinds.make(C, {"kind": kid, "name": "Raw one", "address": "203.0.113.21", "port": 31001}, confirm=True)             # (a VLESS inbound with no TLS is the warning of the core: confirmed)
+    assert _ib(fake, out)["port"] == 31001 and _ib(fake, out)["protocol"] == "vless" and fake.hosts[out["host"]["id"]]["inbound_tag"] == "Raw one" and all(c["ok"] for c in out["checks"])
+
+
+def test_a_protocol_the_builder_does_not_make_can_be_written_as_json(fake):
+    hy = {"protocol": "hysteria", "settings": {"version": 2, "clients": []}, "streamSettings": {"network": "hysteria", "security": "tls", "tlsSettings": {"certificates": [{"certificateFile": "/etc/own/cert.pem", "keyFile": "/etc/own/key.pem"}]}}}
+    r = pg_kinds.save_custom({"family": "", "family_label": "Hysteria", "short": "hy2", "via": "json", "text": json.dumps(hy)})
+    k = next(x for x in r["kinds"] if x["id"] == r["id"])
+    assert (k["protocol"], k["network"], k["security"]) == ("hysteria", "hysteria", "tls") and k["ports"] == [443, 8443, 2053] and r["families"][-1]["emoji"] == "🧩"      # (no port in the JSON: the usual ones of TLS; no emoji given: the puzzle piece)
+    out = pg_kinds.make(C, {"kind": r["id"], "address": "203.0.113.21"})
+    assert _ib(fake, out)["protocol"] == "hysteria" and _ib(fake, out)["streamSettings"]["network"] == "hysteria" and fake.hosts[out["host"]["id"]]["fingerprint"] == "chrome"
+
+
+def test_a_new_drawer_goes_with_its_last_protocol(fake):
+    a = pg_kinds.save_custom({**GRPC_REALITY, "family": "", "family_label": "Brand New", "family_emoji": "🦄"})
+    assert [f["id"] for f in a["families"]] == ["vless", "trojan", "vmess", "shadowsocks", "brandnew"] and a["families"][-1] == {"id": "brandnew", "label": "Brand New", "emoji": "🦄", "custom": True}
+    b = pg_kinds.save_custom({**GRPC_REALITY, "short": "grpc+tls", "security": "tls", "family": "brandnew"})                                  # a second protocol in the same new drawer
+    assert [f["id"] for f in b["families"]].count("brandnew") == 1 and sum(1 for k in b["kinds"] if k["family"] == "brandnew") == 2
+    again = pg_kinds.save_custom({**GRPC_REALITY, "short": "third", "family": "", "family_label": "brand  NEW"})                              # the same name (case and spaces aside) is the same drawer
+    assert again["families"][-1]["emoji"] == "🦄" and [f["id"] for f in again["families"]].count("brandnew") == 1
+    assert "brandnew" in [f["id"] for f in pg_kinds.delete_custom(a["id"])["families"]]                                                     # two protocols are still in it
+    pg_kinds.delete_custom(again["id"])
+    gone = pg_kinds.delete_custom(b["id"])
+    assert [f["id"] for f in gone["families"]] == ["vless", "trojan", "vmess", "shadowsocks"] and not any(k["custom"] for k in gone["kinds"]) and pg_kinds._store() == EMPTY_STORE
+
+
+def test_a_protocol_of_your_own_can_be_changed_and_taken_out(fake):
+    kid = pg_kinds.save_custom(GRPC_REALITY)["id"]
+    r = pg_kinds.save_custom({**GRPC_REALITY, "id": kid, "short": "grpc-reality", "security": "tls-pin", "ports": "", "title": "My own gRPC"})
+    k = next(x for x in r["kinds"] if x["id"] == kid)
+    assert r["id"] == kid and sum(1 for x in r["kinds"] if x["custom"]) == 1 and k["short"] == "grpc-reality" and k["title"] == "My own gRPC" and k["own_cert"] is True
+    assert k["needs"] == ["pin", "service"] and k["ports"] == [32001, 32002, 32003, 32004, 32005] and k["saved"]["cert"] == "self" and k["saved"]["security"] == "tls"
+    for short in ("grpc-reality", "WS+TLS"):                                                              # a button of the group with that name is there already: one of his own, or a built-in one (capitals aside)
+        with pytest.raises(ValueError, match="in that group already"):
+            pg_kinds.save_custom({**GRPC_REALITY, "short": short})
+
+    assert not any(x["custom"] for x in pg_kinds.delete_custom(kid)["kinds"])
+    with pytest.raises(ValueError, match="not in the table"):
+        pg_kinds.delete_custom(kid)
+
+
+def test_the_form_of_a_protocol_of_your_own_is_checked_by_the_rules_of_the_builder(fake):
+    G = GRPC_REALITY
+    for body, why in (({**G, "protocol": "wireguard"}, "protocol is one of"), ({**G, "network": "quic"}, "transport is one of"), ({**G, "security": "ssl"}, "security is one of"), ({**G, "protocol": "shadowsocks"}, "REALITY needs"),
+                      ({**G, "flow": "xtls-rprx-vision"}, "needs a TCP inbound"), ({**G, "protocol": "vmess", "network": "tcp", "flow": "xtls-rprx-vision"}, "only a vless"), ({**G, "header": "http"}, "for a TCP inbound"),
+                      ({**G, "network": "xhttp", "xmode": "fast"}, "xHTTP mode is one of"), ({**G, "ports": "70000"}, "port is a number"), ({**G, "ports": "1,2,3,4,5,6,7,8,9"}, "at most 8"), ({**G, "short": ""}, "the name: 1 to 24"),
+                      ({**G, "short": "x" * 25}, "the name: 1 to 24"), ({**G, "family": "nope"}, "not in the table"), ({**G, "family": "", "family_label": "x"}, "new group"), ({**G, "via": "yaml"}, "builder or with JSON"),
+                      ({**G, "id": "c-000000"}, "not in the table"), ({**G, "title": "ab"}, "full name: 3 to 80"), ({**G, "protocol": "vmess"}, "holds VLESS protocols only"),
+                      ({"family": "trojan", "short": "raw", "via": "json", "text": json.dumps(VLESS_JSON)}, "holds Trojan protocols only")):
+        with pytest.raises(ValueError, match=why):
+            pg_kinds.save_custom(body)
+
+    assert pg_kinds._store() == EMPTY_STORE                                                                 # nothing of that was kept, not even the drawer a refused form named
+
+
+def test_the_json_of_a_protocol_of_your_own_is_one_inbound_without_a_secret(fake):
+    base = {"family": "vless", "short": "raw", "via": "json"}
+    reality = {**VLESS_JSON, "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"privateKey": "AAAA-BBBB-CCCC-DDDD"}}}
+    for text, why in (("", "paste the JSON"), ("{not json", "not valid JSON"), ("[]", "JSON object"), ('{"settings": {}}', "needs a protocol"), (json.dumps(reality), "holds a secret"), ("x" * 20001, "paste the JSON"),
+                      ('{"protocol": "a b", "tag": "x"}', "needs a protocol"), ('{"protocol": "vless", "protocol": "vmess"}', "appears twice")):
+        with pytest.raises(ValueError, match=why):
+            pg_kinds.save_custom({**base, "text": text})
+
+    assert pg_kinds._store() == EMPTY_STORE
+
+
+def test_the_table_holds_forty_protocols_of_your_own_and_a_hand_made_record_cannot_break_the_form(fake):
+    for i in range(pg_kinds.MAX_CUSTOM):
+        pg_kinds.save_custom({**GRPC_REALITY, "short": f"p{i}"})
+
+    with pytest.raises(ValueError, match="at most 40"):
+        pg_kinds.save_custom({**GRPC_REALITY, "short": "one too many"})
+
+    from nikatel.services import settings
+
+    doc = settings.get(pg_kinds.CUSTOM_KEY)
+    settings.put(pg_kinds.CUSTOM_KEY, {"custom": [*doc["custom"], {"id": "c-bad000", "short": "broken"}], "families": doc["families"]})            # (a record without its parts: left out, the form still opens)
+    o = pg_kinds.options(C)
+    assert sum(1 for k in o["kinds"] if k["custom"]) == pg_kinds.MAX_CUSTOM and "c-bad000" not in {k["id"] for k in o["kinds"]}
+
+
+def test_the_api_adds_and_removes_a_protocol_of_your_own(client, fake, pid):
+    base = f"/api/panels/{pid}/pg/kinds"
+    j = client.post(base + "/custom", json=GRPC_REALITY).json()
+    assert j["ok"] is True and j["id"].startswith("c-") and any(k["id"] == j["id"] and k["custom"] for k in j["kinds"]) and [f["id"] for f in j["families"]][:4] == ["vless", "trojan", "vmess", "shadowsocks"]
+    assert any(k["id"] == j["id"] for k in client.get(base).json()["kinds"])                                  # the form reads it
+    made = client.post(base + "/make", json={"kind": j["id"], "name": "Api grpc", "address": "203.0.113.21", "reality_dest": "www.example.test:443"}).json()
+    assert made["ok"] is True and made["tag"] == "Api grpc"
+    bad = client.post(base + "/custom", json={**GRPC_REALITY, "protocol": "wireguard"})
+    assert bad.status_code == 400 and "protocol is one of" in bad.json()["error"]
+    assert client.post(base + "/custom", json={"family": "vless"}).status_code == 422                          # (a short name is the one thing that is needed)
+    assert client.delete(base + "/custom/" + j["id"]).json()["ok"] is True and not any(k["custom"] for k in client.get(base).json()["kinds"])
+    assert client.delete(base + "/custom/c-000000").status_code == 400
+    assert client.get("/api/panels/9999/pg/kinds").status_code == 404 and client.post("/api/panels/9999/pg/kinds/custom", json=GRPC_REALITY).status_code == 404

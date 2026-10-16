@@ -49,6 +49,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "setup": {"dismissed": False},
     # the license token (see services/license.py); empty = the free tier, unless NIKATEL_LICENSE=owner
     "license": {"token": ""},
+    # the Add tab of a PasarGuard panel (services/pg_kinds.py): the protocols the owner added to the table, and the drawers he made for them
+    "pg_kinds": {"custom": [], "families": []},
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}

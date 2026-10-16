@@ -27,7 +27,6 @@ html body #page .lab-bar .tb-search input { width: 100%; height: 30px; border-ra
 @media (max-width: 760px) and (pointer: coarse) { .lab-bar { overflow-x: auto; scrollbar-width: none; } }
 
 /* the list: the table of the old Servers list (srv-tbl: its cards, the flag over the name, the server with its two lights, the fluid layer) - here only what is IN the columns is new */
-.lab-list { border: 1px solid var(--line); border-radius: 0 0 14px 14px; background: var(--panel); }      /* (only when there is nothing to list) */
 .lab-empty { display: grid; justify-items: center; gap: 8px; padding: 34px 14px; text-align: center; }
 html body #page .lab-tbl td { height: 48px; }
 html body #page .srv-tbl.lab-tbl td.lab-ld { font-family: inherit; font-variant-numeric: normal; font-feature-settings: normal; font-size: inherit; font-weight: inherit; letter-spacing: normal; color: inherit; }      /* (the old list kept the address in its fourth column: here it is the load) */
@@ -781,3 +780,10 @@ html[data-mode="light"] body #page .dash-setup { background: #f4f8ff; border-col
 /* 1.57.55 - the health box of the Dashboard: the line under a name is ONE line that is cut with an ellipsis (the whole text is its tooltip) - a long list of stale jobs was three lines high and ran over the row below */
 html body #page .dash-cols .dash-name { min-width: 0; } html body #page .dash-cols .dash-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .abt-foot > button.abt-diag { flex: none; margin-left: 10px; height: 28px; }
+
+/* 1.58.0 - adding a server does not move the page (the owner, 2026-10-16: "when you add a server the page jumps several times"): the empty page is a BOX of the same kind and size as the list (the first row changes nothing around it), the chips of the bar have a room of their own for their numbers (a 0/1 that becomes 1/1, a dash that becomes 4% shift nothing), a server that was never read says so on its row, and the rows are rewritten where they stand */
+.lab-box0 { display: grid; place-items: center; }
+.lab-chip b { display: inline-block; min-width: var(--cw, 3ch); text-align: left; font-variant-numeric: tabular-nums; }
+.lab-chip.c-on b, .lab-chip.c-tun b { --cw: 5ch; } .lab-chip.c-cpu b { --cw: 4ch; } .lab-chip.c-pb b { --cw: 2ch; }
+.lab-nm small .lab-busy { max-width: 100%; }
+html body #page .tabs.lab-kinds .cnt { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }      /* (the count of a tab: a 0 that becomes a 1 - or a 9 that becomes 10 - does not move the search box beside the tabs) */

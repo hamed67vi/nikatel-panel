@@ -228,6 +228,27 @@ def check_now(server_id: int):
     return get_server(server_id)
 
 
+class OnboardIn(BaseModel):
+    steps: list[str] = Field(default_factory=lambda: ["read", "gre", "cores"], max_length=3)
+
+
+@router.post("/servers/{server_id}/onboard", status_code=202)
+def onboard_server(server_id: int, body: OnboardIn):
+    """Prepare a server in the background and answer at once: read it now (so its row has numbers), check its GRE links, put the tunnel cores on it from the panel's cache. `steps` picks some of read, gre, cores; each step is written on the row of the server while it runs."""
+    from ..services import onboard
+
+    bad = [s for s in body.steps if s not in onboard.STEPS]
+
+    if bad:
+        raise HTTPException(400, f"the steps are {', '.join(onboard.STEPS)} (not {bad[0]})")
+
+    with session() as db:
+        if db.get(Server, server_id) is None:
+            raise HTTPException(404, "server not found")
+
+    return {"ok": True, "started": onboard.start(server_id, tuple(body.steps)), "steps": [s for s in onboard.STEPS if s in body.steps]}
+
+
 @router.post("/servers/{server_id}/forget-hostkey")
 def forget_hostkey(server_id: int):
     """After a server is reinstalled its SSH identity changes; this drops the pinned key so the next

@@ -134,6 +134,7 @@ echo "   user      : admin"
 if [ -z "$PASSWORD" ] && [ -f "$DATA/data/initial-admin-password.txt" ]; then
     echo "   password  : $(cat "$DATA/data/initial-admin-password.txt")   (shown once - change it in the panel)"
 fi
+echo "   cores     : the panel downloads the tunnel cores (Backhaul, BackPack, Paqet, Chisel, Xray) into $DATA/engines by itself, right after it starts, and puts them on every server you add"
 echo "   logs      : journalctl -u nikatel -f"
 echo "   upgrade   : re-run this installer, or: cd $SRC && git pull && bash scripts/deploy.sh"
 echo

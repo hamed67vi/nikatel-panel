@@ -13,10 +13,13 @@ from __future__ import annotations
 import datetime
 import hashlib
 import ipaddress
+import json
+import re
 import secrets
+import threading
 from urllib.parse import urlsplit
 
-from . import panels, pg_access, pg_cores, pg_hosts
+from . import panels, pg_access, pg_cores, pg_hosts, settings
 from .panels import PanelError
 
 CERT = "/var/lib/pg-node/certs/ssl_cert.pem"            # where a PasarGuard node keeps its certificate, when no TLS inbound of the panel says otherwise
@@ -64,6 +67,19 @@ ALPN = {"ws": "http/1.1", "grpc": "h2", "tcp": "h2,http/1.1"}     # what the TLS
 REALITY_SITES = ("play.google.com:443", "www.samsung.com:443", "amp-api-edge.apps.apple.com:443", "www.cloudflare.com:443", "www.speedtest.net:443")      # tried in this order when nothing says which site a REALITY inbound imitates (the first three are the ones of the owner's own links)
 SPOOF_SNIS = ("pish-data-31.myket.ir", "pish-data-14.myket.ir", "pish-data-32.myket.ir", "pish-data-33.myket.ir", "pish-data-34.myket.ir", "pish-data-35.myket.ir", "pish-data-36.myket.ir", "pish-data-38.myket.ir")      # the names the links of the owner show to the network when the certificate is the panel's own (kinds "own certificate")
 FINGERPRINTS = ("chrome", "firefox", "safari", "ios", "android", "edge", "random")
+
+# ---- the table of the Add form: the DRAWERS (one per protocol, each with its own emoji) and the short name on every button (the owner, 2026-10-16: "write the names short, e.g. ws+tls" and "every
+# protocol its own emoji"). The title stays the long name (the tooltip of the button, the name of the account made from it).
+FAMILIES: tuple[tuple[str, str, str], ...] = (("vless", "VLESS", "⚡"), ("trojan", "Trojan", "🐴"), ("vmess", "VMess", "💬"), ("shadowsocks", "Shadowsocks", "👻"))
+SHORT = {"vless-reality": "reality", "vless-reality-vision": "reality+vision", "trojan-tcp-pin": "tcp+tls pin", "vless-ws-pin": "ws+tls pin", "vless-ws-tls": "ws+tls", "vless-ws": "ws", "vless-grpc-tls": "grpc+tls",
+         "trojan-ws-tls": "ws+tls", "trojan-tcp-tls": "tcp+tls", "vmess-ws-tls": "ws+tls", "vless-tcp-http": "tcp+http", "vless-xhttp": "xhttp", "vless-xhttp-tls": "xhttp+tls", "vless-xhttp-reality": "xhttp+reality",
+         "vless-httpupgrade-tls": "httpupgrade+tls", "vless-mlkem": "ML-KEM", "shadowsocks": "tcp+udp"}
+BUILTIN_FAMILY = {f[0] for f in FAMILIES}
+CUSTOM_KEY = "pg_kinds"                    # the settings document: {"custom": [the kinds the owner added], "families": [the drawers he made: {id, label, emoji}]}
+MAX_CUSTOM = 40
+_CUSTOM_LOCK = threading.Lock()
+SECURITY_CHOICES = ("none", "tls", "tls-pin", "reality")          # what the form of a protocol of your own offers (tls-pin: TLS with a certificate the panel makes itself and pins in the link)
+PORTS_BY = {"tls": (443, 8443, 2053), "reality": (443, 8443, 2053), "pin": (32001, 32002, 32003, 32004, 32005), "none": (80, 8080, 2082), "shadowsocks": (8388, 2375, 9443)}      # the usual ports of a protocol of your own, when its form names none
 
 
 def _num(v) -> float:
@@ -134,13 +150,252 @@ def _node_addresses(c: dict) -> list[str]:
         return []
 
 
+# ---- the protocols the owner adds to the table (the owner, 2026-10-16: "let the user add other protocols to the table too"): a saved recipe in the settings, looked up together with KINDS everywhere a kind is
+def _store() -> dict:
+    d = settings.get(CUSTOM_KEY)
+    return {"custom": [x for x in d.get("custom") or [] if isinstance(x, dict) and x.get("id")], "families": [x for x in d.get("families") or [] if isinstance(x, dict) and x.get("id")]}
+
+
+def _kind_of(x: dict) -> dict:
+    """The kind (the shape of an entry of KINDS) of a saved protocol of the owner's own: what its form needs follows from its transport and security."""
+    out: dict = {"title": x["title"], "short": x["short"], "note": x.get("note") or "", "family": x["family"], "custom": True, "protocol": x["protocol"], "network": x["network"], "security": x["security"], "ports": tuple(x["ports"])}
+
+    if x.get("via") == "json":
+        return {**out, "needs": (), "json": x["text"]}
+
+    needs = [("pin" if x.get("cert") == "self" else "tls")] if x["security"] == "tls" else ["reality", "spx"] if x["security"] == "reality" else []
+
+    if x["network"] in ("ws", "httpupgrade", "xhttp") or x.get("header"):
+        needs.append("path")
+    elif x["network"] == "grpc":
+        needs.append("service")
+
+    out["needs"] = tuple(needs)
+
+    for k in ("flow", "header", "cert"):
+        if x.get(k):
+            out[k] = x[k]
+
+    if x["network"] == "xhttp":
+        out.update(mode=x.get("xmode") or "auto", tuned=True)
+
+    return out
+
+
+def all_kinds() -> dict[str, dict]:
+    """Every kind the Add form knows, the built-in ones first and then the owner's own, each with its short name and its drawer."""
+    out = {k: {**v, "short": SHORT.get(k) or v["title"], "family": v["protocol"]} for k, v in KINDS.items()}
+
+    for x in _store()["custom"]:
+        try:
+            out[x["id"]] = _kind_of(x)
+        except (KeyError, TypeError, ValueError):
+            continue                                              # a record that is not whole (a hand-edited database) is left out, not a reason for the form to fail
+
+    return out
+
+
+def families() -> list[dict]:
+    """The drawers of the table: the four protocols, then the ones the owner made (only while they hold a protocol), each with its emoji."""
+    st = _store()
+    used = {x.get("family") for x in st["custom"]}
+    own = [{"id": f["id"], "label": str(f.get("label") or f["id"]), "emoji": str(f.get("emoji") or "🧩"), "custom": True} for f in st["families"] if f["id"] in used and f["id"] not in BUILTIN_FAMILY]
+    return [{"id": i, "label": label, "emoji": emoji, "custom": False} for i, label, emoji in FAMILIES] + own
+
+
+def catalog() -> dict:
+    """What the table shows: {kinds, families}. A kind has its long name (title) and short name, its drawer (family), its usual ports and the fields it uses (needs); one of the owner's own also carries `saved`, the record that the edit form is filled from."""
+    saved = {x["id"]: x for x in _store()["custom"]}
+    kinds = [{"id": k, "title": v["title"], "short": v["short"], "note": v["note"], "ports": list(v["ports"]), "needs": list(v["needs"]), "protocol": v["protocol"], "network": v["network"], "security": v["security"], "flow": v.get("flow", ""),
+              "own_cert": v.get("cert") == "self", "first_port": bool(v.get("first_port")), "family": v["family"], "custom": bool(v.get("custom")), **({"saved": saved[k]} if k in saved else {})} for k, v in all_kinds().items()]
+    return {"kinds": kinds, "families": families()}
+
+
+def _words(v, what: str, lo: int, hi: int) -> str:
+    """A name: its words with the spaces made single, `lo` to `hi` characters, no control character."""
+    s = " ".join(str(v or "").split())
+
+    if not lo <= len(s) <= hi or any(ord(ch) < 32 for ch in s):
+        raise ValueError(f"{what}: {lo} to {hi} characters")
+
+    return s
+
+
+def _ports(v, default: tuple[int, ...]) -> list[int]:
+    """The usual ports of a protocol of the owner's own: a list or a text (commas or spaces), up to eight, each 1 to 65535; none given = the usual ones of its security."""
+    raw = re.split(r"[,\s]+", v) if isinstance(v, str) else list(v or [])
+    out: list[int] = []
+
+    for p in raw:
+        if str(p).strip():
+            n = pg_cores._int_port(p)
+
+            if n not in out:
+                out.append(n)
+
+    if len(out) > 8:
+        raise ValueError("at most 8 usual ports")
+
+    return out or list(default)
+
+
+def _family_of(b: dict, st: dict) -> str:
+    """The drawer a new protocol goes into: one of the four, one the owner made before, or a NEW one (a name and an emoji; a name that is there already means that drawer)."""
+    fid = str(b.get("family") or "").strip().lower()
+
+    if fid in BUILTIN_FAMILY or any(f["id"] == fid for f in st["families"]):
+        return fid
+
+    if fid:
+        raise ValueError("that group is not in the table (any more)")
+
+    label = _words(b.get("family_label"), "the name of the new group", 2, 24)
+    fid = re.sub(r"[^a-z0-9]+", "", label.lower())[:20]
+
+    if len(fid) < 2:
+        fid = "g" + secrets.token_hex(3)
+
+    if fid in BUILTIN_FAMILY or any(f["id"] == fid for f in st["families"]):
+        return fid
+
+    emoji = "".join(str(b.get("family_emoji") or "").split())[:12] or "🧩"
+
+    if any(ord(ch) < 32 for ch in emoji):
+        raise ValueError("the emoji of the group has a control character")
+
+    st["families"].append({"id": fid, "label": label, "emoji": emoji})
+    return fid
+
+
+def _from_form(b: dict) -> dict:
+    """The recipe of the builder - protocol, transport, security and what goes with them (flow, HTTP header, xHTTP mode, usual ports) - checked by the rules of the inbound builder itself."""
+    proto, net, sec = (str(b.get(k) or d).strip().lower() for k, d in (("protocol", ""), ("network", "tcp"), ("security", "none")))
+    pin = sec == "tls-pin"
+    sec = "tls" if pin else sec
+
+    if proto not in pg_cores.PROTOCOLS:
+        raise ValueError(f"the protocol is one of {', '.join(pg_cores.PROTOCOLS)} (anything else: write the JSON)")
+
+    if net not in pg_cores.NETWORKS:
+        raise ValueError(f"the transport is one of {', '.join(pg_cores.NETWORKS)}")
+
+    if sec not in pg_cores.SECURITIES:
+        raise ValueError(f"the security is one of {', '.join(SECURITY_CHOICES)}")
+
+    if sec == "reality" and proto == "shadowsocks":
+        raise ValueError("REALITY needs a vless, vmess or trojan inbound")
+
+    flow = str(b.get("flow") or "").strip()
+
+    if flow and (proto != "vless" or flow not in pg_cores.FLOWS):
+        raise ValueError(f"the flow is one of {', '.join(pg_cores.FLOWS)} and only a vless inbound has one")
+
+    if flow and (net != "tcp" or sec == "none"):
+        raise ValueError(f"the flow {flow} needs a TCP inbound with TLS or REALITY")
+
+    header = str(b.get("header") or "").strip().lower()
+    header = "" if header == "none" else header
+
+    if header and (header != "http" or net != "tcp"):
+        raise ValueError("the HTTP header is for a TCP inbound (header: none or http)")
+
+    xmode = str(b.get("xmode") or "").strip().lower() or "auto" if net == "xhttp" else ""
+
+    if xmode and xmode not in pg_cores.XHTTP_MODES:
+        raise ValueError(f"the xHTTP mode is one of {', '.join(pg_cores.XHTTP_MODES)}")
+
+    usual = PORTS_BY["shadowsocks"] if proto == "shadowsocks" else PORTS_BY["pin"] if pin else PORTS_BY[sec]
+    return {"protocol": proto, "network": net, "security": sec, "cert": "self" if pin else "", "flow": flow, "header": header, "xmode": xmode, "ports": _ports(b.get("ports"), usual)}
+
+
+def _from_json(b: dict) -> dict:
+    """The recipe written as the JSON of ONE inbound (for what the builder does not make: hysteria, wireguard, ...). Its tag and port are put in when an account is made. A secret in it is refused: the text is kept in the clear and every account would share it."""
+    text = str(b.get("text") or "").strip()
+
+    if not text or len(text) > 20000:
+        raise ValueError("paste the JSON of ONE inbound (up to 20000 characters)")
+
+    ib = pg_cores.parse_text(text)
+
+    if not isinstance(ib, dict):
+        raise ValueError("the inbound is a JSON object { … }")  # noqa: TRY004 - the caller shows the ValueError text to the operator
+
+    proto = str(ib.get("protocol") or "").strip().lower()
+
+    if not re.fullmatch(r"[a-z0-9_\-]{2,40}", proto):
+        raise ValueError("the inbound needs a protocol, like vless or hysteria")
+
+    if pg_cores.mask_secrets(ib)[1]:
+        raise ValueError("the JSON holds a secret (a private key, a password, a client id): leave it out - the builder makes REALITY keys itself, and the panel puts the users in")
+
+    ss = pg_cores._obj(ib.get("streamSettings"))
+    net, sec = (str(ss.get(k) or d).strip().lower()[:20] for k, d in (("network", "tcp"), ("security", "none")))
+    port = ib.get("port")
+    ports = [port] if isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535 else []
+    return {"protocol": proto, "network": net, "security": sec, "ports": _ports(ports, PORTS_BY["tls" if sec == "tls" else "none"]), "text": json.dumps(ib, ensure_ascii=False, separators=(",", ":"))}
+
+
+def _put(st: dict) -> None:
+    used = {x["family"] for x in st["custom"]}
+    settings.put(CUSTOM_KEY, {"custom": st["custom"], "families": [f for f in st["families"] if f["id"] in used]})
+
+
+def save_custom(body: dict) -> dict:
+    """Add a protocol to the table, or change one the owner added (body.id): its drawer (one of the four, one of his, or a new one with an emoji), its short name, and its recipe - the builder (protocol, transport, security, ...) or the JSON of an inbound. Returns the new catalog and the id."""
+    with _CUSTOM_LOCK:
+        st = _store()
+        kid = str(body.get("id") or "").strip()
+
+        if kid and not any(x["id"] == kid for x in st["custom"]):
+            raise ValueError("that protocol is not in the table (any more)")
+
+        if not kid and len(st["custom"]) >= MAX_CUSTOM:
+            raise ValueError(f"at most {MAX_CUSTOM} protocols of your own")
+
+        fam = _family_of(body, st)
+        label = next((f[1] for f in FAMILIES if f[0] == fam), None) or next(f["label"] for f in st["families"] if f["id"] == fam)
+        short = _words(body.get("short"), "the name", 1, 24)
+        via = str(body.get("via") or "builder")
+
+        if via not in ("builder", "json"):
+            raise ValueError("a protocol is made with the builder or with JSON")
+
+        recipe = _from_form(body) if via == "builder" else _from_json(body)
+
+        if fam in BUILTIN_FAMILY and recipe["protocol"] != fam:
+            raise ValueError(f"the group {label} holds {label} protocols only: choose another group, or a new one")
+
+        given = " ".join(str(body.get("title") or "").split())
+        title = _words(given, "the full name", 3, 80) if given else f"{label} · {short}"
+        rec = {"id": kid or "c-" + secrets.token_hex(3), "family": fam, "short": short, "title": title, "note": " ".join(str(body.get("note") or "").split())[:200], "via": via, **recipe}
+
+        if short.lower() in {v["short"].lower() for k, v in all_kinds().items() if v["family"] == fam and k != rec["id"]}:
+            raise ValueError(f"“{short}” is in that group already: choose another name")
+
+        st["custom"] = [rec if x["id"] == rec["id"] else x for x in st["custom"]] if kid else [*st["custom"], rec]
+        _put(st)
+        return {**catalog(), "id": rec["id"]}
+
+
+def delete_custom(kid: str) -> dict:
+    """Take a protocol of the owner's own out of the table (the accounts already made from it stay in the panel); a drawer he made goes with its last protocol. Returns the new catalog."""
+    with _CUSTOM_LOCK:
+        st = _store()
+
+        if not any(x["id"] == kid for x in st["custom"]):
+            raise ValueError("that protocol is not in the table (any more)")
+
+        st["custom"] = [x for x in st["custom"] if x["id"] != kid]
+        _put(st)
+        return catalog()
+
+
 def options(c: dict) -> dict:
-    """What the form chooses from: the kinds, the cores (with the ports they use), the groups, the addresses of the nodes, and the certificate files and REALITY site the panel's own inbounds already use."""
+    """What the form chooses from: the kinds and their drawers, the cores (with the ports they use), the groups, the addresses of the nodes, and the certificate files and REALITY site the panel's own inbounds already use."""
     pg_access.need_pasarguard(c)
     s = _survey(c)
     groups = [{"id": g["id"], "name": g["name"], "tags": g["inbound_tags"]} for g in (pg_access.group_row(r) for r in pg_access.as_rows(panels.call(c, "GET", "/api/groups"), "groups"))]
-    kinds = [{"id": k, "title": v["title"], "note": v["note"], "ports": list(v["ports"]), "needs": list(v["needs"]), "protocol": v["protocol"], "network": v["network"], "security": v["security"], "flow": v.get("flow", ""), "own_cert": v.get("cert") == "self", "first_port": bool(v.get("first_port"))} for k, v in KINDS.items()]
-    return {"snis": list(SPOOF_SNIS), "fingerprints": list(FINGERPRINTS), "kinds": kinds, "cores": s["cores"], "groups": groups, "addresses": _node_addresses(c), "tls": s["tls"] or {"cert": CERT, "key": KEY, "guess": True}, "reality": s["reality"]}
+    return {"snis": list(SPOOF_SNIS), "fingerprints": list(FINGERPRINTS), **catalog(), "cores": s["cores"], "groups": groups, "addresses": _node_addresses(c), "tls": s["tls"] or {"cert": CERT, "key": KEY, "guess": True}, "reality": s["reality"]}
 
 
 # ---- everything the owner does not say is chosen here (the owner, 2026-10-15: "I only give the protocol, you do the rest")
@@ -158,7 +413,7 @@ def _taken_names(c: dict) -> set[str]:
 
 
 def _auto_name(c: dict, kind: dict) -> str:
-    base, taken, n = kind["title"].replace(" · ", " "), _taken_names(c), 1
+    base, taken, n = " ".join(kind["title"].replace(" · ", " ").replace("<=>", " ").replace(",", " ").split())[:56], _taken_names(c), 1      # (no comma and no <=> in a tag; the group name holds 64 characters)
     name = base
 
     while name.lower() in taken:
@@ -214,7 +469,7 @@ def _auto_reality(c: dict, hint: dict | None) -> tuple[str, str]:
 def _inputs(c: dict, b: dict) -> dict:
     """The form, checked and complete (a ValueError says what is wrong in one sentence). What is left empty is chosen here and reported in `auto` (the values) and `notes` (how): the name, the address, the
     port, the WebSocket path or gRPC service, the certificate files, the REALITY site."""
-    kind = KINDS.get(str(b.get("kind") or ""))
+    kind = all_kinds().get(str(b.get("kind") or ""))
 
     if kind is None:
         raise ValueError("choose the kind of account first")
@@ -279,9 +534,9 @@ def _inputs(c: dict, b: dict) -> dict:
     if b.get("port") in (None, ""):
         auto["port"] = port
 
-    if (kind["network"] in ("ws", "httpupgrade", "xhttp") or kind.get("header")) and not f["path"]:
+    if "path" in kind["needs"] and not f["path"]:
         f["path"] = auto["path"] = "/" + secrets.token_hex(3)
-    elif kind["network"] == "grpc" and not f["service"]:
+    elif "service" in kind["needs"] and not f["service"]:
         f["service"] = auto["service"] = "g" + secrets.token_hex(3)
 
     if "tls" in kind["needs"] and not (f["tls_cert"] and f["tls_key"]):
@@ -336,6 +591,13 @@ def _spec(f: dict, tag: str, cert: dict | None = None) -> dict:
     return {k2: v for k2, v in spec.items() if v not in ("", None)}
 
 
+def _json_text(f: dict, tag: str) -> str:
+    """The inbound of a protocol written as JSON, with the tag and the port of this account put in."""
+    ib = json.loads(f["kind"]["json"])
+    ib["tag"], ib["port"] = tag, f["port"]
+    return json.dumps(ib, ensure_ascii=False)
+
+
 def _host_data(f: dict, tag: str, pin: str | None = None) -> dict:
     """The host of the new inbound: the remark, the address, the port, the inbound's tag, and what the kind needs in the link (the SNI and Host header of a domain behind TLS, a fingerprint)."""
     k = f["kind"]
@@ -371,7 +633,7 @@ def _warnings(f: dict) -> list[str]:
     """Things that are not wrong for the panel but that the owner should know before they are made (the panel cannot see the node's disk or the DNS)."""
     k, out = f["kind"], []
 
-    if k["security"] == "tls" and not k.get("cert"):
+    if "tls" in k["needs"]:
         out.append(f"The certificate {f['tls_cert']} and its key must exist on every node of the core, or Xray cannot start there after a restart.")
 
         if _is_ip(f["address"][0]) and not f["sni"]:
@@ -389,10 +651,11 @@ def _plan_of(c: dict, f: dict, real: bool = False) -> dict:
     if f["kind"].get("cert") == "self":
         cert = _self_cert(f["sni"]) if real else {"cert": "PREVIEW-ONLY-CERTIFICATE", "key": "PREVIEW-ONLY-KEY", "sha256": "0" * 64}
 
-    spec, host = _spec(f, tag, cert), _host_data(f, tag, cert["sha256"] if cert else None)
+    text = _json_text(f, tag) if f["kind"].get("json") else None                  # a protocol of the owner's own written as JSON: its tag and port are put in here
+    spec, host = None if text else _spec(f, tag, cert), _host_data(f, tag, cert["sha256"] if cert else None)
     steps: list[dict] = []
     core = next(x for x in _xray_cores(c) if int(x["id"]) == f["core_id"])
-    r = pg_cores.inbound_dry_run(c, f["core_id"], "add", spec=spec)
+    r = pg_cores.inbound_dry_run(c, f["core_id"], "add", spec=spec, text=text)
     k = f["kind"]
     clash = [row["tag"] for row in pg_cores.inbound_rows(pg_cores._obj(core.get("config"))) if row["port"] == f["port"] and row["public"]]
     errors = list(r["errors"]) + ([f"port {f['port']} is used by the inbound “{clash[0]}” of this core: Xray cannot listen twice on one port (choose another port)"] if clash else [])
@@ -436,7 +699,7 @@ def _plan_of(c: dict, f: dict, real: bool = False) -> dict:
         steps.append({"key": "template", "title": f"Access: a user template “{f['name']}” ({'unlimited data' if not _num(gb) else f'{_num(gb):g} GB'}, {'no end' if not _num(days) else f'{_num(days):g} days'}) that gives the group: a new user is one choice", "ok": not terr,
                       "errors": terr, "warnings": []})
 
-    return {"valid": all(s["ok"] for s in steps), "steps": steps, "tag": tag, "needs_confirm": bool(r["warnings"]), "rev": r.get("rev"), "_f": f, "_spec": spec, "_host": host}
+    return {"valid": all(s["ok"] for s in steps), "steps": steps, "tag": tag, "needs_confirm": bool(r["warnings"]), "rev": r.get("rev"), "_f": f, "_spec": spec, "_text": text, "_host": host}
 
 
 def plan(c: dict, body: dict) -> dict:
@@ -492,7 +755,7 @@ def make(c: dict, body: dict, confirm: bool = False, restart: bool = False) -> d
         out["pcs"] = p["_host"]["pinned_peer_cert_sha256"]
 
     try:
-        r = pg_cores.inbound_apply(c, f["core_id"], "add", spec=p["_spec"], confirm=confirm)
+        r = pg_cores.inbound_apply(c, f["core_id"], "add", spec=p["_spec"], text=p["_text"], confirm=confirm)
         done["core"] = r["backup"]
         out["core"] = {"id": f["core_id"], "backup": r["backup"], "public_key": r.get("public_key")}
 
@@ -522,7 +785,7 @@ def make(c: dict, body: dict, confirm: bool = False, restart: bool = False) -> d
         note = _undo(c, f, tag, done)
         msg = f"{e} - {note}" if note else str(e)
 
-        if "No such file" in str(e) and f["kind"]["security"] == "tls" and not f["kind"].get("cert"):
+        if "No such file" in str(e) and "tls" in f["kind"]["needs"]:
             msg = f"the panel cannot read the certificate files {f['tls_cert']} and {f['tls_key']}: they must exist at that path where the panel runs and on its nodes - write the real paths in the form ({str(e)[:140]})"
 
         raise (PanelError(msg, e.code) if isinstance(e, PanelError) else ValueError(msg)) from None

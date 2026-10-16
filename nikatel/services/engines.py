@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import subprocess
 import tarfile
 import threading
 import time
@@ -96,6 +97,7 @@ def check() -> dict:
 
         info["outdated"] = sum(1 for n in info["nodes"] if n["state"] == "outdated")
         info["current"] = sum(1 for n in info["nodes"] if n["state"] == "current")
+        info["missing"] = sum(1 for n in info["nodes"] if n["state"] == "not installed")      # (the servers that have not got it: About -> Install puts it on them)
 
     _STATE["result"], _STATE["checked_at"] = result, int(time.time())
     return {"engines": result, "checked_at": _STATE["checked_at"]}
@@ -179,16 +181,36 @@ def cache_file(engine: str) -> Path:
     return f
 
 
+def prefetch() -> dict:
+    """Put every core the panel's cache lacks into it (verified downloads), so that a server added later gets them at once - also an Iran server that has no internet (the panel copies the binary over SSH).
+    A core that cannot be downloaded now (GitHub is not reachable from here) is tried again at the next round; {engine: "cached" | "downloaded" | "failed: why"}."""
+    out = {}
+    cache = get_settings().data_dir.parent / "engines"
+
+    for name in ENGINES:
+        had = (cache / name).exists()
+
+        try:
+            cache_file(name)
+            out[name] = "cached" if had else "downloaded"
+        except (httpx.HTTPError, RuntimeError, ValueError, OSError) as e:
+            out[name] = "failed: " + str(e)[:120]
+            log.info("engine cache: %s not downloaded now (%s)", name, str(e)[:120])
+
+    return out
+
+
 def ensure_on_node(node: Node, engine: str, say=None) -> bool:
     """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed."""
-    import subprocess
-
     f = cache_file(engine)
     sha = hashlib.sha256(f.read_bytes()).hexdigest()
     e = ENGINES[engine]
 
     if f"SHA={sha}" in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
         return False
+
+    if e["bin"].startswith("/opt/nikatel-xgw/"):
+        run_action(node, "xgw_mkdir", timeout=30)                  # (the Xray gateway keeps its binary in a directory of its own: it is made before the copy)
 
     s = get_settings()
     opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
@@ -208,8 +230,37 @@ def ensure_on_node(node: Node, engine: str, say=None) -> bool:
     return True
 
 
-def update(engine: str) -> dict:
-    """Download, verify, copy to every server that runs this core and is outdated, restart its units. Synchronous; takes minutes."""
+def install_on(server_id: int, names=None, step=None) -> dict:
+    """Put the tunnel cores on ONE server from the panel's cache (a core the cache lacks is downloaded and verified first): {engine: "installed" | "present" | "failed: why"}.
+    A core that fails does not stop the next one. `step(title, i, n)` is told before each core (the row of the server shows it)."""
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only")
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        node = Node(s.host, s.ssh_user, s.ssh_port)
+
+    todo = [n for n in (names or ENGINES) if n in ENGINES]
+    out: dict = {}
+
+    for i, name in enumerate(todo, 1):
+        if step:
+            step(ENGINES[name]["title"], i, len(todo))
+
+        try:
+            out[name] = "installed" if ensure_on_node(node, name) else "present"
+        except (SSHError, RuntimeError, ValueError, OSError, httpx.HTTPError, subprocess.SubprocessError) as e:
+            out[name] = "failed: " + str(e)[:120]
+
+    return out
+
+
+def update(engine: str, include_missing: bool = False) -> dict:
+    """Download, verify, copy to every server that runs this core and is outdated (and, with `include_missing`, to every server that has not got it), restart its units. Synchronous; takes minutes."""
     if engine not in ENGINES:
         raise ValueError("unknown engine")
 
@@ -230,8 +281,11 @@ def update(engine: str) -> dict:
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_bytes(binary)
         cache.chmod(0o755)
+        newest = cache.parent / engine                                  # (the cache of the panel follows the update: a tunnel built later must not put the older build back on a server)
+        newest.write_bytes(binary)
+        newest.chmod(0o755)
         info = (_STATE["result"] or {}).get(engine) or check()["engines"][engine]
-        targets = [n["name"] for n in info["nodes"] if n["state"] == "outdated"]
+        targets = [n["name"] for n in info["nodes"] if n["state"] == "outdated" or (include_missing and n["state"] == "not installed")]
 
         with session() as db:
             nodes = [(s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.name.in_(targets)))]

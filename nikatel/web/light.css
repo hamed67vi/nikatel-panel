@@ -42,8 +42,6 @@ html[data-mode="light"] body #page .pg-kind-side #pg-kind-portnote { color: #4d5
 html[data-mode="light"] body #page .pg-kind-side .pg-kind-adv > summary { color: #3d4a6b; }
 html[data-mode="light"] body #page :is(.pg-kf-i, .pg-dr-i) { background: #e6ecf8; color: #3d4a6b; }
 html[data-mode="light"] body #page .pg-kind-side .frm-act button:not(.pri) { background: #fff; border-color: rgba(30, 50, 100, .22); color: #1b2540; }
-html[data-mode="light"] body #page .pg-ks-s { background: rgba(10, 122, 82, .12); color: #0a7a52; }
-html[data-mode="light"] body #page .pg-ks-r.off .pg-ks-s { background: rgba(30, 50, 100, .08); color: #4d5b7c; }
 html[data-mode="light"] body #page :is(.pg-kind-step.ok > i, .pg-kind-chk.ok) { color: #0a7a52; } html[data-mode="light"] body #page :is(.pg-kind-step.bad > i, .pg-kind-chk.bad) { color: #c4153f; }
 html[data-mode="light"] body #page .pg-kind-dr .pg-dr-c, html[data-mode="light"] body #page .pg-ks-h .pg-dr-c { background: rgba(30, 50, 100, .08); }
 /* the window of a server */
@@ -85,7 +83,7 @@ html[data-mode="light"][data-theme], html[data-theme="calm"][data-mode="light"] 
 /* text made for the dark theme (a pale grey, near-white, a bright green / red / amber / blue), on the light one: each gets its dark twin. The synthetic audit (every colour rule built into a sample element, light theme on) found them; the shop bot and the Outbound page are off in the menu and are not touched */
 html[data-mode="light"] body :is(.brand small, .ll.DEBUG b, .tlink, .srv-ic, .usr-av, .sg-i small, .set-tabs button i, .qp-sub, .qp-prev, .qp-hint, .qp-f > label, .qp-f label small, .pg-pr > span small, .pg-pa label > span:first-child, .trashbox h5, .wtool small, .bt-pod small, .qp-prev #qp-ptxt, .qp-f label code, .ins-mini) { color: #4d5b7c; }
 html[data-mode="light"] body .cf-sub { color: #4d5b7c; opacity: .9; }
-html[data-mode="light"] body #page :is(.dns-tbl .cl-ic, .dns-chip small, .cf-list thead th, .abt-chev, .abt-copy, .abt-fi, .su-t, .dr-empty i, .bt-pod .bt-s em, .pg-ks-r.off .pg-ks-s) { color: #4d5b7c; }
+html[data-mode="light"] body #page :is(.dns-tbl .cl-ic, .dns-chip small, .cf-list thead th, .abt-chev, .abt-copy, .abt-fi, .su-t, .dr-empty i, .bt-pod .bt-s em) { color: #4d5b7c; }
 html[data-mode="light"] body #page .dns-bar .dns-r .dns-cw > button.dns-x { color: #5a6788 !important; }
 html[data-mode="light"] body #modal :is(.wsec .err, .mcard .err) { color: #4d5b7c; }
 html[data-mode="light"] body :is(.ap-tasks .tk-one, .ins-ico, .bt-s.ok, .bt-chips span, .dns-tbl .mchip.srvtag, .sg-i b) { color: #1b2540; }

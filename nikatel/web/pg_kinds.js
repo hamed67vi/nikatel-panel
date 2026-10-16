@@ -7,7 +7,7 @@ const pgKind = {id: 0, o: null, k: "", res: null};
 const PG_KINDS_UI = false;      // the button "＋ Account type" is not shown in Access, Hosts and Core (the owner, 2026-10-15: "remove this completely"); the window and its routes stay: true brings the button back
 window.pgKindBtn = () => !PG_KINDS_UI || pnType() !== "pasarguard" ? "" : `<button class="sm pri" onclick="pgKindNew()" title="Make a whole kind of account in one step: choose the protocol, the panel makes the inbound, the group, the host and a user template">＋ Account type</button>`;
 const pgKindRand = () => Math.random().toString(36).slice(2, 8);
-const pgKindShort = k => String((k && k.title) || "").replace(/^(VLESS|Trojan|VMess) · /, "");
+const pgKindShort = k => String((k && (k.short || k.title)) || "");      // the short name on the button (ws+tls); the long name is its tooltip
 const pgKindOf = id => ((pgKind.o || {}).kinds || []).find(k => k.id === id) || {};
 window.pgKindNew = async () => {
   const id = +pn.id; if (!id) return;
@@ -21,15 +21,19 @@ const PKI = {};      // the little pictures of the Add form (the owner's picture
 [["user", '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-3.8 3.8-6 7.5-6s6.7 2.2 7.5 6"/>'], ["server", '<rect x="4" y="4" width="16" height="7" rx="2.2"/><rect x="4" y="13" width="16" height="7" rx="2.2"/><path d="M8 7.5h.01M8 16.5h.01"/>'], ["cube", '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5L12 12l8-4.5M12 12v9"/>'], ["grid", '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>'],
   ["folder", '<path d="M3.5 7a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2V17a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>'], ["code", '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>'], ["search", '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'], ["spark", '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>'], ["chev", '<path d="M9 6l6 6-6 6"/>'],
   ["globe", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>'], ["eye", '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>'], ["cert", '<rect x="4" y="3" width="13" height="15" rx="2"/><path d="M8 8h5M8 12h3"/><circle cx="17" cy="17" r="3"/><path d="M15.5 20l-.5 2 2-1 2 1-.5-2"/>'], ["link", '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>'],
-  ["file", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 14h5"/>'], ["upload", '<path d="M12 16V5M7.5 9.5L12 5l4.5 4.5M5 15v3.5a1.5 1.5 0 001.5 1.5h11a1.5 1.5 0 001.5-1.5V15"/>'], ["shield", '<path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/>'], ["lock", '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'], ["info", '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>']
+  ["file", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 14h5"/>'], ["upload", '<path d="M12 16V5M7.5 9.5L12 5l4.5 4.5M5 15v3.5a1.5 1.5 0 001.5 1.5h11a1.5 1.5 0 001.5-1.5V15"/>'], ["shield", '<path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/>'], ["lock", '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'], ["info", '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'],
+  ["plus", '<path d="M12 5v14M5 12h14"/>']
 ].forEach(([k, d]) => { PKI[k] = `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`; });
-const pgKindIc = k => { const id = String(k.id || ""); const n = /mlkem|shadowsocks/.test(id) ? "lock" : /xhttp.*reality/.test(id) ? "shield" : /xhttp.*tls|httpupgrade/.test(id) ? "upload" : /xhttp/.test(id) ? "code" : /vision/.test(id) ? "eye" : /reality/.test(id) ? "globe" : /pin/.test(id) ? "cert" : /ws/.test(id) ? "link" : /grpc/.test(id) ? "server" : /tcp.*(http|header)|http-header/.test(id) ? "file" : /tcp/.test(id) ? "lock" : "globe"; return `<i class="pg-kc-i">${PKI[n]}</i>`; };
+const pgKindIc = k => { const id = k.custom ? ["k", k.protocol, k.network, k.security === "tls" && k.own_cert ? "pin" : k.security, k.flow ? "vision" : "", (k.saved || {}).header === "http" ? "tcp-http-header" : ""].join("-") : String(k.id || ""); const n = /mlkem|shadowsocks/.test(id) ? "lock" : /xhttp.*reality/.test(id) ? "shield" : /xhttp.*tls|httpupgrade/.test(id) ? "upload" : /xhttp/.test(id) ? "code" : /vision/.test(id) ? "eye" : /reality/.test(id) ? "globe" : /pin/.test(id) ? "cert" : /ws/.test(id) ? "link" : /grpc/.test(id) ? "server" : /tcp.*(http|header)|http-header/.test(id) ? "file" : /tcp/.test(id) ? "lock" : "globe"; return `<i class="pg-kc-i">${PKI[n]}</i>`; };
 document.addEventListener("toggle", e => { const d = e.target; if (d && d.matches && d.matches(".pg-kind-dr") && d.open) document.querySelectorAll(".pg-kind-dr[open]").forEach(o => { if (o !== d) o.open = false; }); }, true);      // (one drawer open at a time, in every browser)
+function pgKindDrawers(o) {      // the table: one drawer per protocol (the owner, 2026-10-15: "VLESS in a drawer"; 2026-10-16: "every protocol its own emoji" and "names short, e.g. ws+tls"), one open at a time, the last row adds a protocol of your own
+  const chip = k => `<button type="button" class="pg-kind-chip" data-k="${esc(k.id)}" onclick="pgKindPick('${esc(k.id)}')" title="${esc(k.title + (k.note ? " — " + k.note : ""))}">${pgKindIc(k)}<span>${esc(pgKindShort(k))}</span></button>`;
+  const rows = (o.families || []).map(f => { const ks = o.kinds.filter(k => k.family === f.id); return ks.length ? `<details class="pg-kind-dr" name="pg-kind-acc" data-p="${esc(f.id)}"${f.id === "vless" ? " open" : ""}><summary><i class="pg-dr-i pg-dr-e" aria-hidden="true">${esc(f.emoji)}</i><span class="pg-dr-n">${esc(f.label)}</span><i class="pg-dr-c">${ks.length}</i></summary><div class="pg-kind-row">${ks.map(chip).join("")}</div></details>` : ""; }).join("");
+  return rows + `<button type="button" class="pg-kind-addp" onclick="pgKindCustom()" title="Add a protocol of your own to this table: pick its transport and security, or paste the JSON of an inbound"><i class="pg-dr-i">${PKI.plus}</i><span>Add protocol</span></button>`;
+}
 function pgKindFormHtml(inline) {      // the whole form: in a window (the old button) or as the Add tab of Configs (inline: no Cancel); 1.54.7: the protocols in rows by family, one row of fields, the rest folded
   const o = pgKind.o, opt = (v, t, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(t)}</option>`, tls = o.tls || {};
-  const chip = k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}">${pgKindIc(k)}<span>${esc(pgKindShort(k))}</span></button>`;
-  const drawers = [["VLESS", "vless"], ["Trojan", "trojan"], ["VMess", "vmess"], ["Shadowsocks", "shadowsocks"]].map(([label, proto]) => { const ks = o.kinds.filter(k => k.protocol === proto); return ks.length ? `<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"${proto === "vless" ? " open" : ""}><summary><i class="pg-dr-i">${PKI.cube}</i><span class="pg-dr-n">${label}</span><i class="pg-dr-c">${ks.length}</i></summary><div class="pg-kind-row">${ks.map(chip).join("")}</div></details>` : ""; }).join("");      // (the owner, 2026-10-15: "VLESS in a drawer"): one drawer per protocol, one open at a time, the chosen kind shown on the drawer even when it is shut
-  const chips = drawers;
+  const chips = pgKindDrawers(o);
   const subs = `<div class="pg-kind-subs" id="pg-kind-subs"><div class="pg-ks-h"><i class="pg-kf-i">${PKI.link}</i><b>Subscription configs</b></div><div class="pg-ks-list"><div class="loading"><i class="spin"></i><span>Reading the hosts…</span></div></div></div>`;      // (the owner, 2026-10-16: "the right side is empty - show the list of subscription configs"): the hosts of the panel, the lines a user's link carries
   return `${inline ? '<div class="pg-kind-frame">' : ""}<div class="pg-kind-paste"><i class="pg-kf-i">${PKI.code}</i><input id="pg-kind-link" placeholder="Your own config: paste a vless:// trojan:// vmess:// or ss:// link to copy its type" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') pgKindUseLink()"><button type="button" class="sm" onclick="pgKindUseLink()">Use</button></div><div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side"><div class="pg-kind-note" id="pg-kind-note"></div>
     <form class="frm pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
@@ -73,21 +77,43 @@ window.pgTabs.kinds = {label: "Add", order: 20, types: ["pasarguard"], render: a
 }};
 /* the third column of the Add tab: the hosts of the panel = the configs a user's subscription carries (read from the same cache as the Hosts tab) */
 window.pgKindSubs = async () => {
-  const id = +pn.id, paint = html => { const l = $("#pg-kind-subs .pg-ks-list"); if (l) l.innerHTML = html; };
+  const id = +pn.id, paint = html => { const l = $("#pg-kind-subs .pg-ks-list"); if (l) { const top = l.scrollTop; l.innerHTML = html; l.scrollTop = top; } };      // (the list keeps its place when it is drawn again after a switch, a copy or a delete)
   try { if (!pn.hosts || pn.hostsKey !== String(id)) { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; pn.hostsKey = String(id); } } catch (e) { paint(`<div class="err">${esc(e.message)}</div>`); return; }
   const hs = pn.hosts || [], h = $("#pg-kind-subs .pg-ks-h"); if (!h) return;
   h.querySelectorAll(".pg-dr-c").forEach(n => n.remove()); h.insertAdjacentHTML("beforeend", `<i class="pg-dr-c">${hs.length}</i>`);
-  paint(hs.length ? hs.map(x => `<div class="pg-ks-r${x.disabled ? " off" : ""}" title="${esc(`${x.remark} · ${x.address}${x.port ? ":" + x.port : ""} · ${x.tag}`)}"><i class="pg-kc-i">${PKI.link}</i><span class="pg-ks-t"><b>${esc(x.remark || "(no name)")}</b><small>${esc(x.address || "—")}${x.port ? ":" + esc(x.port) : ""} · ${esc(x.tag || "—")}</small></span><em class="pg-ks-s">${x.disabled ? "off" : "on"}</em></div>`).join("") : '<div class="mut pg-ks-none">No config yet: make an account type and its link shows here.</div>');
+  paint(hs.length ? hs.map(pgKindRow).join("") : '<div class="mut pg-ks-none">No config yet: make an account type and its link shows here.</div>');
 };
+/* one subscription config = one host (the owner, 2026-10-16: "for every config an on/off switch, edit and delete", and his picture of the menu: Modify, Disable, Duplicate, a line, Remove in red). The buttons carry the number of the host, never its name */
+const pgKindRow = x => `<div class="pg-ks-r${x.disabled ? " off" : ""}" data-k="${esc(x.key)}" title="${esc(`${x.remark} · ${x.address}${x.port ? ":" + x.port : ""} · ${x.tag}`)}"><i class="pg-kc-i">${PKI.link}</i><span class="pg-ks-t"><b>${esc(x.remark || "(no name)")}</b><small>${esc(x.address || "—")}${x.port ? ":" + esc(x.port) : ""} · ${esc(x.tag || "—")}</small></span>${pgSw(!x.disabled, "pgKindHostSw(this)", 'title="On / off: the config is left out of the links of the users while it is off"')}<button type="button" class="lab-kb" onclick="pgKindHostMenu(this, event)" aria-haspopup="menu" aria-label="Actions of this config" title="Modify, disable, duplicate, remove">${LAB_DOTS}</button></div>`;
+const pgKindHostOf = el => { const r = el && el.closest ? el.closest(".pg-ks-r") : null; return r ? (pn.hosts || []).find(x => String(x.key) === r.dataset.k) || null : null; };
+const pgKindHostsAgain = () => { pn.hosts = null; return pgKindSubs(); };      // the hosts are read again and only this list is drawn (the form on the left keeps what was typed)
+window.pgKindHostSw = async box => {
+  const x = pgKindHostOf(box), on = box.checked; if (!x) return;
+  const row = box.closest(".pg-ks-r"); row.classList.toggle("off", !on); box.closest("label").classList.toggle("on", on); box.disabled = true;      // (the row follows the switch at once; it is put back when the panel refuses)
+  try { await api(`/api/panels/${+pn.id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys: [x.key], disable: !on})}); x.disabled = !on; toast(`✓ ${x.remark || "The config"} is ${on ? "on" : "off"}`, "ok"); }
+  catch (e) { box.checked = !on; row.classList.toggle("off", on); box.closest("label").classList.toggle("on", !on); toast("✕ " + e.message, "bad"); }
+  box.disabled = false;
+};
+window.pgKindHostMenu = (btn, ev) => {
+  const x = pgKindHostOf(btn); if (!x) return;
+  nkMenu(btn, [labIt("Modify", "edit", () => pgHostOpen(+pn.id, +x.key)), labIt(x.disabled ? "Enable" : "Disable", x.disabled ? "on" : "off", () => pgKindHostSet(x, !!x.disabled)), labIt("Duplicate", "copy", () => pgHostClone(+pn.id, +x.key)),
+    labSep, labIt("Remove", "trash", () => pgHostDelete(+pn.id, +x.key, x.remark || "#" + x.key), {danger: true})], ev);
+};
+const pgKindHostSet = async (x, on) => {
+  try { await api(`/api/panels/${+pn.id}/hosts-toggle`, {method: "POST", body: JSON.stringify({keys: [x.key], disable: !on})}); toast(`✓ ${x.remark || "The config"} is ${on ? "on" : "off"}`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  pgKindHostsAgain();
+};
+window.pgKindHostsDone = () => { if (!$("#pg-kind-subs")) return false; pgKindHostsAgain(); return true; };      // pg_hosts.js asks this after a save, a copy, a delete: on the Add tab only this list is read again, not the whole page
 window.pgKindPick = k => {
   const f = $("#pg-kind-form"); if (!f) return;
   pgKind.k = k; pgKind.res = null;
   document.querySelectorAll(".pg-kind-chip").forEach(b => b.classList.toggle("on", b.dataset.k === k));
-  const kd = pgKindOf(k), nt = $("#pg-kind-note"); if (nt) nt.textContent = kd.note || "";
+  const kd = pgKindOf(k), nt = $("#pg-kind-note");
+  if (nt) nt.innerHTML = `<span class="pg-kn-t">${esc(kd.note || (kd.custom ? kd.title : ""))}</span>` + (kd.custom ? `<span class="pg-kn-a"><button type="button" class="sm" onclick="pgKindCustom(pgKind.k)">Edit</button><button type="button" class="sm danger" onclick="pgKindCustomDel(pgKind.k)">Delete</button></span>` : "");      // (a protocol of your own: Edit and Delete sit on its note)
   f.querySelectorAll("[data-need]").forEach(l => { const on = l.dataset.need.split(" ").some(n => kd.needs.includes(n)); l.hidden = !on; l.querySelectorAll("input, select, button").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-sec]").forEach(l => { const on = kd.security !== "none"; l.hidden = !on; l.querySelectorAll("select, input").forEach(i => { i.disabled = !on; }); });
   f.querySelectorAll("[data-auto]").forEach(i => { i.value = ""; delete i.dataset.auto; });      // what the last check chose for another kind goes: this kind is chosen again
-  document.querySelectorAll(".pg-kind-dr").forEach(d => { const own = kd.protocol === d.dataset.p; if (own) d.open = true; });      // the drawer of the chosen kind opens (the others shut); it does not repeat the name of the kind (the owner, 2026-10-16: the REALITY beside VLESS is gone)
+  document.querySelectorAll(".pg-kind-dr").forEach(d => { const own = kd.family === d.dataset.p; if (own) d.open = true; });      // the drawer of the chosen kind opens (the others shut); it does not repeat the name of the kind (the owner, 2026-10-16: the REALITY beside VLESS is gone)
   pgKindPort(); pgKindTplSync();
   const r = $("#pg-kind-res"); if (r) r.innerHTML = "";
 };
@@ -133,6 +159,7 @@ const pgKindLinkKind = p => {      // the kind that has this protocol, transport
   if (net === "tcp" && sec === "none") return hdr === "http" ? "vless-tcp-http" : null;
   return null;
 };
+const pgKindLinkOwn = p => { const proto = p.proto === "ss" ? "shadowsocks" : p.proto, k = ((pgKind.o || {}).kinds || []).find(x => x.custom && x.protocol === proto && x.network === (p.net || "tcp") && x.security === (p.sec || "none") && !!x.flow === !!p.flow); return k ? k.id : null; };      // a protocol of your own that has this protocol, transport and security
 const pgKindParseLink = text => {
   const s = String(text || "").trim(); let m;
   if ((m = /^vmess:\/\/(.+)$/i.exec(s))) {
@@ -147,7 +174,7 @@ const pgKindParseLink = text => {
 };
 window.pgKindUseLink = () => {
   const box = $("#pg-kind-link"), res = $("#pg-kind-res"), p = pgKindParseLink(box && box.value); if (!p) { toast("✕ That is not a vless:// trojan:// vmess:// or ss:// link", "bad"); return; }
-  const kid = pgKindLinkKind(p); if (!kid) { toast(`✕ No kind for ${p.proto} · ${p.net} · ${p.sec} yet`, "bad"); return; }
+  const kid = pgKindLinkKind(p) || pgKindLinkOwn(p); if (!kid) { toast(`✕ No kind for ${p.proto} · ${p.net} · ${p.sec} yet: add it to the table with ＋ Add protocol`, "bad"); return; }
   pgKindPick(kid); const f = $("#pg-kind-form"), set = (n, v) => { const el = f.elements[n]; if (el && !el.disabled && v !== undefined && v !== "") { el.value = v; delete el.dataset.auto; } };
   const clean = String(p.name || "").replace(/[^\w .\-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 48);
   set("name", clean.length >= 3 ? clean : ""); set("address", p.address); set("port", p.port); set("path", p.path); set("host_header", p.host); set("sni", p.sni && p.sni !== p.address ? p.sni : ""); set("fingerprint", p.fp);
@@ -203,3 +230,77 @@ function pgKindDone(out) {
   if (inline) $("#pg-kind-page").innerHTML = `<h3 class="pg-kind-done">${ok ? "✓" : "⚠"} Account type made</h3>` + body;
   else showModal(`<b>${ok ? "✓" : "⚠"} Account type made</b>`, body, "wide");
 }
+/* ---- a protocol of your own in the table (the owner, 2026-10-16: "let the user add other protocols to the table too"): the row "＋ Add protocol" opens this form. A protocol of your own is made with the BUILDER (protocol, transport,
+   security ... : the same rules as a built-in kind) or with the JSON of an inbound (for what the builder does not make); it is a button in the drawer of its group, works like a built-in kind, and has Edit and Delete on its note.
+   It is kept on this server (Settings), for every panel. A new group is a new drawer with a name and an emoji of its own. */
+const PG_CUST_FAMS = ["vless", "vmess", "trojan", "shadowsocks"], PG_CUST_EMO = ["🧩", "🚀", "🛰️", "🔒", "🌐", "🔥", "⚙️", "🧪", "🦄", "🌙"];
+const PG_CUST_USUAL = {none: "80, 8080, 2082", tls: "443, 8443, 2053", "tls-pin": "32001, 32002, 32003", reality: "443, 8443, 2053", shadowsocks: "8388, 2375, 9443"};
+const pgCustSample = '{\n  "protocol": "vless",\n  "settings": {"clients": [], "decryption": "none"},\n  "streamSettings": {"network": "tcp", "security": "none"}\n}';
+window.pgKindCustom = kid => {
+  const o = pgKind.o; if (!o || !$("#pg-kind-form")) return;
+  const s = kid ? pgKindOf(kid).saved : null; if (kid && !s) return;
+  const cur = s || {}, fam0 = cur.family || pgKindOf(pgKind.k).family || "vless", via = cur.via || "builder", sec0 = cur.security === "tls" && cur.cert === "self" ? "tls-pin" : cur.security || "none";
+  pgKind.cust = {id: s ? s.id : "", via};
+  const opt = (v, t, on) => `<option value="${esc(v)}"${on ? " selected" : ""}>${esc(t)}</option>`, val = k => esc(cur[k] == null ? "" : cur[k]), famLabel = (o.families.find(f => f.id === cur.family) || {}).label;
+  const ownTitle = cur.title && cur.title !== `${famLabel} · ${cur.short}` ? esc(cur.title) : "";      // (the full name made from the group and the short name is not shown as if it were typed: it follows them when they change)
+  const sel = (name, list, now) => `<select name="${name}" data-dd>${list.map(([v, t]) => opt(v, t, v === now)).join("")}</select>`;
+  const body = `<form class="pg-kind-form pg-cust" id="pg-cust-form" onsubmit="return pgCustSave(event)" onchange="pgCustSync()"><div class="pg-kind-quick">
+      <label>Group <small>the drawer it goes into</small><select name="family" data-dd>${o.families.map(f => opt(f.id, `${f.emoji} ${f.label}`, f.id === fam0)).join("")}${opt("", "＋ A new group…", false)}</select></label>
+      <label data-nf>New group <small>its name</small><input name="family_label" maxlength="24" placeholder="Hysteria2" autocomplete="off"></label>
+      <label data-nf>Emoji <small>its picture</small><input name="family_emoji" list="pg-cust-emo" maxlength="12" value="${PG_CUST_EMO[0]}" autocomplete="off"><datalist id="pg-cust-emo">${PG_CUST_EMO.map(e => `<option value="${e}">`).join("")}</datalist></label>
+      <label>Short name <small>on the button, like ws+tls</small><input name="short" maxlength="24" value="${val("short")}" placeholder="grpc+reality" autocomplete="off"></label>
+      <div class="pg-cust-via wide"><span>Made with</span><div class="tabs pn-mode" role="tablist"><button type="button" role="tab" data-via="builder" class="${via === "builder" ? "on" : ""}" onclick="pgCustVia('builder')">Builder</button><button type="button" role="tab" data-via="json" class="${via === "json" ? "on" : ""}" onclick="pgCustVia('json')">JSON</button></div></div>
+      <label data-vf="builder">Protocol${sel("protocol", [["vless", "VLESS"], ["vmess", "VMess"], ["trojan", "Trojan"], ["shadowsocks", "Shadowsocks"]], cur.protocol || fam0)}</label>
+      <label data-vf="builder">Transport${sel("network", [["tcp", "TCP"], ["ws", "WebSocket"], ["grpc", "gRPC"], ["httpupgrade", "HTTPUpgrade"], ["xhttp", "xHTTP"]], cur.network || "tcp")}</label>
+      <label data-vf="builder">Security${sel("security", [["none", "none"], ["tls", "TLS (certificate files)"], ["tls-pin", "TLS (own certificate, pinned)"], ["reality", "REALITY"]], sec0)}</label>
+      <label data-vf="builder" data-row="flow">Flow${sel("flow", [["", "none"], ["xtls-rprx-vision", "xtls-rprx-vision"]], cur.flow || "")}</label>
+      <label data-vf="builder" data-row="header">HTTP header${sel("header", [["", "none"], ["http", "http (a path)"]], cur.header || "")}</label>
+      <label data-vf="builder" data-row="xmode">xHTTP mode${sel("xmode", [["auto", "auto"], ["packet-up", "packet-up"], ["stream-up", "stream-up"], ["stream-one", "stream-one"]], cur.xmode || "auto")}</label>
+      <label data-vf="builder">Usual ports <small>the first free one is offered</small><input name="ports" value="${esc((cur.ports || []).join(", "))}" autocomplete="off"></label>
+      <label class="wide" data-vf="json">Inbound JSON <small>ONE inbound; its tag and port are put in when an account is made. No secret in it</small><textarea name="text" rows="9" spellcheck="false" oninput="pgHAdvCheck(this)" placeholder='{"protocol": "...", "settings": {...}, "streamSettings": {...}}'>${esc(cur.text ? JSON.stringify(JSON.parse(cur.text), null, 2) : "")}</textarea><small class="err pgh-e" hidden></small><button type="button" class="sm pg-cust-ex" onclick="pgCustExample()">Example</button></label>
+      <label class="wide">Full name <small>empty = the group, then the short name</small><input name="title" maxlength="80" value="${ownTitle}" autocomplete="off"></label>
+      <label class="wide">Note <small>shown over the form when this button is chosen</small><input name="note" maxlength="200" value="${val("note")}" autocomplete="off"></label>
+    </div><div id="pg-cust-err"></div>
+    <div class="frm-act"><button class="pri" type="submit" id="pg-cust-go">Save</button><button type="button" onclick="closeModal()">Cancel</button><span class="sp"></span>${s ? '<button type="button" class="danger" onclick="pgKindCustomDel(pgKind.cust.id)">Delete</button>' : ""}</div></form>`;
+  showModal(`<b>${s ? "Edit protocol" : "＋ Add protocol"}</b>`, body, "wide pg-cust-win"); pgCustSync();
+};
+window.pgCustVia = v => { pgKind.cust.via = v; document.querySelectorAll("#pg-cust-form .pg-cust-via button").forEach(b => b.classList.toggle("on", b.dataset.via === v)); pgCustSync(); };
+window.pgCustExample = () => { const t = $("#pg-cust-form textarea[name=text]"); if (t) { t.value = pgCustSample; pgHAdvCheck(t); } };
+window.pgCustSync = () => {      // what the form shows follows what is chosen: a group of the four holds its own protocol only; flow, header and xHTTP mode appear where they can be used
+  const f = $("#pg-cust-form"); if (!f) return;
+  const e = f.elements, via = pgKind.cust.via, fam = e.family.value, builtin = PG_CUST_FAMS.includes(fam);
+  f.querySelectorAll("[data-nf]").forEach(l => { l.hidden = fam !== ""; });
+  f.querySelectorAll("[data-vf]").forEach(l => { l.hidden = l.dataset.vf !== via; });
+  if (builtin) e.protocol.value = fam; e.protocol.disabled = builtin;
+  const proto = e.protocol.value, net = e.network.value, sec = e.security.value, show = (n, on) => { const l = f.querySelector(`[data-row="${n}"]`); if (!l) return; l.hidden = via !== "builder" || !on; if (!on) e[n].value = n === "xmode" ? "auto" : ""; };
+  show("flow", proto === "vless" && net === "tcp" && sec !== "none"); show("header", net === "tcp"); show("xmode", net === "xhttp");
+  e.ports.placeholder = PG_CUST_USUAL[proto === "shadowsocks" ? "shadowsocks" : sec];
+};
+window.pgCustSave = async ev => {
+  if (ev) ev.preventDefault();
+  const f = $("#pg-cust-form"); if (!f) return false;
+  const g = n => (f.elements[n] ? String(f.elements[n].value) : "").trim(), via = pgKind.cust.via, err = $("#pg-cust-err"), go = $("#pg-cust-go");
+  const b = {id: pgKind.cust.id, family: g("family"), family_label: g("family_label"), family_emoji: g("family_emoji"), short: g("short"), title: g("title"), note: g("note"), via};
+  if (via === "builder") Object.assign(b, {protocol: g("protocol"), network: g("network"), security: g("security"), flow: g("flow"), header: g("header"), xmode: g("xmode"), ports: g("ports")}); else b.text = f.elements.text.value;
+  if (!b.short) { err.innerHTML = '<div class="err">Write the short name first (like ws+tls)</div>'; return false; }
+  if (f.querySelector("textarea.bad")) { err.innerHTML = '<div class="err">Fix the JSON first</div>'; return false; }
+  go.disabled = true; err.innerHTML = "";
+  try {
+    const r = await pgApi(pgKind.id, "/kinds/custom", {method: "POST", body: b});
+    Object.assign(pgKind.o, {kinds: r.kinds, families: r.families}); closeModal(); pgKindRedraw(r.id); toast(`✓ ${b.short} is in the table`, "ok");
+  } catch (x) { err.innerHTML = `<div class="err">${esc(x.message)}</div>`; go.disabled = false; }
+  return false;
+};
+window.pgKindCustomDel = async kid => {
+  const k = pgKindOf(kid); if (!k.custom) return;
+  if (!await gconfirm(`Take “${k.short}” out of the table? The accounts already made from it stay in the panel.`, {danger: true})) return;
+  try {
+    const r = await pgApi(pgKind.id, `/kinds/custom/${encodeURIComponent(kid)}`, {method: "DELETE"});
+    Object.assign(pgKind.o, {kinds: r.kinds, families: r.families}); closeModal(); pgKindRedraw(pgKind.k === kid ? "vless-reality" : pgKind.k); toast(`✓ ${k.short} is out of the table`, "ok");
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+const pgKindRedraw = sel => {      // the drawers are drawn again from the new table (the form beside them keeps what was typed) and a kind is chosen
+  const g = $("#pg-kind-page .pg-kind-groups"); if (!g) return;
+  g.innerHTML = pgKindDrawers(pgKind.o);
+  pgKindPick(pgKindOf(sel).id ? sel : "vless-reality");
+};

@@ -70,6 +70,25 @@ class MakeIn(KindIn):
     restart: bool = False
 
 
+class CustomIn(BaseModel):
+    id: str = Field("", max_length=12)
+    family: str = Field("", max_length=24)
+    family_label: str = Field("", max_length=60)
+    family_emoji: str = Field("", max_length=60)
+    short: str = Field(max_length=80)
+    title: str = Field("", max_length=200)
+    note: str = Field("", max_length=400)
+    via: str = Field("builder", max_length=8)
+    protocol: str = Field("", max_length=24)
+    network: str = Field("", max_length=24)
+    security: str = Field("", max_length=24)
+    flow: str = Field("", max_length=24)
+    header: str = Field("", max_length=8)
+    xmode: str = Field("", max_length=16)
+    ports: list[int | str] | str = Field(default="", max_length=100)
+    text: str = Field("", max_length=30000)
+
+
 @router.get(P)
 def kinds_options(panel_id: int):
     """The kinds of account to choose from, with the cores, the groups, the node addresses and the certificate files and REALITY site this panel already uses; nothing is changed."""
@@ -88,3 +107,17 @@ def kinds_make(panel_id: int, body: MakeIn):
     data = body.model_dump()
     confirm, restart = data.pop("confirm"), data.pop("restart")
     return {"ok": True, **_wrap(pg_kinds.make, _cred(panel_id), data, confirm, restart)}
+
+
+@router.post(P + "/custom")
+def kinds_custom_save(panel_id: int, body: CustomIn):
+    """Add a protocol of your own to the table of kinds (id empty), or change one (its id): its drawer and emoji, short name, and the builder recipe or the JSON of an inbound. Answers the new table (kinds, families) and the id; nothing on the panel changes."""
+    _cred(panel_id)
+    return {"ok": True, **_wrap(pg_kinds.save_custom, body.model_dump())}
+
+
+@router.delete(P + "/custom/{kind_id}")
+def kinds_custom_delete(panel_id: int, kind_id: str):
+    """Take a protocol of your own out of the table of kinds (accounts already made from it stay in the panel). Answers the new table; nothing on the panel changes."""
+    _cred(panel_id)
+    return {"ok": True, **_wrap(pg_kinds.delete_custom, kind_id)}

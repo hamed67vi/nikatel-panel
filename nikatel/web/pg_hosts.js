@@ -77,15 +77,16 @@ window.pgHostSave = async e => {
   btn.disabled = true;
   try {
     const body = pgHostBody(form), r = await pgApi(pgH.id, hid ? `/hosts/${hid}` : "/hosts", {method: hid ? "PUT" : "POST", body});
-    toast(hid ? `✓ ${r.host.remark} saved (${r.changed.map(x => x.replace(/_/g, " ")).join(", ")})` : `✓ ${r.host.remark} made`, "ok"); pn.hosts = null; closeModal(); refresh();
+    toast(hid ? `✓ ${r.host.remark} saved (${r.changed.map(x => x.replace(/_/g, " ")).join(", ")})` : `✓ ${r.host.remark} made`, "ok"); pn.hosts = null; closeModal(); pgHostsDone();
   } catch (err) { toast(/nothing to change/i.test(err.message) ? "Nothing changed" : "✕ " + err.message, /nothing to change/i.test(err.message) ? "" : "bad"); btn.disabled = false; }
   return false;
 };
-window.pgHostClone = async (id, hid) => { try { const r = await pgApi(id, `/hosts/${hid}/clone`, {method: "POST"}); toast(`✓ ${r.host.remark} made (switched off)`, "ok"); pn.hosts = null; closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+const pgHostsDone = () => { if (!(window.pgKindHostsDone && pgKindHostsDone())) refresh(); };      // after a save, a copy or a delete: on the Add tab only the list of configs is read again (the form keeps what was typed), anywhere else the page is drawn again
+window.pgHostClone = async (id, hid) => { try { const r = await pgApi(id, `/hosts/${hid}/clone`, {method: "POST"}); toast(`✓ ${r.host.remark} made (switched off)`, "ok"); pn.hosts = null; closeModal(); pgHostsDone(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pgHostDelete = async (id, hid, name) => {
   if (name == null) name = (pgH.d && pgH.d.host && pgH.d.host.remark) || "#" + hid;
   if (!await gconfirm(`Delete the host “${name}”? Users lose that address in their links. The panel cannot undo it; the host is saved here first (Backups can make it again).`, {danger: true})) return;
-  try { await pgApi(id, `/hosts/${hid}?confirm=true`, {method: "DELETE"}); toast("✓ Host deleted (saved in Backups)", "ok"); pn.hosts = null; closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  try { await pgApi(id, `/hosts/${hid}?confirm=true`, {method: "DELETE"}); toast("✓ Host deleted (saved in Backups)", "ok"); pn.hosts = null; closeModal(); pgHostsDone(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 
 /* backups: every host that was changed or deleted from here, newest first */
@@ -101,5 +102,5 @@ window.pgHostBackups = async () => {
 window.pgHostRestore = async i => {
   const b = (pgH.bk || [])[i]; if (!b) return;
   if (!await gconfirm(`Put the host “${b.remark || "#" + b.host_id}” back as it was ${b.at ? new Date(b.at * 1000).toLocaleString() : ""}? It replaces the host that has number ${b.host_id} now (saved first), or is made again when it was deleted.`, {danger: true})) return;
-  try { const r = await pgApi(+pn.id, `/hosts/restore/${encodeURIComponent(b.file)}`, {method: "POST"}); toast(r.made_again ? `✓ ${r.host.remark} made again` : `✓ ${r.host.remark} put back`, "ok"); pn.hosts = null; closeModal(); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  try { const r = await pgApi(+pn.id, `/hosts/restore/${encodeURIComponent(b.file)}`, {method: "POST"}); toast(r.made_again ? `✓ ${r.host.remark} made again` : `✓ ${r.host.remark} put back`, "ok"); pn.hosts = null; closeModal(); pgHostsDone(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };

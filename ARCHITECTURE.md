@@ -47,8 +47,9 @@ nikatel/
     netwatch.py      the network disturbances of a server (its own route is poor: repair only watches)
     tunnel_test.py   quality of one / all tunnels; pair test over several transports with comparison
     gateway.py       Iran Xray gateway: ports → node, borrowed configs, exit test
-    engines.py       check / update backhaul and Xray on every server (GitHub releases, cached binaries)
+    engines.py       the tunnel cores (Backhaul, BackPack, Paqet, Chisel, Xray): check / update / install on the servers that have not got them, the panel's own cache (downloaded and verified by a job and by `nikatel engines`), install_on one server
     nodes.py         node tools: console presets, connect, add many, launchers, Abuse-Defender, reboot, geo, Iran filter check
+    onboard.py       what happens to a server right after it is added: its first reading, its GRE links, the tunnel cores - in the background, every step written on its row (extra.busy), the outcome in extra.onboard; api/servers.py POST /servers/{id}/onboard
     actions.py       repair framework: named, logged, dry-run, rate-limited; Fix with a story
     autopilot.py     the Tunnel Doctor: classify (pure) → ladder restart / rebuild / relink / switch / move, limited by the
                      repair level; _rebuild_safe (the old tunnel comes back when the new build fails); relink probes a new
@@ -93,7 +94,7 @@ nikatel/
     pg_system.py     what the panel keeps about itself - version, resources, user counters - api/pg_system.py (the System tab was removed on 2026-10-15; its Users box is in Usage > Users, read through /usage/overview)
     pg_users.py      PasarGuard users in full: the whole user (groups, on hold, devices limit, next plan, owner), devices, subscription fetches and the subscription in each client format, bulk by name, shift of end dates and data limits, the Shadowsocks method of many, clean-up, users from a template; api/pg_users.py, web/pg_users.js
     pg_hosts.py      PasarGuard hosts in full: every field, the advanced settings as checked JSON, make / change / clone / delete / bulk, backups; api/pg_hosts.py, web/pg_hosts.js
-    pg_kinds.py      One step makes a whole KIND of account on a PasarGuard panel (eleven kinds, only the protocol is asked: the rest is chosen): the inbound (core), the group (access), the host and - when asked - a user template together, checked first, read back, taken back when a step fails; api/pg_kinds.py, web/pg_kinds.js
+    pg_kinds.py      One step makes a whole KIND of account on a PasarGuard panel (seventeen kinds in drawers with a short name and an emoji each, plus protocols the owner adds himself - kept in the settings: the builder's protocol, transport and security, or the JSON of an inbound; only the protocol is asked: the rest is chosen): the inbound (core), the group (access), the host and - when asked - a user template together, checked first, read back, taken back when a step fails; api/pg_kinds.py, web/pg_kinds.js
     pg_usage.py      Usage analytics of a PasarGuard / Marzban panel, read only: counters, usage by node and Tehran day, admin / user lookups, top users, users over time (online / expired / limited), the apps that fetch the subscription, Jalali calendar; api/pg_usage.py, web/pg_usage.js
     accounts.py      one account over many panels: the users of every panel asked through their API and put side by side, one action / a new user on every panel, the signed merged subscription link (/sub/<token>, api/sub.py)
                      (same username, or a hand-made link); nothing is copied out of the panels (roadmap M12)

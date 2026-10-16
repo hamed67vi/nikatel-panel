@@ -19,10 +19,10 @@ def check():
 
 
 @router.post("/engines/{engine}/update")
-def update(engine: str):
-    """Update one tunnel core on every outdated server (verified download, units restarted); refused while another update runs."""
+def update(engine: str, missing: bool = False):
+    """Update one tunnel core on every outdated server (verified download, units restarted); `missing=true` also puts it on every server that has not got it; refused while another update runs."""
     try:
-        job = engines.update(engine)
+        job = engines.update(engine, include_missing=missing)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:

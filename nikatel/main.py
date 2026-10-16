@@ -30,6 +30,7 @@ from .services import (
     configs,
     demo,
     doctor,
+    engines,
     extras,
     facts,
     housekeeping,
@@ -128,6 +129,10 @@ def _harden(resp) -> None:
                                     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 
 
+def _engine_cache() -> None:
+    engines.prefetch()
+
+
 def _register_jobs() -> None:
     s = get_settings()
     jobs.register("servers", s.server_sample_interval, facts.sample_all)
@@ -147,6 +152,7 @@ def _register_jobs() -> None:
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
+    jobs.register("engine-cache", 6 * 3600, _engine_cache)      # the tunnel cores the panel's cache lacks are downloaded (verified), so a server added later gets them at once (the owner, 2026-10-16: "they must install by themselves"); nothing is changed on any server
     jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen
     jobs.register("outbound-users", 60, outbound.auto_users)    # the automatic switch of CDN records: OFF for now (AUTO_USERS in services/outbound.py), the job returns at once; when it is on, the records of a tunnel that stays down are pointed at the pool, and back when it is healthy
     jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
@@ -374,6 +380,7 @@ def cli(argv: list[str] | None = None) -> int:
     ep.add_argument("--clear", action="store_true")
     sub.add_parser("run-job").add_argument("name")
     sub.add_parser("backup", help="make an encrypted backup now (and send it to Telegram when configured)")
+    sub.add_parser("engines", help="download the tunnel cores (Backhaul, BackPack, Paqet, Chisel, Xray) into the panel's cache - a server added later gets them at once; nothing is changed on any server")
     rs = sub.add_parser("restore", help="restore a backup into the data dir - stop the service first")
     rs.add_argument("file")
     rs.add_argument("--passphrase", default="", help="omit to be asked")
@@ -431,6 +438,14 @@ def cli(argv: list[str] | None = None) -> int:
         init_db()
         print(backup.run())
         return 0
+
+    if a.cmd == "engines":
+        res = engines.prefetch()
+
+        for name, state in res.items():
+            print(f"{engines.ENGINES[name]['title']}: {state}")
+
+        return 0 if not any(v.startswith("failed") for v in res.values()) else 1
 
     if a.cmd == "restore":
         import getpass

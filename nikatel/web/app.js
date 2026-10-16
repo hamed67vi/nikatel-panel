@@ -619,7 +619,8 @@ window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({inp
 /* a window of a server or a tunnel is open: the page behind it is NOT drawn again while an operation runs (nothing behind the window moves); it is brought up to date once, when the window closes */
 const pageTarget = () => { if (state.open != null && !state.build && document.querySelector("#modal .modal")) { state.pageStale = true; return document.createElement("div"); } return $("#page"); };
 window.closeModal = () => {
-  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = null; cf.open = null; cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
+  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = document.querySelector("#pg-kind-page #pg-kind-form") ? "kinds" : null; cf.open = null;      // (the Add form of Configs stays held while it is on the page: closing a window - a config's Modify, a protocol of your own - must not let the page draw itself again over what was typed)
+  cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
   hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
   if (state.pageStale) { state.pageStale = false; setTimeout(() => { if (state.open == null && !state.build) refresh(); }, 280); }      // what was held back while the window was open
 };
@@ -796,7 +797,8 @@ const SERVER_FORM = (s, role) => {   // one small window (1.55.15, the owner: "d
       <div class="f3-where">Where <input type="hidden" name="role" value="${esc(s ? s.role : "")}"><span class="srv-where" data-host="${esc(s ? s.host : "")}">${s ? `<span class="pill ${s.role === "iran" ? "ok" : "info"}">${s.role === "iran" ? "🇮🇷 Iran" : "🌍 foreign"}</span><a onclick="srvFlip(this.closest('form'))">change</a>` : '<span class="mut">found from the address once you type it</span>'}</span></div></section>
     <section class="f3-sec"><h5 class="f3-h">SSH login</h5>
       <div class="f3-g3">${f3("User", `<input name="ssh_user" value="${esc(s ? s.ssh_user : "root")}">`)}${f3("Port", `<input name="ssh_port" type="number" min="1" max="65535" value="${s ? s.ssh_port : 22}">`)}${f3("Password", `<input name="password" type="password" autocomplete="new-password" placeholder="${s ? "fill it to install the panel's key now" : "empty = the panel's key is already there"}" title="With a password the panel logs in once, installs its own key and forgets the password">`)}</div>
-      <p class="f3-note">${s ? "A password here installs the panel's key now." : "With a password the panel logs in once, installs its key and forgets it. Without one, the panel's key must already be on the server (Settings shows it)."}</p></section>
+      <p class="f3-note">${s ? "A password here installs the panel's key now." : "With a password the panel logs in once, installs its key and forgets it. Without one, the panel's key must already be on the server (Settings shows it)."}</p>
+      ${s ? "" : `<label class="chk f3-cores" title="After the login the panel reads the server, checks its GRE links and puts the tunnel cores on it by itself, from its own cache - the first time it takes a few minutes. Every step shows on the row of the server."><input name="x_cores" type="checkbox" checked><span>Put the tunnel cores on it <small class="mut">Backhaul · BackPack · Paqet · Chisel · Xray</small></span></label>`}</section>
     ${s ? `<input type="hidden" name="provider" value="${esc(s.provider)}">` : ""}
     ${!s && window.pgSrvBox ? `<section class="f3-sec srv-after f3-pg" ${typeof labIsPgTag === "function" && labIsPgTag(typeof labTagCur === "function" ? labTagCur() : "") ? "" : "hidden"}><h5 class="f3-h">PasarGuard node <small>for this profile</small></h5>
       <div class="f3-opts srv-opts"><label class="chk" title="iptables DROP rules for tracker addresses, refreshed daily (Heclalava/blockpublictorrent-iptables)"><input name="x_bt" type="checkbox"> Block public torrents</label>${window.pgSrvTick ? pgSrvTick() : ""}</div>
@@ -1189,21 +1191,25 @@ window.saveServer = async (e, id) => {
   if (items.includes("marzban_node") && f.get("x_cert_save") === "on" && cert.trim() !== (window.NODE_CERT || "").trim()) api("/api/settings/nodes", {method: "PUT", body: JSON.stringify({marzban_cert: cert})}).then(r => { window.NODE_CERT = r.marzban_cert; }).catch(() => {});
   let pgNode = null; try { pgNode = window.pgSrvAsk ? pgSrvAsk(f) : null; } catch (er) { toast("✕ " + er.message, "bad"); return false; }      // the PasarGuard node (tick): checked before anything is added
   if (pgNode && role === "iran" && !await gconfirm(`${body.name} is an Iran server. A PasarGuard node normally runs on a foreign server (the installer needs Docker and GitHub, which Iran often blocks). Go on?`)) return false;
+  const cores = !id && f.get("x_cores") === "on", later = !!(pgNode || items.length), submit = e.target.querySelector("button[type=submit]");      // (the cores come last when a node or extras were asked for: they are heavy on the same server)
+  if (submit) { submit.disabled = true; submit.dataset.was = submit.textContent; submit.textContent = id ? "Saving…" : "Adding…"; }
   try {
     const saved = await api(id ? `/api/servers/${id}` : "/api/servers", {method: id ? "PUT" : "POST", body: JSON.stringify(body)});
     state.edit = null;
     if (!id && window.labOn && labOn()) closeModal();      // (the box of the Lab closes: the new row appears on the page)
-    if (!id) refresh();          // the new row appears at once; it says "connecting…" while the password login runs
+    if (!id) { refresh(); if (window.labFollow) labFollow(30); }          // the new row appears at once and says what the panel is doing with it ("Waiting for the first reading…", then every step); the page follows it quietly - rows rewritten where they stand, no redraw of the page (the owner, 2026-10-16: "the page jumps several times" and "the status is not clear: show what is being done from the very first moment")
+    const prep = steps => api(`/api/servers/${saved.id}/onboard`, {method: "POST", body: JSON.stringify({steps})}).then(() => { if (window.labFollow) labFollow(20); }).catch(() => {});      // read it now, check its GRE links, put the cores on it: in the background, each step written on its row
+    const first = id ? ["gre"] : ["read", "gre"], rest = cores && !later ? ["cores"] : [];
     let connected = true;
     if (id && !pw) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
-      toast("Server added — connecting with the password…");
-      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname, "ok"); api(`/api/servers/${saved.id}/gre-check`, {method: "POST"}).catch(() => {}).then(() => refresh()); }
-      catch (err) { connected = await connectWithPrompt(saved.id, body.name, err.message); }
-    } else {          // no password: the panel's key must already be on the server - try it
-      try { await api(`/api/servers/${saved.id}/check`, {method: "POST"}); toast("✓ Server added", "ok"); api(`/api/servers/${saved.id}/gre-check`, {method: "POST"}).catch(() => {}).then(() => refresh()); } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
+      toast(`Logging in to ${body.name}…`);
+      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname + (id ? "" : " - the steps are on its row"), "ok"); await prep([...first, ...rest]); }
+      catch (err) { connected = await connectWithPrompt(saved.id, body.name, err.message); if (connected) await prep([...first, ...rest]); }
+    } else {          // no password: the panel's key must already be on the server - try it (the check IS the first reading)
+      try { const r = await api(`/api/servers/${saved.id}/check`, {method: "POST"}); if (r.online === true) { toast("✓ Server added", "ok"); await prep(["gre", ...rest]); } else { connected = false; toast("Added, but the panel's key does not log in yet: " + String(r.last_error || "the server does not answer").slice(0, 160), "bad"); } } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
     }
-    refresh(); state.prefill = null;
+    state.prefill = null; if (id) refresh();          // (an edit draws the page again; a new server is followed quietly)
     if (pgNode && connected) { await pgSrvMake(saved.id, body.name, pgNode); refresh(); }      // the node of the PasarGuard panel FIRST (it is what was asked for; the steps are on the row of the server)
     else if (pgNode) toast("The server is added, but it does not log in yet, so the node is not made: fix the login, then use Install → PasarGuard node in the window of the server", "bad");
     if (items.length && connected) {   // then the extras (the torrent block applies thousands of rules: minutes); the row says "installing"
@@ -1211,7 +1217,11 @@ window.saveServer = async (e, id) => {
       toast(`Installing on ${body.name}: the steps show on its row`); refresh();
       const fin = await followStory(r.id, document.createElement("div"), 1800), lastLine = fin && fin.story ? [...fin.story].reverse().find(l => l && l.trim() && !/^Done/.test(l.trim())) : "";
       toast(fin && fin.ok ? `✓ Installed on ${body.name}` : "✕ " + String(lastLine || "Not finished").trim().slice(0, 200), fin && fin.ok ? "ok" : "bad"); refresh();
-    } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");  } catch (err) { toast("✕ " + err.message, "bad"); }
+    } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
+    if (later && cores && connected) await prep(["cores"]);
+    if (window.labFollow) labFollow(3);
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  finally { if (submit && submit.isConnected) { submit.disabled = false; submit.textContent = submit.dataset.was || (id ? "Save" : "Add server"); } }      // (a refusal - the name is taken - leaves the box open: its button works again)
   return false;
 };
 window.srvPassword = async (id, name) => {
@@ -1287,13 +1297,13 @@ window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)")
 async function enginesLoad() {
   const box = $("#eng-box"); if (!box) return;
   const d = await api("/api/engines");
-  const eng = d.engines || {};
+  const eng = d.engines || {}; enginesLoad.last = eng;
   // one row per core: the version your servers run, the newest release, and an Update button only when one is out
   const row = (k, e) => {
     const nodes = e.nodes || [], have = nodes.filter(n => n.version && n.version !== "none");
-    const outdated = e.outdated || 0, unreach = nodes.filter(n => n.state === "unreachable").length;
+    const outdated = e.outdated || 0, unreach = nodes.filter(n => n.state === "unreachable").length, missing = nodes.filter(n => n.state === "not installed").length;
     const status = e.error ? `<span class="err">${esc(e.error)}</span>` : !nodes.length ? '<span class="mut">checking…</span>' : !have.length ? '<span class="mut">not installed</span>' : outdated ? `<b class="warn">New version ${esc(e.latest)} is out</b> <small class="mut">· ${outdated} server${outdated > 1 ? "s" : ""} to update</small>` : `<b class="gw-ok">✓ Up to date</b>${unreach ? ` <small class="mut">· ${unreach} unreachable</small>` : ""}`;
-    return `<div class="eng-row"><span class="eng-name"><b>${esc(e.title)}</b><small class="mut" title="${have.length} of ${nodes.length} servers have it">${have.length}/${nodes.length}</small></span><span class="eng-latest">${e.latest ? esc(e.latest) : "—"}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener" title="Release notes">↗</a>` : ""}</span><span class="eng-st" title="${esc(nodes.length ? nodes.map(n => n.name + ": " + (n.version && n.version !== "none" ? n.version : "not installed")).join(", ") : "")}">${status}</span><span class="eng-act">${outdated ? `<button class="pri sm" onclick="engineUpdate('${k}')" title="Update ${outdated} server${outdated > 1 ? "s" : ""} to ${esc(e.latest)}">⬆ Update</button>` : ""}</span></div>`;
+    return `<div class="eng-row"><span class="eng-name"><b>${esc(e.title)}</b><small class="mut" title="${have.length} of ${nodes.length} servers have it">${have.length}/${nodes.length}</small></span><span class="eng-latest">${e.latest ? esc(e.latest) : "—"}${e.page ? ` <a class="mut" href="${esc(e.page)}" target="_blank" rel="noopener" title="Release notes">↗</a>` : ""}</span><span class="eng-st" title="${esc(nodes.length ? nodes.map(n => n.name + ": " + (n.version && n.version !== "none" ? n.version : "not installed")).join(", ") : "")}">${status}</span><span class="eng-act">${outdated ? `<button class="pri sm" onclick="engineUpdate('${k}')" title="Update ${outdated} server${outdated > 1 ? "s" : ""} to ${esc(e.latest)}">⬆ Update</button>` : ""}${missing && !e.error ? `<button class="sm" onclick="engineUpdate('${k}', true)" title="Put ${esc(e.title)} on the ${missing} server${missing > 1 ? "s" : ""} that ${missing > 1 ? "have" : "has"} not got it: ${esc(nodes.filter(n => n.state === "not installed").map(n => n.name).join(", "))}">⬇ Install</button>` : ""}</span></div>`;
   };
   box.innerHTML = `<div class="eng-list"><div class="eng-head" title="${esc(d.checked_at ? "checked " + ago(d.checked_at) + " ago - the servers are asked by themselves; nothing updates by itself: Update asks you first" : "the servers are asked by themselves")}"><span>Core</span><span>Newest</span><span>Status</span><span>${d.checking ? '<i class="spin" title="checking every server…"></i>' : ""}</span></div>
     ${Object.entries(eng).map(([k, e]) => row(k, e)).join("") || '<div class="empty">Comparing the cores on your servers with the newest releases - it happens by itself, in a moment.</div>'}</div>
@@ -1305,7 +1315,12 @@ async function engineFollow() {   // the check runs on the server; the box is re
   try { for (let i = 0; i < 24; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (!d || !d.checking) { enginesLoad().catch(() => {}); return; } } } finally { const b = $("#eng-box"); if (b) b._follow = false; }
 }
 window.engineCheck = async () => { toast("Asking every server… (up to a minute)"); try { await api("/api/engines/check", {method: "POST"}); enginesLoad(); engineFollow(); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.engineUpdate = async k => { if (!await gconfirm(`Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return; toast("Updating… (minutes)"); try { const r = await api(`/api/engines/${k}/update`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} updated`, r.error ? "bad" : "ok"); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.engineUpdate = async (k, missing) => {      // Update = the servers that have an older build; Install (missing) = the servers that have not got the core at all (the owner, 2026-10-16: "why are they not installed? they should install by themselves" - a server added from now on gets them at once; this puts them on the ones that were added before)
+  const names = (((enginesLoad.last || {})[k] || {}).nodes || []).filter(n => n.state === "not installed").map(n => n.name).join(", ");
+  if (!await gconfirm(missing ? `Put ${k} on the servers that have not got it${names ? " (" + names + ")" : ""}? The panel copies the verified binary from its cache; no tunnel is restarted.` : `Update ${k} on every outdated server? Each server's tunnel units restart (a few seconds of downtime per server).`)) return;
+  toast(missing ? "Installing… (minutes)" : "Updating… (minutes)");
+  try { const r = await api(`/api/engines/${k}/update${missing ? "?missing=true" : ""}`, {method: "POST"}); toast(r.error ? "✕ " + r.error : `✓ ${r.items.filter(i => i.state === "ok").length} ${missing ? "done" : "updated"}`, r.error ? "bad" : "ok"); api("/api/engines/check", {method: "POST"}).catch(() => {}).then(() => engineFollow()); enginesLoad(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
 PAGES.tunnelsList = async () => {
   const [list, trashRes, outageRes, srvAll] = await Promise.all([api("/api/tunnels"), api("/api/tunnel-trash").catch(() => ({items: []})), api("/api/autopilot/outage").catch(() => null), api("/api/servers").catch(() => null)]);
   if (srvAll) state.serversCache = srvAll;
