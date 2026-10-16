@@ -571,7 +571,7 @@ html body #page .set-tabs button.sub-off { opacity: .38; filter: grayscale(1); p
 html body #page .sf[data-name="About & update"] { background: none; border: 0; box-shadow: none; padding: 0; }
 html body #page .sf[data-name="About & update"] > h3 { display: none; }
 html body #page .abt-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-html body #page .abt-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: 276px minmax(0, 1fr); gap: 12px; }
+html body #page .abt-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }
 @media (max-width: 1000px) { html body #page .abt-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: minmax(232px, auto); } html body #page .abt-wrap.fx-box { height: auto !important; } }
 html body #page .abt-card { display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
 html body #page .abt-ch { display: flex; align-items: flex-start; gap: 14px; flex: none; }
@@ -601,7 +601,7 @@ html body #page .abt-note { display: block; margin-top: 8px; font-size: 12.5px; 
 html body #page .abt-card .lic-form { margin-top: 10px; }
 /* the cores */
 html body #page .abt-card .eng-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; } html body #page .abt-card .eng-bar button { margin-left: auto; height: 28px; }
-html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: 64px 58px 70px minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }      /* 1.57.50 - the columns keep their width and cut with an ellipsis: the headers and the versions no longer run into each other */
+html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: 84px 66px 70px minmax(0, 1fr) auto; gap: 5px; padding: 5px 10px; }      /* 1.57.50 - the columns keep their width and cut with an ellipsis: the headers and the versions no longer run into each other */
 html body #page .abt-card .eng-head > span, html body #page .abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .abt-card .eng-row > .eng-act { overflow: visible; }
 html body #page .abt-card .eng-head { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
 html body #page .abt-card .eng-row { margin-bottom: 5px; border-radius: 11px; background: #131b2e; font-size: 12.5px; }
@@ -671,12 +671,6 @@ html body #page .abt-foot { padding: 6px 8px; justify-content: flex-start; gap: 
 html body #page .abt-fi { width: 24px; height: 24px; border-radius: 8px; } html body #page .abt-fi svg { width: 13px; height: 13px; }
 html body #page .abt-fv em { font-size: 10px; } html body #page .abt-fv b { font-size: 11.5px; }
 
-/* 1.57.47 - the rows of the DNS accounts and of the panels in Settings → Api & Key: the name and what it is on the left, its state and buttons on the right */
-html body #page .sf .ss .sr.li { display: flex !important; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 14px; }
-html body #page .sf .ss .sr.li > span { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; font-size: 13.5px; color: var(--text); }
-html body #page .sf .ss .sr.li > span small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mut); }
-html body #page .sf .ss .sr.li > .v { display: flex; align-items: center; gap: 8px; flex: none; width: auto; margin-left: auto; }
-html body #page .sf .ss .sr.li > .v button { height: 30px; }
 
 /* 1.57.47 - Create tunnel waits for the second server: dim and quiet until then (the owner, 2026-10-16) */
 html body #page .toolbar.joined button.cta:disabled { opacity: .4; filter: saturate(.3); box-shadow: none !important; cursor: default; }
@@ -684,5 +678,46 @@ html body #page .toolbar.joined button.cta:disabled { opacity: .4; filter: satur
 @media (min-width: 761px), (pointer: fine) { html body #page .set-wrap > .card.sf { min-height: 760px !important; } }
 /* 1.57.50 (2) - About & update: the left boxes are a little wider (the cores table has room for its five columns), the text under the name of this panel runs the whole width of its box, the count of a core (1/1) stays in its tooltip */
 html body #page .abt-ds { display: block; flex: none; margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--mut); }
-html body #page .abt-card .eng-name small { display: none; } html body #page .abt-card .eng-head { font-size: 10px; letter-spacing: .3px; } html body #page .abt-card .eng-row { font-size: 12px; } html body #page .abt-card .eng-ver, html body #page .abt-card .eng-latest { font-size: 11.5px; }
-html body #page .abt-card .eng-row .eng-act button { padding: 0 9px; }
+html body #page .abt-card .eng-head { font-size: 10px; letter-spacing: .3px; } html body #page .abt-card .eng-row { font-size: 12px; } html body #page .abt-card .eng-ver, html body #page .abt-card .eng-latest { font-size: 11.5px; }
+html body #page .abt-card .eng-row .eng-act button { padding: 0 7px; } html body #page .abt-card .eng-ver .mut { font-family: inherit; font-size: 10.5px; }
+/* 1.57.51 - About & update like the owner's picture of 1.57.34: the frame is as wide as it was with eight tabs (880 px: the four boxes are two equal columns again, the top row 232 px), nothing behind the boxes limits them */
+/* 1.57.51 (2) - About & update: no extra descriptions, the cards inside the boxes smaller and closer (the owner, 2026-10-16) */
+html body #page .abt-ds, html body #page .abt-note { display: none; }
+html body #page .abt-card { padding: 12px 14px; }
+html body #page .abt-ti { width: 40px; height: 40px; border-radius: 12px; } html body #page .abt-ti svg { width: 21px; height: 21px; }
+html body #page .abt-t1 { min-height: 24px; } html body #page .abt-t1 b { font-size: 15px; }
+html body #page .abt-cb { margin-top: 8px; }
+html body #page .abt-row { height: 44px; border-radius: 11px; font-size: 13.5px; } html body #page .abt-row .abt-ti.sm { width: 30px; height: 30px; border-radius: 9px; } html body #page .abt-row .abt-ti.sm svg { width: 17px; height: 17px; }
+html body #page .abt-card .lic-feats { gap: 6px; margin: 0 0 8px; } html body #page .abt-card .lic-feats .pill { height: 24px; padding: 0 10px; font-size: 12px; }
+html body #page .abt-iid { padding: 5px 6px 5px 12px; border-radius: 10px; } html body #page .abt-iid code { padding: 3px 8px; font-size: 12.5px; } html body #page .abt-copy { width: 26px; height: 26px; }
+html body #page .abt-card .eng-bar { margin: 0 0 4px; } html body #page .abt-card .eng-bar button { height: 26px; }
+html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { padding: 3px 10px; } html body #page .abt-card .eng-row { min-height: 30px; margin-bottom: 3px; border-radius: 9px; }
+html body #page .abt-pg #pgu-box { display: grid; gap: 6px; align-content: start; }
+html body #page .pgu-top { display: flex; align-items: center; gap: 10px; box-sizing: border-box; min-height: 42px; padding: 5px 8px; border-radius: 11px; border: 1px solid var(--uk-line); background: #131b2e; }
+html body #page .pgu-ti { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px; background: #1a2036; color: #3ddc97; font-style: normal; } html body #page .pgu-top.warn .pgu-ti { color: #ffb84d; } html body #page .pgu-top.mut .pgu-ti { color: #8f9bbd; } html body #page .pgu-ti svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .pgu-tt { display: grid; flex: 1 1 auto; min-width: 0; line-height: 1.25; } html body #page .pgu-tt b { font-size: 13px; font-weight: 600; } html body #page .pgu-tt small { font-size: 11px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pgu-top button { flex: none; height: 26px; }
+html body #page .pgu-cap { display: flex; align-items: center; gap: 8px; margin: 4px 2px 0; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); font-weight: 700; } html body #page .pgu-cap button { height: 24px; font-size: 11.5px; text-transform: none; letter-spacing: 0; }
+html body #page .pgu-prow { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 34px; padding: 3px 8px 3px 10px; border-radius: 10px; border: 1px solid var(--uk-line); background: #131b2e; font-size: 12.5px; } html body #page .pgu-prow b { font-weight: 600; } html body #page .pgu-prow small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pgu-prow button { flex: none; height: 24px; font-size: 11.5px; }
+html body #page .pgu-none { padding: 2px 4px; font-size: 12px; }
+html[data-mode="light"] body #page :is(.pgu-top, .pgu-prow) { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); }
+/* 1.57.52 - Settings → Api & Key: every connection is ONE compact box - a head (tile, name, state, buttons) and one or two rows under it; no explaining text (the owner, 2026-10-16) */
+html body #page .ab-list { display: grid; gap: 8px; }
+html body #page .ab { box-sizing: border-box; padding: 8px 12px 10px; border-radius: 14px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
+html body #page .ab-h { display: flex; align-items: center; gap: 10px; min-height: 38px; }
+html body #page .ab-h > .ss-ic { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 10px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; } html body #page .ab-h > .ss-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .ab-t { display: grid; flex: 1 1 auto; min-width: 0; gap: 1px; } html body #page .ab-n { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; } html body #page .ab-n b { font-size: 14px; font-weight: 650; }
+html body #page .ab-t small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--mut); }
+html body #page .ab-hr { display: flex; flex: none; align-items: center; gap: 6px; } html body #page .ab-hr .sm, html body #page .ab-hr a.btn { height: 28px; font-size: 12px; } html body #page .ab-hr .bi svg { width: 14px; height: 14px; }
+html body #page .ab-sw { display: inline-flex; align-items: center; gap: 7px; margin: 0 4px 0 0; font-size: 12px; color: var(--mut); cursor: pointer; }
+html body #page .ab-b { display: grid; gap: 6px; margin-top: 6px; }
+html body #page .ab-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; } html body #page .ab-row > * { flex: 1 1 170px; min-width: 0; } html body #page .ab-row > button, html body #page .ab-row > .sm { flex: none; } html body #page .ab-row > select { flex: 0 0 96px; }
+html body #page .ab-btns > button { height: 26px; font-size: 11.5px; }
+html body #page .ab-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; } html body #page .ab-grid > .ab-wide { grid-column: 1 / -1; height: 34px; min-height: 34px; resize: vertical; }
+html body #page .ab :is(input:not([type=checkbox]), select, textarea) { height: 34px; box-sizing: border-box; border-radius: 10px; font-size: 12.5px; } html body #page .ab textarea { padding-top: 7px; line-height: 1.35; }
+html body #page .ab .fic input { padding-left: 38px !important; } html body #page .ab .sic select { padding-left: 38px !important; }
+html body #page .ab-li { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 34px; padding: 3px 8px 3px 10px; border-radius: 10px; border: 1px solid var(--uk-line); background: #131b2e; } html body #page .ab-ln { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; } html body #page .ab-ln b { font-size: 13px; font-weight: 600; } html body #page .ab-ln small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--mut); } html body #page .ab-li .sm { flex: none; height: 24px; font-size: 11.5px; }
+html body #page .ab .tok-list { display: grid; gap: 4px; } html body #page .ab .tok-row { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 32px; padding: 2px 8px 2px 10px; border-radius: 10px; border: 1px solid var(--uk-line); background: #131b2e; font-size: 12.5px; } html body #page .ab .tok-row small { margin-right: auto; } html body #page .ab .tok-row code { font-size: 11.5px; } html body #page .ab .tok-row .sm { height: 24px; font-size: 11.5px; }
+html[data-mode="light"] body #page .ab { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page :is(.ab-li, .ab .tok-row) { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .ab-h > .ss-ic { background: #f3f6fc; }
+/* 1.57.51 (3) - About & update: no empty room inside the boxes - the boxes are as high as what they hold (top row 156 px, bottom row 316 px, the two of a row always equal; a longer list scrolls inside its box) and the strip of facts follows them at once */
+html body #page .ab :is(.fic input, .sic select, .nk-combo, .nk-combo input) { width: 100%; max-width: none; box-sizing: border-box; } html body #page .ab .nk-combo { display: block; } html body #page .ab-grid > :is(.fic, .sic) { width: auto; }

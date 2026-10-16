@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.57.51 - About & update and Api & Key built tight
+
+- **Settings:** the frame of every tab is never narrower than 880 px (it was 880 when the row had eight tabs; with the Alerts, Probe and Shop bot tabs gone it had shrunk to 726 / 789).
+- **About & update**, after the owner's picture of 1.57.34: the four boxes are two equal columns again, **no extra descriptions** (the text under the name of this panel, under *Tunnel cores* and *PasarGuard*, the note under the install id and the explaining half of the cores line are gone - the words stay in the tooltips), the cards inside them are smaller (the cores table, the PasarGuard panels and nodes as one-line rows, the head of PasarGuard as one line) and **no empty room inside the boxes**: the top row is 156 px, the bottom row 316 px, the two boxes of a row always equal; a longer list scrolls inside its box.
+- ***Update from GitHub*** is off while this is the newest version (and while the check runs); it is on when a newer one is there.
+- **Api & Key:** every connection is ONE compact box - *This panel's API* (the line that makes a token, then the tokens), *AI assistant · Anthropic*, *Telegram bot*, *Probe* (with the install row), *DNS accounts*, *Marzban / PasarGuard panels* - a head with the name, the state and the buttons, one or two rows under it, and no explaining text; the page is about half as tall.
 ## 1.57.50 - Security: no arrows, a working Two-step switch, no Generate in the password box; the Settings frame as wide as before
 
 - **Settings → Security:** the three arrows (›) of *Two-step sign-in*, *Recovery codes* and *Secret entry path* are gone. The *Two-step sign-in* switch works now (it was only drawn since 1.17.38): it shows the real state, turning it on asks the password and shows the QR and the code box, turning it off asks the password and a code.

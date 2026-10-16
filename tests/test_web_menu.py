@@ -786,10 +786,10 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
 def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_button():
     """The owner, 2026-10-16: "build these, all the boxes fixed" (the picture of About & update) and "a button Sign out of other devices under the password boxes"."""
     app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
-    assert '`<div class="abt-wrap fx-box" data-fxmin="760"><div class="abt-grid">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
+    assert '`<div class="abt-wrap"><div class="abt-grid">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
     assert 'pgupd: ["🧩 PasarGuard"' not in app and "pgUpdCard" not in app and 'if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }' in app and "pgupd: SI.box" not in app
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
-    assert "grid-template-rows: 276px minmax(0, 1fr);" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
+    assert "grid-template-rows: 156px 316px;" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app and 'const hd = $("#lic-head"); if (hd) hd.innerHTML = head;' in app
     assert 'onclick="pwOutToggle(this)"' in app and 'window.pwOutToggle = b =>' in app and 'name="logout_others"' not in app and 'logout_others: out' in app and "html body #page .pwf-btns {" in css and 'class="pwf-out on" aria-pressed="true"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
 
@@ -822,12 +822,12 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     the state of the AI key, the Telegram bot, the probe, the DNS accounts and the panels, each with the way to its place; the AI assistant card stays under it."""
     app = _web("app.js")
     assert 'ai: ["🔌 Api & Key",' in app and '["Api & Key"]],' in app and "ai: SI.link," in app
-    assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
+    assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and 'title: "API tokens"' not in app and '<div class="ab-list">${apiBox}${aiBox}${tgBox}${probeBox}${dnsBox}${panelsBox}</div>' in app and "const abBox = o =>" in app
     assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
-    assert 'const aiBody = sCat(' in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app
-    assert 'title: "Telegram bot", cls: "two flat bk-sched api-tg"' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and r"alertsWin(\'rules\')" in app and r"alertsWin(\'report\')" in app and r"alertsWin(\'windows\')" in app and 'async function setData() {' in app and '${security}${backups}' in app
-    assert "Manage in" not in app and 'const dnsGroup = sGrp({icon: SI.cloud, title: "DNS accounts"' in app and 'const panelsGroup = sGrp({icon: SI.cube, title: "Marzban / PasarGuard panels"' in app and 'const probeBody = sGrp({form: "return saveProbe(event)"' in app and 'sCat("Probe") + probeBody + dnsGroup + panelsGroup);' in app
-    assert "window.apiPanelEdit = id =>" in app and 'onclick="dnsAccForm()">＋ Add account' in app and 'onclick="pnAddWin()">＋ Add panel' in app and 'probe: ["🛰 Probe"' not in app and 'const probe = sFrame' not in app and "html body #page .sf .ss .sr.li > .v { display: flex;" in _web("lab.css") and "Open Settings → Api & Key" in app
+    assert 'const aiBody = sCat(' not in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app and 'form="ai-form"' in app and 'onsubmit="return saveAi(event)"' in app
+    assert 'title: "Telegram bot", pill: tg.has_token' in app and 'form="tg-form"' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and "alertsWin('rules')" in app and "alertsWin('report')" in app and "alertsWin('windows')" in app and 'async function setData() {' in app and '${security}${backups}' in app
+    assert "Manage in" not in app and 'const dnsBox = abBox({icon: SI.cloud, title: "DNS accounts"' in app and 'const panelsBox = abBox({icon: SI.cube, title: "Marzban / PasarGuard panels"' in app and 'const probeBox = abBox({icon: SI.probe, title: "Probe"' in app and 'form="probe-form"' in app and 'const aiBody' not in app and 'const probeBody' not in app and 'html body #page .ab-list {' in _web("lab.css") and 'html body #page .ab {' in _web("lab.css")
+    assert "window.apiPanelEdit = id =>" in app and 'onclick="dnsAccForm()">＋ Add account' in app and 'onclick="pnAddWin()">＋ Add panel' in app and 'probe: ["🛰 Probe"' not in app and 'const probe = sFrame' not in app and "html body #page .sf .ss .sr.li" not in _web("lab.css") and "Open Settings → Api & Key" in app
 
 
 def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_timers():
@@ -890,15 +890,15 @@ def test_security_is_one_column_again_like_the_owners_picture():
 def test_the_settings_frame_keeps_its_old_width_when_the_row_of_tabs_gets_shorter():
     """The owner, 2026-10-16: with fewer tabs the frames of Appearance and About shrank - they are as wide as before (never narrower than SET_W_MIN)."""
     app = _web("app.js")
-    assert "const SET_W_MIN = 789;" in app and 'Math.round(Math.max(SET_W_MIN, right - left + 40,' in app
+    assert "const SET_W_MIN = 880;" in app and 'Math.round(Math.max(SET_W_MIN, right - left + 40,' in app
 
 
 def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxes():
     """The owner, 2026-10-16: the sizes of About & update got mixed up (cut texts, a table running into itself) and the frame must be longer; every tab's frame is one height."""
     app, css = _web("app.js"), _web("lab.css")
-    assert 'Math.max(+b.dataset.fxmin || 360,' in app and '<div class="abt-wrap fx-box" data-fxmin="760">' in app
-    assert "grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: 276px minmax(0, 1fr); gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' in app and "html body #page .abt-ds {" in css
-    assert "grid-template-columns: 64px 58px 70px minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }" in css and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+    assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'ub.disabled = !!u.up_to_date;' in app and 'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
+    assert "grid-template-columns: 84px 66px 70px minmax(0, 1fr) auto; gap: 5px; padding: 5px 10px; }" in css and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
 
 
 def test_the_add_form_starts_the_plain_websocket_at_80():
