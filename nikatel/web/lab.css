@@ -666,8 +666,24 @@ html body #page .abt-foot { padding: 6px 8px; justify-content: flex-start; gap: 
 html body #page .abt-fi { width: 24px; height: 24px; border-radius: 8px; } html body #page .abt-fi svg { width: 13px; height: 13px; }
 html body #page .abt-fv em { font-size: 10px; } html body #page .abt-fv b { font-size: 11.5px; }
 
-/* 1.57.46 - Settings → Security in two columns (the owner, 2026-10-16) */
-html body #page .sec-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-html body #page .sec-col { display: grid; gap: 10px; align-content: start; min-width: 0; }
-html body #page .sec-col > .sl, html body #page .sec-col > form.sl { margin: 0; }
-@media (max-width: 1000px) { html body #page .sec-cols { grid-template-columns: minmax(0, 1fr); } }
+/* 1.57.46 - Settings → Security in two columns, the boxes ONE size (the owner, 2026-10-16: "the same size, tidy"): three rows of 204 px; the left column holds the state, the two-step and the recovery codes, the right one the secret path and the password (which takes two rows) */
+html body #page .sec-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, 204px); grid-auto-flow: column; gap: 12px; align-items: stretch; }
+html body #page .sec-cols .sec-col, html body #page .sec-cols .sl { display: contents !important; }
+html body #page .sec-cols .ss-hero, html body #page .sec-cols .si { box-sizing: border-box; width: 100% !important; max-width: none !important; height: 100%; min-height: 0; margin: 0 !important; overflow: auto; align-content: center; scrollbar-width: thin; }
+html body #page .sec-cols .si.pw { grid-row: span 2; align-content: start; }
+@media (max-width: 1000px) { html body #page .sec-cols { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-flow: row; } html body #page .sec-cols .si.pw { grid-row: auto; } html body #page .sec-cols .ss-hero, html body #page .sec-cols .si { height: auto; } }
+/* 1.57.47 - the rows of the DNS accounts and of the panels in Settings → Api & Key: the name and what it is on the left, its state and buttons on the right */
+html body #page .sf .ss .sr.li { display: flex !important; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 14px; }
+html body #page .sf .ss .sr.li > span { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; font-size: 13.5px; color: var(--text); }
+html body #page .sf .ss .sr.li > span small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mut); }
+html body #page .sf .ss .sr.li > .v { display: flex; align-items: center; gap: 8px; flex: none; width: auto; margin-left: auto; }
+html body #page .sf .ss .sr.li > .v button { height: 30px; }
+
+/* 1.57.47 - Sign out of other devices is a SWITCH again, beside Change password (the owner, 2026-10-16) */
+html body #page .pwf-btns { align-items: center; gap: 14px 24px; }
+html body #page .pwf-sw { display: inline-flex; align-items: center; gap: 0; margin: 0; cursor: pointer; color: var(--text); }
+html body #page .pwf-sw > span { display: grid; gap: 1px; } html body #page .pwf-sw b { font-size: 15px; font-weight: 600; } html body #page .pwf-sw small { max-width: 300px; font-size: 11.5px; font-weight: 400; line-height: 1.35; color: var(--mut); }
+html body #page .pwf-sw .pwf-now { color: #6fa8ff; cursor: pointer; text-decoration: underline dotted; }
+
+/* 1.57.47 - Create tunnel waits for the second server: dim and quiet until then (the owner, 2026-10-16) */
+html body #page .toolbar.joined button.cta:disabled { opacity: .4; filter: saturate(.3); box-shadow: none !important; cursor: default; }

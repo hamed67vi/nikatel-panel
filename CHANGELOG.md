@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.57.48 - The Add tab in one frame, with the subscription configs on the right
+
+- **Panel → Configs → Add:** the paste-a-link row and the three columns sit in ONE frame; the columns are cards of one fixed height (they scroll inside), so opening another protocol drawer (VLESS, Trojan, VMess, Shadowsocks) moves nothing.
+- **New third column - Subscription configs:** the hosts of the panel (name, address:port, inbound, on / off) = the lines a user's subscription carries; the head with the count stays, the rows scroll. It reads the same cache as the Hosts tab and shows a made config at once after *Make another*.
+- The first boxes of the three columns are one height (56 px), so the three sections read as one piece.
+
+## 1.57.47 - The connections are set in Settings → Api & Key
+
+- **Create tunnel** is disabled while fewer than two servers are added and becomes active with the second one.
+- **Settings → Security:** the boxes are ONE size (three rows of 204 px, the password takes two rows) and *Sign out of other devices* is a switch again, beside *Change password*.
+- **Api & Key:** the *Manage in …* buttons are gone - the connections are set on this page: the *Probe* (primary, token, standby, install - the Probe tab is gone), the *DNS accounts* (Test, Edit, Remove, Add account) and the *Marzban / PasarGuard panels* (Edit, Remove, Add panel) next to the AI assistant, Telegram and the tokens of this panel's API.
+
 ## 1.57.46 - The Add account type form in two columns, the tab named Api & Key
 
 - **Add account type:** two columns after the owner's picture - on the left the drawers of the protocols (a tile, the name, the count; the kinds inside in two columns, each with its little picture, the chosen one in blue; one drawer open at a time), on the right one card with the note of the kind, the fields in pairs with a picture tile (name, address, core, port, group, the user template), *More*, *Check* and *Make it…*; the paste-a-link row on top has its tile and *Use*.

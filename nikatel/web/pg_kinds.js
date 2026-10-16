@@ -30,7 +30,8 @@ function pgKindFormHtml(inline) {      // the whole form: in a window (the old b
   const chip = k => `<button type="button" class="pg-kind-chip" data-k="${k.id}" onclick="pgKindPick('${k.id}')" title="${esc(k.note)}">${pgKindIc(k)}<span>${esc(pgKindShort(k))}</span></button>`;
   const drawers = [["VLESS", "vless"], ["Trojan", "trojan"], ["VMess", "vmess"], ["Shadowsocks", "shadowsocks"]].map(([label, proto]) => { const ks = o.kinds.filter(k => k.protocol === proto); return ks.length ? `<details class="pg-kind-dr" name="pg-kind-acc" data-p="${proto}"${proto === "vless" ? " open" : ""}><summary><i class="pg-dr-i">${PKI.cube}</i><span class="pg-dr-n">${label}</span><i class="pg-dr-c">${ks.length}</i></summary><div class="pg-kind-row">${ks.map(chip).join("")}</div></details>` : ""; }).join("");      // (the owner, 2026-10-15: "VLESS in a drawer"): one drawer per protocol, one open at a time, the chosen kind shown on the drawer even when it is shut
   const chips = drawers;
-  return `<div class="pg-kind-paste"><i class="pg-kf-i">${PKI.code}</i><input id="pg-kind-link" placeholder="Your own config: paste a vless:// trojan:// vmess:// or ss:// link to copy its type" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') pgKindUseLink()"><button type="button" class="sm" onclick="pgKindUseLink()">Use</button></div><div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side"><div class="pg-kind-note" id="pg-kind-note"></div>
+  const subs = `<div class="pg-kind-subs" id="pg-kind-subs"><div class="pg-ks-h"><i class="pg-kf-i">${PKI.link}</i><b>Subscription configs</b></div><div class="pg-ks-list"><div class="loading"><i class="spin"></i><span>Reading the hosts…</span></div></div></div>`;      // (the owner, 2026-10-16: "the right side is empty - show the list of subscription configs"): the hosts of the panel, the lines a user's link carries
+  return `${inline ? '<div class="pg-kind-frame">' : ""}<div class="pg-kind-paste"><i class="pg-kf-i">${PKI.code}</i><input id="pg-kind-link" placeholder="Your own config: paste a vless:// trojan:// vmess:// or ss:// link to copy its type" autocomplete="off" spellcheck="false" onkeydown="if (event.key === 'Enter') pgKindUseLink()"><button type="button" class="sm" onclick="pgKindUseLink()">Use</button></div><div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side"><div class="pg-kind-note" id="pg-kind-note"></div>
     <form class="frm pg-kind-form" id="pg-kind-form" onsubmit="return false" onchange="pgKindStale(event)" oninput="pgKindStale(event)">
     <div class="pg-kind-quick">
       <label>Name<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i><input name="name" maxlength="64" placeholder="chosen for you" autocomplete="off" title="The inbound, the group and the link are named from it"></span></label>
@@ -57,7 +58,7 @@ function pgKindFormHtml(inline) {      // the whole form: in a window (the old b
       <label data-need="reality">Short ids <small>empty = one is made</small><input name="reality_short_ids" autocomplete="off"></label>
       <label class="chk wide"><input type="checkbox" name="restart"> Restart Xray on the nodes of the core now <small>(cuts their customers for a moment; without it the nodes use the new inbound after their next restart)</small></label></div></details></form>
     <div id="pg-kind-res"></div>
-    <div class="frm-act"><button class="sm" onclick="pgKindCheck()" title="Check the steps and see what is chosen for you; nothing is written">${PKI.search}<span>Check</span></button><span class="sp"></span><button class="pri" id="pg-kind-go" onclick="pgKindMake()">${PKI.spark}<span>Make it…</span>${PKI.chev}</button>${inline ? "" : '<button onclick="closeModal()">Cancel</button>'}</div></div></div>`;
+    <div class="frm-act"><button class="sm" onclick="pgKindCheck()" title="Check the steps and see what is chosen for you; nothing is written">${PKI.search}<span>Check</span></button><span class="sp"></span><button class="pri" id="pg-kind-go" onclick="pgKindMake()">${PKI.spark}<span>Make it…</span>${PKI.chev}</button>${inline ? "" : '<button onclick="closeModal()">Cancel</button>'}</div></div>${inline ? subs : ""}</div>${inline ? "</div>" : ""}`;
 }
 function pgKindDraw() { showModal("<b>＋ Account type</b>", pgKindFormHtml(false), "wide"); }
 /* the Add tab of Configs: the same form, in the page (the Panel page redraws itself every 15 s: while this form is on, state.build holds that back) */
@@ -68,8 +69,16 @@ window.pgTabs.kinds = {label: "Add", order: 20, types: ["pasarguard"], render: a
   if (!box.isConnected || pn.tab !== "kinds") return;
   pgKind.path = "/" + pgKindRand(); pgKind.svc = "g" + pgKindRand();
   pgPaint(box, `<div class="pg-kind-page" id="pg-kind-page">${pgKindFormHtml(true)}</div>`); state.build = "kinds";
-  pgKindPick("vless-reality");
+  pgKindPick("vless-reality"); pgKindSubs();
 }};
+/* the third column of the Add tab: the hosts of the panel = the configs a user's subscription carries (read from the same cache as the Hosts tab) */
+window.pgKindSubs = async () => {
+  const id = +pn.id, paint = html => { const l = $("#pg-kind-subs .pg-ks-list"); if (l) l.innerHTML = html; };
+  try { if (!pn.hosts || pn.hostsKey !== String(id)) { pn.hosts = (await api(`/api/panels/${id}/hosts`)).hosts; pn.hostsKey = String(id); } } catch (e) { paint(`<div class="err">${esc(e.message)}</div>`); return; }
+  const hs = pn.hosts || [], h = $("#pg-kind-subs .pg-ks-h"); if (!h) return;
+  h.querySelectorAll(".pg-dr-c").forEach(n => n.remove()); h.insertAdjacentHTML("beforeend", `<i class="pg-dr-c">${hs.length}</i>`);
+  paint(hs.length ? hs.map(x => `<div class="pg-ks-r${x.disabled ? " off" : ""}" title="${esc(`${x.remark} · ${x.address}${x.port ? ":" + x.port : ""} · ${x.tag}`)}"><i class="pg-kc-i">${PKI.link}</i><span class="pg-ks-t"><b>${esc(x.remark || "(no name)")}</b><small>${esc(x.address || "—")}${x.port ? ":" + esc(x.port) : ""} · ${esc(x.tag || "—")}</small></span><em class="pg-ks-s">${x.disabled ? "off" : "on"}</em></div>`).join("") : '<div class="mut pg-ks-none">No config yet: make an account type and its link shows here.</div>');
+};
 window.pgKindPick = k => {
   const f = $("#pg-kind-form"); if (!f) return;
   pgKind.k = k; pgKind.res = null;

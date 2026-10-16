@@ -791,7 +791,7 @@ def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_bu
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
     assert "grid-template-rows: 232px minmax(0, 1fr);" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app and 'const hd = $("#lic-head"); if (hd) hd.innerHTML = head;' in app
-    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others"' not in app and "logout_others: true" in app and "html body #page .pwf-btns {" in css and 'class="pwf-out" onclick="secLogoutOthers()"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
+    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others" checked' in app and 'logout_others: f.get("logout_others") === "on"' in app and "html body #page .pwf-btns {" in css and 'class="pwf-now" onclick="secLogoutOthers()"' in app and "html body #page .pwf-sw {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
 
 
 def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_tabs():
@@ -823,10 +823,11 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     app = _web("app.js")
     assert 'ai: ["🔌 Api & Key",' in app and '["Api & Key"]],' in app and "ai: SI.link," in app
     assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and app.count('title: "API tokens"') == 1 and app.index('title: "API tokens"') > app.index("async function apiLoad() {")
-    assert '  const s = await api("/api/auth/security");' in app and '<div class="sec-col"><div class="sl">${gP}</div>${gW}</div></div>`;' in app and "html body #page .sec-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));" in _web("lab.css") and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
-    assert 'const aiBody = sCat(' in app and 'title: "Use"' not in app and '${probe}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app
+    assert '  const s = await api("/api/auth/security");' in app and '<div class="sec-col"><div class="sl">${gP}</div>${gW}</div></div>`;' in app and "html body #page .sec-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, 204px);" in _web("lab.css") and "html body #page .sec-cols .si.pw { grid-row: span 2;" in _web("lab.css") and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
+    assert 'const aiBody = sCat(' in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app
     assert 'title: "Telegram bot", cls: "two flat bk-sched api-tg"' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and r"alertsWin(\'rules\')" in app and r"alertsWin(\'report\')" in app and r"alertsWin(\'windows\')" in app and 'async function setData() {' in app and '${security}${backups}' in app
-    assert '"go(\'tunnels\', \'dns\')", "Manage in CDN"' in app and '"go(\'pgpanel\', \'settings\')", "Manage in Panel"' in app and "Open Settings → Api & Key" in app
+    assert "Manage in" not in app and 'const dnsGroup = sGrp({icon: SI.cloud, title: "DNS accounts"' in app and 'const panelsGroup = sGrp({icon: SI.cube, title: "Marzban / PasarGuard panels"' in app and 'const probeBody = sGrp({form: "return saveProbe(event)"' in app and 'sCat("Probe") + probeBody + dnsGroup + panelsGroup);' in app
+    assert "window.apiPanelEdit = id =>" in app and 'onclick="dnsAccForm()">＋ Add account' in app and 'onclick="pnAddWin()">＋ Add panel' in app and 'probe: ["🛰 Probe"' not in app and 'const probe = sFrame' not in app and "html body #page .sf .ss .sr.li > .v { display: flex;" in _web("lab.css") and "Open Settings → Api & Key" in app
 
 
 def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_timers():
@@ -855,7 +856,22 @@ def test_the_model_of_the_ai_is_a_field_with_a_list_that_opens_as_the_kit_menu()
 def test_the_add_account_type_form_in_two_columns_with_pictures():
     """The owner, 2026-10-16 (his picture): the drawers on the left, one card with the note and the fields in pairs on the right; one drawer open at a time."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
-    assert '<div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side">' in js and '</div></div></div>`;\n}' in js and "const PKI = {};" in js and "const pgKindIc = k =>" in js
+    assert '<div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side">' in js and '</div></div>${inline ? subs : ""}</div>${inline ? "</div>" : ""}`;\n}' in js and "const PKI = {};" in js and "const pgKindIc = k =>" in js
     assert '<i class="pg-dr-i">${PKI.cube}</i>' in js and '<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i>' in js and 'name="core_id" data-dd' in js and 'name="group" data-dd' in js and '${PKI.spark}<span>Make it…</span>${PKI.chev}' in js
     assert 'document.addEventListener("toggle", e => {' in js and ".pg-kind-dr[open]" in js
     assert "html body #page .pg-kind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);" in css and "html body #page .pg-kind-side .pg-kind-quick { grid-template-columns: repeat(2, minmax(0, 1fr));" in css
+
+
+def test_create_tunnel_waits_for_the_second_server():
+    """The owner, 2026-10-16: with no server added the button is disabled; when the second server is added it becomes active."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert "const nSrv = (srvAll || state.serversCache || []).length;" in app and '${nSrv >= 2 ? "" : "disabled"}' in app and "add an Iran server and a foreign server first (Servers)" in app
+    assert "if (Array.isArray(state.serversCache) && state.serversCache.length < 2) { toast(" in app and "html body #page .toolbar.joined button.cta:disabled {" in css
+
+def test_add_tab_is_one_frame_with_the_subscription_configs():
+    """The owner, 2026-10-16: the Add sections in one frame of one size whichever drawer is open, and the empty right side shows the subscription configs (the hosts)."""
+    js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
+    assert "inline ? '<div class=\"pg-kind-frame\">' : \"\"" in js and 'id="pg-kind-subs"' in js and "Subscription configs" in js
+    assert "window.pgKindSubs = async () =>" in js and "pgKindPick(\"vless-reality\"); pgKindSubs();" in js and "/hosts`)).hosts" in js
+    assert ".pg-kind-frame .pg-kind-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);" in css and "height: clamp(500px, calc(100vh - 260px), 640px)" in css
+    assert ".pg-kind-frame .pg-kind-subs { overflow: hidden; }" in css and ".pg-ks-list { flex: 1 1 auto; overflow-y: auto;" in css
