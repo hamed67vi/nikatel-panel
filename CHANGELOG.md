@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.60.2 - Found by throttling a real tunnel: the Doctor no longer calls a test of its own "users", and two scales never mix
+
+The real test of the bandwidth watch (2026-10-16): a Backhaul tunnel between an Iran server and a foreign server, its link shaped to 40 Mbit on the foreign server. The watch saw 37 Mb/s against a usual 474, confirmed the drop with the second sample, wrote the story, the events and the *slow* row - and showed three faults that are fixed here:
+
+- **"The tunnel is full of users" was wrong.** The traffic of the link was read as the average of the last minute, and that minute held five tests of the panel itself (a few seconds of 500 Mb/s each). The traffic users carry is now the **middle of the last ten minutes' readings** (at least five readings, none older than 15 minutes) and the tunnel counts as full only when that reaches 80 % of the bandwidth it can give.
+- **Two scales were mixed.** The usual level was made of the one-connection samples of 1.60.0 and the two-connection samples of 1.60.1, so a tunnel that was back looked "low" for a while. A sample now carries its **method**, and a sample of another method - or of another kind of tunnel under the same name - **starts the history again**.
+- A click on *measure now* while the tunnel is dropped looked at it again and wrote the same event twice; it now says *still dropped* and what was found when it dropped. A tunnel is never **measured twice at once** (a click while the job measures it). The line of the story that counted "1 of 1 tunnels dropping" says "this is its only tunnel".
+
 ## 1.60.1 - The bandwidth is measured with two connections (the real test of 1.60.0 on a GRE link)
 
 Found by the first real run of the bandwidth watch on a Backhaul tunnel (2026-10-16): one connection over the GRE link scattered by 16 % from run to run and once stalled (a 4 s run gave 31 Mb/s between 350 and 420), two connections by 9 %, four by 7 % (mean 240 / 345 / 543 / 842 Mb/s for one 6 s run with 40 MB, one 3 s, two 3 s, four 3 s). The measurement now takes **two connections, 3 s, 60 MB each at most (120 MB per sample)**: steadier, and still a few seconds of traffic about every 90 minutes per tunnel. The first samples of that run were also low and uneven because the machine was busy with a test run - the reason a busy server (CPU 85 %) is skipped.

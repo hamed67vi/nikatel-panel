@@ -41,9 +41,11 @@ LINK_PORT = 39777            # the sink of a GRE tunnel listens on its inner add
 BYTES = 60_000_000           # each of the two connections pulls this much at most ...
 SECS = 3                     # ... and for 3 s at most (real tests, 2026-10-16, over a GRE link: one connection scattered by 16 % from run to run, two by 9 %, four by 7 % - and one connection of 4 s stalled once)
 STREAMS = 2
+METHOD = 2                   # the way a sample is taken (streams, seconds): another way is another scale, so samples of another method never mix with these (the samples of 1.60.0 / 1.60.1 were one connection)
 BUSY_CPU = 85.0              # a server this busy is not measured (the test would be slowed by it, and would slow the users more)
 _LOCK = threading.Lock()
-_RUNNING: set[int] = set()
+_RUNNING: set[int] = set()         # the tunnel the job is measuring (one at a time)
+_MEASURING: set[int] = set()       # every tunnel being measured now (the job or a click: never two at once on the same tunnel)
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
@@ -75,6 +77,10 @@ def verdict(down: float | None, ref: float | None) -> str:
 def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None) -> tuple[dict, str]:
     """Pure: (the new `bw` of the tunnel, what changed: "" | "drop" | "recovered") after one sample. The sample is judged against the level BEFORE it, so a drop never pulls its own reference down."""
     bw = dict(bw or {})
+
+    if bw and (bw.get("m") != METHOD or (bw.get("how") and bw["how"] != how)):
+        bw = {}                                                    # another way of measuring (or another kind of tunnel under the same name) is another scale: the history starts again
+
     hist = [list(x) for x in (bw.get("hist") or []) if now - int(x[0]) <= REF_WINDOW]
     ref_before = reference(hist, now)
     v = verdict(down, ref_before)
@@ -104,7 +110,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
     hist.append([now, round(down, 1), None if up is None else round(up, 1)])
     hist = hist[-KEEP:]
     state = "drop" if drop else v if v in ("low", "learning") else "ok"
-    return {"down": round(down, 1), "up": None if up is None else round(up, 1), "at": now, "how": how, "ping": ping, "ref": reference(hist, now), "state": state, "drop": drop, "suspect": suspect,
+    return {"m": METHOD, "down": round(down, 1), "up": None if up is None else round(up, 1), "at": now, "how": how, "ping": ping, "ref": reference(hist, now), "state": state, "drop": drop, "suspect": suspect,
             "next_at": next_at, "hist": hist}, change
 
 
@@ -131,7 +137,7 @@ def explain(f: dict) -> tuple[str, str]:
 
     live = f.get("live")
 
-    if live is not None and now > 0 and live >= 0.7 * now:
+    if live is not None and now > 0 and live >= 0.8 * now:
         return "full", f"The tunnel carries {live:.0f} Mb/s right now of the {now:.0f} it can give: it is full of users, nothing is broken."
 
     loss = f.get("loss")
@@ -225,7 +231,21 @@ def _server_busy(server_id: int, now: int) -> bool:
 
 
 def measure(tunnel_id: int) -> tuple[dict, str]:
-    """One light measurement of a tunnel (read: ValueError when it cannot be measured now). Returns (the new `bw`, what changed)."""
+    """One light measurement of a tunnel (ValueError when it cannot be measured now). Returns (the new `bw`, what changed)."""
+    with _LOCK:
+        if tunnel_id in _MEASURING:
+            raise ValueError("this tunnel is being measured right now")
+
+        _MEASURING.add(tunnel_id)
+
+    try:
+        return _measure(tunnel_id)
+    finally:
+        with _LOCK:
+            _MEASURING.discard(tunnel_id)
+
+
+def _measure(tunnel_id: int) -> tuple[dict, str]:
     from . import build_other
 
     with session() as db:
@@ -384,7 +404,8 @@ def _facts(tunnel_id: int) -> dict:
         bw = dict((t.record or {}).get("bw") or {})
         d = dict(t.detail or {})
         loss = d.get("loss_pct")
-        live = t.rx_mbps                                   # what comes to the Iran server through the link now: the direction the bandwidth is measured in
+        rx = sorted(c.rx_mbps for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 900).order_by(TunnelCheck.ts.desc()).limit(10)) if c.rx_mbps is not None)
+        live = rx[len(rx) // 2] if len(rx) >= 5 else None       # what comes to the Iran server through the link: the MIDDLE of the last ten minutes (one minute that holds a test of the panel itself, a few seconds of 500 Mb/s, must not make the tunnel look full of users)
         rtts = sorted(c.rtt_ms for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if c.rtt_ms is not None)
         sides = {}
 
@@ -414,7 +435,7 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
 
     for key, label in (("same_iran", f["iran"]["name"]), ("same_foreign", f["foreign"]["name"])):
         s = f[key]
-        say(("✕ " if s["total"] >= 2 and s["dropped"] >= 2 else "✓ ") + f"Tunnels of {label}: {s['dropped']} of {s['total']} are dropping" + (" (this one counts)" if s["dropped"] else ""))
+        say(("✕ " if s["total"] >= 2 and s["dropped"] >= 2 else "✓ ") + (f"Tunnels of {label}: this is its only tunnel" if s["total"] <= 1 else f"Tunnels of {label}: {s['dropped']} of {s['total']} are dropping" + (" (this one counts)" if s["dropped"] else "")))
 
     say(("✕ " if (f["loss"] or 0) >= 5 else "✓ ") + ("The line loses " + f"{f['loss']:.0f} % of its packets" if f["loss"] is not None else "The loss of the line cannot be measured here (the provider drops pings); the data passes"))
 
@@ -461,8 +482,10 @@ def measure_start(tunnel_id: int) -> int:
         ref = bw.get("ref")
         autopilot._say(aid, f"Bandwidth: {bw.get('down')} Mb/s" + (f", usually {ref:.0f}" if ref else ", the usual level is still being learnt") + f" - {bw.get('state')}.")
 
-        if change == "drop" or bw.get("state") == "drop":
+        if change == "drop":
             investigate(aid, tunnel_id)
+        elif bw.get("state") == "drop":
+            autopilot._say(aid, f"Still dropped: it usually gives {(bw.get('drop') or {}).get('from')} Mb/s. The reason found when it dropped: {(bw.get('why') or {}).get('text', 'not written yet')}", done=True, ok=True)
         else:
             autopilot._say(aid, "Done.", done=True, ok=True)
 

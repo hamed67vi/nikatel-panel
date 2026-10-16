@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from nikatel.config import get_settings
 from nikatel.db import session
-from nikatel.models import Event, Server, ServerSample, Tunnel
+from nikatel.models import Event, Server, ServerSample, Tunnel, TunnelCheck
 from nikatel.services import autopilot, bandwidth
 from nikatel.ssh import SCRIPTS, SSHError, render_action
 
@@ -111,7 +111,7 @@ def make_tunnel(name="gr-a", typ="backhaul", state="up", door=False, bw=None, re
 
 
 def good_history(down=300.0, n=6):
-    return {"down": down, "at": NOW - 5400, "ref": down, "state": "ok", "drop": None, "suspect": False, "next_at": NOW - 10, "hist": hist_of([down] * n, 5400)}
+    return {"m": bandwidth.METHOD, "how": "link", "down": down, "at": NOW - 5400, "ref": down, "state": "ok", "drop": None, "suspect": False, "next_at": NOW - 10, "hist": hist_of([down] * n, 5400)}
 
 
 def test_a_sample_is_stored_with_an_event_when_a_drop_is_confirmed_and_when_it_ends():
@@ -389,3 +389,53 @@ def test_the_probe_script_takes_a_host_a_byte_limit_and_a_direction():
 
     with pytest.raises(ValueError):
         render_action("sink_install", {"NAME": "bw7", "PORT": "39777", "KEY": "abcdef0123456789", "BIND": "10.2.1.2; id"})
+
+
+def test_a_sample_of_another_method_or_another_kind_of_tunnel_starts_the_history_again():
+    """Real run, 2026-10-16: 1.60.1 measures with two connections, 1.60.0 with one: the two scales must never be mixed (a mixed level made a tunnel that was back look dropped)."""
+    old = {**good_history(300.0), "m": 1}
+    bw, change = bandwidth.add_sample(old, NOW, 600.0, None, "link")
+    assert change == "" and len(bw["hist"]) == 1 and bw["state"] == "learning" and bw["ref"] is None and bw["m"] == bandwidth.METHOD       # the old samples are forgotten
+    nomark = {k: v for k, v in good_history(300.0).items() if k != "m"}
+    assert len(bandwidth.add_sample(nomark, NOW, 600.0, None, "link")[0]["hist"]) == 1                                                        # (a record without a method is the first one)
+    kept = bandwidth.add_sample(good_history(300.0), NOW, 290.0, None, "link")[0]
+    assert len(kept["hist"]) == 7 and kept["state"] == "ok"                                                                                  # the same method: the history goes on
+    door = bandwidth.add_sample(good_history(300.0), NOW, 120.0, None, "door")[0]
+    assert len(door["hist"]) == 1 and door["how"] == "door" and door["state"] == "learning"                                                  # a tunnel rebuilt as another kind: another scale
+
+
+def test_one_tunnel_is_never_measured_twice_at_once(monkeypatch):
+    tid, _, _, _ = make_tunnel("gr-m")
+    inside = []
+
+    def slow(t):
+        inside.append(t)
+
+        with pytest.raises(ValueError, match="being measured right now"):
+            bandwidth.measure(t)                                                                          # (a click while the job measures it)
+
+        return {"down": 1.0}, ""
+
+    monkeypatch.setattr(bandwidth, "_measure", slow)
+    assert bandwidth.measure(tid) == ({"down": 1.0}, "") and inside == [tid]
+    assert bandwidth.measure(tid) == ({"down": 1.0}, "")                                                  # (and it is free again afterwards)
+
+
+def test_the_traffic_users_carry_is_the_middle_of_the_last_ten_minutes():
+    """Real run, 2026-10-16: the Doctor called a tunnel "full of users" because the minute that held five tests of the panel itself averaged 104 Mb/s."""
+    tid, _, _, _ = make_tunnel("gr-n", bw={**good_history(), "state": "drop", "down": 90.0, "drop": {"since": NOW - 600, "from": 300.0, "now": 90.0}})
+    now = int(time.time())
+
+    with session() as db:
+        for i, v in enumerate([2.0, 3.0, 400.0, 2.5, 3.5, 2.8]):                                         # one minute holds a test of the panel itself
+            db.add(TunnelCheck(tunnel_id=tid, ts=now - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=v, tx_mbps=1.0, error=""))
+
+        db.add(TunnelCheck(tunnel_id=tid, ts=now - 3000, ok=True, rtt_ms=80.0, rx_mbps=900.0, tx_mbps=1.0, error=""))        # (an hour old: not counted)
+
+    assert bandwidth._facts(tid)["live"] == 3.0
+    other, _, _, _ = make_tunnel("gr-o", bw={**good_history(), "state": "drop", "down": 90.0, "drop": {"since": NOW - 600, "from": 300.0, "now": 90.0}})
+
+    with session() as db:
+        db.add_all([TunnelCheck(tunnel_id=other, ts=now - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=50.0, tx_mbps=1.0, error="") for i in range(4)])
+
+    assert bandwidth._facts(other)["live"] is None                                                       # fewer than five readings: nothing is said about the users
