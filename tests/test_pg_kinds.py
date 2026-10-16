@@ -589,6 +589,7 @@ def test_every_button_has_a_short_name_and_every_drawer_an_emoji_of_its_own(fake
     o = pg_kinds.options(C)
     assert [f["id"] for f in o["families"]] == ["vless", "trojan", "vmess", "shadowsocks"] and [f["label"] for f in o["families"]] == ["VLESS", "Trojan", "VMess", "Shadowsocks"]
     assert [f["emoji"] for f in o["families"]] == ["⚡", "🐴", "💬", "👻"] and not any(f["custom"] for f in o["families"])
+    assert [f["icon"] for f in o["families"]] == ["bolt", "horse", "chat", "ghost"] and {f["icon"] for f in o["families"]} <= set(pg_kinds.ICONS)          # (the owner, 2026-10-16: "the MacBook style, black and white": a line icon each; the emoji is the same thing as a letter)
     assert next(k for k in o["kinds"] if k["id"] == "vless-ws-tls")["short"] == "ws+tls" and next(k for k in o["kinds"] if k["id"] == "vless-reality-vision")["short"] == "reality+vision"
 
     for k in o["kinds"]:
@@ -625,7 +626,7 @@ def test_the_needs_of_a_protocol_of_your_own_follow_its_transport_and_security(f
 def test_a_protocol_written_as_json_gets_the_tag_and_the_port_of_the_account(fake):
     r = pg_kinds.save_custom({"family": "", "family_label": "Mine", "family_emoji": "🚀", "short": "raw", "via": "json", "text": json.dumps(VLESS_JSON)})
     kid = r["id"]
-    assert r["families"][-1] == {"id": "mine", "label": "Mine", "emoji": "🚀", "custom": True}
+    assert r["families"][-1] == {"id": "mine", "label": "Mine", "icon": "", "emoji": "🚀", "custom": True}                  # an emoji of his own: no icon (the page shows the emoji in black and white)
     k = next(x for x in r["kinds"] if x["id"] == kid)
     assert k["ports"] == [31000] and k["needs"] == [] and k["family"] == "mine" and (k["protocol"], k["network"], k["security"]) == ("vless", "tcp", "none") and k["title"] == "Mine · raw"
     p = pg_kinds.plan(C, {"kind": kid, "name": "Raw one", "address": "203.0.113.21"})
@@ -638,22 +639,31 @@ def test_a_protocol_the_builder_does_not_make_can_be_written_as_json(fake):
     hy = {"protocol": "hysteria", "settings": {"version": 2, "clients": []}, "streamSettings": {"network": "hysteria", "security": "tls", "tlsSettings": {"certificates": [{"certificateFile": "/etc/own/cert.pem", "keyFile": "/etc/own/key.pem"}]}}}
     r = pg_kinds.save_custom({"family": "", "family_label": "Hysteria", "short": "hy2", "via": "json", "text": json.dumps(hy)})
     k = next(x for x in r["kinds"] if x["id"] == r["id"])
-    assert (k["protocol"], k["network"], k["security"]) == ("hysteria", "hysteria", "tls") and k["ports"] == [443, 8443, 2053] and r["families"][-1]["emoji"] == "🧩"      # (no port in the JSON: the usual ones of TLS; no emoji given: the puzzle piece)
+    assert (k["protocol"], k["network"], k["security"]) == ("hysteria", "hysteria", "tls") and k["ports"] == [443, 8443, 2053] and (r["families"][-1]["icon"], r["families"][-1]["emoji"]) == ("cube", "")      # (no port in the JSON: the usual ones of TLS; no picture given: the cube)
     out = pg_kinds.make(C, {"kind": r["id"], "address": "203.0.113.21"})
     assert _ib(fake, out)["protocol"] == "hysteria" and _ib(fake, out)["streamSettings"]["network"] == "hysteria" and fake.hosts[out["host"]["id"]]["fingerprint"] == "chrome"
 
 
 def test_a_new_drawer_goes_with_its_last_protocol(fake):
     a = pg_kinds.save_custom({**GRPC_REALITY, "family": "", "family_label": "Brand New", "family_emoji": "🦄"})
-    assert [f["id"] for f in a["families"]] == ["vless", "trojan", "vmess", "shadowsocks", "brandnew"] and a["families"][-1] == {"id": "brandnew", "label": "Brand New", "emoji": "🦄", "custom": True}
+    assert [f["id"] for f in a["families"]] == ["vless", "trojan", "vmess", "shadowsocks", "brandnew"] and a["families"][-1] == {"id": "brandnew", "label": "Brand New", "icon": "", "emoji": "🦄", "custom": True}
     b = pg_kinds.save_custom({**GRPC_REALITY, "short": "grpc+tls", "security": "tls", "family": "brandnew"})                                  # a second protocol in the same new drawer
     assert [f["id"] for f in b["families"]].count("brandnew") == 1 and sum(1 for k in b["kinds"] if k["family"] == "brandnew") == 2
     again = pg_kinds.save_custom({**GRPC_REALITY, "short": "third", "family": "", "family_label": "brand  NEW"})                              # the same name (case and spaces aside) is the same drawer
     assert again["families"][-1]["emoji"] == "🦄" and [f["id"] for f in again["families"]].count("brandnew") == 1
+    icon = pg_kinds.save_custom({**GRPC_REALITY, "short": "with icon", "family": "", "family_label": "Rocket group", "family_icon": "Rocket"})        # an icon of the list (capitals aside), no emoji
+    assert icon["families"][-1] == {"id": "rocketgroup", "label": "Rocket group", "icon": "rocket", "emoji": "", "custom": True}
     assert "brandnew" in [f["id"] for f in pg_kinds.delete_custom(a["id"])["families"]]                                                     # two protocols are still in it
     pg_kinds.delete_custom(again["id"])
     gone = pg_kinds.delete_custom(b["id"])
+    assert [f["id"] for f in gone["families"]] == ["vless", "trojan", "vmess", "shadowsocks", "rocketgroup"]                                  # the drawer of the last protocol is gone, the Rocket group still holds its one
+    gone = pg_kinds.delete_custom(icon["id"])
     assert [f["id"] for f in gone["families"]] == ["vless", "trojan", "vmess", "shadowsocks"] and not any(k["custom"] for k in gone["kinds"]) and pg_kinds._store() == EMPTY_STORE
+
+    with pytest.raises(ValueError, match="icon of a group is one of"):
+        pg_kinds.save_custom({**GRPC_REALITY, "short": "bad icon", "family": "", "family_label": "Bad icon", "family_icon": "poop"})
+
+    assert pg_kinds._store() == EMPTY_STORE
 
 
 def test_a_protocol_of_your_own_can_be_changed_and_taken_out(fake):

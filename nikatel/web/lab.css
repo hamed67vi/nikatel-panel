@@ -700,25 +700,40 @@ html body #page .pgu-cap { display: flex; align-items: center; gap: 8px; margin:
 html body #page .pgu-prow { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 34px; padding: 3px 8px 3px 10px; border-radius: 10px; border: 1px solid var(--uk-line); background: #131b2e; font-size: 12.5px; } html body #page .pgu-prow b { font-weight: 600; } html body #page .pgu-prow small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .pgu-prow button { flex: none; height: 24px; font-size: 11.5px; }
 html body #page .pgu-none { padding: 2px 4px; font-size: 12px; }
 html[data-mode="light"] body #page :is(.pgu-top, .pgu-prow) { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); }
-/* 1.57.52 - Settings → Api & Key: every connection is ONE slim box - a tile, the name, its state, and the fields and buttons on the SAME line (they fold under the name only on a narrow page); the rows of a list (tokens, accounts, panels) under it; no explaining text (the owner, 2026-10-16: "as elegant and compact as you can") */
-html body #page .ab-list { display: grid; gap: 6px; }
-html body #page .ab { box-sizing: border-box; padding: 6px 10px; border-radius: 13px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
-html body #page .ab-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 38px; margin: 0; }
-html body #page .ab-h > .ss-ic { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 9px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; } html body #page .ab-h > .ss-ic svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-html body #page .ab-t { display: grid; flex: 0 1 auto; min-width: 96px; max-width: 220px; gap: 0; line-height: 1.25; } html body #page .ab-n { display: flex; align-items: center; gap: 7px; white-space: nowrap; } html body #page .ab-n b { font-size: 13.5px; font-weight: 650; }
-html body #page .ab-t small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--mut); }
-html body #page .ab-ctl { display: flex; flex: 1 1 520px; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
-html body #page .ab-ctl > :is(.fic, .sic, .si-f, #tok-name) { flex: 1 1 190px; width: auto; min-width: 150px; } html body #page .ab-ctl > select { flex: 0 0 86px; } html body #page .ab-ctl > .sic { flex: 0 1 170px; } html body #page .ab-ctl > :is(button, a.btn, label) { flex: none; }
-html body #page .ab-ctl .sm, html body #page .ab-ctl a.btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 9px; font-size: 12px; } html body #page .ab .bi svg { width: 14px; height: 14px; }
-html body #page .ab-sw { display: inline-flex; align-items: center; gap: 7px; margin: 0 2px; font-size: 12px; color: var(--mut); cursor: pointer; }
-html body #page .ab-b { display: grid; gap: 4px; margin-top: 6px; } html body #page .ab-b[hidden] { display: none; }
-html body #page .ab-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; } html body #page .ab-btns > button { height: 26px; font-size: 11.5px; }
-html body #page .ab-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; } html body #page .ab-grid > .ab-wide { grid-column: 1 / -1; height: 32px; min-height: 32px; resize: vertical; }
-html body #page .ab :is(input:not([type=checkbox]), select, textarea) { height: 32px; box-sizing: border-box; border-radius: 9px; font-size: 12.5px; } html body #page .ab textarea { padding-top: 6px; line-height: 1.35; }
-html body #page .ab .fic input { padding-left: 36px !important; } html body #page .ab .sic select { padding-left: 36px !important; } html body #page .ab :is(.fic input, .sic select, .nk-combo, .nk-combo input) { width: 100%; max-width: none; box-sizing: border-box; } html body #page .ab .nk-combo { display: block; }
-html body #page .ab-li { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 32px; padding: 2px 8px 2px 10px; border-radius: 9px; border: 1px solid var(--uk-line); background: #131b2e; } html body #page .ab-ln { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; } html body #page .ab-ln b { font-size: 12.5px; font-weight: 600; } html body #page .ab-ln small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--mut); } html body #page .ab-li .sm { flex: none; height: 24px; font-size: 11.5px; }
-html body #page .ab .tok-list { display: grid; gap: 4px; } html body #page .ab .tok-row { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 30px; padding: 2px 8px 2px 10px; border-radius: 9px; border: 1px solid var(--uk-line); background: #131b2e; font-size: 12px; } html body #page .ab .tok-row small { margin-right: auto; } html body #page .ab .tok-row code { font-size: 11px; } html body #page .ab .tok-row .sm { height: 24px; font-size: 11.5px; }
-html[data-mode="light"] body #page .ab { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page :is(.ab-li, .ab .tok-row) { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .ab-h > .ss-ic { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); color: #4a5b86; }
+/* 1.59.0 - Settings → Api & Key: every connection is ONE box (the owner, 2026-10-16: "put each part in a box so it is more orderly"): a head - the tile, the name with its state, the buttons on the right - and under it its fields, each with its name above it; the AIs are rows of one box (a tile, the name and its state, the key and the model, and whether it is the one in use); the rows of a list (tokens, accounts, panels) under their head */
+html body #page .ab-list { display: grid; gap: 12px; }
+html body #page .ab { box-sizing: border-box; margin: 0; border-radius: 16px; border: 1px solid var(--uk-line); background: var(--uk-surface); overflow: hidden; }
+html body #page .ab-h { display: flex; align-items: center; gap: 12px; min-height: 62px; box-sizing: border-box; margin: 0; padding: 12px 16px; }
+html body #page .ab-h > .ss-ic { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 11px; background: #1a2036; border: 1px solid var(--uk-line); color: #aab4d0; font-style: normal; } html body #page .ab-h > .ss-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .ab-t { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; line-height: 1.3; } html body #page .ab-n { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; } html body #page .ab-n b { font-size: 14.5px; font-weight: 650; color: var(--uk-text); }
+html body #page .ab-t small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--uk-mut); }
+html body #page .ab-ctl { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+html body #page .ab-ctl :is(.sm, a.btn) { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 10px; font-size: 12.5px; } html body #page .ab .bi svg { width: 14px; height: 14px; }
+html body #page .ab-b { display: grid; gap: 12px; padding: 14px 16px 16px; border-top: 1px solid var(--uk-line); } html body #page .ab-b.flush { gap: 0; padding: 0; } html body #page .ab-b[hidden] { display: none; }
+html body #page .ab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 14px; }
+html body #page .abf { display: grid; align-content: start; gap: 6px; margin: 0; min-width: 0; } html body #page .abf > span:first-child { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--uk-mut); } html body #page .ab-grid > .ab-wide { grid-column: 1 / -1; }
+html body #page .ab-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } html body #page .ab-btns > button { height: 32px; font-size: 12px; }
+html body #page .ab-make { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } html body #page .ab-make > .si-f { flex: 1 1 260px; min-width: 0; } html body #page .ab-make > select { flex: 0 0 110px; } html body #page .ab-make > button { flex: none; height: 36px; padding: 0 16px; }
+html body #page .ab :is(input:not([type=checkbox]), select) { height: 36px; box-sizing: border-box; border-radius: 10px; font-size: 13px; } html body #page .ab textarea { box-sizing: border-box; min-height: 56px; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4; resize: vertical; }
+html body #page .ab .fic input { padding-left: 38px !important; } html body #page .ab .sic select { padding-left: 38px !important; } html body #page .ab :is(.fic, .sic, .fic input, .sic select, .nk-combo, .nk-combo input) { width: 100%; max-width: none; box-sizing: border-box; } html body #page .ab .nk-combo { display: block; }
+html body #page .ab-sw { display: inline-flex; align-items: center; gap: 8px; height: 36px; }
+html body #page .ab-li { display: flex; align-items: center; gap: 10px; box-sizing: border-box; min-height: 42px; padding: 4px 8px 4px 12px; border-radius: 10px; border: 1px solid var(--uk-line); background: var(--uk-field); } html body #page .ab-b > .ab-li + .ab-li { margin-top: -6px; } html body #page .ab-ln { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; } html body #page .ab-ln b { font-size: 13px; font-weight: 600; } html body #page .ab-ln small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--uk-mut); } html body #page .ab-li .sm { flex: none; height: 28px; font-size: 12px; }
+html body #page .ab .tok-list { display: grid; gap: 6px; } html body #page .ab .tok-row { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 40px; padding: 4px 8px 4px 12px; border-radius: 10px; border: 1px solid var(--uk-line); background: var(--uk-field); font-size: 12.5px; } html body #page .ab .tok-row small { margin-right: auto; } html body #page .ab .tok-row code { font-size: 11.5px; } html body #page .ab .tok-row .sm { height: 28px; font-size: 12px; }
+html body #page .ab-b > #api-box:empty { display: none; }
+/* the AI rows */
+html body #page .aim-list { display: grid; }
+html body #page .aim { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; margin: 0; padding: 14px 16px; border-top: 1px solid var(--uk-line); } html body #page .aim:first-child { border-top: 0; }
+html body #page .aim.on { background: linear-gradient(90deg, rgba(31, 123, 255, .10), transparent 65%); }
+html body #page .aim-i, html body .lab-menu .aim-mono { display: grid; place-items: center; flex: none; width: 38px; height: 38px; box-sizing: border-box; border-radius: 11px; font-style: normal; font-size: 12.5px; font-weight: 800; letter-spacing: .02em; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); border: 1px solid color-mix(in srgb, var(--c) 38%, transparent); }
+html body .lab-menu .aim-mono { width: 22px; height: 22px; border-radius: 7px; font-size: 9.5px; }
+html body #page .aim-t { display: grid; gap: 2px; min-width: 0; line-height: 1.3; } html body #page .aim-n { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; } html body #page .aim-n b { font-size: 14px; font-weight: 650; color: var(--uk-text); }
+html body #page .aim-t small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--uk-mut); } html body #page .aim-t small.err { color: var(--uk-red); }
+html body #page .aim-a { display: flex; align-items: center; justify-content: flex-end; gap: 6px; } html body #page .aim-a .sm { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; }
+html body #page .aim-use { padding: 0 8px; font-size: 12px; font-weight: 650; white-space: nowrap; color: #6db3ff; }
+html body #page .aim-f { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } html body #page .aim-f > .fic { flex: 1 1 220px; min-width: 0; } html body #page .aim-f > button { flex: none; height: 36px; padding: 0 18px; }
+html body #page .nk-combo-b.busy { opacity: .45; cursor: progress; }
+@media (max-width: 640px) { html body #page .aim { grid-template-columns: 38px minmax(0, 1fr); } html body #page .aim-a { grid-column: 1 / -1; justify-content: flex-start; } html body #page .aim-f { grid-column: 1 / -1; } html body #page .ab-h { flex-wrap: wrap; } html body #page .ab-ctl { flex: 1 1 100%; justify-content: flex-start; } }
+html[data-mode="light"] body #page .ab-h > .ss-ic { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); color: #4a5b86; } html[data-mode="light"] body #page .aim-use { color: #1456c8; }
 /* 1.57.51 (4) - the cores and the PasarGuard panels / nodes each sit in ONE box of a fixed size, the list scrolls inside it (the owner, 2026-10-16) */
 html body #page #eng-box, html body #page .abt-pg .abt-cb { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
 html body #page .abt-pg #pgu-box { display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; min-height: 0; }
@@ -787,3 +802,88 @@ html body #page .abt-foot > button.abt-diag { flex: none; margin-left: 10px; hei
 .lab-chip.c-on b, .lab-chip.c-tun b { --cw: 5ch; } .lab-chip.c-cpu b { --cw: 4ch; } .lab-chip.c-pb b { --cw: 2ch; }
 .lab-nm small .lab-busy { max-width: 100%; }
 html body #page .tabs.lab-kinds .cnt { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }      /* (the count of a tab: a 0 that becomes a 1 - or a 9 that becomes 10 - does not move the search box beside the tabs) */
+
+/* 1.59.0 - Backups: ONE box, one piece, a grouped list in the MacBook style (the owner: "make it a box and one piece, unified"): the rows - the panel, the backup password, the schedule - with a hairline between them; the tile, the name with its line of help on the left, the controls on the right */
+html body #page .bk1 { border: 1px solid var(--uk-line); border-radius: 18px; background: var(--uk-surface); overflow: hidden; }
+html body #page .bk1 .bk1-r { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; min-height: 58px; margin: 0; padding: 12px 16px; box-sizing: border-box; border-top: 1px solid var(--uk-line); background: none; }
+html body #page .bk1 > .bk1-r:first-child { border-top: 0; }
+html body #page .bk1 .bk1-r.hidden { display: none !important; }
+html body #page .bk1 .bk1-r > .ss-ic { width: 36px; height: 36px; margin: 0; }
+html body #page .bk1 .bk1-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+html body #page .bk1 .bk1-n { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; } html body #page .bk1 .bk1-n b { font-size: 14px; font-weight: 650; color: var(--uk-text); }
+html body #page .bk1 .bk1-t small { font-size: 12px; line-height: 1.35; color: var(--uk-mut); }
+html body #page .bk1 .bk1-s { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--uk-mut); } html body #page .bk1 .bk1-l { display: inline-flex; align-items: center; gap: 5px; } html body #page .bk1 .bk1-s .bi svg { width: 14px; height: 14px; }
+html body #page .bk1 .bk1-s a.mut { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+html body #page .bk1 .bk1-a { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 10px; }
+html body #page .bk1 .bk1-a .sm { height: 32px; }
+html body #page .bk1 .bpw-form { margin: 0; padding: 10px 16px 12px 66px; border: 0; border-top: 1px solid var(--uk-line); border-radius: 0; background: rgba(255, 255, 255, .02); }
+html body #page .bk1 .bpw-form.hidden { display: none; }
+html body #page .bk1 .bk1-sc { display: block; margin: 0; padding: 0; }
+html body #page .bk1 .bk1-f { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 16px 8px 66px; min-height: 48px; cursor: default; }
+html body #page .bk1 .bk1-f > span:first-child { font-size: 13.5px; color: var(--uk-text); }
+html body #page .bk1 .bk1-c { display: flex; align-items: center; justify-content: flex-end; gap: 8px; } html body #page .bk1 .bk1-c em { font-style: normal; font-size: 12.5px; color: var(--uk-mut); }
+html body #page .bk1 .bk1-c :is(input:not([type=checkbox]), select) { width: 160px; height: 34px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+html body #page .bk1 .bk1-c input[type=number] { width: 96px; }
+html body #page .bk1 .bk1-c select { -webkit-appearance: none; appearance: none; padding-right: 32px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398a2bd' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; background-size: 13px; cursor: pointer; }
+html body #page .bk1 .bk1-x { display: flex; justify-content: flex-end; padding-top: 10px; padding-bottom: 12px; min-height: 0; }
+html body #page .bk1 .bk1-x .sm { height: 34px; padding: 0 22px; }
+html body #page .bk1 .bk1-sc:has(.bk1-h input[name="enabled"]:not(:checked)) .bk1-f { opacity: .5; }
+html body #page .bk1 .bk1-f { transition: opacity .2s; }
+@media (max-width: 640px) { html body #page .bk1 .bk1-r { grid-template-columns: 36px minmax(0, 1fr); } html body #page .bk1 .bk1-a { grid-column: 1 / -1; justify-content: flex-start; } html body #page .bk1 .bk1-f { grid-template-columns: minmax(0, 1fr) auto; padding-left: 16px; } html body #page .bk1 .bpw-form { padding-left: 16px; } }
+
+/* 1.59.0 - Appearance: the theme previews are small pictures of the panel itself (the owner, 2026-10-16: "make the theme previews prettier"): a sidebar, a top bar, two cards and a button in the colours of the theme, its name and one line under it; the chosen one has a ring and a tick */
+html body #page .thm { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 14px; margin: 2px 0 4px; }
+html body #page .thc { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 10px; min-width: 0; height: auto; margin: 0; padding: 8px 8px 12px; border-radius: 16px; border: 1px solid var(--uk-line); background: var(--uk-surface); text-align: left; cursor: pointer; transition: transform .16s, border-color .16s, box-shadow .16s; }
+html body #page .thc:hover { transform: translateY(-2px); border-color: var(--uk-line-2); box-shadow: 0 12px 26px -16px rgba(0, 0, 0, .65); }
+html body #page .thc.on { border-color: var(--uk-blue); box-shadow: 0 0 0 3px var(--uk-ring); }
+html body #page .thc.on::after { content: ""; position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; background: var(--uk-blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 12px no-repeat; box-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
+html body #page .thc-pv { position: relative; display: block; height: 88px; overflow: hidden; border-radius: 10px; background: var(--tb); border: 1px solid rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1); --ink: 255, 255, 255; }
+html body #page .thc-pv.lt { --ink: 20, 32, 70; border-color: rgba(20, 32, 70, .16); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7); }
+html body #page .thc-pv s { position: absolute; display: block; text-decoration: none; }
+html body #page .thc-pv .sb { left: 0; top: 0; bottom: 0; width: 24%; background: rgba(var(--ink), .07); border-right: 1px solid rgba(var(--ink), .08); }
+html body #page .thc-pv .sb::before { content: ""; position: absolute; left: 8px; top: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--ta); box-shadow: 0 0 9px var(--ta); }
+html body #page .thc-pv .sb::after { content: ""; position: absolute; left: 8px; right: 8px; top: 28px; height: 5px; border-radius: 3px; background: var(--ta); opacity: .9; box-shadow: 0 11px 0 rgba(var(--ink), .22), 0 22px 0 rgba(var(--ink), .16), 0 33px 0 rgba(var(--ink), .16); }
+html body #page .thc-pv .tp { left: 24%; right: 0; top: 0; height: 17%; border-bottom: 1px solid rgba(var(--ink), .08); }
+html body #page .thc-pv .tp::before { content: ""; position: absolute; left: 9px; top: 50%; width: 30%; height: 4px; margin-top: -2px; border-radius: 2px; background: rgba(var(--ink), .5); }
+html body #page .thc-pv .tp::after { content: ""; position: absolute; right: 8px; top: 50%; width: 14px; height: 7px; margin-top: -3.5px; border-radius: 4px; background: var(--tc); }
+html body #page .thc-pv .c1, html body #page .thc-pv .c2 { top: 28%; height: 38%; border-radius: 5px; background: rgba(var(--ink), .08); border: 1px solid rgba(var(--ink), .1); }
+html body #page .thc-pv .c1 { left: 29%; width: 33%; } html body #page .thc-pv .c2 { left: 65%; width: 31%; }
+html body #page .thc-pv :is(.c1, .c2)::before { content: ""; position: absolute; left: 5px; top: 6px; width: 40%; height: 3px; border-radius: 2px; background: rgba(var(--ink), .45); }
+html body #page .thc-pv :is(.c1, .c2)::after { content: ""; position: absolute; left: 5px; right: 5px; bottom: 5px; height: 4px; border-radius: 2px; background: var(--ta); opacity: .75; } html body #page .thc-pv .c2::after { background: var(--tc); }
+html body #page .thc-pv .bt { left: 29%; top: 74%; width: 24%; height: 13%; border-radius: 4px; background: var(--ta); box-shadow: 0 0 10px -1px var(--ta); }
+html body #page .thc.flat .thc-pv :is(s, s::before, s::after) { border-radius: 1px; }
+html body #page .thc-n { display: grid; gap: 2px; min-width: 0; padding: 0 4px; } html body #page .thc-n b { font-size: 13px; font-weight: 650; color: var(--uk-text); } html body #page .thc-n small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--uk-mut); }
+@media (max-width: 640px) { html body #page .thm { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+
+/* 1.59.0 - the speed test of a tunnel (the owner, 2026-10-16: "what speed does a user in Iran get"): two ways to choose from, the numbers, the bars against what the tunnel can carry, and the verdict */
+html body #modal .spd { display: grid; gap: 14px; padding: 4px 2px 6px; }
+html body #modal .spd-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+html body #modal .spd-opt { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--uk-line); background: var(--uk-surface); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+html body #modal .spd-opt:has(input:checked) { border-color: var(--uk-blue); box-shadow: 0 0 0 3px var(--uk-ring); }
+html body #modal .spd-opt.off { opacity: .55; cursor: not-allowed; }
+html body #modal .spd-opt input { flex: none; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--uk-blue); }
+html body #modal .spd-ot { display: grid; gap: 3px; min-width: 0; } html body #modal .spd-ot b { font-size: 13.5px; font-weight: 650; color: var(--uk-text); } html body #modal .spd-ot small { font-size: 12px; line-height: 1.4; color: var(--uk-mut); }
+html body #modal .spd-act { display: flex; align-items: center; gap: 12px; } html body #modal .spd-act button { height: 36px; padding: 0 22px; }
+html body #modal .spd-none { padding: 18px 4px; font-size: 13px; color: var(--uk-mut); }
+html body #modal .spd-res { display: grid; gap: 12px; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--uk-line); background: var(--uk-surface); }
+html body #modal .spd-top { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 26px; }
+html body #modal .spd-n { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 5px; } html body #modal .spd-n small { grid-column: 1 / -1; font-size: 11.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--uk-mut); }
+html body #modal .spd-n b { font-size: 30px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums; color: var(--uk-text); } html body #modal .spd-n em { font-style: normal; font-size: 12.5px; color: var(--uk-mut); }
+html body #modal .spd-g { margin-left: auto; padding: 3px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 650; border: 1px solid var(--uk-line); color: var(--uk-mut); }
+html body #modal .spd-res.smooth .spd-g, html body #modal .spd-res.good .spd-g { color: #5ee07f; border-color: rgba(48, 209, 88, .45); background: rgba(48, 209, 88, .1); }
+html body #modal .spd-res.fair .spd-g { color: #ffcc66; border-color: rgba(255, 204, 102, .45); background: rgba(255, 204, 102, .1); }
+html body #modal .spd-res.slow .spd-g, html body #modal .spd-res.bad .spd-g { color: var(--uk-red); border-color: var(--uk-red-line); background: var(--uk-red-bg); }
+html body #modal .spd-bars { display: grid; gap: 7px; }
+html body #modal .spd-b { display: grid; grid-template-columns: minmax(90px, 170px) minmax(0, 1fr) 96px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--uk-text); }
+html body #modal .spd-b i { display: block; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .08); overflow: hidden; } html body #modal .spd-b u { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #5aa9ff, #1f7bff); text-decoration: none; }
+html body #modal .spd-b.cap u { background: linear-gradient(90deg, #6b7794, #98a2bd); } html body #modal .spd-b.cap { color: var(--uk-mut); }
+html body #modal .spd-b b { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; } html body #modal .spd-b small { font-weight: 500; color: var(--uk-mut); }
+html body #modal .spd-v { margin: 0; font-size: 13px; line-height: 1.5; color: var(--uk-text); }
+html[data-mode="light"] body #modal .spd-b i { background: rgba(30, 50, 100, .1); }
+
+/* the light theme of the new pieces (audited with the contrast tool: every text 4.5:1) */
+html[data-mode="light"] body #page .aim-i, html[data-mode="light"] body .lab-menu .aim-mono { color: color-mix(in srgb, var(--c) 50%, #0d1530); }
+html[data-mode="light"] body #modal .spd-res.smooth .spd-g, html[data-mode="light"] body #modal .spd-res.good .spd-g { color: #11703a; border-color: rgba(17, 112, 58, .4); background: rgba(48, 209, 88, .14); }
+html[data-mode="light"] body #modal .spd-res.fair .spd-g { color: #7d5200; border-color: rgba(125, 82, 0, .4); background: rgba(255, 204, 102, .28); }
+html[data-mode="light"] body #modal .spd-res.slow .spd-g, html[data-mode="light"] body #modal .spd-res.bad .spd-g { color: #b4232f; border-color: rgba(200, 40, 60, .4); background: #fdecee; }
+html[data-mode="light"] body #modal .spd-b.cap u { background: linear-gradient(90deg, #9aa5c2, #7886a8); }

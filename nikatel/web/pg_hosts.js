@@ -23,38 +23,46 @@ window.pgHostOpen = async (id, hid) => {
   Object.assign(pgH, {id, hid, d}); pgHostShow();
 };
 
-function pgHostShow() {
+const PGH_I = {      // the little pictures of the cards (thin lines, one colour)
+  pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  shield: '<path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+};
+const pgHIc = n => `<i class="pgh-i" aria-hidden="true"><svg viewBox="0 0 24 24">${PGH_I[n]}</svg></i>`;
+
+function pgHostShow() {      // (the owner, 2026-10-16: "make this window better and more professional", "fix the size of my switches so they do not overlap"): two cards of rows - the name and a line of help on the left, the control on the right; ticks are pills, every switch is 40 x 24
   const {host: h, options: o} = pgH.d, hid = pgH.hid, id = pgH.id;
-  const fld = (l, inner, tip = "", tag = "label") => `<${tag} class="kv2 kf"${tip ? ` title="${esc(tip)}"` : ""}><span>${l}</span>${inner}</${tag}>`;      // (a row of ticks is a div: a label would tick the first one when its caption is clicked)
-  const box = (icon, title, rows, cls = "") => `<div class="sbox ${cls}"><h5><i>${icon}</i>${title}</h5>${rows}</div>`;
-  const sel = (name, opts, cur) => `<select name="${name}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const row = (name, ctl, hint = "", tag = "label", cls = "") => `<${tag} class="pgh-r${cls ? " " + cls : ""}"><span class="pgh-l"><b>${name}</b>${hint ? `<small>${esc(hint)}</small>` : ""}</span><span class="pgh-c">${ctl}</span></${tag}>`;      // (a row of ticks or a switch is a div: a label would tick the first one when its name is clicked)
+  const card = (icon, title, sub, rows, cls = "") => `<section class="pgh-card ${cls}"><header>${pgHIc(icon)}<b>${title}</b><small>${sub}</small></header>${rows}</section>`;
+  const sel = (name, opts, cur) => `<select name="${name}" data-dd>${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   const tags = o.inbounds.map(i => [i.tag, i.tag + (i.protocol ? ` · ${i.protocol}${i.network ? "/" + i.network : ""}` : "")]); if (h.inbound_tag && !o.inbounds.some(i => i.tag === h.inbound_tag)) tags.unshift([h.inbound_tag, h.inbound_tag + " (not in the cores)"]);
-  const chips = (name, list, on, label = x => x) => `<div class="pgh-chips">${list.map(x => `<label class="chk"><input type="checkbox" name="${name}" value="${esc(x)}" ${on.includes(x) ? "checked" : ""}><span>${esc(label(x))}</span></label>`).join("")}</div>`;
-  const where = box("📍", "Where", fld("Remark", `<input name="remark" maxlength="256" value="${esc(h.remark)}" required placeholder="shown in the client; {USERNAME} and friends work" autocomplete="off">`, "The name the client shows. The panel fills {USERNAME}, {DATA_LEFT}, {DAYS_LEFT} and the like.")
-    + fld("Inbound", sel("inbound_tag", [["", "(none)"], ...tags], h.inbound_tag), "The inbound of a core that this host leads to")
-    + fld("Address", `<textarea name="address" rows="2" spellcheck="false" placeholder="one or more, separated by commas or lines">${esc(h.address.join(", "))}</textarea>`, "Where the client connects: a domain or an IP. Several = the client gets one line for each")
-    + fld("Port", `<input name="port" type="number" min="1" max="65535" value="${h.port ?? ""}" placeholder="the inbound's port">`)
-    + fld("Priority", `<input name="priority" type="number" min="0" step="1" value="${h.priority}" title="The order of the hosts in the subscription: the lowest first">`)
-    + fld("For users", chips("st", pgHSt, h.status || [], x => x.replace("_", " ")), "Only users in these statuses get this host. None ticked = every user", "div")
-    + `<div class="kv2 kf"><span>Enabled</span>${pgSw(!h.is_disabled, "", 'name="enabled"')}</div>`, "pgh-where");
-  const sec = box("🔒", "Security", fld("Security", sel("security", o.securities.map(s => [s, s.replace("_", " ")]), h.security), "inbound default = what the inbound itself says")
-    + fld("SNI", `<input name="sni" value="${esc(h.sni.join(", "))}" placeholder="server name, comma separated" autocomplete="off">`)
-    + fld("Host header", `<input name="host" value="${esc(h.host.join(", "))}" placeholder="the Host header / CDN name" autocomplete="off">`)
-    + fld("Path", `<input name="path" maxlength="1024" value="${esc(h.path)}" placeholder="/ws" autocomplete="off">`)
-    + fld("ALPN", chips("alpn", o.alpns, h.alpn), "", "div")
-    + fld("Fingerprint", sel("fingerprint", o.fingerprints.map(f => [f, f || "(none)"]), h.fingerprint))
-    + fld("Insecure", sel("allowinsecure", [["", "default"], ["true", "allow"], ["false", "do not allow"]], h.allowinsecure == null ? "" : String(h.allowinsecure)), "Allow a certificate that does not verify")
-    + `<div class="kv2 kf"><span>SNI as host</span>${pgSw(h.use_sni_as_host, "", 'name="use_sni_as_host" title="Use the SNI as the Host header too"')}</div>`
-    + `<div class="kv2 kf"><span>Random UA</span>${pgSw(h.random_user_agent, "", 'name="random_user_agent" title="A random User-Agent in the client config"')}</div>`, "pgh-sec");
-  const more = `<details class="sbox pgh-more pgh-row"><summary><b>More TLS options</b><small class="mut"> VLESS route · cipher suites · pinned certificate · verify by name</small></summary>
-    ${fld("VLESS route", `<input name="vless_route" maxlength="128" value="${esc(h.vless_route)}" autocomplete="off">`)}${fld("Cipher suites", `<input name="cipher_suites" maxlength="1024" value="${esc(h.cipher_suites)}" autocomplete="off">`)}
-    ${fld("Pinned cert", `<input name="pinned_peer_cert_sha256" maxlength="256" value="${esc(h.pinned_peer_cert_sha256)}" placeholder="sha256 of the certificate" autocomplete="off">`)}${fld("Verify by name", `<input name="verify_peer_cert_by_name" value="${esc(h.verify_peer_cert_by_name.join(", "))}" placeholder="names, comma separated" autocomplete="off">`)}</details>`;
-  const adv = `<details class="sbox pgh-adv pgh-row"><summary><b>Advanced settings</b><small class="mut"> ${pgHAdv.filter(([k]) => h.json[k]).map(a => a[1]).join(" · ") || "none set"}</small></summary>
-    ${pgHAdv.map(([k, label, hint, ex]) => `<div class="pgh-a"><div class="pgh-ah"><b>${label}</b><small class="mut">${esc(hint)}</small>${k === "subscription_templates" && o.templates.length ? `<select class="sm" onchange="pgHTpl(this)" title="Fill the box with one of the xray templates"><option value="">template…</option>${o.templates.map(t => `<option value="${t.id}">${esc(t.name)} (#${t.id})</option>`).join("")}</select>` : ""}<button type="button" class="sm" onclick="pgHAdvEx('${k}')" title="Put an example in the box">example</button></div>
+  const chips = (name, list, on, label = x => x) => `<span class="pgh-chips">${list.map(x => `<label class="pgh-chip"><input type="checkbox" name="${name}" value="${esc(x)}"${on.includes(x) ? " checked" : ""}><span>${esc(label(x))}</span></label>`).join("")}</span>`;
+  const where = card("pin", "Where", "what the client connects to", row("Remark", `<input name="remark" maxlength="256" value="${esc(h.remark)}" required placeholder="shown in the client" title="The panel fills {USERNAME}, {DATA_LEFT}, {DAYS_LEFT} and the like" autocomplete="off">`, "{USERNAME} etc. work")
+    + row("Inbound", sel("inbound_tag", [["", "(none)"], ...tags], h.inbound_tag), "the inbound it leads to")
+    + row("Address", `<textarea name="address" rows="2" spellcheck="false" placeholder="a domain or an IP; several, separated by commas or lines">${esc(h.address.join(", "))}</textarea>`, "one line per address")
+    + row("Port", `<input name="port" type="number" min="1" max="65535" value="${h.port ?? ""}" placeholder="the inbound's port">`, "empty = the inbound's")
+    + row("Priority", `<input name="priority" type="number" min="0" step="1" value="${h.priority}">`, "the lowest comes first")
+    + row("For users", chips("st", pgHSt, h.status || [], x => x.replace("_", " ")), "none = everyone", "div")
+    + row("Enabled", pgSw(!h.is_disabled, "", 'name="enabled"'), "off = hidden", "div", "pgh-sw"), "pgh-where");
+  const sec = card("lock", "Security", "how the connection is protected", row("Security", sel("security", o.securities.map(s => [s, s.replace("_", " ")]), h.security), "default = as the inbound")
+    + row("SNI", `<input name="sni" value="${esc(h.sni.join(", "))}" placeholder="server name, comma separated" autocomplete="off">`)
+    + row("Host header", `<input name="host" value="${esc(h.host.join(", "))}" placeholder="the Host header / CDN name" autocomplete="off">`)
+    + row("Path", `<input name="path" maxlength="1024" value="${esc(h.path)}" placeholder="/ws" autocomplete="off">`)
+    + row("ALPN", chips("alpn", o.alpns, h.alpn), "", "div")
+    + row("Fingerprint", sel("fingerprint", o.fingerprints.map(f => [f, f || "(none)"]), h.fingerprint))
+    + row("Insecure", sel("allowinsecure", [["", "default"], ["true", "allow"], ["false", "do not allow"]], h.allowinsecure == null ? "" : String(h.allowinsecure)), "accept a bad certificate")
+    + row("SNI as host", pgSw(h.use_sni_as_host, "", 'name="use_sni_as_host"'), "SNI also as Host", "div", "pgh-sw")
+    + row("Random UA", pgSw(h.random_user_agent, "", 'name="random_user_agent"'), "random User-Agent", "div", "pgh-sw"), "pgh-sec");
+  const more = `<details class="pgh-more"><summary>${pgHIc("shield")}<b>More TLS options</b><small>VLESS route · cipher suites · pinned certificate · verify by name</small></summary>
+    ${row("VLESS route", `<input name="vless_route" maxlength="128" value="${esc(h.vless_route)}" autocomplete="off">`)}${row("Cipher suites", `<input name="cipher_suites" maxlength="1024" value="${esc(h.cipher_suites)}" autocomplete="off">`)}
+    ${row("Pinned cert", `<input name="pinned_peer_cert_sha256" maxlength="256" value="${esc(h.pinned_peer_cert_sha256)}" placeholder="sha256 of the certificate" autocomplete="off">`)}${row("Verify by name", `<input name="verify_peer_cert_by_name" value="${esc(h.verify_peer_cert_by_name.join(", "))}" placeholder="names, comma separated" autocomplete="off">`)}</details>`;
+  const adv = `<details class="pgh-more pgh-adv"><summary>${pgHIc("sliders")}<b>Advanced settings</b><small>${pgHAdv.filter(([k]) => h.json[k]).map(a => a[1]).join(" · ") || "none set"}</small></summary>
+    ${pgHAdv.map(([k, label, hint, ex]) => `<div class="pgh-a"><div class="pgh-ah"><b>${label}</b><small>${esc(hint)}</small>${k === "subscription_templates" && o.templates.length ? `<select class="sm" data-dd onchange="pgHTpl(this)" title="Fill the box with one of the xray templates"><option value="">template…</option>${o.templates.map(t => `<option value="${t.id}">${esc(t.name)} (#${t.id})</option>`).join("")}</select>` : ""}<button type="button" class="sm" onclick="pgHAdvEx('${k}')" title="Put an example in the box">example</button></div>
       <textarea name="adv_${k}" rows="${h.json[k] ? Math.min(12, h.json[k].split("\n").length + 1) : 2}" spellcheck="false" data-ex="${esc(ex)}" data-was="${esc(h.json[k])}" placeholder="empty = nothing set" oninput="pgHAdvCheck(this)">${esc(h.json[k])}</textarea><small class="err pgh-e" hidden></small></div>`).join("")}</details>`;
   const acts = hid ? `<button type="button" class="sm" onclick="pgHostClone(${id}, ${hid})" title="A copy of this host, switched off">Clone</button><button type="button" class="sm danger" onclick="pgHostDelete(${id}, ${hid})">Delete</button>` : "";
   showModal(hid ? `<span class="st ${h.is_disabled ? "" : "online"}"></span><b>${esc(h.remark)}</b> <span class="pill">${esc(h.inbound_tag || "no inbound")}</span> <span class="pill">#${hid}</span>` : "<b>New host</b>",
-    `<form class="pg-admin-form2 pgh-form" onsubmit="return pgHostSave(event)"><div class="sgrid ue-grid two">${where}${sec}</div>${more}${adv}
+    `<form class="pg-admin-form2 pgh-form" onsubmit="return pgHostSave(event)"><div class="pgh-grid">${where}${sec}</div>${more}${adv}
     <div class="frm-act"><button class="pri" type="submit">${hid ? "Save" : "Make the host"}</button><button type="button" onclick="closeModal()">Cancel</button><span class="sp"></span>${acts}</div></form>`, "wide pgh");
 }
 window.pgHAdvEx = k => { const t = document.querySelector(`#modal textarea[name="adv_${k}"]`); if (!t) return; t.value = JSON.stringify(JSON.parse(t.dataset.ex), null, 2); t.rows = Math.min(12, t.value.split("\n").length + 1); pgHAdvCheck(t); };

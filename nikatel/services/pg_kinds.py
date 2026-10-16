@@ -68,13 +68,16 @@ REALITY_SITES = ("play.google.com:443", "www.samsung.com:443", "amp-api-edge.app
 SPOOF_SNIS = ("pish-data-31.myket.ir", "pish-data-14.myket.ir", "pish-data-32.myket.ir", "pish-data-33.myket.ir", "pish-data-34.myket.ir", "pish-data-35.myket.ir", "pish-data-36.myket.ir", "pish-data-38.myket.ir")      # the names the links of the owner show to the network when the certificate is the panel's own (kinds "own certificate")
 FINGERPRINTS = ("chrome", "firefox", "safari", "ios", "android", "edge", "random")
 
-# ---- the table of the Add form: the DRAWERS (one per protocol, each with its own emoji) and the short name on every button (the owner, 2026-10-16: "write the names short, e.g. ws+tls" and "every
-# protocol its own emoji"). The title stays the long name (the tooltip of the button, the name of the account made from it).
-FAMILIES: tuple[tuple[str, str, str], ...] = (("vless", "VLESS", "⚡"), ("trojan", "Trojan", "🐴"), ("vmess", "VMess", "💬"), ("shadowsocks", "Shadowsocks", "👻"))
+# ---- the table of the Add form: the DRAWERS (one per protocol, each with a picture of its own) and the short name on every button (the owner, 2026-10-16: "write the names short, e.g. ws+tls", "every
+# protocol its own emoji" and then "in the MacBook style, black and white": the picture is a thin line icon of the kit - `icon` names one of ICONS, drawn in web/pg_kinds.js - and `emoji` is the same
+# thing as a letter, for a client that wants text; a drawer of the owner's own may carry an emoji instead of an icon, which the page shows in black and white). The title stays the long name (the tooltip of the button, the name of the account made from it).
+FAMILIES: tuple[tuple[str, str, str, str], ...] = (("vless", "VLESS", "bolt", "⚡"), ("trojan", "Trojan", "horse", "🐴"), ("vmess", "VMess", "chat", "💬"), ("shadowsocks", "Shadowsocks", "ghost", "👻"))
+ICONS = ("bolt", "horse", "chat", "ghost", "rocket", "flame", "star", "cloud", "wifi", "key", "shield", "globe", "lock", "cube", "spark")      # the pictures a drawer of your own can have (web/pg_kinds.js draws each)
 SHORT = {"vless-reality": "reality", "vless-reality-vision": "reality+vision", "trojan-tcp-pin": "tcp+tls pin", "vless-ws-pin": "ws+tls pin", "vless-ws-tls": "ws+tls", "vless-ws": "ws", "vless-grpc-tls": "grpc+tls",
          "trojan-ws-tls": "ws+tls", "trojan-tcp-tls": "tcp+tls", "vmess-ws-tls": "ws+tls", "vless-tcp-http": "tcp+http", "vless-xhttp": "xhttp", "vless-xhttp-tls": "xhttp+tls", "vless-xhttp-reality": "xhttp+reality",
          "vless-httpupgrade-tls": "httpupgrade+tls", "vless-mlkem": "ML-KEM", "shadowsocks": "tcp+udp"}
 BUILTIN_FAMILY = {f[0] for f in FAMILIES}
+
 CUSTOM_KEY = "pg_kinds"                    # the settings document: {"custom": [the kinds the owner added], "families": [the drawers he made: {id, label, emoji}]}
 MAX_CUSTOM = 40
 _CUSTOM_LOCK = threading.Lock()
@@ -199,8 +202,9 @@ def families() -> list[dict]:
     """The drawers of the table: the four protocols, then the ones the owner made (only while they hold a protocol), each with its emoji."""
     st = _store()
     used = {x.get("family") for x in st["custom"]}
-    own = [{"id": f["id"], "label": str(f.get("label") or f["id"]), "emoji": str(f.get("emoji") or "🧩"), "custom": True} for f in st["families"] if f["id"] in used and f["id"] not in BUILTIN_FAMILY]
-    return [{"id": i, "label": label, "emoji": emoji, "custom": False} for i, label, emoji in FAMILIES] + own
+    own = [{"id": f["id"], "label": str(f.get("label") or f["id"]), "icon": f.get("icon") if f.get("icon") in ICONS else ("" if f.get("emoji") else "cube"), "emoji": str(f.get("emoji") or ""), "custom": True}
+           for f in st["families"] if f["id"] in used and f["id"] not in BUILTIN_FAMILY]
+    return [{"id": i, "label": label, "icon": icon, "emoji": emoji, "custom": False} for i, label, icon, emoji in FAMILIES] + own
 
 
 def catalog() -> dict:
@@ -258,12 +262,16 @@ def _family_of(b: dict, st: dict) -> str:
     if fid in BUILTIN_FAMILY or any(f["id"] == fid for f in st["families"]):
         return fid
 
-    emoji = "".join(str(b.get("family_emoji") or "").split())[:12] or "🧩"
+    emoji = "".join(str(b.get("family_emoji") or "").split())[:12]
+    icon = str(b.get("family_icon") or "").strip().lower()
 
     if any(ord(ch) < 32 for ch in emoji):
         raise ValueError("the emoji of the group has a control character")
 
-    st["families"].append({"id": fid, "label": label, "emoji": emoji})
+    if icon and icon not in ICONS:
+        raise ValueError(f"the icon of a group is one of {', '.join(ICONS)}")
+
+    st["families"].append({"id": fid, "label": label, "icon": icon or ("" if emoji else "cube"), "emoji": emoji})
     return fid
 
 

@@ -167,7 +167,8 @@ echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
     # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door
     # (runs on the Iran server, talks to the sink on the foreign server through the tunnel)
     "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' <<'__NK_PY__'
-import socket, threading, time, json, sys
+import socket, threading, time, json, sys, os
+POOL = [os.urandom(65536) for _ in range(32)]   # random bytes: a tunnel that compresses (BackPack) must not look faster than it is for the encrypted traffic of real customers
 P = int(sys.argv[1]); SECS = float(sys.argv[2]); N = int(sys.argv[3]); PINGS = int(sys.argv[4]); KEY = sys.argv[5].encode()
 TO = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5
 out = {"port": P}
@@ -217,9 +218,9 @@ def run(mode, results, i):
             end = time.time()
             rate = (n - nw) * 8 / (end - warm) / 1e6 if (warm and end > warm) else n * 8 / max(end - t0, 0.2) / 1e6
         else:
-            b = b"x" * 65536
+            k = i * 7
             while time.time() - t0 < SECS:
-                s.sendall(b)
+                s.sendall(POOL[k % 32]); k += 1
             s.settimeout(30)
             buf = b""
             while b"\n" not in buf:
@@ -833,7 +834,8 @@ for u in $U; do systemctl restart "$u" || true; done; echo "SWAPPED units=$U"
     # that echoes pings and streams bytes both ways so the Iran side can measure the real tunnel
     "sink_install": (r"""set -e; install -d /usr/local/sbin
 cat > /usr/local/sbin/nikatel-sink-@NAME@.py <<'__NK_SINK__'
-import socket, threading, time, sys
+import socket, threading, time, sys, os
+POOL = [os.urandom(65536) for _ in range(32)]   # random bytes (see probe_run): what the sink sends cannot be squeezed by a compressing tunnel
 P = int(sys.argv[1]); KEY = sys.argv[2].encode()
 s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind((sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1", P)); s.listen(256)
@@ -855,9 +857,9 @@ def h(c):
                     break
                 c.sendall(d)
         elif m == b"D":
-            b = b"x" * 65536; t = time.time()
+            t = time.time(); k = int(t * 1000) % 32
             while time.time() - t < 12:
-                c.sendall(b)
+                c.sendall(POOL[k % 32]); k += 1
         elif m == b"U":
             t_first = None; n = 0; n1 = 0; t1 = None; tl = None
             c.settimeout(2.0)

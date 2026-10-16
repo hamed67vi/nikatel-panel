@@ -32,7 +32,8 @@ def at(y, mo, d, h=0, mi=0):
 
 
 @pytest.fixture(autouse=True)
-def clean_cache():
+def clean_cache(monkeypatch):
+    monkeypatch.setattr(pg_usage, "STALE", 0)               # the plain rules (a value is asked again at its TTL) are under test here; the stale window has its own tests below
     pg_usage.clear_cache()
     yield
     pg_usage.clear_cache()
@@ -978,3 +979,105 @@ def test_js_the_users_box_of_the_old_system_tab_is_in_usage():
     box = run_page_js("""return c.pgUsageUsersBoxHtml(ov);""")
     assert "7 online" in box and "100 active" in box and "2 on hold" in box and "5 limited" in box and "10 expired" in box and "3 disabled" in box and "120 in all" in box
     assert 'class="pill warn"' in box and "since the counters were last reset" in box and "↓ 0.93 GB · ↑ 1.86 GB" in box
+
+@needs_node
+def test_js_every_card_has_its_place_from_the_first_frame_and_nothing_waits_with_a_spinner():
+    """The owner, 2026-10-16: "these boxes load late - boxes fixed, solve the late loading": the six cards (three on Marzban) are there at once as grey shapes; the data fills the same boxes; a failed question says why inside its box."""
+    got = run_page_js("""run("Object.assign(pgUsageState, {type: 'pasarguard', ov: null, range: null, apps: null, top: null, err: {}})"); c.pgUsageDrawCards(); const none = els["#pg-usage-ov"].innerHTML;
+      run("Object.assign(pgUsageState, {ov: " + JSON.stringify(ov) + "})"); c.pgUsageDrawCards(); const some = els["#pg-usage-ov"].innerHTML;
+      run("Object.assign(pgUsageState, {err: {range: 'the panel did not answer'}})"); c.pgUsageDrawCards(); const bad = els["#pg-usage-ov"].innerHTML;
+      run("Object.assign(pgUsageState, {type: 'marzban', ov: null, err: {}})"); c.pgUsageDrawCards(); const mz = els["#pg-usage-ov"].innerHTML;
+      return [none, some, bad, mz];""")
+    none, some, bad, mz = got
+    assert none.count('class="card pg-rc pg-rc-sk"') == 6 and none.count('aria-busy="true"') == 6 and "Reading the" not in none and "spin" not in none and none.count("<h3>") == 6                  # six boxes at once, each with its title
+    assert [t for t in ("Users", "Server", "Traffic", "Nodes", "Apps", "Top users") if f"<h3>{t}</h3>" in none] == ["Users", "Server", "Traffic", "Nodes", "Apps", "Top users"]
+    assert some.count('class="card pg-rc"') == 2 and some.count("pg-rc-sk") == 4 and "7 online now" in some and some.index("<h3>Users</h3>") < some.index("<h3>Server</h3>") < some.index("<h3>Traffic</h3>")      # the counters came: the same two boxes, the others still wait in their places
+    assert "the panel did not answer" in bad and bad.count("pg-rc-bad") == 2 and bad.count("pg-rc-sk") == 4                                                               # (Traffic and Nodes)
+    assert mz.count("pg-rc-sk") == 3 and "Traffic" not in mz and "Nodes" not in mz and "Apps" not in mz
+
+
+@needs_node
+def test_js_the_last_picture_of_the_overview_is_kept_and_comes_back_at_once():
+    got = run_page_js("""run("var sessionStorage = (() => { const m = {}; return {getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }}; })()");
+      run("pgUsageReset(5, 'pasarguard'); Object.assign(pgUsageState, {ov: " + JSON.stringify(ov) + ", ovAt: Date.now() - 1000, range: " + JSON.stringify(range) + ", rangeKey: pgUsageQuery(), rangeAt: Date.now() - 2000, top: " + JSON.stringify(top) + ", topKey: pgUsageTopKey(), topAt: Date.now() - 3000})");
+      c.pgUsageSave();
+      run("pgUsageReset(5, 'pasarguard'); pgUsageRestore(5)");
+      const back = run("({ov: !!pgUsageState.ov, range: !!pgUsageState.range, apps: !!pgUsageState.apps, top: !!pgUsageState.top, ovAge: Date.now() - pgUsageState.ovAt})");
+      run("pgUsageReset(6, 'pasarguard'); pgUsageRestore(6)"); const other = run("!!pgUsageState.ov");
+      run("pgUsageReset(5, 'pasarguard'); pgUsageState.preset = 'last30'; pgUsageRestore(5)"); const rangeOfOtherDays = run("[!!pgUsageState.ov, !!pgUsageState.range]");
+      return [back, other, rangeOfOtherDays];""")
+    back, other, other_range = got
+    assert back["ov"] and back["range"] and back["top"] and not back["apps"] and 900 < back["ovAge"] < 60000                    # what was saved comes back with its own age, so the counters line says how old it is
+    assert other is False                                                                                                       # another panel starts empty
+    assert other_range == [True, False]                                                                                         # the same panel, another range: the counters come back, the range does not
+
+def _wait(cond, seconds=3.0):
+    import time
+
+    end = time.time() + seconds
+
+    while time.time() < end:
+        if cond():
+            return True
+
+        time.sleep(0.01)
+
+    return cond()
+
+
+def test_an_old_value_is_handed_out_at_once_while_a_new_one_is_asked_behind(monkeypatch):
+    """The owner, 2026-10-16: "these boxes load late": past its TTL a value is still given at once (old) for the stale window, and a new one is asked in the background - once, however many ask."""
+    import threading
+
+    t = [0.0]
+    monkeypatch.setattr(pg_usage, "_clock", lambda: t[0])
+    asked, gate = [], threading.Event()
+
+    def ask():
+        asked.append(1)
+
+        if len(asked) == 2:
+            gate.wait(5)                                   # the second question is slow: nobody may wait for it
+
+        return len(asked)
+
+    assert pg_usage._cached(("k",), 10, ask, 60) == (1, None)                                     # the very first time it is asked and waited for
+    t[0] = 5
+    assert pg_usage._cached(("k",), 10, ask, 60) == (1, 5)                                        # fresh: nothing asked
+    t[0] = 20
+    assert pg_usage._cached(("k",), 10, ask, 60) == (1, 20)                                       # old, but handed out at once ...
+    assert _wait(lambda: len(asked) == 2)                                                         # ... and asked again behind
+    assert pg_usage._cached(("k",), 10, ask, 60) == (1, 20) and len(asked) == 2                   # a second visitor does not start a second question
+    gate.set()
+    assert _wait(lambda: pg_usage._CACHE[("k",)][1] == 2)                                         # the new value arrived
+    t[0] = 21
+    assert pg_usage._cached(("k",), 10, ask, 60) == (2, 1)
+    t[0] = 200                                                                                    # older than the TTL and the stale window together: it is waited for
+    assert pg_usage._cached(("k",), 10, ask, 60) == (3, None)
+
+
+def test_a_failed_refresh_behind_keeps_the_old_value_and_the_next_question_asks_again(monkeypatch):
+    t = [0.0]
+    monkeypatch.setattr(pg_usage, "_clock", lambda: t[0])
+    calls = []
+
+    def ask():
+        calls.append(1)
+
+        if len(calls) == 2:
+            raise PanelError("the panel is down", 502)
+
+        return len(calls)
+
+    pg_usage._cached(("e",), 10, ask, 60)
+    t[0] = 20
+    assert pg_usage._cached(("e",), 10, ask, 60) == (1, 20)
+    assert _wait(lambda: len(calls) == 2 and not pg_usage._LOCKS[("e",)].locked())
+    assert pg_usage._cached(("e",), 10, ask, 60) == (1, 20)                                       # the old value is still there; another question is started behind
+    assert _wait(lambda: pg_usage._CACHE[("e",)][1] == 3)
+    assert pg_usage._cached(("e",), 10, ask, 60)[0] == 3
+
+
+def test_the_questions_of_the_overview_use_the_stale_window():
+    src = Path(pg_usage.__file__).read_text(encoding="utf-8")
+    assert "STALE = 300" in src and src.count(", STALE)") >= 5 and "def _refresh_behind(" in src                  # the counters, the range, the user counts, the apps and the top users

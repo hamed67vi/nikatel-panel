@@ -338,9 +338,8 @@ def diagnose_config(config_id: int) -> dict:
         why = "all tunnels are healthy and nothing else shares this address: the foreign server, its port or the CDN in front of it is probably cut from Iran"
 
     out = {**info, "findings": findings, "summary": why, "tunnel_info": tinfo, "ai": ""}
-    s = ai.conf()
 
-    if s.get("enabled") and s.get("api_key"):
+    if ai.ready():
         try:
             out["ai"] = ai.ask(CONFIG_SYSTEM, "<facts>\n" + json.dumps({"config": info, "same_address": same[:12], "sick_tunnels": sick[:8], "panel_summary": why}, ensure_ascii=False)[:5000] + "\n</facts>", max_tokens=300)
         except (RuntimeError, httpx.HTTPError) as e:
@@ -798,10 +797,8 @@ def situation() -> dict:
 
 
 def explain(tunnel_id: int | None = None) -> dict:
-    s = ai.conf()
-
-    if not s.get("api_key"):
-        raise ValueError("no AI key saved: Settings → Repairs & AI → AI assistant")
+    if not ai.has_key():
+        raise ValueError("no AI key saved: Settings → Api & Key")
 
     facts = situation()
 

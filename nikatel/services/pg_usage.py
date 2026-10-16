@@ -37,6 +37,7 @@ PAST_TTL = 300                                        # a range that ended more 
 NAMES_TTL = 300                                       # node names, admin names
 MARZBAN_TTL = 120                                     # a usage question can take many seconds on a big Marzban: it is not repeated at the drop of a hat (a finished range: 10 minutes)
 MARZBAN_PAST_TTL = 600
+STALE = 300                                           # seconds past its TTL a counter, a range, the top users are still handed out at once (old) while a new one is asked in the background: nobody waits for the panel (the owner, 2026-10-16: "these boxes load late")
 PRESETS = ("today", "last7", "last30", "jmonth", "last_jmonth", "custom")
 JALALI_MONTHS = ("Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar", "Mehr", "Aban", "Azar", "Dey", "Bahman", "Esfand")
 TOP_SORTS = {"pasarguard": ("used_traffic", "online_at", "data_limit", "created_at"), "marzban": ("used_traffic", "data_limit", "created_at")}
@@ -425,13 +426,33 @@ _MAX_CACHE = 200
 _clock = time.monotonic          # the tests move this clock
 
 
-def _cached(key: tuple, ttl: float, fn: Callable[[], T]) -> tuple[T, float | None]:
-    """(value, age in seconds), the age is None when the value was just asked from the panel. One asker at a time per key, so several open tabs wait for the first answer instead of each asking the panel; an error is not kept."""
+def _refresh_behind(key: tuple, lock: threading.Lock, fn: Callable[[], Any]) -> None:
+    """The new answer for a value that was handed out old: asked from the panel in the background (the caller holds `lock`), kept when it comes; an error leaves the old value for its turn."""
+    try:
+        value = fn()
+
+        with _GUARD:
+            _CACHE[key] = (_clock(), value)
+    except Exception as e:                                # noqa: BLE001 - a background refresh must never take the thread down; the next question asks again
+        log.info("refresh of %s failed: %s", key[0], str(e)[:100])
+    finally:
+        lock.release()
+
+
+def _cached(key: tuple, ttl: float, fn: Callable[[], T], stale: float = 0) -> tuple[T, float | None]:
+    """(value, age in seconds), the age is None when the value was just asked from the panel. One asker at a time per key, so several open tabs wait for the first answer instead of each asking the panel; an error is not kept.
+    With `stale` a value older than `ttl` but younger than `ttl + stale` is handed out AT ONCE, old, and a new one is asked in the background (the owner, 2026-10-16: "these boxes load late"): nobody waits for the panel except the very first time."""
     with _GUARD:
         hit = _CACHE.get(key)
         lock = _LOCKS.setdefault(key, threading.Lock())
 
     if hit is not None and _clock() - hit[0] < ttl:
+        return hit[1], _clock() - hit[0]
+
+    if hit is not None and stale and _clock() - hit[0] < ttl + stale:
+        if lock.acquire(blocking=False):                  # nobody is asking yet: ask in the background (the lock is let go there)
+            threading.Thread(target=_refresh_behind, args=(key, lock, fn), daemon=True, name="usage-refresh").start()
+
         return hit[1], _clock() - hit[0]
 
     with lock:
@@ -536,7 +557,7 @@ def admins(c: dict) -> dict:
 def overview(c: dict) -> dict:
     """The counters of the panel (users by status, online, cpu, memory, traffic). Asked at most once in 15 seconds per panel, however many tabs are open."""
     typ = _check_type(c)
-    value, age = _cached(("overview", c["id"]), OVERVIEW_TTL, lambda: parse_overview(_get(c, "/api/system", 30)))
+    value, age = _cached(("overview", c["id"]), OVERVIEW_TTL, lambda: parse_overview(_get(c, "/api/system", 30)), STALE)
     return {**value, "panel_type": typ, **_meta(age)}
 
 
@@ -650,7 +671,7 @@ def _usage(c: dict, scope: str, name: str, preset: str, frm: str, to: str, now: 
     past = span.end <= now - dt.timedelta(hours=2)
     ttl = (PAST_TTL if past else RANGE_TTL) if typ == "pasarguard" else (MARZBAN_PAST_TTL if past else MARZBAN_TTL)
     # the key is the range of DAYS, not the moment "now" that cuts its end: a question a few seconds later is the same question
-    value, age = _cached(("usage", c["id"], scope, name, span.first.isoformat(), span.last.isoformat()), ttl, lambda: _fetch_usage(c, typ, scope, name, span))
+    value, age = _cached(("usage", c["id"], scope, name, span.first.isoformat(), span.last.isoformat()), ttl, lambda: _fetch_usage(c, typ, scope, name, span), STALE)
     return {**value, **_meta(age)}
 
 
@@ -737,7 +758,7 @@ def counts(c: dict, metric: str, preset: str = "last7", frm: str = "", to: str =
         total, series = parse_counts(_get(c, f"/api/users/counts/{metric}?" + urlencode(q), 60))
         return {"metric": metric, "period": period, "range": span.to_dict(), "admin": who, "count": total, "series": series, "max": max((p["count"] for p in series), default=0)}
 
-    value, age = _cached(("counts", c["id"], metric, who, period, span.first.isoformat(), span.last.isoformat()), PAST_TTL if past else RANGE_TTL, ask)
+    value, age = _cached(("counts", c["id"], metric, who, period, span.first.isoformat(), span.last.isoformat()), PAST_TTL if past else RANGE_TTL, ask, STALE)
     return {**value, **_meta(age)}
 
 
@@ -768,7 +789,7 @@ def sub_apps(c: dict, preset: str = "last7", frm: str = "", to: str = "", user: 
         segs = [{"name": str(s.get("name") or "")[:80], "count": _num(s.get("count")), "percent": round(float(s.get("percentage") or 0), 1)} for s in (raw.get("segments") if isinstance(raw.get("segments"), list) else []) if isinstance(s, dict)]
         return {"range": span.to_dict(), "user": uname, "admin": aname, "total": _num(raw.get("total")), "apps": sorted(segs, key=lambda s: -s["count"])[:30]}
 
-    value, age = _cached(("subapps", c["id"], uname, aname, span.first.isoformat(), span.last.isoformat()), PAST_TTL if past else RANGE_TTL, ask)
+    value, age = _cached(("subapps", c["id"], uname, aname, span.first.isoformat(), span.last.isoformat()), PAST_TTL if past else RANGE_TTL, ask, STALE)
     return {**value, **_meta(age)}
 
 
@@ -808,5 +829,5 @@ def top_users(c: dict, sort: str = "used_traffic", limit: int = MAX_TOP, admin: 
         users = [top_row(u) for u in rows if isinstance(u, dict)] if isinstance(rows, list) else []
         return {"users": users[:MAX_TOP], "total": total if isinstance(total, int) else len(users)}
 
-    value, age = _cached(("top", c["id"], sort, n, who), RANGE_TTL, ask)
+    value, age = _cached(("top", c["id"], sort, n, who), RANGE_TTL, ask, STALE)
     return {**value, "sort": sort, "limit": n, "admin": who, "sorts": list(TOP_SORTS[typ]), **_meta(age)}

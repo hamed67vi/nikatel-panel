@@ -160,8 +160,9 @@ const pgUsageStat = (label, value, note = "", cls = "") => `<div class="pg-ust $
 function pgUsagePresetInfo(key) { const r = pgUsageState.ranges; return r && r.presets.find(p => p.preset === key); }
 function pgUsageDrawAge() {
   const a = $("#pg-usage-age"), s = pgUsageState; if (!a) return;
-  const age = s.ov ? s.ov.age_s + (Date.now() - s.ovAt) / 1000 : 0;
-  a.textContent = !s.ov || age < 25 ? "" : `counters ${Math.round(age)} s old`;      // (said only when they are old: the bar stays in one row)
+  const age = s.ov ? s.ov.age_s + (Date.now() - s.ovAt) / 1000 : 0, bad = s.err.cards || s.err.range || s.err.top || s.err.apps;
+  a.textContent = s.ov && bad ? "could not refresh" : !s.ov || age < 25 ? "" : `counters ${Math.round(age)} s old`;      // (said only when they are old or a question failed: the bar stays in one row)
+  a.title = bad || "";
 }
 /* ---- the range: ONE button with a small panel that opens softly under it (the owner, 2026-10-15) - tab Relative (Days / Weeks / Months and the two Jalali months), tab Absolute (two dates). The dates are whole Tehran days and one question covers at most 93 of them. */
 /* pure: a date 'YYYY-MM-DD' moved by n days / the number of days from a to b (both counted) */
@@ -302,15 +303,40 @@ function pgUsageUsersBoxHtml(ov) {          // the Users box of the old System t
   const body = `<div class="pg-ub-chips">${chip("online", ov.online, "ok")}${chip("active", ov.active)}${chip("on hold", ov.on_hold)}${chip("limited", ov.limited, ov.limited ? "warn" : "")}${chip("expired", ov.expired, ov.expired ? "warn" : "")}${chip("disabled", ov.disabled)}</div>
     <div class="pg-ub-row"><span>Traffic</span><b>↓ ${esc(fmtB(ov.traffic_in))} · ↑ ${esc(fmtB(ov.traffic_out))}</b><small class="mut">since the counters were last reset</small></div>`;
   return pgUsageCard("Users", `${n(ov.total)} in all`, body, false, "pg-ub");
-}function pgUsageDrawCards() {          // the overview: what is known is drawn at once, the rest comes in as it arrives
-  const s = pgUsageState, pg = pgUsageIsPg(), cards = [];
-  if (s.ov) cards.push(pgUsageUsersRc(s.ov), pgUsageServerRc(s.ov));
-  if (pg && s.range) cards.push(pgUsageTrafficRc(s.range), pgUsageNodesRc(s.range));
-  if (pg && s.apps) cards.push(pgUsageAppsRc(s.apps));
-  if (s.top) cards.push(pgUsageTopRc(s.top));
+}
+/* a card that is waiting for its data (the owner, 2026-10-16: "these boxes load late - boxes fixed, solve the late loading"): it is in its place from the first frame - the same box, its title, and grey shapes where the numbers will be - so nothing moves when the data comes; a card whose question failed says why in the same box */
+const pgUsageSk = n => Array.from({length: n}, (_, i) => `<i class="pg-sk" style="width:${[78, 62, 70, 54, 66][i % 5]}%"></i>`).join("");
+const PGU_SK = {
+  ring: () => `<div class="pg-rc-b"><i class="pg-sk pg-sk-ring"></i><div class="pg-sk-lines">${pgUsageSk(5)}</div></div>`,
+  gauges: () => '<div class="pg-rc-gs"><i class="pg-sk pg-sk-gau"></i><i class="pg-sk pg-sk-gau"></i><i class="pg-sk pg-sk-gau"></i></div><div class="pg-rc-foot"><i class="pg-sk pg-sk-line"></i></div>',
+  spark: () => '<div class="pg-rc-tr"><i class="pg-sk pg-sk-big"></i></div><i class="pg-sk pg-sk-spark"></i>',
+  list: () => `<div class="pg-sk-lines pg-sk-rows">${pgUsageSk(5)}</div>`,
+};
+const pgUsageRcWait = (title, kind, err) => `<div class="card pg-rc pg-rc-sk${err ? " pg-rc-bad" : ""}" aria-busy="${err ? "false" : "true"}"><div class="pg-rc-h"><h3>${esc(title)}</h3></div>${err ? `<div class="pg-rc-err">${esc(err)}</div>` : PGU_SK[kind]()}</div>`;
+/* the last picture of the overview is kept for this tab of the browser: a reload or another visit shows it at once, and the new numbers replace it as they come */
+const PGU_SNAP = "nk.pgu.snap.";
+function pgUsageSave() {
+  const s = pgUsageState; if (!s.id || !(s.ov || s.range || s.apps || s.top)) return;
+  try { sessionStorage.setItem(PGU_SNAP + s.id, JSON.stringify({type: s.type, q: pgUsageQuery(), aq: pgUsageAppsKey(), tq: pgUsageTopKey(), ov: s.ov, ovAt: s.ovAt, range: s.range, rangeKey: s.rangeKey, rangeAt: s.rangeAt, apps: s.apps, appsKey: s.appsKey, appsAt: s.appsAt, top: s.top, topKey: s.topKey, topAt: s.topAt})); } catch (e) { /* full or a private window: the first picture is only slower */ }
+}
+function pgUsageRestore(id) {
+  const s = pgUsageState; let d = null;
+  try { d = JSON.parse(sessionStorage.getItem(PGU_SNAP + id) || "null"); } catch (e) { d = null; }
+  const old = at => !at || Date.now() - at > 6 * 3600000;      // (a picture of more than six hours ago is of no use)
+  if (!d || d.type !== s.type) return;
+  if (d.ov && !old(d.ovAt)) { s.ov = d.ov; s.ovAt = d.ovAt; }
+  if (d.range && d.q === pgUsageQuery() && !old(d.rangeAt)) { s.range = d.range; s.rangeKey = d.rangeKey; s.rangeAt = d.rangeAt; }
+  if (d.apps && d.aq === pgUsageAppsKey() && !old(d.appsAt)) { s.apps = d.apps; s.appsKey = d.appsKey; s.appsAt = d.appsAt; }
+  if (d.top && d.tq === pgUsageTopKey() && !old(d.topAt)) { s.top = d.top; s.topKey = d.topKey; s.topAt = d.topAt; }
+}
+function pgUsageDrawCards() {          // the overview: EVERY card has its place from the first frame; what is known is drawn in it, the rest waits as grey shapes
+  const s = pgUsageState, pg = pgUsageIsPg(), card = (data, err, title, kind, draw) => data ? draw(data) : pgUsageRcWait(title, kind, err);
+  const cards = [card(s.ov, s.err.cards, "Users", "ring", pgUsageUsersRc), card(s.ov, s.err.cards, "Server", "gauges", pgUsageServerRc),
+    ...(pg ? [card(s.range, s.err.range, "Traffic", "spark", pgUsageTrafficRc), card(s.range, s.err.range, "Nodes", "ring", pgUsageNodesRc), card(s.apps, s.err.apps, "Apps", "ring", pgUsageAppsRc)] : []),
+    card(s.top, s.err.top, "Top users", "list", pgUsageTopRc)];
   pgUsagePut("#pg-usage-ubox", s.ov ? pgUsageUsersBoxHtml(s.ov) : "");
-  pgUsagePut("#pg-usage-ov", pgUsageErr(s.err.cards) + (cards.length ? `<div class="pg-rcs">${cards.join("")}</div>` : s.err.cards ? "" : pgUsageWait("Reading the counters…")));
-  pgUsageDrawAge();
+  pgUsagePut("#pg-usage-ov", `<div class="pg-rcs">${cards.join("")}</div>`);
+  pgUsageDrawAge(); pgUsageSave();
 }
 /* ---- the sections: chips under the range bar; Marzban has Overview, Users and Look up only (it does not answer the usage of all users) */
 const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nodes", "Nodes", false], ["users", "Users", true], ["apps", "Apps", false], ["look", "Look up", true]];      // [key, name, also on Marzban] (no chips: the cards of the overview open the sections; "Look up" has a button of its own in the row beside the range)
@@ -533,18 +559,13 @@ function pgUsageKick(force) {
   if (s.admins == null) pgUsageLoadAdmins();
   if (force || now - s.rangesAt > 300000) pgUsageLoadRanges().then(() => { pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); }).catch(() => { /* the dates on show stay as they are */ });
 }
-async function pgUsageRender(id, box) {
+async function pgUsageRender(id, box) {          // (async: the Panels page chains .catch on what a tab returns) everything is drawn from what is known AT ONCE, with nothing to wait for first: the cards stand in their places as grey shapes (or with the last picture) while the numbers come
   const s = pgUsageState, type = (typeof pnType === "function" && pnType()) || "pasarguard";
-  if (s.id !== id || s.type !== type) pgUsageReset(id, type);
-  if (!s.ranges) {
-    pgLoading(box, "Reading the ranges…");
-    await pgUsageLoadRanges();
-    if (!box.isConnected || (typeof pn !== "undefined" && pn.tab !== "usage")) return;          // another tab was opened meanwhile
-  }
-  pgPaint(box, pgUsageSkeleton());          // from what is known, at once: the first await comes after this
+  if (s.id !== id || s.type !== type) { pgUsageReset(id, type); pgUsageRestore(id); }
+  pgPaint(box, pgUsageSkeleton());
   pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageDrawTop();
   pgUsagePut("#pg-usage-look-form", pgUsageLookFormHtml()); pgUsageDrawLook();
-  pgUsageKick(false);
+  pgUsageKick(false);          // (the dates of the ranges come with it: the range button already says its name without them)
 }
 
 

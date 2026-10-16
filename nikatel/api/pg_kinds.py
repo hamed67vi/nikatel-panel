@@ -75,6 +75,7 @@ class CustomIn(BaseModel):
     family: str = Field("", max_length=24)
     family_label: str = Field("", max_length=60)
     family_emoji: str = Field("", max_length=60)
+    family_icon: str = Field("", max_length=20)
     short: str = Field(max_length=80)
     title: str = Field("", max_length=200)
     note: str = Field("", max_length=400)

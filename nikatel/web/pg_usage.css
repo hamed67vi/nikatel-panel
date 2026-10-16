@@ -218,3 +218,16 @@ html body #page .pg-usage-two .pg-useg { height: 36px; box-sizing: border-box; p
 html body #page .pg-usage-two .pg-useg button { height: 28px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
 @media (max-width: 760px) { html body #page .pg-usage-two { grid-auto-rows: minmax(340px, auto); } html body #page .pg-ub { height: auto; min-height: 128px; } }
 html[data-mode="light"] body #page .pg-usage [data-for="users"] .pg-usage-card, html[data-mode="light"] body #page .pg-ub { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 1px 2px rgba(30, 50, 100, .06); } html[data-mode="light"] body #page .pg-usage [data-for="users"] .pg-usage-ch h3 { color: #14213d; }
+
+/* 1.59.0 - every card of the overview is in its place from the first frame: while its data is on its way it shows grey shapes where the numbers will be, and when the data comes nothing moves (the owner, 2026-10-16: "these boxes load late - boxes fixed, solve the late loading") */
+html body #page .pg-sk { display: block; border-radius: 8px; background: linear-gradient(90deg, rgba(255, 255, 255, .05) 20%, rgba(255, 255, 255, .11) 50%, rgba(255, 255, 255, .05) 80%) 0 0 / 240% 100%; animation: pgSk 1.5s linear infinite; }
+@keyframes pgSk { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+html body #page .pg-sk-ring { flex: none; width: 118px; height: 118px; border-radius: 50%; -webkit-mask: radial-gradient(circle, transparent 41px, #000 42px); mask: radial-gradient(circle, transparent 41px, #000 42px); }
+html body #page .pg-sk-gau { flex: none; width: 82px; height: 82px; border-radius: 50%; -webkit-mask: radial-gradient(circle, transparent 29px, #000 30px); mask: radial-gradient(circle, transparent 29px, #000 30px); }
+html body #page .pg-sk-lines { display: grid; flex: 1 1 auto; gap: 12px; min-width: 0; } html body #page .pg-sk-lines .pg-sk { height: 12px; }
+html body #page .pg-sk-rows { align-content: start; } html body #page .pg-sk-rows .pg-sk { width: 100% !important; height: 22px; border-radius: 6px; }
+html body #page .pg-sk-line { width: 70%; height: 12px; } html body #page .pg-sk-big { width: 42%; height: 30px; }
+html body #page .pg-rc > .pg-sk-spark { flex: none; width: 100%; height: 104px; margin-top: auto; }
+html body #page .pg-rc-err { padding: 18px 2px; font-size: 12.5px; line-height: 1.4; color: var(--uk-red, #ff6577); overflow: hidden; }
+html[data-mode="light"] body #page .pg-sk { background-image: linear-gradient(90deg, rgba(30, 50, 100, .06) 20%, rgba(30, 50, 100, .12) 50%, rgba(30, 50, 100, .06) 80%); }
+@media (prefers-reduced-motion: reduce) { html body #page .pg-sk { animation: none; } }

@@ -113,7 +113,16 @@ html[data-mode="light"] body #page .pg-kind-frame { background: #f3f6fd; border-
 html body #page .pg-kind-frame .pg-kind-subs { overflow: hidden; } html body #page .pg-ks-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }      /* the head of the list stays; only the rows scroll */
 
 /* 1.58.0 - the Add table (the owner, 2026-10-16): an emoji on every drawer, short names on the buttons, the row "＋ Add protocol" after the drawers, Edit and Delete on the note of a protocol of your own, and on every subscription config a switch and the "⋯" menu (Modify, Disable, Duplicate, Remove) */
-html body #page .pg-dr-e { font-size: 20px; line-height: 1; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
+/* 1.59.0 - the pictures of the drawers are thin line icons of the kit, one colour (the owner: "the MacBook style, black and white"); an emoji of your own is shown in black and white too */
+html body #page .pg-dr-i .pg-dr-e { font-size: 18px; line-height: 1; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; filter: grayscale(1) brightness(1.6) contrast(1.05); }
+html[data-mode="light"] body #page .pg-dr-i .pg-dr-e { filter: grayscale(1) brightness(.35) contrast(1.1); }
+html body #modal .pg-cust-ico { grid-column: 1 / -1; display: grid; gap: 6px; font-size: 11px; color: var(--mut); } html body #modal .pg-cust-ico small { font-size: 10.5px; }
+html body #modal .pg-icos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+html body #modal .pg-ico { display: grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; color: var(--uk-text); }
+html body #modal .pg-ico svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html body #modal .pg-ico.on { background-image: none !important; background-color: #2d3f68 !important; border-color: rgba(120, 170, 255, .55) !important; color: #fff; box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .4); }
+html[data-mode="light"] body #modal .pg-ico.on { background-color: #e3edff !important; color: #1456c8; border-color: rgba(20, 86, 200, .45) !important; }
+html body #modal .pg-icos input { flex: 1 1 140px; min-width: 120px; height: 34px; }
 html body #page .pg-kind-addp { display: flex; align-items: center; gap: 12px; flex: none; box-sizing: border-box; width: 100%; height: 56px; padding: 0 18px 0 12px; border: 1px dashed var(--uk-line-2) !important; border-radius: 14px; background: transparent !important; background-image: none !important; color: var(--uk-mut); font-size: 15px; font-weight: 600; text-align: left; box-shadow: none; cursor: pointer; }
 html body #page .pg-kind-addp:hover, html body #page .pg-kind-addp:focus-visible { color: var(--uk-text); border-color: var(--uk-blue) !important; background: rgba(31, 123, 255, .08) !important; outline: none; }
 html body #page .pg-kind-addp .pg-dr-i svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }

@@ -184,6 +184,33 @@ def quality(tunnel_id: int):
         raise HTTPException(502, str(e))
 
 
+class SpeedIn(BaseModel):
+    mode: str = "customer"
+
+
+@router.get("/tunnels/{tunnel_id}/speed")
+def speed_options(tunnel_id: int):
+    """What can be measured on this tunnel (the speed a customer gets through a config, or the tunnel alone through its test door), and the last result set beside what the tunnel can carry."""
+    from ..services import tunnel_speed
+
+    try:
+        return tunnel_speed.options(tunnel_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/tunnels/{tunnel_id}/speed", status_code=202)
+def speed_start(tunnel_id: int, body: SpeedIn):
+    """Measure the speed a customer in Iran gets, as an action (follow /api/actions/{action_id}; the result is kept, see GET /tunnels/{id}/speed).
+    mode customer: the probe downloads and uploads through a config of this tunnel, one connection like a phone; mode door: one and four connections through the test door of the tunnel."""
+    from ..services import tunnel_speed
+
+    try:
+        return {"ok": True, "action_id": tunnel_speed.start(tunnel_id, body.mode)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/tunnels/retune", status_code=202)
 def retune():
     """Apply the newer Backhaul defaults to the tunnels that exist - one at a time, at quiet moments, each checked and rolled back if worse."""

@@ -46,6 +46,7 @@ nikatel/
     extras.py        installs started right after a server is added (torrent block, Marzban node): detached on the server, followed by polling
     netwatch.py      the network disturbances of a server (its own route is poor: repair only watches)
     tunnel_test.py   quality of one / all tunnels; pair test over several transports with comparison
+    tunnel_speed.py  the speed a CUSTOMER gets through a tunnel: the probe downloads / uploads through a config that rides it (one connection), or - without a probe - one and four connections through the test door (random data); kept in record.speed beside record.quality, with a verdict; api/tunnels.py GET|POST /tunnels/{id}/speed
     gateway.py       Iran Xray gateway: ports → node, borrowed configs, exit test
     engines.py       the tunnel cores (Backhaul, BackPack, Paqet, Chisel, Xray): check / update / install on the servers that have not got them, the panel's own cache (downloaded and verified by a job and by `nikatel engines`), install_on one server
     nodes.py         node tools: console presets, connect, add many, launchers, Abuse-Defender, reboot, geo, Iran filter check

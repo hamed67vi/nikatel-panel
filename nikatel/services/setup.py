@@ -7,14 +7,14 @@ from sqlalchemy import func, select
 from .. import auth
 from ..db import session
 from ..models import Panel, Server
-from . import backup, dnsprov
+from . import ai, backup, dnsprov
 from . import settings as st
 
 # key, title, what it asks for (the order is the order on the Dashboard: the API keys first)
 ITEMS = (
     ("panel", "Connect your panel", "Marzban or PasarGuard: its address and an API key"),
     ("telegram", "Telegram alerts", "a bot token and the chat id"),
-    ("ai", "AI assistant", "an Anthropic API key - the Tunnel Doctor asks it"),
+    ("ai", "AI assistant", "the key of any AI (Claude, ChatGPT, Gemini, Grok, DeepSeek ...) - the Tunnel Doctor asks it"),
     ("dns", "DNS account", "an ArvanCloud or Cloudflare key - CDN records and the failover"),
     ("servers", "Add your servers", "at least one Iran and one foreign server"),
     ("probe", "Probe", "tests the configs from inside Iran"),
@@ -30,12 +30,12 @@ def _facts() -> dict[str, tuple[bool, str]]:
         n_iran = db.scalar(select(func.count()).select_from(Server).where(Server.role == "iran")) or 0
         n_foreign = db.scalar(select(func.count()).select_from(Server).where(Server.role == "foreign")) or 0
 
-    tg, ai, probe, arvan = st.get("telegram"), st.get("ai"), st.get("probe"), st.get("arvan")
+    tg, probe, arvan = st.get("telegram"), st.get("probe"), st.get("arvan")
     n_dns = len(dnsprov.accounts()) + (1 if arvan.get("api_key") else 0)
     return {
         "panel": (n_panels > 0, f"{n_panels} panel{'' if n_panels == 1 else 's'}" if n_panels else "none yet"),
         "telegram": (bool(tg.get("token") and tg.get("chat_id")), ("sending alerts" if tg.get("enabled") else "saved, switched off") if tg.get("token") and tg.get("chat_id") else "not set"),
-        "ai": (bool(ai.get("api_key")), "key saved" if ai.get("api_key") else "no key"),
+        "ai": (ai.has_key(), ai.summary()),
         "dns": (n_dns > 0, f"{n_dns} account{'' if n_dns == 1 else 's'}" if n_dns else "none yet"),
         "servers": (n_iran > 0 and n_foreign > 0, f"{n_iran} Iran · {n_foreign} foreign"),
         "probe": (bool(probe.get("api_url")), "set" if probe.get("api_url") else "not set"),

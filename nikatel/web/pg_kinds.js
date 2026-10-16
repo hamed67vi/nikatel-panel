@@ -22,13 +22,21 @@ const PKI = {};      // the little pictures of the Add form (the owner's picture
   ["folder", '<path d="M3.5 7a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2V17a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/>'], ["code", '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>'], ["search", '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'], ["spark", '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>'], ["chev", '<path d="M9 6l6 6-6 6"/>'],
   ["globe", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>'], ["eye", '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>'], ["cert", '<rect x="4" y="3" width="13" height="15" rx="2"/><path d="M8 8h5M8 12h3"/><circle cx="17" cy="17" r="3"/><path d="M15.5 20l-.5 2 2-1 2 1-.5-2"/>'], ["link", '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>'],
   ["file", '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 14h5"/>'], ["upload", '<path d="M12 16V5M7.5 9.5L12 5l4.5 4.5M5 15v3.5a1.5 1.5 0 001.5 1.5h11a1.5 1.5 0 001.5-1.5V15"/>'], ["shield", '<path d="M12 3l7 3v5.2c0 4.5-3 7.9-7 9.8-4-1.9-7-5.3-7-9.8V6z"/>'], ["lock", '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'], ["info", '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'],
-  ["plus", '<path d="M12 5v14M5 12h14"/>']
+  ["plus", '<path d="M12 5v14M5 12h14"/>'],
+  /* the pictures of the drawers (the owner, 2026-10-16: "emojis in the MacBook style, black and white"): thin line icons of the kit, one colour (the text colour) */
+  ["bolt", '<path d="M13.5 3L5.5 13.5h6l-1 7.5 8-10.5h-6z"/>'], ["horse", '<path d="M15 3.4l1.7 2.9c2.1 1.5 3 4.2 2.7 7.4L18.6 20.6h-8l.5-3.7c-1.2.1-2.2.5-3.3 1.2-.9.6-2 .1-2.2-.9l-.3-1.7c-.1-.9.2-1.7.9-2.3l4.2-3.5c.2-1.8 1.2-3.5 2.9-4.7z"/><path d="M12.9 8.9h.01M7.1 15.3l1.6-.4"/>'],
+  ["chat", '<path d="M5.2 5.5h13.6A1.7 1.7 0 0120.5 7.2v7.6a1.7 1.7 0 01-1.7 1.7h-7.6L7 20.2v-3.7H5.2a1.7 1.7 0 01-1.7-1.7V7.2a1.7 1.7 0 011.7-1.7z"/><path d="M8.2 11h.01M12 11h.01M15.8 11h.01"/>'], ["ghost", '<path d="M5.5 20.5V10.5a6.5 6.5 0 0113 0v10l-2.2-1.7-2.1 1.7-2.2-1.7-2.2 1.7-2.1-1.7z"/><path d="M9.6 10.8h.01M14.4 10.8h.01"/>'],
+  ["rocket", '<path d="M12 3c3 2.2 4.5 5.3 4.5 9v3l2 2.3v1.9l-3.3-1.2L12 21l-3.2-3-3.3 1.2v-1.9l2-2.3v-3c0-3.7 1.5-6.8 4.5-9z"/><circle cx="12" cy="10.8" r="1.6"/>'],
+  ["flame", '<path d="M12 3.2c.5 3-2.9 4.6-2.9 8 0 1.1.4 2 1.1 2.6-.2-1.7.9-2.9 1.9-4 1.7 1.6 3.4 3.1 3.4 5.7a4.8 4.8 0 01-4.8 4.8 4.8 4.8 0 01-4.8-4.8c0-4.6 4.1-6.5 4.1-12.3z"/>'], ["star", '<path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/>'],
+  ["cloud", '<path d="M7.5 18.5a4.2 4.2 0 01-.5-8.4 5.5 5.5 0 0110.6 1.2 3.7 3.7 0 01-.6 7.2z"/>'], ["wifi", '<path d="M3.5 9.6a12 12 0 0117 0M6.6 12.9a7.6 7.6 0 0110.8 0M9.6 16a3.3 3.3 0 014.8 0M12 19.2h.01"/>'],
+  ["key", '<circle cx="8.5" cy="14.5" r="4"/><path d="M11.4 11.6L19.5 3.5M16 7l2.5 2.5M13.5 9.5L15 11"/>']
 ].forEach(([k, d]) => { PKI[k] = `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`; });
 const pgKindIc = k => { const id = k.custom ? ["k", k.protocol, k.network, k.security === "tls" && k.own_cert ? "pin" : k.security, k.flow ? "vision" : "", (k.saved || {}).header === "http" ? "tcp-http-header" : ""].join("-") : String(k.id || ""); const n = /mlkem|shadowsocks/.test(id) ? "lock" : /xhttp.*reality/.test(id) ? "shield" : /xhttp.*tls|httpupgrade/.test(id) ? "upload" : /xhttp/.test(id) ? "code" : /vision/.test(id) ? "eye" : /reality/.test(id) ? "globe" : /pin/.test(id) ? "cert" : /ws/.test(id) ? "link" : /grpc/.test(id) ? "server" : /tcp.*(http|header)|http-header/.test(id) ? "file" : /tcp/.test(id) ? "lock" : "globe"; return `<i class="pg-kc-i">${PKI[n]}</i>`; };
 document.addEventListener("toggle", e => { const d = e.target; if (d && d.matches && d.matches(".pg-kind-dr") && d.open) document.querySelectorAll(".pg-kind-dr[open]").forEach(o => { if (o !== d) o.open = false; }); }, true);      // (one drawer open at a time, in every browser)
-function pgKindDrawers(o) {      // the table: one drawer per protocol (the owner, 2026-10-15: "VLESS in a drawer"; 2026-10-16: "every protocol its own emoji" and "names short, e.g. ws+tls"), one open at a time, the last row adds a protocol of your own
+const pgKindFamIcon = f => f.icon && PKI[f.icon] ? PKI[f.icon] : f.emoji ? `<span class="pg-dr-e">${esc(f.emoji)}</span>` : PKI.cube;      // the picture of a drawer: a thin line icon of the kit; an emoji of the owner's own is shown in black and white (the owner, 2026-10-16: "the MacBook style, black and white")
+function pgKindDrawers(o) {      // the table: one drawer per protocol (the owner, 2026-10-15: "VLESS in a drawer"; 2026-10-16: "every protocol its own picture" and "names short, e.g. ws+tls"), one open at a time, the last row adds a protocol of your own
   const chip = k => `<button type="button" class="pg-kind-chip" data-k="${esc(k.id)}" onclick="pgKindPick('${esc(k.id)}')" title="${esc(k.title + (k.note ? " — " + k.note : ""))}">${pgKindIc(k)}<span>${esc(pgKindShort(k))}</span></button>`;
-  const rows = (o.families || []).map(f => { const ks = o.kinds.filter(k => k.family === f.id); return ks.length ? `<details class="pg-kind-dr" name="pg-kind-acc" data-p="${esc(f.id)}"${f.id === "vless" ? " open" : ""}><summary><i class="pg-dr-i pg-dr-e" aria-hidden="true">${esc(f.emoji)}</i><span class="pg-dr-n">${esc(f.label)}</span><i class="pg-dr-c">${ks.length}</i></summary><div class="pg-kind-row">${ks.map(chip).join("")}</div></details>` : ""; }).join("");
+  const rows = (o.families || []).map(f => { const ks = o.kinds.filter(k => k.family === f.id); return ks.length ? `<details class="pg-kind-dr" name="pg-kind-acc" data-p="${esc(f.id)}"${f.id === "vless" ? " open" : ""}><summary><i class="pg-dr-i" aria-hidden="true">${pgKindFamIcon(f)}</i><span class="pg-dr-n">${esc(f.label)}</span><i class="pg-dr-c">${ks.length}</i></summary><div class="pg-kind-row">${ks.map(chip).join("")}</div></details>` : ""; }).join("");
   return rows + `<button type="button" class="pg-kind-addp" onclick="pgKindCustom()" title="Add a protocol of your own to this table: pick its transport and security, or paste the JSON of an inbound"><i class="pg-dr-i">${PKI.plus}</i><span>Add protocol</span></button>`;
 }
 function pgKindFormHtml(inline) {      // the whole form: in a window (the old button) or as the Add tab of Configs (inline: no Cancel); 1.54.7: the protocols in rows by family, one row of fields, the rest folded
@@ -233,7 +241,7 @@ function pgKindDone(out) {
 /* ---- a protocol of your own in the table (the owner, 2026-10-16: "let the user add other protocols to the table too"): the row "＋ Add protocol" opens this form. A protocol of your own is made with the BUILDER (protocol, transport,
    security ... : the same rules as a built-in kind) or with the JSON of an inbound (for what the builder does not make); it is a button in the drawer of its group, works like a built-in kind, and has Edit and Delete on its note.
    It is kept on this server (Settings), for every panel. A new group is a new drawer with a name and an emoji of its own. */
-const PG_CUST_FAMS = ["vless", "vmess", "trojan", "shadowsocks"], PG_CUST_EMO = ["🧩", "🚀", "🛰️", "🔒", "🌐", "🔥", "⚙️", "🧪", "🦄", "🌙"];
+const PG_CUST_FAMS = ["vless", "vmess", "trojan", "shadowsocks"], PG_CUST_ICONS = ["bolt", "horse", "chat", "ghost", "rocket", "flame", "star", "cloud", "wifi", "key", "shield", "globe", "lock", "cube", "spark"];      // (the icons a drawer of your own can have: the same list as ICONS of services/pg_kinds.py)
 const PG_CUST_USUAL = {none: "80, 8080, 2082", tls: "443, 8443, 2053", "tls-pin": "32001, 32002, 32003", reality: "443, 8443, 2053", shadowsocks: "8388, 2375, 9443"};
 const pgCustSample = '{\n  "protocol": "vless",\n  "settings": {"clients": [], "decryption": "none"},\n  "streamSettings": {"network": "tcp", "security": "none"}\n}';
 window.pgKindCustom = kid => {
@@ -247,7 +255,7 @@ window.pgKindCustom = kid => {
   const body = `<form class="pg-kind-form pg-cust" id="pg-cust-form" onsubmit="return pgCustSave(event)" onchange="pgCustSync()"><div class="pg-kind-quick">
       <label>Group <small>the drawer it goes into</small><select name="family" data-dd>${o.families.map(f => opt(f.id, `${f.emoji} ${f.label}`, f.id === fam0)).join("")}${opt("", "＋ A new group…", false)}</select></label>
       <label data-nf>New group <small>its name</small><input name="family_label" maxlength="24" placeholder="Hysteria2" autocomplete="off"></label>
-      <label data-nf>Emoji <small>its picture</small><input name="family_emoji" list="pg-cust-emo" maxlength="12" value="${PG_CUST_EMO[0]}" autocomplete="off"><datalist id="pg-cust-emo">${PG_CUST_EMO.map(e => `<option value="${e}">`).join("")}</datalist></label>
+      <div class="pg-cust-ico wide" data-nf><span>Picture <small>one of these icons, or an emoji of your own (shown in black and white)</small></span><div class="pg-icos">${PG_CUST_ICONS.map(k => `<button type="button" class="pg-ico${k === "cube" ? " on" : ""}" data-i="${k}" onclick="pgCustIcon('${k}')" title="${k}" aria-label="${k}">${PKI[k]}</button>`).join("")}<input name="family_emoji" maxlength="12" placeholder="or an emoji" autocomplete="off" oninput="pgCustIcon('')" aria-label="An emoji of your own"></div><input type="hidden" name="family_icon" value="cube"></div>
       <label>Short name <small>on the button, like ws+tls</small><input name="short" maxlength="24" value="${val("short")}" placeholder="grpc+reality" autocomplete="off"></label>
       <div class="pg-cust-via wide"><span>Made with</span><div class="tabs pn-mode" role="tablist"><button type="button" role="tab" data-via="builder" class="${via === "builder" ? "on" : ""}" onclick="pgCustVia('builder')">Builder</button><button type="button" role="tab" data-via="json" class="${via === "json" ? "on" : ""}" onclick="pgCustVia('json')">JSON</button></div></div>
       <label data-vf="builder">Protocol${sel("protocol", [["vless", "VLESS"], ["vmess", "VMess"], ["trojan", "Trojan"], ["shadowsocks", "Shadowsocks"]], cur.protocol || fam0)}</label>
@@ -263,6 +271,11 @@ window.pgKindCustom = kid => {
     </div><div id="pg-cust-err"></div>
     <div class="frm-act"><button class="pri" type="submit" id="pg-cust-go">Save</button><button type="button" onclick="closeModal()">Cancel</button><span class="sp"></span>${s ? '<button type="button" class="danger" onclick="pgKindCustomDel(pgKind.cust.id)">Delete</button>' : ""}</div></form>`;
   showModal(`<b>${s ? "Edit protocol" : "＋ Add protocol"}</b>`, body, "wide pg-cust-win"); pgCustSync();
+};
+window.pgCustIcon = k => {      // a picture for a new drawer: an icon of the list (the emoji box is emptied) or none (the owner is typing an emoji)
+  const f = $("#pg-cust-form"); if (!f) return;
+  f.elements.family_icon.value = k; if (k) f.elements.family_emoji.value = "";
+  f.querySelectorAll(".pg-ico").forEach(b => b.classList.toggle("on", b.dataset.i === k));
 };
 window.pgCustVia = v => { pgKind.cust.via = v; document.querySelectorAll("#pg-cust-form .pg-cust-via button").forEach(b => b.classList.toggle("on", b.dataset.via === v)); pgCustSync(); };
 window.pgCustExample = () => { const t = $("#pg-cust-form textarea[name=text]"); if (t) { t.value = pgCustSample; pgHAdvCheck(t); } };
@@ -280,7 +293,7 @@ window.pgCustSave = async ev => {
   if (ev) ev.preventDefault();
   const f = $("#pg-cust-form"); if (!f) return false;
   const g = n => (f.elements[n] ? String(f.elements[n].value) : "").trim(), via = pgKind.cust.via, err = $("#pg-cust-err"), go = $("#pg-cust-go");
-  const b = {id: pgKind.cust.id, family: g("family"), family_label: g("family_label"), family_emoji: g("family_emoji"), short: g("short"), title: g("title"), note: g("note"), via};
+  const b = {id: pgKind.cust.id, family: g("family"), family_label: g("family_label"), family_emoji: g("family_emoji"), family_icon: g("family_icon"), short: g("short"), title: g("title"), note: g("note"), via};
   if (via === "builder") Object.assign(b, {protocol: g("protocol"), network: g("network"), security: g("security"), flow: g("flow"), header: g("header"), xmode: g("xmode"), ports: g("ports")}); else b.text = f.elements.text.value;
   if (!b.short) { err.innerHTML = '<div class="err">Write the short name first (like ws+tls)</div>'; return false; }
   if (f.querySelector("textarea.bad")) { err.innerHTML = '<div class="err">Fix the JSON first</div>'; return false; }

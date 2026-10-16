@@ -24,7 +24,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
     "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
     # the AI assistant (Anthropic): advises inside Fix; `actions` lets its suggested steps be added to the plan
-    "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {}},   # status: the result of the last key test
+    "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {},   # api_key / model / status: the Anthropic record (status = the result of the last key test)
+           "provider": "anthropic", "providers": {}},                                                                       # provider: the AI every call uses; providers: {id: {api_key, model, base_url, status}} of the other AIs (services/ai.py)
     # ArvanCloud DNS: the failover of an Iran server points the records that used its address at the replacement (mode: off | approve | auto)
     "arvan": {"api_key": "", "mode": "off", "confirm_minutes": 5, "domains": [], "status": {}},
     # CPU balance: the Tunnel Doctor turns RPS on for a busy multi-core server whose network work sits on one core (auto), what was found per server
@@ -107,5 +108,9 @@ def public(key: str) -> dict:
             d[f"{f}_tail"] = str(d.get(f) or "")[-4:] if len(str(d.get(f) or "")) >= 12 else ""   # the last four characters tell which key it is
 
         d[f] = ""
+
+    if key == "ai":                             # the keys of the other AIs sit one level down: they leave as a flag and four characters too
+        d["providers"] = {pid: {**v, "api_key": "", "has_api_key": bool(v.get("api_key")), "api_key_tail": str(v.get("api_key") or "")[-4:] if len(str(v.get("api_key") or "")) >= 12 else ""}
+                          for pid, v in (d.get("providers") or {}).items() if isinstance(v, dict)}
 
     return d

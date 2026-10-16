@@ -826,8 +826,9 @@ def test_the_shop_bot_is_seen_nowhere_in_the_menu_and_the_backup_password_is_a_s
     assert 'const SET_OFF = new Set(["bot"]);' in app and "settings: Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};" in app
     assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and "Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => `<button class=\"${k === cur ? \"on\" : \"\"}\" onclick=\"setTab('${k}')\">" in app
     assert 'Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")' in app and "the shop bot: kept here" not in app
-    assert 'const passRow = sItem({ok: !!bk.has_passphrase, icon: SI.key, title: "Backup password"' in app and "pgSw(!!bk.has_passphrase, \"bkPassToggle(this)\"" in app and "window.bkPassToggle = el =>" in app and 'id="bpw-form"' in app and 'title: "Backup password", desc:' not in app
-    assert 'cls: "two flat bk-sched"' in app and "html body #page .sf form.ss.bk-sched { display: flex !important; flex-wrap: wrap;" in css and "html body #page .sf .ss.bk-sched .ss-rows { display: contents; }" in css
+    assert 'const passRow = `<div class="bk1-r bk1-k' in app and "pgSw(!!bk.has_passphrase, \"bkPassToggle(this)\"" in app and "window.bkPassToggle = el =>" in app and 'id="bpw-form"' in app
+    assert '<form class="bk1-sc bk-sched" onsubmit="return saveBackup(event)">' in app and 'name="enabled" title="Automatic backups"' in app and "html body #page .bk1 { border: 1px solid var(--uk-line); border-radius: 18px;" in css and "html body #page .bk1 .bk1-r { display: grid;" in css          # (1.59.0) the owner: "make it a box and one piece, unified, MacBook style": ONE box, a row each for the panel, the password and the schedule, a hairline between them
+    assert '`<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")}${passRow}${sched}</div>`' in app and 'class="sl bpw"' not in app
 
 
 def test_the_api_tab_of_settings_gathers_every_api_connection():
@@ -837,7 +838,7 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     assert 'ai: ["🔌 Api & Key",' in app and '["Api & Key"]],' in app and "ai: SI.link," in app
     assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and 'const tokBox = abBox({icon: SI.key, title: "API tokens"' in app and 'const instBox = abBox({icon: SI.down, title: "Install a probe"' in app and '<div class="ab-list">${apiBox}${tokBox}${aiBox}${tgBox}${probeBox}${instBox}${dnsBox}${panelsBox}</div>' in app and "const abBox = o =>" in app
     assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
-    assert 'const aiBody = sCat(' not in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.saveAi = async e =>' in app and 'f.enabled.checked' not in app and 'form: {id: "ai-form", submit: "saveAi(event)"}' in app and 'id="${f.id}"' in app
+    assert 'const aiBody = sCat(' not in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.aiSave = async (e, pid) =>' in app and 'window.saveAi' not in app and 'f.enabled.checked' not in app and 'onsubmit="return aiSave(event, \'${c.id}\')"' in app and 'id="${f.id}"' in app
     assert 'title: "Telegram bot", pill: tg.has_token' in app and 'form: {id: "tg-form", submit: "saveTelegram(event)"}' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and "alertsWin('rules')" in app and "alertsWin('report')" in app and "alertsWin('windows')" in app and 'async function setData() {' in app and '${security}${backups}' in app
     assert "Manage in" not in app and 'const dnsBox = abBox({icon: SI.cloud, title: "DNS accounts"' in app and 'const panelsBox = abBox({icon: SI.cube, title: "Marzban / PasarGuard panels"' in app and 'const probeBox = abBox({icon: SI.probe, title: "Probe"' in app and 'form="probe-form"' in app and 'const aiBody' not in app and 'const probeBody' not in app and 'html body #page .ab-list {' in _web("lab.css") and 'html body #page .ab {' in _web("lab.css")
     assert "window.apiPanelEdit = id =>" in app and 'onclick="dnsAccForm()">${ib(SI.plus, "Add account")}' in app and 'onclick="pnAddWin()">${ib(SI.plus, "Add panel")}' in app and 'probe: ["🛰 Probe"' not in app and 'const probe = sFrame' not in app and "html body #page .sf .ss .sr.li" not in _web("lab.css") and "Open Settings → Api & Key" in app
@@ -862,15 +863,15 @@ def test_the_rows_of_active_tasks_after_the_picture():
 def test_the_model_of_the_ai_is_a_field_with_a_list_that_opens_as_the_kit_menu():
     """The owner, 2026-10-16: any model the user wants can be added; the list drops down."""
     app, css = _web("app.js"), _web("lab.css")
-    assert 'const AI_MODELS = [["claude-fable-5-1", "Fable 5.1' in app and "window.nkCombo = btn =>" in app and 'class="nk-combo"><input name="model"' in app and 'onmousedown="event.preventDefault(); nkCombo(this)"' in app
-    assert "function nkDdOpen(sel, anchor) {" in app and "if (s.__combo) { s.__combo.value = s.options[i].value;" in app and "aiRemember(f.model.value);" in app and "html body #page .sf .nk-combo .nk-combo-b {" in css
+    assert 'const AI_MODELS = [["claude-fable-5-1", "Fable 5.1' in app and "window.nkCombo = async btn =>" in app and '<span class="nk-combo" data-pid="${c.id}"><input name="model"' in app and 'onmousedown="event.preventDefault(); nkCombo(this)"' in app
+    assert "function nkDdOpen(sel, anchor) {" in app and "if (s.__combo) { s.__combo.value = s.options[i].value;" in app and "aiRemember(pid, f.model.value);" in app and "html body #page .sf .nk-combo .nk-combo-b {" in css
 
 
 def test_the_add_account_type_form_in_two_columns_with_pictures():
     """The owner, 2026-10-16 (his picture): the drawers on the left, one card with the note and the fields in pairs on the right; one drawer open at a time."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
     assert '<div class="pg-kind-cols"><div class="pg-kind-groups">${chips}</div><div class="pg-kind-side">' in js and '</div></div>${inline ? subs : ""}</div>${inline ? "</div>" : ""}`;\n}' in js and "const PKI = {};" in js and "const pgKindIc = k =>" in js
-    assert '<i class="pg-dr-i pg-dr-e" aria-hidden="true">${esc(f.emoji)}</i>' in js and '<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i>' in js and 'name="core_id" data-dd' in js and 'name="group" data-dd' in js and '${PKI.spark}<span>Make it…</span>${PKI.chev}' in js
+    assert '<i class="pg-dr-i" aria-hidden="true">${pgKindFamIcon(f)}</i>' in js and '<span class="pg-kf"><i class="pg-kf-i">${PKI.user}</i>' in js and 'name="core_id" data-dd' in js and 'name="group" data-dd' in js and '${PKI.spark}<span>Make it…</span>${PKI.chev}' in js
     assert 'document.addEventListener("toggle", e => {' in js and ".pg-kind-dr[open]" in js
     assert "html body #page .pg-kind-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);" in css and "html body #page .pg-kind-side .pg-kind-quick { grid-template-columns: repeat(2, minmax(0, 1fr));" in css
 
@@ -1017,7 +1018,10 @@ def test_the_cores_box_does_not_ask_for_a_button_that_is_gone():
 def test_the_add_table_has_an_emoji_on_every_drawer_short_names_and_a_row_to_add_a_protocol():
     """The owner, 2026-10-16: "write the names short, e.g. ws+tls", "every protocol its own emoji (VLESS, VMess ...)" and "let the user add other protocols to the table too"."""
     js, css = _web("pg_kinds.js"), _web("pg_kinds.css")
-    assert "function pgKindDrawers(o)" in js and 'class="pg-dr-i pg-dr-e"' in js and "${esc(f.emoji)}" in js and "(o.families || [])" in js and "o.kinds.filter(k => k.family === f.id)" in js          # one drawer per family, its own emoji
+    assert "function pgKindDrawers(o)" in js and '<i class="pg-dr-i" aria-hidden="true">${pgKindFamIcon(f)}</i>' in js and "const pgKindFamIcon = f =>" in js and "(o.families || [])" in js and "o.kinds.filter(k => k.family === f.id)" in js          # one drawer per family, its own picture (a thin line icon of the kit; an emoji of your own is shown in black and white)
+    from nikatel.services import pg_kinds
+    icons = re.search(r"PG_CUST_ICONS = \[(.*?)\]", js).group(1)
+    assert re.findall(r'"([a-z]+)"', icons) == list(pg_kinds.ICONS) and all(f"""["{k}", '<""" in js for k in pg_kinds.ICONS)      # the picker offers the icons of the server's list, and every one of them is drawn
     assert 'const pgKindShort = k => String((k && (k.short || k.title)) || "");' in js and "<span>${esc(pgKindShort(k))}</span>" in js and 'title="${esc(k.title + (k.note ? " — " + k.note : ""))}"' in js      # the short name on the button, the long one in its tooltip
     assert 'onclick="pgKindCustom()"' in js and "Add protocol</span></button>" in js and 'd.dataset.p' in js and "kd.family === d.dataset.p" in js          # the last row of the drawers adds a protocol; the drawer of a chosen kind opens
     for fn in ("pgKindCustom", "pgCustSave", "pgCustSync", "pgCustVia", "pgCustExample", "pgKindCustomDel"):
@@ -1026,7 +1030,7 @@ def test_the_add_table_has_an_emoji_on_every_drawer_short_names_and_a_row_to_add
     assert 'class="sm danger" onclick="pgKindCustomDel(pgKind.k)"' in js and "kd.custom ?" in js          # Edit and Delete sit on the note of a protocol of your own, and only there
     assert "protocol: g(\"protocol\"), network: g(\"network\")" in js and "b.text = f.elements.text.value" in js and '"/kinds/custom"' in js and "`/kinds/custom/${encodeURIComponent(kid)}`" in js
     assert "const pgKindLinkOwn = p =>" in js and "pgKindLinkKind(p) || pgKindLinkOwn(p)" in js          # a pasted link finds a protocol of your own too
-    assert ".pg-kind-addp {" in css and ".pg-dr-e {" in css and ".pg-kn-a {" in css and ".pg-cust-via {" in css
+    assert ".pg-kind-addp {" in css and ".pg-dr-i .pg-dr-e {" in css and "filter: grayscale(1)" in css and ".pg-kn-a {" in css and ".pg-cust-via {" in css and ".pg-ico.on {" in css
     assert js.index("window.pgKindCustom = ") > js.index("function pgKindDone(out)")          # (the form of a protocol of your own comes after the Add form: its fields are not part of the one the Add form tests read)
 
 
@@ -1068,3 +1072,65 @@ def test_the_cores_box_has_an_install_button_and_a_server_has_tunnel_cores_in_it
     assert 'labIt("Tunnel cores…", "box", () => srvCores(s.id, nm))' in lab and "window.srvCores = async (id, name) =>" in lab and 'steps: ["cores"]' in lab
     install = (WEB.parent.parent / "install.sh").read_text(encoding="utf-8")
     assert "downloads the tunnel cores" in install and "engines" in install
+
+def test_the_ai_models_have_a_row_each_and_the_page_knows_every_ai_of_the_server():
+    """The owner, 2026-10-16: "add the other AI models too: DeepSeek, ChatGPT, Grok, Gemini and more" - one row for each AI (its key, its model, whether it is the one in use), five always there, the rest from "Add another AI"."""
+    from nikatel.services import ai
+
+    app, css = _web("app.js"), _web("lab.css")
+    ids = list(ai.PROVIDERS)
+
+    def keys(name):
+        return re.findall(r'(\w+): "', re.search(r"const " + name + r" = \{(.*?)\};", app, re.DOTALL).group(1))
+
+    assert keys("AIM_C") == ids and keys("AIM_M") == ids                                  # every AI of the server has its colour and its two letters
+    main = re.search(r"const AI_MAIN = \[(.*?)\];", app).group(1)
+    assert re.findall(r'"(\w+)"', main) == ids[:5] and keys("AIM_N") == ids[:5] and all(f'{k}: "{ai.PROVIDERS[k]["name"]}"' in app for k in ids[:5])
+    assert 'const aiShown = aiCat.filter(c => c.has_key || AI_MAIN.includes(c.id) || aiOpen.has(c.id))' in app and '<div class="aim-list">${aiShown.map(aiRow).join("")}</div>' in app and 'onsubmit="return aiSave(event, \'${c.id}\')"' in app
+    assert '<div class="aim-f">${fIc(SI.key,' in app and "c.custom ? fIc(SI.link," in app and 'data-pid="${c.id}"' in app and 'onclick="aiUse(\'${c.id}\')"' in app and 'onclick="aiTest(\'${c.id}\')"' in app and "onclick=\"aiForget('${c.id}', '${esc(c.name)}')\"" in app
+    for fn in ("aiSave", "aiTest", "aiUse", "aiForget", "aiAddMenu"):
+        assert f"window.{fn} = " in app, fn
+
+    assert 'api("/api/settings/ai/use", {method: "POST", body: JSON.stringify({provider: pid})})' in app and 'aiPath(pid) + "/test"' in app and "const aiPath = pid => `/api/settings/ai/providers/${encodeURIComponent(pid)}`;" in app
+    assert 'AI_MAIN.map(k => `<option value="${k}">${esc(AIM_N[k])}</option>`)' in app and "/api/settings/ai/providers/${encodeURIComponent(f.provider ? f.provider.value : \"anthropic\")}" in app      # the first-run card asks which AI the key is for
+    assert "html body #page .aim { display: grid;" in css and "html body #page .aim-i" in css and "html body #page .abf {" in css and "html body #page .ab-b.flush {" in css and "color-mix(in srgb, var(--c) 16%, transparent)" in css
+
+
+def test_the_boxes_of_api_and_key_are_cards_with_labelled_fields():
+    """The owner, 2026-10-16: "put each part in a box so it is more orderly": a head (tile, name with its state, the buttons on the right) and the fields under it, each with its name above."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert "const abF = (label, inner, cls = \"\") =>" in app and '<form id="${f.id}" class="ab ab-f" onsubmit="return ${f.submit}"><div class="ab-h">${head}</div>${body}</form>' in app
+    tg = app.split("const tgBox = abBox(", 1)[1].split("const probeBox", 1)[0]
+    assert 'abF("Bot token"' in tg and 'abF("Chat id"' in tg and "pgSw(!!tg.enabled" in tg and "ab-btns" in tg and 'type="submit"' in tg                                   # Save is in the head of its card, the fields are in its body
+    probe = app.split("const probeBox = abBox(", 1)[1].split("const instBox", 1)[0]
+    assert 'form="probe-form"' in probe and 'abF("Standby probes"' in probe and 'class="ab-grid" onsubmit="return saveProbe(event)"' in probe
+    assert "pgSw(" in tg and "<label class=\"ab-sw\">" not in tg and "wrap.hidden" not in app.split("async function apiLoad() {", 1)[1].split("window.tokCreate", 1)[0]
+    assert "html body #page .ab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));" in css and "html body #page .ab-h { display: flex;" in css
+
+
+def test_the_host_window_is_two_cards_of_rows_with_pills_and_one_size_of_switch():
+    """The owner, 2026-10-16: "make this window better and more professional" and "fix the size of my switches so they do not overlap": the ticks (the users' states, ALPN) were drawn as 40 px switches in a label squeezed to 18 px by an old rule."""
+    hosts, css, app_css = _web("pg_hosts.js"), _web("pg_admin.css"), _web("app.css")
+    assert '<div class="pgh-grid">${where}${sec}</div>' in hosts and 'const row = (name, ctl, hint = "", tag = "label", cls = "") =>' in hosts and '<label class="pgh-chip"><input type="checkbox" name="${name}"' in hosts and 'class="chk"' not in hosts
+    for name in ("st", "alpn"):
+        assert f'chips("{name}"' in hosts                                                          # pgHostBody reads name="st" and name="alpn" as before
+    for name in ("enabled", "use_sni_as_host", "random_user_agent"):
+        assert f"""'name="{name}"'""" in hosts
+    assert "html body #modal .pgh .pgh-chip input:checked + span {" in css and "html body #modal .pgh .srv-sw:has(input:checked) i {" in css and "width: 40px; min-width: 40px; max-width: 40px; height: 24px;" in css and "html body #modal .pgh .frm-act { position: sticky;" in css
+    assert "#modal .kv2 i.chk {" in app_css and "#modal .kv2 .chk {" not in app_css and ".kv2 i.chk { width: 15px;" in app_css                  # the little round badge only: a tick with its words in a row of a window keeps its own size
+
+def test_the_theme_previews_are_small_pictures_of_the_panel():
+    """The owner, 2026-10-16: "make the theme previews prettier": each theme is a small panel (sidebar, top bar, two cards, a button) in its own colours, with its name and a line under it; the chosen one has a ring and a tick."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert '<div class="thm">${THEMES.map(thCard).join("")}</div>' in app and '<s class="sb"></s><s class="tp"></s><s class="c1"></s><s class="c2"></s><s class="bt"></s>' in app and 'class="tsw' not in app and 'class="theme-grid"' not in app
+    assert "const thLight = hex =>" in app and 'role="button" tabindex="0"' in app and 'aria-pressed="${LOOK.theme === k}"' in app and "onclick=\"lookSet('theme', '${k}'); refresh()\"" in app
+    assert "html body #page .thm { display: grid;" in css and "html body #page .thc.on::after {" in css and "html body #page .thc-pv.lt {" in css and "html body #page .thc-pv .sb::after {" in css
+
+def test_the_tunnel_menu_has_a_speed_test_that_opens_inside_the_window():
+    """The owner, 2026-10-16: "a speed test for my tunnels - what speed does a user in Iran get - what the customer holds - the closest possible": in the menu of the tunnel, in the window of the tunnel (Back returns)."""
+    lab, app, css = _web("lab.js"), _web("app.js"), _web("lab.css")
+    menu = lab.split("function tunMenuItems(id) {", 1)[1].split("function labNodeParts", 1)[0]
+    assert menu.index('labIt("Health check"') < menu.index('labIt("Speed test…", "monitor"') < menu.index('labIt("Restart…"') and "tunSpeed(t.id, t.name)" in menu
+    assert "window.tunSpeed = async (id, name) =>" in app and "window.tunSpeedRun = async id =>" in app and "function tunSpeedResult(r, cap) {" in app and 'name="sp-mode"' in app
+    assert 'api(`/api/tunnels/${id}/speed`, {method: "POST", body: JSON.stringify({mode})})' in app and "followStory(r.action_id, box, 400)" in app and 'onclick="tunBack(${id})"' in app.split("window.tunSpeed = ", 1)[1]
+    assert "html body #modal .spd-opts {" in css and "html body #modal .spd-b.cap u" in css and "html body #modal .spd-res.fair .spd-g" in css
