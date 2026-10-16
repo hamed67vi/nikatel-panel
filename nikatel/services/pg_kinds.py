@@ -35,7 +35,7 @@ KINDS: dict[str, dict] = {
     "vless-ws-tls": {"title": "VLESS · WebSocket · TLS", "note": "Behind a CDN or a tunnel; the certificate is on the node, the address is a domain.", "protocol": "vless", "network": "ws", "security": "tls",
                      "ports": (443, 2083, 2087, 8443), "needs": ("tls", "path")},
     "vless-ws": {"title": "VLESS · WebSocket", "note": "Plain WebSocket for a CDN or a tunnel that does the TLS itself.", "protocol": "vless", "network": "ws", "security": "none",
-                 "ports": (80, 8080, 2082, 8880), "needs": ("path",)},
+                 "ports": (80, 8080, 2082, 8880), "needs": ("path",), "first_port": True},      # (first_port: the Add form starts at the first port even when the core holds it - the owner, 2026-10-16: "the default port of ws is 80"; a call with no port still gets a free one)
     "vless-grpc-tls": {"title": "VLESS · gRPC · TLS", "note": "gRPC over TLS; the certificate is on the node, the address is a domain.", "protocol": "vless", "network": "grpc", "security": "tls",
                        "ports": (443, 2053, 8443), "needs": ("tls", "service")},
     "trojan-ws-tls": {"title": "Trojan · WebSocket · TLS", "note": "Trojan over WebSocket and TLS, for a CDN.", "protocol": "trojan", "network": "ws", "security": "tls",
@@ -139,7 +139,7 @@ def options(c: dict) -> dict:
     pg_access.need_pasarguard(c)
     s = _survey(c)
     groups = [{"id": g["id"], "name": g["name"], "tags": g["inbound_tags"]} for g in (pg_access.group_row(r) for r in pg_access.as_rows(panels.call(c, "GET", "/api/groups"), "groups"))]
-    kinds = [{"id": k, "title": v["title"], "note": v["note"], "ports": list(v["ports"]), "needs": list(v["needs"]), "protocol": v["protocol"], "network": v["network"], "security": v["security"], "flow": v.get("flow", ""), "own_cert": v.get("cert") == "self"} for k, v in KINDS.items()]
+    kinds = [{"id": k, "title": v["title"], "note": v["note"], "ports": list(v["ports"]), "needs": list(v["needs"]), "protocol": v["protocol"], "network": v["network"], "security": v["security"], "flow": v.get("flow", ""), "own_cert": v.get("cert") == "self", "first_port": bool(v.get("first_port"))} for k, v in KINDS.items()]
     return {"snis": list(SPOOF_SNIS), "fingerprints": list(FINGERPRINTS), "kinds": kinds, "cores": s["cores"], "groups": groups, "addresses": _node_addresses(c), "tls": s["tls"] or {"cert": CERT, "key": KEY, "guess": True}, "reality": s["reality"]}
 
 

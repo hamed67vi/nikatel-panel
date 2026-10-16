@@ -786,12 +786,12 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
 def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_button():
     """The owner, 2026-10-16: "build these, all the boxes fixed" (the picture of About & update) and "a button Sign out of other devices under the password boxes"."""
     app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
-    assert '`<div class="abt-wrap fx-box"><div class="abt-grid">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
+    assert '`<div class="abt-wrap fx-box" data-fxmin="760"><div class="abt-grid">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
     assert 'pgupd: ["🧩 PasarGuard"' not in app and "pgUpdCard" not in app and 'if (state.stab === "update") { aboutLoad(); enginesLoad(); licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }' in app and "pgupd: SI.box" not in app
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
-    assert "grid-template-rows: 232px minmax(0, 1fr);" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
+    assert "grid-template-rows: 276px minmax(0, 1fr);" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app and 'const hd = $("#lic-head"); if (hd) hd.innerHTML = head;' in app
-    assert 'onclick="secLogoutOthers()"' in app and 'window.secLogoutOthers = async () =>' in app and '"/api/auth/logout-others"' in app and 'name="logout_others"' not in app and "logout_others: true" in app and "html body #page .pwf-btns {" in css and 'class="pwf-out" onclick="secLogoutOthers()"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
+    assert 'onclick="pwOutToggle(this)"' in app and 'window.pwOutToggle = b =>' in app and 'name="logout_others"' not in app and 'logout_others: out' in app and "html body #page .pwf-btns {" in css and 'class="pwf-out on" aria-pressed="true"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
 
 
 def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_tabs():
@@ -881,4 +881,27 @@ def test_security_is_one_column_again_like_the_owners_picture():
     """The owner, 2026-10-16 (his picture): Settings -> Security is one column, the boxes one under the other; Sign out of other devices is a button beside Change password; no two-column grid, no switch."""
     app, css = _web("app.js"), _web("lab.css")
     assert 'box.innerHTML = `${codes}${hero}${setup}<div class="sl">${sec.setup ? "" : g2}${gR}${gP}</div>${gW}`;' in app and "sec-cols" not in app and "sec-cols" not in css
-    assert '<button type="button" class="pwf-out" onclick="secLogoutOthers()"' in app and "pwf-sw" not in app and "pwf-sw" not in css and "logout_others: true" in app
+    assert '<button type="button" class="pwf-out on" aria-pressed="true" onclick="pwOutToggle(this)"' in app and "pwf-sw" not in app and "pwf-sw" not in css and 'logout_others: out' in app and "html body #page .pwf-btns .pwf-out.on {" in css
+    assert "chev: true" not in app.split("const gP = sItem(")[0].split("const g2 = sItem(")[1] and "const gR = sItem({ok: onR," in app and "const gP = sItem({ok: onP," in app      # (the three arrows of Security are gone, the owner, 2026-10-16)
+    assert '${on2 ? "checked" : ""}' in app and '${on2 ? "secOff()" : "secSetup()"}' in app      # (the Two-step switch works: it shows the real state and starts the turn-on / turn-off)
+    assert 'gprompt("Your password, to confirm:", "", {password: true, generate: false})' in app      # (the confirm-your-password box has no Generate button, the owner, 2026-10-16)
+
+
+def test_the_settings_frame_keeps_its_old_width_when_the_row_of_tabs_gets_shorter():
+    """The owner, 2026-10-16: with fewer tabs the frames of Appearance and About shrank - they are as wide as before (never narrower than SET_W_MIN)."""
+    app = _web("app.js")
+    assert "const SET_W_MIN = 789;" in app and 'Math.round(Math.max(SET_W_MIN, right - left + 40,' in app
+
+
+def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxes():
+    """The owner, 2026-10-16: the sizes of About & update got mixed up (cut texts, a table running into itself) and the frame must be longer; every tab's frame is one height."""
+    app, css = _web("app.js"), _web("lab.css")
+    assert 'Math.max(+b.dataset.fxmin || 360,' in app and '<div class="abt-wrap fx-box" data-fxmin="760">' in app
+    assert "grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: 276px minmax(0, 1fr); gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' in app and "html body #page .abt-ds {" in css
+    assert "grid-template-columns: 64px 58px 70px minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }" in css and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+
+
+def test_the_add_form_starts_the_plain_websocket_at_80():
+    """The owner, 2026-10-16: the default port of ws is 80, not 8080."""
+    js = _web("pg_kinds.js")
+    assert "kd.first_port ? kd.ports[0] : kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];" in js

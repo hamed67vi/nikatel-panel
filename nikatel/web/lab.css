@@ -571,7 +571,7 @@ html body #page .set-tabs button.sub-off { opacity: .38; filter: grayscale(1); p
 html body #page .sf[data-name="About & update"] { background: none; border: 0; box-shadow: none; padding: 0; }
 html body #page .sf[data-name="About & update"] > h3 { display: none; }
 html body #page .abt-wrap { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-html body #page .abt-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 232px minmax(0, 1fr); gap: 12px; }
+html body #page .abt-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: 276px minmax(0, 1fr); gap: 12px; }
 @media (max-width: 1000px) { html body #page .abt-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: minmax(232px, auto); } html body #page .abt-wrap.fx-box { height: auto !important; } }
 html body #page .abt-card { display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--uk-line); background: linear-gradient(180deg, #111a2e, #0e1626); }
 html body #page .abt-ch { display: flex; align-items: flex-start; gap: 14px; flex: none; }
@@ -601,7 +601,8 @@ html body #page .abt-note { display: block; margin-top: 8px; font-size: 12.5px; 
 html body #page .abt-card .lic-form { margin-top: 10px; }
 /* the cores */
 html body #page .abt-card .eng-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; } html body #page .abt-card .eng-bar button { margin-left: auto; height: 28px; }
-html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.5fr) auto; gap: 8px; padding: 5px 12px; }
+html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: 64px 58px 70px minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }      /* 1.57.50 - the columns keep their width and cut with an ellipsis: the headers and the versions no longer run into each other */
+html body #page .abt-card .eng-head > span, html body #page .abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .abt-card .eng-row > .eng-act { overflow: visible; }
 html body #page .abt-card .eng-head { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
 html body #page .abt-card .eng-row { margin-bottom: 5px; border-radius: 11px; background: #131b2e; font-size: 12.5px; }
 html body #page .abt-card .eng-row .eng-act button { height: 26px; font-size: 11.5px; }
@@ -624,6 +625,10 @@ html body #page .pwf-btns .pwf-out { background: #0f1626; border: 1px solid var(
 html body #page .pwf-btns .pwf-out:hover { border-color: rgba(120, 170, 255, .45); background: #131d33; }
 html body #page .pwf-btns .pwf-out svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 html[data-mode="light"] body #page .pwf-btns .pwf-out { background: #f3f6fc; border-color: rgba(30, 50, 100, .16); }
+/* 1.57.50 - Sign out of other devices is a button that stays pressed: pressed = the other devices are signed out after the password changes (the owner, 2026-10-16) */
+html body #page .pwf-btns .pwf-out .lk-c { display: none; } html body #page .pwf-btns .pwf-out.on .lk-c { display: inline; } html body #page .pwf-btns .pwf-out.on .lk-o { display: none; }
+html body #page .pwf-btns .pwf-out.on { background: #1c2f57; border-color: rgba(120, 170, 255, .55); color: #fff; }
+html[data-mode="light"] body #page .pwf-btns .pwf-out.on { background: #e3edff; border-color: rgba(20, 86, 200, .5); color: #1456c8; }
 /* 1.57.39 - the password boxes start under the title, at the left, and end where the row above ends (the owner, 2026-10-16) */
 html body #page .si.pw .si-b { min-width: 0; flex: 1 1 auto; }
 html body #page .si.pw .pwf-f { align-items: stretch; width: 100%; padding: 8px 0 0; }
@@ -675,3 +680,9 @@ html body #page .sf .ss .sr.li > .v button { height: 30px; }
 
 /* 1.57.47 - Create tunnel waits for the second server: dim and quiet until then (the owner, 2026-10-16) */
 html body #page .toolbar.joined button.cta:disabled { opacity: .4; filter: saturate(.3); box-shadow: none !important; cursor: default; }
+/* 1.57.50 - the frame of every Settings tab is ONE height, and a taller one (the owner, 2026-10-16: "fix the sizes, they got mixed up - the frame they are in must be longer"): at least 760 px whatever the tab holds (a tab with more grows); About & update has its four boxes in it (rows 276 px and the rest) and never gets lower than 760 px (data-fxmin) */
+@media (min-width: 761px), (pointer: fine) { html body #page .set-wrap > .card.sf { min-height: 760px !important; } }
+/* 1.57.50 (2) - About & update: the left boxes are a little wider (the cores table has room for its five columns), the text under the name of this panel runs the whole width of its box, the count of a core (1/1) stays in its tooltip */
+html body #page .abt-ds { display: block; flex: none; margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--mut); }
+html body #page .abt-card .eng-name small { display: none; } html body #page .abt-card .eng-head { font-size: 10px; letter-spacing: .3px; } html body #page .abt-card .eng-row { font-size: 12px; } html body #page .abt-card .eng-ver, html body #page .abt-card .eng-latest { font-size: 11.5px; }
+html body #page .abt-card .eng-row .eng-act button { padding: 0 9px; }

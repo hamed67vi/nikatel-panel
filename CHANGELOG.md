@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.57.50 - Security: no arrows, a working Two-step switch, no Generate in the password box; the Settings frame as wide as before
+
+- **Settings → Security:** the three arrows (›) of *Two-step sign-in*, *Recovery codes* and *Secret entry path* are gone. The *Two-step sign-in* switch works now (it was only drawn since 1.17.38): it shows the real state, turning it on asks the password and shows the QR and the code box, turning it off asks the password and a code.
+- **The *Your password, to confirm* box** has no *Generate* button and no *make a strong one* hint any more (your own password is typed, never made).
+- **Sign out of other devices** is a button that stays pressed (a lock, blue when on; on by default): when it is on, changing the password signs every other device out; when it is off they stay signed in. The immediate sign-out is gone from the page (the API route stays).
+- **Settings frames:** every tab's frame is one height and a taller one - at least 760 px (a tab with more grows). **About & update:** its four boxes have room - the top row is 276 px, the left boxes are a little wider, the text under the name of this panel runs the whole width, and the cores table keeps its five columns apart (no more headers and versions running into each other); the box never gets lower than 760 px.
+- **Add (Panel → Configs):** the plain WebSocket starts at port 80, not 8080 (the note under the field and the check say when another inbound of the core holds it; a call with no port still gets a free one).
+- **Settings:** the frame of every tab is never narrower than 789 px (it is as wide as the row of tabs; with the Alerts, Probe and Shop bot tabs gone the row got shorter and the frames of Appearance and About shrank).
+
 ## 1.57.49 - Settings → Security back to the single column of the owner's picture
 
 - **Settings → Security:** one column again, as in the owner's picture - the state strip, *Two-step sign-in*, *Recovery codes*, *Secret entry path* and *Password* one under the other, each in its own size; *Sign out of other devices* is a button with an open padlock beside *Change password* (the two-column grid of 204 px rows and the switch are gone; changing the password signs the other sessions out again). *Api & Key* keeps what it gathered (probe, DNS accounts, panels).

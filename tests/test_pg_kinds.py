@@ -566,3 +566,13 @@ def test_vless_encryption_needs_the_two_strings_and_writes_both_into_the_inbound
         pg_cores.build_inbound({"protocol": "vless", "network": "tcp", "security": "none", "port": 80, "decryption": "x", "encryption": "y"}, preview=True)
     with pytest.raises(ValueError, match="mlkem768x25519plus"):
         pg_cores.build_inbound({"protocol": "trojan", "network": "tcp", "security": "none", "port": 80, **ML}, preview=True)
+
+
+def test_the_form_starts_the_plain_websocket_at_port_80_but_the_api_still_picks_a_free_one(fake):
+    """The owner, 2026-10-16: the default port of the plain WebSocket in the form is 80, not 8080 (the form tells when the core holds it); a call with no port still gets a free one."""
+    o = pg_kinds.options(C)
+    ws = next(k for k in o["kinds"] if k["id"] == "vless-ws")
+    assert ws["first_port"] is True and ws["ports"][0] == 80 and not any(k["first_port"] for k in o["kinds"] if k["id"] != "vless-ws")
+    assert pg_kinds._auto_port(pg_kinds.KINDS["vless-ws"], [80, 2053]) == 8080
+    p = pg_kinds.plan(C, {"kind": "vless-ws", "name": "Plain ws", "address": "203.0.113.21", "path": "/abc123", "port": 80})
+    assert p["valid"] is False and "port 80 is used" in " ".join(e for s in p["steps"] for e in s["errors"])

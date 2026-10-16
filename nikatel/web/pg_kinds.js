@@ -93,7 +93,7 @@ window.pgKindPick = k => {
 };
 const pgKindPort = (keep) => {      // the first usual port of the kind that no inbound of the chosen core uses (not touched when the owner typed one: keep)
   const f = $("#pg-kind-form"), kd = pgKindOf(pgKind.k), core = pgKind.o.cores.find(c => String(c.id) === String(f.elements.core_id.value)) || {ports: []};
-  if (!keep) f.elements.port.value = kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];
+  if (!keep) f.elements.port.value = kd.first_port ? kd.ports[0] : kd.ports.find(p => !core.ports.includes(p)) || kd.ports[0];      // (the plain WebSocket always starts at 80, the owner, 2026-10-16: the note under the field and the check say when another inbound holds it)
   $("#pg-kind-portnote").textContent = core.ports.includes(+f.elements.port.value) ? "in use in this core" : "free in this core";
 };
 const pgKindTplSync = () => {      // a template gives a group: with no group there is none; its two numbers show only while it is wanted
