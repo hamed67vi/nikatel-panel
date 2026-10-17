@@ -5,12 +5,16 @@
 ```bash
 git clone git@github.com:hamed67vi/nikatel-panel.git && cd nikatel-panel
 python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]" ruff
-pytest -q && ruff check nikatel tests && bash scripts/check_no_secrets.sh
+pytest -q -n auto && ruff check nikatel tests && bash scripts/check_no_secrets.sh
 NIKATEL_DATA_DIR=./data NIKATEL_TLS_CERT= NIKATEL_TLS_KEY= NIKATEL_LISTEN_PORT=8000 nikatel serve   # http://localhost:8000
 ```
 
 Pick an issue → branch `issue-<n>-<slug>` → PR → CI green → merge → `scripts/deploy.sh` on the
 panel server. Small PRs; one issue each.
+
+The whole suite runs in parallel: `pytest -n auto` (pytest-xdist, in the `dev` extras) uses every core; each worker has its own
+temporary data directory (`tests/conftest.py`), so no test needs to know about the others. A test that measures wall-clock time must have a
+bound wide enough for a busy machine and a second proof that does not depend on the clock.
 
 ## Where things go
 
@@ -39,7 +43,9 @@ panel server. Small PRs; one issue each.
 SSH is never real: test `parse_*` / `judge` with captured output strings, test the API with
 imported fixtures. A bug fix adds the failing case first.
 
-CI measures the coverage (`pytest --cov=nikatel`, the total in the job summary), runs `tests/test_upgrade.py` (a database
+CI (`.github/workflows/ci.yml`) runs on every push to `main`, every pull request, once a week and by hand; its four jobs run at the same time
+(the quick checks, the tests on Python 3.10 and 3.12, the installer on a clean machine, gitleaks) and a newer push cancels the older run of the same branch.
+It measures the coverage (`pytest --cov=nikatel`, the total in the job summary), runs `tests/test_upgrade.py` (a database
 made by the previous tag opens with the current code and every migration runs: `git archive <tag>` in a temp dir), and installs
 the panel on a clean runner with `install.sh` from the checkout, then runs the installer again as an upgrade. `scripts/deploy.sh`
 imports the whole panel and runs the migrations against a copy of the live database before every restart (the suite itself does not run on the

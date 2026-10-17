@@ -1,16 +1,65 @@
 name: ci
 
-# Run by hand only (Actions tab -> ci -> Run workflow). The same checks - tests, lint, secrets, JS syntax, installer - run on the owner's server before every release (ship_tag.sh), so a run on every push only spent the
-# 2,000 free minutes a month of a private repository (90 % used on 2026-10-15). Public repositories have unlimited minutes: put the push / pull_request triggers back then.
+# Runs on every push to main, on every pull request, once a week (a new release of a library can break a green tree) and by hand (Actions -> ci -> Run workflow).
+# The repository is public, so the minutes are free and unlimited (it was private and manual-only from 1.52.2 to 1.66.x: the free 2,000 minutes a month were gone).
+# Everything that does not need another job runs AT THE SAME TIME: the quick checks, the tests of each Python (spread over every core of the runner with pytest-xdist),
+# the installer on a clean machine and the secrets scan. A newer push cancels the run of the older one on the same branch.
+# The same checks (ruff, JS, secrets, the whole suite) run on the owner's build server before every release (ship_tag.sh); here they run on clean machines.
 on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  check:
+  static:
+    # seconds: nothing in the repository that identifies the real infrastructure, lint, the syntax of every JS and shell file
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: no secrets in the repository
+        run: bash scripts/check_no_secrets.sh
+      - name: lint
+        run: |
+          python -m pip install -q --upgrade pip
+          pip install -q "ruff>=0.5"
+          ruff check nikatel tests
+      - name: front-end syntax
+        run: for f in nikatel/web/*.js; do node --check "$f"; done
+      - name: installer and script syntax
+        run: bash -n install.sh scripts/*.sh
+
+  tests:
+    # the whole suite on each Python, on every core of the runner (pytest-xdist); the Python we ship (3.12) installs the pinned libraries of requirements.lock, so the test runs on what a fresh install gets,
+    # and also measures the coverage; 3.10 (the lowest we support) takes the newest libraries, which is the early warning for the next lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        python: ["3.10", "3.12"]
+        include:
+          - python: "3.10"
+            constraints: ""
+            cov: ""
+          - python: "3.12"
+            constraints: "-c requirements.lock"
+            cov: "--cov=nikatel --cov-report=term"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,26 +68,23 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-      - name: no secrets in the repository
-        run: bash scripts/check_no_secrets.sh
       - name: install
         run: |
           python -m pip install -q --upgrade pip
-          pip install -q -e ".[dev]" ruff
-      - name: lint
-        run: ruff check nikatel tests
-      - name: tests (with coverage)
+          pip install -q ${{ matrix.constraints }} -e ".[dev]"
+      - name: tests (every core)
         run: |
-          pytest -q --cov=nikatel --cov-report=term | tee /tmp/cov.txt
-          { echo "### Coverage (python ${{ matrix.python }})"; echo; echo '```'; grep -E "^(TOTAL|Name)" /tmp/cov.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-      - name: front-end syntax
-        run: for f in nikatel/web/*.js; do node --check "$f"; done
-      - name: installer syntax
-        run: bash -n install.sh scripts/*.sh
+          set -o pipefail          # (the default shell has no pipefail: a red suite piped into tee would count as green)
+          pytest -q -n auto ${{ matrix.cov }} | tee /tmp/pytest.txt
+      - name: coverage in the job summary
+        if: matrix.cov != ''
+        run: |
+          { echo "### Coverage (python ${{ matrix.python }})"; echo; echo '```'; grep -E "^(TOTAL|Name)" /tmp/pytest.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   install-on-a-clean-machine:
     # the installer, as a new operator runs it, from this checkout: a fresh install answers /api/health, and running it again upgrades in place
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +106,7 @@ jobs:
 
   secrets-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:

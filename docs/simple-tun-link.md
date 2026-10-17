@@ -5,7 +5,7 @@ how it compares with the panel, and what 1.66.0 took from it.
 
 **What was read:** the README, `docs/ARCHITECTURE.md`, `docs/DIAGNOSTICS.md`, the file tree (about 330 files, most of them tests), the WireGuard backend (`internal/backend/wireguard/apply.go`, `model.go`), the GRE backend's apply
 order, and the firewall module (`internal/linux/firewall.go`). **Not read line by line:** the IPsec/strongSwan backend (about a third of the code), the installer script (59 KB), the state / lock / persistence engine, the pairing codec.
-The project's own words on its testing: its CI does not certify every real two-server WAN, NAT, provider firewall or reboot case - and neither does this review: the links below were built and measured for real on the test servers (see the changelog).
+The project's own words on its testing: its CI does not certify every real two-server WAN, NAT, provider firewall or reboot case - and neither does this review. What was really run, and what was not, is under "What was measured" below.
 
 ## What STL is
 
@@ -46,6 +46,18 @@ interface is called like the tunnel, the units are `nikatel-gre-<name>`, `nikate
 - **The Doctor:** the kinds `wg:tcpmux`, `wg:tcp`, `fou:tcpmux` are in the pair test, in the night survey (`READY`) and - last in the static order, first when a survey found one connecting - in the replacements of a cut tunnel. A tunnel whose own UDP
   link is cut does not get the other UDP links as replacement (they would be cut the same way); a GRE tunnel cut by a protocol-47 filter does. The diagnosis says "the UDP port of the link is filtered" for a UDP link.
 - **What a UDP link cannot do:** pass where UDP is filtered (BackPack TCP kinds, Chisel, the TLS WebSocket kinds remain for that), and WireGuard is not hidden: a filter that blocks WireGuard's handshake pattern blocks it. GRE-in-UDP is plain.
+
+## What was measured (2026-10-17, the two test servers: one in Iran, one abroad)
+
+| | Result |
+|---|---|
+| GRE link (`tcpmux`) and GRE inside UDP (`fou:tcpmux`), built by the panel | **works end to end**: built, checked, a download through the forwarded port, the link cut on one server and seen by the panel, started again, the tunnel deleted and nothing left on either server (interface, units, key file, firewall rules, FOU port) |
+| WireGuard scripts (`wg:tcpmux`), run in two network namespaces on one server | **works**: the handshake, data over the inner /30, the firewall rule, the key file (0600) and the removal; no private key text in any script |
+| WireGuard between the two real servers | **does not connect on this route**: the handshake never completed on any UDP port tried, while GRE inside UDP (on its own ports) passed. Most likely a filter on the route that recognises WireGuard's handshake - it is a property of this route, not of the code, and it is exactly what the Doctor's pair test and the night survey are for: WireGuard is tried on a pair and is kept only where it connects; on this pair it is recorded as "not connecting" and the next tunnel type is tried |
+| Public WireGuard servers outside Iran | not tested: the review had only these two servers |
+
+So the answer to "does WireGuard pass where GRE does not" is **not always**: it passes where UDP is open and nothing recognises the handshake; where a filter does (as on the test route), GRE inside UDP is the link that passes. Both are in the panel, and the
+Doctor finds out per pair which one connects.
 
 ## Later, if it is wanted
 

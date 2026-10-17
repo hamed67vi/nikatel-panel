@@ -148,7 +148,7 @@ def _register_jobs() -> None:
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
     jobs.register("tunnels-fast", 8, tunnels.check_unhealthy)   # the tunnels that are not up are looked at again every ~8 s (and at once when a server goes off or comes back)
     jobs.register("livebw", 5, livebw.run)                      # what the users use of each tunnel RIGHT NOW: the counters of its card on the Iran server, every 5 s while the page looks at the tunnels, every 30 s otherwise (services/livebw.py)
-    jobs.register("alerts", 60, alerts.run)
+    jobs.register("alerts", 5, alerts.run)                      # every 5 s: the states the checkers wrote become one DOWN / UP message once they held for down_seconds / up_seconds (was every 60 s, after 3 checks and 4 minutes down, 10 minutes up); a message Telegram did not take is sent again (services/alerts.py)
     jobs.register("report", 300, report.run)
     jobs.register("backup", 300, backup.scheduled)
     jobs.register("repair", 5, autopilot.repair_cycle)          # the plain restarts and the climb of a cut tunnel every 5 s, and at once when a tunnel is cut or a repair ends (was every 20 s: each hand-off waited ten to twenty seconds); the look at lossy tunnels every five minutes (one job, not three)
@@ -168,7 +168,8 @@ def _register_jobs() -> None:
     jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
 
     jobs.register("configs", 120, configs.sync)
-    jobs.register("panels", 30, panels.check_all)          # a node that drops off a Marzban / PasarGuard panel shows within half a minute
+    jobs.register("configs-fast", configs.QUICK_READ, configs.sync_fast)   # the probe's answer read every 15 s (it tests each config about every 30 s): a config is called down / up after two different tests, ~30-60 s, not 2-4 minutes
+    jobs.register("panels", 15, panels.check_all)          # a panel that stops answering or a node that drops off a Marzban / PasarGuard panel shows within ~30 s (two checks; the reconnect request is still sent at most every 30 s)
     jobs.register("geo", 3600, nodes.geo_missing_job)
     jobs.register("filter", 3600, nodes.filter_daily_job)
 

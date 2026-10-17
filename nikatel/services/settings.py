@@ -11,7 +11,8 @@ from ..models import Setting
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "telegram": {"enabled": False, "token": "", "chat_id": ""},
-    "alerts": {"tunnel_fails": 3, "server_fails": 2, "config_fails": 3, "min_down_minutes": 4, "up_stable_seconds": 600, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
+    # down_seconds / up_seconds: how long a thing must stay bad / good (as its checker confirmed it) before one DOWN / UP message (services/alerts.py); the older rules (failed checks in a row, minutes, stable seconds) became these two - see _alerts_today
+    "alerts": {"down_seconds": 10, "up_seconds": 15, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True, "every_minutes": 0, "tg_every": "all", "parts": {"panel": {"enabled": True, "topic": 0, "topic_name": ""}, "bot": {"enabled": True, "topic": 0, "topic_name": ""}}},
     # the smart repair is on by default (restart, rebuild, a new GRE link, another tunnel type - by itself); it can be switched off on Smart repair to work by hand
@@ -59,13 +60,36 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}
 
 
+_ALERT_OLD = ("tunnel_fails", "server_fails", "config_fails", "min_down_minutes", "up_stable_seconds")
+
+
+def _alerts_today(v: dict) -> dict:
+    """The alert rules saved before 1.67.0 counted failed checks in a row and minutes; the checkers confirm a fault themselves now, so only two times are left. The old numbers
+    go; what the owner had CHANGED (the minutes down, the seconds good) is kept as seconds, and the defaults of the version he never touched do not hold the alerts back."""
+    if not any(k in v for k in _ALERT_OLD):
+        return v
+
+    out = {k: x for k, x in v.items() if k not in _ALERT_OLD}
+    minutes, stable = int(v.get("min_down_minutes", 4)), int(v.get("up_stable_seconds", 600))
+
+    if (minutes, stable) != (4, 600):
+        out.setdefault("down_seconds", minutes * 60)
+        out.setdefault("up_seconds", stable)
+
+    return out
+
+
+def _stored(key: str, value: dict) -> dict:
+    return _alerts_today(value) if key == "alerts" else value
+
+
 def get(key: str) -> dict:
     with session() as db:
         row = db.get(Setting, key)
         merged = copy.deepcopy(DEFAULTS.get(key, {}))
 
         if row is not None and isinstance(row.value, dict):
-            merged.update(row.value)
+            merged.update(_stored(key, row.value))
 
         return merged
 
@@ -80,7 +104,7 @@ def put(key: str, changes: dict) -> dict:
         current = copy.deepcopy(DEFAULTS[key])
 
         if row is not None and isinstance(row.value, dict):
-            current.update(row.value)
+            current.update(_stored(key, row.value))
 
         for k, v in changes.items():
             if k not in DEFAULTS[key]:

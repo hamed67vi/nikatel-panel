@@ -18,6 +18,18 @@ HEALTH = {"ok": True, "summary": {"total": 2, "up": 1}, "configs": [
     {"name": "Czech", "slug": "czech", "port": 11001, "status": "down", "ping": 0, "checked_at": 1791575700, "error": "curl: (28) SSL connection timeout", "speed": {}}]}
 
 
+_TEST = {"at": 1791575800}
+
+
+def fresh(health):
+    """The probe answers `health`, and every read is a NEW test of the probe (its checked_at moves on): the panel counts different tests, not one test read twice."""
+    def read():
+        _TEST["at"] += 30
+        return {**health, "configs": [dict(c, checked_at=_TEST["at"]) for c in health["configs"]]}
+
+    return read
+
+
 def test_parse_health():
     rows = parse_health(HEALTH)
     assert rows[0]["status"] == "up" and rows[0]["down_mbps"] == 34.93 and rows[0]["ping_ms"] == 607
@@ -175,7 +187,7 @@ def test_a_direct_tcp_config_is_down_only_when_its_port_does_not_open(client, mo
     from nikatel.models import Config
 
     health = {"ok": True, "configs": [{"name": "Direct", "slug": "direct", "port": 11000, "status": "down", "ping": 0, "checked_at": 1, "error": "curl: (28) SSL connection timeout", "speed": {}}]}
-    monkeypatch.setattr(probe, "health", lambda: health)
+    monkeypatch.setattr(probe, "health", fresh(health))
     monkeypatch.setattr(probe, "config_uri", lambda name: "vless://u@d.example:443?type=tcp&security=reality#Direct")
     client.post("/api/servers", json={"name": "ir1", "host": "9.9.9.9", "role": "iran"})
     answer = {"v": "REACH d.example:443 1 42\n"}
@@ -312,20 +324,20 @@ def test_picking_two_new_nodes_keeps_the_order_of_the_whole_subscription(client,
     assert [c["name"] for c in client.get("/api/configs").json()["configs"]] == ["Zed", "Alpha", "Mid", "Beta"]      # as the subscription lists them, not alphabetical
 
 
-def test_a_config_changes_status_only_after_two_reads_agree(client, monkeypatch):
+def test_a_config_changes_status_only_after_two_tests_agree(client, monkeypatch):
     up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
     down = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
-    monkeypatch.setattr(probe, "health", lambda: up)
+    monkeypatch.setattr(probe, "health", fresh(up))
     configs.sync()
-    monkeypatch.setattr(probe, "health", lambda: down)
+    monkeypatch.setattr(probe, "health", fresh(down))
     configs.sync()
     r = client.get("/api/configs").json()["configs"][0]
-    assert r["status"] == "up" and not r["last_error"]                       # one failed read: still up, no reason shown, no event
+    assert r["status"] == "up" and not r["last_error"]                       # one failed test: still up, no reason shown, no event
     assert not any("not working" in e["text"] for e in client.get("/api/events?domain=configs").json()["events"])
     configs.sync()
     r = client.get("/api/configs").json()["configs"][0]
     assert r["status"] == "down" and "timeout" in r["last_error"]
-    monkeypatch.setattr(probe, "health", lambda: up)
+    monkeypatch.setattr(probe, "health", fresh(up))
     configs.sync()
     assert client.get("/api/configs").json()["configs"][0]["status"] == "down"
     configs.sync()
@@ -338,9 +350,9 @@ def test_a_config_changes_status_only_after_two_reads_agree(client, monkeypatch)
 def test_the_second_look_of_a_round_does_not_count_as_a_second_read(client, monkeypatch):
     up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
     down = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
-    monkeypatch.setattr(probe, "health", lambda: up)
+    monkeypatch.setattr(probe, "health", fresh(up))
     configs.sync()
-    monkeypatch.setattr(probe, "health", lambda: down)
+    monkeypatch.setattr(probe, "health", fresh(down))
     monkeypatch.setattr(configs, "refresh_reach", lambda names: True)         # a reachability answer arrived: the round looks again
     configs.sync()
     assert client.get("/api/configs").json()["configs"][0]["status"] == "up"      # one round is one read, however many looks
@@ -351,14 +363,87 @@ def test_the_second_look_of_a_round_does_not_count_as_a_second_read(client, monk
 def test_a_config_that_flips_again_and_again_gets_one_unstable_event_then_quiet(client, monkeypatch):
     up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
     down = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
-    monkeypatch.setattr(probe, "health", lambda: up)
+    monkeypatch.setattr(probe, "health", fresh(up))
     configs.sync()
 
     for i in range(10):                                                         # down down up up down down up up down down: a flip every second read
-        monkeypatch.setattr(probe, "health", lambda h=(down if (i // 2) % 2 == 0 else up): h)
+        monkeypatch.setattr(probe, "health", fresh(down if (i // 2) % 2 == 0 else up))
         configs.sync()
 
     texts = [e["text"] for e in client.get("/api/events?domain=configs").json()["events"]]
     assert sum("is unstable" in t for t in texts) == 1
     assert sum("not working" in t for t in texts) + sum("works again" in t for t in texts) == 2      # the first two flips were said; from the third the feed is quiet
     assert client.get("/api/configs").json()["configs"][0]["status"] == "down"                      # the status itself keeps moving
+
+
+def test_settle_counts_different_tests_not_reads_of_one_test():
+    s, p = configs.settle_config("up", "down", None, 100)
+    assert s == "up" and p["n"] == 1
+    s, p = configs.settle_config("up", "down", p, 100)                # the same test of the probe read again (the panel reads every 15 s, the probe tests about every 30 s)
+    assert s == "up" and p["n"] == 1
+    s, p = configs.settle_config("up", "down", p, 130)                # a second, different test
+    assert s == "down" and p["n"] == 2
+    assert configs.settle_config("up", "down", {"status": "down", "n": 1}) == ("down", {"status": "down", "n": 2})      # without a time of the test every read counts (as before)
+
+
+def test_the_quick_read_moves_a_status_after_two_different_tests_and_adds_no_extra_history(client, monkeypatch):
+    up = {"ok": True, "configs": [dict(HEALTH["configs"][0])]}
+    monkeypatch.setattr(probe, "health", fresh(up))
+    configs.sync()
+    cid = client.get("/api/configs").json()["configs"][0]["id"]
+
+    def samples():
+        return len(client.get(f"/api/configs/{cid}/samples").json()["samples"])
+
+    before = samples()
+    stuck = {"ok": True, "configs": [dict(HEALTH["configs"][0], status="down", ping=0, checked_at=1791576000, error="curl: (28) SSL connection timeout")]}
+    monkeypatch.setattr(probe, "health", lambda: stuck)
+
+    for _ in range(5):                                                       # one test of the probe, read five times
+        configs.sync_fast()
+
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "up"
+    stuck["configs"][0]["checked_at"] = 1791576030                           # the probe tested again
+    configs.sync_fast()
+    r = client.get("/api/configs").json()["configs"][0]
+    assert r["status"] == "down" and "timeout" in r["last_error"]
+    assert samples() == before                                               # the quick reads add no history point (one per ~2 minutes is kept)
+    stuck["configs"][0].update(status="up", ping=300, error=None, checked_at=1791576060)
+    configs.sync_fast()
+    configs.sync_fast()
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "down"      # one test says up: not yet
+    stuck["configs"][0]["checked_at"] = 1791576090
+    configs.sync_fast()
+    assert client.get("/api/configs").json()["configs"][0]["status"] == "up"
+
+
+def test_the_quick_read_waits_for_iran_before_it_calls_a_direct_config_down(client, monkeypatch):
+    from nikatel import jobs
+
+    up = {"ok": True, "configs": [{"name": "Direct", "slug": "direct", "port": 11000, "status": "up", "ping": 100, "checked_at": 1, "error": None, "speed": {}}]}
+    down = {"ok": True, "configs": [dict(up["configs"][0], status="down", ping=0, error="curl: (28) SSL connection timeout")]}
+    monkeypatch.setattr(probe, "config_uri", lambda name: "vless://u@d.example:443?type=tcp&security=reality#Direct")
+    client.post("/api/servers", json={"name": "ir1", "host": "9.9.9.9", "role": "iran"})
+    monkeypatch.setattr(configs, "run_script", lambda node, name, params=None, timeout=25: "REACH d.example:443 0 0\n")      # the port does not open from Iran
+    monkeypatch.setattr(probe, "health", fresh(up))
+    configs.sync()
+    configs.sync()                                                           # the config is there and its link is read (the address is known)
+
+    def status():
+        c = client.get("/api/configs").json()["configs"][0]
+        return c["status"], c["last_error"]
+
+    assert status()[0] == "up"
+    asked = []
+    monkeypatch.setattr(jobs, "trigger", lambda name: asked.append(name))
+    monkeypatch.setitem(configs._HELD, "at", 0.0)
+    monkeypatch.setattr(probe, "health", fresh(down))
+
+    for _ in range(3):
+        configs.sync_fast()
+
+    assert status()[0] == "up" and asked == ["configs"]                      # three tests say down, but Iran has not been asked: not down yet, and the full round is asked ONCE
+    configs.sync()                                                           # the full round asks the Iran servers
+    configs.sync()
+    st, err = status()
+    assert st == "down" and "does not open from Iran" in err

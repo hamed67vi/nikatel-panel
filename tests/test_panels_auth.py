@@ -416,7 +416,7 @@ def test_the_panels_are_checked_at_the_same_time(monkeypatch):
             seen["now"] += 1
             seen["max"] = max(seen["max"], seen["now"])
 
-        time.sleep(0.2)
+        time.sleep(0.4)
 
         with lock:
             seen["now"] -= 1
@@ -426,6 +426,6 @@ def test_the_panels_are_checked_at_the_same_time(monkeypatch):
     monkeypatch.setattr(panels, "check", slow)
     t0 = time.time()
     panels.check_all()
-    assert seen["max"] >= 3 and time.time() - t0 < 0.7          # four checks of 0.2 s one after the other would be 0.8 s
+    assert seen["max"] >= 3 and time.time() - t0 < 1.4          # four checks of 0.4 s one after the other would be 1.6 s (the bound is wide: the tests run in parallel on a busy machine; "max >= 3" is the proof)
     with session() as db:
         assert [p.status for p in db.scalars(select(Panel))] == ["up"] * 4

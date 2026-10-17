@@ -334,19 +334,24 @@ echo NO_CERT
 
     # one side of a tunnel: unit states, the GRE interface, its counters, a ping to the other end,
     # and the forwarded ports (only on the Iran side, where users connect)
+    # QUICK=1 (the sentinel, a unit or the card shows a fault): the units and the card only, a second. Otherwise the request through the first forwarded port runs WHILE the pings run, and a peer that answers
+    # none of three quick pings is silent - the other seventeen are not waited for: a link that does not answer costs ~4 s here, it cost ~9.
     "tunnel_side": (r"""for u in @UNITS@; do echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
 if [ -n "@IFACE@" ]; then
   echo "IFACE @IFACE@ $(ip -o link show '@IFACE@' 2>/dev/null | grep -o 'state [A-Z]*' | head -1 | cut -d' ' -f2) $(cat /sys/class/net/@IFACE@/statistics/rx_bytes /sys/class/net/@IFACE@/statistics/tx_bytes 2>/dev/null | tr '\n' ' ')"
 fi
+if [ "@QUICK@" = 1 ]; then echo "NOW $(date +%s)"; exit 0; fi
+# end to end: one request through the first forwarded port (Iran side only); any HTTP answer proves the data path, 000 = nothing came back
+set -- @PORTS@; if [ -n "$1" ]; then ( C=$(curl -s -m 4 -o /dev/null -w '%{http_code} %{time_total}' http://127.0.0.1:$1/ 2>/dev/null); echo "DATA $1 ${C:-000 0}" ) & fi
 if [ -n "@PEER@" ]; then
-  P=$(ping -c 20 -i 0.2 -W 1 -q '@PEER@' 2>/dev/null)
+  P=$(ping -c 3 -i 0.2 -W 1 -q '@PEER@' 2>/dev/null)
+  case "$P" in *" 0 received"*|*" 0 packets received"*) ;; *) P=$(ping -c 20 -i 0.2 -W 1 -q '@PEER@' 2>/dev/null) ;; esac
   echo "PEER @PEER@ $(echo "$P" | awk -F/ '/^rtt/{print $5}') $(echo "$P" | grep -o '[0-9]*% packet loss' | cut -d% -f1)"
 fi
 for p in @PORTS@; do echo "LISTEN $p $(ss -ltnH 2>/dev/null | grep -c ":$p ")"; done
-# end to end: one request through the first forwarded port (Iran side only); any HTTP answer proves the data path, 000 = nothing came back
-set -- @PORTS@; if [ -n "$1" ]; then C=$(curl -s -m 4 -o /dev/null -w '%{http_code} %{time_total}' http://127.0.0.1:$1/ 2>/dev/null); echo "DATA $1 ${C:-000 0}"; fi
+wait
 echo "NOW $(date +%s)"
-""", {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS}),
+""", {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS, "QUICK": r"^[01]?$"}),
 
     # the sentinel (services/sentinel.py), every 10 s, ONE command per server for ALL its tunnels: the state of every unit, of every GRE card and three quick pings of every GRE peer, in parallel (about two seconds when a
     # peer is silent). "UNIT <name> <state>", "IFACE <card> <state>" (the state is empty when there is no such card), "PEER <ip> <loss %>", "NOW <seconds>". Read-only.

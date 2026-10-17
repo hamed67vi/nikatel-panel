@@ -4382,10 +4382,11 @@ window.alertsWin = async kind => {
   const [, , al, rp, , mw] = d, dt = ts => new Date(ts * 1000).toISOString().slice(0, 16), now = Math.floor(Date.now() / 1000);
   if (kind === "rules") {
     const muted = (al.muted || []).length ? `<div class="mut">Muted: ${(al.muted || []).map(m => `<code>${esc(m)}</code> <a onclick="muteRef('${esc(m)}', false); closeModal()">unmute</a>`).join(" · ")}</div>` : "";
-    showModal("<b>Alert rules</b>", `<form class="frm alerts-win" onsubmit="return saveRules(event)"><p class="mut">A tunnel, a server or a config is called down after this many failed checks in a row; 0 hours = no reminders.</p>
-      <label>Call it down after <small>failed checks in a row</small><input name="tunnel_fails" type="number" min="1" max="20" value="${al.tunnel_fails}" oninput="this.form.server_fails.value = this.form.config_fails.value = this.value"></label>
+    showModal("<b>Alert rules</b>", `<form class="frm alerts-win" onsubmit="return saveRules(event)"><p class="mut">The panel confirms a fault itself first (a few seconds), then waits this long before it tells you; a thing that works again is told after it has held this long. Lower = faster, but a very short blip also gets a message.</p>
+      <label>Tell me it is down after <small>seconds</small><input name="down_seconds" type="number" min="0" max="3600" value="${al.down_seconds == null ? 10 : al.down_seconds}"></label>
+      <label>Tell me it is up again after <small>seconds</small><input name="up_seconds" type="number" min="0" max="3600" value="${al.up_seconds == null ? 15 : al.up_seconds}"></label>
       <label>Remind every (h) <small>while still down; 0 = never</small><input name="remind_hours" type="number" min="0" max="168" value="${al.remind_hours == null ? 0 : al.remind_hours}"></label>${muted}
-      ${[["server_fails", al.server_fails], ["config_fails", al.config_fails == null ? 3 : al.config_fails], ["min_down_minutes", al.min_down_minutes == null ? 4 : al.min_down_minutes], ["up_stable_seconds", al.up_stable_seconds], ["flap_max", al.flap_max == null ? 3 : al.flap_max], ["flap_quiet_hours", al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours]].map(([k, v]) => `<input type="hidden" name="${k}" value="${v}">`).join("")}
+      ${[["flap_max", al.flap_max == null ? 3 : al.flap_max], ["flap_quiet_hours", al.flap_quiet_hours == null ? 6 : al.flap_quiet_hours]].map(([k, v]) => `<input type="hidden" name="${k}" value="${v}">`).join("")}
       <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "narrow");
   } else if (kind === "report") {
     showModal("<b>Daily report</b>", `<form class="frm alerts-win" onsubmit="return saveReport(event)"><label class="chk"><input type="checkbox" name="enabled" ${rp.enabled ? "checked" : ""}> Send a daily report</label>
@@ -4400,7 +4401,7 @@ window.alertsWin = async kind => {
 };
 window.saveTelegram = e => put(e, "/api/settings/telegram", formJson(e, [], ["enabled"]), "✓ Telegram saved");
 window.testTelegram = async () => { toast("Sending…"); try { await api("/api/settings/telegram/test", {method: "POST"}); toast("✓ Test message sent", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); } };
-window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["tunnel_fails", "server_fails", "config_fails", "min_down_minutes", "up_stable_seconds", "remind_hours", "flap_max", "flap_quiet_hours"]), "✓ Rules saved", true);
+window.saveRules = e => put(e, "/api/settings/alerts", formJson(e, ["down_seconds", "up_seconds", "remind_hours", "flap_max", "flap_quiet_hours"]), "✓ Rules saved", true);
 window.muteRef = async (ref, on) => { try { const r = await api(`/api/settings/alerts/mute?ref=${encodeURIComponent(ref)}&muted=${on}`, {method: "POST"}); state.mutedSet = new Set(r.muted || []); toast(on ? "✓ Muted " + ref : "✓ Unmuted " + ref, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.addWindow = async e => { e.preventDefault(); const f = new FormData(e.target); const b = {start: Math.floor(new Date(f.get("start") + "Z").getTime() / 1000), end: Math.floor(new Date(f.get("end") + "Z").getTime() / 1000), note: f.get("note")}; try { await api("/api/maintenance", {method: "POST", body: JSON.stringify(b)}); toast("✓ Window added", "ok"); refresh(); if ($("#modal .alerts-win")) alertsWin("windows"); } catch (err) { toast("✕ " + err.message, "bad"); } return false; };
 window.delWindow = async id => { try { await api(`/api/maintenance/${id}`, {method: "DELETE"}); refresh(); if ($("#modal .alerts-win")) alertsWin("windows"); } catch (e) { toast("✕ " + e.message, "bad"); } };

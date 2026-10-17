@@ -43,6 +43,7 @@ _STATUSES = ("active", "disabled", "limited", "expired", "on_hold")
 NODE_OK = ("connected", "disabled", "healthy", "connecting")
 TOKEN_SHORT_DAYS = 30        # a token that ends sooner is no way to stay connected without a login that renews it
 KEY_META_EVERY = 12 * 3600   # how often the panel is asked about its API key (end date, still active)
+RECONNECT_EVERY = 30         # seconds between two reconnect requests for the same node (the panels are checked every 15 s)
 _JWT = re.compile(r"^[A-Za-z0-9_\-]{4,}\.[A-Za-z0-9_\-]{4,}\.[A-Za-z0-9_\-]*$")
 _ALERTED: dict[int, str] = {}      # panel id -> the level of the warning about the key / token the owner was last given (forgotten when it is fine)
 
@@ -600,15 +601,21 @@ def check_all() -> None:
                         emit(db, "ok", "panels", f"Node {n['name']} of {label} is connected again.", p.name)
                     elif fails >= 2 and n.get("id") is not None:
                         how = "reconnect not requested (panel is read-only)"
+                        asked = int(prev.get("reconnect_at", 0))          # (the panel is looked at every 15 s; a node that is still connecting is not asked to reconnect again before RECONNECT_EVERY)
+                        n["reconnect_at"] = asked
 
-                        if rw:
+                        if rw and now - asked >= RECONNECT_EVERY:
                             try:
                                 node_reconnect(c, n["id"])
                                 how = "reconnect requested"
                             except (PanelError, ValueError) as e:
                                 how = "reconnect failed: " + str(e)[:80]
 
-                        if fails in (2, 10, 60):
+                            n["reconnect_at"] = now
+                        elif rw:
+                            how = "reconnect requested a moment ago"
+
+                        if fails in (2, 20, 120):
                             emit(db, "bad", "panels", f"Node {n['name']} of {label} is {n['status'] or 'not connected'}" + (f" ({n['message']})" if n["message"] else "") + f" — {how}.", p.name)
 
                     nodes.append(n)

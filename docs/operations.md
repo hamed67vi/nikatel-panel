@@ -100,12 +100,17 @@ server was really reinstalled, delete its line from `/var/lib/nikatel/data/known
 
 ## Alerts
 
-Settings → Alerts → Alert rules. A thing goes DOWN once: after `tunnel_fails` / `server_fails` /
-`config_fails` failed checks in a row **and** at least `min_down_minutes` (default 4). UP is sent after it
-has been fine for `up_stable_seconds`. Reminders (`remind_hours`) are off by default (0). If something goes
-down `flap_max` (3) times within an hour you get one FLAPPING message and silence about it for
-`flap_quiet_hours` (6). Mute an item or add a maintenance window to silence it on purpose. Too many
-messages? Raise `min_down_minutes` or lower `flap_max`.
+Settings → Alerts → Alert rules. The panel confirms a fault itself first (a tunnel after its own confirming checks, a server after
+two missed 5-second pulses, a config after two different tests of the probe, a panel after two reads), then looks at the states **every 5 seconds**.
+A thing goes DOWN once, after it has stayed bad for `down_seconds` (default **10**); UP is sent after it has stayed good for `up_seconds`
+(default **15**). The clock starts at the moment the checker changed the state, not at the panel's next look. Typical delays from the event to the Telegram
+message: a server switched off or on ~15-25 s, a tunnel cut by a stopped unit or a dropped link ~15-30 s (a tunnel that only stops carrying data
+~45 s), a config ~40-70 s (the probe tests each config about every 30 s and two tests must agree). Reminders (`remind_hours`) are off by default (0).
+If something goes down `flap_max` (3) times within an hour you get one FLAPPING message and silence about it for `flap_quiet_hours` (6).
+Mute an item or add a maintenance window to silence it on purpose. Too many messages? Raise `down_seconds` (a blip shorter than it says nothing)
+or lower `flap_max`. A message Telegram does not take (a timeout, "too many requests") is kept and sent again every 10 seconds, in order, for half an hour.
+The rules saved by versions before 1.67.0 (failed checks in a row, `min_down_minutes`, `up_stable_seconds`) became these two numbers: the old
+defaults give the new defaults, a value the owner had changed is kept (minutes → seconds).
 
 ## The shop bot server
 

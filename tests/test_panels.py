@@ -256,3 +256,31 @@ def test_clone_and_save_of_a_pasarguard_host_use_the_write_names_and_the_slash(m
     panels.host_save({"id": 1, "type": "pasarguard"}, "7", {"remark": "renamed"})
     method, path, body = [x for x in calls if x[0] == "PUT"][-1]
     assert path == "/api/host/7" and body["remark"] == "renamed" and body["mux_settings"]["xray"]["xudp_concurrency"] == 4
+
+def test_a_node_that_stays_broken_is_asked_to_reconnect_at_most_every_30_seconds(client, fake, monkeypatch):
+    """The panels are looked at every 15 s now: two failed checks still make a node "down" in ~30 s, but the panel is not asked to reconnect it at every look."""
+    from nikatel.config import get_settings
+    from nikatel.db import session
+    from nikatel.models import Panel
+
+    monkeypatch.setenv("NIKATEL_READ_ONLY", "false")
+    get_settings.cache_clear()
+    monkeypatch.setattr(panels, "_token", lambda c, fresh=False: "t")
+    monkeypatch.setattr(panels, "_login", lambda c: "tok.tok.tok")
+    r = client.post("/api/panels", json={"name": "shop", "type": "marzban", "url": "https://1.1.1.1:8000/dashboard", "username": "admin", "password": "pw"})
+    assert r.status_code == 200, r.text
+    pid = r.json()["panel"]["id"]
+
+    def asked():
+        return fake.calls.count(("POST", "/api/node/2/reconnect"))
+
+    for _ in range(4):
+        panels.check_all()
+
+    assert asked() == 1                              # the second failed check asks; the third and the fourth are inside the 30 s
+    with session() as db:
+        p = db.get(Panel, pid)
+        p.nodes = [dict(n, reconnect_at=int(n.get("reconnect_at", 0)) - 40) if n["name"] == "de1" else n for n in p.nodes]
+
+    panels.check_all()
+    assert asked() == 2                              # 40 s later: asked again

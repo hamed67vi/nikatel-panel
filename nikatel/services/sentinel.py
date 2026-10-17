@@ -31,6 +31,7 @@ COOLDOWN = 30                # a tunnel is looked at for these signs at most thi
 MAX_CHECKS = 6               # full checks started in one turn (the rest wait for the next one)
 WORKERS = 4                  # ... at most this many at once
 PER_SERVER = 40              # units asked of one server in one command
+PEER_SIGN = "no answer from the foreign end"          # the sign of a GRE peer that answers none of the pings
 _LAST: dict[int, float] = {}         # tunnel -> when it was last looked at because of a sign
 _HEARD: dict[int, float] = {}        # server -> when it last answered the sentinel
 
@@ -96,7 +97,7 @@ def suspects(w: Watch, iran: dict | None, foreign: dict | None) -> list[str]:
         loss = iran["peers"].get(w.peer)
 
         if loss is not None and loss >= 100:
-            out.append("no answer from the foreign end over the GRE link")
+            out.append(PEER_SIGN + " over the GRE link")
 
     return out
 
@@ -129,7 +130,18 @@ def plan_reads(watches: list[Watch]) -> dict[int, dict[str, list[str]]]:
     return need
 
 
+def is_hard(signs: list[str]) -> bool:
+    """Pure: does a sign name a stopped unit or a card that is not up? Then the check starts with a quick read of the units and the card (a stopped unit says `down` by itself, a few seconds);
+    a silent peer alone needs the full look (an ICMP filter is not a cut)."""
+    return any(not s.startswith(PEER_SIGN) for s in signs)
+
+
 # ------------------------------------------------------------------ the job
+def look(item: tuple[Watch, list[str]]) -> None:
+    w, signs = item
+    tunnels.check_tunnel(w.id, fresh_ext=True, quick=is_hard(signs))
+
+
 def _load() -> tuple[list[Watch], dict[int, Node]]:
     with session() as db:
         watches: list[Watch] = []
@@ -210,4 +222,4 @@ def run() -> None:
         log.info("sentinel: %s: %s - checking it now", w.name, "; ".join(signs[:3]))
 
     with ThreadPoolExecutor(min(WORKERS, len(todo))) as ex:
-        list(ex.map(lambda x: tunnels.check_tunnel(x[0].id, fresh_ext=True), todo))
+        list(ex.map(look, todo))

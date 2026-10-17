@@ -56,11 +56,8 @@ def telegram_test():
 
 # ---- alert rules
 class RulesIn(BaseModel):
-    tunnel_fails: int = Field(3, ge=1, le=20)
-    server_fails: int = Field(2, ge=1, le=20)
-    config_fails: int = Field(3, ge=1, le=20)
-    min_down_minutes: int = Field(4, ge=0, le=1440)      # down for at least this long before DOWN
-    up_stable_seconds: int = Field(600, ge=0, le=86400)
+    down_seconds: int = Field(10, ge=0, le=3600)          # bad (as its checker confirmed it) for at least this long before DOWN
+    up_seconds: int = Field(15, ge=0, le=3600)            # good for at least this long before UP
     remind_hours: int = Field(0, ge=0, le=168)            # 0 = never remind
     flap_max: int = Field(3, ge=0, le=50)                 # outages per hour before FLAPPING + quiet; 0 = off
     flap_quiet_hours: int = Field(6, ge=1, le=168)
@@ -68,7 +65,7 @@ class RulesIn(BaseModel):
 
 @router.get("/settings/alerts")
 def alerts_get():
-    """The alert rules: failed checks before DOWN, minimum down time, stable time before UP, reminders, the flapping guard, mutes."""
+    """The alert rules: seconds down before DOWN, seconds good before UP, reminders, the flapping guard, mutes."""
     return {"ok": True, **st.get("alerts")}
 
 

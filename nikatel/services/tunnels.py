@@ -186,6 +186,22 @@ def parse_side(out: str) -> Side:
 DATA_DOWN_AFTER = 4          # this many failed data probes in a row: the tunnel is down, not just degraded (a minute in the fast lane, which looks at such a tunnel every ~8 s; it was four minutes in the minute cycle)
 
 
+def hard_fault(plan: Plan, iran: Side, foreign: Side) -> str:
+    """Pure: the sentence when a unit of either end is not active or the GRE card is not up - a fault that needs no ping, no request through the forwarded port and no look from another server
+    to be called down - else "". (Both sides must have answered: the caller has checked `error`.)"""
+    for label, side, units in (("Iran", iran, plan.iran_units), ("foreign", foreign, plan.foreign_units)):
+        for u in units:
+            st = side.units.get(u, "unknown")
+
+            if st != "active":
+                return f"{label}: {u} is {st}"
+
+    if plan.iface and iran.iface_state not in ("UP", "UNKNOWN"):
+        return f"the GRE interface {plan.iface} is {iran.iface_state or 'missing'} on the Iran server"
+
+    return ""
+
+
 def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_fails: int = 0,
           ext: tuple | None = None, ext_seen: bool = False, ext_fails: int = 0, stalled: str = "") -> tuple[str, str]:
     """(state, reason). Pure, so the rules are testable. `data_seen`: this tunnel has answered an HTTP request before (so silence now
@@ -202,15 +218,10 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
     if foreign.error:
         return "unknown", f"the foreign server does not answer ({foreign.error})"
 
-    for label, side, units in (("Iran", iran, plan.iran_units), ("foreign", foreign, plan.foreign_units)):
-        for u in units:
-            st = side.units.get(u, "unknown")
+    hard = hard_fault(plan, iran, foreign)
 
-            if st != "active":
-                return "down", f"{label}: {u} is {st}"
-
-    if plan.iface and iran.iface_state not in ("UP", "UNKNOWN"):
-        return "down", f"the GRE interface {plan.iface} is {iran.iface_state or 'missing'} on the Iran server"
+    if hard:
+        return "down", hard
 
     # the users' path decides: an HTTP answer through the forwarded port - from another Iran server, or at least on the server itself -
     # proves the tunnel carries data, whatever a ping over the link says (some routes drop ICMP inside GRE while TCP passes)
@@ -421,11 +432,13 @@ def external_probe_all() -> None:
     _EXT["at"], _EXT["res"], _EXT["from"] = int(time.time()), res, seen_from
 
 
-def _query(node: Node, plan: Plan, is_iran: bool) -> Side:
+def _query(node: Node, plan: Plan, is_iran: bool, quick: bool = False) -> Side:
+    """One side of a tunnel. `quick`: only the units and the card (a second or two; no ping, no request through the forwarded port)."""
     params = {"UNITS": " ".join(plan.iran_units if is_iran else plan.foreign_units),
               "IFACE": (plan.iface or plan.ping_iface) if is_iran else "",
-              "PEER": (plan.iran_peer or plan.ping) if is_iran else "",
-              "PORTS": " ".join(str(p) for p in plan.ports) if is_iran else ""}
+              "PEER": (plan.iran_peer or plan.ping) if is_iran and not quick else "",
+              "PORTS": " ".join(str(p) for p in plan.ports) if is_iran and not quick else "",
+              "QUICK": "1" if quick else ""}
 
     for attempt in (1, 2):
         try:
@@ -467,9 +480,11 @@ _CHECKING: set[int] = set()
 _CK_LOCK = threading.Lock()
 
 
-def check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
+def check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) -> None:
     """One check of a tunnel. Only one at a time per tunnel (the slow cycle, the fast lane and a repair may all want it: two at once would count one
-    failure twice); a second caller waits for the first and then makes its own, so it always sees what happened after it asked."""
+    failure twice); a second caller waits for the first and then makes its own, so it always sees what happened after it asked.
+    `quick` (the sentinel, when a unit or the card shows the fault): the units and the card are read first - a few seconds - and when one is not active the tunnel is down
+    at once, without the pings, the request through the port and the look from another server, which take ~15 s on a link that does not answer; when they are all fine the full check follows."""
     for _ in range(120):
         with _CK_LOCK:
             if tunnel_id not in _CHECKING:
@@ -481,13 +496,20 @@ def check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
         return
 
     try:
-        _check_tunnel(tunnel_id, fresh_ext)
+        _check_tunnel(tunnel_id, fresh_ext, quick)
     finally:
         with _CK_LOCK:
             _CHECKING.discard(tunnel_id)
 
 
-def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
+def _ext_one(iran_host: str, port: int, iran_id: int) -> None:
+    try:
+        external_probe_one(iran_host, port, iran_id)
+    except Exception:
+        log.exception("single external probe failed")
+
+
+def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) -> None:
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -502,24 +524,34 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
         iran_host, iran_id = t.iran.host, t.iran_server_id
         iran_off, foreign_off = t.iran.enabled and t.iran.online is False, t.foreign.enabled and t.foreign.online is False
 
-    def ask(node, is_iran, off):
+    def ask(node, is_iran, off, quick_read=False):
         if off:                  # the pulse already knows the server is off: asking it over SSH would only wait for a time-out (10-15 s each, for every tunnel of that server)
             s = Side()
             s.error = "the server is off or does not answer"
             return s
 
-        return _query(node, plan, is_iran)
+        return _query(node, plan, is_iran, True) if quick_read else _query(node, plan, is_iran)
 
-    with ThreadPoolExecutor(2) as ex:
-        fi = ex.submit(ask, iran_node, True, iran_off)
-        ff = ex.submit(ask, foreign_node, False, foreign_off)
-        iran, foreign = fi.result(), ff.result()
+    iran = foreign = None
 
-    if fresh_ext and not iran.error and (iran.data_port or plan.ports):
-        try:
-            external_probe_one(iran_host, int(iran.data_port or plan.ports[0]), iran_id)
-        except Exception:
-            log.exception("single external probe failed")
+    if quick:
+        with ThreadPoolExecutor(2) as ex:
+            qi, qf = ex.submit(ask, iran_node, True, iran_off, True), ex.submit(ask, foreign_node, False, foreign_off, True)
+            iran, foreign = qi.result(), qf.result()
+
+        if not (iran.error or foreign.error) and not hard_fault(plan, iran, foreign):
+            iran = foreign = None            # nothing is stopped or down in the units and the card: the full look decides (a server that did not answer, or a stopped unit, is the verdict already)
+
+    if iran is None:
+        # the two servers and - at the same time - the look from another Iran server: a link that does not answer costs the longest of them, not the sum
+        with ThreadPoolExecutor(3) as ex:
+            fi = ex.submit(ask, iran_node, True, iran_off)
+            ff = ex.submit(ask, foreign_node, False, foreign_off)
+            fe = ex.submit(_ext_one, iran_host, int(plan.ports[0]), iran_id) if fresh_ext and plan.ports and not iran_off else None
+            iran, foreign = fi.result(), ff.result()
+
+            if fe is not None:
+                fe.result()
 
     if (iran.error or foreign.error) and jobs.stopping():
         log.info("check name=%s skipped: the panel is restarting", plan.iface or tunnel_id)

@@ -42,18 +42,25 @@ def parse_health(answer: dict) -> list[dict]:
 
 FLAP_WINDOW = 2 * 3600    # a config that changes status FLAP_FLIPS times within this window is "unstable": one event says so, then the feed stays calm until it kept one status for the whole window
 FLAP_FLIPS = 3
-CONFIRM_CHECKS = 2        # a config changes its status only after this many reads of the probe agree: its test from a data centre is noisy, one SSL timeout is not a dead config
+CONFIRM_CHECKS = 2        # a config changes its status only after this many DIFFERENT tests of the probe agree: its test from a data centre is noisy, one SSL timeout is not a dead config
+QUICK_READ = 15           # seconds between two quick reads of the probe (the probe tests every config about every 30 s: a status moves ~30-60 s after the config changed, not 2-4 minutes)
+SAMPLE_EVERY = 110        # a quick read does not add a history sample unless this many seconds passed since the last one of that config (the history keeps one point per ~2 minutes)
 
 
-def settle_config(old: str, judged: str, pend: dict | None) -> tuple[str, dict]:
-    """Flapping control for a config: the stored status moves to `judged` once CONFIRM_CHECKS reads in a row said so. A config never judged before takes
+def settle_config(old: str, judged: str, pend: dict | None, seen: int = 0) -> tuple[str, dict]:
+    """Flapping control for a config: the stored status moves to `judged` once CONFIRM_CHECKS tests of the probe in a row said so. `seen`: the time of the probe's test
+    that was read (reading the same test again counts nothing: the panel reads far more often than the probe tests). A config never judged before takes
     its first status at once. Pure: see test_configs."""
     pend = dict(pend or {})
 
     if pend.get("status") == judged:
-        pend["n"] = int(pend.get("n", 0)) + 1
+        if not (seen and pend.get("at") == seen):
+            pend["n"] = int(pend.get("n", 0)) + 1
     else:
         pend = {"status": judged, "n": 1}
+
+    if seen:
+        pend["at"] = seen
 
     if judged == old or old in ("", "unknown"):
         return judged, pend
@@ -195,11 +202,18 @@ def fill_meta(limit: int = 20) -> int:
 
 
 # ------------------------------------------------------------------ sync job
+_SYNC_LOCK = threading.Lock()       # one read of the probe at a time (the quick job and the full job both read it)
+_SAMPLED: dict[int, int] = {}       # config id -> when its last history sample was written
+_HELD = {"at": 0.0}                  # the last time the quick read asked the full job to run (a direct config the probe calls down waits for the reach answer)
+
+
 def sync() -> None:
+    """The full round (every 2 minutes): the probe's answer, the groups and the links, and for the direct TCP configs the probe calls down, the question to the Iran servers."""
     down_tcp: list[str] = []
 
     try:
-        down_tcp = _sync()
+        with _SYNC_LOCK:
+            down_tcp = _sync()
     finally:
         try:
             assign_groups()
@@ -212,9 +226,32 @@ def sync() -> None:
             down_direct = [c.name for c in db.scalars(select(Config).where(Config.status == "down")) if _direct_tcp(c.meta)]
 
         if refresh_reach(sorted(set(down_tcp) | set(down_direct))):
-            _sync(settle=False)      # the answer is there: show it now, not at the next round - as a second look, not as a second read
+            with _SYNC_LOCK:
+                _sync(settle=False)      # the answer is there: show it now, not at the next round - as a second look, not as a second read
     except Exception:
         log.exception("reach check failed")
+
+
+def sync_fast() -> None:
+    """The quick read (every QUICK_READ seconds): only the probe's answer and the statuses, nothing that asks a server. A direct TCP config the probe calls down does
+    not turn down here before the Iran servers said whether its port opens: the full round is asked to run now."""
+    if not _SYNC_LOCK.acquire(blocking=False):
+        return
+
+    try:
+        held = _sync(fast=True)
+    finally:
+        _SYNC_LOCK.release()
+
+    if held and time.time() - _HELD["at"] >= 20:
+        _HELD["at"] = time.time()
+
+        try:
+            from .. import jobs
+
+            jobs.trigger("configs")
+        except KeyError:
+            pass                      # not registered (tests)
 
 
 REACH_TTL = 300     # seconds a reachability answer is kept
@@ -283,7 +320,9 @@ def refresh_reach(names: list[str]) -> bool:
     return changed
 
 
-def _sync(settle: bool = True) -> list[str]:
+def _sync(settle: bool = True, fast: bool = False) -> list[str]:
+    """One read of the probe into the statuses. Returns the direct TCP configs the probe calls down; with `fast` (the quick job) the ones that were HELD: the probe
+    says down, there is no fresh answer from the Iran servers about their port yet, so their status is not moved to down here (the full round asks, and decides)."""
     try:
         with _PLOCK:
             pending = set(_PENDING)
@@ -299,6 +338,7 @@ def _sync(settle: bool = True) -> list[str]:
 
     now = int(time.time())
     down_tcp: list[str] = []
+    held: list[str] = []
 
     with session() as db:
         by_name = {c.name: c for c in db.scalars(select(Config))}
@@ -316,6 +356,7 @@ def _sync(settle: bool = True) -> list[str]:
             seen.add(r["name"])
             meta = dict(c.meta or {})
             overridden = False
+            hold = False
 
             if _direct_tcp(meta):          # direct TCP: down only when the port really does not open from Iran
                 reach = meta.get("reach") or {}
@@ -329,13 +370,20 @@ def _sync(settle: bool = True) -> list[str]:
                         overridden = True
                     elif reach.get("ok") is False and fresh:
                         r = {**r, "error": "the port does not open from Iran: the address is filtered or its server is off"}
+                    elif fast:
+                        hold = True        # no fresh answer from Iran yet: the quick read does not call it down
                 elif r["status"] == "up" and reach:
                     meta.pop("reach", None)
 
             old = c.status
+            probe_test = int(r["checked_at"] or 0) or now // 30 * 30          # (a probe that sends no time of its test: one test per 30 s is assumed)
 
             if settle:
-                status, meta["pend"] = settle_config(old, r["status"], meta.get("pend"))
+                status, meta["pend"] = settle_config(old, r["status"], meta.get("pend"), probe_test)
+
+                if hold and status == "down" and old != "down":
+                    status = old
+                    held.append(c.name)
             else:                            # the second look of one round (after a reachability answer): only a measured override moves the status; nothing is counted twice
                 status = r["status"] if overridden else old
 
@@ -370,7 +418,8 @@ def _sync(settle: bool = True) -> list[str]:
 
             c.meta = meta
 
-            if settle:
+            if settle and (not fast or now - _SAMPLED.get(c.id, 0) >= SAMPLE_EVERY):
+                _SAMPLED[c.id] = now
                 db.add(ConfigSample(config_id=c.id, ts=now, up=r["status"] == "up", ping_ms=r["ping_ms"]))
 
         for name, c in by_name.items():
@@ -379,10 +428,14 @@ def _sync(settle: bool = True) -> list[str]:
                 db.delete(c)
 
         db.flush()
-        db.execute(delete(ConfigSample).where(ConfigSample.ts < now - KEEP_SAMPLES_SECONDS))
 
-    log.info("sync ok configs=%s up=%s", len(rows), sum(1 for r in rows if r["status"] == "up"))
-    return down_tcp
+        if not fast:
+            db.execute(delete(ConfigSample).where(ConfigSample.ts < now - KEEP_SAMPLES_SECONDS))
+
+    if not fast:
+        log.info("sync ok configs=%s up=%s", len(rows), sum(1 for r in rows if r["status"] == "up"))
+
+    return held if fast else down_tcp
 
 
 _PROBE_DOWN = {"at": 0}

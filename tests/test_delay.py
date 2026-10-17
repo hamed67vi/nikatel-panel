@@ -110,9 +110,18 @@ def sentinel_world(monkeypatch, answers):
     monkeypatch.setattr(sentinel, "_LAST", {})
     monkeypatch.setattr(sentinel.jobs, "stopping", lambda: False)
     monkeypatch.setattr(sentinel, "run_light", lambda node, name, params=None, timeout=8: answers(node, params))
-    monkeypatch.setattr(sentinel.tunnels, "check_tunnel", lambda tunnel_id, fresh_ext=False: checked.append((tunnel_id, fresh_ext)))
+    QUICK.clear()
+
+    def fake_check(tunnel_id, fresh_ext=False, quick=False):
+        checked.append((tunnel_id, fresh_ext))
+        QUICK.append(quick)
+
+    monkeypatch.setattr(sentinel.tunnels, "check_tunnel", fake_check)
     monkeypatch.setattr(ap, "repairing_names", list)
     return tid, ir, fr, checked
+
+
+QUICK: list[bool] = []         # the `quick` flag of every check the sentinel asked for
 
 
 def test_the_sentinel_checks_at_once_a_tunnel_that_lost_a_unit_and_leaves_a_healthy_one_alone(monkeypatch):
@@ -124,7 +133,7 @@ def test_the_sentinel_checks_at_once_a_tunnel_that_lost_a_unit_and_leaves_a_heal
 
     tid, _, _, checked = sentinel_world(monkeypatch, answers)
     sentinel.run()
-    assert checked == [(tid, True)]                                                                                  # a fresh look (from another Iran server too), not the minute cycle's
+    assert checked == [(tid, True)] and QUICK == [True]                                                              # a fresh look (from another Iran server too), not the minute cycle's; a stopped unit: the quick read first
     checked.clear()
     sentinel.run()
     assert checked == []                                                                                             # the same sign again within the cooldown: not looked at again
@@ -132,6 +141,114 @@ def test_the_sentinel_checks_at_once_a_tunnel_that_lost_a_unit_and_leaves_a_heal
     monkeypatch.setattr(ap, "repairing_names", lambda: ["sn1"])
     sentinel.run()
     assert checked == []                                                                                             # a repair is working on it: left alone
+
+
+def test_a_silent_peer_alone_gets_the_full_look_and_a_stopped_unit_or_a_card_the_quick_read(monkeypatch):
+    assert sentinel.is_hard(["Iran: backhaul-iran-tcpmux-9301.service is failed"]) and sentinel.is_hard(["the GRE interface t1 is DOWN on the Iran server"])
+    assert sentinel.is_hard(["foreign: x.service is inactive", "no answer from the foreign end over the GRE link"])
+    assert not sentinel.is_hard(["no answer from the foreign end over the GRE link"]) and not sentinel.is_hard([])
+
+    def silent(node, params):
+        return "".join(f"UNIT {u} active\n" for u in params["UNITS"].split()) + "".join(f"IFACE {i} UP\n" for i in params["IFACES"].split()) + "".join(f"PEER {p} 100\n" for p in params["PEERS"].split())
+
+    tid, _, _, checked = sentinel_world(monkeypatch, silent)
+    sentinel.run()
+    assert checked == [(tid, True)] and QUICK == [False]                                                             # an ICMP filter is not a cut: the full look decides
+
+
+def quick_world(monkeypatch, name, iran_units_state):
+    """A tunnel whose servers answer from `iran_units_state` ("active" / "inactive") on the Iran side; records every _query (quick or not) and every single look from another server."""
+    tid, _, _ = world(name)
+    calls, looks = [], []
+
+    def query(node, plan, is_iran, quick=False):
+        calls.append(("iran" if is_iran else "foreign", quick))
+        units = plan.iran_units if is_iran else plan.foreign_units
+        text = "".join(f"UNIT {u} " + (iran_units_state if is_iran else "active") + "\n" for u in units)
+
+        if is_iran and plan.iface:
+            text += f"IFACE {plan.iface} UP\n"
+
+        if not quick and is_iran:
+            text += "PEER 10.8.1.2 1.5 0\nDATA 8310 200 0.01\n"
+
+        return tn.parse_side(text + "NOW 1000\n")
+
+    monkeypatch.setattr(tn, "_query", query)
+    monkeypatch.setattr(tn, "external_probe_one", lambda *a, **k: looks.append(a))
+    monkeypatch.setattr(tn.jobs, "trigger", lambda name: None)
+    return tid, calls, looks
+
+
+def test_a_stopped_unit_is_called_down_after_the_quick_read_without_the_pings_the_request_and_the_look_from_another_server(monkeypatch):
+    tid, calls, looks = quick_world(monkeypatch, "qk1", "inactive")
+    tn._check_tunnel(tid, fresh_ext=True, quick=True)
+
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        assert t.state == "down" and "is inactive" in t.last_error
+
+    assert calls == [("iran", True), ("foreign", True)] and looks == []                                              # two quick reads, nothing else: ~2 s, not ~15
+
+
+def test_when_the_quick_read_finds_nothing_stopped_the_full_check_follows_and_the_look_from_another_server_is_made_with_it(monkeypatch):
+    tid, calls, looks = quick_world(monkeypatch, "qk2", "active")
+    tn._check_tunnel(tid, fresh_ext=True, quick=True)
+
+    with session() as db:
+        assert db.get(Tunnel, tid).state == "up"
+
+    assert sorted(calls) == [("foreign", False), ("foreign", True), ("iran", False), ("iran", True)] and len(looks) == 1       # the quick pair, then the full pair + one look from another server (at the same time)
+    calls.clear()
+    looks.clear()
+    tn._check_tunnel(tid, fresh_ext=False)                                                                           # an ordinary check: no quick read, no extra look
+    assert sorted(calls) == [("foreign", False), ("iran", False)] and looks == []
+
+
+def test_a_server_that_does_not_answer_the_quick_read_is_not_asked_a_second_time(monkeypatch):
+    tid, _, _ = world("qk3")
+    calls = []
+
+    def query(node, plan, is_iran, quick=False):
+        calls.append((is_iran, quick))
+        s = tn.Side()
+        s.error = "ssh connection lost" if is_iran else ""
+        s.units = {u: "active" for u in plan.foreign_units} if not is_iran else {}
+        return s
+
+    monkeypatch.setattr(tn, "_query", query)
+    monkeypatch.setattr(tn, "external_probe_one", lambda *a, **k: None)
+    monkeypatch.setattr(tn.jobs, "trigger", lambda name: None)
+    monkeypatch.setattr(tn.jobs, "stopping", lambda: False)                                                          # (an earlier test that shut the app down leaves the flag set)
+    tn._check_tunnel(tid, fresh_ext=True, quick=True)
+
+    with session() as db:
+        assert db.get(Tunnel, tid).detail["iran_error"] == "ssh connection lost"          # (an up tunnel needs two such checks to become "unknown": the rule of `settle`)
+
+    assert sorted(calls) == [(False, True), (True, True)]                                                           # one quick read each; the full look would only wait for the same time-out again
+
+
+def test_hard_fault_is_what_judge_calls_down_before_any_ping():
+    plan = tn.Plan(["backhaul-iran-tcpmux-9301.service", "nikatel-gre-t1.service"], ["backhaul-kharej-tcpmux-9301.service"], ports=[8301], iface="t1", iran_peer="10.8.1.2")
+    ok = tn.parse_side("UNIT backhaul-iran-tcpmux-9301.service active\nUNIT nikatel-gre-t1.service active\nIFACE t1 UP\n")
+    far = tn.parse_side("UNIT backhaul-kharej-tcpmux-9301.service active\n")
+    assert tn.hard_fault(plan, ok, far) == ""
+    assert tn.hard_fault(plan, ok, tn.parse_side("UNIT backhaul-kharej-tcpmux-9301.service inactive\n")) == "foreign: backhaul-kharej-tcpmux-9301.service is inactive"
+    assert tn.hard_fault(plan, tn.parse_side("UNIT backhaul-iran-tcpmux-9301.service active\nUNIT nikatel-gre-t1.service active\nIFACE t1 DOWN\n"), far) == "the GRE interface t1 is DOWN on the Iran server"
+    assert tn.judge(plan, ok, tn.parse_side("UNIT backhaul-kharej-tcpmux-9301.service failed\n")) == ("down", "foreign: backhaul-kharej-tcpmux-9301.service is failed")
+
+
+def test_the_tunnel_side_script_asks_the_users_path_while_it_pings_and_does_not_wait_for_twenty_pings_of_a_silent_peer():
+    params = {"UNITS": "a.service", "IFACE": "t1", "PEER": "10.8.1.2", "PORTS": "8301"}
+    text = ssh._script_text("tunnel_side", params)
+    assert "ping -c 3" in text and "ping -c 20" in text and '*" 0 received"*' in text                                  # three pings first; twenty only when something answered
+    assert text.index("curl -s -m 4") < text.index("ping -c 3") and ") & fi" in text and "\nwait\n" in text          # the request through the port runs in the background beside the pings
+    quick = ssh._script_text("tunnel_side", {**params, "QUICK": "1"})
+    assert '[ "1" = 1 ]' in quick and "exit 0" in quick
+    assert '[ "" = 1 ]' in ssh._script_text("tunnel_side", params)                                                    # (no QUICK given: the full look)
+
+    with pytest.raises(ValueError):
+        ssh._script_text("tunnel_side", {**params, "QUICK": "2"})
 
 
 def test_the_sentinel_says_nothing_about_a_healthy_tunnel_a_down_one_or_a_server_it_cannot_ask(monkeypatch):

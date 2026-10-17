@@ -10,56 +10,79 @@ from nikatel.services.alerts import Rules, Track, decide, in_maintenance
 from nikatel.services.importer import import_seed_dir
 from nikatel.services.telegram import valid_chat, valid_token
 
-R = Rules(fails=3, up_stable_seconds=600, remind_seconds=3600)
+R = Rules(down_seconds=10, up_seconds=15, remind_seconds=3600)
 
 
-def test_decide_needs_n_failures_then_one_down():
+def test_decide_says_down_once_after_down_seconds_and_counts_from_the_first_bad_look():
     t = Track()
     t, v1 = decide(t, True, 1000, R)
-    t, v2 = decide(t, True, 1060, R)
-    t, v3 = decide(t, True, 1120, R)
-    t, v4 = decide(t, True, 1180, R)
+    t, v2 = decide(t, True, 1005, R)
+    t, v3 = decide(t, True, 1010, R)               # 10 s bad: now
+    t, v4 = decide(t, True, 1015, R)
     assert (v1, v2, v3, v4) == (None, None, "down", None) and t.alerted and t.bad_since == 1000
 
 
-def test_decide_flap_does_not_alert():
+def test_decide_a_blip_shorter_than_down_seconds_says_nothing():
     t = Track()
-    for i in range(6):   # bad, good, bad, good …
-        t, v = decide(t, i % 2 == 0, 1000 + i * 60, R)
-        assert v is None
+    for i in range(8):   # bad 5 s, good 5 s, bad 5 s, good ...
+        t, v = decide(t, i % 2 == 0, 1000 + i * 5, R)
+        assert v is None and not t.alerted
 
 
-def test_decide_up_only_after_stable_and_reminders():
-    t = Track(fails=3, alerted=True, bad_since=0, last_notice=0)
+def test_decide_the_clock_starts_where_the_checker_changed_the_state():
+    """A tunnel the checker called down 7 s before our look is told 3 s later, not 10."""
+    t, v = decide(Track(), True, 1007, R, since=1000)
+    assert v is None and t.bad_since == 1000
+    t, v = decide(t, True, 1010, R, since=1000)
+    assert v == "down"
+    # the same for the way back: it has been up since 2000, our first look is at 2012
+    t, v = decide(t, False, 2012, R, since=2000)
+    assert v is None and t.good_since == 2000
+    t, v = decide(t, False, 2015, R, since=2000)
+    assert v == "up" and t.alerted is False
+    # a `since` in the future (a clock that jumped) is not believed
+    t, v = decide(Track(), True, 3000, R, since=3600)
+    assert t.bad_since == 3000
+
+
+def test_decide_up_only_after_it_held_and_reminders():
+    t = Track(fails=1, alerted=True, bad_since=0, last_notice=0)
     t, v = decide(t, True, 3700, R)
     assert v == "remind"
     t, v = decide(t, False, 4000, R)
-    assert v is None and not t.alerted is False
-    t, v = decide(t, False, 4300, R)
+    assert v is None and t.alerted is True
+    t, v = decide(t, True, 4005, R)                 # it fell again before it held: no UP, and no second DOWN (it is still "down" for the reader)
+    assert v is None and t.alerted is True and t.good_since == 0
+    t, v = decide(t, False, 4010, R)
+    t, v = decide(t, False, 4020, R)
     assert v is None
-    t, v = decide(t, False, 4700, R)
+    t, v = decide(t, False, 4025, R)
     assert v == "up" and t.alerted is False and t.fails == 0
 
 
-def test_decide_waits_for_the_minimum_down_time_and_never_reminds_when_off():
-    rules = Rules(fails=1, up_stable_seconds=60, remind_seconds=0, min_bad_seconds=240)
-    t = Track()
-    t, v1 = decide(t, True, 1000, rules)           # one failed check, but only 0 s down
-    t, v2 = decide(t, True, 1120, rules)           # 2 min
-    t, v3 = decide(t, True, 1250, rules)           # 4 min 10 s -> now it counts
-    assert (v1, v2, v3) == (None, None, "down") and t.bad_since == 1000
+def test_decide_never_reminds_when_off_and_down_seconds_zero_is_at_once():
+    rules = Rules(down_seconds=0, up_seconds=10, remind_seconds=0)
+    t, v1 = decide(Track(), True, 1000, rules)          # 0 s: the very first bad look
+    assert v1 == "down" and t.bad_since == 1000
     t, v = decide(t, True, 90000, rules)           # down for a day: no reminder, reminders are off
     assert v is None
     t, v = decide(t, False, 90100, rules)
-    t, v = decide(t, False, 90200, rules)
+    t, v = decide(t, False, 90110, rules)
     assert v == "up"
-    # a blip: bad for 2 minutes, then good again -> not a word
-    t, v = decide(Track(), True, 2000, rules); t, v2 = decide(t, True, 2100, rules); t, v3 = decide(t, False, 2200, rules); t, v4 = decide(t, False, 2300, rules)
-    assert (v, v2, v3, v4) == (None, None, None, None) and not t.alerted
+
+
+def test_decide_does_not_write_the_track_again_while_nothing_changes():
+    """The look is every 5 s: a thing that stays down must not change its row on every look."""
+    t, _ = decide(Track(), True, 1000, R)
+    t2, _ = decide(t, True, 1005, R)
+    assert t2 == t
+    t, _ = decide(t, True, 1010, R)
+    t2, _ = decide(t, True, 1015, R)
+    assert t2 == t
 
 
 def test_decide_flapping_guard_says_it_once_then_keeps_quiet():
-    rules = Rules(fails=1, up_stable_seconds=0, remind_seconds=0, min_bad_seconds=0, flap_max=3, flap_window=3600, flap_quiet=6 * 3600)
+    rules = Rules(down_seconds=0, up_seconds=0, remind_seconds=0, flap_max=3, flap_window=3600, flap_quiet=6 * 3600)
     t, out = Track(), []
     for i in range(10):                             # down / up every 5 minutes for 50 minutes
         t, v = decide(t, i % 2 == 0, 1000 + i * 300, rules)
@@ -100,8 +123,12 @@ def test_settings_api_masks_token(client):
 
 
 def test_alert_rules_mute_and_maintenance_api(client):
-    r = client.put("/api/settings/alerts", json={"tunnel_fails": 4, "server_fails": 2, "up_stable_seconds": 300, "remind_hours": 2})
-    assert r.status_code == 200 and r.json()["tunnel_fails"] == 4 and r.json()["flap_max"] == 3 and r.json()["min_down_minutes"] == 4
+    d = client.get("/api/settings/alerts").json()
+    assert d["down_seconds"] == 10 and d["up_seconds"] == 15 and d["remind_hours"] == 0         # the defaults: a fault is told after 10 s, a repair after 15 s
+    r = client.put("/api/settings/alerts", json={"down_seconds": 20, "up_seconds": 30, "remind_hours": 2})
+    assert r.status_code == 200 and r.json()["down_seconds"] == 20 and r.json()["up_seconds"] == 30 and r.json()["flap_max"] == 3
+    assert not any(k in r.json() for k in ("tunnel_fails", "server_fails", "config_fails", "min_down_minutes", "up_stable_seconds"))
+    assert client.put("/api/settings/alerts", json={"down_seconds": -1}).status_code == 422 and client.put("/api/settings/alerts", json={"up_seconds": 99999}).status_code == 422
     assert client.put("/api/settings/alerts", json={"remind_hours": 0, "flap_max": 0}).status_code == 200      # reminders and the guard can be switched off
     assert client.put("/api/settings/alerts", json={"remind_hours": -1}).status_code == 422
     assert client.post("/api/settings/alerts/mute?ref=t1").json()["muted"] == ["t1"]

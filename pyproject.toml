@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5"]
+dev = ["pytest>=8", "pytest-cov>=5", "pytest-xdist>=3.5", "ruff>=0.5"]
 
 [project.scripts]
 nikatel = "nikatel.main:cli"
