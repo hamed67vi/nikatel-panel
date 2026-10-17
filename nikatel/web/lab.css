@@ -976,6 +976,16 @@ html body #page .tun-tbl .tun-act .td-act { display: flex; align-items: center; 
 html body #page .tun-tbl .tun-act .lab-kb { width: 32px; height: 32px; border-radius: 10px; }
 html body #page .tun-tbl .tun-act .busy-chip { padding: 0; width: 24px; justify-content: center; }
 
+/* 1.64.6 - the columns of the tunnel table share the width by what they hold, and the address cells breathe (the owner, 2026-10-17: "the parts where the server addresses are written are very crowded; the empty space between the columns is too much; put the columns right").
+   Before, the name, the type and the ports had 19 / 19 / 12 % and the middle block had fixed pixels, so on a wide window the room that was left piled up between the type and the bandwidth and after the ports while the two address cells stayed tight against the ping arrows.
+   Now every column has a share (13 / 14 / 10 / 9 / 11 / 11 / 8 %, the button 56 px), tuned on a demo panel: on a 2000 px window the gaps between the columns are 110-160 px instead of 170-270 px. */
+html body #page .tun-tbl td.td-node { line-height: 1.3; }
+html body #page .tun-tbl td.td-node.ir { padding-right: 20px; }
+html body #page .tun-tbl td.td-node:not(.ir) { padding-left: 20px; }
+html body #page .tun-tbl td.td-node b { font-weight: 700; }
+html body #page .tun-tbl td.td-node .ip-copy { margin-top: 3px; font-size: 11.5px; font-weight: 400; letter-spacing: 0; }      /* (the address one step smaller and lighter than the name above it: two equally heavy lines were the crowd) */
+html:not([data-mode="light"]) body #page .tun-tbl td.td-node .ip-copy { color: #97a5c3; }
+
 /* 1.64.0 - the second row of boxes of a tunnel window (the owner, 2026-10-17: the users' internet and the stability "inside their own box, not in the cards"): Users' internet | Stability | Last results, under Servers | Status | Link */
 html body #modal .tunwin .sbox[data-b="users"], html body #modal .tunwin .sbox[data-b="stability"], html body #modal .tunwin .sbox[data-b="results"] { min-width: 0; }
 html body #modal .tunwin .sbox[data-b="stability"] > h5 small, html body #modal .tunwin .sbox[data-b="users"] > h5 small { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: 0; text-transform: none; }

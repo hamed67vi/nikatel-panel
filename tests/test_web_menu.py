@@ -1256,7 +1256,7 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     app, css = _web("app.js"), _web("lab.css")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert "<th>Traffic</th>" not in app and 'class="num hide-sm"' not in row and row.count("<td") == 8                       # the table is eight columns now: name, type, bandwidth, Iran, ping, foreign, ports, the end
-    assert '<col style="width:19%"><col style="width:19%"><col style="width:150px"><col style="width:170px"><col style="width:140px"><col style="width:170px"><col style="width:12%"><col style="width:56px">' in app and app.count("<col ") >= 8      # (the owner, 2026-10-17: "bring the nodes and the ping toward the bandwidth column, too much space between them": the middle block has the widths of its content and the room that is left goes to the name, the type and the ports)
+    assert '<col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%"><col style="width:8%"><col style="width:56px">' in app and app.count("<col ") >= 8      # (the owner, 2026-10-17: "the address cells are very crowded, too much empty space between the columns": every column but the last has a share of the width (the shares were tuned in a demo panel at 2000 / 1440 / 1180 px so the gaps between the columns come out about equal; the fluid layer spreads what they do not add up to), so no column piles up the room that is left)
     assert '"bandwidthmb s": 118' in _web("fluid.js")
     assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
     assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" in app
@@ -1346,7 +1346,7 @@ def test_the_end_of_a_tunnel_row_is_the_dots_button_of_the_server_list_and_the_s
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert '<td class="tun-act"><div class="td-act">' in row and 'labKebab("tun", t.id, "Actions of " + t.name)' in row and row.count("<td") == 8
     assert 'typeof labKebab === "function"' in row and 'class="busy-chip" title="the tunnel is being rebuilt"' in row                      # (a tunnel that is being rebuilt shows its spinner in place of the button)
-    assert '<col style="width:12%"><col style="width:56px"></colgroup>' in app                                                           # (the last column is as wide as the button needs)
+    assert '<col style="width:8%"><col style="width:56px"></colgroup>' in app                                                            # (the last column is as wide as the button needs)
     assert ".tun-tbl td:last-child::after { content:" not in appcss and "padding-right: 52px" not in appcss.split(".tun-tbl td:last-child {", 1)[1].split("}", 1)[0]      # (the tunnel's own arrow and the room kept for it are gone ...)
     assert "html body #page .tun-tbl td:last-child::after { content: none !important; }" in css                                             # ... and the "›" every clickable row shows on hover (app.css) is switched off here, as in the server list (lab.css)
     assert "function tunMenuItems(id)" in lab and 'if (ctx === "tun") return tunMenuItems(id);' in lab and "const labKebab = (ctx, id, label) =>" in lab      # (the menu is the one of the tunnel window)
@@ -1363,6 +1363,15 @@ def test_the_copy_mark_of_an_address_sits_inside_the_address_box_so_a_cell_canno
     box = css.split("html body #page .tun-tbl .td-node .ip-copy {", 1)[1].split("}", 1)[0]
     assert "display: inline-block" in box and "max-width: 100%" in box and "overflow: hidden" in box and "text-overflow: ellipsis" in box     # (never wider than the cell: a tight cell cuts the address with "...", not the mark)
     assert "padding-right: 18px" in css and "padding-left: 18px" in css and 'html[data-mode="light"] body #page .tun-tbl .td-node .ip-copy::before' in css
+
+
+def test_the_address_cells_of_the_tunnel_table_breathe_and_the_columns_share_the_width():
+    """The owner, 2026-10-17 (his picture of the tunnels table): "the parts where the server addresses are written are very crowded; the empty space between the columns is too much; put the columns right"."""
+    css = _web("lab.css")
+    block = css.split("/* 1.64.6 - the columns of the tunnel table share the width", 1)[1].split("/* 1.64.0 - the second row of boxes", 1)[0]
+    assert "html body #page .tun-tbl td.td-node.ir { padding-right: 20px; }" in block and "html body #page .tun-tbl td.td-node:not(.ir) { padding-left: 20px; }" in block      # air between an address and the ping arrows
+    assert "html body #page .tun-tbl td.td-node .ip-copy { margin-top: 3px; font-size: 11.5px; font-weight: 400;" in block                                                       # the address is lighter than the name above it
+    assert 'html:not([data-mode="light"]) body #page .tun-tbl td.td-node .ip-copy { color: #97a5c3; }' in block and "td.td-node b { font-weight: 700; }" in block
 
 
 def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stability_and_the_list_stays_calm():

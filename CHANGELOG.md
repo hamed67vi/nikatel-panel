@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.64.6 - The tunnel table's columns share the width evenly; the address cells breathe
+
+The owner (2026-10-17), his picture of the Tunnels table on a 2000 px window: "the parts where the server addresses are written are very crowded"; "the empty space between the cards is too much"; "put the columns right, make the empty space between the columns less, tidy it".
+
+- **The room is shared, not piled up.** The name, the type and the ports had 19 / 19 / 12 % of the width and the middle block (bandwidth, Iran node, ping, foreign node) had fixed pixels, so on a wide window everything that was left landed between the type and the bandwidth (about 230 px), after the foreign node (about 200 px) and after the ports (about 250 px), while the two address cells stayed tight against the ping arrows. Every column has a share now (name 13, type 14, bandwidth 10, Iran node 9, ping 11, foreign node 11, ports 8 %, the "⋯" button 56 px), tuned on a demo panel: on a 2000 px window the gaps between the columns are 110-160 px, nearly equal; on 1440 px nothing is cut, and on 1180 px it is no tighter than before.
+- **The address cells are calmer.** The address (monospace) is one step smaller and lighter than the bold name above it (two equally heavy lines were the crowd), the line height is a little more open, and the Iran and foreign cells keep 20 px of air on the side of the ping arrows.
+
 ## 1.64.5 - The capacity number is amber no more; only a real drop is coloured
 
 The owner (2026-10-17), his picture of the Tunnels table (capacity numbers 799, 831, 544, 1085, 207 in amber, the rest grey): "do not show these yellow numbers unless there is really a problem or a real drop in bandwidth".
