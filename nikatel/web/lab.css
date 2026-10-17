@@ -902,11 +902,10 @@ html body #page .tun-tbl td.name .tun-lamp.down { --lamp: var(--bad, #ff6b8b); }
 html body #page .tun-tbl td.name .tun-lamp.starting, html body #page .tun-tbl td.name .tun-lamp.unknown { --lamp: #7d8aa8; box-shadow: none; }
 html body #page .tun-tbl td.bwc { white-space: nowrap; }
 /* 1.63.0 - the Bandwidth cell holds TWO numbers (the owner, 2026-10-17): the capacity (blue: what the tunnel can carry, the Doctor's last test), a thin line, and what the users use of it now (down and up, live); the bar under both is the part of the capacity they use (blue, amber from 70 %, red from 90 %) */
-html body #page .tun-tbl .bwx { display: inline-flex; flex-direction: column; gap: 5px; vertical-align: middle; min-width: 128px; max-width: 100%; }
+html body #page .tun-tbl .bwx { display: inline-flex; flex-direction: column; gap: 5px; vertical-align: middle; min-width: 112px; max-width: 100%; }
 html body #page .tun-tbl .bwr { display: flex; align-items: center; gap: 7px; line-height: 1.1; white-space: nowrap; }
 html body #page .tun-tbl .bwcap { display: inline-flex; align-items: baseline; gap: 2px; min-width: 24px; font-variant-numeric: tabular-nums; }
 html body #page .tun-tbl .bwcap b { font-size: 12.5px; font-weight: 800; letter-spacing: .1px; color: var(--acc-2, #7aa7f0); }
-html body #page .tun-tbl .bwcap small { font-size: 9.5px; font-weight: 700; color: var(--mut); letter-spacing: 0; }
 html body #page .tun-tbl .bwcap em { margin-left: 2px; font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--bad, #ff6b8b); }
 html body #page .tun-tbl .bwcap.low b { color: var(--warn, #ffc44d); }
 html body #page .tun-tbl .bwcap.drop b { color: var(--bad, #ff6b8b); }
@@ -915,19 +914,14 @@ html body #page .tun-tbl .bwsep { flex: none; width: 1px; height: 14px; backgrou
 html body #page .tun-tbl .bwuse { display: inline-flex; align-items: baseline; gap: 2px; min-width: 0; font-variant-numeric: tabular-nums; }
 html body #page .tun-tbl .bwuse i { font-style: normal; font-size: 10.5px; font-weight: 800; color: var(--mut); }
 html body #page .tun-tbl .bwuse b { margin-right: 3px; font-size: 12px; font-weight: 700; color: var(--text); }
-html body #page .tun-tbl .bwuse small { font-size: 9.5px; font-weight: 700; color: var(--mut); }
 html body #page .tun-tbl .bwuse.old b { opacity: .7; }
 html body #page .tun-tbl .bwuse.none { color: var(--mut); font-weight: 700; }
 html body #page .tun-tbl .bwbar { display: block; width: 100%; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .1); overflow: hidden; }
 html body #page .tun-tbl .bwbar u { display: block; height: 100%; border-radius: 2px; background: var(--acc-2, #7aa7f0); text-decoration: none; transition: width .5s; }
 html body #page .tun-tbl .bwbar.hot u { background: var(--warn, #ffc44d); }
 html body #page .tun-tbl .bwbar.full u { background: var(--bad, #ff6b8b); }
-html body #page .tun-tbl th.bwh .bwh-in { display: block; container-type: inline-size; white-space: nowrap; }
-html body #page .tun-tbl th.bwh small { margin-left: 8px; font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--mut); white-space: nowrap; }
-@container (max-width: 172px) { html body #page .tun-tbl th.bwh small { display: none; } }      /* (a column too narrow for the legend shows only the word: the legend is in the tooltip - never a legend cut in half) */
-html body #page .tun-tbl th.bwh small i { font-style: normal; }
-html body #page .tun-tbl th.bwh small i:first-child { color: var(--acc-2, #7aa7f0); }
-html body #page .tun-tbl th.bwh small u { margin: 0 5px; text-decoration: none; opacity: .5; }
+html body #page .tun-tbl th.bwh .bwh-in { display: block; white-space: nowrap; }
+html body #page .tun-tbl th.bwh .bwh-in em { margin-left: 6px; font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--mut); }      /* (the unit is written ONCE, up here: the owner, 2026-10-17 - never beside every number, never Gb/s; and nothing else: no "capacity | in use" legend, it is in the tooltip) */
 html[data-mode="light"] body #page .tun-tbl .bwbar { background: rgba(30, 50, 100, .14); }
 html[data-mode="light"] body #page .tun-tbl .bwsep { background: rgba(30, 50, 100, .22); }
 html body #modal .bw-why { margin-top: 4px; color: var(--warn, #ffc44d); font-size: 12px; line-height: 1.35; }
@@ -942,21 +936,21 @@ html body #page .tun-tbl .bwcap.pend .spin { display: inline-block; width: 10px;
 html[data-mode="light"] body #page .tun-tbl .bwcap.pend .spin { border-color: rgba(30, 50, 100, .18); border-top-color: var(--mut); }
 
 /* 1.63.0 - the Ping / Loss cell after the owner's picture (2026-10-17: "fix this arrow and the way the ping and the packet loss are placed"): the ping above, an arrow at each end of a dotted line, the loss below - blue while the link runs, red with a cross while it is cut */
-html body #page .tun-tbl .tlink { --tl: #7fa6d8; --tl-glow: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; box-sizing: border-box; width: 100%; min-width: 0; max-width: 150px; margin: 0 auto; color: var(--tl); }
+html body #page .tun-tbl .tlink { --tl: #7fa6d8; --tl-glow: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; box-sizing: border-box; width: 100%; min-width: 0; max-width: 150px; margin: 0 auto; color: var(--tl); }
 html body #page .tun-tbl .tlink.down, html body #page .tun-tbl .tlink.cut { --tl: #cf7480; --tl-glow: transparent; }
 html body #page .tun-tbl .tlink.unknown, html body #page .tun-tbl .tlink.starting { --tl: #7d8aa8; --tl-glow: transparent; }
-html body #page .tun-tbl .tlink .ms { min-height: 13px; font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 13px; letter-spacing: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+html body #page .tun-tbl .tlink .ms { min-height: 12px; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 12px; letter-spacing: 0; color: var(--text); font-variant-numeric: tabular-nums; }      /* (the owner, 2026-10-17: "the ping numbers smaller, and the ping and the loss closer to the line of the arrows") */
 html body #page .tun-tbl .tlink .ms.mut { color: var(--mut); }
 html body #page .tun-tbl .tlink .ms.warn { color: var(--warn, #ffc44d); }
-html body #page .tun-tbl .tlink .wire { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; max-width: none; height: 14px; opacity: .5; }      /* (the owner: "the arrows paler - I do not want that place to look busy": the whole wire is dimmed, the numbers above and below are not) */
+html body #page .tun-tbl .tlink .wire { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; max-width: none; height: 12px; opacity: .5; }      /* (the owner: "the arrows paler - I do not want that place to look busy": the whole wire is dimmed, the numbers above and below are not) */
 html body #page .tun-tbl .tlink .wire::before, html body #page .tun-tbl .tlink .wire::after { content: none; }
-html body #page .tun-tbl .tlink .ah { flex: none; width: 16px; height: 10px; fill: none; stroke: var(--tl); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .tun-tbl .tlink .ah { flex: none; width: 15px; height: 9px; fill: none; stroke: var(--tl); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 html body #page .tun-tbl .tlink .dots { position: relative; flex: 1 1 auto; min-width: 8px; height: 4px; margin: 0; background: radial-gradient(circle, var(--tl) 1px, transparent 1.4px) 0 50% / 7px 4px repeat-x; opacity: .6; text-decoration: none; }
 html body #page .tun-tbl .tlink .dots::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, #d6e9ff 1.4px, transparent 2px) 7px 50% / 29px 4px repeat-x; opacity: .6; }
 html body #page .tun-tbl .tlink.down .dots, html body #page .tun-tbl .tlink.cut .dots { height: 1.5px; border-radius: 2px; background: var(--tl); opacity: .8; }
 html body #page .tun-tbl .tlink.down .dots::before, html body #page .tun-tbl .tlink.cut .dots::before { content: none; }
 html body #page .tun-tbl .tlink .xx { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -52%); padding: 0 3px; font-style: normal; font-weight: 700; font-size: 13px; line-height: 1; color: var(--tl); text-shadow: 0 0 4px var(--panel, #14161f), 0 0 4px var(--panel, #14161f); pointer-events: none; }
-html body #page .tun-tbl .tlink .loss { min-height: 13px; padding: 0; background: none; font-size: 11px; font-weight: 600; line-height: 13px; color: var(--mut); font-variant-numeric: tabular-nums; }
+html body #page .tun-tbl .tlink .loss { min-height: 12px; padding: 0; background: none; font-size: 10.5px; font-weight: 600; line-height: 12px; color: var(--mut); font-variant-numeric: tabular-nums; }
 html body #page .tun-tbl .tlink .loss.hi { color: var(--warn, #ffc44d); font-weight: 800; }
 html body #page .tun-tbl .tlink .loss.blk { font-style: italic; font-weight: 600; opacity: .85; }
 @keyframes tlFlow { to { background-position: 36px 50%; } }
@@ -965,6 +959,23 @@ html[data-mode="light"] body #page .tun-tbl .tlink { --tl: #3a79d0; --tl-glow: t
 html[data-mode="light"] body #page .tun-tbl .tlink.down, html[data-mode="light"] body #page .tun-tbl .tlink.cut { --tl: #cc4a58; --tl-glow: transparent; }
 html[data-mode="light"] body #page .tun-tbl .tlink.unknown, html[data-mode="light"] body #page .tun-tbl .tlink.starting { --tl: #7a86a3; --tl-glow: transparent; }
 html[data-mode="light"] body #page .tun-tbl .tlink .dots::before { background-image: radial-gradient(circle, #ffffff 1.5px, transparent 2.1px); }
+
+/* 1.63.1 - the copy mark of an address (the owner, 2026-10-17: "the copy icon falls incomplete"). A cell cuts whatever hangs outside it, and the mark hung 16 px to the left of the address - inside the 8 px of padding - so it was cut.
+   Now the mark lives INSIDE the address box, on the free side (left of an Iran address, right of a foreign one): the box grows by the width of the mark when the pointer is on it, and in a tight cell the address gives way ("...") - the mark itself is never cut. */
+html body #page .tun-tbl .td-node .ip-copy { display: inline-block; vertical-align: top; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .tun-tbl .td-node .ip-copy::before { top: 50%; left: auto; right: 3px; width: 12px; height: 12px; transform: translateY(-50%); }
+html body #page .tun-tbl .td-node.ir .ip-copy::before { left: 3px; right: auto; }
+html body #page .tun-tbl .td-node .ip-copy:hover { padding-right: 18px; }
+html body #page .tun-tbl .td-node.ir .ip-copy:hover { padding-right: 0; padding-left: 18px; }
+html body #page .tun-tbl .td-node .ip-copy:hover::before { opacity: .85; transform: translateY(-50%); }
+html[data-mode="light"] body #page .tun-tbl .td-node .ip-copy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%232c5fc9' stroke-width='1.5'%3E%3Crect x='5.5' y='5.5' width='8' height='8' rx='2'/%3E%3Cpath d='M10.5 3.5v-.2A1.8 1.8 0 0 0 8.7 1.5H3.8A1.8 1.8 0 0 0 2 3.3v4.9a1.8 1.8 0 0 0 1.8 1.8h.2' stroke-linecap='round'/%3E%3C/svg%3E"); }
+
+/* 1.63.1 - the end of a tunnel row is the "⋯" button of the server list (labKebab, the menu of the tunnel window); the soft "›" arrow is gone */
+html body #page .tun-tbl td:last-child::after { content: none !important; }      /* (the "›" that every clickable row of app.css shows on hover: no "›" over the "⋯", as in the server list) */
+html body #page .tun-tbl td.tun-act { padding-left: 4px; padding-right: 10px; }
+html body #page .tun-tbl .tun-act .td-act { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
+html body #page .tun-tbl .tun-act .lab-kb { width: 32px; height: 32px; border-radius: 10px; }
+html body #page .tun-tbl .tun-act .busy-chip { padding: 0; width: 24px; justify-content: center; }
 
 /* 1.62.0 - the Knowledge tab of the Tunnel Doctor: what it knows about every pair of servers and what it remembers of the cuts */
 html body #page .kn-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 4px 2px 10px; }

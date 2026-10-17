@@ -348,11 +348,22 @@ set -- @PORTS@; if [ -n "$1" ]; then C=$(curl -s -m 4 -o /dev/null -w '%{http_co
 echo "NOW $(date +%s)"
 """, {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS}),
 
-    # read-only: the byte counters of some network cards and the uptime, in one go - "IF <card> <rx_bytes> <tx_bytes>" for every card that exists and "UP <seconds>" - the live numbers of the tunnels (services/livebw.py).
-    # The uptime is the clock of the rate: it does not move with the time the ssh answer takes.
+    # read-only: the byte counters of some network cards, the byte counters of the TCP connections of some tunnels, and the uptime, in one go - the live numbers of the tunnels (services/livebw.py):
+    #   "IF <card> <rx_bytes> <tx_bytes>" for every card that exists;
+    #   "SOCK <spec> <local> <remote> <bytes_acked> <bytes_received>" for every established connection of a tunnel that has no card of its own (a reverse proxy: BackPack, Chisel): spec "s8072" = the connections that
+    #   came IN on port 8072 (the foreign server dials the Iran server), "d443@203.0.113.9" = the connections the Iran server opened to that address and port (forward tunnels) - the kernel's own socket counters (ss);
+    #   "UP <seconds>". The uptime is the clock of the rate: it does not move with the time the ssh answer takes.
     "iface_counters": (r"""for i in @IFACES@; do [ -r /sys/class/net/$i/statistics/rx_bytes ] && echo "IF $i $(cat /sys/class/net/$i/statistics/rx_bytes) $(cat /sys/class/net/$i/statistics/tx_bytes)"; done
+for sp in @SOCKS@; do
+  case "$sp" in
+    s*) f="( sport = :${sp#s} )" ;;
+    *) p=${sp#d}; f="( dport = :${p%@*} and dst ${p#*@} )" ;;
+  esac
+  ss -tniH "$f" 2>/dev/null | awk -v sp="$sp" '/^ESTAB/ { loc = $4; rem = $5; next } /bytes_/ { a = ""; r = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^bytes_acked:/) { split($i, x, ":"); a = x[2] } if ($i ~ /^bytes_received:/) { split($i, x, ":"); r = x[2] } } if (loc != "" && a != "" && r != "") print "SOCK " sp " " loc " " rem " " a " " r; loc = "" }'
+done
 echo "UP $(cut -d' ' -f1 /proc/uptime)"
-""", {"IFACES": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39}$"}),
+""", {"IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39})?$",
+      "SOCKS": r"^((s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3})( (s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3})){0,39})?$"}),
 
     # the users' path, looked at from another Iran server: one HTTP request to host:port (several at once, in parallel) - http first,
     # then https without verification for TLS ports. "REACH host port <http code> <seconds>": any code but 000 proves the port answers from Iran.

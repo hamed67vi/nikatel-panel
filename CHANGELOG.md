@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.63.1 - Live use for the reverse-proxy tunnels too; the column is in Mb only; "⋯" at the end of a row; the copy mark is whole
+
+The owner (2026-10-17), looking at 1.63.0 on his real tunnels: "why is no usage shown here (BackPack wssmux / tcpmux)?"; "make the ping numbers smaller and both the packet loss and the ping a bit closer to the arrow line";
+"do not write Gig at all, put everything in Mb and do not write Mb/s beside the numbers - write it at the top of the column"; "write only Mb/s in the header"; "the copy icon falls incomplete"; "turn these arrows into three stacked dots
+that bring the options, like the server section".
+
+- **A reverse proxy has a live number now.** BackPack and Chisel over TCP, WS, WSS or mux have no network card of their own, so the cell said "-". The panel now adds up the byte counters the kernel keeps for every **TCP connection**
+  (`ss -ti`) of the tunnel: the ones that came in on the control port of the Iran server (the foreign server dialled in) or, for a forward Chisel tunnel, the ones the Iran server opened to the foreign server - one light command per Iran
+  server, the same 5 s / 4 s rhythm as the card counters, a rate over ~15 s. Each connection is followed by itself (a new one counts what it has, a gone one says nothing more, a count that went back starts again), so a long download
+  neither jumps nor is counted twice. The numbers include the framing of the tunnel (a few percent) and say `via: "connections"` in `GET /api/tunnels/live`. What has neither a card nor a connection (UDP, QUIC, KCP, raw sockets: Paqet, BackPack UDP)
+  still says "-", never a made-up zero.
+  Tried for real on the test panel (a download of 42 Mb/s, limited by curl, from the Iran test server through each kind to the build server, the panel's live number against curl's own): **BackPack tcpmux 41.9 (curl 41.9), wssmux 41.8 (42.0), tcp 42.2 (41.9),
+  Chisel ws 42.2 (41.9), Chisel fws forward 42.0 (41.9)** - within 1 %; every tunnel and what it made was removed again.
+- **Mb only.** No "Gb/s" anywhere in the column (1234, not "1.2 Gb/s") and no unit beside a number: the header says **"Bandwidth Mb/s"** and nothing else (the "capacity | in use" legend is gone from it; the tooltip keeps the explanation).
+- **The ping cell is calmer.** The ping number is smaller (11 px) and the ping and the loss sit closer to the line of the arrows.
+- **"⋯" at the end of a row.** The soft "›" is replaced by the three-dot button of the server list; it opens the menu of the tunnel window (Repair, History, Mute alerts, Rename, Ports, Rebuild, Remove), and a click on the row still opens the window.
+- **The copy mark is whole.** The mark that shows beside an address when the pointer is on it hung outside the address, in 8 px of cell padding, and the cell cut it. It now lives inside the address box, on the free side (left of an Iran address, right of
+  a foreign one); in a tight cell the address gives way with "...", never the mark.
+
 ## 1.63.0 - The Bandwidth column shows the capacity AND what the users use of it, live; the ping cell after the owner's picture; the saved password can be read
 
 The owner (2026-10-17): "show the overall capacity and, beside it, the bandwidth the users are using; delete the traffic column; make the bandwidth column more useful and understandable - and the numbers it shows must be real,

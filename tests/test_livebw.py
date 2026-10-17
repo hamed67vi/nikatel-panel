@@ -1,6 +1,8 @@
 """What the users use of every tunnel right now (services/livebw.py): the counters of the tunnel's own link, read every few seconds and turned into rates.
 The owner, 2026-10-17: "show the capacity, and the bandwidth the users are using - the numbers must be real, reliable and live"."""
 import itertools
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -20,7 +22,7 @@ MB = 1_000_000 // 8          # bytes in a megabit
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    for d in (livebw._READS, livebw._LIVE, livebw._HOLD, livebw._BACKOFF):
+    for d in (livebw._READS, livebw._SOCKS, livebw._LIVE, livebw._HOLD, livebw._BACKOFF):
         d.clear()
 
     livebw._ASKED[0] = livebw._LAST[0] = 0.0
@@ -92,30 +94,141 @@ def test_the_window_starts_again_when_the_card_was_made_again_or_the_server_rest
     assert len(w) == 1
 
 
-def test_the_script_asks_only_for_cards_and_gives_what_a_real_card_says():
+def test_the_script_asks_only_for_cards_and_connections_by_their_names_and_gives_what_a_real_card_says():
     assert "iface_counters" in ssh.SCRIPTS
-    with pytest.raises(ValueError):
-        ssh._script_text("iface_counters", {"IFACES": "lo; reboot"})                       # a card name is a name: nothing else gets into the command
-    with pytest.raises(ValueError):
-        ssh._script_text("iface_counters", {"IFACES": ""})
+    for bad in ({"IFACES": "lo; reboot"}, {"IFACES": "lo", "SOCKS": "s80; reboot"}, {"SOCKS": "s99999999"}, {"SOCKS": "d443@example.com"}, {"SOCKS": "x80"}):
+        with pytest.raises(ValueError):
+            ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": "", **bad})                 # a card is a name, a connection is a port (and an address): nothing else gets into the command
+
+    assert "@IFACES@" not in ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": "s8072 d443@203.0.113.9"})      # (both may be empty, and both can be several)
 
     if sys.platform.startswith("linux"):
-        out = subprocess.run(["bash", "-c", ssh._script_text("iface_counters", {"IFACES": "lo no-such-card"})], capture_output=True, text=True, timeout=20, check=False).stdout
+        out = subprocess.run(["bash", "-c", ssh._script_text("iface_counters", {"IFACES": "lo no-such-card", "SOCKS": ""})], capture_output=True, text=True, timeout=20, check=False).stdout
         up, cards = livebw.parse_counters(out)
         assert up is not None and up > 0 and "lo" in cards and "no-such-card" not in cards      # (a card that does not exist is left out, not made up)
 
 
-def test_the_servers_to_read_are_the_iran_servers_with_a_card_per_tunnel():
+@pytest.mark.skipif(not sys.platform.startswith("linux") or shutil.which("ss") is None, reason="needs Linux and ss")
+def test_the_script_reads_the_byte_counters_of_the_connections_of_a_port_in_both_directions():
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(4)
+    port = server.getsockname()[1]
+    client = socket.create_connection(("127.0.0.1", port))
+    peer, _ = server.accept()
+    client.sendall(b"x" * 60_000)                      # (a little: it all fits in the buffers, nobody has to read it for the counters to count it)
+    peer.sendall(b"y" * 40_000)
+    time.sleep(0.5)
+
+    try:
+        for spec, who in ((f"s{port}", "the accepted connection (the foreign server dialled in)"), (f"d{port}@127.0.0.1", "the connection this side opened (a forward tunnel)")):
+            out = subprocess.run(["bash", "-c", ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": spec})], capture_output=True, text=True, timeout=20, check=False).stdout
+            conns = livebw.parse_socks(out).get(spec) or {}
+            assert len(conns) == 1, (who, out)
+            (acked, received), = conns.values()
+            sent, got = (40_000, 60_000) if spec.startswith("s") else (60_000, 40_000)                 # (what that end sent, and what it received)
+            assert acked >= sent and received >= got, (who, acked, received)
+    finally:
+        client.close()
+        peer.close()
+        server.close()
+
+
+def test_the_servers_to_read_are_the_iran_servers_with_a_card_or_the_connections_of_each_tunnel():
     gre, gre_sid = make("gr-a")
     direct, direct_sid = make("bp-d", typ="backpack", transport="l3:udp", record={"inner_net": 7})
-    make("bp-rev", typ="backpack", transport="wssmux")                                    # a reverse proxy: no card of its own, no counter
+    rev, rev_sid = make("bp-rev", typ="backpack", transport="wssmux")                     # a reverse proxy: no card of its own - its connections on the control port are counted
+    chrev, chrev_sid = make("ch-rev", typ="chisel", transport="ws", record={"direction": "reverse"})
+    chfwd, chfwd_sid = make("ch-fwd", typ="chisel", transport="fws", record={"direction": "forward"})
+    make("bp-udp", typ="backpack", transport="udp", record={"udp_carrier": True})          # UDP, QUIC, KCP and raw sockets have no connection to count: no number ...
+    make("pq-a", typ="paqet", transport="kcp", record={"direction": "direct"})             # ... and Paqet is one of them
     make("test-x")                                                                         # a temporary test tunnel: never listed, never read
     make("gr-off", iran_online=False)
     make("gr-dis", enabled=False)
     make("gr-ird", iran_enabled=False)
-    got = {t["server_id"]: t["cards"] for t in livebw.targets()}
-    assert got == {gre_sid: {"gr-a": [gre]}, direct_sid: {"bp7": [direct]}}                # the GRE link by the name of the tunnel, the L3 link of a BackPack Direct tunnel by its bp<N>
+
+    with session() as db:
+        fwd_host = db.get(Tunnel, chfwd).foreign.host
+
+    got = {t["server_id"]: (t["cards"], t["socks"]) for t in livebw.targets()}
+    assert got == {gre_sid: ({"gr-a": [gre]}, {}),                                          # the GRE link by the name of the tunnel
+                   direct_sid: ({"bp7": [direct]}, {}),                                     # the L3 link of a BackPack Direct tunnel by its bp<N>
+                   rev_sid: ({}, {"s9901": [rev]}), chrev_sid: ({}, {"s9901": [chrev]}),   # the connections that came in on the control port (the foreign server dials the Iran server)
+                   chfwd_sid: ({}, {f"d9901@{fwd_host}": [chfwd]})}                         # the connections the Iran server opened to the foreign server (a forward tunnel)
     assert all(t["node"].host.startswith("203.0.113.") for t in livebw.targets())          # (always the Iran side: that is where the users' traffic enters)
+
+
+def sockline(spec, loc, rem, acked, received):
+    return f"SOCK {spec} {loc} {rem} {acked} {received}\n"
+
+
+def test_the_connections_in_the_answer_are_read_by_tunnel():
+    out = (sockline("s8072", "10.0.0.1:8072", "203.0.113.9:40001", 100, 200) + sockline("s8072", "10.0.0.1:8072", "203.0.113.9:40002", 5, 6)
+           + sockline("d443@203.0.113.9", "10.0.0.1:50000", "203.0.113.9:443", 7, 8) + "SOCK short\nSOCK a b c d e\nUP 1.0\n")
+    assert livebw.parse_socks(out) == {"s8072": {("10.0.0.1:8072", "203.0.113.9:40001"): (100, 200), ("10.0.0.1:8072", "203.0.113.9:40002"): (5, 6)},
+                                       "d443@203.0.113.9": {("10.0.0.1:50000", "203.0.113.9:443"): (7, 8)}}      # (a line that is not a connection is not one)
+    assert livebw.parse_socks("") == {}
+
+
+def test_what_the_connections_moved_is_the_growth_of_each_and_never_goes_back():
+    a, b = ("l:1", "r:1"), ("l:1", "r:2")
+    assert livebw.sock_step(None, {a: (100, 200)}) == (0, 0)                                  # the first sight: there is no "since"
+    assert livebw.sock_step({a: (100, 200)}, {a: (150, 260)}) == (50, 60)
+    assert livebw.sock_step({a: (100, 200)}, {a: (150, 260), b: (10, 20)}) == (60, 80)       # a new connection counts what it has: it began since the last read
+    assert livebw.sock_step({a: (100, 200), b: (10, 20)}, {a: (150, 260)}) == (50, 60)       # one that is gone says nothing more
+    assert livebw.sock_step({a: (100, 200)}, {a: (30, 40)}) == (30, 40)                       # counters that went back: a new connection on the same ports
+
+
+def test_a_round_counts_the_connections_of_a_reverse_proxy_into_the_numbers_of_the_tunnel(monkeypatch):
+    tid, _ = make("bp-rev", typ="backpack", transport="wssmux")
+    a, b = ("10.0.0.1:9901", "203.0.113.9:40001"), ("10.0.0.1:9901", "203.0.113.9:40002")
+    outs = iter([sockline("s9901", *a, 1_000, 5_000) + "UP 100.0\n",
+                 sockline("s9901", *a, 1_000 + 2_500_000, 5_000 + 50_000_000) + sockline("s9901", *b, 0, 12_500_000) + "UP 105.0\n",      # a grew, b is new: 62.5 MB down, 2.5 MB up in 5 s
+                 sockline("s9901", *b, 2_500_000, 12_500_000 + 62_500_000) + "UP 110.0\n"])                                                  # a is gone, b grew by the same again
+    seen = []
+    monkeypatch.setattr(livebw, "run_light", lambda node, name, params=None, timeout=8: (seen.append(params), next(outs))[1])
+    target = livebw.targets()[0]
+    livebw._read(target)
+    assert livebw.view() == {}                                                                # the baseline
+    livebw._read(target)
+    v = livebw.view()[str(tid)]
+    assert v["down"] == 100.0 and v["up"] == 4.0 and v["via"] == "connections"                # (62.5 MB in 5 s = 100 Mb/s, 2.5 MB = 4 Mb/s)
+    livebw._read(target)
+    v = livebw.view()[str(tid)]
+    assert v["down"] == 100.0 and v["up"] == 4.0 and v["span"] == 10.0                        # (125 MB in 10 s: the connection that closed did not make the number go back)
+    assert seen[0] == {"IFACES": "", "SOCKS": "s9901"}
+
+
+def test_no_connection_a_long_gap_or_a_test_of_the_panel_gives_no_wrong_number(monkeypatch):
+    tid, _ = make("bp-rev", typ="backpack", transport="wssmux")
+    a = ("10.0.0.1:9901", "203.0.113.9:40001")
+    outs = iter([sockline("s9901", *a, 0, 1_000_000) + "UP 100.0\n", sockline("s9901", *a, 2_500_000, 63_500_000) + "UP 105.0\n",
+                 "UP 110.0\n",                                                                # nothing connected (or a kernel that does not count): no number to give
+                 sockline("s9901", *a, 0, 5_000_000_000) + "UP 115.0\n",                      # it is back, with a lot behind it (it began somewhere before): the baseline again
+                 sockline("s9901", *a, 0, 5_000_000_000 + 62_500_000) + "UP 120.0\n",
+                 sockline("s9901", *a, 0, 9_000_000_000) + "UP 400.0\n",                      # a gap of 280 s: what is new now began somewhere in it - the baseline again
+                 sockline("s9901", *a, 0, 9_000_000_000 + 62_500_000) + "UP 405.0\n"])
+    monkeypatch.setattr(livebw, "run_light", lambda node, name, params=None, timeout=8: next(outs))
+    target = livebw.targets()[0]
+    livebw._read(target)
+    livebw._read(target)
+    assert livebw.view()[str(tid)]["down"] == 100.0
+    livebw._LIVE.clear()
+    livebw._read(target)                                                                       # nothing connected
+    assert livebw.view() == {} and not livebw._SOCKS and not livebw._READS[(target["server_id"], "sock:s9901")]
+    livebw._read(target)
+    assert livebw.view() == {}                                                                 # (5 GB behind it is not a rate: the first sight counts nothing)
+    livebw._read(target)
+    assert livebw.view()[str(tid)]["down"] == 100.0                                            # (and the next one is: 62.5 MB in 5 s)
+    livebw._LIVE.clear()
+    livebw._read(target)
+    assert livebw.view() == {}
+    livebw._read(target)
+    assert livebw.view()[str(tid)]["down"] == 100.0
+
+    livebw.hold(tid, 60)                                                                        # a test of the panel is on the tunnel: nothing of it is the users'
+    livebw._sock_update(target["server_id"], "s9901", [tid], {a: (1, 2)}, 500.0, time.time())
+    assert (target["server_id"], "sock:s9901") not in livebw._SOCKS and not livebw._READS[(target["server_id"], "sock:s9901")]
 
 
 def test_a_round_turns_the_counters_into_the_numbers_of_the_tunnel(monkeypatch):
@@ -131,7 +244,7 @@ def test_a_round_turns_the_counters_into_the_numbers_of_the_tunnel(monkeypatch):
     livebw._read(target)
     v = livebw.view()[str(tid)]
     assert v["down"] == 100.0 and v["span"] == 10.0 and 0 <= v["age"] < 5                    # (over 10 s now: the window grows to 15 s)
-    assert seen[0][1:] == ("iface_counters", {"IFACES": "gr-a"}) and seen[0][0].startswith("203.0.113.")
+    assert seen[0][1:] == ("iface_counters", {"IFACES": "gr-a", "SOCKS": ""}) and seen[0][0].startswith("203.0.113.")
 
 
 def test_a_test_of_the_panel_on_the_link_is_not_the_users_use(monkeypatch):

@@ -1178,7 +1178,8 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     app, css, lab = _web("app.js"), _web("lab.css"), _web("lab.js")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc"', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
-    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and '<thead><tr><th>Tunnel</th><th>Type</th><th class="bwh" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<small><i>capacity</i><u>|</u><i>in use</i></small></span></th>' in app
+    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and '<thead><tr><th>Tunnel</th><th>Type</th><th class="bwh" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
+    assert "<small><i>capacity</i>" not in app                                                    # the header says the word and the unit, nothing else (the owner, 2026-10-17: "write only mb/s here"); the legend is in the tooltip
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
@@ -1252,7 +1253,7 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
     assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" in app
     assert "const liveAge = l => l.age + (Date.now() - (state.liveAt || Date.now())) / 1000;" in app                                # (the age comes from the server: no clock of the browser is compared with the server's)
-    for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", ".bwbar.hot u", ".bwbar.full u", "th.bwh small {"):
+    for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", ".bwbar.hot u", ".bwbar.full u", "th.bwh .bwh-in em {"):
         assert "html body #page .tun-tbl " + sel in css, sel
     assert 'html[data-mode="light"] body #page .tun-tbl .bwsep {' in css
 
@@ -1270,7 +1271,7 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
         pytest.skip("node is not installed here")
 
     app = _web("app.js")
-    code = app[app.index("const bwNum = (v, gb)"): app.index("/* the numbers of what the users use change by themselves")]
+    code = app[app.index("const bwFmt = v =>"): app.index("\n", app.index("const bwFmt = v =>"))] + "\n" + app[app.index("const bwNum = v =>"): app.index("/* the numbers of what the users use change by themselves")]
     driver = tmp_path / "bw.js"
     driver.write_text(
         "const esc = s => String(s == null ? '' : s); const mbps = v => v == null ? '-' : v.toFixed(1) + ' Mb/s'; const ago = () => '1m'; const bwPending = () => false; const bwTip = () => 'tip';\n"
@@ -1278,30 +1279,29 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
         "const now = Date.now() / 1000; const mk = (bw, rx, tx) => ({id: 7, state: 'up', bw, rx_mbps: rx, tx_mbps: tx, last_check_at: now - 30});\n"
         "const live = (down, up, age) => { state.live = {7: {down, up, age}}; state.liveAt = Date.now(); };\n"
         "const res = {};\n"
-        "res.nums = [bwNum(87.34, false), bwNum(8.4, false), bwNum(0.4, false), bwNum(0.02, false), bwNum(1234, true), bwNum(15000, true), bwPair(87.3, 12.1), bwPair(1234, 90)];\n"
+        "res.nums = [bwNum(87.34), bwNum(8.4), bwNum(0.4), bwNum(0.02), bwNum(1234), bwNum(15000), bwNum(999.6), bwFmt(1234), bwFmt(null)];\n"
         "let t = mk({down: 312, state: 'ok'}, 5, 1); live(87, 12, 3);\n"
         "res.live = {use: bwUse(t), bar: bwBar(t), util: bwUtil(t)};\n"
         "live(250, 20, 3); res.hot = bwBar(t); live(300, 20, 3); res.full = bwBar(t); live(400, 20, 3); res.over = bwBar(t); live(1500, 20, 3); res.mixed = bwUse(t);\n"
         "state.live = {}; res.cycle = bwUse(t);\n"
         "t = mk({down: 312, state: 'ok'}, null, null); t.last_check_at = 0; res.none = {use: bwUse(t), bar: bwBar(t), util: bwUtil(t)};\n"
         "live(87, 12, 200); res.stale = bwUse(mk({down: 312}, 40, 4));\n"
-        "res.capSame = bwCap(mk({down: 312, state: 'ok'}, 40, 4)); res.capDiff = bwCap(mk({down: 1234, state: 'ok'}, 40, 4));\n"
         "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), none: bwCap(mk({}))};\n"
         "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     res = json.loads(r.stdout)
-    assert res["nums"] == ["87", "8.4", "0.40", "0", "1.2", "15", ["87", "12", "Mb/s", "Mb/s"], ["1.2", "90", "Gb/s", "Mb/s"]]      # each number in its own unit: a small upload beside a download in Gb/s is not a "0"
-    assert 'class="bwuse live"' in res["live"]["use"] and "<b>87</b>" in res["live"]["use"] and "<b>12</b>" in res["live"]["use"] and "<small>Mb/s</small>" in res["live"]["use"]
+    assert res["nums"] == ["87", "8.4", "0.40", "0", "1234", "15000", "1000", "1234 Mb/s", "—"]      # always Mb/s, never Gb/s (the owner, 2026-10-17: "do not write Gig, everything in Mb")
+    assert 'class="bwuse live"' in res["live"]["use"] and "<b>87</b>" in res["live"]["use"] and "<b>12</b>" in res["live"]["use"]
+    seen = re.sub(r'title="[^"]*"', "", res["live"]["use"])                                                                  # (what is SEEN: the tooltip keeps its units)
+    assert "Mb/s" not in seen and "Gb/s" not in seen and "<small>" not in seen                                               # and no unit beside the numbers: it is in the header of the column
     assert res["live"]["util"] == pytest.approx(87 / 312) and 'class="bwbar"' in res["live"]["bar"] and "width:28%" in res["live"]["bar"]      # the bar is the part of the capacity the users use
     assert 'class="bwbar hot"' in res["hot"] and 'class="bwbar full"' in res["full"] and 'class="bwbar full"' in res["over"] and "width:100%" in res["over"]      # amber from 70 %, red from 90 %, never wider than the box
-    assert "<b>1.5</b><small>Gb/s</small>" in res["mixed"] and "<b>20</b><small>Mb/s</small>" in res["mixed"]                                                 # a download in Gb/s beside an upload in Mb/s: each has its own unit
+    assert "<b>1500</b>" in res["mixed"] and "<b>20</b>" in res["mixed"] and "Gb" not in res["mixed"]                                                         # a download of 1.5 Gb/s is 1500, in Mb
     assert 'class="bwuse old"' in res["cycle"] and "<b>5.0</b>" in res["cycle"] and "<b>1.0</b>" in res["cycle"]                                              # without a live number: the last check's, marked as not live
     assert 'class="bwuse none"' in res["none"]["use"] and "—" in res["none"]["use"] and res["none"]["util"] is None and "width:0%" in res["none"]["bar"]    # no counter: a dash and an empty bar, never a made-up zero
     assert 'class="bwuse old"' in res["stale"] and "<b>40</b>" in res["stale"]                                                                               # a live number older than two minutes is not shown
-    assert "<b>1.2</b><small>Gb/s</small>" in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<em>▼310</em>" in res["cap"]["drop"]
-    assert "<b>312</b>" in res["capSame"] and "<small>" not in res["capSame"]                      # the unit is written once ("312 | ↓ 40 ↑ 4.0 Mb/s") when the use has the same one ...
-    assert "<b>1.2</b><small>Gb/s</small>" in res["capDiff"]                                        # ... and by the capacity too when they differ
+    assert "<b>1234</b>" in res["cap"]["big"] and "Gb" not in res["cap"]["big"] and "<small>" not in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<em>▼310</em>" in res["cap"]["drop"]
     assert "<em>no data</em>" in res["cap"]["stall"] and 'class="bwcap drop"' in res["cap"]["stall"] and 'class="bwcap none"' in res["cap"]["none"] and "—" in res["cap"]["none"]
 
 
@@ -1315,7 +1315,32 @@ def test_the_ping_cell_has_the_ping_above_an_arrow_at_each_end_of_a_dotted_line_
     for sel in (".tlink {", ".tlink.down, html body #page .tun-tbl .tlink.cut {", ".tlink .ah {", ".tlink .dots {", ".tlink .dots::before {", ".tlink .xx {", ".tlink .loss.hi {"):
         assert "html body #page .tun-tbl " + sel in css, sel
     assert "@keyframes tlFlow" in css and 'html[data-anim="rich"] body #page .tun-tbl .tlink.up .dots::before' in css          # (the dots flow only when the owner chose rich animations)
-    assert "container-type: inline-size" in css and "@container (max-width: 172px)" in css                                       # (the legend of the Bandwidth header goes when the column is too narrow for it - never cut in half)
+    assert "th.bwh .bwh-in em {" in css and "th.bwh small" not in css and "@container (max-width: 206px)" not in css                # (the header is the word and the unit; the legend of the old header and its container query are gone)
+
+
+def test_the_end_of_a_tunnel_row_is_the_dots_button_of_the_server_list_and_the_soft_arrow_is_gone():
+    """The owner, 2026-10-17 (his picture of the "›" at the end of a row): "turn these arrows into three stacked dots, so that when you click it brings the options, like the server section"."""
+    app, css, lab, appcss = _web("app.js"), _web("lab.css"), _web("lab.js"), _web("app.css")
+    row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
+    assert '<td class="tun-act"><div class="td-act">' in row and 'labKebab("tun", t.id, "Actions of " + t.name)' in row and row.count("<td") == 8
+    assert 'typeof labKebab === "function"' in row and 'class="busy-chip" title="the tunnel is being rebuilt"' in row                      # (a tunnel that is being rebuilt shows its spinner in place of the button)
+    assert '<col style="width:9%"><col style="width:56px">' in app                                                                       # (the last column is as wide as the button needs)
+    assert ".tun-tbl td:last-child::after { content:" not in appcss and "padding-right: 52px" not in appcss.split(".tun-tbl td:last-child {", 1)[1].split("}", 1)[0]      # (the tunnel's own arrow and the room kept for it are gone ...)
+    assert "html body #page .tun-tbl td:last-child::after { content: none !important; }" in css                                             # ... and the "›" every clickable row shows on hover (app.css) is switched off here, as in the server list (lab.css)
+    assert "function tunMenuItems(id)" in lab and 'if (ctx === "tun") return tunMenuItems(id);' in lab and "const labKebab = (ctx, id, label) =>" in lab      # (the menu is the one of the tunnel window)
+    assert "html body #page .tun-tbl .tun-act .lab-kb {" in css and "html body #page .tun-tbl td.tun-act {" in css
+
+
+def test_the_copy_mark_of_an_address_sits_inside_the_address_box_so_a_cell_cannot_cut_it():
+    """The owner, 2026-10-17: "the copy icon falls incomplete". The mark hung outside the address, in 8 px of cell padding, and the cell cut it; now the box grows by the mark when the pointer is on it."""
+    css = _web("lab.css")
+
+    for sel in (".td-node .ip-copy {", ".td-node .ip-copy::before {", ".td-node.ir .ip-copy::before {", ".td-node .ip-copy:hover {", ".td-node.ir .ip-copy:hover {", ".td-node .ip-copy:hover::before {"):
+        assert "html body #page .tun-tbl " + sel in css, sel
+
+    box = css.split("html body #page .tun-tbl .td-node .ip-copy {", 1)[1].split("}", 1)[0]
+    assert "display: inline-block" in box and "max-width: 100%" in box and "overflow: hidden" in box and "text-overflow: ellipsis" in box     # (never wider than the cell: a tight cell cuts the address with "...", not the mark)
+    assert "padding-right: 18px" in css and "padding-left: 18px" in css and 'html[data-mode="light"] body #page .tun-tbl .td-node .ip-copy::before' in css
 
 
 def test_the_password_box_of_the_sign_in_page_keeps_the_colour_of_the_field_when_the_browser_fills_it():

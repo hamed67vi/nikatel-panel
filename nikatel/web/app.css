@@ -3637,10 +3637,8 @@ html:not([data-mode="light"]) body button.danger { color: #ffb3bd; background: r
 #modal .bld-log:empty::before { content: "Messages and the progress of the build and the test show here."; color: var(--mut); font-size: 13px; }
 #modal .bld-log.hidden { display: block; }
 
-/* the soft arrow at the end of a card under the pointer: the tunnel cards have it too (room is kept for it at the end of the row) */
-.tun-tbl td:last-child { position: relative; overflow: visible; padding-right: 52px; }
-.tun-tbl td:last-child::after { content: "›"; position: absolute; right: 12px; top: 50%; width: 24px; height: 24px; margin-top: -12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 18px; line-height: 1; padding-bottom: 2px; color: rgba(200,218,255,.8); background: rgba(120,160,230,.16); border: 1px solid rgba(140,175,240,.22); opacity: 0; transform: translateX(-6px); transition: opacity .15s ease, transform .15s ease; pointer-events: none; }
-.tun-tbl tr.clk:hover td:last-child::after { opacity: .85; transform: none; }
+/* the end of a tunnel row (the owner, 2026-10-17): the soft "›" arrow is gone; the row ends with the "⋯" button of the server list (labKebab) - the same menu as in the tunnel window */
+.tun-tbl td:last-child { position: relative; overflow: visible; padding-right: 10px; }
 
 /* ================= THEME "Calm slate" (Settings → Look) =================
    the look of the tunnel window design: flat boxes, slate icon chips, ONE soft blue for bars, charts and the timeline, white numbers, flat buttons with a small corner, no glow.
