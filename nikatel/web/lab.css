@@ -601,8 +601,9 @@ html body #page .abt-note { display: block; margin-top: 8px; font-size: 12.5px; 
 html body #page .abt-card .lic-form { margin-top: 10px; }
 /* the cores */
 html body #page .abt-card .eng-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; } html body #page .abt-card .eng-bar button { margin-left: auto; height: 28px; }
-html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr); gap: 6px; padding: 5px 10px; }      /* 1.57.50 - the columns keep their width and cut with an ellipsis: the headers and the versions no longer run into each other */
+html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }      /* 1.64.2 - Status sits at the right edge, Newest takes the slack so the row is not empty on the right (the owner: "move the Status column to the right, fill the empty space") */
 html body #page .abt-card .eng-head > span, html body #page .abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .abt-card .eng-head > span:last-child { text-align: right; }      /* the Status header over the right-aligned status */
 html body #page .abt-card .eng-head { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
 html body #page .abt-card .eng-row { margin-bottom: 5px; border-radius: 11px; background: #131b2e; font-size: 12.5px; }
 /* PasarGuard */
@@ -935,15 +936,15 @@ html body #page .tun-tbl .bwcap.pend .spin { display: inline-block; width: 10px;
 html[data-mode="light"] body #page .tun-tbl .bwcap.pend .spin { border-color: rgba(30, 50, 100, .18); border-top-color: var(--mut); }
 
 /* 1.63.0 - the Ping / Loss cell after the owner's picture (2026-10-17: "fix this arrow and the way the ping and the packet loss are placed"): the ping above, an arrow at each end of a dotted line, the loss below - blue while the link runs, red with a cross while it is cut */
-html body #page .tun-tbl .tlink { --tl: #7fa6d8; --tl-glow: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; box-sizing: border-box; width: 100%; min-width: 0; max-width: 150px; margin: 0 auto; color: var(--tl); }
+html body #page .tun-tbl .tlink { --tl: #7fa6d8; --tl-glow: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100px; margin: 0 auto; color: var(--tl); }      /* 1.64.2 - the arrows shorter / less busy, and the ping number smaller (the owner: "make these arrows shorter, it is too crowded; make the ping number smaller too") */
 html body #page .tun-tbl .tlink.down, html body #page .tun-tbl .tlink.cut { --tl: #cf7480; --tl-glow: transparent; }
 html body #page .tun-tbl .tlink.unknown, html body #page .tun-tbl .tlink.starting { --tl: #7d8aa8; --tl-glow: transparent; }
-html body #page .tun-tbl .tlink .ms { min-height: 12px; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 12px; letter-spacing: 0; color: var(--text); font-variant-numeric: tabular-nums; }      /* (the owner, 2026-10-17: "the ping numbers smaller, and the ping and the loss closer to the line of the arrows") */
+html body #page .tun-tbl .tlink .ms { min-height: 12px; font-family: inherit; font-size: 10px; font-weight: 600; line-height: 12px; letter-spacing: 0; color: var(--text); font-variant-numeric: tabular-nums; }      /* (the owner, 2026-10-17: "the ping numbers smaller"; smaller again 1.64.2) */
 html body #page .tun-tbl .tlink .ms.mut { color: var(--mut); }
 html body #page .tun-tbl .tlink .ms.warn { color: var(--warn, #ffc44d); }
 html body #page .tun-tbl .tlink .wire { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; max-width: none; height: 12px; opacity: .5; }      /* (the owner: "the arrows paler - I do not want that place to look busy": the whole wire is dimmed, the numbers above and below are not) */
 html body #page .tun-tbl .tlink .wire::before, html body #page .tun-tbl .tlink .wire::after { content: none; }
-html body #page .tun-tbl .tlink .ah { flex: none; width: 15px; height: 9px; fill: none; stroke: var(--tl); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+html body #page .tun-tbl .tlink .ah { flex: none; width: 12px; height: 8px; fill: none; stroke: var(--tl); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 html body #page .tun-tbl .tlink .dots { position: relative; flex: 1 1 auto; min-width: 8px; height: 4px; margin: 0; background: radial-gradient(circle, var(--tl) 1px, transparent 1.4px) 0 50% / 7px 4px repeat-x; opacity: .6; text-decoration: none; }
 html body #page .tun-tbl .tlink .dots::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, #d6e9ff 1.4px, transparent 2px) 7px 50% / 29px 4px repeat-x; opacity: .6; }
 html body #page .tun-tbl .tlink.down .dots, html body #page .tun-tbl .tlink.cut .dots { height: 1.5px; border-radius: 2px; background: var(--tl); opacity: .8; }
@@ -1013,7 +1014,7 @@ html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-
 html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini), html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini), html body #page .abt-pg .pgu-cap button:not(.eye):not(.mini) { flex: none; box-sizing: border-box; height: 22px !important; min-height: 22px !important; padding: 0 10px !important; border-radius: 7px !important; font-size: 11px !important; line-height: 1 !important; }
 html body #page .abt-pg .pgu-a button:not(.eye):not(.mini) { width: 52px; padding: 0 !important; }
 html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini) { width: 60px; padding: 0 !important; }
-html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; }
+html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; justify-content: flex-end; }
 html body #page .abt-card .eng-row > .eng-st small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 1.64.0 - a question with several answers (glassChoice): the second line of a choice (the address of a server, the note of a program) was cut - "body #ask .ask-box .ask-act button" gave every button 36 px and beat the "height: auto" of the list (the owner, 2026-10-17, his picture of the Spoof test: "fix the text of these too") */

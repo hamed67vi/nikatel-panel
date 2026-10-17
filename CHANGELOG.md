@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.64.2 - The cores table fills its width (Status at the right); the ping arrows shorter and the ping number smaller
+
+The owner (2026-10-17): "move the Status column to the right so the empty space fills" (his picture of the cores table); "make these arrows shorter, it is too crowded, and make the ping number smaller too" (his picture of the Ping/Loss column).
+
+- **Cores table — Status at the right edge.** The Status cell was wide with its text on the left, so the row was empty on the right. Now Newest takes the slack and Status (✓ Up to date, or the Update button) sits at the right edge; the row reads Core · Newest … Status across the whole width. Newest is wider too, so a long version is no longer cut.
+- **Ping / Loss cell — shorter arrows, smaller ping.** The dotted arrow ran almost the full width of the cell and looked busy; it is capped shorter (and the arrow heads a touch smaller). The ping number is one step smaller.
+
 ## 1.64.1 - The IP-spoofing options reach the build; the packet-profile menu no longer clips
 
 The owner (2026-10-17): "fix the size of these too" (his picture of the packet-profile drop-down, every option wrapped and cut).

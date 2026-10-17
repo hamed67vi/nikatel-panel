@@ -913,7 +913,7 @@ def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxe
     app, css = _web("app.js"), _web("lab.css")
     assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
     assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'aboutBtn(!!u.up_to_date, ' in app and'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
-    assert "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr); gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+    assert "grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
 
 
 def test_the_add_form_starts_the_plain_websocket_at_80():
@@ -1082,7 +1082,8 @@ def test_the_cores_box_has_no_install_button_the_update_button_takes_the_place_o
     row = app.split("const row = (k, e) => {", 1)[1].split("box.innerHTML", 1)[0]
     assert "⬇ Install" not in app and "?missing=true" not in app and "engineUpdate('${k}', true)" not in app and "window.engineUpdate = async k =>" in app and "enginesLoad.last" not in app
     assert 'class="pri sm eng-upd"' in row and "outdated ? upd :" in row and "✓ Up to date" in row and '<span class="eng-act">' not in row            # (one cell for the state: "Up to date", or the Update button in its place)
-    assert "<span>Core</span><span>Newest</span><span>Status${d.checking" in app and "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr); gap: 6px;" in css
+    assert "<span>Core</span><span>Newest</span><span>Status${d.checking" in app and "grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px;" in css
+    assert "html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; justify-content: flex-end; }" in css and "html body #page .abt-card .eng-head > span:last-child { text-align: right; }" in css      # (Status at the right edge, the empty space filled by Newest)
     assert "html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini)" in css and "height: 22px !important; min-height: 22px !important;" in css       # (the Settings rule gives every button 32 px with !important: the small buttons of this card must say !important too)
     assert "html body #page .abt-card .eng-row, html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }" in css and "html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-bottom: 5px; }" in css      # (7 px of air above and below a button: the owner, 2026-10-17)
     assert 'labIt("Tunnel cores…", "box", () => srvCores(s.id, nm))' in lab and "window.srvCores = async (id, name) =>" in lab and 'steps: ["cores"]' in lab
