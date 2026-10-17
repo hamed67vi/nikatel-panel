@@ -1190,7 +1190,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in capcell      # one number, coloured by state; no second red number in the row
+    assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5); no second red number in the row
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "(t.bw || {}).state === \"drop\"" in app
     assert 'slow = tl.filter(t => t.state === "up" && (t.bw || {}).state === "drop" && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
@@ -1307,7 +1307,7 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
         "state.live = {}; res.cycle = bwUse(t);\n"
         "t = mk({down: 312, state: 'ok'}, null, null); t.last_check_at = 0; res.none = {use: bwUse(t), bar: bwBar(t), util: bwUtil(t)};\n"
         "live(87, 12, 200); res.stale = bwUse(mk({down: 312}, 40, 4));\n"
-        "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), none: bwCap(mk({}))};\n"
+        "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), low: bwCap(mk({down: 230, state: 'low', ref: 300})), none: bwCap(mk({}))};\n"
         "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
@@ -1324,6 +1324,7 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
     assert 'class="bwuse old"' in res["stale"] and "<b>40</b>" in res["stale"]                                                                               # a live number older than two minutes is not shown
     assert "<b>1234</b>" in res["cap"]["big"] and "Gb" not in res["cap"]["big"] and "<small>" not in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<b>90</b>" in res["cap"]["drop"] and "<em>" not in res["cap"]["drop"] and "▼" not in res["cap"]["drop"]      # the row shows only the number it dropped TO (90), red; the usual level (310) is the tooltip and the tunnel window (the owner, 2026-10-17: two red numbers were not clear)
     assert "<b>0</b>" in res["cap"]["stall"] and 'class="bwcap drop"' in res["cap"]["stall"] and "<em>" not in res["cap"]["stall"] and 'class="bwcap none"' in res["cap"]["none"] and "—" in res["cap"]["none"]
+    assert 'class="bwcap ok"' in res["cap"]["low"] and "<b>230</b>" in res["cap"]["low"] and "low" not in re.sub(r'title="[^"]*"', "", res["cap"]["low"])      # a capacity a little under the usual (60-80 %) is not coloured: only a real drop or a stall is (the owner, 2026-10-17: "do not show these yellow numbers unless there is really a problem")
 
 
 def test_the_ping_cell_has_the_ping_above_an_arrow_at_each_end_of_a_dotted_line_and_the_loss_below():

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.64.5 - The capacity number is amber no more; only a real drop is coloured
+
+The owner (2026-10-17), his picture of the Tunnels table (capacity numbers 799, 831, 544, 1085, 207 in amber, the rest grey): "do not show these yellow numbers unless there is really a problem or a real drop in bandwidth".
+
+- **A capacity a little under the usual is not coloured.** The Doctor calls a capacity of 60-80 % of the usual level "low" and the row painted it amber, so a fifth of the table was yellow without anything being wrong. The row now shows the number in its ordinary colour for everything but a **drop** (under 60 %, confirmed by a second test) or a **stall** (no data moved), which stay red. The state itself is unchanged - it is still in the tooltip and the tunnel window (Link → Capacity) - only the row stopped colouring it. A test covers it (`tests/test_web_menu.py`).
+
 ## 1.64.4 - The Spoof test picks its own target, once one is proven
 
 The owner (2026-10-17), on the target picker (his picture: a list of ten Iran servers to choose from): "instead of this list, can't it use an Iran server that already tested OK and just run the test with that".

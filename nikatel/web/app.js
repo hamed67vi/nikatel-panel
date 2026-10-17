@@ -855,7 +855,7 @@ const bwBar = t => { const f = bwUtil(t); return `<i class="bwbar${f == null ? "
 const bwCap = t => {      // the capacity: the download speed the Doctor measured, ONE number in the colour of its state - green/healthy, amber/low, red/dropped or stalled (the owner, 2026-10-17: "these red numbers, what are they, not clear" - two numbers side by side, one a drop arrow, read as noise). The usual level, when it dropped and why are the tooltip and the tunnel window (Link -> Capacity), not crowded into the row.
   const b = t.bw || {}, stall = b.down != null && b.down < 1;
   if (b.down == null) return bwPending(t) ? `<span class="bwcap none pend" title="${esc(bwTip(t))}"><i class="spin"></i>measuring…</span>` : `<span class="bwcap none" title="${esc(bwTip(t))}">—</span>`;
-  return `<span class="bwcap ${stall || b.state === "drop" ? "drop" : b.state === "low" ? "low" : "ok"}" title="${esc(bwTip(t))}"><b>${bwNum(b.down)}</b></span>`;
+  return `<span class="bwcap ${stall || b.state === "drop" ? "drop" : "ok"}" title="${esc(bwTip(t))}"><b>${bwNum(b.down)}</b></span>`;      // (a "low" capacity - 60-80 % of the usual level - is NOT coloured: only a real drop or a stall is; the owner, 2026-10-17: "do not show these yellow numbers unless there is really a problem or a real drop")
 };
 /* the numbers of what the users use change by themselves: while the Tunnels page is on screen they are asked every 4 s and the cells change in place (nothing is drawn again) */
 let tunLiveT = null;
