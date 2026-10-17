@@ -220,15 +220,19 @@ The owner: "show the stability and the quality of the users' internet inside the
 * **Stability** is `GET /api/tunnels/{id}/stability`: the share of the checks that answered over 24 hours and over 7 days, the cuts (the analyst's rule: two failed checks in a row; one lost check is noise and counts only against the share), the last cut and how long it lasted, how long the tunnel has been up, the verdict of the analyst (Stable / Watch / Unstable) and the strip of the last day (48 cells of half an hour).
 
 
-## The link under Backhaul: GRE, GRE inside UDP, WireGuard (1.66.0)
+## The link under Backhaul: GRE, GRE or IPIP inside UDP, IPIP, WireGuard, IPsec (1.66.0, nine models since 1.69.0)
 
-A Backhaul tunnel runs over the inner addresses of a /30 link between the two servers. The link was always GRE (IP protocol 47). It can now be one of three, chosen in *Create tunnel* as the transport of the Backhaul type:
+A Backhaul tunnel runs over the inner addresses of a /30 link between the two servers. The link was always GRE (IP protocol 47). It can now be one of **nine**, chosen in *Create tunnel* as the transport of the Backhaul type (measured Mb/s: Iran -> foreign / foreign -> Iran on the test route, 2026-10-17):
 
 | Transport | The link | Needs | Passes where |
 |---|---|---|---|
 | `tcpmux` `tcp` `wsmux` `wssmux` | GRE (as before) | the `ip_gre` module | IP protocol 47 is open |
-| `fou:tcpmux` | GRE inside **one UDP port** (5500-5599, the same on both servers) | the `fou`, `ip_gre` modules | UDP is open and protocol 47 is filtered; not encrypted |
-| `wg:tcpmux` `wg:tcp` | a kernel **WireGuard** link on **one UDP port** (51820-51919), encrypted and authenticated | the `wireguard` module and `wireguard-tools` | UDP is open and protocol 47 is filtered |
+| `fou:tcpmux` `gue:tcpmux` | GRE inside **one UDP port** (FOU 5500-5599, GUE 5600-5699, the same on both servers) - 2 / 648 and 2 / 666 | the `fou`, `ip_gre` modules | UDP is open and protocol 47 is filtered; not encrypted |
+| `ipip:tcpmux` | IP-in-IP, no key (the kernel holds ONE per pair of servers) - 1307 / 1290 | the `ipip` module | IP protocol 4 is open |
+| `ipipfou:tcpmux` `ipipgue:tcpmux` | IPIP inside one UDP port (5700-5799, 5800-5899) - 1228 / 736 and 43 / 620 | the `ipip`, `fou` modules | UDP is open |
+| `wg:tcpmux` `wg:tcp` | a kernel **WireGuard** link on **one UDP port** (51820-51919), encrypted and authenticated - 19 / 634 | the `wireguard` module and `wireguard-tools` | UDP is open and protocol 47 is filtered |
+| `ipsec:tcpmux` | ESP in tunnel mode on an xfrm interface, keys made by the panel, encrypted - 1055 / 778 | the `xfrm_interface`, `esp4` modules | IP protocol 50 is open |
+| `ipsecnat:tcpmux` | the same ESP inside one UDP port (4500-4599, NAT-T), encrypted - 30 / 668 | the same | UDP is open |
 
 Everything above the link is the same: the units (`nikatel-gre-<name>`, `nikatel-gre-check-<name>.timer`: a check pings the inner peer every minute and restarts the link after three silences), the checks and the sentinel, the live numbers, the bandwidth
 job, the Doctor's ladder, rebuilds and the trash. `record.link` (`wg`, `fou`; absent = GRE), `record.link_port` and - WireGuard - the two PUBLIC keys are kept; the private keys are made on each server (`wg_keygen`) and stay in
@@ -237,5 +241,6 @@ job, the Doctor's ladder, rebuilds and the trash. `record.link` (`wg`, `fou`; ab
 **Packages:** the Doctor and the night survey never install anything on a server. A build the OWNER asked for (Create tunnel, a test he started, *Test now*, the Compare form) installs `wireguard-tools` with apt on a server that has none; if apt cannot,
 the build stops with a sentence that says to install it by hand.
 
-**In the Doctor:** the kinds `wg:tcpmux`, `wg:tcp`, `fou:tcpmux` are in the pair test, the night survey and the replacements of a cut tunnel (last in the static order; a pair whose survey found one connecting tries it first). Details and what was taken from
+**In the Doctor:** all of the kinds are in the pair test, the night survey and the replacements of a cut tunnel (after the other engines, in the order they measured; a pair whose survey found one connecting tries it first). **The link probe** (1.69.0, `services/linkprobe.py`) asks which of the nine
+links pass between the two servers in seconds (a temporary link of each, all at once, removed again) BEFORE a cut tunnel is rebuilt, and the kinds whose link does not pass are not tried at all; the answers are kept per pair (`POST /api/doctor/knowledge/links`, `pairs[].links`). Details and what was taken from
 simple-tun-link: [simple-tun-link.md](simple-tun-link.md).

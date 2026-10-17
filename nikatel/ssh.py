@@ -394,10 +394,12 @@ echo "UP $(cut -d' ' -f1 /proc/uptime)"
     # a "ping" made of TCP handshakes, for a route that drops ICMP (the owner, 2026-10-17: a working tunnel showed "no ping"): ten connections to host:port, one every 0.1 s, each waits at most 1 s; one that needs more than
     # 800 ms counts as lost (the kernel repeats a lost SYN after 1 s, so a handshake that slow lost a packet). "TPING host:port <sent> <answered> <average ms of the answered>". Only connects, sends nothing.
     "tcp_ping": (r"""h=@HOST@; p=@PORT@; d=$(mktemp -d)
+base=1000; for i in 1 2 3; do s=$(date +%s%N); timeout 1 bash -c "echo > /dev/tcp/127.0.0.1/9" 2>/dev/null; e=$(date +%s%N); v=$(( (e - s) / 1000000 )); [ "$v" -lt "$base" ] && base=$v; done
 for i in 1 2 3 4 5 6 7 8 9 10; do ( s=$(date +%s%N); if timeout 1 bash -c "echo > /dev/tcp/$h/$p" 2>/dev/null; then e=$(date +%s%N); echo $(( (e - s) / 1000000 )) > "$d/$i"; fi ) & sleep 0.1; done; wait
 ok=0; sum=0
 for f in "$d"/*; do [ -f "$f" ] || continue; v=$(cat "$f"); if [ "$v" -lt 800 ]; then ok=$((ok + 1)); sum=$((sum + v)); fi; done
-echo "TPING $h:$p 10 $ok $([ "$ok" -gt 0 ] && echo $((sum / ok)) || echo 0)"
+avg=0; [ "$ok" -gt 0 ] && avg=$(( sum / ok - base )); [ "$avg" -lt 0 ] && avg=0
+echo "TPING $h:$p 10 $ok $avg"
 rm -rf "$d"
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
 
@@ -499,13 +501,17 @@ echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
 """, {}),
 
     # what a Backhaul link that is NOT plain GRE needs from a server (read-only apart from loading a module): the WireGuard module and tool, the FOU module (GRE inside UDP), the UDP ports in use,
-    # and whether apt can install wireguard-tools. "WG_MOD=1", "WG_TOOL=1", "FOU_MOD=1", "UDP=<ports>", "FOU_PORTS=<ports>", "APT=1"
+    # and whether apt can install wireguard-tools. "WG_MOD=1", "WG_TOOL=1", "FOU_MOD=1", "UDP=<ports>", "FOU_PORTS=<ports>", "APT=1"; 1.69.0: "MODS=<the modules of the nine link models that are there>" and
+    # "IPIP_PAIRS=<remote>><local> ..." (an IPIP tunnel has no key: the kernel holds one per pair of addresses)
     "link_facts": (r"""modprobe wireguard 2>/dev/null; echo "WG_MOD=$( (lsmod | grep -q '^wireguard' || [ -d /sys/module/wireguard ]) && echo 1 || echo 0)"
 echo "WG_TOOL=$(command -v wg >/dev/null 2>&1 && echo 1 || echo 0)"
 modprobe ip_gre 2>/dev/null; modprobe fou 2>/dev/null; echo "FOU_MOD=$( (lsmod | grep -q '^fou' || [ -d /sys/module/fou ]) && echo 1 || echo 0)"
 echo "UDP=$(ss -lunH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
 echo "FOU_PORTS=$(ip fou show 2>/dev/null | grep -o 'port [0-9]*' | cut -d' ' -f2 | tr '\n' ' ')"
 echo "APT=$(command -v apt-get >/dev/null 2>&1 && echo 1 || echo 0)"
+for m in ipip xfrm_interface esp4; do modprobe "$m" 2>/dev/null; done
+echo "MODS=$(for m in ip_gre ipip fou xfrm_interface esp4 wireguard; do if lsmod | grep -q "^$m " || [ -d "/sys/module/$m" ]; then printf '%s ' "$m"; fi; done)"
+echo "IPIP_PAIRS=$(ip -d -o link show type ipip 2>/dev/null | grep -oE 'remote [0-9.]+ local [0-9.]+' | sed -E 's/remote ([0-9.]+) local ([0-9.]+)/\1>\2/' | tr '\n' ' ')"
 """, {}),
 
     # largest ICMP payload that crosses to the peer with DF set (GRE inner MTU)
@@ -808,8 +814,9 @@ rm -f "/etc/backhaul/iran-$tr-$p.toml" "/etc/backhaul/kharej-$tr-$p.toml" "/etc/
 rm -f "/etc/systemd/system/nikatel-gre-$n.service" "/etc/systemd/system/nikatel-gre-check-$n.service" "/etc/systemd/system/nikatel-gre-check-$n.timer"
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/usr/local/sbin/nikatel-gre-check-$n"
 systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true
-if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre '; then ip link del "$n" 2>/dev/null || true; fi
-rm -f "/etc/nikatel/wg/$n.key"; echo "REMOVED $n"
+systemctl disable --now "nikatel-ipsec-sock-$n.service" >/dev/null 2>&1 || true
+if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre |ipip|xfrm'; then ip link del "$n" 2>/dev/null || true; fi
+rm -f "/etc/nikatel/wg/$n.key" "/etc/nikatel/ipsec/$n.keys"; echo "REMOVED $n"
 """, {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "TRANSPORT": r"^(tcp|tcpmux|wsmux|wssmux)$"}),
 
     # the WARM STANDBY (services/standby.py), the handover: the users' ports of a tunnel that is cut are handed to the ports of its standby tunnel (the same two servers, shifted ports) with a NAT redirect in PREROUTING -
@@ -968,6 +975,20 @@ if command -v iptables >/dev/null 2>&1; then
 fi
 echo "PROBE_DOWN $n"
 """, {"NAME": r"^nkgp[0-9]{1,3}$"}),
+
+    # the LINK PROBE (services/linkprobe.py): the up or down script of a temporary link "lp-<model>" that the probe has just written (nikatel-gre-up-lp-fou ...) is run; nothing but those two scripts is ever run
+    "link_probe_run": (r"""n='@NAME@'; f="/usr/local/sbin/nikatel-gre-@MODE@-$n"
+if [ -x "$f" ]; then "$f"; echo "LINK_PROBE @MODE@ $n rc=$?"; else echo "LINK_PROBE @MODE@ $n missing rc=1"; fi
+""", {"NAME": r"^lp-[a-z]{2,9}$", "MODE": r"^(up|down)$"}),
+
+    # the LINK PROBE, last step (on BOTH servers, always run): the temporary link comes down, its scripts, its key file and its tagged firewall rules are removed
+    "link_probe_clean": (r"""n='@NAME@'
+[ -x "/usr/local/sbin/nikatel-gre-down-$n" ] && "/usr/local/sbin/nikatel-gre-down-$n" >/dev/null 2>&1
+systemctl stop "nikatel-ipsec-sock-$n.service" >/dev/null 2>&1 || true
+ip link set "$n" down 2>/dev/null || true; ip link del "$n" 2>/dev/null || true
+rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/etc/nikatel/ipsec/$n.keys" "/etc/nikatel/wg/$n.key"
+echo "LINK_PROBE_CLEAN $n"
+""", {"NAME": r"^lp-[a-z]{2,9}$"}),
 
     # SPOOF TEST, the sending end (the owner's method, 2026-10-17: "put an SNAT rule on the Iran server, ping the other server, look with tcpdump there"): CONTROL ordinary pings of a size nobody else uses (115 bytes in all), then COUNT
     # of the same pings whose source address is rewritten to SPOOF. The rule is the narrowest there can be - ICMP echo requests to TARGET only, tagged - so nothing else the server sends (not the tunnels to TARGET) is touched;
@@ -1188,9 +1209,13 @@ for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paq
 for f in $(grep -lE "\"$tp(=|\")|\"$tp:" /etc/backhaul/*.toml 2>/dev/null); do b=$(basename "$f" .toml); systemctl disable --now "backhaul-$b.service" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/backhaul-$b.service" "$f"; n=$((n+1)); done
 for s in /usr/local/sbin/nikatel-gre-up-test-* /usr/local/sbin/nikatel-gre-down-test-* /usr/local/sbin/nikatel-gre-check-test-* /usr/local/sbin/nikatel-bpfw-test-* /usr/local/sbin/nikatel-paqet-fw-test-* /usr/local/sbin/nikatel-sink-test-*; do [ -e "$s" ] && rm -f "$s"; done
 rm -f /etc/backpack/test-*.toml /etc/backpack/test-*.metrics.json /etc/paqet/test-*.yaml /etc/nikatel-chisel/test-*.key /etc/nikatel-chisel/test-*.crt /etc/nikatel-chisel/test-*.env 2>/dev/null
-for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep '^test-'); do ip tunnel del "$i" 2>/dev/null || true; done
-for i in $(ip -o link show type wireguard 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep '^test-'); do ip link del "$i" 2>/dev/null || true; done
-rm -f /etc/nikatel/wg/test-*.key 2>/dev/null
+for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip tunnel del "$i" 2>/dev/null || true; done
+for i in $(ip -o link show type wireguard 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
+for i in $(ip -o link show type ipip 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
+for i in $(ip -o link show type xfrm 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
+for s in /usr/local/sbin/nikatel-gre-up-lp-* /usr/local/sbin/nikatel-gre-down-lp-*; do [ -e "$s" ] && rm -f "$s"; done; rm -f /etc/nikatel/ipsec/lp-*.keys /etc/nikatel/wg/lp-*.key 2>/dev/null
+for u in $(systemctl list-units --all --no-legend --plain 'nikatel-ipsec-sock-test-*' 2>/dev/null | awk '{print $1}'); do systemctl stop "$u" >/dev/null 2>&1 || true; done
+rm -f /etc/nikatel/wg/test-*.key /etc/nikatel/ipsec/test-*.keys 2>/dev/null
 systemctl daemon-reload; echo "PURGED $n"
 """, {"TESTPORT": r"^\d{4,5}$"}),
 

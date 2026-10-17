@@ -25,6 +25,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Server, ServerSample, Tunnel, is_temp
+from . import linkmodels
 from . import settings as st
 from .events import emit
 
@@ -43,11 +44,13 @@ GRE_KINDS = ("tcpmux", "tcp", "wsmux", "wssmux")          # the Backhaul kinds: 
 # server dials (reverse - they are the way when the Iran server cannot dial out) follow; the odd ones are last. It is the order for a pair nobody tested yet, and the tie-break.
 PRIOR = ["tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bpd:udp", "chisel:fwdtls", "bp:wssmux", "bp:tcpmux", "chisel:tls", "bp:stealth", "bp:wss", "bp:tcp",
          "wssmux", "tcp", "wsmux", "bp:pck", "chisel", "bp:ws", "bp:wsmux", "bp:kcp", "bpd:quic", "bp:quic", "bpd:xdi", "bp:xdi",
-         "wg:tcpmux", "fou:tcpmux", "wg:tcp"]                 # (1.66.0: Backhaul over WireGuard / GRE inside UDP - last in the standard order; what the survey finds to connect on a pair is tried first by `candidates`)
-UDP_LINK_KINDS = ("wg:tcpmux", "fou:tcpmux", "wg:tcp")        # Backhaul over a UDP link: they need no GRE (protocol 47), they need UDP to pass between the two servers
+         "ipip:tcpmux", "ipipfou:tcpmux", "ipsec:tcpmux", "ipipgue:tcpmux", "ipsecnat:tcpmux", "wg:tcpmux", "wg:tcp", "fou:tcpmux", "gue:tcpmux"]      # (1.66.0 / 1.69.0: Backhaul over the other eight link models - last in the standard order, and in the order they measured on the test route, 2026-10-17: IPIP 1307 / 1290 Mb/s, IPIP in FOU 1228 / 736, IPsec ESP 1055 / 778, the rest 2 - 43 Mb/s towards the foreign server; what the survey finds to connect on a pair is tried first by `candidates`)
+LINK_KINDS = ("ipip:tcpmux", "ipipfou:tcpmux", "ipsec:tcpmux", "ipipgue:tcpmux", "ipsecnat:tcpmux", "wg:tcpmux", "fou:tcpmux", "gue:tcpmux", "wg:tcp")      # Backhaul over a link that is not native GRE (services/linkmodels.py): they need no protocol 47 (the order is the measured one, see PRIOR: the link probe leaves out the ones that do not pass, the best of the rest goes first)
+UDP_LINK_KINDS = tuple(k for k in LINK_KINDS if linkmodels.is_udp(linkmodels.split_kind(k)[0]))        # ... the ones that need a UDP port to pass between the two servers (the others need IP protocol 4 or 50)
 # What the night survey tests on every pair that carries a tunnel (about twelve minutes a pair): the kinds the Doctor reaches for when a route is cut, the robust ones first. The other kinds are tested when
 # the owner asks (Doctor page, Knowledge) or by a repair that needs them.
-READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bp:wss", "chisel:fwdtls", "bp:tcp", "bpd:udp", "wg:tcpmux", "fou:tcpmux"]      # (a UDP link too: where protocol 47 is filtered it is the first thing to try - when the server has wireguard-tools, a survey never installs it)
+READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bp:wss", "chisel:fwdtls", "bp:tcp", "bpd:udp", "wg:tcpmux", "fou:tcpmux",
+         "gue:tcpmux", "ipip:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsec:tcpmux", "ipsecnat:tcpmux"]      # (a link of the other models too: where protocol 47 is filtered they are the first thing to try, and which of them passes differs from pair to pair - a survey never installs a package, wireguard-tools included)
 NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", "down1_mbps", "up1_mbps")
 INCIDENTS = 200             # the cuts that are kept (the newest)
 PLAYBOOK_DAYS = 90          # what healed a pair this long ago is still the first thing tried
@@ -133,7 +136,7 @@ FORWARD_KINDS = frozenset({"bpd:udp", "bpd:quic", "bpd:pck", "bpd:xdi", "paqet",
 CUT_REVERSE = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bp:wss", "bp:tcp", "chisel", "bp:stealth", "bp:wsmux", "bp:ws", "bp:kcp", "bp:pck", "bp:quic", "bp:xdi"]
 CUT_FORWARD = ["bpd:pck", "chisel:fwd", "paqet", "chisel:fwdtls", "bpd:udp", "bpd:quic", "bpd:xdi"]
 CUT_GRE = ["tcpmux", "wssmux", "tcp", "wsmux"]
-CUT_UDPLINK = ["wg:tcpmux", "fou:tcpmux", "wg:tcp"]       # Backhaul over a UDP link: last in the static order (a pair whose survey found one connecting has it first anyway, see `candidates`)
+CUT_LINKS = list(LINK_KINDS)       # Backhaul over a link that is not native GRE: last in the static order (a pair whose survey found one connecting has it first anyway, see `candidates`)
 
 
 def cut_order(dial_i: bool | None, dial_f: bool | None, no_gre: bool) -> list[str]:
@@ -142,12 +145,12 @@ def cut_order(dial_i: bool | None, dial_f: bool | None, no_gre: bool) -> list[st
     gre = [] if no_gre else CUT_GRE
 
     if dial_i is False and dial_f is not False:
-        return gre + CUT_REVERSE + CUT_FORWARD + CUT_UDPLINK
+        return gre + CUT_REVERSE + CUT_FORWARD + CUT_LINKS
 
     if dial_i:
-        return gre + CUT_FORWARD + CUT_REVERSE + CUT_UDPLINK
+        return gre + CUT_FORWARD + CUT_REVERSE + CUT_LINKS
 
-    return gre + CUT_REVERSE + CUT_FORWARD + CUT_UDPLINK
+    return gre + CUT_REVERSE + CUT_FORWARD + CUT_LINKS
 
 
 def unreachable(dial_i: bool | None, dial_f: bool | None) -> frozenset:
@@ -210,8 +213,32 @@ def record(iran_id: int, foreign_id: int, r: dict, measure: str, now: int | None
         p = dict(d["pairs"].get(k) or {})
         kinds = dict(p.get("kinds") or {})
         kinds[r["kind"]] = merge(kinds.get(r["kind"]), r, measure, now)
-        d["pairs"][k] = {"at": now, "kinds": kinds}
+        d["pairs"][k] = {**p, "at": now, "kinds": kinds}
         st.put("knowledge", {"pairs": d["pairs"]})
+
+
+def record_link(iran_id: int, foreign_id: int, link: str, r: dict, now: int | None = None) -> None:
+    """Keep what the link probe found for one link of one pair (services/linkprobe.py): did it pass, its delay and loss, why not, when. These are answers about the CARRIER (a protocol or a UDP port between the two
+    servers), not about an engine: they are cheap to ask again, so unlike a kind that failed they never lock anything out for weeks - the next cut simply asks again."""
+    if link not in linkmodels.LINKS:
+        return
+
+    now = now or int(time.time())
+
+    with _LOCK:
+        d = _doc()
+        k = pair_key(iran_id, foreign_id)
+        p = dict(d["pairs"].get(k) or {})
+        links = dict(p.get("links") or {})
+        links[link] = {"ok": bool(r.get("ok")), "at": now, "rtt_ms": r.get("rtt_ms"), "loss_pct": r.get("loss_pct"), "error": "" if r.get("ok") else str(r.get("error") or "")[:140]}
+        d["pairs"][k] = {**p, "at": now, "links": links}
+        st.put("knowledge", {"pairs": d["pairs"]})
+
+
+def link_state(pair: dict | None, link: str, now: int, within: int = 6 * 3600) -> bool | None:
+    """Did this link pass between the pair when the probe last asked (True / False), or has it not been asked within `within` seconds (None)?"""
+    e = ((pair or {}).get("links") or {}).get(link)
+    return bool(e.get("ok")) if e and now - int(e.get("at") or 0) <= within else None
 
 
 def note_quality(tunnel_id: int, q: dict) -> None:
@@ -327,13 +354,16 @@ def plan_for(iran_id: int, foreign_id: int, current: str, no_gre: bool, lossy: b
     one that still carries data tries a few and is swapped only for something clearly better."""
     now = now or int(time.time())
     p = pair(iran_id, foreign_id)
-    base = None if lossy else cut_order(dial_i, dial_f, no_gre)
+    cur_link = linkmodels.split_kind(current)[0]
+    cut_link = cur_link if no_gre and cur_link not in ("", "gre") else ""          # the link under this tunnel is not GRE and it is the link that is cut: its other transports would be cut the same way - the other links, native GRE too, may still pass
+    drop_gre = no_gre and not cut_link or (no_gre and cause == "route_cut")        # (GRE is left out where GRE itself is filtered, or where the two servers cannot reach each other at all)
+    base = None if lossy else cut_order(dial_i, dial_f, drop_gre)
     cannot = unreachable(dial_i, dial_f) if not lossy else frozenset()
     hints = [] if lossy else sibling_kinds(iran_id, foreign_id, now)
-    kinds = candidates(p, current, no_gre, lossy, now, limit=LIMIT if lossy else len(PRIOR), base=base, unreachable_kinds=cannot, prefer=hints)
+    kinds = candidates(p, current, drop_gre, lossy, now, limit=LIMIT if lossy else len(PRIOR), base=base, unreachable_kinds=cannot, prefer=hints)
 
-    if no_gre and current in UDP_LINK_KINDS:                 # the link under this tunnel is a UDP one and it is the link that is cut: the other UDP links would be cut the same way (GRE, another protocol, may still pass)
-        kinds = [k for k in kinds if k not in UDP_LINK_KINDS]
+    if cut_link:
+        kinds = [k for k in kinds if linkmodels.split_kind(k)[0] != cut_link]
 
     pb = {} if (lossy or not cause) else playbook(iran_id, foreign_id, cause, now)
 
@@ -566,7 +596,7 @@ def state(now: int | None = None) -> dict:
         p = d["pairs"].get(k) or {}
         kinds = p.get("kinds") or {}
         rows.append({"iran_id": i, "foreign_id": f, "iran": names[i], "foreign": names[f], "tunnels": live.get((i, f), 0), "at": int(p.get("at") or 0), "tested": len(kinds),
-                     "due": len(due_kinds(p, READY, now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now),
+                     "due": len(due_kinds(p, READY, now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
                      "blocked": [{"kind": x, "error": kinds[x]["last"].get("error") or "", "at": int(kinds[x]["last"].get("at") or 0)} for x in blocked(p, now)]})
 
     rows.sort(key=lambda r: (r["iran"].lower(), r["foreign"].lower()))

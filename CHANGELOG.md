@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.69.0 - Nine links under Backhaul, a link probe that answers in seconds, and what each one measured
+
+The owner (2026-10-17): "simple-tun-link has nine GRE models - add them all and test which is better, especially WireGuard; if one is better, put it in place of our GRE" and "combine all the GREs with the tunnels, test them - on one server one GRE model may answer and another not - the Doctor must keep all of it in its memory". 1.66.0 had taken three of the nine (GRE, GRE inside UDP, WireGuard). Now all nine are there, each was run for real between the two test servers, and the Doctor asks which of them pass **before** it builds anything.
+
+- **The nine links** (`services/linkmodels.py`, a Backhaul tunnel runs over the inner /30 of one of them; every Backhaul transport - `tcpmux`, `tcp`, `wsmux`, `wssmux` - can ride any of them; a kind is `<link>:<transport>`, `tcpmux` alone is GRE):
+
+  | link | what must pass between the servers | encrypted |
+  |---|---|---|
+  | GRE (`tcpmux`) | IP protocol 47 | no |
+  | GRE inside UDP, FOU (`fou:tcpmux`) / GUE (`gue:tcpmux`) | one UDP port (5500-5599 / 5600-5699) | no |
+  | IPIP (`ipip:tcpmux`) | IP protocol 4 - the kernel holds ONE IPIP tunnel per pair of addresses, the build checks that (`IPIP_PAIRS`) | no |
+  | IPIP inside UDP, FOU / GUE (`ipipfou:tcpmux`, `ipipgue:tcpmux`) | one UDP port (5700-5799 / 5800-5899) | no |
+  | WireGuard (`wg:tcpmux`, `wg:tcp`) | one UDP port (51820-51919) | yes |
+  | IPsec ESP (`ipsec:tcpmux`) | IP protocol 50 | yes |
+  | IPsec ESP inside UDP, NAT-T (`ipsecnat:tcpmux`) | one UDP port (4500-4599) | yes |
+
+  IPsec is not strongSwan: it is the kernel's ESP in tunnel mode on an **xfrm interface**, one SA per direction, **the keys made by the panel** (random SPIs and 160-bit keys, AEAD `rfc4106(gcm(aes))`, 64-bit sequence numbers so the SAs never run out of numbers), kept in a file of 0600 on each server and given to `ip` through its standard input - **never in a command line, a script text or a log**; NAT-T is a small UDP socket unit that decapsulates. No IKE daemon, nothing to install (`ip_gre`, `ipip`, `fou`, `xfrm_interface`, `esp4`, `wireguard` are kernel modules; WireGuard needs `wireguard-tools`, installed only for a build the owner asked for, as since 1.66.0). Every value that goes into a script is checked first, a firewall rule names the exact peer and protocol or port, the link keeps the names a GRE link has (so the units, checks, sentinel, live numbers, bandwidth job, rebuild and trash treat all nine alike), and removing a tunnel removes its interface, UDP port, keys, SAs and socket unit (checked on the servers: nothing is left).
+- **The link probe** (`services/linkprobe.py`; the answer to "on one server one model may pass and another not"). For a pair of servers it writes a temporary link of EVERY model (`lp-<link>`, own address, own port), brings them all up **at the same time**, pings the inner address ten times each way, and always removes everything again (on both servers, even after an error; a stale one is also swept by the purge of test leftovers). A few seconds for all nine. The answers - passed or not, delay, loss, why not - are kept in the Doctor's memory of the pair (`knowledge.pairs[...].links`, `record_link` / `link_state`) and shown with the rest of what it knows.
+- **The Doctor uses it where a minute counts.** A cut tunnel is replaced by the first kind that connects, and each try used to be a build of one or two minutes (a kind whose link is filtered fails only at the end). Before the tries, `_switch_cut` asks the probe, in seconds, which links pass and **leaves out every kind whose link does not** (`autopilot._probe_links`); the story of the repair says which and why. A kind of another engine has no link and stays; a link the probe could not judge stays; when the probe cannot run at all the list is as it was. A cut link does not get its own kinds as replacements (GRE filtered: the other eight are tried; WireGuard filtered: GRE and the raw ones are), as since 1.66.0.
+- **The order, from the measurements below** (`knowledge.PRIOR`, `LINK_KINDS`): IPIP, IPIP inside FOU, IPsec ESP, IPIP inside GUE, IPsec NAT-T, WireGuard, GRE inside FOU / GUE. The night survey, the pair test, the Compare form and *Test now* know all of the kinds; a pair whose survey found one connecting tries it first, as before.
+- **TCP "ping" no longer reads the cost of starting a handshake.** The "ping" of a tunnel whose provider drops ICMP (1.68.0) is ten TCP handshakes; each one now has the time of a handshake to a closed LOCAL port taken off (the cost of starting `bash`/`timeout`), so a port next door reads about 0 ms and a far one is not a few ms too high. The script is run for real in a test.
+
+**Measured, for real, between the Iran test server (4 cores, kernel 5.15) and the build server (2 cores, kernel 6.8), 72-78 ms apart** - each link brought up with the panel's own scripts on both servers, 20 pings each way, the largest packet that passes (1332 bytes of payload went through all nine: the inner MTU of 1360 holds), TCP throughput over the inner addresses with 4 streams for 6 s, twice (the better run; the two agree), the CPU of both servers during it:
+
+| link | Iran -> foreign (Mb/s) | foreign -> Iran (Mb/s) | note |
+|---|---|---|---|
+| **GRE** | **1306** | **1352** | the current link |
+| IPIP | 1307 | 1290 | as fast as GRE; one tunnel per pair of servers |
+| IPIP inside FOU | 1228 | 736 | |
+| IPsec ESP (encrypted) | 1055 | 778 | the fast encrypted one |
+| IPIP inside GUE | 43 | 620 | |
+| IPsec inside UDP (encrypted) | 30 | 668 | |
+| WireGuard (encrypted) | 19 | 634 | |
+| GRE inside FOU | 2.4 | 648 | |
+| GRE inside GUE | 2.0 | 666 | |
+
+**So: GRE stays the default - nothing beat it, and WireGuard is the slowest of the encrypted ones on this route** (19 Mb/s towards the foreign server; the other direction 634). The raw-protocol links (GRE, IPIP, IPsec ESP) carry 1.0 - 1.35 Gbps both ways; every link carried in UDP is fast from the foreign server to Iran (620 - 740 Mb/s) and slow in the other direction, except IPIP inside FOU. That is a property of this route (and of these two servers' kernels), not of the code: the same scripts, the same ports, the same hosts - and a plain-UDP test with a Python sender could not be made to work in the time there was (nothing arrived at any rate, while five small datagrams did), so the cause is **not isolated**. The panel does not guess: the Doctor's pair test measures every kind between the two servers it runs on, and the order above is only the order for a pair nobody measured. The numbers are one route, one afternoon, a 2-core machine at 50 - 70 % CPU during the runs.
+
+**Which cut each link survives** (the same lab; the condition is a firewall rule that drops one protocol between the two servers only - in the `raw` table, before the links' own accept rules - SSH and everything else untouched; "✗" = the inner pings got through with 100 % loss):
+
+| dropped between the servers | GRE | GRE/FOU | GRE/GUE | IPIP | IPIP/FOU | IPIP/GUE | WireGuard | IPsec ESP | IPsec/UDP |
+|---|---|---|---|---|---|---|---|---|---|
+| nothing | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| IP protocol 47 (GRE) | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| IP protocol 4 (IPIP) | ✓ | ✓ | ✓ | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| IP protocol 50 (ESP) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **✗** | ✓ |
+| all UDP | ✓ | **✗** | **✗** | ✓ | **✗** | **✗** | **✗** | ✓ | **✗** |
+| 47, 4 and 50 together (only TCP, UDP and ICMP pass) | **✗** | ✓ | ✓ | **✗** | ✓ | ✓ | ✓ | **✗** | ✓ |
+| 47, 4, 50 and all UDP (only TCP and ICMP pass) | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** |
+
+Each filter cuts exactly the links that carry that protocol, and no other: what the Doctor assumed since 1.66.0 for GRE and UDP, now proved for all nine. Where a filter drops every protocol but TCP / UDP / ICMP (the usual "whitelist" kind), only the six UDP links are left, and where UDP is dropped as well, none of the nine is - the TCP engines (BackPack, Chisel, Paqet) are what is left, which is why they stay in the Doctor's list.
+
+- **Tests.** `tests/test_linkmodels.py` (19), `tests/test_linkprobe.py` (13), and the updated `test_links.py`, `test_build_other.py`, `test_cut_tunnel.py`: the registry and the kinds; the scripts of every model (the right kernel commands, valid shell - `sh -n` and a real run in two namespaces where the kernel allows, nothing secret in a command line, a firewall rule that names the exact peer and protocol, idempotent up, a down script that removes only what it owns); what a build checks first (modules, a taken UDP port, an IPIP pair, WireGuard tools); the probe (all at once, always cleaned, one failing link does not stop the others, a probe that cannot run changes nothing); and what the Doctor does with all of it.
+
 ## 1.68.2 - One cause, one message: fourteen configs that fall together are one line, not fourteen errors
 
 The owner (2026-10-17, a Telegram screenshot: **DOWN (14)**, fourteen configs, every one with the same `curl: (35) OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to www.gstatic.com:443`): "why did these errors come for nothing - so many errors for one small disturbance?"

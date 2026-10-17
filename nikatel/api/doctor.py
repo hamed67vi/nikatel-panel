@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..config import get_settings
-from ..services import doctor, failover, knowledge
+from ..services import doctor, failover, knowledge, linkprobe
+from ..ssh import SSHError
 
 router = APIRouter(tags=["doctor"], dependencies=[Depends(current_user)])
 
@@ -104,6 +105,20 @@ def doctor_survey(body: SurveyIn):
         raise HTTPException(400, str(e))
     except RuntimeError as e:
         raise HTTPException(409, str(e))
+
+
+@router.post("/doctor/knowledge/links")
+def doctor_links(body: SurveyIn):
+    """Ask which of the nine links (GRE, GRE / IPIP inside UDP, IPIP, WireGuard, IPsec ...) pass between an Iran server and a foreign server RIGHT NOW: a temporary link of each, all at once, a few seconds,
+    removed again. The answers are kept in the Doctor's memory of the pair (they are in GET /doctor/knowledge, per pair, under `links`)."""
+    _writable()
+
+    try:
+        return {"ok": True, "links": linkprobe.probe(body.iran_id, body.foreign_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (RuntimeError, SSHError) as e:
+        raise HTTPException(502, str(e)[:200])
 
 
 @router.post("/doctor/knowledge/stop")

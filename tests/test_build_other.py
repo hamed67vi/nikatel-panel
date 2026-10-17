@@ -94,7 +94,7 @@ def test_parsers_and_score():
 def test_kinds_and_actions():
     assert tt.kind_parts("tcpmux") == ("backhaul", "tcpmux") and tt.kind_parts("bp:stealth") == ("backpack", "stealth")
     assert tt.kind_parts("bpd:xdi") == ("backpack_direct", "xdi") and tt.kind_parts("paqet") == ("paqet", "kcp") and tt.kind_parts("chisel:tls") == ("chisel", "wss")
-    assert {k[3] for k in tt.KINDS} == {"Backhaul over GRE", "Backhaul over WireGuard / UDP", "BackPack", "BackPack Direct", "Paqet", "Chisel"}
+    assert {k[3] for k in tt.KINDS} == {"Backhaul over GRE", "Backhaul over another link", "BackPack", "BackPack Direct", "Paqet", "Chisel"}
     assert "nikatel-sink-fi-ir1.py 39101 abcdef0123456789 " in render_action("sink_install", {"NAME": "fi-ir1", "PORT": "39101", "KEY": "abcdef0123456789", "BIND": ""})
     rm = render_action("other_remove", {"NAME": "fi-ir1", "KIND": "backpack", "PORT": "9901", "PROTO": "udp"})
     assert "n='fi-ir1'" in rm and "backpack-$n-kharej.service" in rm and "pr='udp'" in rm

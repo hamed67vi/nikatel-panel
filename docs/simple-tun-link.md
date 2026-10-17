@@ -20,8 +20,8 @@ server; commands: `stl menu`, `stl link list|status|diagnose|remove|ensure`, `st
 | **GRE link**, keyed, MTU, TTL | yes - the link under every Backhaul tunnel (`nikatel-gre-<name>`), MTU measured, firewall rules tagged | unchanged |
 | **GRE inside UDP (FOU)** - passes where IP protocol 47 is filtered | no | **added**: `Backhaul · TCP Mux over GRE-in-UDP` (kind `fou:tcpmux`), one symmetric UDP port (5500-5599), the same GRE inside |
 | **WireGuard** link | no | **added**: `Backhaul · TCP Mux / TCP over WireGuard` (kinds `wg:tcpmux`, `wg:tcp`): a kernel WireGuard link on one UDP port (51820-51919), keys made ON each server |
-| IPIP (native / FOU / GUE) | no | not taken: no key (one IPIP link per server pair), nothing GRE does not do here |
-| IPsec / XFRM (strongSwan) | no | not taken: protocol 50 is filtered like protocol 47, NAT-T needs UDP like WireGuard does, and it needs a strongSwan runtime on every server; WireGuard is the encrypted link |
+| IPIP (native / FOU / GUE) | no | **added in 1.69.0**: `ipip`, `ipipfou`, `ipipgue` - no key, so the kernel holds ONE tunnel per pair of servers (a build checks that) |
+| IPsec / XFRM (strongSwan) | no | **added in 1.69.0 without strongSwan**: `ipsec` (ESP, protocol 50) and `ipsecnat` (ESP in UDP, NAT-T) - the kernel's ESP on an xfrm interface, the keys made by the panel and never in a command line, no IKE daemon, nothing to install |
 | Keys that never leave their server, never in argv or logs | (no keys before) | **taken**: `wg_keygen` runs on the server, writes `/etc/nikatel/wg/<name>.key` (0600) and prints only the public key; the panel keeps public keys only (`record.wg`); the up script reads the key from the file |
 | Owner tag on the interface (`stl:<id>` alias) so that only an own link is deleted | no (deleted by name) | **taken** for the new links: alias `nikatel:<name>`, and the down script deletes a link only when it is of the expected type |
 | Firewall rule that names the exact peer, local address, protocol, port | rules per interface, GRE rules per peer | **taken**: UDP rules name the peer, the local address and the port; every `iptables` call of a link waits up to 5 s for the xtables lock (`-w 5`, as STL does) |
@@ -58,6 +58,42 @@ interface is called like the tunnel, the units are `nikatel-gre-<name>`, `nikate
 
 So the answer to "does WireGuard pass where GRE does not" is **not always**: it passes where UDP is open and nothing recognises the handshake; where a filter does (as on the test route), GRE inside UDP is the link that passes. Both are in the panel, and the
 Doctor finds out per pair which one connects.
+
+## 1.69.0 - all nine models, and what each one measured (2026-10-17)
+
+The owner: "add all nine, test which is better, especially WireGuard, and replace our GRE if one is better". `services/linkmodels.py` holds the nine (GRE, GRE over FOU, GRE over GUE, IPIP, IPIP over FOU, IPIP over GUE, WireGuard, IPsec ESP, IPsec ESP in UDP); a kind is
+`<link>:<transport>` (`ipip:tcpmux`, `ipsecnat:tcpmux`, `wg:tcp` ...), `tcpmux` alone is GRE. Each was run FOR REAL between the Iran test server (4 cores, kernel 5.15) and the build server (2 cores, kernel 6.8), 72-78 ms apart, with the panel's own scripts on both ends
+(`builder.link_scripts`): 20 pings each way, the largest packet that passes (1332 bytes of payload passed through all nine), TCP throughput over the inner addresses (4 streams, 6 s, twice, the better run), the CPU of both servers.
+
+| link | Iran -> foreign Mb/s | foreign -> Iran Mb/s | what must pass |
+|---|---|---|---|
+| **GRE** | **1306** | **1352** | IP protocol 47 |
+| IPIP | 1307 | 1290 | IP protocol 4 |
+| IPIP in FOU | 1228 | 736 | UDP 5700-5799 |
+| IPsec ESP (encrypted) | 1055 | 778 | IP protocol 50 |
+| IPIP in GUE | 43 | 620 | UDP 5800-5899 |
+| IPsec in UDP, NAT-T (encrypted) | 30 | 668 | UDP 4500-4599 |
+| WireGuard (encrypted) | 19 | 634 | UDP 51820-51919 |
+| GRE in FOU | 2.4 | 648 | UDP 5500-5599 |
+| GRE in GUE | 2.0 | 666 | UDP 5600-5699 |
+
+**Answers.** GRE stays the default: nothing beat it. IPIP is as fast but allows ONE tunnel per pair of servers; WireGuard is the slowest of the encrypted links on this route (19 Mb/s towards the foreign server), IPsec ESP the fast encrypted one. Every link carried in UDP is fast from the foreign
+server to Iran and slow the other way (except IPIP in FOU) - a property of this route, **cause not isolated** (a plain-UDP test with a Python sender could not be made to work in the time there was). The order for a pair nobody measured follows the table (`knowledge.PRIOR`);
+the Doctor's pair test measures every kind on the pair it runs on, and that is what counts. One route, one afternoon, a 2-core machine at 50 - 70 % CPU: numbers to compare with each other, not promises.
+
+**Which cut each link survives** (a firewall rule in the `raw` table drops one protocol between the two servers only; "✗" = 100 % loss of the inner pings):
+
+| dropped between the servers | GRE | GRE/FOU | GRE/GUE | IPIP | IPIP/FOU | IPIP/GUE | WireGuard | IPsec ESP | IPsec/UDP |
+|---|---|---|---|---|---|---|---|---|---|
+| IP protocol 47 | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| IP protocol 4 | ✓ | ✓ | ✓ | **✗** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| IP protocol 50 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **✗** | ✓ |
+| all UDP | ✓ | **✗** | **✗** | ✓ | **✗** | **✗** | **✗** | ✓ | **✗** |
+| 47, 4 and 50 together (only TCP, UDP and ICMP pass) | **✗** | ✓ | ✓ | **✗** | ✓ | ✓ | ✓ | **✗** | ✓ |
+| 47, 4, 50 and all UDP (only TCP and ICMP pass) | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** | **✗** |
+
+**The link probe** (`services/linkprobe.py`): a temporary link of every model between the two servers, brought up at the same time (the three IPIP models one after the other: one tunnel per pair), ten pings each way, removed again on both servers always. A cut tunnel asks it before it
+builds anything and leaves out every kind whose link does not pass; the answers are kept in the Doctor's memory of the pair (`POST /api/doctor/knowledge/links` asks it by hand, `GET /api/doctor/knowledge` shows `pairs[].links`).
 
 ## Later, if it is wanted
 

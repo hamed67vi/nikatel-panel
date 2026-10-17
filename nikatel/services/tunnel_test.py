@@ -13,7 +13,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel
 from ..ssh import Node, SSHError, run_action, run_script
-from . import builder
+from . import builder, linkmodels
 from .tunnels import link_of
 
 log = get_logger("tunnel-test")
@@ -349,9 +349,15 @@ KINDS = [
     ("tcp", "Backhaul · TCP", "over GRE, plain TCP, one connection per user", "Backhaul over GRE", True),
     ("wsmux", "Backhaul · WebSocket Mux", "over GRE, clear-text WebSocket, multiplexed", "Backhaul over GRE", False),
     ("wssmux", "Backhaul · WebSocket TLS Mux", "over GRE, TLS WebSocket, multiplexed", "Backhaul over GRE", False),
-    ("wg:tcpmux", "Backhaul · TCP Mux over WireGuard", "an encrypted UDP link: passes where GRE is filtered, the kernel carries it", "Backhaul over WireGuard / UDP", True),
-    ("wg:tcp", "Backhaul · TCP over WireGuard", "an encrypted UDP link, plain TCP, one connection per user", "Backhaul over WireGuard / UDP", False),
-    ("fou:tcpmux", "Backhaul · TCP Mux over GRE-in-UDP", "GRE inside one UDP port: passes where protocol 47 is filtered, not encrypted", "Backhaul over WireGuard / UDP", False),
+    ("wg:tcpmux", "Backhaul · TCP Mux over WireGuard", "an encrypted UDP link: passes where GRE is filtered, the kernel carries it", "Backhaul over another link", True),
+    ("wg:tcp", "Backhaul · TCP over WireGuard", "an encrypted UDP link, plain TCP, one connection per user", "Backhaul over another link", False),
+    ("fou:tcpmux", "Backhaul · TCP Mux over GRE-in-UDP (FOU)", "GRE inside one UDP port: passes where protocol 47 is filtered, not encrypted", "Backhaul over another link", False),
+    ("gue:tcpmux", "Backhaul · TCP Mux over GRE-in-UDP (GUE)", "GRE inside one UDP port with the GUE header (another UDP shape than FOU), not encrypted", "Backhaul over another link", False),
+    ("ipip:tcpmux", "Backhaul · TCP Mux over IPIP", "IP-in-IP (protocol 4): the lightest link, one per pair of servers, not encrypted", "Backhaul over another link", False),
+    ("ipipfou:tcpmux", "Backhaul · TCP Mux over IPIP-in-UDP (FOU)", "IP-in-IP inside one UDP port, one per pair of servers, not encrypted", "Backhaul over another link", False),
+    ("ipipgue:tcpmux", "Backhaul · TCP Mux over IPIP-in-UDP (GUE)", "IP-in-IP inside one UDP port with the GUE header, one per pair of servers, not encrypted", "Backhaul over another link", False),
+    ("ipsec:tcpmux", "Backhaul · TCP Mux over IPsec (ESP)", "ESP (protocol 50), encrypted with AES-GCM, keys made by the panel", "Backhaul over another link", False),
+    ("ipsecnat:tcpmux", "Backhaul · TCP Mux over IPsec in UDP (NAT-T)", "ESP inside one UDP port, encrypted with AES-GCM, keys made by the panel", "Backhaul over another link", False),
     ("bp:tcpmux", "BackPack · TCP Mux", "many users over few connections", "BackPack", True),
     ("bp:tcp", "BackPack · TCP", "plain TCP", "BackPack", True),
     ("bp:stealth", "BackPack · TCP + Stealth", "looks like random bytes", "BackPack", True),
@@ -378,12 +384,13 @@ _COMPARE: dict[str, dict] = {}
 
 
 def kind_link(kind: str) -> str:
-    """The link a Backhaul kind runs over: "gre" (the bare keys), "wg" (WireGuard) or "fou" (GRE inside UDP)."""
-    return kind.split(":", 1)[0] if kind.startswith(("wg:", "fou:")) else "gre"
+    """The link a Backhaul kind runs over: "gre" (the bare keys) or one of the other eight models of services/linkmodels.py ("wg", "fou", "gue", "ipip", "ipipfou", "ipipgue", "ipsec", "ipsecnat")."""
+    link, _ = linkmodels.split_kind(kind)
+    return link if link and link != "gre" else "gre"
 
 
 def kind_parts(kind: str) -> tuple[str, str]:
-    """A test kind -> (builder kind, transport). Backhaul transports keep their bare key; "wg:tcpmux" and "fou:tcpmux" are Backhaul over another link (`kind_link`)."""
+    """A test kind -> (builder kind, transport). Backhaul transports keep their bare key; "wg:tcpmux", "fou:tcpmux", "ipsec:tcp" ... are Backhaul over another link (`kind_link`)."""
     if kind in ("tcpmux", "tcp", "wsmux", "wssmux"):
         return "backhaul", kind
 

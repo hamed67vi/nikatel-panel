@@ -30,7 +30,7 @@ def test_a_gre_link_is_exactly_what_it_was_and_the_other_links_keep_its_names():
     assert set(wg) == set(gre) == set(fou)                                                                             # the same six files: the units, the timer and the check keep the names every other part of the panel knows
     for link in (wg, fou):
         assert link["/usr/local/sbin/nikatel-gre-check-ca-ir1"] == gre["/usr/local/sbin/nikatel-gre-check-ca-ir1"]      # (the check pings the inner peer and restarts the unit after three silences: the same for every link)
-    assert "Nikatel WireGuard link" in wg["/etc/systemd/system/nikatel-gre-ca-ir1.service"] and "Nikatel GRE over UDP link" in fou["/etc/systemd/system/nikatel-gre-ca-ir1.service"]
+    assert "Nikatel WireGuard link" in wg["/etc/systemd/system/nikatel-gre-ca-ir1.service"] and "Nikatel GRE over UDP (FOU) link" in fou["/etc/systemd/system/nikatel-gre-ca-ir1.service"]
 
 
 def test_a_wireguard_end_names_the_peer_and_the_port_and_never_holds_a_private_key():
@@ -84,9 +84,9 @@ def test_a_link_refuses_what_it_would_run_as_root_if_it_were_not_checked():
 
 # ------------------------------------------------------------------ what a server says, the port, the key
 def test_the_facts_of_a_server_are_read_and_the_port_is_one_nobody_holds():
-    f = builder.parse_link_facts("WG_MOD=1\nWG_TOOL=0\nFOU_MOD=1\nUDP=53 51820 51821 \nFOU_PORTS=5500 \nAPT=1\nnoise\n")
-    assert f == {"wg_mod": True, "wg_tool": False, "fou_mod": True, "udp": {53, 51820, 51821}, "fou_ports": {5500}, "apt": True}
-    assert builder.parse_link_facts("") == {"wg_mod": False, "wg_tool": False, "fou_mod": False, "udp": set(), "fou_ports": set(), "apt": False}
+    f = builder.parse_link_facts("WG_MOD=1\nWG_TOOL=0\nFOU_MOD=1\nUDP=53 51820 51821 \nFOU_PORTS=5500 \nAPT=1\nMODS=ip_gre fou ipip \nIPIP_PAIRS=203.0.113.1>198.51.100.2 \nnoise\n")
+    assert f == {"wg_mod": True, "wg_tool": False, "fou_mod": True, "udp": {53, 51820, 51821}, "fou_ports": {5500}, "apt": True, "mods": {"ip_gre", "fou", "ipip"}, "ipip_pairs": {("203.0.113.1", "198.51.100.2")}}
+    assert builder.parse_link_facts("") == {"wg_mod": False, "wg_tool": False, "fou_mod": False, "udp": set(), "fou_ports": set(), "apt": False, "mods": set(), "ipip_pairs": set()}
     assert builder.pick_link_port("wg", set()) == 51820 and builder.pick_link_port("wg", {51820, 51821}) == 51822 and builder.pick_link_port("fou", {5500}) == 5501
     assert builder.pick_link_port("wg", set(range(51820, 51920))) == 0                                              # a full range: none
     assert builder.parse_pub(f"PUB={PUB_I}\n") == PUB_I and builder.parse_pub("PUB=short") == "" and builder.parse_pub("") == ""
@@ -97,8 +97,10 @@ def test_the_options_of_a_link_are_checked():
     assert builder.clean_bh_opts({"link": "gre"}) == {} and builder.clean_bh_opts({"link": ""}) == {}                  # GRE is the default: nothing is written for it
     assert builder.clean_bh_opts({"install_wg": True}) == {"install_wg": True}
     assert builder.clean_bh_opts({"avoid_net": "10.4.5.0/30"}) == {"avoid_net": "10.4.5.0/30"} and builder.clean_bh_opts({"avoid_net": "10.4.5.0/30; id"}) == {}      # (a fresh-link rebuild keeps the network to avoid: it was dropped here)
+    assert builder.clean_bh_opts({"link": "ipsec"}) == {"link": "ipsec"} and builder.clean_bh_opts({"link": "gue"}) == {"link": "gue"}          # (all nine models are valid; the six that are not GRE are new in 1.69.0)
+
     with pytest.raises(ValueError):
-        builder.clean_bh_opts({"link": "ipsec"})
+        builder.clean_bh_opts({"link": "sit"})
 
 
 # ------------------------------------------------------------------ the reviewed scripts of the servers
@@ -113,13 +115,13 @@ def test_the_reviewed_scripts_for_a_link_take_only_what_their_rules_allow():
     i = ssh.render_action("wg_install", {})
     assert "apt-get install -y -qq wireguard-tools" in i and "WG_FAIL" in i
     r = ssh.render_action("remove_tunnel_files", {"NAME": "ca-ir1", "PORT": "9901", "TRANSPORT": "tcpmux"})
-    assert 'rm -f "/etc/nikatel/wg/$n.key"' in r and "grep -qE 'wireguard|gre '" in r                                # (the key goes with the tunnel; a WireGuard link is deleted with `ip link`)
+    assert 'rm -f "/etc/nikatel/wg/$n.key" "/etc/nikatel/ipsec/$n.keys"' in r and "grep -qE 'wireguard|gre |ipip|xfrm'" in r      # (the keys go with the tunnel; a WireGuard / IPIP / xfrm link is deleted with `ip link`)
 
 
 # ------------------------------------------------------------------ the kinds the Doctor knows
 def test_the_pair_test_knows_the_links_and_a_kind_says_which_link_it_runs_over():
     for key in ("wg:tcpmux", "wg:tcp", "fou:tcpmux"):
-        assert key in tunnel_test.KIND_KEYS and key in knowledge.PRIOR and key in knowledge.CUT_UDPLINK and key in knowledge.UDP_LINK_KINDS
+        assert key in tunnel_test.KIND_KEYS and key in knowledge.PRIOR and key in knowledge.CUT_LINKS and key in knowledge.UDP_LINK_KINDS
         assert tunnel_test.kind_parts(key)[0] == "backhaul"
 
     assert tunnel_test.kind_parts("wg:tcpmux") == ("backhaul", "tcpmux") and tunnel_test.kind_parts("fou:tcpmux") == ("backhaul", "tcpmux") and tunnel_test.kind_parts("wg:tcp") == ("backhaul", "tcp")
@@ -140,13 +142,16 @@ def test_a_build_of_a_kind_runs_over_the_link_of_that_kind_whatever_the_old_opti
     assert seen == [("tcpmux", {"tune": True, "link": "wg"}), ("tcpmux", {"tune": True}), ("tcpmux", {"link": "fou"})]
 
 
-def test_when_the_link_under_a_tunnel_is_cut_the_other_udp_links_are_not_its_replacement():
+def test_when_the_link_under_a_tunnel_is_cut_its_own_kinds_are_not_its_replacement_but_the_other_links_are():
     ir, fr = 801, 802
     kinds, _ = knowledge.plan_for(ir, fr, "wg:tcpmux", True, False, dial_i=True, dial_f=True, cause="gre_blocked")
-    assert not set(kinds) & set(knowledge.UDP_LINK_KINDS) and "tcpmux" not in kinds                                    # (GRE kinds stay out too: no_gre)
+    assert "wg:tcpmux" not in kinds and "wg:tcp" not in kinds                                                         # the WireGuard link is the one that is cut: its other transport would be cut the same way
+    assert "fou:tcpmux" in kinds and "tcpmux" in kinds and "ipsec:tcpmux" in kinds                                   # GRE inside UDP on another port, native GRE, ESP ... may pass (1.69.0: it was every UDP link and GRE that were left out)
     kinds, _ = knowledge.plan_for(ir, fr, "tcpmux", True, False, dial_i=True, dial_f=True, cause="gre_blocked")
-    assert "wg:tcpmux" in kinds and "fou:tcpmux" in kinds                                                          # a GRE tunnel cut by a protocol-47 filter: UDP may pass
+    assert "wg:tcpmux" in kinds and "fou:tcpmux" in kinds and "ipip:tcpmux" in kinds and "tcpmux" not in kinds       # a GRE tunnel cut by a protocol-47 filter: the other links may pass
     assert kinds.index("wg:tcpmux") > kinds.index("bp:wssmux")                                                     # (last in the static order; a pair whose survey found one connecting has it first)
+    kinds, _ = knowledge.plan_for(ir, fr, "wg:tcpmux", True, False, dial_i=True, dial_f=True, cause="route_cut")
+    assert "tcpmux" not in kinds                                                                                   # the two servers cannot reach each other at all: GRE cannot pass either
 
 
 def test_the_diagnosis_says_udp_for_a_udp_link():
@@ -155,7 +160,11 @@ def test_the_diagnosis_says_udp_for_a_udp_link():
     cause, why = ap.classify({**facts, "link": "wg"})
     assert cause == "gre_blocked" and "the WireGuard link does not" in why and "UDP port of the link is filtered" in why and "protocol 47" not in why
     cause, why = ap.classify({**facts, "link": "fou", "under_loss_i": 0.0})
-    assert "GRE-over-UDP link" in why
+    assert "GRE over UDP (FOU) link" in why and "UDP port of the link is filtered" in why
+    cause, why = ap.classify({**facts, "link": "ipip"})
+    assert cause == "gre_blocked" and "IPIP link does not" in why and "IPIP (protocol 4) is filtered" in why and "UDP port" not in why        # a link that is not in a UDP port: what is filtered is its IP protocol
+    cause, why = ap.classify({**facts, "link": "ipsec"})
+    assert "IPsec (ESP) link does not" in why and "ESP (protocol 50) is filtered" in why
 
 
 # ------------------------------------------------------------------ the API and what a build may do
@@ -170,9 +179,11 @@ def test_the_api_turns_a_wireguard_transport_into_a_build_over_wireguard(client,
     assert client.post("/api/tunnels", json={**body, "transport": "fou:tcpmux"}).status_code == 202
     assert client.post("/api/tunnels", json={**body, "transport": "tcpmux"}).status_code == 202
     assert seen == [("tcpmux", {"link": "wg", "install_wg": True}), ("tcpmux", {"link": "fou"}), ("tcpmux", {})]       # the owner asked for WireGuard: wireguard-tools may be installed; GRE over UDP needs no package
-    assert client.post("/api/tunnels", json={**body, "transport": "ipsec:tcpmux"}).status_code == 400
+    assert client.post("/api/tunnels", json={**body, "transport": "ipsec:tcpmux"}).status_code == 202               # (1.69.0: ESP, GUE, IPIP ... are links too)
+    assert seen[-1] == ("tcpmux", {"link": "ipsec"})
+    assert client.post("/api/tunnels", json={**body, "transport": "sit:tcpmux"}).status_code == 400 and client.post("/api/tunnels", json={**body, "transport": "gre:tcpmux"}).status_code == 400
     kinds = client.get("/api/tunnels/kinds").json()["kinds"]
-    assert {"wg:tcpmux", "wg:tcp", "fou:tcpmux"} <= {t["key"] for k in kinds if k["key"] == "backhaul" for t in k["transports"]}
+    assert {"wg:tcpmux", "wg:tcp", "fou:tcpmux", "gue:tcpmux", "ipip:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsec:tcpmux", "ipsecnat:tcpmux"} <= {t["key"] for k in kinds if k["key"] == "backhaul" for t in k["transports"]}
 
 
 def test_a_build_the_doctor_makes_never_installs_a_package_but_the_owners_may(monkeypatch):
