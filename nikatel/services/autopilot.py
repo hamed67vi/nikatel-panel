@@ -928,6 +928,16 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
                 step_kind = _switch_cut(aid, snap, kinds)
                 healed = bool(step_kind)
 
+                if healed and step_kind != d["kind"]:
+                    try:
+                        # (imported here: comeback builds on this module)
+                        from . import comeback
+
+                        comeback.note(snap["name"], snap["iran_id"], snap["foreign_id"], d["kind"], step_kind, d["cause"])          # (the disturbance may be temporary: the old type is looked for again, see services/comeback.py)
+                        _say(aid, f"{d['kind']} is remembered as the type this tunnel should go back to: the Doctor tests it again after 5 minutes (then 10, 20, 30, 60 ...) and swaps back, at a quiet moment, when it is clearly better than {step_kind}.")
+                    except Exception:
+                        log.exception("the wish of %s to go back could not be kept", snap["name"])
+
                 if not healed:
                     _say(aid, f"None of the tunnel types connects on this route right now. The repair tries again in {RETRY_STEPS[0] // 60} minute (then 2, 5 and every 10 minutes; the types that failed are not tried again).")
         if healed and step in ("restart", "rebuild", "relink") and not _holds(aid, tunnel_id):

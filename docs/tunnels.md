@@ -152,6 +152,13 @@ again and again. What the Doctor does now:
 | wake-ups | the repair job ticks every 5 s (it was 20) and runs at once when a tunnel is cut and when a restart or a smart repair ends: the next step is never waited for until the next tick | each hand-off used to cost 10 - 20 s |
 | remember | every cut is kept (`knowledge.incidents`): the cause the Doctor found, the steps in order with the type each built, what healed it, how long it took. The next cut of the pair starts with the type that healed it | "keep it in memory so that next time it knows what to do" |
 
+**Back to the better type (1.69.5; the owner, 2026-10-17: "the disturbance may be temporary - check whether the conditions got better and go to the tunnel that works better").** A cut tunnel is swapped to the first type that connects, and the robust
+kinds that come first are usually the slower ones. The type the tunnel HAD is kept as the one wanted (`comeback.wants`, settings `comeback`) and the Doctor looks for it again, every look **beside** the running tunnel and without touching the users: a temporary tunnel of the wanted type,
+delay and loss only (about a minute). The looks come after 5, 10, 20, 30, 60 minutes, 2 hours, then every 4 hours, for three days. The tunnel goes back, at a quiet moment, when the wanted type connects **clean** (under 5 % loss) and scores clearly better than the running one
+(10 points - the same rule as every other swap); when it connects but is only as good the running type stays and the looking stops; when it does not connect, or loses packets, the disturbance is still there and the next look comes later.
+A wanted type that runs over a link (WireGuard, FOU, IPsec ...) is first asked of the link probe (a few seconds): a link that still does not pass costs no test at all. Nothing is done while the Doctor is off, the panel is read-only, a repair works on the tunnel, in a storm of cuts, or before the tunnel has been
+up for 3 minutes; a tunnel somebody changed in the meantime (a swap by hand, a later repair) is never put back - its wish is forgotten; one tunnel goes back at most 3 times in 24 hours (a route that flaps does not make it swing). Every look is a story in the Doctor's log (`comeback`), a swap back is an event.
+
 **The order of a cut tunnel** (robustness first, speed afterwards): when only the foreign server can dial (the Iran server cannot open a TCP connection to it) the reverse kinds go first - BackPack WebSocket TLS Mux, Chisel TLS,
 BackPack TCP Mux, BackPack WebSocket TLS, BackPack TCP, Chisel, Stealth ... - and the forward kinds last; when the Iran server can dial, the fast forward kinds go first (BackPack Direct PCK, Chisel forward, Paqet ...). GRE
 kinds are left out where GRE (or the whole route) is cut.
@@ -231,7 +238,7 @@ A Backhaul tunnel runs over the inner addresses of a /30 link between the two se
 | `ipip:tcpmux` | IP-in-IP, no key (the kernel holds ONE per pair of servers) - 1307 / 1290 | the `ipip` module | IP protocol 4 is open |
 | `ipipfou:tcpmux` `ipipgue:tcpmux` | IPIP inside one UDP port (5700-5799, 5800-5899) - 1228 / 736 and 43 / 620 | the `ipip`, `fou` modules | UDP is open |
 | `wg:tcpmux` `wg:tcp` | a kernel **WireGuard** link on **one UDP port** (51820-51919), encrypted and authenticated - 19 / 634 | the `wireguard` module and `wireguard-tools` | UDP is open and protocol 47 is filtered |
-| `ipsec:tcpmux` | ESP in tunnel mode on an xfrm interface, keys made by the panel, encrypted - 1055 / 778 | the `xfrm_interface`, `esp4` modules | IP protocol 50 is open |
+| `ipsec:tcpmux` | ESP in tunnel mode on an xfrm interface, keys made by the panel, encrypted - 1055 / 778 | the `xfrm_interface`, `esp4` modules. The SAs are made once (1.69.4); a restart of ONE end resets its sequence numbers and the other end drops its packets until its own check restarts it (up to 4 minutes) | IP protocol 50 is open |
 | `ipsecnat:tcpmux` | the same ESP inside one UDP port (4500-4599, NAT-T), encrypted - 30 / 668 | the same | UDP is open |
 
 Everything above the link is the same: the units (`nikatel-gre-<name>`, `nikatel-gre-check-<name>.timer`: a check pings the inner peer every minute and restarts the link after three silences), the checks and the sentinel, the live numbers, the bandwidth
@@ -242,5 +249,5 @@ job, the Doctor's ladder, rebuilds and the trash. `record.link` (`wg`, `fou`; ab
 the build stops with a sentence that says to install it by hand.
 
 **In the Doctor:** all of the kinds are in the pair test, the night survey and the replacements of a cut tunnel (after the other engines, in the order they measured; a pair whose survey found one connecting tries it first). **The link probe** (1.69.0, `services/linkprobe.py`) asks which of the nine
-links pass between the two servers in seconds (a temporary link of each, all at once, removed again) BEFORE a cut tunnel is rebuilt, and the kinds whose link does not pass are not tried at all; the answers are kept per pair (`POST /api/doctor/knowledge/links`, `pairs[].links`). Details and what was taken from
+links pass between the two servers in about 20 seconds (a temporary link of each, all at once, removed again) BEFORE a cut tunnel is rebuilt, and the kinds whose link does not pass are not tried at all; the answers are kept per pair (`POST /api/doctor/knowledge/links`, `pairs[].links`). Details and what was taken from
 simple-tun-link: [simple-tun-link.md](simple-tun-link.md).

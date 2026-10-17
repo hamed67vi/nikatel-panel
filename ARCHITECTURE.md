@@ -35,7 +35,7 @@ nikatel/
     uptime.py        the strip of cells that shows how a server looked over the last hours, read from the samples only (build_strip / up_percent are pure); api/servers.py and api/profiles.py serve it
     tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
     linkmodels.py    the nine links a Backhaul tunnel can run over (1.69.0: GRE, GRE over FOU / GUE, IPIP, IPIP over FOU / GUE, WireGuard, IPsec ESP, IPsec in UDP; simple-tun-link): the registry, the kinds (`fou:tcpmux`, `ipsec:tcp` ...), what must pass between the servers, the scripts of one end - pure
-    linkprobe.py     the link probe (1.69.0): which of the nine links pass between two servers RIGHT NOW - a temporary `lp-<link>` link of each, ten pings each way, all at once, a few seconds; the answers go to the Doctor's memory of the pair, and a cut tunnel does not try a kind whose link does not pass
+    linkprobe.py     the link probe (1.69.0): which of the nine links pass between two servers RIGHT NOW - a temporary `lp-<link>` link of each, ten pings each way, all at once, about 7 s a link and 23 s for all nine; the answers go to the Doctor's memory of the pair, and a cut tunnel does not try a kind whose link does not pass
     builder.py       create / remove / rebuild a Backhaul tunnel over one of the nine links (`link_scripts`, docs/simple-tun-link.md); set_ports; pending rebuilds that survive a
                      restart of the panel; follow_server_rename / follow_server_host (a server's new name or address)
     build_other.py   the other engines: BackPack (reverse and direct), Paqet, Chisel (reverse, or forward = the Iran server dials, transports fws / fwss) - plan, install, units, proof, rollback
@@ -65,6 +65,7 @@ nikatel/
                      repair level; _rebuild_safe (the old tunnel comes back when the new build fails); relink probes a new
                      GRE link beside the tunnel first; storm detection; observe (lossy tunnels); repair_cycle (one job);
                      fix_all, explain (the AI reads the whole situation), config diagnosis (SNI, reachability)
+    comeback.py      back to the better tunnel type (1.69.5): a cut tunnel swapped to an emergency type is tested again for the type it had, with growing waits, and swapped back at a quiet moment when that type is clearly better - pure rules + the job (every minute) + the look
     doctor.py        the Tunnel Doctor's three modes (off / fix / move) and its moves: a dead Iran server (server by server in a
                      provider-wide outage), an exhausted server (one tunnel), never for packet loss (suggested instead), the return
                      after three healthy hours; the ledger of moves, the suggestions, the rails (pure: is_saturated, may_move, ready_to_return)

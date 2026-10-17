@@ -28,6 +28,7 @@ from .services import (
     bandwidth,
     besttoday,
     builder,
+    comeback,
     configs,
     demo,
     doctor,
@@ -160,7 +161,8 @@ def _register_jobs() -> None:
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only): the ranking of the best tunnels of the day uses them
     jobs.register("userq", 300, userq.run)                      # what the USERS get through every tunnel: the probe's tests of the configs that ride it, each against its own week; the grade of the tunnel, a look by the Doctor when it falls (services/userq.py)
-    jobs.register("knowledge", 600, knowledge.run)              # what the Doctor KNOWS about every pair of servers: the night survey of the tunnel types, one pair at a time, when nothing else needs the servers (services/knowledge.py)
+    jobs.register("comeback", 60, comeback.run)                 # a cut tunnel that was swapped to an emergency type: its old type is tested again with growing waits (5, 10, 20 ... min) and the tunnel goes back when it is clearly better (services/comeback.py)
+    jobs.register("knowledge", 600, knowledge.run)            # what the Doctor KNOWS about every pair of servers: the night survey of the tunnel types, one pair at a time, when nothing else needs the servers (services/knowledge.py)
     jobs.register("bandwidth", 60, bandwidth.run)               # the bandwidth of every GRE tunnel: one light measurement per minute (two connections, 120 MB at most), each tunnel about every 90 minutes; a drop is looked at by the Doctor (services/bandwidth.py)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
