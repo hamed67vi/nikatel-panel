@@ -385,6 +385,16 @@ echo "UP $(cut -d' ' -f1 /proc/uptime)"
     "reach_many": (r"""i=0; for hp in @TARGETS@; do i=$((i+1)); [ $((i % 6)) -eq 0 ] && wait; ( h=${hp%:*}; p=${hp##*:}; r=$(curl -s -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "http://$h:$p/" 2>/dev/null); c=${r%% *}; if [ -z "$r" ] || [ "$c" = "000" ]; then r=$(curl -sk -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "https://$h:$p/" 2>/dev/null); fi; [ -n "$r" ] || r="000 0"; echo "REACH $h $p $r" ) & done; wait
 """, {"TARGETS": r"^[A-Za-z0-9.\-]{1,253}:\d{1,5}( [A-Za-z0-9.\-]{1,253}:\d{1,5}){0,80}$"}),
 
+    # a "ping" made of TCP handshakes, for a route that drops ICMP (the owner, 2026-10-17: a working tunnel showed "no ping"): ten connections to host:port, one every 0.1 s, each waits at most 1 s; one that needs more than
+    # 800 ms counts as lost (the kernel repeats a lost SYN after 1 s, so a handshake that slow lost a packet). "TPING host:port <sent> <answered> <average ms of the answered>". Only connects, sends nothing.
+    "tcp_ping": (r"""h=@HOST@; p=@PORT@; d=$(mktemp -d)
+for i in 1 2 3 4 5 6 7 8 9 10; do ( s=$(date +%s%N); if timeout 1 bash -c "echo > /dev/tcp/$h/$p" 2>/dev/null; then e=$(date +%s%N); echo $(( (e - s) / 1000000 )) > "$d/$i"; fi ) & sleep 0.1; done; wait
+ok=0; sum=0
+for f in "$d"/*; do [ -f "$f" ] || continue; v=$(cat "$f"); if [ "$v" -lt 800 ]; then ok=$((ok + 1)); sum=$((sum + v)); fi; done
+echo "TPING $h:$p 10 $ok $([ "$ok" -gt 0 ] && echo $((sum / ok)) || echo 0)"
+rm -rf "$d"
+""", {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
+
     # can this server open a TCP connection to host:port (several at once): "REACH host:port 1|0 <connect ms>". Only connects, sends nothing.
     "tcp_reach": (r"""for hp in @TARGETS@; do h=${hp%:*}; p=${hp##*:}; ( s=$(date +%s%N); if timeout 4 bash -c "echo > /dev/tcp/$h/$p" 2>/dev/null; then e=$(date +%s%N); echo "REACH $hp 1 $(( (e - s) / 1000000 ))"; else echo "REACH $hp 0 0"; fi ) & done; wait
 """, {"TARGETS": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}( [A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}){0,39}$"}),

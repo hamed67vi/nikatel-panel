@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.68.0 - "No ping" is measured by TCP handshakes now
+
+The owner (2026-10-17, a screenshot of a BackPack wssmux tunnel that carries its users but shows "no ping" under 87 ms): "find out why it says no ping, fix it, and test that the other tunnels do not have it".
+
+- **Why:** the tunnel is pinged from its Iran server to the public address of the foreign server (a BackPack / Chisel / Paqet tunnel has no GRE link to ping over). That server (or the route in front of it) drops ICMP: the 20 pings all go unanswered while the users' request through the forwarded port is answered, so the panel
+  knew the tunnel worked ("the provider drops ping") but had **no loss number and showed the time of the users' request instead of a ping**. On the owner's panel one of 20 tunnels was in that state; the 19 others answered the ping (the Backhaul ones over their GRE link, the BackPack ones over the public address).
+- **Fix:** when ICMP is dropped and the users' path works, the "ping" is **ten TCP handshakes to the control port of the tunnel**, made by the server that dials it (the foreign server for the reverse kinds - BackPack tcp / tcpmux / ws / wsmux / wss / wssmux / stealth, Chisel, Chisel TLS -, the Iran server for the forward Chisel kinds): that port is the one place the two servers surely talk through.
+  The script `tcp_ping` (ten connections, one every 0.1 s, each waits at most 1 s; a handshake that needs more than 800 ms counts as lost because the kernel repeats a lost SYN after 1 s) gives the loss and the latency; the cell shows the real % and the latency of the handshake (the tooltip says "counted with ten TCP handshakes").
+  It runs only when ICMP is dropped (never for a tunnel whose ping answers), only for the kinds whose control port is a TCP listener (not Paqet, KCP, QUIC, raw-packet kinds, nor the GRE kinds, which are pinged over their own link), and not when the dialling server is off. When the handshakes do not answer either, the cell stays "no ping" - honest.
+- **Other tunnels:** tested in `tests/test_noping.py` for every direction (reverse from the foreign server, forward Chisel from the Iran server), for the kinds that must not be knocked on, for a ping that answers (no handshake at all) and for a server that is off.
+
 ## 1.67.2 - Tests that waited for the clock now wait for a gate
 
 - **Measured after 1.67.1** (the sentinel every 5 s; the same real GRE tunnel, link service stopped, four rounds): the panel said *down* **5, 5, 5 and 2 seconds** after the cut (23 s before 1.67.0, 8-10 s with the 10 s tick).
@@ -588,7 +599,8 @@ Finding what went wrong:
 - **Lab geometry (the owner: *the distance from the lamp exact and engineered, checked with a test*):** the lamp is now inside the name cell; one set of three numbers decides everything - the lamp is 16 px from the edge and 14 px wide, the icon starts 20 px after it (50 px from the edge); a test keeps the header, the colgroup and every kind of row at the same number of columns. Measured in a real browser on seven rows: lamp 14 x 14 px at 16 px (17 with the cell's border), 20 px to the icon, icon 26 x 26, 9 px to the name, lamp and icon both exactly centred.
 - **Flags:** they fade more on all four sides; when a row is pointed at they get only a little colour (so the text and the icon stay readable) and the name and the icon get a soft shadow.
 - **Problems as tags (the owner: *GRE x, Filtered ...*):** a server with a problem shows it as tags after its name - the kit's Error and Warning chips: *GRE ✕*, *Filtered*, *Offline*, *Bad route*, *CPU 91 %* ... (three at most, the rest as *+n*); a node that is not connected says its state the same way; the search finds a server by its problem.
-- **Traffic used (new column):** the bytes a server's network card has carried since it started (a node: what its panel counted), value over unit, between Load and the speed. The probe now also reads the byte counters (x_bytes, 	x_bytes in the facts).
+- **Traffic used (new column):** the bytes a server's network card has carried since it started (a node: what its panel counted), value over unit, between Load and the speed. The probe now also reads the byte counters (
+x_bytes, 	x_bytes in the facts).
 - **Panel bar (the owner: *like the Profile section, no edit button, a locked box*):** the panels are the same segmented control as the profiles with the same + and bin icon buttons; the edit button is gone (the API key pill still opens the edit window); the box has one fixed height and the panels scroll inside it.
 
 ## 1.57.12 - Flyout menus, the Usage range in the lower row, autofill, the Doctor buttons

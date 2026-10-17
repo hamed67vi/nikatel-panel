@@ -276,6 +276,54 @@ def ping_verdict(loss_pct: float | None, data_code: str, ext: tuple | None) -> t
     return loss_pct, False
 
 
+TCP_REVERSE = frozenset({"bp:tcpmux", "bp:tcp", "bp:stealth", "bp:wss", "bp:wssmux", "bp:ws", "bp:wsmux", "chisel", "chisel:tls"})      # the control port is a TCP port on the IRAN server and the FOREIGN server dials it
+TCP_FORWARD = frozenset({"chisel:fwd", "chisel:fwdtls"})                                                                              # the control port is a TCP port on the FOREIGN server and the IRAN server dials it
+
+
+def tcp_target(kind: str, port: int, iran_host: str, foreign_host: str) -> tuple[str, str, int] | None:
+    """Pure: where a tunnel whose ICMP is dropped is "pinged" by TCP handshakes: (the side that makes them, the host it connects to, the port) - the control port of the tunnel, from the server that dials it
+    (the foreign server for the reverse kinds, the Iran server for the forward Chisel kinds). None for the kinds whose control port is not a TCP listener (UDP, KCP, QUIC, raw packets) and for a tunnel without a port."""
+    if not 1 <= int(port or 0) <= 65535:
+        return None
+
+    if kind in TCP_REVERSE and iran_host:
+        return "foreign", iran_host, int(port)
+
+    if kind in TCP_FORWARD and foreign_host:
+        return "iran", foreign_host, int(port)
+
+    return None
+
+
+def parse_tping(out: str) -> tuple[float | None, float | None]:
+    """Pure: the answer of the `tcp_ping` script ("TPING host:port <sent> <answered> <average ms>") -> (average ms of the handshakes that answered, % of them that did not); (None, None) when the answer is not there."""
+    for line in str(out).splitlines():
+        p = line.split()
+
+        if len(p) >= 5 and p[0] == "TPING" and p[2].isdigit() and p[3].isdigit() and int(p[2]) > 0:
+            sent, ok = int(p[2]), int(p[3])
+
+            try:
+                avg = float(p[4])
+            except ValueError:
+                avg = 0.0
+
+            return (round(avg, 1) if ok else None), round(100.0 - ok * 100.0 / sent, 1)
+
+    return None, None
+
+
+def tcp_ping(node: Node, host: str, port: int) -> tuple[float | None, float | None]:
+    """(% lost, average ms) of ten TCP handshakes from `node` to host:port (about two seconds); (None, None) when it could not be done."""
+    try:
+        rtt, loss = parse_tping(run_script(node, "tcp_ping", {"HOST": host, "PORT": str(port)}, timeout=20))
+    except (SSHError, ValueError) as e:
+        log.debug("tcp ping to %s:%s failed: %s", host, port, str(e)[:100])
+        return None, None
+
+    return loss, rtt
+
+
 def settle(old_state: str, judged: str, streak: dict | None) -> tuple[str, dict]:
     """Flapping control: between up and degraded, and into unknown (an ssh hiccup), the judged state
     must repeat CONFIRM_CHECKS times before it replaces the stored one. down applies at once (a
@@ -510,6 +558,9 @@ def _ext_one(iran_host: str, port: int, iran_id: int) -> None:
 
 
 def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) -> None:
+    # (autopilot imports this module: it is imported here, not at the top)
+    from . import autopilot
+
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -521,8 +572,9 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         prev = dict(t.detail or {})
         bw = dict((t.record or {}).get("bw") or {})
-        iran_host, iran_id = t.iran.host, t.iran_server_id
+        iran_host, iran_id, foreign_host = t.iran.host, t.iran_server_id, t.foreign.host
         iran_off, foreign_off = t.iran.enabled and t.iran.online is False, t.foreign.enabled and t.foreign.online is False
+        tcp = tcp_target(autopilot.kind_of(t.type, t.transport, t.record or {}), int(t.port or 0), iran_host, foreign_host)
 
     def ask(node, is_iran, off, quick_read=False):
         if off:                  # the pulse already knows the server is off: asking it over SSH would only wait for a time-out (10-15 s each, for every tunnel of that server)
@@ -571,9 +623,19 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
     loss, ping_blocked = ping_verdict(iran.loss_pct, iran.data_code, ext)
     ping_over = "link" if plan.iface else "iface" if plan.ping_iface else "servers" if plan.ping else ""      # what the pings crossed: the GRE link, another L3 link, or the open internet between the two servers
     udp = bw.get("loss") or {}
+    tcp_rtt = None
 
     if ping_blocked and udp.get("pct") is not None and int(time.time()) - int(udp.get("at") or 0) <= bandwidth.LOSS_FRESH:
         loss, ping_blocked, ping_over = float(udp["pct"]), False, "udp"          # the provider drops ICMP: the loss of the link is what the UDP packets of the bandwidth test lost (the owner, 2026-10-16: "no ping, but it has bandwidth")
+    elif ping_blocked and not plan.iface and tcp is not None and not (iran_off if tcp[0] == "iran" else foreign_off):
+        # the provider drops ICMP between the two servers and the users' path works (the owner, 2026-10-17: a working tunnel showed "no ping"): the control port of the tunnel is the one place both servers
+        # surely talk through, so the "ping" is ten TCP handshakes to it, made by the server that dials it
+        tcp_loss, tcp_rtt = tcp_ping(iran_node if tcp[0] == "iran" else foreign_node, tcp[1], tcp[2])
+
+        if tcp_loss is not None and tcp_loss < 100:
+            loss, ping_blocked, ping_over = tcp_loss, False, "tcp"
+        else:
+            tcp_rtt = None
     now = int(time.time())
     rx, tx = throughput(prev, iran.now, iran.rx_bytes, iran.tx_bytes)      # what crossed the card between two checks
 
@@ -606,7 +668,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
         t.last_check_at = now
         t.last_error = reason[:300] if state != "up" else ""
         # latency: the ping over the link; when that is blocked, how long the users' request took (from the other Iran server, else on the server)
-        t.rtt_ms = iran.rtt_ms if iran.rtt_ms is not None else (ext[1] if ext is not None and ext[1] is not None else iran.data_ms)
+        t.rtt_ms = iran.rtt_ms if iran.rtt_ms is not None else tcp_rtt if tcp_rtt is not None else (ext[1] if ext is not None and ext[1] is not None else iran.data_ms)
         t.rx_mbps, t.tx_mbps = rx, tx
         t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state,
                     "loss_pct": loss, "ping_blocked": ping_blocked, "ping_over": ping_over, "listen": {str(k): v for k, v in iran.listen.items()},
