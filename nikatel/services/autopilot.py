@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 from sqlalchemy import select
 
+from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
@@ -456,6 +457,8 @@ def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manu
             with _LOCK:
                 _BUSY.pop(label, None)
 
+            wake_repair()                 # a repair has ended: whatever is due next (a retry, the next tunnel's turn) starts now, not at the next tick
+
     threading.Thread(target=run, name=f"autopilot-{label}", daemon=True).start()
     return aid
 
@@ -690,8 +693,24 @@ def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800) -> bool:
 
 
 RELAPSE_WINDOW = 1800   # a step that healed a tunnel less than this long ago did not hold when it is cut again: the repair climbs past it
-SOAK = 60               # after a repair the tunnel must still be up this many seconds later, or the repair did not hold
-RETRY_DOWN = 600        # a tunnel that is down gets a new smart repair this often (one that only flaps: every half hour)
+SOAK = 25               # after a repair the tunnel must still be up this many seconds later, or the repair did not hold (was 60: a tunnel that falls again does it within seconds, and the relapse rule catches a later fall)
+RETRY_STEPS = (60, 120, 300, 600)      # a tunnel that is down gets a new smart repair this long after the END of its last one: 1, 2, 5 minutes, then every 10 (one that only flaps: every half hour). The types that failed on the route are not tried again for two weeks, so a quick retry costs little
+
+
+def retry_after(state: str, runs: int) -> int:
+    """Pure: seconds a tunnel waits after the end of its last smart repair before the next one. `runs`: the smart repairs of this cut so far (the first retry is the quickest, the later ones are spaced out)."""
+    if state != "down":
+        return 1800
+
+    return RETRY_STEPS[min(max(int(runs), 1), len(RETRY_STEPS)) - 1]
+
+
+def wake_repair() -> None:
+    """Run the repair job now: a tunnel was cut or a repair has ended, so the next step is due - not at the next tick of the job."""
+    try:
+        jobs.trigger("repair")
+    except KeyError:
+        pass                      # not registered (tests)
 
 
 def relapsed(name: str, now: int) -> set[str]:
@@ -845,7 +864,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
                 healed = bool(step_kind)
 
                 if not healed:
-                    _say(aid, f"None of the tunnel types connects on this route right now. The repair tries again in {RETRY_DOWN // 60} minutes.")
+                    _say(aid, f"None of the tunnel types connects on this route right now. The repair tries again in {RETRY_STEPS[0] // 60} minute (then 2, 5 and every 10 minutes; the types that failed are not tried again).")
         if healed and step in ("restart", "rebuild", "relink") and not _holds(aid, tunnel_id):
             healed = False             # it was up for a moment: the next step
 
@@ -1061,7 +1080,7 @@ def ranking(tunnel_id: int) -> list[dict]:
 # ------------------------------------------------------------------ mass disruption
 STORM_SERVERS = 3       # this many servers offline at once ...
 STORM_FRACTION = 0.25   # ... or this share of the tunnels down: a mass disruption, not one broken tunnel
-MAX_AUTO_REPAIRS = 2    # smart repairs running at the same time
+MAX_AUTO_REPAIRS = 4    # smart repairs running at the same time (was 2: when one route event cuts several tunnels the last of them waited for two or three repairs before its turn)
 _STORM = {"told": 0}
 
 
@@ -1236,6 +1255,11 @@ def auto_escalate() -> None:
 
     muted = set(st.get("alerts").get("muted") or [])
     now = int(time.time())
+
+    with session() as db:
+        if db.scalar(select(Tunnel.id).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))).limit(1)) is None:
+            return                          # (the job runs every few seconds now: with nothing cut there is nothing to look at, and the whole-system look below is not made)
+
     out = outage_state()
 
     if out["storm"]:                       # several servers gone: deleting or rebuilding now would do harm, not good
@@ -1261,13 +1285,16 @@ def auto_escalate() -> None:
 
         plain = actions.recent_fixes(name, max(3600, now - since + 60)) if st_ == "down" else 0
 
-        if not escalate_due(st_, now - since, int(conf.get("after_seconds", 60)), plain, actions.is_route_fault(err), knowledge.cut_before(iran_id, foreign_id, ("gre_blocked", "route_cut"), now)):
+        if not escalate_due(st_, now - since, int(conf.get("after_seconds", 20)), plain, actions.is_route_fault(err), knowledge.cut_before(iran_id, foreign_id, ("gre_blocked", "route_cut"), now)):
             continue
 
         with session() as db:
-            last = db.scalar(select(ActionLog.ts).where(ActionLog.ref == name, ActionLog.action == "autopilot").order_by(ActionLog.id.desc()).limit(1))
+            rows = db.execute(select(ActionLog.ts, ActionLog.finished_at).where(ActionLog.ref == name, ActionLog.action == "autopilot").order_by(ActionLog.id.desc()).limit(12)).all()
 
-        if last and now - last < (RETRY_DOWN if st_ == "down" else 1800):         # a tunnel that is cut is tried again every ten minutes (its users are cut); one that only flaps every half hour
+        last_end = max(int(rows[0][0] or 0), int(rows[0][1] or 0)) if rows else 0
+        runs = sum(1 for ts, _ in rows if int(ts or 0) >= int(since or 0))               # the smart repairs of THIS cut
+
+        if last_end and now - last_end < retry_after(st_, runs):         # a cut tunnel is tried again 1, 2, 5 minutes after the end of the last try, then every 10 (its users are cut); one that only flaps every half hour
             continue
 
         log.info("auto smart repair of %s (down for %ss, level %s)", name, now - since, level)

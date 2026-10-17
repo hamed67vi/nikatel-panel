@@ -35,7 +35,9 @@ FAIL_FRESH = 14 * 86400         # a kind that did not work is left alone this lo
 QUIET_MBPS = 150.0              # the tunnels of the two servers carry less than this together (the night survey only asks a few pings of a temporary tunnel, no speed test: a survey hardly touches the users)
 BUSY_CPU = 60.0                 # a server this busy is not surveyed
 LIMIT = 5                       # the kinds the Doctor tries live at most
-SURVEYS = ("survey", "survey-manual")
+SURVEYS = ("survey", "survey-manual", "survey-cold")      # survey-cold: the first survey of a pair nobody has tested, by day too (see COLD_QUIET_MBPS)
+COLD_QUIET_MBPS = 30.0          # a pair that has never been surveyed is surveyed outside the night window as well, when the tunnels of its servers carry less than this: without what the Doctor knows about a pair, a cut on it
+                                # is repaired by trying the tunnel types one by one - the longest part of a repair (the owner, 2026-10-17: "bring the delay down to the minimum")
 GRE_KINDS = ("tcpmux", "tcp", "wsmux", "wssmux")          # the Backhaul kinds: they need GRE (protocol 47) to pass between the two servers
 # What the real tests said (docs/tunnels.md, 2026-10-16): the side that DIALS decides what a customer downloads, so the kinds where the Iran server dials come first; the kinds where the foreign
 # server dials (reverse - they are the way when the Iran server cannot dial out) follow; the odd ones are last. It is the order for a pair nobody tested yet, and the tie-break.
@@ -390,7 +392,8 @@ def survey_start(iran_id: int, foreign_id: int, source: str = "survey-manual", k
     jid = tunnel_test.compare_start(iran_id, foreign_id, order, measure=measure, source=source)
 
     with session() as db:
-        emit(db, "info", "tunnels", f"Survey of {names[0]} ⇄ {names[1]} started: {len(order)} tunnel types, one after the other ({'by hand: with a speed test' if source == 'survey-manual' else 'the night survey: delay and loss only'}).", names[0])
+        how = "by hand: with a speed test" if source == "survey-manual" else "the first survey of this pair, on quiet servers: delay and loss only" if source == "survey-cold" else "the night survey: delay and loss only"
+        emit(db, "info", "tunnels", f"Survey of {names[0]} ⇄ {names[1]} started: {len(order)} tunnel types, one after the other ({how}).", names[0])
 
     return jid
 
@@ -429,8 +432,9 @@ def _live_pairs(db) -> dict[tuple[int, int], int]:
     return out
 
 
-def pending_pairs(now: int) -> list[tuple[int, int, list[str]]]:
-    """The pairs that carry a tunnel and have kinds due for a test: (Iran id, foreign id, the due kinds in the standard order), the pair with the least knowledge first."""
+def pending_pairs(now: int, cold_only: bool = False) -> list[tuple[int, int, list[str]]]:
+    """The pairs that carry a tunnel and have kinds due for a test: (Iran id, foreign id, the due kinds in the standard order), the pair with the least knowledge first.
+    `cold_only`: only the pairs that have never been surveyed (nothing is known about them at all)."""
     from . import license
 
     allowed = [k for k in READY if license.tunnel_kind_allowed(k)]            # (the kinds a repair reaches for; the owner can survey all of them by hand)
@@ -445,6 +449,10 @@ def pending_pairs(now: int) -> list[tuple[int, int, list[str]]]:
                 continue
 
             p = d["pairs"].get(pair_key(i, f)) or {}
+
+            if cold_only and p.get("kinds"):
+                continue
+
             due = due_kinds(p, allowed, now)
 
             if due:
@@ -453,8 +461,8 @@ def pending_pairs(now: int) -> list[tuple[int, int, list[str]]]:
     return [(i, f, due) for _, _, i, f, due in sorted(out)]
 
 
-def not_now(iran_id: int, foreign_id: int, now: int) -> str:
-    """Why the pair must not be surveyed right now ('' when it may): a server is busy, or its tunnels carry users."""
+def not_now(iran_id: int, foreign_id: int, now: int, quiet: float = QUIET_MBPS) -> str:
+    """Why the pair must not be surveyed right now ('' when it may): a server is busy, or its tunnels carry users (`quiet`: Mb/s of users under which the survey goes on)."""
     with session() as db:
         for sid in (iran_id, foreign_id):
             _on, cpu = _server_state(db, sid, now)
@@ -465,7 +473,7 @@ def not_now(iran_id: int, foreign_id: int, now: int) -> str:
         carried = sum((t.rx_mbps or 0) + (t.tx_mbps or 0) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), (Tunnel.iran_server_id == iran_id) | (Tunnel.foreign_server_id == foreign_id)))
                       if not is_temp(t.name))
 
-    return f"its servers carry {carried:.0f} Mb/s for users (the survey waits under {QUIET_MBPS:.0f})" if carried >= QUIET_MBPS else ""
+    return f"its servers carry {carried:.0f} Mb/s for users (the survey waits under {quiet:.0f})" if carried >= quiet else ""
 
 
 def _tell_finished() -> None:
@@ -504,23 +512,26 @@ def run() -> None:
     busy = bool(autopilot.repairing_names()) or autopilot.storm_now()
 
     if running:
-        if busy or (running["source"] == "survey" and not (d["on"] and window)):
+        if busy or (running["source"] == "survey" and not (d["on"] and window)) or (running["source"] == "survey-cold" and not d["on"]):
             tunnel_test.compare_stop(running["id"])            # a repair needs the place, or the night is over
 
         return
 
-    if not d["on"] or not window or busy:
+    if not d["on"] or busy:
         return
 
-    for iran_id, foreign_id, kinds in pending_pairs(now):
-        why = not_now(iran_id, foreign_id, now)
+    cold = not window                                          # outside the night window only the pairs nobody has tested yet are surveyed, and only on very quiet servers
+    source = "survey-cold" if cold else "survey"
+
+    for iran_id, foreign_id, kinds in pending_pairs(now, cold_only=cold):
+        why = not_now(iran_id, foreign_id, now, COLD_QUIET_MBPS if cold else QUIET_MBPS)
 
         if why:
             log.info("survey of %s:%s waits: %s", iran_id, foreign_id, why)
             continue
 
         try:
-            survey_start(iran_id, foreign_id, "survey", kinds)
+            survey_start(iran_id, foreign_id, source, kinds)
         except (ValueError, RuntimeError) as e:
             log.info("survey of %s:%s not started: %s", iran_id, foreign_id, str(e)[:120])
 

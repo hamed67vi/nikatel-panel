@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import select
 
+from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
@@ -58,16 +59,30 @@ def grace_for(last_error: str, after_seconds: int) -> int:
     return 0 if re.search(r" is (inactive|failed|dead|missing)\b", last_error or "") else int(after_seconds)
 
 
-def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: int = 4) -> tuple[str, str]:
+RECHECK_FIRST = 4            # seconds before the first look after a restart: a tunnel service dials in within a few seconds ...
+RECHECK_EVERY = 5            # ... and between two looks (a look takes a few seconds more); it was 8 and 10, so a healed tunnel was seen up to ten seconds late
+RECHECK_GIVE_UP = 2          # a cut that is still the SILENT ROUTE after this many looks is not one a restart cures: the smart repair goes on at once instead of waiting for the rest of the time (about 30 s saved)
+
+
+def _wake_repair() -> None:
+    """Run the repair job now: a restart has ended, so what is due next (the smart repair of this tunnel, the restart of another) starts now."""
+    try:
+        jobs.trigger("repair")
+    except KeyError:
+        pass                      # not registered (tests)
+
+
+def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: int = 7) -> tuple[str, str]:
     """After a restart: wait, ask another Iran server about the users' port again (the cycle's answer is from BEFORE the restart and
     would call a healed tunnel still down), check the tunnel; up to `tries` times, about 40 s in all - a tunnel service needs a few
     seconds to dial in again. The tunnel must be up in TWO checks in a row: one that answers for an instant (the services dial in, a stale connection still carries a
-    request) is not healed - the owner, 2026-10-16: "it says fixed and the tunnel is not connected". Returns (state, reason) of the last check."""
+    request) is not healed - the owner, 2026-10-16: "it says fixed and the tunnel is not connected". A tunnel that is still the silent route after RECHECK_GIVE_UP looks stops waiting.
+    Returns (state, reason) of the last check."""
     port = int(plan.ports[0]) if plan.ports and str(plan.ports[0]).isdigit() else 0
     state, why, ups = "unknown", "", 0
 
     for i in range(tries + 1):
-        time.sleep(8 if i == 0 else 10)
+        time.sleep(RECHECK_FIRST if i == 0 else RECHECK_EVERY)
 
         if port:
             external_probe_one(iran_host, port, owner_id)
@@ -89,6 +104,9 @@ def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: i
 
         if ups >= 2:
             return state, ""
+
+        if state == "down" and i >= RECHECK_GIVE_UP and is_route_fault(why):
+            return state, why
 
     return ("degraded", "it answered once but not steadily (the next check failed again)") if state == "up" else (state, why)
 
@@ -197,6 +215,8 @@ def _fix_worker(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
             for k, v in list(_RUNNING.items()):
                 if v == aid:
                     _RUNNING.pop(k, None)
+
+        _wake_repair()                # the restart has ended: the smart repair (or the next restart) is due now, not at the next tick
 
 
 def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
@@ -313,7 +333,7 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         _say(aid, f"Checked again: still {now_state} ({now_reason}). Next step.")
 
     if batch:
-        now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id, tries=3)
+        now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id, tries=6)
 
         if now_state == "up":
             _say(aid, "Checked again: the tunnel works.", done=True, ok=True)
@@ -392,7 +412,7 @@ def auto_repair() -> None:
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 
-        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 60))) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
+        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 20))) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
             continue
 
         log.info("auto repair of %s (down for %ss)", name, now - since)

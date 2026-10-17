@@ -13,7 +13,7 @@ class RepairIn(BaseModel):
     mode: str | None = Field(None, pattern=r"^(off|fix|move)$")      # the Doctor: off | fix (the ladder) | move (the ladder + another Iran server when one is off or exhausted)
     server_minutes: int = Field(10, ge=2, le=60)                     # an Iran server off this long is replaced (mode move)
     auto: bool | None = None                                         # old clients: True = fix, False = off (ignored when `mode` is given)
-    after_seconds: int = Field(60, ge=30, le=3600)
+    after_seconds: int = Field(20, ge=10, le=3600)
     level: str = Field("switch", pattern=r"^(restart|rebuild|switch)$")
 
 

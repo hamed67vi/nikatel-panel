@@ -15,6 +15,8 @@ import secrets
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait as futures_wait
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -32,6 +34,7 @@ from .tunnels import check_tunnel, parse_side, sname
 
 log = get_logger("builder")
 GRE_HOLD_WAIT = 10
+STABLE_WAIT = 5              # a built tunnel must still be running this many seconds later (was 8: the check after the build, the sentinel and the soak of a repair watch it afterwards)
 _LOCK = threading.Lock()
 _BUILDING: set[str] = set()
 
@@ -428,6 +431,17 @@ def _node(s: Server) -> Node:
     return Node(s.host, s.ssh_user, s.ssh_port)
 
 
+def _both(fn_iran, fn_foreign):
+    """Run two independent per-server steps (one on the Iran server, one on the foreign server) at the SAME time and return their answers in that order. An error of either is raised once both have ended, so
+    nothing is left running behind the exception. (The owner, 2026-10-17: "bring the delay down to the minimum" - a build asked the two servers one after the other for facts, MTU, tuning and the GRE check:
+    the second answer was waited for for nothing.)"""
+    with ThreadPoolExecutor(2) as ex:
+        fi, ff = ex.submit(fn_iran), ex.submit(fn_foreign)
+        futures_wait([fi, ff])
+
+    return fi.result(), ff.result()           # (raises the Iran side's error first, else the foreign side's - after BOTH have ended)
+
+
 def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> None:
     """Both servers need /usr/local/bin/backhaul. Copy it from the one that has it, through the panel."""
     if fi["backhaul"] and ff["backhaul"]:
@@ -656,9 +670,11 @@ def _rollback(b: Build) -> None:
 
 def _build(b: Build) -> None:
     aid, iran, foreign = b.aid, _node(b.iran), _node(b.foreign)
+    ihost, fhost = b.iran.host, b.foreign.host           # (read here, not inside the threads of `_both`)
 
-    # 1. preflight
-    fi, ff = parse_facts(run_script(iran, "build_facts", timeout=40)), parse_facts(run_script(foreign, "build_facts", timeout=40))
+    # 1. preflight (both servers asked at once)
+    raw_i, raw_f = _both(lambda: run_script(iran, "build_facts", timeout=40), lambda: run_script(foreign, "build_facts", timeout=40))
+    fi, ff = parse_facts(raw_i), parse_facts(raw_f)
 
     for label, f, srv in (("Iran", fi, b.iran), ("Foreign", ff, b.foreign)):
         if f["broken"]:
@@ -694,16 +710,21 @@ def _build(b: Build) -> None:
 
     # 2. mtu + tuning
     if not b.mtu:
-        a = int((re.search(r"MTU=(\d+)", run_script(iran, "mtu_probe", {"PEER": b.foreign.host}, timeout=70)) or [0, "0"])[1])
-        c = int((re.search(r"MTU=(\d+)", run_script(foreign, "mtu_probe", {"PEER": b.iran.host}, timeout=70)) or [0, "0"])[1])
+        mtu_i, mtu_f = _both(lambda: run_script(iran, "mtu_probe", {"PEER": fhost}, timeout=70), lambda: run_script(foreign, "mtu_probe", {"PEER": ihost}, timeout=70))
+        a = int((re.search(r"MTU=(\d+)", mtu_i) or [0, "0"])[1])
+        c = int((re.search(r"MTU=(\d+)", mtu_f) or [0, "0"])[1])
         b.mtu = max(1200, min(a or 1400, c or 1400, 1360))
         _say(aid, f"Path MTU measured: Iran side {a or '?'}, foreign side {c or '?'} → GRE MTU {b.mtu}")
 
-    for label, node in (("Iran", iran), ("foreign", foreign)) if b.opts.get("tune", True) else ():
+    def tune(label: str, node: Node) -> str:
         try:
-            _say(aid, f"Kernel tuning on the {label} server: " + run_action(node, "sysctl_tune").strip().splitlines()[-1])
+            return f"Kernel tuning on the {label} server: " + run_action(node, "sysctl_tune").strip().splitlines()[-1]
         except (SSHError, ValueError) as e:
-            _say(aid, f"Kernel tuning on the {label} server skipped: {e}")
+            return f"Kernel tuning on the {label} server skipped: {e}"
+
+    if b.opts.get("tune", True):
+        for line in _both(lambda: tune("Iran", iran), lambda: tune("foreign", foreign)):
+            _say(aid, line)
 
     # 3. plan
     if not b.name:
@@ -716,7 +737,7 @@ def _build(b: Build) -> None:
     _say(aid, f"Plan: {b.name}, inner network {network} (Iran {iran_ip}, foreign {foreign_ip})")
 
     # 4. GRE both sides
-    for label, node, local, remote, addr in (("Iran", iran, b.iran.host, b.foreign.host, f"{iran_ip}/30"), ("foreign", foreign, b.foreign.host, b.iran.host, f"{foreign_ip}/30")):
+    def gre_side(label: str, node: Node, local: str, remote: str, addr: str) -> None:
         b.created.append(("gre", node))
 
         for path, text in gre_scripts(b.name, local, remote, key, addr, b.mtu).items():
@@ -728,11 +749,13 @@ def _build(b: Build) -> None:
         if st != "active":
             raise RuntimeError(f"the GRE unit on the {label} server ended {st}")
 
+    _both(lambda: gre_side("Iran", iran, ihost, fhost, f"{iran_ip}/30"), lambda: gre_side("foreign", foreign, fhost, ihost, f"{foreign_ip}/30"))      # (a GRE end does not wait for the other: both are made at once)
     _say(aid, "GRE: interfaces up on both servers")
     time.sleep(1)
 
-    (_, ga), rtt = ping_stats(run_script(iran, "gre_verify", {"IFACE": b.name, "PEER": foreign_ip}, timeout=40))
-    (_, gb), _ = ping_stats(run_script(foreign, "gre_verify", {"IFACE": b.name, "PEER": iran_ip}, timeout=40))
+    ver_i, ver_f = _both(lambda: ping_stats(run_script(iran, "gre_verify", {"IFACE": b.name, "PEER": foreign_ip}, timeout=40)), lambda: ping_stats(run_script(foreign, "gre_verify", {"IFACE": b.name, "PEER": iran_ip}, timeout=40)))
+    (_, ga), rtt = ver_i
+    (_, gb), _ = ver_f
 
     if ga < 8 or gb < 8:
         raise RuntimeError(f"the GRE tunnel is up but the inner addresses cannot ping each other (Iran→foreign {ga}/10, foreign→Iran {gb}/10). "
@@ -795,7 +818,7 @@ def _build(b: Build) -> None:
     _say(aid, f"Data path through port {first.listen}: {data}")
 
     # 6b. still alive a few seconds later: a tunnel that was started and then stopped by something else is not ready
-    time.sleep(8)
+    time.sleep(STABLE_WAIT)
 
     for label, node, unit in (("Iran", iran, iran_unit), ("foreign", foreign, foreign_unit)):
         side = parse_side(run_script(node, "tunnel_side", {"UNITS": unit, "IFACE": "", "PEER": "", "PORTS": ""}, timeout=35))
@@ -807,7 +830,7 @@ def _build(b: Build) -> None:
     if foreign_ip not in run_script(iran, "estab_check", {"PORT": str(port)}, timeout=20):
         raise RuntimeError("the control connection dropped again a few seconds after it was established: the tunnel is not stable")
 
-    _say(aid, "Still running 8 seconds later: stable")
+    _say(aid, f"Still running {STABLE_WAIT} seconds later: stable")
 
     # 7. record the tunnel
     with session() as db:

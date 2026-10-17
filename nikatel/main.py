@@ -44,6 +44,7 @@ from .services import (
     probe,
     pulse,
     report,
+    sentinel,
     tunnel_test,
     tunnels,
     underuse,
@@ -150,7 +151,8 @@ def _register_jobs() -> None:
     jobs.register("alerts", 60, alerts.run)
     jobs.register("report", 300, report.run)
     jobs.register("backup", 300, backup.scheduled)
-    jobs.register("repair", 20, autopilot.repair_cycle)         # the plain restarts every 20 s (a tunnel that is down waits only its grace, not a whole minute more); the smart repair and the look at lossy tunnels every five minutes (one job, not three)
+    jobs.register("repair", 5, autopilot.repair_cycle)          # the plain restarts and the climb of a cut tunnel every 5 s, and at once when a tunnel is cut or a repair ends (was every 20 s: each hand-off waited ten to twenty seconds); the look at lossy tunnels every five minutes (one job, not three)
+    jobs.register("sentinel", 10, sentinel.run)                 # every 10 s, ONE light command per server: are the units active, is the GRE card up, does the GRE peer answer - a tunnel that is up and loses one of them is checked at once, not at the next turn of the minute cycle (services/sentinel.py)
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("cpu-balance", 600, balance.run)              # a busy server whose network work sits on one core gets RPS (the Doctor does it by itself; no tunnel is touched)
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed

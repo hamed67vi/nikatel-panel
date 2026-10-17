@@ -236,7 +236,8 @@ def test_the_job_starts_the_survey_of_the_pair_with_the_least_knowledge_only_at_
     monkeypatch.setattr(knowledge, "survey_start", lambda iran_id, foreign_id, source="survey-manual", kinds=None: started.append((iran_id, foreign_id, source, kinds)) or "cmp1")
     night(monkeypatch, hour=14)
     knowledge.run()
-    assert started == []                                                                                              # an afternoon: nothing
+    assert started == [(ir2, fr2, "survey-cold", knowledge.READY)]                                                    # an afternoon: only the pair nobody tested (on quiet servers); the one that knows a kind waits for the night
+    started.clear()
     night(monkeypatch, hour=3)
     st.put("knowledge", {"on": False})
     knowledge.run()
@@ -274,6 +275,8 @@ def test_a_busy_server_or_users_on_the_tunnels_keep_the_survey_waiting_and_the_n
 def test_a_survey_stops_when_the_night_is_over_or_a_repair_needs_the_place_and_one_event_tells_how_it_ended(monkeypatch):
     ir, fr = live_pair("n6")
     stopped = []
+    started = []
+    monkeypatch.setattr(knowledge, "survey_start", lambda iran_id, foreign_id, source="survey-manual", kinds=None: started.append(source) or "cmp78")      # (after the night the pair nobody tested is surveyed by day: it must not be a real survey here)
     monkeypatch.setattr(tunnel_test, "compare_stop", lambda jid: stopped.append(jid))
     job = fake_job(ir, fr, results=[{"kind": "bpd:pck", "ok": True, "score": 71}, {"kind": "paqet", "ok": True, "score": 58}, {"kind": "tcpmux", "ok": False, "error": "x"}])
 
@@ -304,6 +307,7 @@ def test_a_survey_stops_when_the_night_is_over_or_a_repair_needs_the_place_and_o
         said = [e.text for e in db.scalars(select(Event).where(Event.ref == "ir-n6"))]
 
     assert sum(m.startswith("Survey of ir-n6 ⇄ fr-n6 stopped: 3 of 24 tunnel types tested, 2 work - best: bpd:pck 71, paqet 58.") for m in said) == 1        # told once
+    assert started and set(started) == {"survey-cold"}                                                                # (the night is over and the pair has no knowledge: by day it is the cold survey, never the night one)
 
 
 def test_the_switch_the_hours_and_the_survey_are_reachable_through_the_api(client, monkeypatch):

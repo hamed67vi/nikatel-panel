@@ -42,6 +42,7 @@ nikatel/
     trash.py         removed tunnels kept for a while with everything needed to put them back
     retune.py        apply newer tunnel defaults one tunnel at a time, checked, put back when worse
     pulse.py         a 5 s heartbeat that marks a switched-off server off within seconds and wakes the fast lane of the tunnel checks
+    sentinel.py      every 10 s, ONE light command per server (ssh.py `sentinel`, `run_light`) for all its tunnels: the state of every unit, of every GRE card and three quick pings of every GRE peer; a tunnel that is up and loses one of them gets a full check at once (never a state of its own); the repair job (autopilot `repair_cycle`, every 5 s) is woken by a tunnel turning down and by the end of a repair; the sign-reading is pure (`parse`, `suspects`, `plan_reads`); design of the warm standby that is not built yet: docs/standby-design.md
     pathscan.py      the route of a tunnel measured from both servers (where the loss is: this pair, one server's own network, the anchors)
     extras.py        installs started right after a server is added (torrent block, Marzban node): detached on the server, followed by polling
     netwatch.py      the network disturbances of a server (its own route is poor: repair only watches)

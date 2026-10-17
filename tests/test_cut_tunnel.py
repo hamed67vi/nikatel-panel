@@ -225,7 +225,7 @@ def test_when_nothing_connects_every_kind_is_tried_the_old_type_is_put_back_and_
     assert ap.smart_fix(9, tid, "switch", "auto") is False
     assert len(attempts) == len(knowledge.PRIOR) - 4 and attempts[0][1] is True                                         # all of them except the GRE kinds
     assert any(ln.startswith("None of the 20 tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
-    assert any("None of the tunnel types connects on this route right now. The repair tries again in 10 minutes." in ln for ln in said)
+    assert any("None of the tunnel types connects on this route right now. The repair tries again in 1 minute (then 2, 5 and every 10 minutes; the types that failed are not tried again)." in ln for ln in said)
     assert set(knowledge.blocked(knowledge.pair(ir, fr), int(time.time()))) == {a[0] for a in attempts}                  # each one failed here: none is tried again for two weeks
     assert knowledge.playbook(ir, fr, "route_cut") == {} and knowledge.repeats(ir, fr) == 1                              # the cut is remembered though nothing healed it
 
@@ -299,7 +299,7 @@ def test_a_repair_has_to_hold_or_the_climb_goes_on(monkeypatch):
 
     monkeypatch.setattr(ap, "check_tunnel", check)
     assert ap._holds(1, tid) is True
-    assert ap._holds(1, tid) is False and said[-1].startswith("It was up for a moment and is down again 60 seconds later")
+    assert ap._holds(1, tid) is False and said[-1].startswith(f"It was up for a moment and is down again {ap.SOAK} seconds later") and ap.SOAK == 25
 
 
 def test_a_plain_repair_is_healed_only_after_two_checks_up_in_a_row(monkeypatch):
@@ -316,7 +316,7 @@ def test_a_plain_repair_is_healed_only_after_two_checks_up_in_a_row(monkeypatch)
             db.get(Tunnel, tunnel_id).state = next(seq)
 
     monkeypatch.setattr(actions, "check_tunnel", check)
-    assert actions._recheck(tid, plan, "203.0.113.20", 1)[0] == "up" and len(rechecked) == 4
+    assert actions._recheck(tid, plan, "203.0.113.20", 1, tries=4)[0] == "up" and len(rechecked) == 4
     seq2 = iter(["down", "up", "down", "down", "up"])
 
     def check2(tunnel_id, fresh_ext=False):
@@ -324,7 +324,7 @@ def test_a_plain_repair_is_healed_only_after_two_checks_up_in_a_row(monkeypatch)
             db.get(Tunnel, tunnel_id).state = next(seq2)
 
     monkeypatch.setattr(actions, "check_tunnel", check2)
-    state, why = actions._recheck(tid, plan, "203.0.113.20", 1)
+    state, why = actions._recheck(tid, plan, "203.0.113.20", 1, tries=4)
     assert state == "degraded" and "not steadily" in why                      # the last check was up, the one before it was not: not healed
 
 
@@ -382,7 +382,7 @@ def test_a_cut_tunnel_is_restarted_whole_and_checked_once(monkeypatch):
         time.sleep(0.1)
 
     s = actions.status(aid)
-    assert s["done"] and s["ok"] is False and len(ran) == 4 and rechecks == [3]                                          # four restarts, ONE look after them (not a look after each: three minutes for a cut route)
+    assert s["done"] and s["ok"] is False and len(ran) == 4 and rechecks == [6]                                          # four restarts, ONE look after them (not a look after each: three minutes for a cut route)
     assert s["story"][-1].startswith("Every step was tried; the tunnel is still not up. The smart repair goes on from here.")
     assert sum(ln.startswith("Checked again") for ln in s["story"]) == 1
 
@@ -396,7 +396,7 @@ def test_the_smart_repair_starts_by_rules_and_no_tunnel_waits_more_than_five_min
     assert ap.escalate_due("degraded", 599, 60, 0, False, False) is False and ap.escalate_due("degraded", 600, 60, 0, False, False) is True
 
 
-def test_a_cut_tunnel_climbs_after_one_plain_restart_and_is_tried_again_every_ten_minutes(monkeypatch):
+def test_a_cut_tunnel_climbs_after_one_plain_restart_and_is_tried_again_after_one_two_five_then_ten_minutes(monkeypatch):
     tid, _, _ = world("es-ir1")
     now = int(time.time())
 
@@ -418,20 +418,37 @@ def test_a_cut_tunnel_climbs_after_one_plain_restart_and_is_tried_again_every_te
     ap.auto_escalate()
     assert [a[0] for a in started] == [tid]                                                                      # ONE restart that did not heal it says restarts do not help here
 
-    with session() as db:
-        db.add(ActionLog(ref="es-ir1", action="autopilot", source="auto", ok=False, finished_at=now - 700, ts=now - 700, story=["x"]))
+    with session() as db:                                                                                        # the first smart repair of this cut ended 30 s ago
+        first = ActionLog(ref="es-ir1", action="autopilot", source="auto", ok=False, finished_at=now - 30, ts=now - 150, story=["x"])
+        db.add(first)
+        db.flush()
+        first_id = first.id
 
     started.clear()
     ap.auto_escalate()
-    assert [a[0] for a in started] == [tid]                                                                      # the last smart repair was 11 minutes ago: a cut tunnel is tried again after ten
+    assert started == []                                                                                         # 30 s after its end: the first retry waits a minute
 
     with session() as db:
-        e = db.scalars(select(ActionLog).where(ActionLog.action == "autopilot")).first()
-        e.ts = now - 300
+        db.get(ActionLog, first_id).finished_at = now - 70
+
+    ap.auto_escalate()
+    assert [a[0] for a in started] == [tid]                                                                      # 70 s after the end of the first: tried again
+
+    with session() as db:                                                                                        # a second try of this cut ended 100 s ago
+        second = ActionLog(ref="es-ir1", action="autopilot", source="auto", ok=False, finished_at=now - 100, ts=now - 190, story=["x"])
+        db.add(second)
+        db.flush()
+        second_id = second.id
 
     started.clear()
     ap.auto_escalate()
-    assert started == []                                                                                         # five minutes ago: wait
+    assert started == []                                                                                         # the second retry waits two minutes
+
+    with session() as db:
+        db.get(ActionLog, second_id).finished_at = now - 130
+
+    ap.auto_escalate()
+    assert [a[0] for a in started] == [tid]                                                                      # 130 s after the end of the second: tried again
 
 
 def test_the_diagnosis_reuses_a_fresh_check_and_asks_every_server_at_once(monkeypatch):

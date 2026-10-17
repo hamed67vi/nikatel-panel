@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.65.0 - The Doctor's delay, brought down in every step
+
+The owner (2026-10-17), after the step-by-step timing of the Tunnel Doctor (a cut tunnel took about 4 - 6 minutes from the cut to its return): "I want the delay in all the steps to be very low".
+Where the time went: up to 60 s to notice a tunnel that was up, 60 s of grace and 15 - 50 s of a restart that cannot cure a silent route, 10 - 20 s at every hand-off between the repair steps, about 90 s per tunnel type tried,
+60 s of holding, and 10 minutes before a failed repair was tried again.
+
+- **A sentinel looks every 10 s** (`services/sentinel.py`, job `sentinel`). ONE light command per server for all its tunnels: the state of every unit, of every GRE card, and three quick pings of every GRE peer, in parallel. A tunnel that is up and
+  loses a unit (either end), its GRE card or its GRE peer gets a full check at once, with a fresh look from another Iran server - not at the next turn of the minute cycle (a cut was noticed after up to 60 s, now after about 10). It never changes a
+  state itself; it leaves alone the tunnels a repair works on, the ones whose provider drops ICMP, and a tunnel looked at in the last 30 s.
+- **The repair job ticks every 5 s and wakes at once** when a tunnel turns down or degraded and when a restart or a smart repair ends (it ticked every 20 s: each hand-off between detect, restart, smart repair and retry waited 10 - 20 s).
+- **The grace before the first restart is 20 s** (*Auto Fix Tunnels*; it was 60 s, and the field now takes 10 - 3600). The fast lane checks a cut tunnel every ~8 s, so 20 s are two checks.
+- **A restart is judged sooner.** The first look after it is 4 s away (was 8) and the next ones 5 s apart (was 10): a healed tunnel is seen about 10 s sooner. A cut that is still the **silent route** (no answer over the GRE link, the port cut in front of
+  the server) after three looks is not one a restart cures: the smart repair goes on at once instead of waiting out the rest (about 30 s).
+- **The hold after a repair is 25 s** (was 60): the tunnel must still be up then, in a fresh check; a fall later is caught by the relapse rule.
+- **Retries come sooner:** a cut tunnel is tried again 1, 2 and 5 minutes after the END of its last smart repair, then every 10 (it was a flat 10 minutes from the start of the last one). The types that failed on the route are not tried
+  again for two weeks, so a quick retry costs little. Up to 4 smart repairs run at the same time (was 2): when one route event cuts several tunnels the last one no longer waits for two or three repairs.
+- **A degraded tunnel that moves no data is in the fast lane** ("no data comes back", "blocked in front of the server", "port … is not listening"): its failed data probes are counted every ~8 s, so it is called *down* (and repaired) after about a
+  minute, not four.
+- **A build asks the two servers at once:** the facts, the MTU probe, the kernel tuning, the making of the two GRE ends and the GRE check were asked of the Iran server and then of the foreign server; the second answer was waited for for nothing
+  (about 15 - 25 s of every build, and a repair builds up to dozens of times). A built tunnel must still run 5 s later (was 8).
+- **A pair nobody has tested is surveyed by day too**, on servers whose tunnels carry under 30 Mb/s (the night survey stays as it was for the rest): without what the Doctor knows about a pair, a cut on it is repaired by trying the tunnel
+  types one by one - the longest part of a repair.
+- Tests: `tests/test_delay.py` (the sentinel's parser, signs and reads, the wake-ups, the restart look, the retries, the fast lane, the parallel builds, the cold survey); the tests that held the old numbers say the new ones.
+
 ## 1.64.6 - The tunnel table's columns share the width evenly; the address cells breathe
 
 The owner (2026-10-17), his picture of the Tunnels table on a 2000 px window: "the parts where the server addresses are written are very crowded"; "the empty space between the cards is too much"; "put the columns right, make the empty space between the columns less, tidy it".

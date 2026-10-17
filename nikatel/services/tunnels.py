@@ -183,7 +183,7 @@ def parse_side(out: str) -> Side:
     return s
 
 
-DATA_DOWN_AFTER = 4          # this many failed data probes in a row (4 minutes): the tunnel is down, not just degraded
+DATA_DOWN_AFTER = 4          # this many failed data probes in a row: the tunnel is down, not just degraded (a minute in the fast lane, which looks at such a tunnel every ~8 s; it was four minutes in the minute cycle)
 
 
 def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_fails: int = 0,
@@ -552,6 +552,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
             return
 
         old = t.state
+        went_bad = False
 
         if state in ("down", "unknown") and now - t.created_at < GRACE_SECONDS and old == "unknown":
             state = "starting"
@@ -586,6 +587,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
         if state != old:
             t.state = state
             t.state_since = now
+            went_bad = state in ("down", "degraded")
             label = f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
 
             if state == "up" and old in ("down", "degraded"):
@@ -599,6 +601,17 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False) -> None:
 
         log.info("check name=%s state=%s judged=%s loss=%s%s rtt=%s rx=%s tx=%s %s", t.name, state, judged, loss, " (ping blocked)" if ping_blocked else "", iran.rtt_ms, rx, tx, reason)
 
+    if went_bad:
+        try:
+            jobs.trigger("repair")           # a tunnel was cut: the repair job looks at it now (its grace starts from this moment), not at its next tick
+        except KeyError:
+            pass                              # not registered (tests)
+
+
+# a tunnel that is only DEGRADED for one of these reasons is not "slow, to be watched": nothing passes, or a port is shut. The fast lane looks at it every ~8 s too, so that the checks that make it "down" (DATA_DOWN_AFTER
+# failed data probes in a row) come within a minute and not within four
+FAST_DEGRADED = ("no data comes back", "blocked in front of the server", "is not listening on the Iran server")
+
 
 def check_unhealthy() -> None:
     """The fast lane (every ~8 s): the tunnels that are not up - down, unknown (a server did not answer), starting - are looked at again at once, each with a fresh
@@ -607,7 +620,8 @@ def check_unhealthy() -> None:
     now = int(time.time())
 
     with session() as db:
-        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "unknown", "starting")))) if now - int(t.last_check_at or 0) >= 6]
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "unknown", "starting", "degraded"))))
+               if (t.state != "degraded" or any(w in (t.last_error or "") for w in FAST_DEGRADED)) and now - int(t.last_check_at or 0) >= 6]
 
     if ids:
         with ThreadPoolExecutor(max(1, min(4, len(ids)))) as ex:
