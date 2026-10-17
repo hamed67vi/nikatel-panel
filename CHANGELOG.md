@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.64.4 - The Spoof test picks its own target, once one is proven
+
+The owner (2026-10-17), on the target picker (his picture: a list of ten Iran servers to choose from): "instead of this list, can't it use an Iran server that already tested OK and just run the test with that".
+
+- **A proven target is reused by itself.** The list of servers asked "send the forged packets to which server?" every time. Now, if any server has ever come back `can` in a spoof test - from this server or any other - it is used as the target straight away, and only the address to forge is asked. The list only comes back when nothing is proven yet, or the proven one is gone, off or disabled.
+
 ## 1.64.3 - The Bandwidth row is one number each; the breakdown moved into the tunnel window
 
 The owner (2026-10-17), his picture of a PAQET row reading "199 ▼259 | ↓9.7 ↑3.8", both red: "what are these red numbers, not clear"; "instead of showing upload and download here, show one number"; "put more detail inside the tunnel box".

@@ -1425,6 +1425,57 @@ def test_a_server_has_a_spoof_test_in_its_tests_menu_and_the_picker_names_both_s
     assert "BackPack Direct · IP spoofing" in app and "BackPack Direct · PCK / SNI spoofing" in app and "FAKE TLS hello" in app
 
 
+def test_the_spoof_test_reuses_a_target_already_proven_and_only_asks_when_none_is(tmp_path):
+    """The owner, 2026-10-17, on the target picker (his picture: a list of ten Iran servers to choose from): "instead of this list, can't it use an Iran server that already tested OK and just run the test with that"."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    lab = _web("lab.js")
+    start = lab.index("window.srvSpoof = async (id, name) => {")
+    code = lab[start: lab.index("\nlet labFollowT", start)]
+    driver = tmp_path / "spoof.js"
+    driver.write_text(
+        "const window = {};\n"
+        "const state = {serversCache: []};\n"
+        "let glassChoiceCalls = 0, glassChoiceReturn = null, apiCalls = [];\n"
+        "const glassChoice = async () => { glassChoiceCalls++; return glassChoiceReturn; };\n"
+        "const gprompt = async () => '10.10.10.10';\n"
+        "const api = async (url, opts) => { apiCalls.push({url, body: JSON.parse((opts || {}).body || '{}')}); return {can: true, level: 'yes', verdict: 'ok'}; };\n"
+        "const toast = () => {}; const refresh = () => {};\n"
+        + code + "\n"
+        "const iran = (id, name, spoof) => ({id, name, role: 'iran', enabled: true, online: true, extra: spoof ? {spoof} : {}});\n"
+        "const pad = () => [iran(4, 'ir04'), iran(5, 'ir05'), iran(6, 'ir06'), iran(7, 'ir07'), iran(8, 'ir08'), iran(9, 'ir09'), iran(10, 'ir10'), iran(11, 'ir11')];\n"
+        "const src = {id: 1, name: 'fr01', role: 'foreign', enabled: true, online: true, extra: {}};\n"
+        "const witness = iran(3, 'ir03', {can: true, target_id: 2, target: 'ir02', at: 1000});\n"
+        "const res = {};\n"
+        "async function run(tag, cache, gc) {\n"
+        "  state.serversCache = cache; glassChoiceCalls = 0; glassChoiceReturn = gc; apiCalls.length = 0;\n"
+        "  await window.srvSpoof(1, 'fr01');\n"
+        "  res[tag] = {glassChoiceCalls, target: apiCalls.length ? apiCalls[0].body.target_id : null};\n"
+        "}\n"
+        "(async () => {\n"
+        "  await run('proven', [src, iran(2, 'ir02'), witness, ...pad()], 99);\n"
+        "  await run('none', [src, iran(2, 'ir02'), iran(3, 'ir03'), ...pad()], 5);\n"
+        "  await run('provenButOff', [src, {...iran(2, 'ir02'), enabled: false}, witness, ...pad()], 7);\n"
+        "  process.stdout.write(JSON.stringify(res));\n"
+        "})();\n",
+        encoding="utf-8",
+    )
+    r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    res = json.loads(r.stdout)
+    assert res["proven"] == {"glassChoiceCalls": 0, "target": 2}            # ir02 was proven (ir03's own last test used it and got "can"): picked straight away, the list never opens
+    assert res["none"] == {"glassChoiceCalls": 1, "target": 5}              # nothing proven yet: the list opens and whatever is chosen there is used
+    assert res["provenButOff"] == {"glassChoiceCalls": 1, "target": 7}      # the proven server is disabled now, so it is not a candidate: the list opens again
+
+
 def test_the_password_box_of_the_sign_in_page_keeps_the_colour_of_the_field_when_the_browser_fills_it():
     """The owner, 2026-10-17 (his picture: a white box with the dots of the password hardly visible): a saved password painted the box light blue and the light dots could not be read on it."""
     css = _web("login.css")
