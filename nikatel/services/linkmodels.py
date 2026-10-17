@@ -138,7 +138,7 @@ fi
 ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
 # The SAs are made ONCE. This script also runs every minute from the health-check timer, and adding an SA again starts its sequence number at 0 while the other end still remembers the numbers it has seen:
 # it drops every packet of ours as a replay until our count passes its old one - a tunnel that carried a download for a few seconds and then nothing (found on the test panel, 2026-10-17).
-if ip xfrm state 2>/dev/null | grep -q "spi 0x$SPI_TX(" && ip xfrm state 2>/dev/null | grep -q "spi 0x$SPI_RX("; then
+if ip xfrm state 2>/dev/null | grep -qE "spi 0x$SPI_TX( |[(])" && ip xfrm state 2>/dev/null | grep -qE "spi 0x$SPI_RX( |[(])"; then
   :
 else
 ip xfrm state del src "$LOCAL" dst "$REMOTE" proto esp spi "0x$SPI_TX" 2>/dev/null || true

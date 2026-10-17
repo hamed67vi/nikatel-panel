@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.4 - The guard of 1.69.3 never matched: the IPsec up script really leaves the SAs alone now
+
+1.69.3 made the IPsec up script leave existing SAs alone (the health-check timer runs it every minute and every run used to add the SAs again, which restarts their sequence numbers at 0 and makes the other end drop everything as a replay). The release was proved by unit tests, and the **test panel showed it did nothing**: a 4-minute soak of an IPsec tunnel after the release still carried 5 of 8 downloads (3 of 8 got nothing), an IPsec NAT-T tunnel 1 of 8, and a look at the SAs on the servers after running the up script by hand showed their `add` time had moved - the SAs had been replaced again.
+
+- **The cause.** The guard looks for the two SPIs in the output of `ip xfrm state` with the pattern `spi 0x<hex>(` - the form of `ip -s xfrm state`, which was the form seen while debugging. Plain `ip xfrm state` prints `spi 0x<hex> reqid ...` with no bracket, so the pattern never matched and the script went on to delete and add the SAs. The unit test's stand-in for `ip` printed the form the guard expected, so it agreed with the mistake.
+- **The fix.** The pattern takes a space or a bracket after the SPI (`spi 0x<hex>( |[(])`); the test's stand-in now prints the real form of `ip xfrm state` (the SPI on its own line, no bracket).
+- **Said plainly.** Between 1.69.0 and this release the two IPsec kinds carried data only in the minutes between the timer's runs; every IPsec tunnel built by those versions must be rebuilt (the Doctor does it by itself the first time one is cut). Whether this is the whole story of the IPsec blackouts is checked by the soak after this release (see the changelog of the release after it).
+
 ## 1.69.3 - IPsec links keep their sequence numbers, and a link in UDP is not turned down for the first packets it loses
 
 The first run of the transitions test (2026-10-17, test panel: one Backhaul tunnel replaced by the next of ten links, twice, with a 60 MB download through the users' port after every step and a look at both servers) found two real faults that the unit tests and the lab could not see:

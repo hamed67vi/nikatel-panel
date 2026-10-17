@@ -312,7 +312,7 @@ D="${STUB_DIR}"
 echo "ip $*" >> "$D/log"
 case "$1" in
   -o) echo "198.51.100.20 dev eth0 src 203.0.113.10 uid 0"; exit 0;;
-  -batch) while read -r line; do echo "batch: $line" >> "$D/log"; case "$line" in "xfrm state add"*) echo "$line" | sed -E 's/.* spi (0x[0-9a-f]+) .*/src a dst b proto esp spi \1(1) reqid 1/' >> "$D/states";; esac; done; exit 0;;
+  -batch) while read -r line; do echo "batch: $line" >> "$D/log"; case "$line" in "xfrm state add"*) echo "$line" | sed -E 's/.* spi (0x[0-9a-f]+) .*/src a dst b\n\tproto esp spi \1 reqid 1 mode tunnel/' >> "$D/states";; esac; done; exit 0;;
   link) case "$2" in show) [ -f "$D/link" ]; exit $?;; add) touch "$D/link"; exit 0;; esac; exit 0;;
   xfrm) if [ "$2" = state ] && [ -z "$3" ]; then cat "$D/states" 2>/dev/null; fi; exit 0;;
 esac
