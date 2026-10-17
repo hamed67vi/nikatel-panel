@@ -30,6 +30,59 @@ def test_profile_availability_mttr_verdict_and_latency():
     assert an.tunnel_profile([], NOW, 1)["verdict"] == "no data"
 
 
+def minute_checks(days, failed=()):
+    """One check a minute for `days` days (the newest a minute before NOW); `failed`: (minutes ago, how many in a row) - the checks that failed."""
+    bad = {m for a, n in failed for m in range(a, a - n, -1)}
+    return [(NOW - m * 60, m not in bad) for m in range(days * 1440, 0, -1)]
+
+
+def test_the_stability_box_says_the_share_that_answered_the_cuts_the_last_one_and_how_long_it_is_up():
+    """The owner, 2026-10-17: the stability of a tunnel in its own box. A cut = two failed checks in a row (the analyst's rule); one lost check is noise and counts only against the share."""
+    ck = minute_checks(3, failed=[(244, 5), (600, 1), (4000, 10)])           # a cut 4 h ago (5 checks), one lost check 10 h ago, a cut of 10 checks 2.8 days ago
+    v = an.stability_view(ck, NOW, "up", NOW - 90 * 3600)
+    assert v["d1"]["checks"] == 1440 and v["d1"]["cuts"] == 1 and v["d1"]["down_secs"] == 300 and v["d1"]["longest_secs"] == 300 and v["d1"]["avail"] == round(1434 * 100 / 1440, 2)
+    assert v["d7"]["checks"] == 4320 and v["d7"]["cuts"] == 2 and v["d7"]["down_secs"] == 900 and v["d7"]["longest_secs"] == 600 and v["d7"]["avail"] == round(4304 * 100 / 4320, 2)
+    assert v["last"] == {"start": NOW - 244 * 60, "end": NOW - 239 * 60, "secs": 300, "ongoing": False} and v["up_for"] == 90 * 3600 and v["verdict"] == "stable"
+    assert len(v["strip"]) == an.STRIP_CELLS == 48 and v["strip"][0] == 2 and v["strip"][39] == 1 and v["strip"][40] == 1 and v["strip"][47] == 2      # (the cut shows as "now and then" cells: half an hour each)
+    assert v["strip_to"] == NOW and v["strip_from"] == NOW - 86400
+
+
+def test_the_stability_of_a_tunnel_that_is_cut_now_a_new_one_and_one_with_holes():
+    ck = minute_checks(1, failed=[(2, 2)])                                    # the last two checks failed and nothing has answered since
+    v = an.stability_view(ck, NOW, "down", NOW - 600)
+    assert v["last"]["ongoing"] is True and v["last"]["end"] is None and v["last"]["secs"] == 120 and v["up_for"] is None and v["d1"]["cuts"] == 1
+    new = an.stability_view(minute_checks(1)[-10:], NOW, "up", NOW - 600)    # ten checks: too few to say a share
+    assert new["d1"]["avail"] is None and new["d7"]["avail"] is None and new["verdict"] == "no data" and new["last"] is None and new["up_for"] == 600
+    short = an.stability_view(minute_checks(1)[-120:], NOW)                    # only the last two hours: the cells before them say "no check"
+    assert short["strip"][:44] == [-1] * 44 and short["strip"][47] == 2
+    bad = an.stability_view(minute_checks(2, failed=[(300, 200)]), NOW)       # a long cut of 200 checks: the share and the verdict follow
+    assert bad["d1"]["cuts"] == 1 and bad["d1"]["longest_secs"] == 200 * 60 and bad["verdict"] in ("watch", "chronic")
+    assert an.stability_view([], NOW)["d7"]["checks"] == 0 and an.stability_view([], NOW)["verdict"] == "no data"
+
+
+def test_the_stability_route_reads_the_checks_of_one_tunnel(client):
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel, TunnelCheck
+
+    now = int(time.time())
+
+    with session() as db:
+        i, f = Server(name="ir9", host="203.0.113.9", role="iran", country="IR", online=True), Server(name="fi9", host="198.51.100.9", role="foreign", online=True)
+        db.add_all([i, f])
+        db.flush()
+        t = Tunnel(name="t9", type="backhaul", transport="tcpmux", iran_server_id=i.id, foreign_server_id=f.id, state="up", state_since=now - 7200)
+        db.add(t)
+        db.flush()
+        tid = t.id
+
+        for k in range(120):
+            db.add(TunnelCheck(tunnel_id=tid, ts=now - (120 - k) * 60, ok=not (50 <= k < 53), rtt_ms=40.0, error="" if not (50 <= k < 53) else "no data"))
+
+    r = client.get(f"/api/tunnels/{tid}/stability").json()
+    assert r["ok"] and r["d1"]["checks"] == 120 and r["d1"]["cuts"] == 1 and r["d1"]["avail"] == round(117 * 100 / 120, 2) and r["last"]["ongoing"] is False and 7100 <= r["up_for"] <= 7300
+    assert len(r["strip"]) == 48 and client.get("/api/tunnels/999999/stability").status_code == 404
+
+
 def test_a_rising_latency_and_a_weak_hour_make_a_tunnel_at_risk():
     ck = checks("o" * 200, start=NOW - 200 * 60)
     ck = [c if NOW - c[0] > 1500 else (c[0], True, 140.0, "") for c in ck]          # the last 25 minutes: 140 ms against 40

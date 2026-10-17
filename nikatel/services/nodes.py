@@ -830,6 +830,124 @@ def filter_check(server_id: int, wait: int = 28) -> dict:
     return res
 
 
+# ------------------------------------------------------------------ spoof test: does the provider of a server let packets with a FORGED source address out?
+SPOOF_CONTROL = 5          # ordinary pings first: they prove that ICMP reaches the other server at all
+SPOOF_COUNT = 10           # the same pings with the forged source
+SPOOF_WINDOW = 22          # seconds the other server listens
+
+
+def spoof_verdict(sources: list[str], spoof_ip: str, count: int = SPOOF_COUNT, control: int = SPOOF_CONTROL) -> tuple[str, str, int, int]:
+    """Pure: (level, a sentence, forged, real) from the source addresses the receiving server saw on the test pings (the owner's method, 2026-10-17: "tcpdump on the other server: if the packets came with the forged
+    address, the server takes spoofs; if nothing came, it does not"). The ordinary pings sent first tell a provider that drops FORGED sources from one that drops ping altogether, which tcpdump alone cannot."""
+    forged = sum(1 for s in sources if s == spoof_ip)
+    real = len(sources) - forged
+    half = (count + 1) // 2
+
+    if forged >= half:
+        return "yes", f"This server can spoof: {forged} of {count} forged packets arrived with the source {spoof_ip} (the {real} ordinary ones arrived too).", forged, real
+
+    if forged:
+        return "part", f"Only some forged packets get through ({forged} of {count}): the provider drops part of them. Try another address to forge.", forged, real
+
+    if real >= control + half:
+        return "norewrite", "The forged pings arrived with the REAL source: the rewrite did not happen on the sending server (no NAT support?). Nothing can be said.", forged, real
+
+    if real:
+        return "no", f"This server does not spoof: the {real} ordinary pings arrived, none of the {count} forged ones did - the provider drops packets with a forged source.", forged, real
+
+    return "blind", "Nothing arrived at the other server - not even the ordinary pings: ICMP is filtered between the two (or tcpdump saw nothing). Try another target server.", forged, real
+
+
+def parse_spoof_listen(out: str) -> tuple[list[str], str]:
+    """Pure: (the source of every test ping that arrived, a problem sentence or "") from the answer of `spoof_listen`."""
+    text = str(out or "")
+
+    if "NOTCPDUMP" in text:
+        return [], "tcpdump is not installed on the other server: install it (apt install tcpdump) and test again"
+
+    if "LISTENING" not in text:
+        return [], "the other server did not start listening"
+
+    return [m for m in re.findall(r"^PKT (\d{1,3}(?:\.\d{1,3}){3})\s*$", text, re.MULTILINE)], ""
+
+
+def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
+    """Does the provider of this server let packets with a forged source address out? This server pings the target five times as it is and ten times with the source rewritten to `spoof_ip` (a tagged SNAT rule for ICMP echo
+    requests to the target only, taken out again whatever happens); the target listens with tcpdump and says what arrived. The answer is kept in the extra data of the server."""
+    import ipaddress
+    import threading
+
+    try:
+        ip = ipaddress.IPv4Address(str(spoof_ip).strip())
+    except ValueError:
+        raise ValueError("the forged source must be an IPv4 address, for example 10.10.10.10") from None
+
+    if ip.is_loopback or ip.is_multicast or ip.is_unspecified or ip.is_reserved or ip.is_link_local:
+        raise ValueError("choose an ordinary address to forge (not loopback, multicast, link-local or reserved)")
+
+    if server_id == target_id:
+        raise ValueError("choose another server as the target")
+
+    with session() as db:
+        s, t = db.get(Server, server_id), db.get(Server, target_id)
+
+        if s is None or t is None:
+            raise ValueError("server not found")
+
+        for x in (s, t):
+            if not x.enabled or x.online is False:
+                raise ValueError(f"{x.name} is off or does not answer")
+
+        if str(ip) in (s.host, t.host):
+            raise ValueError("the forged source must not be the address of one of the two servers")
+
+        ns, nt = Node(s.host, s.ssh_user, s.ssh_port), Node(t.host, t.ssh_user, t.ssh_port)
+        sender, target, target_host = s.name, t.name, t.host
+
+    got: dict = {}
+
+    def listen() -> None:
+        try:
+            got["rx"] = run_script(nt, "spoof_listen", {"SECS": str(SPOOF_WINDOW)}, timeout=SPOOF_WINDOW + 30)
+        except (SSHError, ValueError) as e:
+            got["err"] = f"{target} could not listen: {str(e)[:140]}"
+
+    th = threading.Thread(target=listen, daemon=True)
+    th.start()
+    time.sleep(3)                                                      # (tcpdump needs a moment to start)
+
+    try:
+        tx = run_action(ns, "spoof_send", {"TARGET": target_host, "SPOOF": str(ip), "CONTROL": str(SPOOF_CONTROL), "COUNT": str(SPOOF_COUNT)}, timeout=70)
+    except (SSHError, ValueError) as e:
+        th.join(timeout=SPOOF_WINDOW + 30)
+        raise ValueError(f"the test could not run on {sender}: {str(e)[:160]}") from None
+
+    th.join(timeout=SPOOF_WINDOW + 30)
+
+    for word, why in (("NOIPTABLES", "iptables is not installed on the sending server"), ("NOPING", "ping is not installed on the sending server"), ("RULEFAIL", "the sending server refused the NAT rule (no iptables nat support)")):
+        if word in tx:
+            raise ValueError(f"{sender}: {why}")
+
+    if "err" in got:
+        raise ValueError(got["err"])
+
+    sources, problem = parse_spoof_listen(got.get("rx", ""))
+
+    if problem:
+        raise ValueError(problem)
+
+    level, text, forged, real = spoof_verdict(sources, str(ip))
+    left = re.search(r"^LEFT (\d+)", tx, re.MULTILINE)
+    note = " The temporary NAT rule could not be removed: run  iptables -t nat -S POSTROUTING | grep nikatel-spoof-test  on the sending server and delete it." if left and int(left.group(1)) else ""
+    res = {"can": level in ("yes", "part"), "level": level, "verdict": text + note, "forged": forged, "real": real, "sent": SPOOF_COUNT, "control": SPOOF_CONTROL, "spoof_ip": str(ip), "target": target, "target_id": target_id, "at": int(time.time())}
+    _set_extra(server_id, spoof=res)
+
+    with session() as db:
+        emit(db, "ok" if res["can"] else "warn", "servers", f"Spoof test {sender} -> {target} (source {ip}): {text}", sender)
+
+    return res
+
+
 def filter_daily_job() -> None:
     """Every foreign server once a day (the job runs hourly and only does work when the last check is older than a day)."""
     with session() as db:

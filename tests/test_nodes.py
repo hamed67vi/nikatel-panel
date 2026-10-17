@@ -78,6 +78,67 @@ def test_launcher_and_abuse_guards(client, monkeypatch):
     assert s["extra"]["abuse"]["installed"] is True and s["extra"]["abuse"]["rules"] == 4321
 
 
+def test_the_spoof_test_scripts_send_the_narrowest_rule_and_always_take_it_out():
+    """The owner, 2026-10-17 (his method: an SNAT rule on the Iran server, pings to the other server, tcpdump there): the rule is for ICMP echo requests to the target only, tagged, taken out whatever happens."""
+    base = {"TARGET": "203.0.113.9", "SPOOF": "10.10.10.10", "CONTROL": "5", "COUNT": "10"}
+    text = ssh.render_action("spoof_send", base)
+    assert "-d \"$T\" -p icmp --icmp-type echo-request" in text and "--comment \"$tag\"" in text and "-j SNAT --to-source \"$S\"" in text and "trap clean EXIT" in text     # (nothing else the server sends is touched)
+    assert text.index("ping -c 5") < text.index("iptables -t nat -I POSTROUTING") < text.index("ping -c 10")                                                           # the ordinary pings first, then the rule, then the forged pings
+    assert "-s 87" in text and text.rstrip().endswith('--comment $tag")"') and 'echo "LEFT ' in text                  # (it says at the end whether its rule is really gone)
+
+    for bad in ({"TARGET": "203.0.113.9; reboot"}, {"SPOOF": "ten"}, {"COUNT": "100"}, {"CONTROL": "x"}):
+        with pytest.raises(ValueError):
+            ssh.render_action("spoof_send", {**base, **bad})
+
+    assert "spoof_send" in ssh.ACTIONS and "spoof_send" not in ssh.SCRIPTS and "spoof_listen" in ssh.SCRIPTS            # (the sender changes a server: an action, refused while the panel is read-only; the listener only reads)
+    listen = ssh._script_text("spoof_listen", {"SECS": "22"})
+    assert "tcpdump" in listen and "ip[2:2] == 115" in listen and "timeout 22" in listen and "NOTCPDUMP" in listen        # (115 = 20 + 8 + 87: a size no other ping has)
+
+    with pytest.raises(ValueError):
+        ssh._script_text("spoof_listen", {"SECS": "22; id"})
+
+
+def test_the_spoof_verdict_tells_a_provider_that_drops_forged_sources_from_one_that_drops_ping():
+    s, real = "10.10.10.10", "198.51.100.1"
+    assert nodes.spoof_verdict([s] * 10 + [real] * 5, s)[0] == "yes"
+    assert nodes.spoof_verdict([s] * 3 + [real] * 5, s)[0] == "part"
+    level, text, forged, got = nodes.spoof_verdict([real] * 5, s)
+    assert level == "no" and forged == 0 and got == 5 and "drops packets with a forged source" in text            # the ordinary pings arrived, the forged did not: THIS is "the server does not eat spoofs"
+    assert nodes.spoof_verdict([], s)[0] == "blind"                                                                 # nothing at all: ping is filtered (the test cannot say)
+    assert nodes.spoof_verdict([real] * 15, s)[0] == "norewrite"                                                    # the source was not rewritten on the sender
+    assert nodes.parse_spoof_listen("LISTENING\nPKT 10.10.10.10\nPKT 198.51.100.1\nnoise\nPKT x.y\nDONE\n") == (["10.10.10.10", "198.51.100.1"], "")
+    assert "tcpdump is not installed" in nodes.parse_spoof_listen("NOTCPDUMP\n")[1] and "did not start" in nodes.parse_spoof_listen("")[1]
+
+
+def test_the_spoof_test_runs_both_ends_keeps_the_answer_and_refuses_what_makes_no_sense(client, monkeypatch):
+    client.post("/api/servers", json={"name": "ir1", "host": "203.0.113.1", "role": "iran"})
+    client.post("/api/servers", json={"name": "fi1", "host": "198.51.100.2", "role": "foreign"})
+    seen = []
+    monkeypatch.setattr(nodes.time, "sleep", lambda s: None)
+    monkeypatch.setattr(nodes, "run_script", lambda node, name, params=None, timeout=40: (seen.append(("listen", node.host, name, dict(params))), "LISTENING\n" + "PKT 10.10.10.10\n" * 9 + "PKT 203.0.113.1\n" * 5 + "DONE\n")[1])
+    monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90: (seen.append(("send", node.host, name, dict(params))), "SENT 5 10\nLEFT 0\n")[1])
+    r = client.post("/api/servers/1/spoof-test", json={"target_id": 2, "spoof_ip": "10.10.10.10"})
+    d = r.json()
+    assert r.status_code == 200 and d["ok"] is True and d["can"] is True and d["level"] == "yes" and d["forged"] == 9 and d["real"] == 5 and d["target"] == "fi1" and d["spoof_ip"] == "10.10.10.10"
+    assert ("listen", "198.51.100.2", "spoof_listen", {"SECS": "22"}) in seen                                                                   # the target listens ...
+    assert ("send", "203.0.113.1", "spoof_send", {"TARGET": "198.51.100.2", "SPOOF": "10.10.10.10", "CONTROL": "5", "COUNT": "10"}) in seen       # ... the tested server sends
+    kept = client.get("/api/servers/1").json()["extra"]["spoof"]
+    assert kept["level"] == "yes" and kept["target"] == "fi1" and kept["at"] > 0
+
+    for body, why in (({"target_id": 1, "spoof_ip": "10.10.10.10"}, "another server"), ({"target_id": 2, "spoof_ip": "127.0.0.1"}, "ordinary address"), ({"target_id": 2, "spoof_ip": "not-an-ip"}, "IPv4"),
+                      ({"target_id": 2, "spoof_ip": "198.51.100.2"}, "one of the two servers"), ({"target_id": 99, "spoof_ip": "10.10.10.10"}, "not found")):
+        r = client.post("/api/servers/1/spoof-test", json=body)
+        assert r.status_code == 400 and why in r.json()["error"], (body, r.text)
+
+    monkeypatch.setattr(nodes, "run_script", lambda node, name, params=None, timeout=40: "NOTCPDUMP\n")
+    r = client.post("/api/servers/1/spoof-test", json={"target_id": 2, "spoof_ip": "10.10.10.10"})
+    assert r.status_code == 400 and "tcpdump is not installed" in r.json()["error"]
+    monkeypatch.setattr(nodes, "run_script", lambda node, name, params=None, timeout=40: "LISTENING\nPKT 198.51.100.9\nDONE\n")
+    monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90: "SENT 5 10\nLEFT 1\n")
+    r = client.post("/api/servers/1/spoof-test", json={"target_id": 2, "spoof_ip": "10.10.10.10"})
+    assert r.status_code == 200 and r.json()["level"] == "no" and r.json()["can"] is False and "could not be removed" in r.json()["verdict"] and "nikatel-spoof-test" in r.json()["verdict"]      # a rule that stayed is said, with the command
+
+
 def test_gre_links_are_read_from_the_scan():
     out = "BH iran-tcpmux-9900 server 10.1.2.1:9900 tcpmux 80,\nGRE fi-ir1 10.1.2.1/30 203.0.113.9 active\nGRE gre0 - - none\nEND\n"
     assert nodes.parse_gre_links(out) == [{"iface": "fi-ir1", "addr": "10.1.2.1", "peer": "10.1.2.2", "unit": "active"}]

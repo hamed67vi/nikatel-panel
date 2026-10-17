@@ -45,6 +45,8 @@ RTT_UP_MS = 30.0               # ... and at least this many ms above it
 SKIP_AFTER_TUNNEL = 3          # a step that failed this many times in a row on this tunnel (and never healed it in the window) is skipped
 SKIP_AFTER_CAUSE = 8           # ... or this many times for this cause on all tunnels, with under 10 % success
 NEVER_SKIP = {("units_down", "restart")}      # a dead service is always restarted first
+STRIP_CELLS = 48               # the strip of the last day in a tunnel's window: a cell per half hour
+MIN_CHECKS = 30                # fewer checks than this in a window: the share that answered is not said (a tunnel just built)
 
 
 # ------------------------------------------------------------------ pure: tunnel profile
@@ -132,6 +134,37 @@ def tunnel_profile(checks: list[tuple[int, bool, float | None, str]], now: int, 
     return {"checks": n, "availability": avail, "outages": len(outs), "outages_per_day": per_day, "mttr_secs": int(sum(closed) / len(closed)) if closed else None,
             "longest_secs": max((o["secs"] for o in outs), default=0), "down_secs": sum(o["secs"] for o in outs), "rtt_base": base, "rtt_p95": p95, "rtt_now": rnow, "rtt_ratio": ratio,
             "weak_hours": weak, "causes": [{"reason": r, "n": k} for r, k in causes], "verdict": verdict, "rising": rising, "ongoing": any(o["ongoing"] for o in outs)}
+
+
+def stability_view(checks: list[tuple[int, bool]], now: int, state: str = "", state_since: int | None = None) -> dict:
+    """Pure: how steady ONE tunnel is, from its checks [(ts, ok)] of the last 7 days - for the Stability box of its window (the owner, 2026-10-17: users' quality and stability "inside their own box, not in the cards").
+    `d1` and `d7`: the checks, the share that answered (None under MIN_CHECKS: not enough to say), the cuts (OUTAGE_AFTER failed checks in a row) and the time they took, the longest; `last`: the latest cut;
+    `up_for`: seconds since the tunnel came up (None while it is not up); `verdict`: stable / watch / chronic (the analyst's own words), "no data" under MIN_CHECKS; `strip`: the last day, a cell per half hour
+    (-1 no check, 0 no answer, 1 now and then, 2 answered)."""
+    ck = sorted((int(t), bool(ok)) for t, ok in checks)
+    day_ago = now - 86400
+    d1 = [c for c in ck if c[0] >= day_ago]
+
+    def window(rows: list[tuple[int, bool]]) -> dict:
+        outs = find_outages(rows, now)
+        return {"checks": len(rows), "avail": round(sum(1 for _t, ok in rows if ok) * 100.0 / len(rows), 2) if len(rows) >= MIN_CHECKS else None, "cuts": len(outs),
+                "down_secs": sum(o["secs"] for o in outs), "longest_secs": max((o["secs"] for o in outs), default=0)}
+
+    ok_n, all_n = [0] * STRIP_CELLS, [0] * STRIP_CELLS
+
+    for ts, ok in d1:
+        i = (ts - day_ago) * STRIP_CELLS // 86400
+
+        if 0 <= i < STRIP_CELLS:
+            all_n[i] += 1
+            ok_n[i] += 1 if ok else 0
+
+    strip = [-1 if not all_n[i] else 2 if ok_n[i] == all_n[i] else 1 if ok_n[i] else 0 for i in range(STRIP_CELLS)]
+    outs7 = find_outages(ck, now)
+    last = outs7[-1] if outs7 else None
+    verdict = tunnel_profile([(t, ok, None, "") for t, ok in ck], now, 7)["verdict"] if len(ck) >= MIN_CHECKS else "no data"
+    return {"d1": window(d1), "d7": window(ck), "last": {"start": last["start"], "end": last["end"], "secs": last["secs"], "ongoing": last["ongoing"]} if last else None,
+            "up_for": max(0, now - int(state_since)) if state == "up" and state_since else None, "verdict": verdict, "strip": strip, "strip_from": day_ago, "strip_to": now, "now": now}
 
 
 def risk_of(profile: dict, state: str, hour_now: int) -> list[str]:
@@ -360,6 +393,22 @@ def hints_for(tunnel: str, cause: str, steps: list[str]) -> tuple[list[str], lis
     except Exception:
         log.exception("the analyst could not advise (the repair goes on without it)")
         return list(steps), []
+
+
+def stability(tunnel_id: int, now: int | None = None) -> dict | None:
+    """The Stability box of one tunnel (see `stability_view`): its checks of the last 7 days, one query; None for a tunnel that does not exist."""
+    now = now or int(time.time())
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            return None
+
+        rows = [(r[0], bool(r[1])) for r in db.execute(select(TunnelCheck.ts, TunnelCheck.ok).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - 7 * 86400))]
+        state, since = t.state, t.state_since
+
+    return stability_view(rows, now, state, since)
 
 
 def _peak_hours(samples: dict[int, list[ServerSample]], servers: dict[int, Server]) -> set[int]:

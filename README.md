@@ -73,7 +73,7 @@ Five engines, all built, monitored, tested and repaired from the panel
 |---|---|---|---|
 | **Backhaul over GRE** | foreign → Iran | TCP Mux ★, TCP, WebSocket Mux, WebSocket TLS Mux | the default — stable, many users over few connections |
 | **BackPack** | foreign → Iran | TCP Mux, TCP, Stealth, PCK, UDP + KCP + FEC, UDP, QUIC, WebSocket (plain / Mux / TLS / TLS Mux), xDi (ICMP) | heavy filtering, lossy or throttled routes |
-| **BackPack Direct** | Iran → foreign | UDP, QUIC, PCK, SNI spoofing, xDi (ICMP) | routes where the foreign server cannot be dialled |
+| **BackPack Direct** | Iran → foreign | UDP, QUIC, PCK, SNI spoofing (a fake TLS hello), IP spoofing (a forged source address), xDi (ICMP) | routes where the foreign server cannot be dialled |
 | **Paqet** | Iran opens the ports | KCP over raw sockets | routes that stall ordinary TCP |
 | **Chisel** | foreign → Iran (reverse) or Iran → foreign (forward) | HTTP WebSocket, TLS WebSocket | where only HTTP(S)-looking traffic passes; forward when customers' downloads are slow |
 

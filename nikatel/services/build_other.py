@@ -58,9 +58,13 @@ BP_DIRECT = {
     "udp": ("UDP", "plain UDP, no root needed", False, True),
     "quic": ("QUIC", "a real QUIC session on UDP, no root needed", False, True),
     "pck": ("PCK", "looks like an ordinary TCP flow (root)", True, False),
-    "sni": ("SNI spoofing", "PCK plus a TLS hello naming a domain your route allows", True, False),
+    # (the owner, 2026-10-17: "SNI spoofing is not there at all - fix its name or its description"): this is BackPack's own "SNI Spoofing" carrier - raw TCP (PCK) that opens with a FAKE TLS hello naming a domain
+    # your route lets through, so a filter that only reads the name in the hello lets it pass; the rest is not TLS at all (it is the tunnel's own sealed frames). It is NOT a spoofed source address - that is "IP spoofing" below.
+    "sni": ("SNI spoofing", "raw TCP that opens with a fake TLS hello naming a domain your route allows - the filter reads the name and lets it pass (root)", True, False),
+    "spoof": ("IP spoofing", "raw packets whose SOURCE ADDRESS you choose - for paths that block, throttle or count traffic by source address; the provider must let forged sources out: test it first (Servers → Tests → Spoof test) (root)", True, True),
     "xdi": ("xDi (ICMP)", "inside ping, for routes that filter UDP and TCP (root)", True, False),
 }
+SPOOF_PROFILES = ("udp", "icmp", "tcp", "icmpv6", "proto58", "ipip", "gre")      # the packet disguises of the IP spoofing carrier (both ends use the same one)
 KINDS = ("backpack", "backpack_direct", "paqet", "chisel")
 KIND_TITLE = {"backpack": "BackPack", "backpack_direct": "BackPack Direct", "paqet": "Paqet", "chisel": "Chisel"}
 CHISEL_TRANSPORTS = ("ws", "wss", "fws", "fwss")          # ws / wss: reverse (the foreign server dials the Iran server); fws / fwss: forward (the Iran server dials the foreign server)
@@ -173,11 +177,13 @@ sniffer = false
     return server, client
 
 
-def direct_texts(foreign_host: str, port: int, token: str, carrier: str, net: int, ports: list[PortMap], test_port: int, opts: dict | None = None) -> tuple[str, str]:
-    """(Iran toml - dials, foreign toml - listens) of a BackPack Direct (L3) tunnel on 10.10.<net>.0/30."""
+def direct_texts(foreign_host: str, port: int, token: str, carrier: str, net: int, ports: list[PortMap], test_port: int, opts: dict | None = None, iran_host: str = "") -> tuple[str, str]:
+    """(Iran toml - dials, foreign toml - listens) of a BackPack Direct (L3) tunnel on 10.10.<net>.0/30. The IP spoofing carrier also needs the real address of the Iran server on the listener (`spoof_peer_ip`: its
+    packets do not tell where they came from), the same packet profile on both ends and - when a source is forged - the forged address on the Iran side and the address the listener should expect (`spoof_peer_src_ip`)."""
     o = opts or {}
     port_lines = "\n".join(f'    "{p}",' for p in _entries(ports, test_port))
     extra = ""
+    iran_extra = foreign_extra = ""
 
     if carrier in ("pck", "sni"):
         extra += f"mtu = {int(o.get('mtu') or 1380)}\n"
@@ -185,12 +191,18 @@ def direct_texts(foreign_host: str, port: int, token: str, carrier: str, net: in
     if carrier == "sni" and o.get("sni_domain"):
         extra += f'sni_domain = "{o["sni_domain"]}"\n'
 
+    if carrier == "spoof":
+        profile, forged, nic = str(o.get("spoof_profile") or "udp"), str(o.get("spoof_src_ip") or ""), str(o.get("spoof_interface") or "")
+        extra += f'spoof_profile = "{profile}"\n'
+        iran_extra = (f'spoof_src_ip = "{forged}"\n' if forged else "") + (f'spoof_interface = "{nic}"\n' if nic else "")
+        foreign_extra = f'spoof_peer_ip = "{iran_host}"\n' + (f'spoof_peer_src_ip = "{forged}"\n' if forged else "")
+
     common = f'carrier = "{carrier}"\ntoken = "{token}"\niface = "bp{net}"\n{extra}'
     iran = f"""# Nikatel panel - BackPack direct tunnel (Iran dials)
 [l3]
 mode = "dial"
 addr = "{foreign_host}:{port}"
-{common}local_ip = "10.10.{net}.1/30"
+{common}{iran_extra}local_ip = "10.10.{net}.1/30"
 peer_ip = "10.10.{net}.2"
 accept_udp = {"true" if o.get("accept_udp") else "false"}
 ports = [
@@ -201,7 +213,7 @@ ports = [
 [l3]
 mode = "listen"
 addr = "0.0.0.0:{port}"
-{common}local_ip = "10.10.{net}.2/30"
+{common}{foreign_extra}local_ip = "10.10.{net}.2/30"
 peer_ip = "10.10.{net}.1"
 """
     return iran, foreign
@@ -464,6 +476,20 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
 
         if transport == "sni" and (not re.fullmatch(r"[A-Za-z0-9.\-]{3,80}", dom) or "." not in dom):
             raise ValueError("SNI spoofing needs a domain your route allows (for example a CDN domain)")
+
+        if transport == "spoof":
+            profile, forged, nic = str(opts.get("spoof_profile") or "udp").strip().lower(), str(opts.get("spoof_src_ip") or "").strip(), str(opts.get("spoof_interface") or "").strip()
+
+            if profile not in SPOOF_PROFILES:
+                raise ValueError("the packet profile of IP spoofing is one of: " + ", ".join(SPOOF_PROFILES))
+
+            if forged and not re.fullmatch(r"(\d{1,3}\.){3}\d{1,3}", forged):
+                raise ValueError("the forged source must be an IPv4 address, for example 10.10.10.10 (empty = do not forge: the tunnel uses the real address - the right first build)")
+
+            if nic and not re.fullmatch(r"[A-Za-z0-9._-]{1,15}", nic):
+                raise ValueError("the network interface name is not valid")
+
+            opts.update(spoof_profile=profile, spoof_src_ip=forged, spoof_interface=nic)
     elif kind == "paqet":
         transport = "kcp"
     elif transport in CHISEL_TRANSPORTS:
@@ -781,7 +807,7 @@ def _build(b: Build) -> None:
     elif b.kind == "backpack_direct":
         label = BP_DIRECT[b.transport][0]
         _say(aid, f"BackPack · Direct · {label}: the Iran server dials the foreign server")
-        iran_toml, foreign_toml = direct_texts(b.foreign.host, b.port, token, b.transport, b.net, b.ports, b.test_port, b.opts)
+        iran_toml, foreign_toml = direct_texts(b.foreign.host, b.port, token, b.transport, b.net, b.ports, b.test_port, b.opts, iran_host=b.iran.host)
         fw = f"nikatel-bpfw-{b.name}"
         _install_sink(b, foreign, key, bind="0.0.0.0")
 

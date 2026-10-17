@@ -601,11 +601,10 @@ html body #page .abt-note { display: block; margin-top: 8px; font-size: 12.5px; 
 html body #page .abt-card .lic-form { margin-top: 10px; }
 /* the cores */
 html body #page .abt-card .eng-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; } html body #page .abt-card .eng-bar button { margin-left: auto; height: 28px; }
-html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr) auto; gap: 6px; padding: 5px 10px; }      /* 1.57.50 - the columns keep their width and cut with an ellipsis: the headers and the versions no longer run into each other */
-html body #page .abt-card .eng-head > span, html body #page .abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } html body #page .abt-card .eng-row > .eng-act { overflow: visible; }
+html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr); gap: 6px; padding: 5px 10px; }      /* 1.57.50 - the columns keep their width and cut with an ellipsis: the headers and the versions no longer run into each other */
+html body #page .abt-card .eng-head > span, html body #page .abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body #page .abt-card .eng-head { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
 html body #page .abt-card .eng-row { margin-bottom: 5px; border-radius: 11px; background: #131b2e; font-size: 12.5px; }
-html body #page .abt-card .eng-row .eng-act button { height: 26px; font-size: 11.5px; }
 /* PasarGuard */
 html body #page .abt-pg #pgu-box { display: grid; gap: 10px; }
 html body #page .abt-pg .ss-hero { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: auto; max-width: none; margin: 0 !important; padding: 10px 12px !important; border-radius: 13px !important; border: 1px solid var(--uk-line) !important; background: #0f1626 !important; }
@@ -679,7 +678,7 @@ html body #page .toolbar.joined button.cta:disabled { opacity: .4; filter: satur
 /* 1.57.50 (2) - About & update: the left boxes are a little wider (the cores table has room for its five columns), the text under the name of this panel runs the whole width of its box, the count of a core (1/1) stays in its tooltip */
 html body #page .abt-ds { display: block; flex: none; margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--mut); }
 html body #page .abt-card .eng-head { font-size: 10px; letter-spacing: .3px; } html body #page .abt-card .eng-row { font-size: 12px; } html body #page .abt-card .eng-ver, html body #page .abt-card .eng-latest { font-size: 11.5px; }
-html body #page .abt-card .eng-row .eng-act button { padding: 0 7px; } html body #page .abt-card .eng-ver .mut { font-family: inherit; font-size: 10.5px; }
+html body #page .abt-card .eng-ver .mut { font-family: inherit; font-size: 10.5px; }
 /* 1.57.51 - About & update like the owner's picture of 1.57.34: the frame is as wide as it was with eight tabs (880 px: the four boxes are two equal columns again, the top row 232 px), nothing behind the boxes limits them */
 /* 1.57.51 (2) - About & update: no extra descriptions, the cards inside the boxes smaller and closer (the owner, 2026-10-16) */
 html body #page .abt-ds, html body #page .abt-note { display: none; }
@@ -977,6 +976,18 @@ html body #page .tun-tbl .tun-act .td-act { display: flex; align-items: center; 
 html body #page .tun-tbl .tun-act .lab-kb { width: 32px; height: 32px; border-radius: 10px; }
 html body #page .tun-tbl .tun-act .busy-chip { padding: 0; width: 24px; justify-content: center; }
 
+/* 1.64.0 - the second row of boxes of a tunnel window (the owner, 2026-10-17: the users' internet and the stability "inside their own box, not in the cards"): Users' internet | Stability | Last results, under Servers | Status | Link */
+html body #modal .tunwin .sbox[data-b="users"], html body #modal .tunwin .sbox[data-b="stability"], html body #modal .tunwin .sbox[data-b="results"] { min-width: 0; }
+html body #modal .tunwin .sbox[data-b="stability"] > h5 small, html body #modal .tunwin .sbox[data-b="users"] > h5 small { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+html body #modal .tunwin .sbox[data-b="users"] > h5 small.mut { font-weight: 500; }
+html body #modal .tunwin .sbox[data-b="stability"] .lab-ups { min-height: 40px; margin-top: 4px; padding-bottom: 4px; }
+html body #modal .tunwin .sbox[data-b="users"] .us-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-top: 3px; font-size: 11.5px; line-height: 1.35; }
+html body #modal .tunwin .sbox[data-b="users"] .us-line b { flex: none; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--text); }
+html body #modal .tunwin .sbox[data-b="users"] .us-line span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn, #ffc44d); }
+html body #modal .tunwin .sbox[data-b="users"] .us-line.mut { color: var(--mut); }
+html body #modal .tunwin .sbox[data-b="users"] .us-note { padding: 6px 0 8px; font-size: 11.5px; line-height: 1.4; }
+html body #modal .tunwin .sbox[data-b="users"] .bw-why { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 5px 0 6px; overflow: hidden; font-size: 11.5px; line-height: 1.35; }      /* (two lines of the Doctor's sentence: the whole of it is the tooltip) */
+
 /* 1.62.0 - the Knowledge tab of the Tunnel Doctor: what it knows about every pair of servers and what it remembers of the cuts */
 html body #page .kn-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 4px 2px 10px; }
 html body #page .kn-bar .sp { flex: 1; }
@@ -994,3 +1005,19 @@ html body #page .kn-fix { font-size: 12px; }
 html body #page .kn-none { padding: 6px 2px; font-size: 12px; }
 html[data-mode="light"] body #page .kn-k { background: rgba(30, 50, 100, .06); border-color: rgba(30, 50, 100, .2); }
 html[data-mode="light"] body #page .kn-bad { color: #b4232f; }
+
+/* 1.64.0 - the small buttons of About & update (the owner, 2026-10-17, his picture of the nodes of PasarGuard: "make the buttons smaller, and keep a space above and below them"). The Settings rule of app.css
+   (html body #page .sf button, with !important) made EVERY button of the card 32 px tall - as tall as its row - so the 24 px of the rules above never applied. These are 22 px in rows of 36 px: 7 px of air above and below. */
+html body #page .abt-card .eng-row, html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }
+html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-bottom: 5px; }
+html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini), html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini), html body #page .abt-pg .pgu-cap button:not(.eye):not(.mini) { flex: none; box-sizing: border-box; height: 22px !important; min-height: 22px !important; padding: 0 10px !important; border-radius: 7px !important; font-size: 11px !important; line-height: 1 !important; }
+html body #page .abt-pg .pgu-a button:not(.eye):not(.mini) { width: 52px; padding: 0 !important; }
+html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini) { width: 60px; padding: 0 !important; }
+html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; }
+html body #page .abt-card .eng-row > .eng-st small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 1.64.0 - a question with several answers (glassChoice): the second line of a choice (the address of a server, the note of a program) was cut - "body #ask .ask-box .ask-act button" gave every button 36 px and beat the "height: auto" of the list (the owner, 2026-10-17, his picture of the Spoof test: "fix the text of these too") */
+body #ask .ask-box .ask-act.ask-choices { justify-content: stretch; }
+body #ask .ask-box .ask-act.ask-choices button { height: auto; min-height: 40px; padding: 8px 14px; border-radius: 14px; line-height: 1.25; }
+body #ask .ask-box .ask-act.ask-choices button small { display: block; line-height: 1.2; }
+body #ask .ask-box .ask-act.ask-choices button.ask-no { min-height: 36px; border-radius: 18px; }

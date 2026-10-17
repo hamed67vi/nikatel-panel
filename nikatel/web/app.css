@@ -194,9 +194,9 @@ nav a { height: 38px; font-size: 13.5px; }
 .tbl .mchip { margin-left: 0; } .mchip { padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; border: 1px solid var(--line); } .mchip.ok { color: var(--ok); border-color: rgba(52,211,153,.4); } .mchip.bad { color: var(--bad); border-color: rgba(255,107,139,.45); }
 @media (max-width: 900px) { .srv-th { display: none; } .srv-row { grid-template-columns: 1fr 1fr; row-gap: 6px; padding: 10px 12px; } .srv-name, .srv-st { grid-column: 1 / -1; } }
 /* core update: one row per core */
-.eng-head, .eng-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.6fr 150px; gap: 10px; align-items: center; padding: 8px 12px; }
+.eng-head, .eng-row { display: grid; grid-template-columns: 1.2fr 1fr 1.6fr; gap: 10px; align-items: center; padding: 8px 12px; }
 .eng-head { font-size: 10.5px; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); font-weight: 700; padding-bottom: 4px; }
-.eng-row { border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); margin-bottom: 6px; font-size: 12.5px; } .eng-name b { display: block; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-family: var(--mono); font-size: 12px; } .eng-act { text-align: right; } .eng-act button { white-space: nowrap; } .eng-st .warn { color: var(--warn); }
+.eng-row { border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); margin-bottom: 6px; font-size: 12.5px; } .eng-name b { display: block; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-family: var(--mono); font-size: 12px; } .eng-st .warn { color: var(--warn); }
 @media (max-width: 900px) { .eng-head { display: none; } .eng-row { grid-template-columns: 1fr 1fr; } }
 /* tunnel list like the old dense table */
 .td-type { font-size: 10.5px; font-weight: 800; letter-spacing: .5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); } .td-node b { display: block; font-size: 12.5px; } .td-node span { font-size: 10.5px; }
@@ -1839,8 +1839,8 @@ html[data-anim="off"] .bg-scene { display: none; } html[data-anim="off"] body::b
 
 /* Core update: one slim line per core */
 .eng-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; } .eng-bar small { font-size: 11.5px; }
-.eng-head, .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr) 96px; gap: 8px; padding: 4px 10px; } .eng-head { padding-bottom: 2px; font-size: 10px; }
-.eng-row { margin-bottom: 4px; font-size: 12px; min-height: 34px; border-radius: 10px; } .eng-name { display: flex; align-items: baseline; gap: 8px; } .eng-name b { display: inline; font-size: 12.5px; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .eng-act button { height: 24px; }
+.eng-head, .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.5fr); gap: 8px; padding: 4px 10px; } .eng-head { padding-bottom: 2px; font-size: 10px; }
+.eng-row { margin-bottom: 4px; font-size: 12px; min-height: 34px; border-radius: 10px; } .eng-name { display: flex; align-items: baseline; gap: 8px; } .eng-name b { display: inline; font-size: 12.5px; } .eng-name small { font-size: 10.5px; } .eng-ver, .eng-latest { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) { .eng-head { display: none; } .eng-row { grid-template-columns: 1fr 1fr; } }
 
 /* password inside the Security card */

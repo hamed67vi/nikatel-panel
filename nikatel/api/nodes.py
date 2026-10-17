@@ -195,6 +195,17 @@ def gre_probe(server_id: int):
     return {"ok": True, **_wrap(nodes.gre_probe, server_id)}
 
 
+class SpoofIn(BaseModel):
+    target_id: int
+    spoof_ip: str = Field(min_length=7, max_length=15)
+
+
+@router.post("/servers/{server_id}/spoof-test")
+def spoof_test(server_id: int, body: SpoofIn):
+    """Does the provider of this server let packets with a forged source address out: it pings another server of the panel with the source rewritten, and that server says what arrived (tcpdump); about half a minute."""
+    return {"ok": True, **_wrap(nodes.spoof_test, server_id, body.target_id, body.spoof_ip)}
+
+
 @router.post("/servers/{server_id}/filter-check")
 def filter_check(server_id: int):
     """Is this server's address filtered inside Iran right now (asked from an Iran server)."""

@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.64.0 - Users' internet and Stability boxes in the tunnel window; the nodes close to the Bandwidth column; the CDN last; no Install button; small buttons with air
+
+The owner (2026-10-17): "show the stability and the quality of the users' internet inside their own box, not in the cards"; "bring these toward the Bandwidth column, there is too much space between them" (his picture of the table);
+"the CDN comes down, under the Tunnel Doctor"; "remove Install here too, and when a core has an update show the Update button instead of Up to date"; "make the buttons smaller here too, and keep a space above and below them" (his picture of the PasarGuard nodes); "show the users' traffic in the different tunnels" (his picture: two Paqet tunnels with a dash);
+"why did you not add the spoof of the BackPack project?"; "this is how a server is tested for spoofing - add it to Servers" (his picture of the method); "SNI spoofing is not there at all - fix its name or its description".
+
+- **A spoof test in the Servers section** (his method, his picture of it: "on the destination server run tcpdump icmp; on the Iran server put an SNAT rule and ping it; if the packets arrived with the forged address the server takes spoofs"):
+  **Servers → a server → ⋯ → Tests → Spoof test…** asks for the target server and the address to forge, then the server pings the target 5 times as it is and 10 times with the source rewritten while the target listens with tcpdump. The rule is
+  the narrowest there can be - ICMP echo requests to the target only, tagged, put in after the ordinary pings and taken out again whatever happens (a trap), so the tunnels to that server are never touched. The ordinary pings tell "the provider drops forged
+  sources" (does not spoof) from "ICMP is filtered altogether" (no answer), which tcpdump alone cannot. The answer is in the Last results of the server ("Spoofing"). New: `POST /api/servers/{id}/spoof-test`, the scripts `spoof_listen` (read-only) and `spoof_send` (an action: refused in read-only mode).
+- **BackPack Direct: IP spoofing is a carrier now, and SNI spoofing says what it is.** The panel had BackPack's "SNI spoofing" carrier under a vague line ("Iran only allows a domain") and not the project's other spoof - **IP spoofing** (raw packets with a source address you choose;
+  profiles udp, icmp, tcp, icmpv6, proto58, ipip, gre). Now both are in Create tunnel: *SNI spoofing* = raw TCP that opens with a **fake TLS hello** naming a domain your route allows (the field is "Fake SNI"); *IP spoofing* = a forged **source address**. IP spoofing is built the way the project
+  advises - first without forging (the real addresses; the listener gets the Iran server's real address as `spoof_peer_ip`, the same profile on both ends), then a forged source (`spoof_src_ip`, and `spoof_peer_src_ip` on the listener) only when one is typed; the Spoof test above says whether a server can forge at all.
+  Tried for real on the test servers (BackPack 1.8.5, unforged): the carrier builds and connects with the `udp` profile (the test door 537 Mb/s) and the `icmp` profile (489 Mb/s), a download limited to 42 Mb/s by curl through it moved at 42.0. The Spoof test, run for real
+  from the Iran test server to the build server (10.10.10.10 and 8.8.4.4) and back: the 5 ordinary pings arrived and none of the 10 forged ones - "this server does not spoof" - in 22 s, and no rule was left on either server.
+- **Every kind of tunnel has a live number of what the users use - Paqet too.** Paqet (KCP over raw sockets), BackPack over UDP and any tunnel that has no card and no TCP connection between its servers showed a dash. The panel now counts the **users' own connections** to the
+  forwarded ports of the Iran server: the users connect over TCP whatever carries their data on, the kernel keeps a byte counter for each of those sockets, and what the Iran server sends them is their download (`via: "users"` in `GET /api/tunnels/live`; no framing in the number).
+  Looked at read-only on the real Iran server of his two Paqet tunnels: 109 connections on port 80, 0.68 Mb/s down. Tried for real on the test panel (a download limited to 42 Mb/s by curl through a Paqet tunnel from the Iran test server to the build server):
+  **curl 42.0, the panel's live number 41.9 (ratio 1.00)**; the tunnel was removed again. A tunnel with a GRE card is still read from its card, one with a control connection (BackPack, Chisel over TCP) from it; a tunnel with no forwarded port still says "-".
+  **BackPack Direct is read from the users' connections too**: its L3 link `bp<N>` counted the headers of its inner packets and the framing of its carrier - 50.3 Mb/s for a download of 42.0 with the IP spoofing carrier (+20 %; +4 % with the icmp profile) - the users' own connections are what they moved.
+- **The tunnel window has six boxes.** Row one: Servers, Status, Link; row two: **Users' internet**, **Stability**, Last results. *Users' internet* = the grade the Doctor keeps for the configs that ride the tunnel (Good / Fair / Poor / Bad), how many are fine, what is wrong
+  (slow, unstable, down), the two worst configs and, for a poor or bad grade, the Doctor's reading (two lines; all of it in the tooltip); without a config of the probe on the tunnel it says so. *Stability* = the new `GET /api/tunnels/{id}/stability`: the share of the checks that
+  answered over 24 h and 7 days, the cuts (two failed checks in a row, the analyst's rule), the last cut and its length, how long the tunnel has been up, the analyst's verdict and the strip of the last day. The "Users" row left the Link box; the rows of the list carry neither.
+- **The table.** Bandwidth, Iran node, ping / loss and Foreign node have the widths of their content (150 / 170 / 140 / 170 px), so the gap between the Bandwidth column and the Iran node went from about 370 px to about 120 px on a wide window; what is left goes to the name, the type and the ports.
+  The Bandwidth column is an important column for the fitter (it was a "least important" one since it replaced the Status column) and keeps 118 px.
+- **Network tabs:** Tunnel manager, Tunnel Doctor, CDN (the CDN was first for three days).
+- **The cores box (About & update):** no Install button any more (a server added from now on gets the cores at once; "Tunnel cores..." in the menu of a server puts them on one that has not got them); one cell for the state - "✓ Up to date", or, when a newer release is out,
+  the Update button in its place with the number of servers beside it.
+- **Small buttons with air.** The buttons of the PasarGuard nodes and panels and of the cores were 32 px tall, as tall as their rows: the Settings rule (`html body #page .sf button`, with `!important`) beat every size set for them since 1.57.51, which is why they were "fixed" three times and never changed.
+  They are 22 px (Update and Xray 52 px wide, Update... 60 px) in rows of 36 / 38 px: 7 px of air above and below.
+
 ## 1.63.1 - Live use for the reverse-proxy tunnels too; the column is in Mb only; "⋯" at the end of a row; the copy mark is whole
 
 The owner (2026-10-17), looking at 1.63.0 on his real tunnels: "why is no usage shown here (BackPack wssmux / tcpmux)?"; "make the ping numbers smaller and both the packet loss and the ping a bit closer to the arrow line";

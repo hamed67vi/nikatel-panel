@@ -1,12 +1,16 @@
 """What the users use of every tunnel RIGHT NOW: the byte counters of the tunnel's network card on its Iran server, read every few seconds and turned into rates.
 (The owner, 2026-10-17: "show the capacity, and beside it the bandwidth the users are using - the numbers must be real, reliable and live".)
 
-  where it is read    the card of the tunnel on its Iran server - the GRE link of a Backhaul / GRE tunnel, the L3 link (bp<N>) of a BackPack Direct tunnel: the kernel's own counters
+  where it is read    the card of the tunnel on its Iran server - the GRE link of a Backhaul / GRE tunnel: the kernel's own counters (a BackPack Direct tunnel is NOT read from its L3 link bp<N>: that counts the headers of its
+                      inner packets and the framing of its carrier, 20 % more than the users moved in a real test - its users' own connections are counted, see below)
                       (/sys/class/net/<card>/statistics), ONE light command per Iran server for all its cards (ssh.py `iface_counters`). A reverse proxy has no card (BackPack and Chisel over TCP):
                       its own TCP connections are counted instead - the byte counters the kernel keeps per socket (`ss -ti`: bytes_received / bytes_acked) of the connections on its control port (the
                       foreign server dialled in) or to it (forward). They include the framing of the tunnel (mux, WebSocket, TLS: a few percent) and what a short connection moved after the last
-                      read is lost; a connection that is new counts what it has, one that is gone says nothing more. What has neither (UDP, QUIC, KCP, raw sockets: Paqet, BackPack UDP) has no
-                      counter: its cell says "-", never a made-up zero. Download is what comes IN from the foreign server (what the users download), upload what goes out.
+                      read is lost; a connection that is new counts what it has, one that is gone says nothing more. What has neither a card nor a TCP connection between its servers (UDP, QUIC, KCP,
+                      raw sockets: Paqet, BackPack over UDP) is read from the USERS' own connections to its forwarded ports on the Iran server (the owner, 2026-10-17: "show the users' traffic in
+                      every kind of tunnel"): the users connect over TCP whatever carries their data on, and the byte counters of those connections are exactly what the users move - what the Iran
+                      server sends them is their download. A tunnel with no forwarded port has no counter: its cell says "-", never a made-up zero. For a card or a control connection, download is
+                      what comes IN from the foreign server (what the users download), upload what goes out.
   how fast            every 5 s while somebody looks at the tunnels (the page asks GET /api/tunnels/live), every 30 s otherwise, so that the first number is there when the page opens.
   how it is counted   the rate over the last ~15 s (the newest read against the oldest one inside the window) on the SERVER's own uptime clock: steady, and still live. A counter that went back (the card
                       was made again) or a clock that did (a reboot) starts the window again; a rate no card can carry is dropped.
@@ -43,8 +47,9 @@ MAX_MBPS = 400_000.0         # a rate above this is a wrong counter, not a rate
 TIMEOUT = 8                  # one read of one server
 MAX_GAP = 45.0               # connections seen further apart than this (seconds of uptime) say nothing about the time between: the count starts again
 PER_SERVER = 40              # cards (and connection specs) asked of one server in one command
+MAX_USER_PORTS = 16          # ports of one tunnel whose users' connections are counted
 CARD = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,14}")
-SPEC = re.compile(r"s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}")
+SPEC = re.compile(r"s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15}")
 _LOCK = threading.Lock()
 _READS: dict[tuple[int, str], deque] = {}          # (Iran server, card or "sock:<spec>") -> its last reads (uptime, rx_bytes, tx_bytes)
 _SOCKS: dict[tuple[int, str], dict] = {}           # (Iran server, spec) -> {conns: the connections of the last read, acc: [sent, received] counted so far, up: the uptime of that read}
@@ -144,22 +149,36 @@ def rate(reads: list[tuple[float, int, int]], window: float = WINDOW) -> dict | 
     return {"down": round(down, 2), "up": round(up, 2), "span": round(dt, 1)}
 
 
+def users_ports(t: Tunnel) -> list[int]:
+    """The ports the USERS connect to on the Iran server of a tunnel - its forwarded ports. What the Iran server accepts there is the users' own connections, whatever carries them on to the foreign server
+    (a mux, a WebSocket, KCP over raw sockets ...): their byte counters are what the users move."""
+    ports = sorted({int(p) for p in (t.forwarded_ports or []) if str(p).isdigit() and 1 <= int(p) <= 65535})
+    return ports[:MAX_USER_PORTS]
+
+
 def sock_spec(t: Tunnel) -> str:
-    """The TCP connections that carry a tunnel with no card of its own, as the `iface_counters` script wants them: "s<port>" (they came in on the control port of the Iran server - the foreign server dials in) or
-    "d<port>@<address>" (the Iran server opened them to the foreign server: a forward tunnel). "" when there is nothing to count: UDP, QUIC, KCP and raw sockets (Paqet, BackPack UDP) have no connection."""
+    """The TCP connections that tell what a tunnel with no card of its own carries, as the `iface_counters` script wants them. In this order:
+    "s<port>" - the connections that came in on the control port of the Iran server (the foreign server dials in: BackPack and Chisel over TCP, reverse);
+    "d<port>@<address>" - the ones the Iran server opened to the foreign server (a forward tunnel);
+    "u<port>,<port>..." - the USERS' own connections to the forwarded ports of the Iran server: for what has no TCP connection between the servers (UDP, QUIC, KCP, raw sockets: Paqet, BackPack over UDP) - the
+    users still connect over TCP to the Iran server, whatever carries their data on. "" when there is nothing to count (no forwarded port)."""
     rec = t.record or {}
     port = int(t.port or 0)
+    udp = bool(rec.get("udp_carrier")) or str(t.transport or "").startswith("l3:")
 
-    if t.type not in ("backpack", "chisel") or not 1 <= port <= 65535 or rec.get("udp_carrier") or str(t.transport or "").startswith("l3:"):
-        return ""
+    if t.type in ("backpack", "chisel") and 1 <= port <= 65535 and not udp:
+        direction = rec.get("direction") or "reverse"
 
-    direction = rec.get("direction") or "reverse"
+        if direction == "reverse":
+            return f"s{port}"
 
-    if direction == "reverse":
-        return f"s{port}"
+        host = str(t.foreign.host) if direction == "forward" and t.foreign is not None else ""
 
-    host = str(t.foreign.host) if direction == "forward" and t.foreign is not None else ""
-    return f"d{port}@{host}" if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", host) else ""
+        if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", host):
+            return f"d{port}@{host}"
+
+    ports = users_ports(t)
+    return "u" + ",".join(str(p) for p in ports) if ports else ""
 
 
 def targets() -> list[dict]:
@@ -173,7 +192,8 @@ def targets() -> list[dict]:
                 continue
 
             plan = plan_for(t)
-            card = plan.iface or plan.ping_iface
+            direct = t.type == "backpack" and str(t.transport or "").startswith("l3:")
+            card = "" if direct and users_ports(t) else (plan.iface or plan.ping_iface)      # (the L3 link of a BackPack Direct tunnel counts the headers of its inner packets and the framing of its carrier - 20 % more than the users moved in a real test with the IP spoofing carrier: the users' own connections are exactly what they move)
             spec = "" if card else sock_spec(t)
 
             if card and not CARD.fullmatch(card):
@@ -233,12 +253,13 @@ def _sock_update(sid: int, spec: str, ids: list[int], cur: dict, up: float, at: 
     tx, rx = sock_step(st["conns"] if st else None, cur)
     acc = [(st["acc"][0] if st else 0) + tx, (st["acc"][1] if st else 0) + rx]
     _SOCKS[key] = {"conns": cur, "acc": acc, "up": up}
-    push(reads, up, acc[1], acc[0])
+    users = spec.startswith("u")
+    push(reads, up, *((acc[0], acc[1]) if users else (acc[1], acc[0])))      # (a control connection: what the Iran server RECEIVES from the foreign server is what the users download; a user's own connection: what it SENDS to the user is)
     r = rate(list(reads))
 
     if r is not None:
         for i in ids:
-            _LIVE[i] = {**r, "at": at, "via": "connections"}
+            _LIVE[i] = {**r, "at": at, "via": "users" if users else "connections"}
 
 
 def _read(target: dict) -> None:
@@ -328,6 +349,7 @@ def ask() -> None:
 
 
 def view() -> dict[str, dict]:
-    """What the page gets: {tunnel id: {down, up, span, at, age, via}} for the tunnels read in the last two minutes (Mb/s; `age` in seconds; `via`: "link" = the card of the tunnel, "connections" = its TCP connections)."""
+    """What the page gets: {tunnel id: {down, up, span, at, age, via}} for the tunnels read in the last two minutes (Mb/s; `age` in seconds; `via`: "link" = the card of the tunnel, "connections" = the TCP connections
+    between its servers, "users" = the users' own connections to its ports)."""
     now = time.time()
     return {str(i): {**v, "age": round(now - v["at"], 1)} for i, v in list(_LIVE.items()) if now - v["at"] <= VIEW_FOR}

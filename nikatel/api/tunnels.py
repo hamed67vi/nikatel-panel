@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck, is_temp
-from ..services import builder, livebw
+from ..services import analyst, builder, livebw
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -39,7 +39,7 @@ def build(body: BuildIn):
         if body.kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
             raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
-        other_opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+        other_opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
         measure = "full" if body.opts.get("measure") != "latency" else "latency"
 
         names = [n.strip().lower() for n in body.dns_names if n.strip()]
@@ -109,7 +109,7 @@ def tunnel_kinds():
          "transports": [{"key": k, "label": lbl, "note": n} for k, lbl, n in (("tcpmux", "TCP Mux", "many users, few connections (recommended)"), ("tcp", "TCP", "plain TCP"), ("wsmux", "WebSocket Mux", "clear-text WebSocket, multiplexed"), ("wssmux", "WebSocket TLS Mux", "TLS WebSocket, multiplexed"))]},
         {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
-        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI / xDi carriers", "direction": "direct",
+        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers", "direction": "direct",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_DIRECT.items()]},
         {"key": "paqet", "title": "Paqet", "note": "KCP over raw sockets: the foreign server listens, the Iran server opens the ports", "direction": "direct",
          "transports": [{"key": "kcp", "label": "KCP", "note": "modes normal / fast / fast2 / fast3"}]},
@@ -121,7 +121,7 @@ def tunnel_kinds():
 
 @router.get("/tunnels/live")
 def tunnels_live():
-    """What the users use of each tunnel right now (Mb/s down and up, from the counters of its link, counted over about 15 s and read every 5 s while this is asked). Only a read of memory: the servers are read by a job."""
+    """What the users use of each tunnel right now (Mb/s down and up, from the counters of its link or, for a reverse proxy with no link, of its TCP connections; counted over about 15 s and read every 5 s while this is asked). Only a read of memory: the servers are read by a job."""
     livebw.ask()
     return {"ok": True, "at": time.time(), "live": livebw.view()}
 
@@ -457,6 +457,17 @@ def get_tunnel(tunnel_id: int):
             raise HTTPException(404, "tunnel not found")
 
         return _out(t)
+
+
+@router.get("/tunnels/{tunnel_id}/stability")
+def stability(tunnel_id: int):
+    """How steady a tunnel is: the share of its checks that answered over 24 hours and 7 days, its cuts, the last one, how long it has been up, and the strip of the last day."""
+    r = analyst.stability(tunnel_id)
+
+    if r is None:
+        raise HTTPException(404, "tunnel not found")
+
+    return {"ok": True, **r}
 
 
 @router.get("/tunnels/{tunnel_id}/checks")

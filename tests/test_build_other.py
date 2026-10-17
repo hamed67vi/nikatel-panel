@@ -29,6 +29,35 @@ def test_direct_texts_and_fw():
     assert "ExecStartPre=/usr/local/sbin/nikatel-bpfw-fi-ir1 up" in unit and "ExecStopPost=" in unit
 
 
+def test_the_ip_spoofing_carrier_keeps_its_profile_on_both_ends_and_forges_only_when_asked():
+    """The owner, 2026-10-17 ("why did you not add the spoof of this project?"): BackPack's IP spoofing is a carrier of the direct tunnel - raw packets with a source address of your choice. The first build forges nothing."""
+    ports = parse_ports("8072")
+    i, f = bo.direct_texts("203.0.113.5", 9850, "tok", "spoof", 12, ports, 39600, {"spoof_profile": "icmp"}, iran_host="198.51.100.7")
+    assert 'carrier = "spoof"' in i and 'spoof_profile = "icmp"' in i and 'spoof_profile = "icmp"' in f                                         # (the same profile on both ends)
+    assert "spoof_src_ip" not in i and "spoof_peer_src_ip" not in f and 'spoof_peer_ip = "198.51.100.7"' in f and "spoof_peer_ip" not in i      # (nothing forged: the listener only needs the real address of the Iran server)
+    i2, f2 = bo.direct_texts("203.0.113.5", 9850, "tok", "spoof", 12, ports, 39600, {"spoof_profile": "udp", "spoof_src_ip": "10.10.10.10", "spoof_interface": "eth0"}, iran_host="198.51.100.7")
+    assert 'spoof_src_ip = "10.10.10.10"' in i2 and 'spoof_interface = "eth0"' in i2 and 'spoof_peer_src_ip = "10.10.10.10"' in f2          # (forged: the listener expects exactly that source)
+    assert "mtu = " not in i                                                                                                                   # (the carrier measures its path MTU by itself)
+    label, hint, root, udp = bo.BP_DIRECT["spoof"]
+    assert label == "IP spoofing" and root and udp and "SOURCE ADDRESS" in hint and "Spoof test" in hint
+    sni = bo.BP_DIRECT["sni"]
+    assert sni[0] == "SNI spoofing" and "fake TLS hello" in sni[1] and "name" in sni[1]                                                         # (the owner: "SNI spoofing is not there at all - fix its name or description": it says what it is)
+
+
+def test_ip_spoofing_options_are_checked_before_anything_is_built(monkeypatch):
+    from nikatel.config import get_settings
+    from nikatel.services import license
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(license, "require", lambda *a, **k: None)
+
+    for opts, why in (({"spoof_profile": "bogus"}, "packet profile"), ({"spoof_src_ip": "ten.ten"}, "IPv4"), ({"spoof_interface": "eth0; reboot"}, "interface")):
+        with pytest.raises(ValueError, match=why):
+            bo.start_build(1, 2, "8072", "backpack_direct", "spoof", opts)
+
+    assert bo.SPOOF_PROFILES == ("udp", "icmp", "tcp", "icmpv6", "proto58", "ipip", "gre")
+
+
 def test_paqet_and_chisel_texts():
     ports = parse_ports("443=2096, 8080")
     net = {"IF": "eth0", "IP": "203.0.113.5", "MAC": "aa:bb:cc:dd:ee:ff"}
@@ -91,6 +120,16 @@ def test_build_other_refused_in_read_only(client):
     assert [k["key"] for k in kinds] == ["backhaul", "backpack", "backpack_direct", "paqet", "chisel"] and len(kinds[1]["transports"]) == 12
     groups = {k["group"] for k in client.get("/api/tunnel-test/kinds").json()["kinds"]}
     assert "Paqet" in groups and "BackPack Direct" in groups
+
+
+def test_the_spoof_and_sni_options_of_the_form_reach_the_builder(client, monkeypatch):
+    """Found with the real harness, 2026-10-17: the API kept a list of option names and the three spoof ones were not on it, so a forged source chosen in the form was never built (the unit tests called the builder directly)."""
+    seen = {}
+    monkeypatch.setattr(bo, "start_build", lambda iran_id, foreign_id, ports, kind, transport, opts=None, measure="full": seen.update(opts=dict(opts or {}), kind=kind, transport=transport) or 5)
+    form = {"spoof_profile": "icmp", "spoof_src_ip": "10.10.10.10", "spoof_interface": "eth0", "sni_domain": "example.com", "bogus": "x", "nested": {"a": 1}}
+    r = client.post("/api/tunnels", json={"iran_id": 1, "foreign_id": 2, "ports": "8072", "kind": "backpack_direct", "transport": "spoof", "opts": form})
+    assert r.status_code == 202 and r.json() == {"ok": True, "id": 5} and seen["kind"] == "backpack_direct" and seen["transport"] == "spoof"
+    assert seen["opts"] == {"spoof_profile": "icmp", "spoof_src_ip": "10.10.10.10", "spoof_interface": "eth0", "sni_domain": "example.com"}       # (and nothing else gets through)
 
 
 def test_forced_name_leftovers_are_removed_before_the_port_check(monkeypatch):

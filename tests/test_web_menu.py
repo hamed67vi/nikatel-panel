@@ -149,15 +149,15 @@ def test_nothing_puts_the_servers_the_panel_already_has_on_the_lab_by_itself():
     assert "backfill" not in db and "auto_all" in db
 
 
-def test_the_section_that_was_called_tunnels_is_called_network_and_starts_with_the_cdn():
-    """The owner (2026-10-14): "this section's name becomes Network", "bring CDN above the Tunnel manager". CDN is the first tab, so a shortcut that used to land on the Tunnel manager by
-    being the first tab must now say which tab it wants (go(page, tab)), else it would draw the CDN first and the tab it wanted second."""
+def test_the_section_that_was_called_tunnels_is_called_network_and_the_cdn_is_its_last_tab():
+    """The owner (2026-10-14): "this section's name becomes Network"; 2026-10-17: "bring the CDN down, under the Tunnel Doctor" (it was the first tab for three days, above the Tunnel manager): the tabs are the
+    Tunnel manager, the Tunnel Doctor, the CDN. A shortcut still names the tab it wants (go(page, tab)): a first draw of another tab must never land over the one it wanted."""
     assert '<span>Network</span>' in NAV and 'data-short="Network"' in INDEX and "<span>Tunnels</span>" not in NAV
     assert re.search(r'^  tunnels: \["Network", ', APP, re.MULTILINE)
     block = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
     tabs = re.findall(r'^  tunnels: \[(.*)\],?(?:      //.*)?$', block, re.MULTILINE)[0]
-    assert tabs.index('["dns", "🌐 CDN"') < tabs.index('["list", "⇄ Tunnel manager"') < tabs.index('["repairs"') < tabs.index('["gateway"')
-    assert not re.search(r"""go\((['"])tunnels\1\)""", APP), "go('tunnels') with no tab opens the CDN: name the tab"
+    assert tabs.index('["list", "⇄ Tunnel manager"') < tabs.index('["repairs"') < tabs.index('["dns", "🌐 CDN"') < tabs.index('["gateway"')
+    assert not re.search(r"""go\((['"])tunnels\1\)""", APP), "go('tunnels') with no tab: name the tab"
     assert 'actions: "tunnels/repairs"' in APP
 
 
@@ -913,7 +913,7 @@ def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxe
     app, css = _web("app.js"), _web("lab.css")
     assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
     assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'aboutBtn(!!u.up_to_date, ' in app and'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
-    assert "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr) auto; gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+    assert "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr); gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
 
 
 def test_the_add_form_starts_the_plain_websocket_at_80():
@@ -1075,10 +1075,16 @@ def test_adding_a_server_moves_nothing_and_says_what_is_being_done_from_the_firs
     assert 'name="x_cores" type="checkbox" checked' in app and "Put the tunnel cores on it" in app      # the tick of the Add form (on by default: "they must install by themselves")
 
 
-def test_the_cores_box_has_an_install_button_and_a_server_has_tunnel_cores_in_its_menu():
-    """The owner, 2026-10-16: "why are Paqet, Chisel and Xray not installed? They should install by themselves": a new server gets them at once; the ones added before get them from here."""
-    app, lab = _web("app.js"), _web("lab.js")
-    assert "⬇ Install</button>" in app and "engineUpdate('${k}', true)" in app and "window.engineUpdate = async (k, missing) =>" in app and "/update${missing ? \"?missing=true\" : \"\"}" in app and "enginesLoad.last = eng;" in app
+def test_the_cores_box_has_no_install_button_the_update_button_takes_the_place_of_up_to_date_and_a_server_has_tunnel_cores_in_its_menu():
+    """The owner, 2026-10-16: "why are Paqet, Chisel and Xray not installed? They should install by themselves": a new server gets them at once; one added before gets them from the menu of the server ("Tunnel cores...").
+    2026-10-17 (his picture of the box: "Up to date" and an Install button on every row): "remove Install here too, and when a core has an update show the Update button instead of Up to date"."""
+    app, lab, css = _web("app.js"), _web("lab.js"), _web("lab.css")
+    row = app.split("const row = (k, e) => {", 1)[1].split("box.innerHTML", 1)[0]
+    assert "⬇ Install" not in app and "?missing=true" not in app and "engineUpdate('${k}', true)" not in app and "window.engineUpdate = async k =>" in app and "enginesLoad.last" not in app
+    assert 'class="pri sm eng-upd"' in row and "outdated ? upd :" in row and "✓ Up to date" in row and '<span class="eng-act">' not in row            # (one cell for the state: "Up to date", or the Update button in its place)
+    assert "<span>Core</span><span>Newest</span><span>Status${d.checking" in app and "grid-template-columns: minmax(0, 1.1fr) 82px minmax(0, 1.4fr); gap: 6px;" in css
+    assert "html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini)" in css and "height: 22px !important; min-height: 22px !important;" in css       # (the Settings rule gives every button 32 px with !important: the small buttons of this card must say !important too)
+    assert "html body #page .abt-card .eng-row, html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }" in css and "html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-bottom: 5px; }" in css      # (7 px of air above and below a button: the owner, 2026-10-17)
     assert 'labIt("Tunnel cores…", "box", () => srvCores(s.id, nm))' in lab and "window.srvCores = async (id, name) =>" in lab and 'steps: ["cores"]' in lab
     install = (WEB.parent.parent / "install.sh").read_text(encoding="utf-8")
     assert "downloads the tunnel cores" in install and "engines" in install
@@ -1178,7 +1184,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     app, css, lab = _web("app.js"), _web("lab.css"), _web("lab.js")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc"', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
-    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and '<thead><tr><th>Tunnel</th><th>Type</th><th class="bwh" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
+    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and '<thead><tr><th>Tunnel</th><th>Type</th><th class="bwh" data-prio="1" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
     assert "<small><i>capacity</i>" not in app                                                    # the header says the word and the unit, nothing else (the owner, 2026-10-17: "write only mb/s here"); the legend is in the tooltip
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
@@ -1196,7 +1202,7 @@ def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
     tip of the bandwidth cell and the Doctor page (a row "users"); the configs that ride no known tunnel are counted with a button that ties them to one (the Configs page is switched off)."""
     app = _web("app.js")
     assert "const uxTip = t =>" in app and "const uxWhy = t =>" in app and "+ uxTip(t);" in app and 'kind === "users" ? uxWhy(t)' in app
-    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and '${users.map(t => row(t, "users")).join("")}' in app and 'kv("Users", ' in app
+    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and '${users.map(t => row(t, "users")).join("")}' in app and "const tunUsersBox = t =>" in app and 'kv("Users", ' not in app      # (the Users row of the Link box is its own box now, see the test of the second row of boxes)
     assert "const usersNote = u => u && u.total > u.linked ?" in app and "${usersNote(dc && dc.users)}" in app and 'onclick="apLinkConfigs()"' in app
     assert "window.apLinkConfigs = async () =>" in app and "window.apLinkSave = async () =>" in app and 'api("/api/configs/" + s.dataset.cid, {method: "PUT", body: JSON.stringify({tunnel: s.value})})' in app
     assert 'api("/api/doctor"), api("/api/configs"), api("/api/tunnels")' in app
@@ -1249,7 +1255,8 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     app, css = _web("app.js"), _web("lab.css")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert "<th>Traffic</th>" not in app and 'class="num hide-sm"' not in row and row.count("<td") == 8                       # the table is eight columns now: name, type, bandwidth, Iran, ping, foreign, ports, the end
-    assert '<col style="width:22%"><col style="width:12%">' in app and app.count("<col ") >= 8
+    assert '<col style="width:19%"><col style="width:19%"><col style="width:150px"><col style="width:170px"><col style="width:140px"><col style="width:170px"><col style="width:12%"><col style="width:56px">' in app and app.count("<col ") >= 8      # (the owner, 2026-10-17: "bring the nodes and the ping toward the bandwidth column, too much space between them": the middle block has the widths of its content and the room that is left goes to the name, the type and the ports)
+    assert '"bandwidthmb s": 118' in _web("fluid.js")
     assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
     assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" in app
     assert "const liveAge = l => l.age + (Date.now() - (state.liveAt || Date.now())) / 1000;" in app                                # (the age comes from the server: no clock of the browser is compared with the server's)
@@ -1324,7 +1331,7 @@ def test_the_end_of_a_tunnel_row_is_the_dots_button_of_the_server_list_and_the_s
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert '<td class="tun-act"><div class="td-act">' in row and 'labKebab("tun", t.id, "Actions of " + t.name)' in row and row.count("<td") == 8
     assert 'typeof labKebab === "function"' in row and 'class="busy-chip" title="the tunnel is being rebuilt"' in row                      # (a tunnel that is being rebuilt shows its spinner in place of the button)
-    assert '<col style="width:9%"><col style="width:56px">' in app                                                                       # (the last column is as wide as the button needs)
+    assert '<col style="width:12%"><col style="width:56px"></colgroup>' in app                                                           # (the last column is as wide as the button needs)
     assert ".tun-tbl td:last-child::after { content:" not in appcss and "padding-right: 52px" not in appcss.split(".tun-tbl td:last-child {", 1)[1].split("}", 1)[0]      # (the tunnel's own arrow and the room kept for it are gone ...)
     assert "html body #page .tun-tbl td:last-child::after { content: none !important; }" in css                                             # ... and the "›" every clickable row shows on hover (app.css) is switched off here, as in the server list (lab.css)
     assert "function tunMenuItems(id)" in lab and 'if (ctx === "tun") return tunMenuItems(id);' in lab and "const labKebab = (ctx, id, label) =>" in lab      # (the menu is the one of the tunnel window)
@@ -1341,6 +1348,67 @@ def test_the_copy_mark_of_an_address_sits_inside_the_address_box_so_a_cell_canno
     box = css.split("html body #page .tun-tbl .td-node .ip-copy {", 1)[1].split("}", 1)[0]
     assert "display: inline-block" in box and "max-width: 100%" in box and "overflow: hidden" in box and "text-overflow: ellipsis" in box     # (never wider than the cell: a tight cell cuts the address with "...", not the mark)
     assert "padding-right: 18px" in css and "padding-left: 18px" in css and 'html[data-mode="light"] body #page .tun-tbl .td-node .ip-copy::before' in css
+
+
+def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stability_and_the_list_stays_calm():
+    """The owner, 2026-10-17: "show the stability and the quality of the users' internet inside their own box, not in the cards - I do not want the cards to be crowded". Row one: Servers | Status | Link; row two: Users' internet | Stability | Last results."""
+    app, css = _web("app.js"), _web("lab.css")
+    body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
+    assert "tunBanner(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
+    assert 'data-b="users"' in app and 'data-b="stability"' in app and 'data-b="results"' in app and "<i>${SI.users}</i>Users' internet" in app and "<i>${SI.pulse}</i>Stability" in app
+    users = app.split("const tunUsersBox = t => {", 1)[1].split("const tunUpBox = t =>", 1)[0]
+    assert all(f'kv("{w}", ' in users for w in ("Quality", "Problems")) and "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two rows, two lines of the problems, two of the Doctor's sentence: the row of boxes stays as tall as the Stability box)
+    stab = app.split("const tunUpBox = t =>", 1)[1].split("function tunResBox", 1)[0]
+    assert '["Answered", "Cuts", "Last cut", "Up for"]' in stab and 'class="lab-ups" id="tun-ov-${t.id}"' in stab
+    assert "api(`/api/tunnels/${id}/stability`)" in app and "/checks?hours=24" not in app.split("async function tunStrip(id) {", 1)[1].split("\n}\n", 1)[0]
+    row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
+    assert "t.ux" not in row and "stability" not in row.lower()                                           # (the rows of the list carry neither: the two boxes are in the window)
+    for sel in ('.sbox[data-b="users"] .us-line {', '.sbox[data-b="stability"] .lab-ups {', '.sbox[data-b="users"] .us-note {'):
+        assert "html body #modal .tunwin " + sel in css, sel
+
+
+def test_the_users_box_counts_what_the_doctor_keeps_of_the_configs_that_ride_the_tunnel(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    app = _web("app.js")
+    code = app[app.index("const UX_WORD ="): app.index("const tunUpBox = t =>")]
+    driver = tmp_path / "ux.js"
+    driver.write_text(
+        "const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); const ago = () => '5m'; const SI = {users: '<svg></svg>'};\n" + code + "\n"
+        "const bad = [{config: 'a', issue: 'down', text: 'does not connect'}, {config: 'b', issue: 'slow_ping', text: 'ping 900 ms'}, {config: 'c', issue: 'slow_speed', text: 'speed 3 Mb/s'}, {config: 'd', issue: 'unstable', text: 'half of its tests'}];\n"
+        "const res = {good: tunUsersBox({ux: {grade: 'good', known: 4, bad: [], at: 1}}), poor: tunUsersBox({ux: {grade: 'poor', known: 5, at: 1, bad, why: {text: 'The tunnel is healthy but the problem is BEYOND it.'}}}),\n"
+        "  fair: tunUsersBox({ux: {grade: 'fair', known: 6, at: 1, bad: bad.slice(0, 1), why: {text: 'not shown for fair'}}}), none: tunUsersBox({}), unk: tunUsersBox({ux: {grade: 'unknown', known: 0, bad: []}})};\n"
+        "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
+    r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    res = json.loads(r.stdout)
+    assert '<b class="gw-ok">Good</b> <small class="mut">4 of 4 configs fine</small>' in res["good"] and ">none<" in res["good"] and 'class="us-line"' not in res["good"] and "5m ago" in res["good"] and "answers as it usually does" in res["good"]
+    assert '<b class="err">Poor</b>' in res["poor"] and "1 of 5 configs fine" in res["poor"] and "2 slow · 1 unstable · 1 down" in res["poor"]
+    assert res["poor"].count('<div class="us-line"') == 2 and "+2 more" in res["poor"] and "BEYOND it" in res["poor"] and 'class="bw-why" title="The tunnel' in res["poor"]      # two lines, the rest counted, the Doctor's sentence under them (the whole of it in the tooltip)
+    assert '<b class="warn">Fair</b>' in res["fair"] and "5 of 6 configs fine" in res["fair"] and "not shown for fair" not in res["fair"]            # (the Doctor's sentence is for a poor or bad grade)
+    for k in ("none", "unk"):
+        assert "not known yet" in res[k] and "Tie the configs to their tunnels in the Doctor page" in res[k] and 'class="us-line"' not in res[k]      # no config rides it: it says so, never a made-up grade
+
+
+def test_a_server_has_a_spoof_test_in_its_tests_menu_and_the_picker_names_both_spoofing_carriers():
+    """The owner, 2026-10-17: "this is the way to tell whether a server eats spoofs - add it to the Servers section"; "SNI spoofing is not there at all - fix its name or its description"."""
+    app, lab, css = _web("app.js"), _web("lab.js"), _web("lab.css")
+    assert "body #ask .ask-box .ask-act.ask-choices button { height: auto; min-height: 40px;" in css and "body #ask .ask-box .ask-act.ask-choices button small { display: block;" in css      # (the second line of a choice - the address of a server - is not cut: his picture of the dialog)
+    assert 'labIt("Spoof test…", "spoof", () => srvSpoof(s.id, nm))' in lab and "window.srvSpoof = async (id, name) =>" in lab and "`/api/servers/${id}/spoof-test`" in lab and "target_id: target, spoof_ip: ip.trim()" in lab
+    assert "  spoof: '<path d=" in lab and 'glassChoice(`Spoof test of ${name}' in lab and "10.10.10.10" in lab                       # (the icon, the target of the forged packets, the address to forge)
+    assert "const spfTxt = p =>" in app and 'row("Spoofing", "spf", x.spoof ? spfTxt(x.spoof)' in app
+    assert '"backpack_direct:sni": "fake TLS hello: only a domain passes (root)"' in app and '"backpack_direct:spoof": "forged source address (root)"' in app and "Fake SNI <small>(the domain the fake TLS hello names" in app
+    assert 'name="spoof_profile"' in app and 'name="spoof_src_ip"' in app and 'name="spoof_interface"' in app and '"spoof_profile", "spoof_src_ip", "spoof_interface"' in app and "const SPOOF_PROFILES = [[" in app
+    assert "BackPack Direct · IP spoofing" in app and "BackPack Direct · PCK / SNI spoofing" in app and "FAKE TLS hello" in app
 
 
 def test_the_password_box_of_the_sign_in_page_keeps_the_colour_of_the_field_when_the_browser_fills_it():

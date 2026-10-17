@@ -19,7 +19,8 @@
     "listens on": 5, source: 5, size: 5, "backup of": 5};
 
   var MINW = {status: 72, state: 72, expires: 104, "traffic used": 120, traffic: 84, used: 84, on: 56, cpu: 56, ram: 56, disk: 56, users: 56, port: 56, ttl: 48, coef: 56, rules: 56,
-    hosts: 56, delay: 56, limit: 64, ping: 60, "ping loss": 84, inbounds: 96, outbounds: 82, templates: 80, groups: 96, "data limit": 76, duration: 70, username: 80};      // (inbounds and groups hold the pills of a group or a template)
+    hosts: 56, delay: 56, limit: 64, ping: 60, "ping loss": 84, inbounds: 96, outbounds: 82, templates: 80, groups: 96, "data limit": 76, duration: 70, username: 80,
+    "bandwidthmb s": 118};      // (inbounds and groups hold the pills of a group or a template; "bandwidthmb s" is the header of the tunnels' Bandwidth column - "Bandwidth" and its unit: the cell holds the capacity, the use and a bar)
 
   var norm = function (s) { return String(s || "").toLowerCase().replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim(); };
   var num = function (s) { var v = parseFloat(s); return isNaN(v) ? 0 : v; };

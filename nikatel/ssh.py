@@ -351,19 +351,21 @@ echo "NOW $(date +%s)"
     # read-only: the byte counters of some network cards, the byte counters of the TCP connections of some tunnels, and the uptime, in one go - the live numbers of the tunnels (services/livebw.py):
     #   "IF <card> <rx_bytes> <tx_bytes>" for every card that exists;
     #   "SOCK <spec> <local> <remote> <bytes_acked> <bytes_received>" for every established connection of a tunnel that has no card of its own (a reverse proxy: BackPack, Chisel): spec "s8072" = the connections that
-    #   came IN on port 8072 (the foreign server dials the Iran server), "d443@203.0.113.9" = the connections the Iran server opened to that address and port (forward tunnels) - the kernel's own socket counters (ss);
+    #   came IN on port 8072 (the foreign server dials the Iran server), "d443@203.0.113.9" = the connections the Iran server opened to that address and port (forward tunnels), "u80,443" = the USERS' connections
+    #   to the forwarded ports 80 and 443 of the Iran server (Paqet, BackPack over UDP: nothing else of them is a TCP connection) - the kernel's own socket counters (ss);
     #   "UP <seconds>". The uptime is the clock of the rate: it does not move with the time the ssh answer takes.
     "iface_counters": (r"""for i in @IFACES@; do [ -r /sys/class/net/$i/statistics/rx_bytes ] && echo "IF $i $(cat /sys/class/net/$i/statistics/rx_bytes) $(cat /sys/class/net/$i/statistics/tx_bytes)"; done
 for sp in @SOCKS@; do
   case "$sp" in
     s*) f="( sport = :${sp#s} )" ;;
+    u*) f="("; o=""; for p in $(echo "${sp#u}" | tr ',' ' '); do f="$f $o sport = :$p"; o="or"; done; f="$f )" ;;
     *) p=${sp#d}; f="( dport = :${p%@*} and dst ${p#*@} )" ;;
   esac
   ss -tniH "$f" 2>/dev/null | awk -v sp="$sp" '/^ESTAB/ { loc = $4; rem = $5; next } /bytes_/ { a = ""; r = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^bytes_acked:/) { split($i, x, ":"); a = x[2] } if ($i ~ /^bytes_received:/) { split($i, x, ":"); r = x[2] } } if (loc != "" && a != "" && r != "") print "SOCK " sp " " loc " " rem " " a " " r; loc = "" }'
 done
 echo "UP $(cut -d' ' -f1 /proc/uptime)"
 """, {"IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39})?$",
-      "SOCKS": r"^((s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3})( (s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3})){0,39})?$"}),
+      "SOCKS": r"^((s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})( (s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})){0,39})?$"}),
 
     # the users' path, looked at from another Iran server: one HTTP request to host:port (several at once, in parallel) - http first,
     # then https without verification for TLS ports. "REACH host port <http code> <seconds>": any code but 000 proves the port answers from Iran.
@@ -373,6 +375,14 @@ echo "UP $(cut -d' ' -f1 /proc/uptime)"
     # can this server open a TCP connection to host:port (several at once): "REACH host:port 1|0 <connect ms>". Only connects, sends nothing.
     "tcp_reach": (r"""for hp in @TARGETS@; do h=${hp%:*}; p=${hp##*:}; ( s=$(date +%s%N); if timeout 4 bash -c "echo > /dev/tcp/$h/$p" 2>/dev/null; then e=$(date +%s%N); echo "REACH $hp 1 $(( (e - s) / 1000000 ))"; else echo "REACH $hp 0 0"; fi ) & done; wait
 """, {"TARGETS": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}( [A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}){0,39}$"}),
+    # SPOOF TEST, the receiving end (read-only: it only LISTENS): the ICMP echo requests of the test (a size no other ping has: 115 bytes in all) that reach this server in the next SECS seconds, one line each with the source
+    # they came from: "PKT <source address>". "NOTCPDUMP" when tcpdump is not installed here. The sending end is the action spoof_send.
+    "spoof_listen": (r"""command -v tcpdump >/dev/null 2>&1 || { echo NOTCPDUMP; exit 0; }
+echo LISTENING
+timeout @SECS@ tcpdump -n -l -i any -c 200 'icmp and icmp[icmptype] == icmp-echo and ip[2:2] == 115' 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "IP") { print "PKT " $(i + 1); break } }'
+echo DONE
+""", {"SECS": r"^\d{1,2}$"}),
+
     # does a TLS handshake with this server name (SNI) get an answer, and does one with a neutral name: tells a filtered name from a filtered address
     "tls_sni": (r"""ip=$(getent ahostsv4 '@HOST@' | head -1 | cut -d" " -f1)
 c() { timeout 7 openssl s_client -connect "$ip:@PORT@" -servername "$1" </dev/null 2>/dev/null | grep -c 'BEGIN CERTIFICATE'; }
@@ -821,6 +831,26 @@ if command -v iptables >/dev/null 2>&1; then
 fi
 echo "PROBE_DOWN $n"
 """, {"NAME": r"^nkgp[0-9]{1,3}$"}),
+
+    # SPOOF TEST, the sending end (the owner's method, 2026-10-17: "put an SNAT rule on the Iran server, ping the other server, look with tcpdump there"): CONTROL ordinary pings of a size nobody else uses (115 bytes in all), then COUNT
+    # of the same pings whose source address is rewritten to SPOOF. The rule is the narrowest there can be - ICMP echo requests to TARGET only, tagged - so nothing else the server sends (not the tunnels to TARGET) is touched;
+    # it is put in after the control pings and taken out again at the end, ALWAYS (a trap removes it however the script ends). Nothing is written to disk. spoof_listen on the other server counts what arrives.
+    "spoof_send": (r"""set -u
+T='@TARGET@'; S='@SPOOF@'; tag="nikatel-spoof-test"
+command -v iptables >/dev/null 2>&1 || { echo NOIPTABLES; exit 0; }
+command -v ping >/dev/null 2>&1 || { echo NOPING; exit 0; }
+clean() { iptables -t nat -S POSTROUTING 2>/dev/null | grep -- "--comment $tag" | sed 's/^-A/-D/' | while read -r r; do iptables -t nat $r 2>/dev/null || true; done; }
+trap clean EXIT
+clean
+ping -c @CONTROL@ -i 0.3 -W 1 -s 87 -n "$T" >/dev/null 2>&1
+sleep 1
+iptables -t nat -I POSTROUTING 1 -d "$T" -p icmp --icmp-type echo-request -m comment --comment "$tag" -j SNAT --to-source "$S" || { echo RULEFAIL; exit 0; }
+ping -c @COUNT@ -i 0.3 -W 1 -s 87 -n "$T" >/dev/null 2>&1
+sleep 1
+clean
+echo "SENT @CONTROL@ @COUNT@"
+echo "LEFT $(iptables -t nat -S POSTROUTING 2>/dev/null | grep -c -- "--comment $tag")"
+""", {"TARGET": _IPV4, "SPOOF": _IPV4, "CONTROL": r"^\d{1,2}$", "COUNT": r"^\d{1,2}$"}),
 
     # a throw-away web server on 127.0.0.1 for 14 s, to prove the data path through a forwarded port
     "data_test_server": (r"""(timeout 14 python3 -m http.server '@PORT@' --bind 127.0.0.1 >/dev/null 2>&1 &); sleep 1; echo started

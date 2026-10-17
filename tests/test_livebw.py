@@ -96,11 +96,12 @@ def test_the_window_starts_again_when_the_card_was_made_again_or_the_server_rest
 
 def test_the_script_asks_only_for_cards_and_connections_by_their_names_and_gives_what_a_real_card_says():
     assert "iface_counters" in ssh.SCRIPTS
-    for bad in ({"IFACES": "lo; reboot"}, {"IFACES": "lo", "SOCKS": "s80; reboot"}, {"SOCKS": "s99999999"}, {"SOCKS": "d443@example.com"}, {"SOCKS": "x80"}):
+    for bad in ({"IFACES": "lo; reboot"}, {"IFACES": "lo", "SOCKS": "s80; reboot"}, {"SOCKS": "s99999999"}, {"SOCKS": "d443@example.com"}, {"SOCKS": "x80"}, {"SOCKS": "u80;reboot"}, {"SOCKS": "u99999999"}, {"SOCKS": "u80,"}, {"SOCKS": "u80,$(id)"},
+                {"SOCKS": "u" + ",".join(["80"] * 17)}):
         with pytest.raises(ValueError):
             ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": "", **bad})                 # a card is a name, a connection is a port (and an address): nothing else gets into the command
 
-    assert "@IFACES@" not in ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": "s8072 d443@203.0.113.9"})      # (both may be empty, and both can be several)
+    assert "@IFACES@" not in ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": "s8072 d443@203.0.113.9 u80,443"})      # (both may be empty, and both can be several)
 
     if sys.platform.startswith("linux"):
         out = subprocess.run(["bash", "-c", ssh._script_text("iface_counters", {"IFACES": "lo no-such-card", "SOCKS": ""})], capture_output=True, text=True, timeout=20, check=False).stdout
@@ -120,18 +121,33 @@ def test_the_script_reads_the_byte_counters_of_the_connections_of_a_port_in_both
     peer.sendall(b"y" * 40_000)
     time.sleep(0.5)
 
+    server2 = socket.socket()                          # a second port with a connection of its own: the users' ports of one tunnel are asked together
+    server2.bind(("127.0.0.1", 0))
+    server2.listen(4)
+    port2 = server2.getsockname()[1]
+    client2 = socket.create_connection(("127.0.0.1", port2))
+    peer2, _ = server2.accept()
+    client2.sendall(b"a" * 10_000)
+    peer2.sendall(b"b" * 20_000)
+    time.sleep(0.5)
+
     try:
-        for spec, who in ((f"s{port}", "the accepted connection (the foreign server dialled in)"), (f"d{port}@127.0.0.1", "the connection this side opened (a forward tunnel)")):
+        for spec, who in ((f"s{port}", "the accepted connection (the foreign server dialled in)"), (f"d{port}@127.0.0.1", "the connection this side opened (a forward tunnel)"), (f"u{port}", "the users' connection to a forwarded port")):
             out = subprocess.run(["bash", "-c", ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": spec})], capture_output=True, text=True, timeout=20, check=False).stdout
             conns = livebw.parse_socks(out).get(spec) or {}
             assert len(conns) == 1, (who, out)
             (acked, received), = conns.values()
-            sent, got = (40_000, 60_000) if spec.startswith("s") else (60_000, 40_000)                 # (what that end sent, and what it received)
+            sent, got = (60_000, 40_000) if spec.startswith("d") else (40_000, 60_000)                 # (what that end sent, and what it received: the accepted side sent 40 000 and got 60 000)
             assert acked >= sent and received >= got, (who, acked, received)
+
+        both = f"u{port},{port2}"                                                                      # (two users' ports of one tunnel: the connections of both, in one answer)
+        out = subprocess.run(["bash", "-c", ssh._script_text("iface_counters", {"IFACES": "", "SOCKS": both})], capture_output=True, text=True, timeout=20, check=False).stdout
+        conns = livebw.parse_socks(out).get(both) or {}
+        assert len(conns) == 2 and sorted(c[0] for c in conns) == sorted([f"127.0.0.1:{port}", f"127.0.0.1:{port2}"]), out
+        assert sum(a for a, _r in conns.values()) >= 60_000 and sum(r for _a, r in conns.values()) >= 70_000
     finally:
-        client.close()
-        peer.close()
-        server.close()
+        for s in (client, peer, server, client2, peer2, server2):
+            s.close()
 
 
 def test_the_servers_to_read_are_the_iran_servers_with_a_card_or_the_connections_of_each_tunnel():
@@ -140,8 +156,8 @@ def test_the_servers_to_read_are_the_iran_servers_with_a_card_or_the_connections
     rev, rev_sid = make("bp-rev", typ="backpack", transport="wssmux")                     # a reverse proxy: no card of its own - its connections on the control port are counted
     chrev, chrev_sid = make("ch-rev", typ="chisel", transport="ws", record={"direction": "reverse"})
     chfwd, chfwd_sid = make("ch-fwd", typ="chisel", transport="fws", record={"direction": "forward"})
-    make("bp-udp", typ="backpack", transport="udp", record={"udp_carrier": True})          # UDP, QUIC, KCP and raw sockets have no connection to count: no number ...
-    make("pq-a", typ="paqet", transport="kcp", record={"direction": "direct"})             # ... and Paqet is one of them
+    udp, udp_sid = make("bp-udp", typ="backpack", transport="udp", record={"udp_carrier": True})      # UDP, QUIC, KCP and raw sockets have no connection between the servers to count ...
+    pq, pq_sid = make("pq-a", typ="paqet", transport="kcp", record={"direction": "direct"})          # ... and Paqet is one of them: its USERS' connections to the forwarded port are counted (the owner, 2026-10-17)
     make("test-x")                                                                         # a temporary test tunnel: never listed, never read
     make("gr-off", iran_online=False)
     make("gr-dis", enabled=False)
@@ -152,9 +168,10 @@ def test_the_servers_to_read_are_the_iran_servers_with_a_card_or_the_connections
 
     got = {t["server_id"]: (t["cards"], t["socks"]) for t in livebw.targets()}
     assert got == {gre_sid: ({"gr-a": [gre]}, {}),                                          # the GRE link by the name of the tunnel
-                   direct_sid: ({"bp7": [direct]}, {}),                                     # the L3 link of a BackPack Direct tunnel by its bp<N>
+                   direct_sid: ({}, {"u8076": [direct]}),                                   # a BackPack Direct tunnel: the users' own connections to its port, not its L3 link bp<N> (the link counts ~20 % more: inner headers and the carrier's framing)
                    rev_sid: ({}, {"s9901": [rev]}), chrev_sid: ({}, {"s9901": [chrev]}),   # the connections that came in on the control port (the foreign server dials the Iran server)
-                   chfwd_sid: ({}, {f"d9901@{fwd_host}": [chfwd]})}                         # the connections the Iran server opened to the foreign server (a forward tunnel)
+                   chfwd_sid: ({}, {f"d9901@{fwd_host}": [chfwd]}),                         # the connections the Iran server opened to the foreign server (a forward tunnel)
+                   udp_sid: ({}, {"u8076": [udp]}), pq_sid: ({}, {"u8076": [pq]})}         # the users' own connections to the forwarded port: what has no TCP connection between its servers
     assert all(t["node"].host.startswith("203.0.113.") for t in livebw.targets())          # (always the Iran side: that is where the users' traffic enters)
 
 
@@ -197,6 +214,47 @@ def test_a_round_counts_the_connections_of_a_reverse_proxy_into_the_numbers_of_t
     v = livebw.view()[str(tid)]
     assert v["down"] == 100.0 and v["up"] == 4.0 and v["span"] == 10.0                        # (125 MB in 10 s: the connection that closed did not make the number go back)
     assert seen[0] == {"IFACES": "", "SOCKS": "s9901"}
+
+
+def test_the_spec_of_a_tunnel_is_its_control_connections_else_the_users_own_connections_to_its_ports():
+    """The owner, 2026-10-17 (his picture: two Paqet tunnels with a dash): "show the users' traffic in the different tunnels"."""
+    def spec_of(**kw):
+        tid, _ = make(**kw)
+
+        with session() as db:
+            return livebw.sock_spec(db.get(Tunnel, tid))
+
+    assert spec_of(name="a1", typ="backpack", transport="wssmux") == "s9901" and spec_of(name="a2", typ="chisel", transport="ws", record={"direction": "reverse"}) == "s9901"      # (the control port: as before)
+    assert spec_of(name="a3", typ="chisel", transport="fws", record={"direction": "forward"}).startswith("d9901@198.51.100.")
+    assert spec_of(name="a4", typ="paqet", transport="kcp", record={"direction": "direct"}) == "u8076"                       # no TCP connection between its servers: the users' own
+    assert spec_of(name="a5", typ="backpack", transport="udp", record={"udp_carrier": True}) == "u8076"
+    assert spec_of(name="a6", typ="backhaul") == "u8076"                                                                     # (a tunnel whose card is not known still has its users' ports)
+
+    tid, _ = make("a7", typ="paqet", transport="kcp")
+
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        t.forwarded_ports = [443, 80, "8443", 80, 70000, 0, "x"]                                                              # sorted, once each, only real ports
+        assert livebw.sock_spec(t) == "u80,443,8443"
+        t.forwarded_ports = list(range(1000, 1040))
+        assert livebw.sock_spec(t).count(",") == livebw.MAX_USER_PORTS - 1                                                    # (a limit: one command stays small)
+        t.forwarded_ports = []
+        assert livebw.sock_spec(t) == ""                                                                                      # no forwarded port: nothing to count, never a made-up zero
+
+
+def test_a_round_counts_the_users_own_connections_and_what_the_server_sends_them_is_their_download(monkeypatch):
+    tid, _ = make("pq-a", typ="paqet", transport="kcp", record={"direction": "direct"})
+    a, b = ("10.0.0.1:8076", "203.0.113.50:41001"), ("10.0.0.1:8076", "203.0.113.51:41002")
+    outs = iter([sockline("u8076", *a, 1_000, 5_000) + "UP 100.0\n",
+                 sockline("u8076", *a, 1_000 + 62_500_000, 5_000 + 2_500_000) + sockline("u8076", *b, 0, 0) + "UP 105.0\n"])      # the server SENT 62.5 MB to the users in 5 s (their download), received 2.5 MB
+    seen = []
+    monkeypatch.setattr(livebw, "run_light", lambda node, name, params=None, timeout=8: (seen.append(params), next(outs))[1])
+    target = livebw.targets()[0]
+    livebw._read(target)
+    livebw._read(target)
+    v = livebw.view()[str(tid)]
+    assert v["down"] == 100.0 and v["up"] == 4.0 and v["via"] == "users"                      # (acked = sent to the user = download; a control connection is the other way round)
+    assert seen[0] == {"IFACES": "", "SOCKS": "u8076"}
 
 
 def test_no_connection_a_long_gap_or_a_test_of_the_panel_gives_no_wrong_number(monkeypatch):
