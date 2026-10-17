@@ -361,6 +361,12 @@ for h in @PEERS@; do ( o=$(ping -c 3 -i 0.2 -W 1 -q "$h" 2>/dev/null); l=$(echo 
 echo "NOW $(date +%s)"
 """, {"UNITS": _UNITS, "IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,59})?$", "PEERS": r"^(\d{1,3}(\.\d{1,3}){3}( \d{1,3}(\.\d{1,3}){3}){0,59})?$"}),
 
+    # the WARM STANDBY (services/standby.py), read-only: the redirects of the users' ports that stand on this server - "STANDBY <standby name> <tcp|udp> <users' port> <shifted port>" for every NAT rule tagged
+    # "nikatel-standby-<name>". The panel compares it with what it believes (a rule nobody asked for is taken off, a handover whose rules are gone is put again).
+    "standby_list": (r"""iptables -t nat -S PREROUTING 2>/dev/null | awk '/nikatel-standby-/ { n = ""; p = ""; d = ""; s = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1); if ($i == "--to-ports") s = $(i + 1); if ($i == "--comment") { n = $(i + 1); gsub(/"/, "", n); sub(/^nikatel-standby-/, "", n) } } if (n != "" && p != "" && d != "" && s != "") print "STANDBY", n, p, d, s }'
+echo "NOW $(date +%s)"
+""", {}),
+
     # read-only: the byte counters of some network cards, the byte counters of the TCP connections of some tunnels, and the uptime, in one go - the live numbers of the tunnels (services/livebw.py):
     #   "IF <card> <rx_bytes> <tx_bytes>" for every card that exists;
     #   "SOCK <spec> <local> <remote> <bytes_acked> <bytes_received>" for every established connection of a tunnel that has no card of its own (a reverse proxy: BackPack, Chisel): spec "s8072" = the connections that
@@ -805,6 +811,87 @@ systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true
 if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre '; then ip link del "$n" 2>/dev/null || true; fi
 rm -f "/etc/nikatel/wg/$n.key"; echo "REMOVED $n"
 """, {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "TRANSPORT": r"^(tcp|tcpmux|wsmux|wssmux)$"}),
+
+    # the WARM STANDBY (services/standby.py), the handover: the users' ports of a tunnel that is cut are handed to the ports of its standby tunnel (the same two servers, shifted ports) with a NAT redirect in PREROUTING -
+    # one command, about two seconds. Every rule is tagged "nikatel-standby-<standby name>" so that nothing else is touched, an ACCEPT for the shifted port is put in INPUT (a closed INPUT chain would drop what
+    # was redirected), and everything can be run again (idempotent). A small script and a boot unit keep it across a reboot while the handover stands.
+    # The request the panel makes ON the server (127.0.0.1) is NOT redirected: the tunnel that is cut is still judged by what it carries itself. "STANDBY_ON <name> <rules>" / "STANDBY_FAIL <why>". MAP: "<users' port>:<shifted port>,...".
+    # (The redirect is put at the TOP of the chain and a rule left by the way back is removed only after that: the NAT chain is never empty in between - see standby_off.)
+    "standby_on": (r"""set -e; n='@NAME@'
+command -v iptables >/dev/null 2>&1 || { echo "STANDBY_FAIL this server has no iptables"; exit 0; }
+cat > "/usr/local/sbin/nikatel-standby-$n" <<'EOS'
+#!/bin/sh
+# Nikatel warm standby '@NAME@': the users' ports (@MAP@, @PROTOS@) go to the shifted ports of the standby tunnel. `on` puts the redirects, `off` takes every rule of this standby off; both can be run again and again.
+tag="nikatel-standby-@NAME@"
+W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
+ipt() { iptables $W "$@"; }
+each() { for pair in $(echo '@MAP@' | tr ',' ' '); do p=${pair%%:*}; s=${pair##*:}; for proto in @PROTOS@; do "$1" "$proto" "$p" "$s"; done; done; }
+on_one() {
+  ipt -t nat -C PREROUTING -p "$1" --dport "$2" -m comment --comment "$tag" -j REDIRECT --to-ports "$3" 2>/dev/null || ipt -t nat -I PREROUTING 1 -p "$1" --dport "$2" -m comment --comment "$tag" -j REDIRECT --to-ports "$3"
+  while ipt -t nat -C PREROUTING -p "$1" --dport "$2" -m comment --comment "$tag" -j RETURN 2>/dev/null; do ipt -t nat -D PREROUTING -p "$1" --dport "$2" -m comment --comment "$tag" -j RETURN; done
+  ipt -C INPUT -p "$1" --dport "$3" -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$1" --dport "$3" -m comment --comment "$tag" -j ACCEPT
+  while ipt -C INPUT -p "$1" --dport "$3" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null; do ipt -D INPUT -p "$1" --dport "$3" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT; done
+}
+off_all() {
+  for spec in "nat PREROUTING" "filter INPUT"; do
+    set -- $spec
+    ipt -t "$1" -S "$2" 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | sed 's/^-A /-D /' | tr -d '"' | while read -r r; do ipt -t "$1" $r; done
+  done
+}
+case "$1" in on) each on_one ;; off) off_all ;; *) exit 2 ;; esac
+EOS
+chmod 755 "/usr/local/sbin/nikatel-standby-$n"
+cat > "/etc/systemd/system/nikatel-standby-$n.service" <<'EOS'
+[Unit]
+Description=Nikatel warm standby @NAME@ (the users' ports go to the standby tunnel)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/nikatel-standby-@NAME@ on
+ExecStop=/usr/local/sbin/nikatel-standby-@NAME@ off
+[Install]
+WantedBy=multi-user.target
+EOS
+systemctl daemon-reload
+"/usr/local/sbin/nikatel-standby-$n" on
+systemctl enable "nikatel-standby-$n.service" >/dev/null 2>&1 || true
+echo "STANDBY_ON @NAME@ $(iptables -t nat -S PREROUTING 2>/dev/null | grep -c -- "--comment \"\?nikatel-standby-$n\"\? .*-j REDIRECT")"
+""", {"NAME": _TNAME, "MAP": r"^\d{1,5}:\d{1,5}(,\d{1,5}:\d{1,5}){0,199}$", "PROTOS": r"^(tcp|udp|tcp udp)$"}),
+
+    # the way back. PARK=1 (the users go back to the tunnel): new connections stop being redirected, and the CONNECTIONS THAT ARE OPEN STAY on the standby until they close. Measured on a kernel with nft-backed iptables: deleting the
+    # last rule of the NAT chain makes the kernel forget the translation of every open connection (they are reset), so a rule of ours is PUT FIRST (a tagged RETURN at the top of the chain, harmless) and the redirect is deleted
+    # after it; the same for INPUT (the accept becomes an accept of the established connections only). PARK=0 (the standby is removed): every rule of the tag is taken off, parked ones too. Either way the boot unit and the script
+    # are removed, so a reboot puts nothing again. Found by the tag, so it works even when the script is gone. "STANDBY_OFF <name> <redirects left>" (PARK=0: <rules of the tag left>).
+    "standby_off": (r"""n='@NAME@'; park='@PARK@'; tag="nikatel-standby-$n"
+if command -v iptables >/dev/null 2>&1; then
+  W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
+  ipt() { iptables $W "$@"; }
+  mine() { ipt -t "$1" -S "$2" 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | tr -d '"'; }
+  pd() { awk '{ p = ""; d = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1) } if (p != "" && d != "") print p, d }' | sort -u; }
+  if [ "$park" = 1 ]; then
+    mine nat PREROUTING | grep -- '-j REDIRECT' | pd | while read -r p d; do
+      ipt -t nat -C PREROUTING -p "$p" --dport "$d" -m comment --comment "$tag" -j RETURN 2>/dev/null || ipt -t nat -I PREROUTING 1 -p "$p" --dport "$d" -m comment --comment "$tag" -j RETURN
+    done
+    mine nat PREROUTING | grep -- '-j REDIRECT' | sed 's/^-A /-D /' | while read -r r; do ipt -t nat $r; done
+    mine filter INPUT | grep -v conntrack | pd | while read -r p d; do
+      ipt -C INPUT -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT
+      while ipt -C INPUT -p "$p" --dport "$d" -m comment --comment "$tag" -j ACCEPT 2>/dev/null; do ipt -D INPUT -p "$p" --dport "$d" -m comment --comment "$tag" -j ACCEPT; done
+    done
+  else
+    for spec in "nat PREROUTING" "filter INPUT"; do
+      set -- $spec
+      mine "$1" "$2" | sed 's/^-A /-D /' | while read -r r; do ipt -t "$1" $r; done
+    done
+  fi
+fi
+systemctl disable "nikatel-standby-$n.service" >/dev/null 2>&1 || true
+rm -f "/etc/systemd/system/nikatel-standby-$n.service" "/usr/local/sbin/nikatel-standby-$n"
+systemctl daemon-reload
+if [ "$park" = 1 ]; then LEFT=$(iptables -t nat -S PREROUTING 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? .*-j REDIRECT"); else LEFT=$( (iptables -t nat -S PREROUTING; iptables -t filter -S INPUT) 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? "); fi
+echo "STANDBY_OFF $n $LEFT"
+""", {"NAME": _TNAME, "PARK": r"^[01]$"}),
 
     # WireGuard for a Backhaul link: install wireguard-tools when the server has none (apt only; nothing is copied from another machine - a binary of another release does not run), then make the key of one tunnel
     # on the server itself - the private key never leaves it and never appears in a command line or a log - and print the public key. "WG_OK ..." / "WG_FAIL <why>", "PUB=<key>"

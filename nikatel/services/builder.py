@@ -24,7 +24,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Server, Tunnel, is_temp
+from ..models import ActionLog, Server, Tunnel, is_standby, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from ..ssh import target as ssh_target
 from . import settings as st
@@ -583,6 +583,7 @@ class Build:
     opts: dict = field(default_factory=dict)
     name: str = ""
     created: list[tuple[str, Node]] = field(default_factory=list)   # (what, where) for rollback
+    standby_of: str = ""   # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock (the repair of the real tunnel may build at the same time)
 
 
 CANCEL: set[int] = set()   # build ids the operator stopped: the next step of the build raises and the build rolls everything back
@@ -712,8 +713,9 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
     return {"ports": [p.listen for p in ports], "mapping": ",".join(p.spec() for p in ports)}
 
 
-def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True, opts: dict | None = None) -> int:
-    """Validate, create the action_log entry, run the build in a thread. Returns the action id."""
+def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True, opts: dict | None = None,
+                standby_of: str = "") -> int:
+    """Validate, create the action_log entry, run the build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -744,22 +746,23 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
             raise ValueError("both servers must be enabled")
 
         pair = f"{iran.name} ⇄ {foreign.name}"
+        lock = f"{pair} (standby {forced_name})" if standby_of else pair          # a standby is built beside the real tunnel of its pair: its own key, the servers' locks still make the builds wait for each other
 
         with _LOCK:
-            if pair in _BUILDING:
+            if lock in _BUILDING:
                 raise ValueError("a tunnel between these two servers is already being built")
 
-            _BUILDING.add(pair)
+            _BUILDING.add(lock)
 
-        entry = ActionLog(ref=forced_name or pair, action="build", source="manual", story=[f"Building a {transport} tunnel {pair}, ports {', '.join(p.spec() for p in ports)}"])
+        entry = ActionLog(ref=forced_name or pair, action="standby" if standby_of else "build", source="manual", story=[f"Building a {transport} tunnel {pair}, ports {', '.join(p.spec() for p in ports)}"])
         db.add(entry)
         db.flush()
         aid = entry.id
-        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name)
+        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of)
         db.expunge(iran)
         db.expunge(foreign)
 
-    threading.Thread(target=_build_worker, args=(b, pair), name=f"build-{pair}", daemon=True).start()
+    threading.Thread(target=_build_worker, args=(b, lock), name=f"build-{lock}", daemon=True).start()
     return aid
 
 
@@ -1092,16 +1095,17 @@ def _build(b: Build) -> None:
 
     # 7. record the tunnel
     with session() as db:
-        t = Tunnel(name=b.name, enabled=not is_temp(b.name), type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
+        t = Tunnel(name=b.name, enabled=not is_temp(b.name) and not b.standby_of, type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
                    record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel",
+                           **({"standby_of": b.standby_of} if b.standby_of else {}),
                            **({"link": link, "link_port": link_port, **({"wg": {"iran_pub": pubs["iran"], "foreign_pub": pubs["foreign"]}} if link == "wg" else {})} if link != "gre" else {})},        # (public keys only: the private ones never left their servers)
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
         db.flush()
         tid = t.id
-        if not is_temp(b.name):          # a temporary test tunnel is not an event
+        if not is_temp(b.name) and not b.standby_of:          # a temporary test tunnel and a standby are not an event
             emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: ports {', '.join(p.spec() for p in b.ports)}, {rtt} ms over GRE.", b.name)
 
     check_tunnel(tid)
@@ -1127,6 +1131,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
         nodes = [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
         other = (t.type or "").lower() in ("backpack", "paqet", "chisel")
         rec_now = dict(t.record or {})          # (the bandwidth sink of a GRE tunnel is on the foreign server: it goes with the tunnel)
+        quiet = is_standby(t)                   # (a warm standby that is removed or built again is not an event: nobody is told that a spare was replaced)
         snap = trash_snapshot(t) if trash and not keep_record else None
         entry = ActionLog(ref=name, action="delete", source="manual", story=[f"Removing {label} from both servers"])
         db.add(entry)
@@ -1170,7 +1175,8 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
             e.ok = all("removed" in r and "not" not in r for r in results)
             e.finished_at = int(time.time())
 
-        emit(db, "warn" if all("not" not in r for r in results) else "bad", "tunnels", f"Tunnel {label} removed: " + "; ".join(results), name)
+        if not quiet:
+            emit(db, "warn" if all("not" not in r for r in results) else "bad", "tunnels", f"Tunnel {label} removed: " + "; ".join(results), name)
 
     if snap is not None:
         from . import trash as trash_store
@@ -1288,6 +1294,10 @@ def _rename_row(db, t: Tunnel, new: str, custom: bool) -> None:
 
     if old in muted:
         st.put("alerts", {"muted": sorted({new if m == old else m for m in muted})})
+
+    from . import standby  # (it imports this module: so it is imported here)
+
+    standby.note_rename(old, new)      # the mark and the standby of the tunnel follow its new name (the standby job does it, outside this session)
 
 
 def rename_tunnel(tunnel_id: int, new_name: str) -> str:

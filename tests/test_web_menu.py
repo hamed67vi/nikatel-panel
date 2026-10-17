@@ -1378,7 +1378,7 @@ def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stabi
     """The owner, 2026-10-17: "show the stability and the quality of the users' internet inside their own box, not in the cards - I do not want the cards to be crowded". Row one: Servers | Status | Link; row two: Users' internet | Stability | Last results."""
     app, css = _web("app.js"), _web("lab.css")
     body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
-    assert "tunBanner(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
+    assert "tunBanner(t) + tunStandby(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
     assert 'data-b="users"' in app and 'data-b="stability"' in app and 'data-b="results"' in app and "<i>${SI.users}</i>Users' internet" in app and "<i>${SI.pulse}</i>Stability" in app
     users = app.split("const tunUsersBox = t => {", 1)[1].split("const tunUpBox = t =>", 1)[0]
     assert all(f'kv("{w}", ' in users for w in ("Quality", "Problems")) and "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two rows, two lines of the problems, two of the Doctor's sentence: the row of boxes stays as tall as the Stability box)

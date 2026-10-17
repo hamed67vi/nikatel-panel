@@ -14,6 +14,12 @@ def is_temp(name: str) -> bool:
     return str(name).startswith("test-")
 
 
+def is_standby(t) -> bool:
+    """The warm standby of another tunnel (services/standby.py): a real tunnel between the same two servers on shifted ports, switched off in the list (`enabled` False: every place that lists, counts, alerts on or repairs
+    the enabled tunnels leaves it alone) and looked at only by the standby job. Its record names the tunnel it stands for."""
+    return bool(((getattr(t, "record", None) or {}) if not isinstance(t, dict) else t).get("standby_of"))
+
+
 def now() -> int:
     return int(time.time())
 

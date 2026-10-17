@@ -300,7 +300,7 @@ def test_the_repair_job_runs_at_once_when_a_tunnel_is_cut_and_when_a_repair_ends
     with session() as db:
         assert db.get(Tunnel, tid).state == "down"
 
-    assert woken == ["repair"]                                                                                     # a tunnel turned down: the job looks at it now
+    assert woken == ["repair", "standby"]                                                                                     # a tunnel turned down: the repair job looks at it now - and the standby job (a tunnel with a warm standby gets its users' ports handed over)
     woken.clear()
     tn._check_tunnel(tid)
     assert woken == []                                                                                             # (no change of state, no wake-up)

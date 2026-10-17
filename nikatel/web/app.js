@@ -826,7 +826,7 @@ const LOSS_OVER = {link: "the GRE link of this tunnel", iface: "the link of this
 const lossTip = t => tunLoss(t).blocked ? "Ping does not pass on this path (the provider drops it) - the data does: it was checked through the tunnel itself" : `Packets lost on ${LOSS_OVER[(t.detail || {}).ping_over] || LOSS_OVER.link}`;
 const tunSev = t => { const loss = tunLoss(t).v || 0; if (t.state === "down") return "sev-red"; return t.state === "unknown" || t.state === "starting" || loss >= SHOW_LOSS || (t.bw || {}).state === "drop" ? "sev-yellow" : ""; };
 /* the bandwidth of a tunnel (what the Doctor keeps: services/bandwidth.py): the download it can carry, in the plainest words - a number, a bar against its usual level, and "▼ usual" while it is dropped */
-const LINK_TAG = {wg: "WireGuard", fou: "GRE/UDP"};      // what a Backhaul tunnel runs over besides GRE (record.link: services/builder.py `link_scripts`)
+const LINK_TAG = {wg: "WireGuard", fou: "GRE/UDP", gue: "GRE/GUE", ipip: "IPIP", ipipfou: "IPIP/UDP", ipipgue: "IPIP/GUE", ipsec: "IPsec", ipsecnat: "IPsec/UDP"};      // what a Backhaul tunnel runs over besides GRE (record.link: services/builder.py `link_scripts`)
 const linkTag = t => LINK_TAG[(t.record || {}).link] || "GRE";
 const bwFmt = v => v == null ? "—" : bwNum(v) + " Mb/s";      // (everything about a tunnel's bandwidth is in Mb/s, never Gb/s - the owner, 2026-10-17)
 const uxTip = t => { const u = t.ux || {}; return u.grade && u.grade !== "unknown" ? ` · Users: ${u.grade}${u.known ? " (" + u.known + " config" + (u.known === 1 ? "" : "s") + ")" : ""}` : ""; };      // what the users get through it (the probe's tests of the configs that ride the tunnel; services/userq.py)
@@ -896,8 +896,24 @@ function tunModal(t) {
 function tunWinHtml(t) {
   const sec = state.tsec === "monitor" ? "monitor" : "overview", c = (state.chartCache || {})["t" + t.id + ":" + state.mrange];
   const bar = `<div class="tabs lab-sec">${TUN_SECS.map(([k, l]) => `<button class="${k === sec ? "on" : ""}" onclick="tunWtab('${k}')">${l}</button>`).join("")}</div>`;
-  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunGrid(t) + `<div class="sgrid">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`;
+  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunStandby(t) + tunGrid(t) + `<div class="sgrid">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`;
   return bar + `<div class="lab-body" data-sec="${sec}">${body}</div><div id="fix-${t.id}" class="fix hidden"></div>`;
+}
+/* the warm standby (the owner, 2026-10-17: "bring the delay down to the minimum"; services/standby.py): a second tunnel of another type between the same two servers, built BEFORE a cut and kept idle on shifted ports; when this tunnel is cut
+   the users' ports are handed to it in seconds, and they go back when this tunnel has held for a minute. A switch and a state in the window - the standby is not a row of the list. t.standby = {on, state, kind, since, why, ports, up} */
+const SB_WORD = {off: "Off", building: "Building…", ready: "Ready", in_use: "In use", mending: "Being mended", waiting: "Waiting", failed: "Not built", removing: "Removing…"};
+function tunStandby(t) {
+  const s = t.standby || {}, st = s.state || "off", id = t.id, tone = st === "in_use" ? "warn" : st === "ready" ? "ok" : st === "failed" ? "bad" : st === "off" ? "" : "warn", clock = ts => ts ? new Date(ts * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "";
+  const b = (label, click, pri, tip) => `<button class="sm ${pri ? "pri" : ""}" onclick="${click}" ${tip ? `title="${esc(tip)}"` : ""}>${label}</button>`;
+  const meta = st === "off" ? "A second tunnel of another type waits beside this one. If this one is cut, its users' ports are handed to it in seconds." :
+    st === "ready" ? `${esc(s.kind)} · ports ${esc(s.ports)} · idle, looked at every 15 seconds` :
+    st === "in_use" ? `The users' ports are on the standby (${esc(s.kind)}) since ${clock(s.since)} - they go back to this tunnel when it has held for a minute` :
+    esc(s.why || SB_WORD[st] || "");
+  const acts = st === "off" ? b("Turn on", `tunStandbySet(${id}, true)`, false, "Build the standby now (about a minute); nothing changes for the users")
+    : st === "in_use" ? b("Back now", `tunStandbyBack(${id})`, true, "Take the users' ports off the standby now") + b("Turn off", `tunStandbySet(${id}, false)`, false, "Give the ports back and remove the standby")
+    : st === "ready" ? b("Switch now", `tunStandbyNow(${id})`, false, "Hand the users' ports to the standby now (a drill; they stay there until Back now)") + b("Turn off", `tunStandbySet(${id}, false)`, false, "Remove the standby")
+    : st === "removing" ? "" : b("Turn off", `tunStandbySet(${id}, false)`, false, "Remove the standby");
+  return `<div class="lab-ban ${tone}" data-b="standby" title="The warm standby: another tunnel type between the same two servers, on shifted ports, built before a cut"><i class="lb-i">${st === "in_use" ? "⇆" : "⧉"}</i><div class="lb-t"><b>Standby · ${SB_WORD[st] || st}</b><span class="lb-m" title="${esc(s.why || "")}">${meta}</span></div><div class="lb-a">${acts}</div></div>`;
 }
 function tunBanner(t) {      // one box that says how the tunnel is, in plain words, with the buttons that fix it
   const offs = tunOffServers(t), d = t.detail || {}, up = t.state === "up";
@@ -1354,6 +1370,32 @@ window.healthTunnel = async id => {      // ONE button: the check (up / down, da
   toast("Checking and measuring… (about 10 s)");
   try { await api(`/api/tunnels/${id}/check`, {method: "POST"}); const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
+const tunRedraw = async id => {      // the window of this tunnel, drawn again with what the server says now (no page refresh: the window stays where it is)
+  try { const t = await api(`/api/tunnels/${id}`), i = (state.tunnelsCache || []).findIndex(x => x.id === id); if (i >= 0) state.tunnelsCache[i] = t; const body = $("#modal .modal-body"); if (state.open === id && body) { body.innerHTML = `<div id="tun-detail-${id}">${tunWinHtml(t)}</div>`; tunAfter(t); } } catch (e) { /* the window was closed meanwhile */ }
+};
+let tunSbT = null;
+const tunStandbyWatch = id => {      // while the standby is being built or mended the window looks again every 4 s, until it is ready (or off, or in use)
+  clearInterval(tunSbT); let n = 0;
+  tunSbT = setInterval(async () => {
+    if (state.open !== id || !document.getElementById("tun-detail-" + id) || ++n > 90) { clearInterval(tunSbT); return; }
+    await tunRedraw(id); const s = ((state.tunnelsCache || []).find(x => x.id === id) || {}).standby || {};
+    if (["ready", "off", "failed", "in_use"].includes(s.state)) clearInterval(tunSbT);
+  }, 4000);
+};
+window.tunStandbySet = async (id, on) => {
+  if (!on && !await gconfirm("Remove the standby of this tunnel? If the users' ports are on it they are given back to the tunnel first.", {danger: true})) return;
+  try { await api(`/api/tunnels/${id}/standby`, {method: "PUT", body: JSON.stringify({on})}); toast(on ? "✓ Standby on - it is being built beside the tunnel (about a minute); nothing changes for the users" : "✓ Standby off", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id); tunStandbyWatch(id);
+};
+window.tunStandbyNow = async id => {
+  if (!await gconfirm("Hand the users' ports of this tunnel to its standby now? New connections go through the standby until you press Back now (a drill of what happens when the tunnel is cut).")) return;
+  try { const r = await api(`/api/tunnels/${id}/standby/handover`, {method: "POST"}); toast(`✓ The users' ports are on the standby (${r.kind})`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id);
+};
+window.tunStandbyBack = async id => {
+  try { await api(`/api/tunnels/${id}/standby/back`, {method: "POST"}); toast("✓ The users' ports are on the tunnel again; open connections end on the standby by themselves", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id); refresh();
+};
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.checkAll = async () => {      // Check all: it works right there on the button (no window); the answer is one line in the status bar and the list is drawn again
   if (state.tunChecking) return; state.tunChecking = true;
@@ -1528,7 +1570,7 @@ const BK_GUIDE = [
 const SPOOF_PROFILES = [["udp", "plain datagrams · the default"], ["icmp", "for paths that filter UDP"], ["tcp", "looks like a TCP flow"], ["icmpv6", "ICMPv6 echo in an IPv4 packet"], ["proto58", "bare protocol 58"], ["ipip", "IP-in-IP (protocol 4)"], ["gre", "GRE (protocol 47)"]];      // (the packet profiles of BackPack's IP spoofing carrier: docs/ip-spoofing.md of the project)
 /* two or three words per type, shown in the drop-down */
 const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp": "few users, plain route", "backhaul:wsmux": "behind a CDN, clear", "backhaul:wssmux": "behind a CDN, TLS",
-  "backhaul:wg:tcpmux": "GRE filtered, UDP open, encrypted", "backhaul:wg:tcp": "GRE filtered, UDP open, few users", "backhaul:fou:tcpmux": "GRE filtered, UDP open, no encryption",
+  "backhaul:wg:tcpmux": "GRE filtered, UDP open, encrypted", "backhaul:wg:tcp": "GRE filtered, UDP open, few users", "backhaul:fou:tcpmux": "GRE filtered, UDP open, no encryption", "backhaul:gue:tcpmux": "GRE filtered, UDP open, GUE shape", "backhaul:ipip:tcpmux": "GRE filtered, the lightest link", "backhaul:ipipfou:tcpmux": "GRE filtered, IPIP in UDP", "backhaul:ipipgue:tcpmux": "GRE filtered, IPIP in UDP (GUE)", "backhaul:ipsec:tcpmux": "GRE filtered, ESP open, encrypted", "backhaul:ipsecnat:tcpmux": "GRE filtered, UDP open, IPsec",
   "backpack:tcpmux": "many users, GRE blocked", "backpack:tcp": "few users, GRE blocked", "backpack:stealth": "very heavy filtering", "backpack:pck": "Iran stalls plain TCP (root)", "backpack:kcp": "lossy route, games", "backpack:udp": "UDP-only services", "backpack:quic": "UDP open, wants QUIC", "backpack:ws": "behind your own TLS", "backpack:wsmux": "WebSocket + many users", "backpack:wss": "must look like HTTPS", "backpack:wssmux": "heavy filtering + many users", "backpack:xdi": "Iran blocks almost everything",
   "backpack_direct:udp": "low latency, voice, games", "backpack_direct:quic": "low latency, UDP open", "backpack_direct:pck": "Iran throttles TCP (root)", "backpack_direct:sni": "fake TLS hello: only a domain passes (root)", "backpack_direct:spoof": "forged source address (root)", "backpack_direct:xdi": "UDP and TCP both blocked",
   "paqet:kcp": "ordinary TCP stalls, raw sockets", "chisel:ws": "small group, simplest", "chisel:wss": "small group, looks like HTTPS",
@@ -1944,10 +1986,10 @@ PAGES.actions = async () => {
   const sugRow = s => `<div class="ap-row ap-sug"><span class="st degraded">${s.kind === "route" ? "route" : "load"}</span><b>${esc(s.tunnel)}</b><span class="ap-ft"><em>${esc(s.from)}</em> → <em>${esc(s.to || "?")}</em></span><span class="ap-why mut" title="${esc(s.why)}">${esc(s.why)}</span><time title="${when(s.at)}">${ago(s.at)} ago</time>${s.to_id ? `<button class="sm pri" onclick="apSugApply('${esc(s.id)}')" title="Build it on ${esc(s.to)} first, point its DNS, then remove the old one">${apIc("sync")}<span>Move now</span></button>` : `<button class="sm" onclick="apPickMove(${s.tunnel_id}, '${esc(s.tunnel)}')" title="Choose the Iran server yourself">Choose a server</button>`}<button class="sm" onclick="apSugDrop('${esc(s.id)}')">Dismiss</button></div>`;
   const sugBox = sugs.length ? `<div class="nw-box sug-box"><b class="nw-title">💡 The Doctor suggests${mode === "fix" ? ' <small class="mut">(in the mode “Fix + move” it would do this by itself)</small>' : ""}</b>${sugs.map(sugRow).join("")}</div>` : "";
   /* the ledger of moves: what went where and why, with the way back */
-  const REASON = {down: "server off", resources: "exhausted", route: "bad route", return: "return", manual: "by hand", replace: "replaced"};
+  const REASON = {down: "server off", resources: "exhausted", route: "bad route", return: "return", manual: "by hand", replace: "replaced", standby: "standby"};
   const mv = (dc && dc.moves) || [], back = (dc && dc.back) || {}, rails = (dc && dc.rails) || {max_per_day: 3, cooldown_hours: 2, back_after_hours: 3};
   const mvRow = m => { const names = (m.tunnels || []).length ? m.tunnels : (m.asked || []), canBack = m.ok !== false && !m.returned && m.reason !== "return" && (m.tunnels || []).length && m.to_id;
-    return `<div class="mv-row ${m.ok === false ? "bad" : m.returned ? "back" : m.reason === "return" ? "ret" : "ok"}"><time title="${when(m.at)}">${ago(m.at)} ago</time><span class="mv-k k-${esc(m.reason)}">${REASON[m.reason] || esc(m.reason)}</span><span class="mv-t">${names.map(x => `<span class="tchip">${esc(x)}</span>`).join("") || '<span class="mut">—</span>'}</span><span class="mv-ft"><em>${esc(m.from)}</em> → <em>${esc(m.to || "?")}</em></span><span class="mv-why mut" title="${esc(m.why)}">${esc(m.why)}</span><span class="mv-dns mut" title="DNS records re-pointed">${m.dns} DNS</span><span class="pill ${m.ok === false ? "err" : m.returned ? "" : "ok"}">${m.ok === false ? "failed" : m.returned ? "returned" : "done"}</span><span class="mv-act">${canBack ? `<button class="sm" onclick="apReturn('${esc(m.id)}')" title="Bring these tunnels back to ${esc(m.from)} now (built there first, the DNS follows)">↩ Return now</button>` : ""}${m.dns && m.ok !== false ? `<button class="sm" onclick="foUndo('${esc(m.id)}')" title="Point only the DNS records back at ${esc(m.from_ip)}; the tunnels stay">DNS back</button>` : ""}</span></div>`; };
+    return `<div class="mv-row ${m.ok === false ? "bad" : m.returned ? "back" : m.reason === "return" ? "ret" : "ok"}"><time title="${when(m.at)}">${ago(m.at)} ago</time><span class="mv-k k-${esc(m.reason)}">${REASON[m.reason] || esc(m.reason)}</span><span class="mv-t">${names.map(x => `<span class="tchip">${esc(x)}</span>`).join("") || '<span class="mut">—</span>'}</span><span class="mv-ft"><em>${esc(m.from)}</em> → <em>${esc(m.to || "?")}</em></span><span class="mv-why mut" title="${esc(m.why)}">${esc(m.why)}</span><span class="mv-dns mut" title="DNS records re-pointed">${m.reason === "standby" ? "" : m.dns + " DNS"}</span><span class="pill ${m.ok === false ? "err" : m.returned ? "" : "ok"}">${m.ok === false ? "failed" : m.returned ? "returned" : m.reason === "standby" ? "on standby" : "done"}</span><span class="mv-act">${m.reason === "standby" && !m.returned ? `<button class="sm" onclick="apStandbyBack('${esc((m.asked || [])[0] || "")}')" title="Take the users' ports off the standby now: they are the tunnel's again (open connections end on the standby by themselves)">Back now</button>` : ""}${canBack ? `<button class="sm" onclick="apReturn('${esc(m.id)}')" title="Bring these tunnels back to ${esc(m.from)} now (built there first, the DNS follows)">↩ Return now</button>` : ""}${m.dns && m.ok !== false ? `<button class="sm" onclick="foUndo('${esc(m.id)}')" title="Point only the DNS records back at ${esc(m.from_ip)}; the tunnels stay">DNS back</button>` : ""}</span></div>`; };
   const backChips = irn.filter(s => back[String(s.id)] && mv.some(m => m.from_id === s.id && m.reason === "down" && !m.returned && m.ok !== false)).map(s => { const h = (Date.now() / 1000 - back[String(s.id)]) / 3600; return `<span class="pill ${h >= rails.back_after_hours ? "ok" : ""}" title="Its tunnels come back by themselves after ${rails.back_after_hours} healthy hours">${esc(s.name)}: back for ${h < 1 ? Math.round(h * 60) + " min" : h.toFixed(1) + " h"}</span>`; }).join("");
   const openN = mv.filter(m => !m.returned && m.ok !== false && m.reason !== "return").length;
   const movesTab = `<div class="mv-bar"><span class="mv-plan"><span class="mut">What if</span><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><span class="mut">went off?</span><button type="button" class="sm" onclick="foPreview()" title="The tunnels that would move, the server that would take them, the DNS records of every account that would change - nothing is changed">👁 Show the plan</button></span>${backChips}<span class="sp"></span><small class="mut">At most ${rails.max_per_day} moves a day per tunnel, ${rails.cooldown_hours} hours between two, one at a time; Telegram tells before and after.</small></div>
@@ -2003,6 +2045,10 @@ window.apLinkSave = async () => {
 window.apReturn = async id => {
   if (!await gconfirm("Bring these tunnels back to the server they left? They are built there first, the DNS follows, and the old ones go after the TTL.", {danger: true})) return;
   try { const r = await api("/api/doctor/moves/" + encodeURIComponent(id) + "/return", {method: "POST"}); showModal("<b>↩ Return</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.id, $("#ap-story"), 900).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.apStandbyBack = async name => {      // the "Back now" of a handover to a warm standby (the entry of the Moves tab)
+  try { const t = (await api("/api/tunnels")).find(x => x.name === name); if (!t) throw new Error("this tunnel is not in the list any more"); await api(`/api/tunnels/${t.id}/standby/back`, {method: "POST"}); toast("✓ The users' ports are on " + name + " again", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  refresh();
 };
 window.apPickMove = async (tid, name) => {
   const irn = (await api("/api/servers").catch(() => [])).filter(s => s.role === "iran" && s.enabled && s.online !== false);

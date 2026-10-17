@@ -11,7 +11,7 @@ from ..auth import current_user, session_user
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger, mask
-from ..models import Job, Panel, Server, Tunnel
+from ..models import Job, Panel, Server, Tunnel, is_standby
 from ..services import updater
 
 router = APIRouter(tags=["system"])
@@ -159,7 +159,7 @@ def diagnostics():
 
     with session() as db:
         servers = list(db.scalars(select(Server)))
-        tunnels = list(db.scalars(select(Tunnel)))
+        tunnels = [t for t in db.scalars(select(Tunnel)) if not is_standby(t)]          # (a warm standby is not a tunnel of the list)
         job_rows = list(db.scalars(select(Job)))
         n_panels = db.scalar(select(func.count(Panel.id))) or 0
 
@@ -180,7 +180,7 @@ def overview():
 
     with session() as db:
         servers = list(db.scalars(select(Server)))
-        tunnels = list(db.scalars(select(Tunnel)))
+        tunnels = [t for t in db.scalars(select(Tunnel)) if not is_standby(t)]          # (a warm standby is not a tunnel of the list)
         jobs_ = list(db.scalars(select(Job)))
 
     stale = [j.name for j in jobs_ if j.enabled and j.last_ok and now - j.last_ok > j.interval * 3]

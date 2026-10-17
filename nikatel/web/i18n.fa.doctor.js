@@ -161,4 +161,28 @@ I18N.add({
 });
 I18N.add({"no answer on the SSH port {}: {} quick checks in a row got no connection": "پورت SSH {} پاسخ نمی‌دهد: {} بررسی سریع پشت‌سرهم وصل نشد", "Server {} does not answer: no answer on the SSH port {}: {} quick checks in a row got no connection": "سرور {} پاسخ نمی‌دهد: پورت SSH {} جواب نمی‌دهد ({} بررسی سریع پشت‌سرهم وصل نشد)"});
 
+/* ---- the warm standby of a tunnel (services/standby.py) */
+I18N.add({
+"Standby · {}": "تانل رزرو · {}", "Building": "در حال ساخت", "Ready": "آماده", "In use": "در حال استفاده", "Being mended": "در حال ترمیم", "Waiting": "در انتظار", "Not built": "ساخته نشد", "Removing": "در حال حذف",
+"A second tunnel of another type waits beside this one. If this one is cut, its users' ports are handed to it in seconds.": "یک تانل دوم از نوعی دیگر کنار این تانل آماده است. اگر این تانل قطع شود، پورت‌های کاربران در چند ثانیه به آن سپرده می‌شود.",
+"{} · ports {} · idle, looked at every 15 seconds": "{} · پورت‌ها {} · بی‌کار، هر ۱۵ ثانیه بررسی می‌شود",
+"The users' ports are on the standby ({}) since {} - they go back to this tunnel when it has held for a minute": "پورت‌های کاربران از ساعت {2} روی تانل رزرو ({1}) است - وقتی این تانل یک دقیقه پایدار بماند برمی‌گردند",
+"Turn on": "روشن کردن", "Turn off": "خاموش کردن", "Switch now": "همین حالا جابه‌جا کن", "Back now": "همین حالا برگردان",
+"Build the standby now (about a minute); nothing changes for the users": "تانل رزرو را همین حالا بساز (حدود یک دقیقه)؛ برای کاربران چیزی عوض نمی‌شود",
+"Hand the users' ports to the standby now (a drill; they stay there until Back now)": "پورت‌های کاربران را همین حالا به تانل رزرو بسپار (تمرین؛ تا «همین حالا برگردان» همان‌جا می‌مانند)",
+"Take the users' ports off the standby now": "پورت‌های کاربران را همین حالا از تانل رزرو بردار", "Give the ports back and remove the standby": "پورت‌ها را پس بده و تانل رزرو را حذف کن", "Remove the standby": "حذف تانل رزرو",
+"The warm standby: another tunnel type between the same two servers, on shifted ports, built before a cut": "تانل رزرو آماده‌باش: نوع دیگری از تانل بین همین دو سرور، روی پورت‌های جابه‌جاشده، پیش از قطع ساخته می‌شود",
+"Remove the standby of this tunnel? If the users' ports are on it they are given back to the tunnel first.": "تانل رزرو این تانل حذف شود؟ اگر پورت‌های کاربران روی آن باشد، اول به تانل پس داده می‌شود.",
+"Hand the users' ports of this tunnel to its standby now? New connections go through the standby until you press Back now (a drill of what happens when the tunnel is cut).": "پورت‌های کاربران این تانل همین حالا به تانل رزرو سپرده شود؟ اتصال‌های تازه از تانل رزرو می‌گذرند تا «همین حالا برگردان» را بزنید (تمرین آنچه با قطع تانل رخ می‌دهد).",
+"✓ Standby on - it is being built beside the tunnel (about a minute); nothing changes for the users": "✓ تانل رزرو روشن شد - کنار تانل ساخته می‌شود (حدود یک دقیقه)؛ برای کاربران چیزی عوض نمی‌شود", "✓ Standby off": "✓ تانل رزرو خاموش شد",
+"✓ The users' ports are on the standby ({})": "✓ پورت‌های کاربران روی تانل رزرو ({}) است", "✓ The users' ports are on the tunnel again; open connections end on the standby by themselves": "✓ پورت‌های کاربران دوباره روی تانل است؛ اتصال‌های باز خودشان روی تانل رزرو تمام می‌شوند",
+"✓ The users' ports are on {} again": "✓ پورت‌های کاربران دوباره روی {} است", "standby": "رزرو", "on standby": "روی رزرو",
+"Take the users' ports off the standby now: they are the tunnel's again (open connections end on the standby by themselves)": "پورت‌های کاربران را همین حالا از تانل رزرو بردار: دوباره مال تانل می‌شوند (اتصال‌های باز خودشان روی تانل رزرو تمام می‌شوند)",
+"Standby of {} is ready ({} on the ports {}).": "تانل رزرو {} آماده است ({} روی پورت‌های {}).",
+"Standby: the users' ports of {} ({}) were handed to its standby tunnel ({}) in {} s, {} s after the cut.": "تانل رزرو: پورت‌های کاربران {1} ({2}) در {4} ثانیه به تانل رزرو ({3}) سپرده شد، {5} ثانیه بعد از قطع.",
+"Standby: the users' ports of {} ({}) were handed to its standby tunnel ({}) in {} s.": "تانل رزرو: پورت‌های کاربران {1} ({2}) در {4} ثانیه به تانل رزرو ({3}) سپرده شد.",
+"Standby: the users' ports of {} are on the tunnel again after {} s on its standby.": "تانل رزرو: پورت‌های کاربران {} بعد از {} ثانیه روی تانل رزرو، دوباره روی خود تانل است.",
+"Standby of {}: the {} standby could not be built ({}); it is tried again with another type, the wait grows from {} minutes.": "تانل رزرو {}: تانل رزرو {} ساخته نشد ({})؛ با نوع دیگری دوباره امتحان می‌شود، فاصله از {} دقیقه شروع می‌شود و بیشتر می‌شود."
+});
+
 I18N.add({"foreign server off": "سرور خارج خاموش", "Iran server off": "سرور ایران خاموش", "both servers off": "هر دو سرور خاموش", "GRE link cut": "لینک GRE قطع", "GRE interface missing": "اینترفیس GRE نیست", "service stopped": "سرویس متوقف", "no data passes": "داده عبور نمی‌کند", "no answer": "بی‌پاسخ"});

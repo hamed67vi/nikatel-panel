@@ -26,7 +26,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Server, Tunnel, TunnelCheck
+from ..models import Server, Tunnel, TunnelCheck, is_standby
 from ..ssh import Node, SSHError, run_script
 from .events import emit
 
@@ -526,6 +526,8 @@ def throughput(prev: dict, now: int | None, rx_bytes: int | None, tx_bytes: int 
 
 _CHECKING: set[int] = set()
 _CK_LOCK = threading.Lock()
+HANDED: set[str] = set()      # the tunnels whose users' ports are on their warm standby right now (services/standby.py keeps it): the same request from another Iran server would be answered by the STANDBY, so such a tunnel
+                              # is judged without that look - by its units, its link, its ports and the request on the server itself (which the handover does not redirect)
 
 
 def check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) -> None:
@@ -564,9 +566,10 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
-        if t is None or not t.enabled:
+        if t is None or (not t.enabled and not is_standby(t)):          # (a warm standby is switched off in the list but watched here, quietly)
             return
 
+        tname, sb = t.name, is_standby(t)
         plan = plan_for(t)
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
@@ -613,6 +616,9 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
     data_fails = int(prev.get("data_fails", 0)) + 1 if iran.data_code == "000" else 0
     # the same request from another Iran server (this cycle's external probe), when there is a fresh one for this port
     ext = ext_for((iran_host, iran.data_port or (plan.ports[0] if plan.ports else 0)), time.time(), _EXT["at"], _EXT["res"], _EXT.get("one") or {})
+
+    if tname in HANDED:
+        ext = None            # the users' ports are on the standby: another server's request to them proves the STANDBY, not this tunnel
     ext_seen = bool(prev.get("ext_seen")) or (ext is not None and ext[0] != "000")
     ext_fails = (int(prev.get("ext_fails", 0)) + 1 if ext[0] == "000" else 0) if ext is not None else int(prev.get("ext_fails", 0))
 
@@ -623,6 +629,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
     loss, ping_blocked = ping_verdict(iran.loss_pct, iran.data_code, ext)
     ping_over = "link" if plan.iface else "iface" if plan.ping_iface else "servers" if plan.ping else ""      # what the pings crossed: the GRE link, another L3 link, or the open internet between the two servers
     udp = bw.get("loss") or {}
+
     tcp_rtt = None
 
     if ping_blocked and udp.get("pct") is not None and int(time.time()) - int(udp.get("at") or 0) <= bandwidth.LOSS_FRESH:
@@ -676,15 +683,18 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
                     "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak,
                     "data_seen": data_seen, "data_fails": data_fails, "data_code": iran.data_code, "data_ms": iran.data_ms,
                     "ext": ({"code": ext[0], "ms": ext[1], "from": ext[2]} if ext is not None else None), "ext_seen": ext_seen, "ext_fails": ext_fails}
-        db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=raw == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
+        if not sb:          # (a standby is looked at every few seconds: its history is not kept, it would only fill the table)
+            db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=raw == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
 
         if state != old:
             t.state = state
             t.state_since = now
-            went_bad = state in ("down", "degraded")
+            went_bad = state in ("down", "degraded") and not sb          # a standby that falls is never "a tunnel that was cut": the standby job rebuilds it quietly
             label = f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
 
-            if state == "up" and old in ("down", "degraded"):
+            if sb:
+                pass              # no event, no alert, no repair: a standby is not in the list, and nobody is told that a spare is being mended
+            elif state == "up" and old in ("down", "degraded"):
                 emit(db, "ok", "tunnels", f"Tunnel {label} works again.", t.name)
             elif state == "down":
                 emit(db, "bad", "tunnels", f"Tunnel {label} is down: {reason}", t.name)
@@ -700,6 +710,11 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
             jobs.trigger("repair")           # a tunnel was cut: the repair job looks at it now (its grace starts from this moment), not at its next tick
         except KeyError:
             pass                              # not registered (tests)
+
+        try:
+            jobs.trigger("standby")          # ... and so does the standby job: if this tunnel has a warm standby, the users' ports are handed to it now (services/standby.py)
+        except KeyError:
+            pass
 
 
 # a tunnel that is only DEGRADED for one of these reasons is not "slow, to be watched": nothing passes, or a port is shut. The fast lane looks at it every ~8 s too, so that the checks that make it "down" (DATA_DOWN_AFTER

@@ -444,10 +444,11 @@ class Build:
     created: list[Node] = field(default_factory=list)
     measure: str = "full"       # full | latency
     quality: dict = field(default_factory=dict)
+    standby_of: str = ""        # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock
 
 
-def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full") -> int:
-    """Validate, create the action_log entry, build in a thread. Returns the action id."""
+def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full", standby_of: str = "") -> int:
+    """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -512,23 +513,24 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
             raise ValueError("both servers must be enabled")
 
         pair = f"{iran.name} ⇄ {foreign.name}"
+        lock = f"{pair} (standby {forced_name})" if standby_of else pair          # a standby is built beside the real tunnel of its pair: its own key, the servers' locks still make the builds wait for each other
 
         with _LOCK:
-            if pair in _BUILDING:
+            if lock in _BUILDING:
                 raise ValueError("a tunnel between these two servers is already being built")
 
-            _BUILDING.add(pair)
+            _BUILDING.add(lock)
 
-        entry = ActionLog(ref=forced_name or pair, action="build", source="manual",
+        entry = ActionLog(ref=forced_name or pair, action="standby" if standby_of else "build", source="manual",          # (a standby build is not "a build that runs" for the Create window)
                           story=[f"Building a {KIND_TITLE[kind]} · {transport} tunnel {pair}, ports {', '.join(p.spec() for p in ports)}"])
         db.add(entry)
         db.flush()
         aid = entry.id
-        b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure)
+        b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of)
         db.expunge(iran)
         db.expunge(foreign)
 
-    threading.Thread(target=_worker, args=(b, pair), name=f"build-{pair}", daemon=True).start()
+    threading.Thread(target=_worker, args=(b, lock), name=f"build-{lock}", daemon=True).start()
     return aid
 
 
@@ -896,18 +898,18 @@ def _build(b: Build) -> None:
     _measure(b, iran, key)
 
     with session() as db:
-        t = Tunnel(name=b.name, enabled=not is_temp(b.name), type=eng, transport=b.transport if b.kind != "backpack_direct" else f"l3:{b.transport}", engine=eng,
+        t = Tunnel(name=b.name, enabled=not is_temp(b.name) and not b.standby_of, type=eng, transport=b.transport if b.kind != "backpack_direct" else f"l3:{b.transport}", engine=eng,
                    iran_server_id=b.iran.id, foreign_server_id=b.foreign.id, port=b.port,
                    iran_tunnel_ip=f"10.10.{b.net}.1" if b.net else "", foreign_tunnel_ip=f"10.10.{b.net}.2" if b.net else "",
                    forwarded_ports=[p.listen for p in b.ports],
                    record={"kind": b.kind, "direction": direction, "transport_label": tlabel, "port_mapping": ",".join(p.spec() for p in b.ports),
                            "test_port": b.test_port, "inner_net": b.net, "udp_carrier": b.udp, "opts": {k: v for k, v in b.opts.items() if k != "sni_domain" or v},
-                           "quality": b.quality, "built_by": "nikatel-panel"},
+                           "quality": b.quality, "built_by": "nikatel-panel", **({"standby_of": b.standby_of} if b.standby_of else {})},
                    secrets={"token": token, "test_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
         db.flush()
         tid = t.id
-        if not is_temp(b.name):
+        if not is_temp(b.name) and not b.standby_of:
             emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: {tlabel}, ports {', '.join(p.spec() for p in b.ports)}"
                  + (f", {b.quality.get('latency_ms')} ms" if b.quality.get("latency_ms") is not None else "") + ".", b.name)
 

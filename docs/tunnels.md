@@ -177,7 +177,8 @@ the restart brought the speed back (at most once in six hours; the result goes t
 
 A raw-socket tunnel (BackPack · PCK, Paqet) reads its packets before the firewall: no rule of the firewall cuts it, which is why the second cut was made on a GRE tunnel.
 **What is not instant**: a tunnel type built from nothing takes about a minute to connect, so with this the users are connected again about three minutes after a cut instead of hours. Seconds need a tunnel that is
-already built and waiting (a standby), which is the next step.
+already built and waiting (a standby): that is the **warm standby** (1.68.1) - a second tunnel of another carrier between the same two servers, on shifted ports (`20000 + P`), built before the cut and kept idle; when the tunnel has been down
+5 s the users' ports are handed to it with one NAT redirect (about 2 s) and given back when the tunnel has held for a minute. Off until the owner marks a tunnel (*Tunnel window → Standby*); how it works, its rails and how it is to be proved: [standby.md](standby.md).
 
 ## The Bandwidth column: the capacity and what the users use (2026-10-17)
 
@@ -200,7 +201,7 @@ What makes the numbers trustworthy:
 * A counter that went back (the card was made again), a clock that went back (a reboot) or a rate no card can carry starts the window again; a number older than two minutes is not shown; the number of the last check (about a minute old) fills in until the live one is there and is shown dimmed.
 * The check's own rate (`rx_mbps`, `tx_mbps` in the list) is no longer averaged over a gap: two checks more than five minutes apart (the panel was off) give no rate.
 
-The **Ping / Loss** cell beside it (the owner's picture): the ping on top, an arrow at each end of a dotted line, the loss below - pale blue while the link runs, pale red with a cross while it is cut (and then no numbers), the loss amber from the line the panel calls lossy, "no ping" only where the provider drops ICMP and nothing else can be measured (the loss is then counted with UDP packets through the bandwidth sink for a GRE tunnel, and - 1.68.0 - with ten TCP handshakes to the control port of the tunnel, made by the server that dials it, for a BackPack / Chisel one; the tooltip says which). The arrows are pale on purpose: the numbers are what is read.
+The **Ping / Loss** cell beside it (the owner's picture): the ping on top, an arrow at each end of a dotted line, the loss below - pale blue while the link runs, pale red with a cross while it is cut (and then no numbers), the loss amber from the line the panel calls lossy, "no ping" where the provider drops ICMP (the loss is then counted with UDP packets through the bandwidth sink). The arrows are pale on purpose: the numbers are what is read.
 
 The **end of a row** is the "⋯" button of the server list (the owner, 2026-10-17: three stacked dots in place of the soft "›"): it opens the menu of the tunnel window - Repair (Fix, Dry run, Health check, Speed test, Restart), History, Mute alerts, Rename, Ports, Rebuild and, last and red, Remove - and a click on the row itself still opens the window. A tunnel that is being rebuilt shows its spinner in place of the button. An address copies when it is clicked; the copy mark shows **inside** the address box on the free side (left of an Iran address, right of a foreign one), so a cell never cuts it - in a tight cell the address gives way with "...".
 

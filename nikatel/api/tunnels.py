@@ -7,8 +7,8 @@ from sqlalchemy import select
 
 from ..auth import current_user
 from ..db import session
-from ..models import Tunnel, TunnelCheck, is_temp
-from ..services import analyst, builder, livebw
+from ..models import Tunnel, TunnelCheck, is_standby, is_temp
+from ..services import analyst, builder, livebw, standby
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -37,11 +37,11 @@ def build(body: BuildIn):
         transport = body.transport or ("tcpmux" if body.kind == "backhaul" else "")     # an empty transport means the default of the engine
         opts = dict(body.opts)
 
-        if body.kind == "backhaul" and ":" in transport:         # "wg:tcpmux" / "fou:tcpmux": Backhaul over WireGuard / GRE inside UDP (the kinds of the pair test)
+        if body.kind == "backhaul" and ":" in transport:         # "wg:tcpmux" / "fou:tcpmux" / "ipsec:tcp" ...: Backhaul over another link (the kinds of the pair test)
             link, _, transport = transport.partition(":")
 
-            if link not in ("wg", "fou"):
-                raise ValueError("the link of a Backhaul tunnel is GRE (the default), fou (GRE over UDP) or wg (WireGuard)")
+            if link not in builder.LINKS or link == "gre":
+                raise ValueError("the link of a Backhaul tunnel is GRE (the default) or one of: " + ", ".join(k for k in builder.LINKS if k != "gre"))
 
             opts["link"] = link
 
@@ -121,7 +121,13 @@ def tunnel_kinds():
          "transports": [{"key": k, "label": lbl, "note": n} for k, lbl, n in (("tcpmux", "TCP Mux", "many users, few connections (recommended)"), ("tcp", "TCP", "plain TCP"), ("wsmux", "WebSocket Mux", "clear-text WebSocket, multiplexed"), ("wssmux", "WebSocket TLS Mux", "TLS WebSocket, multiplexed"),
                                                                      ("wg:tcpmux", "TCP Mux · WireGuard", "over an encrypted WireGuard link (one UDP port) instead of GRE: passes where GRE is filtered"),
                                                                      ("wg:tcp", "TCP · WireGuard", "plain TCP over a WireGuard link"),
-                                                                     ("fou:tcpmux", "TCP Mux · GRE over UDP", "over GRE inside one UDP port: passes where protocol 47 is filtered, not encrypted"))]},
+                                                                     ("fou:tcpmux", "TCP Mux · GRE over UDP (FOU)", "over GRE inside one UDP port: passes where protocol 47 is filtered, not encrypted"),
+                                                                     ("gue:tcpmux", "TCP Mux · GRE over UDP (GUE)", "GRE inside one UDP port with the GUE header (another UDP shape than FOU), not encrypted"),
+                                                                     ("ipip:tcpmux", "TCP Mux · IPIP", "IP-in-IP (protocol 4): the lightest link, one per pair of servers, not encrypted"),
+                                                                     ("ipipfou:tcpmux", "TCP Mux · IPIP over UDP (FOU)", "IP-in-IP inside one UDP port, one per pair of servers, not encrypted"),
+                                                                     ("ipipgue:tcpmux", "TCP Mux · IPIP over UDP (GUE)", "IP-in-IP inside one UDP port with the GUE header, one per pair of servers, not encrypted"),
+                                                                     ("ipsec:tcpmux", "TCP Mux · IPsec (ESP)", "ESP (protocol 50) with AES-GCM, keys made by the panel"),
+                                                                     ("ipsecnat:tcpmux", "TCP Mux · IPsec in UDP (NAT-T)", "ESP inside one UDP port with AES-GCM, keys made by the panel"))]},
         {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
         {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers", "direction": "direct",
@@ -362,11 +368,91 @@ def tunnel_test(body: TestIn):
 
 @router.delete("/tunnels/{tunnel_id}")
 def delete(tunnel_id: int):
-    """Remove a tunnel from both servers; it goes to the trash, from where it can be put back."""
+    """Remove a tunnel from both servers; it goes to the trash, from where it can be put back. Its warm standby (if it has one) is removed with it."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        name = t.name if t is not None and not is_standby(t) else ""
+
     try:
-        return {"ok": True, "results": builder.delete_tunnel(tunnel_id, trash=True)}
+        res = builder.delete_tunnel(tunnel_id, trash=True)
     except ValueError as e:
         raise HTTPException(400 if "read-only" in str(e) else 404, str(e))
+
+    if name:
+        standby.forget(name)
+
+    return {"ok": True, "results": res}
+
+
+class StandbyIn(BaseModel):
+    on: bool
+
+
+@router.get("/tunnels/{tunnel_id}/standby")
+def standby_get(tunnel_id: int):
+    """The warm standby of a tunnel: whether it is on, its state (off · building · ready · in_use · mending · waiting · failed), its type, the shifted ports and why it waits."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None or is_standby(t):
+            raise HTTPException(404, "tunnel not found")
+
+        name = t.name
+
+    return {"ok": True, **standby.status(name)}
+
+
+@router.put("/tunnels/{tunnel_id}/standby")
+def standby_set(tunnel_id: int, body: StandbyIn):
+    """Switch the warm standby of a tunnel on (it is built at once when the tunnel is up: another tunnel type between the same two servers, on shifted ports) or off (it is removed)."""
+    try:
+        return {"ok": True, **standby.switch(tunnel_id, body.on)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _standby_name(tunnel_id: int) -> str:
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None or is_standby(t):
+            raise HTTPException(404, "tunnel not found")
+
+        return t.name
+
+
+@router.post("/tunnels/{tunnel_id}/standby/handover")
+def standby_handover(tunnel_id: int):
+    """Hand the users' ports of this tunnel to its standby NOW (by hand: they stay there until Back now). Refused when the standby is not up."""
+    from ..ssh import SSHError
+
+    name = _standby_name(tunnel_id)
+
+    try:
+        standby.handover(name, "handed over by you", manual=True)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (RuntimeError, SSHError) as e:
+        raise HTTPException(502, str(e))
+
+    return {"ok": True, **standby.status(name)}
+
+
+@router.post("/tunnels/{tunnel_id}/standby/back")
+def standby_back(tunnel_id: int):
+    """Back now: the users' ports are the tunnel's again (the redirects to the standby are taken off; open connections stay on the standby until they close)."""
+    from ..ssh import SSHError
+
+    name = _standby_name(tunnel_id)
+
+    try:
+        standby.give_back(name, "taken back by you")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (RuntimeError, SSHError) as e:
+        raise HTTPException(502, str(e))
+
+    return {"ok": True, **standby.status(name)}
 
 
 @router.post("/tunnels/{tunnel_id}/rebuild", status_code=202)
@@ -407,9 +493,10 @@ class TunnelOut(BaseModel):
     ux: dict = {}           # what the users get through it (services/userq.py): the grade, the configs with a problem, the Doctor's reading
     bw: dict = {}           # the bandwidth the Doctor keeps (services/bandwidth.py) without its history; GET /tunnels/{id}/bandwidth has the history
     record: dict = {}       # port mapping, direction, test door, engine options - never secrets
+    standby: dict = {}      # the warm standby of the tunnel (services/standby.py): on, state, type, since, why, the shifted ports
 
 
-def _out(t: Tunnel) -> TunnelOut:
+def _out(t: Tunnel, sb: dict | None = None) -> TunnelOut:
     plan = plan_for(t)
     return TunnelOut(id=t.id, name=t.name, type=t.type, transport=t.transport, engine=t.engine,
                      iran_name=t.iran.name, iran_host=t.iran.host, foreign_name=t.foreign.name, foreign_host=t.foreign.host,
@@ -420,7 +507,7 @@ def _out(t: Tunnel) -> TunnelOut:
                      bw={k: v for k, v in ((t.record or {}).get("bw") or {}).items() if k != "hist"},
                      ux={k: v for k, v in ((t.record or {}).get("ux") or {}).items() if k != "pend"},
                      record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw", "ux")},
-                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface})
+                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, standby=sb or {})
 
 
 def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], known: set[str], now: int) -> list[TunnelOut]:
@@ -452,7 +539,9 @@ def list_tunnels():
     from ..services import settings as st
 
     with session() as db:
-        rows = [_out(t) for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name)]      # a temporary test tunnel is not part of the list
+        shown = [t for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name) and not is_standby(t)]      # a temporary test tunnel and a warm standby are not part of the list
+        sbs = standby.summaries([t.name for t in shown])
+        rows = [_out(t, sbs.get(t.name)) for t in shown]
         pending = st.get("pending_builds").get("items", [])
 
         if pending:
@@ -468,10 +557,10 @@ def get_tunnel(tunnel_id: int):
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
-        if t is None:
+        if t is None or is_standby(t):          # (a standby is shown inside the window of its tunnel only)
             raise HTTPException(404, "tunnel not found")
 
-        return _out(t)
+        return _out(t, standby.status(t.name))
 
 
 @router.get("/tunnels/{tunnel_id}/stability")
