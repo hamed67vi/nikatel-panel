@@ -8,6 +8,7 @@ import re
 import threading
 import time
 import urllib.parse
+from collections import Counter
 
 import httpx
 from sqlalchemy import delete, select
@@ -320,6 +321,27 @@ def refresh_reach(names: list[str]) -> bool:
     return changed
 
 
+GROUP_EVENTS = 4          # this many configs that change status in ONE read are one event, not one each (1.68.1: fourteen configs fell together with one error - one cause, one line)
+
+
+def _tell_changes(db, fell: list[tuple[str, str]], rose: list[str]) -> None:
+    """The events of one read: a few configs that changed are told one by one; GROUP_EVENTS or more at once are ONE event with the error most of them share."""
+    if len(fell) < GROUP_EVENTS:
+        for name, why in fell:
+            emit(db, "bad", "configs", f"Config {name} is not working: {why}", name)
+    else:
+        why, n = Counter(w for _, w in fell).most_common(1)[0]
+        shared = (f", all with the same error: {why}" if n == len(fell) else f", {n} of them with the same error: {why}") if n >= 2 and n >= 0.7 * len(fell) else ""
+        names = ", ".join(name for name, _ in fell[:8]) + (f", … (+{len(fell) - 8})" if len(fell) > 8 else "")
+        emit(db, "bad", "configs", f"{len(fell)} configs are not working at the same moment{shared}. One cause is likely (the probe's own path to its test address), not {len(fell)} faults: {names}", "")
+
+    if len(rose) < GROUP_EVENTS:
+        for name in rose:
+            emit(db, "ok", "configs", f"Config {name} works again.", name)
+    else:
+        emit(db, "ok", "configs", f"{len(rose)} configs work again: " + ", ".join(rose[:8]) + (f", … (+{len(rose) - 8})" if len(rose) > 8 else ""), "")
+
+
 def _sync(settle: bool = True, fast: bool = False) -> list[str]:
     """One read of the probe into the statuses. Returns the direct TCP configs the probe calls down; with `fast` (the quick job) the ones that were HELD: the probe
     says down, there is no fresh answer from the Iran servers about their port yet, so their status is not moved to down here (the full round asks, and decides)."""
@@ -339,6 +361,8 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
     now = int(time.time())
     down_tcp: list[str] = []
     held: list[str] = []
+    fell: list[tuple[str, str]] = []          # (name, why) of the configs that went down in this read: told together below
+    rose: list[str] = []
 
     with session() as db:
         by_name = {c.name: c for c in db.scalars(select(Config))}
@@ -412,9 +436,9 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
                     meta["quiet_until"] = now + FLAP_WINDOW
                     emit(db, "warn", "configs", f"Config {c.name} is unstable: {len(flips)} changes in the last {FLAP_WINDOW // 3600} hours ({why}). No more events for it until it keeps one status for {FLAP_WINDOW // 3600} hours.", c.name)
                 elif status == "down":
-                    emit(db, "bad", "configs", f"Config {c.name} is not working: {why}", c.name)
+                    fell.append((c.name, why))
                 elif status == "up" and old == "down":
-                    emit(db, "ok", "configs", f"Config {c.name} works again.", c.name)
+                    rose.append(c.name)
 
             c.meta = meta
 
@@ -427,6 +451,7 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
                 emit(db, "warn", "configs", f"Config {name} is gone from the probe; removed from the list.", name)
                 db.delete(c)
 
+        _tell_changes(db, fell, rose)
         db.flush()
 
         if not fast:

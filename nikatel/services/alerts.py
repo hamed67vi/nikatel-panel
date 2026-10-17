@@ -56,9 +56,10 @@ class Track:
     quiet_until: int = 0            # while now < quiet_until nothing is said about this thing
 
 
-def decide(track: Track, bad: bool, now: int, rules: Rules, since: int = 0) -> tuple[Track, str | None]:
+def decide(track: Track, bad: bool, now: int, rules: Rules, since: int = 0, hold: bool = False) -> tuple[Track, str | None]:
     """Returns the updated track and one of None | "down" | "up" | "remind" | "flapping".
-    `since`: when the checker itself changed the state (0 = unknown): the clock of a DOWN / UP starts there, so the message does not wait for our next look."""
+    `since`: when the checker itself changed the state (0 = unknown): the clock of a DOWN / UP starts there, so the message does not wait for our next look.
+    `hold`: a mass event is going on (see MASS): a DOWN or an UP that is due is NOT given yet and nothing is changed - the next look asks again, and when the hold ends they all come in the same look (one message)."""
     t = Track(**track.__dict__)
     quiet = now < t.quiet_until
     began = since if 0 < since <= now else now
@@ -73,6 +74,9 @@ def decide(track: Track, bad: bool, now: int, rules: Rules, since: int = 0) -> t
             t.fails = 1
 
         if not t.alerted and now - t.bad_since >= rules.down_seconds:
+            if hold:
+                return t, None
+
             t.alerted = True
             t.last_notice = now
 
@@ -104,6 +108,9 @@ def decide(track: Track, bad: bool, now: int, rules: Rules, since: int = 0) -> t
         t.good_since = began
 
     if t.alerted and now - t.good_since >= rules.up_seconds:
+        if hold:
+            return t, None
+
         t.alerted = False
         t.last_notice = now
         return t, None if quiet else "up"
@@ -138,6 +145,77 @@ def rules_from(conf: dict) -> Rules:
     return Rules(int(conf.get("down_seconds", DOWN_SECONDS)), int(conf.get("up_seconds", UP_SECONDS)), int(conf.get("remind_hours", 0)) * 3600,
                  int(conf.get("flap_max", 0)), 3600, int(conf.get("flap_quiet_hours", 6)) * 3600)
 
+
+# ------------------------------------------------------------------ one cause, one message
+# (the owner, 2026-10-17: fourteen configs at once - "DOWN (14)" - every one with the same error toward the same address: "why so many errors for one small disturbance?") Things that fail TOGETHER and
+# with the same error have one cause, which is not fourteen faults: the test the probe makes (its own path, its test address), the panel's own network, a provider event. So:
+#   * while many things of a kind are bad at the same time (MASS: at least this many, at least this share of all of them) the DOWN and UP messages of that kind WAIT - for a few seconds for tunnels and servers, for
+#     a minute and a half for configs (the probe tests them one after the other, so they fall one after the other); a disturbance that is over by then is not told at all;
+#   * what is left is told as ONE line: how many, the error they share, a few names and the likely cause.
+MASS = {"config": (4, 0.5, 90), "server": (3, 0.4, 30), "tunnel": (4, 0.3, 20)}           # kind -> (at least this many bad, at least this share of all, wait this many seconds for the rest)
+GROUP_MIN = 4                                                                             # this many of a kind with no MASS rule (panels, nodes) in ONE message are told as one line
+NAMES_SHOWN = 6
+HINT = {"config": "The same test fails for all of them at the same moment: the probe's own path to its test address is the likely cause, not {n} separate faults.",
+        "server": "Several servers stopped answering together: the panel's own network or a provider event is the likely cause.",
+        "tunnel": "Several tunnels fell together: a route or provider event is the likely cause; the Doctor is already working on them."}
+
+
+def mass_state(kind: str, bad_since: list[int], total: int, now: int) -> tuple[bool, bool]:
+    """Pure: (is a mass event going on, are the messages of this kind held back). `bad_since`: when each thing that is bad now became bad; `total`: how many things of this kind there are."""
+    if kind not in MASS:
+        return False, False
+
+    lo, share, wait = MASS[kind]
+    mass = len(bad_since) >= lo and len(bad_since) >= share * max(1, total)
+    return mass, mass and now - min(bad_since) < wait
+
+
+def group_min(kind: str) -> int:
+    """How many of a kind in one message are told as one line: the number that makes a mass event of that kind."""
+    return MASS[kind][0] if kind in MASS else GROUP_MIN
+
+
+def shared_reason(items: list[tuple[str, str, str]]) -> tuple[str, int]:
+    """Pure: the error most of the things share, and how many: ("", 0) when no error covers at least 70 % of them. `items`: (name, label, why)."""
+    counts: dict[str, int] = {}
+
+    for _, _, why in items:
+        counts[why] = counts.get(why, 0) + 1
+
+    why, n = max(counts.items(), key=lambda kv: kv[1]) if counts else ("", 0)
+    return (why, n) if n >= 0.7 * len(items) and n >= 2 else ("", 0)
+
+
+def down_lines(by_kind: dict[str, list[tuple[str, str, str]]]) -> list[str]:
+    """Pure: the lines of a DOWN message. Four or more things of one kind in one message are ONE line (see MASS); fewer are one line each. `by_kind`: kind -> [(name, label, why)]."""
+    out: list[str] = []
+
+    for kind, items in by_kind.items():
+        if len(items) < group_min(kind):
+            out += [f"• {label} — {why}" for _, label, why in items]
+            continue
+
+        why, n = shared_reason(items)
+        shown = ", ".join(name for name, _, _ in items[:NAMES_SHOWN]) + (f", … (+{len(items) - NAMES_SHOWN})" if len(items) > NAMES_SHOWN else "")
+        head = f"• {len(items)} {kind}s fail together" + (f", {n} of them with the same error: {why}" if n < len(items) and why else f", all with the same error: {why}" if why else "")
+        out.append(head + f"\n  {shown}" + (f"\n  {HINT[kind].format(n=len(items))}" if kind in HINT else ""))
+
+    return out
+
+
+def up_lines(by_kind: dict[str, list[tuple[str, str, str]]], words: dict[str, str]) -> list[str]:
+    """Pure: the lines of an UP message, grouped like the DOWN ones. `by_kind`: kind -> [(name, label, how long it was down)]; `words`: kind -> "down" / "unreachable" / "disconnected"."""
+    out: list[str] = []
+
+    for kind, items in by_kind.items():
+        if len(items) < group_min(kind):
+            out += [f"• {label} — was {words.get(kind, 'down')} {how}" for _, label, how in items]
+            continue
+
+        shown = ", ".join(name for name, _, _ in items[:NAMES_SHOWN]) + (f", … (+{len(items) - NAMES_SHOWN})" if len(items) > NAMES_SHOWN else "")
+        out.append(f"• {len(items)} {kind}s work again\n  {shown}")
+
+    return out
 
 # ------------------------------------------------------------------ delivery
 OUTBOX_MAX_AGE = 1800          # a message older than this is dropped (a DOWN of half an hour ago is no news; the next DOWN / UP of the thing says where it stands)
@@ -218,6 +296,9 @@ def _say(level: str, text: str) -> None:
 
 
 # ------------------------------------------------------------------ the look
+WORDS = {"tunnel": "down", "server": "unreachable", "config": "down", "panel": "down", "node": "disconnected"}
+
+
 def run(now: int | None = None) -> None:
     flush()           # whatever Telegram did not take at the last look goes first
 
@@ -225,8 +306,8 @@ def run(now: int | None = None) -> None:
     now = int(time.time() if now is None else now)
     muted = set(conf.get("muted") or [])
     rules = rules_from(conf)
-    down_msgs: list[str] = []
-    up_msgs: list[str] = []
+    downs: dict[str, list[tuple[str, str, str]]] = {}          # kind -> [(name, label, why)]
+    ups: dict[str, list[tuple[str, str, str]]] = {}            # kind -> [(name, label, how long it was down)]
     remind_msgs: list[str] = []
     flap_msgs: list[str] = []
     quiet_for = _dur(rules.flap_quiet)
@@ -235,6 +316,45 @@ def run(now: int | None = None) -> None:
         windows = [(m.start, m.end) for m in db.scalars(select(Maintenance))]
         quiet = in_maintenance(now, windows)
         tracks = {(a.kind, a.ref): a for a in db.scalars(select(AlertState))}
+        tunnels = [t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if t.state not in ("unknown", "starting")]      # (not a verdict about the tunnel)
+        servers = [s for s in db.scalars(select(Server).where(Server.enabled.is_(True))) if s.online is not None]
+        configs = [c for c in db.scalars(select(Config).where(Config.enabled.is_(True))) if c.status != "unknown"]
+
+        def since_of(kind: str, ref: str) -> int:
+            a = tracks.get((kind, ref))
+            return int(a.bad_since) if a is not None and a.fails and a.bad_since else now          # (a track that says "bad" at the last look: when it began; else it began at this look)
+
+        def recovering(kind: str, things: list[tuple[str, bool, int]]) -> tuple[int, int]:
+            """(how many of this kind were told as down, how many of those are good now but not for `up_seconds` yet): the UPs of a group wait for the last of them, a few seconds, so they come as ONE message."""
+            told = ripening = 0
+
+            for ref, bad, since in things:
+                a = tracks.get((kind, ref))
+
+                if a is None or not a.alerted:
+                    continue
+
+                told += 1
+
+                if not bad and now - (a.good_since or (since if 0 < since <= now else now)) < rules.up_seconds:
+                    ripening += 1
+
+            return told, ripening
+
+        # is a mass event going on - many things of one kind bad at the same moment? then their messages wait (see MASS)
+        bad_since = {"tunnel": [int(t.state_since or now) for t in tunnels if t.state == "down"],
+                     "server": [since_of("server", s.name) for s in servers if s.online is False],
+                     "config": [int(c.status_since or now) for c in configs if c.status == "down"]}
+        totals = {"tunnel": len(tunnels), "server": len(servers), "config": len(configs)}
+        told_ripening = {"tunnel": recovering("tunnel", [(t.name, t.state == "down", int(t.state_since or 0)) for t in tunnels]),
+                         "server": recovering("server", [(s.name, s.online is False, 0) for s in servers]),
+                         "config": recovering("config", [(c.name, c.status == "down", int(c.status_since or 0)) for c in configs])}
+        mass: dict[str, tuple[bool, bool, bool]] = {}          # kind -> (mass going on, DOWNs held, UPs held)
+
+        for kind, since_list in bad_since.items():
+            in_mass, hold_down = mass_state(kind, since_list, totals[kind], now)
+            told, ripening = told_ripening[kind]
+            mass[kind] = (in_mass, hold_down, in_mass or (told >= group_min(kind) and ripening > 0))          # (a group that was told together comes back together: the UPs wait until the last good one has been good for `up_seconds`)
 
         def track_for(kind: str, ref: str) -> AlertState:
             a = tracks.get((kind, ref))
@@ -249,50 +369,42 @@ def run(now: int | None = None) -> None:
 
         def judge(kind: str, ref: str, bad: bool, since: int = 0) -> tuple[AlertState, str | None]:
             a = track_for(kind, ref)
-            new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice, a.flips or 0, a.flap_since or 0, a.quiet_until or 0), bad, now, rules, since)
+            _, hold_down, hold_up = mass.get(kind, (False, False, False))
+            new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice, a.flips or 0, a.flap_since or 0, a.quiet_until or 0), bad, now, rules, since, hold=hold_down if bad else hold_up)
             a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice = new.fails, new.alerted, new.bad_since, new.good_since, new.last_notice
             a.flips, a.flap_since, a.quiet_until = new.flips, new.flap_since, new.quiet_until
             return a, verdict
 
-        def say(verdict: str | None, a: AlertState, label: str, why: str, down_word: str = "down") -> None:
+        def say(verdict: str | None, a: AlertState, kind: str, name: str, label: str, why: str = "") -> None:
             if not verdict:
                 return
 
             if verdict == "down":
-                down_msgs.append(f"• {label} — {why}")
+                downs.setdefault(kind, []).append((name, label, why))
             elif verdict == "remind":
-                remind_msgs.append(f"• {label} — still {down_word} for {_dur(now - a.bad_since)}")
+                remind_msgs.append(f"• {label} — still {WORDS[kind]} for {_dur(now - a.bad_since)}")
             elif verdict == "flapping":
                 flap_msgs.append(f"• {label} — {a.flips} outages in the last hour; quiet about it for {quiet_for}")
             else:
-                up_msgs.append(f"• {label} — was {down_word} {_dur(a.good_since - a.bad_since)}")
+                ups.setdefault(kind, []).append((name, label, _dur(a.good_since - a.bad_since)))
 
-        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
-            if t.state in ("unknown", "starting"):
-                continue   # not a verdict about the tunnel
-
+        for t in tunnels:
             a, verdict = judge("tunnel", t.name, t.state == "down", int(t.state_since or 0))
 
             if t.name not in muted and not quiet:
-                say(verdict, a, f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})", t.last_error or "no data passes")
+                say(verdict, a, "tunnel", t.name, f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})", t.last_error or "no data passes")
 
-        for s in db.scalars(select(Server).where(Server.enabled.is_(True))):
-            if s.online is None:
-                continue
-
+        for s in servers:
             a, verdict = judge("server", s.name, s.online is False)
 
             if s.name not in muted and not quiet:
-                say(verdict, a, f"server {s.name}", s.last_error or "does not answer", "unreachable")
+                say(verdict, a, "server", s.name, f"server {s.name}", s.last_error or "does not answer")
 
-        for c in db.scalars(select(Config).where(Config.enabled.is_(True))):
-            if c.status == "unknown":
-                continue
-
+        for c in configs:
             a, verdict = judge("config", c.name, c.status == "down", int(c.status_since or 0))
 
             if c.name not in muted and not quiet:
-                say(verdict, a, f"config {c.name}", c.last_error or "no answer through it")
+                say(verdict, a, "config", c.name, f"config {c.name}", c.last_error or "no answer through it")
 
         for p in db.scalars(select(Panel).where(Panel.enabled.is_(True))):
             if p.status == "unknown":
@@ -301,18 +413,18 @@ def run(now: int | None = None) -> None:
             a, verdict = judge("panel", p.name, p.status == "down", int(p.status_since or 0))
 
             if p.name not in muted and not quiet:
-                say(verdict, a, f"panel {p.name}", p.last_error or "does not answer")
+                say(verdict, a, "panel", p.name, f"panel {p.name}", p.last_error or "does not answer")
 
             for n in p.nodes or []:
                 a, verdict = judge("node", f"{p.name}/{n.get('name', '')}", int(n.get("fails", 0)) >= 2)
 
                 if p.name not in muted and not quiet:
                     why = (n.get("status") or "not connected") + (f" ({n['message']})" if n.get("message") else "")
-                    say(verdict, a, f"node {n.get('name', '')} of {p.name}", why, "disconnected")
+                    say(verdict, a, "node", f"{p.name}/{n.get('name', '')}", f"node {n.get('name', '')} of {p.name}", why)
 
     # the states are saved; the messages go out after the database is let go (a slow Telegram must not hold a connection)
-    if down_msgs:
-        _deliver("bad", f"🔴 DOWN ({len(down_msgs)})\n" + "\n".join(down_msgs))
+    if downs:
+        _deliver("bad", f"🔴 DOWN ({sum(len(v) for v in downs.values())})\n" + "\n".join(down_lines(downs)))
 
     if flap_msgs:
         _deliver("warn", f"🟠 FLAPPING ({len(flap_msgs)})\n" + "\n".join(flap_msgs))
@@ -320,5 +432,5 @@ def run(now: int | None = None) -> None:
     if remind_msgs:
         _deliver("warn", f"⚠ STILL DOWN ({len(remind_msgs)})\n" + "\n".join(remind_msgs))
 
-    if up_msgs:
-        _deliver("ok", f"🟢 UP again ({len(up_msgs)})\n" + "\n".join(up_msgs))
+    if ups:
+        _deliver("ok", f"🟢 UP again ({sum(len(v) for v in ups.values())})\n" + "\n".join(up_lines(ups, WORDS)))

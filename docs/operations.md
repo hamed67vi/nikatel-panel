@@ -109,6 +109,10 @@ message: a server switched off or on ~15-25 s, a tunnel cut by a stopped unit ~1
 If something goes down `flap_max` (3) times within an hour you get one FLAPPING message and silence about it for `flap_quiet_hours` (6).
 Mute an item or add a maintenance window to silence it on purpose. Too many messages? Raise `down_seconds` (a blip shorter than it says nothing)
 or lower `flap_max`. A message Telegram does not take (a timeout, "too many requests") is kept and sent again every 10 seconds, in order, for half an hour.
+**One cause, one message (1.68.2).** Many things of one kind that fall at the same moment have one cause, not many faults (the typical one: the probe's own path to its test address makes every config fail with the same curl error).
+When at least 4 configs and half of them (3 servers and 40 %, 4 tunnels and 30 %) are bad at once, their DOWN messages wait - configs 90 s, servers 30 s, tunnels 20 s - and what is sent is ONE message: the count, the error they share, a few names and the likely cause.
+A disturbance that is over by then is not told at all; the way back is one message (`UP again (14)`). The events page does the same: four or more configs that change status in one read of the probe are one event.
+A few things (two configs, one server) are told one by one, `down_seconds` after the fault, as before.
 The rules saved by versions before 1.67.0 (failed checks in a row, `min_down_minutes`, `up_stable_seconds`) became these two numbers: the old
 defaults give the new defaults, a value the owner had changed is kept (minutes → seconds).
 
