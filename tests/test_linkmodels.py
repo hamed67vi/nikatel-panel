@@ -297,3 +297,45 @@ def test_the_tcp_ping_script_runs_for_real_and_answers_ten_of_ten_on_a_local_por
     line = next(ln for ln in out.splitlines() if ln.startswith("TPING"))
     sent, answered, avg = (int(x) for x in line.split()[2:5])
     assert (sent, answered) == (10, 10) and 0 <= avg <= 40
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="needs a shell")
+@pytest.mark.parametrize("link", ["ipsec", "ipsecnat"])
+def test_the_ipsec_up_script_run_again_leaves_the_sas_alone(link, tmp_path):
+    """Found on the test panel (2026-10-17, the transitions run): the health-check timer runs the up script every minute, and the script took the SAs away and added them again - their sequence numbers start at 0
+    and the other end drops everything as a replay until it passes its old count: a tunnel that carried a download for a few seconds and then nothing. The script is run for real here with stand-ins for `ip`,
+    `iptables` and the rest: the second run must not add (or delete) anything."""
+    bin_dir, keys_dir = tmp_path / "bin", tmp_path / "keys"
+    bin_dir.mkdir()
+    keys_dir.mkdir()
+    ip = r"""#!/bin/sh
+D="${STUB_DIR}"
+echo "ip $*" >> "$D/log"
+case "$1" in
+  -o) echo "198.51.100.20 dev eth0 src 203.0.113.10 uid 0"; exit 0;;
+  -batch) while read -r line; do echo "batch: $line" >> "$D/log"; case "$line" in "xfrm state add"*) echo "$line" | sed -E 's/.* spi (0x[0-9a-f]+) .*/src a dst b proto esp spi \1(1) reqid 1/' >> "$D/states";; esac; done; exit 0;;
+  link) case "$2" in show) [ -f "$D/link" ]; exit $?;; add) touch "$D/link"; exit 0;; esac; exit 0;;
+  xfrm) if [ "$2" = state ] && [ -z "$3" ]; then cat "$D/states" 2>/dev/null; fi; exit 0;;
+esac
+exit 0
+"""
+    (bin_dir / "ip").write_text(ip)
+
+    for tool in ("iptables", "sysctl", "modprobe", "logger", "systemctl", "systemd-run"):
+        (bin_dir / tool).write_text("#!/bin/sh\n[ \"$1\" = is-active ] && exit 1\nexit 0\n")
+
+    for p in bin_dir.iterdir():
+        p.chmod(0o755)
+
+    out = files(link, ipsec=IPSEC)
+    (keys_dir / "ca-ir1.keys").write_text(out["/etc/nikatel/ipsec/ca-ir1.keys"])
+    script = tmp_path / "up.sh"
+    script.write_text(out["/usr/local/sbin/nikatel-gre-up-ca-ir1"].replace("/etc/nikatel/ipsec/", f"{keys_dir}/"))
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "STUB_DIR": str(tmp_path)}
+
+    for _ in range(3):
+        r = subprocess.run(["sh", str(script)], env=env, capture_output=True, text=True, timeout=30, check=False)
+        assert r.returncode == 0, r.stderr
+
+    log = (tmp_path / "log").read_text()
+    assert log.count("batch: xfrm state add") == 2 and log.count("batch: xfrm policy add") == 3                      # two SAs and three policies, added by the first run only
+    assert log.count("xfrm state del") == 2                                                                         # (the first run clears what an older run of the same link might have left)

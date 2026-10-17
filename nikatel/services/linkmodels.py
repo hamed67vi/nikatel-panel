@@ -136,6 +136,11 @@ if ! ip link show "$NAME" >/dev/null 2>&1; then
   ip link add "$NAME" type xfrm dev "$DEV" if_id "$IFID" || exit 1
 fi
 ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
+# The SAs are made ONCE. This script also runs every minute from the health-check timer, and adding an SA again starts its sequence number at 0 while the other end still remembers the numbers it has seen:
+# it drops every packet of ours as a replay until our count passes its old one - a tunnel that carried a download for a few seconds and then nothing (found on the test panel, 2026-10-17).
+if ip xfrm state 2>/dev/null | grep -q "spi 0x$SPI_TX(" && ip xfrm state 2>/dev/null | grep -q "spi 0x$SPI_RX("; then
+  :
+else
 ip xfrm state del src "$LOCAL" dst "$REMOTE" proto esp spi "0x$SPI_TX" 2>/dev/null || true
 ip xfrm state del src "$REMOTE" dst "$LOCAL" proto esp spi "0x$SPI_RX" 2>/dev/null || true
 ip xfrm policy del src 0.0.0.0/0 dst 0.0.0.0/0 dir out if_id "$IFID" 2>/dev/null || true
@@ -148,6 +153,7 @@ xfrm policy add src 0.0.0.0/0 dst 0.0.0.0/0 dir out if_id $IFID tmpl src $LOCAL 
 xfrm policy add src 0.0.0.0/0 dst 0.0.0.0/0 dir in if_id $IFID tmpl src $REMOTE dst $LOCAL proto esp reqid $IFID mode tunnel
 xfrm policy add src 0.0.0.0/0 dst 0.0.0.0/0 dir fwd if_id $IFID tmpl src $REMOTE dst $LOCAL proto esp reqid $IFID mode tunnel
 EOF
+fi
 ip addr show dev "$NAME" | grep -q "inet ${ADDR%/*}/" || ip addr add "$ADDR" dev "$NAME"
 ip link set "$NAME" mtu "$MTU" up
 @SYSCTL@"""

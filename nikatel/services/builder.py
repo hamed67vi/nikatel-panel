@@ -1007,7 +1007,8 @@ def _build(b: Build) -> None:
     _say(aid, "GRE: interfaces up on both servers" if link == "gre" else f"{title}: link up on both servers")
     time.sleep(1 if link == "gre" else 2)                  # (a WireGuard end shakes hands with the other first)
 
-    ver_i, ver_f = _both(lambda: ping_stats(run_script(iran, "gre_verify", {"IFACE": b.name, "PEER": foreign_ip}, timeout=40)), lambda: ping_stats(run_script(foreign, "gre_verify", {"IFACE": b.name, "PEER": iran_ip}, timeout=40)))
+    verify = "gre_verify" if link == "gre" else "link_probe_ping"          # (a link in UDP loses the first packets of a new flow for a few seconds on some routes - up to eight single pings first, then the ten that count; 1.69.3)
+    ver_i, ver_f = _both(lambda: ping_stats(run_script(iran, verify, {"IFACE": b.name, "PEER": foreign_ip}, timeout=60)), lambda: ping_stats(run_script(foreign, verify, {"IFACE": b.name, "PEER": iran_ip}, timeout=60)))
     (_, ga), rtt = ver_i
     (_, gb), _ = ver_f
 
