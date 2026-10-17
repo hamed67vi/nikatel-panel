@@ -42,10 +42,12 @@ GRE_KINDS = ("tcpmux", "tcp", "wsmux", "wssmux")          # the Backhaul kinds: 
 # What the real tests said (docs/tunnels.md, 2026-10-16): the side that DIALS decides what a customer downloads, so the kinds where the Iran server dials come first; the kinds where the foreign
 # server dials (reverse - they are the way when the Iran server cannot dial out) follow; the odd ones are last. It is the order for a pair nobody tested yet, and the tie-break.
 PRIOR = ["tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bpd:udp", "chisel:fwdtls", "bp:wssmux", "bp:tcpmux", "chisel:tls", "bp:stealth", "bp:wss", "bp:tcp",
-         "wssmux", "tcp", "wsmux", "bp:pck", "chisel", "bp:ws", "bp:wsmux", "bp:kcp", "bpd:quic", "bp:quic", "bpd:xdi", "bp:xdi"]
+         "wssmux", "tcp", "wsmux", "bp:pck", "chisel", "bp:ws", "bp:wsmux", "bp:kcp", "bpd:quic", "bp:quic", "bpd:xdi", "bp:xdi",
+         "wg:tcpmux", "fou:tcpmux", "wg:tcp"]                 # (1.66.0: Backhaul over WireGuard / GRE inside UDP - last in the standard order; what the survey finds to connect on a pair is tried first by `candidates`)
+UDP_LINK_KINDS = ("wg:tcpmux", "fou:tcpmux", "wg:tcp")        # Backhaul over a UDP link: they need no GRE (protocol 47), they need UDP to pass between the two servers
 # What the night survey tests on every pair that carries a tunnel (about twelve minutes a pair): the kinds the Doctor reaches for when a route is cut, the robust ones first. The other kinds are tested when
 # the owner asks (Doctor page, Knowledge) or by a repair that needs them.
-READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bp:wss", "chisel:fwdtls", "bp:tcp", "bpd:udp"]
+READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bp:wss", "chisel:fwdtls", "bp:tcp", "bpd:udp", "wg:tcpmux", "fou:tcpmux"]      # (a UDP link too: where protocol 47 is filtered it is the first thing to try - when the server has wireguard-tools, a survey never installs it)
 NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", "down1_mbps", "up1_mbps")
 INCIDENTS = 200             # the cuts that are kept (the newest)
 PLAYBOOK_DAYS = 90          # what healed a pair this long ago is still the first thing tried
@@ -131,6 +133,7 @@ FORWARD_KINDS = frozenset({"bpd:udp", "bpd:quic", "bpd:pck", "bpd:xdi", "paqet",
 CUT_REVERSE = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bp:wss", "bp:tcp", "chisel", "bp:stealth", "bp:wsmux", "bp:ws", "bp:kcp", "bp:pck", "bp:quic", "bp:xdi"]
 CUT_FORWARD = ["bpd:pck", "chisel:fwd", "paqet", "chisel:fwdtls", "bpd:udp", "bpd:quic", "bpd:xdi"]
 CUT_GRE = ["tcpmux", "wssmux", "tcp", "wsmux"]
+CUT_UDPLINK = ["wg:tcpmux", "fou:tcpmux", "wg:tcp"]       # Backhaul over a UDP link: last in the static order (a pair whose survey found one connecting has it first anyway, see `candidates`)
 
 
 def cut_order(dial_i: bool | None, dial_f: bool | None, no_gre: bool) -> list[str]:
@@ -139,12 +142,12 @@ def cut_order(dial_i: bool | None, dial_f: bool | None, no_gre: bool) -> list[st
     gre = [] if no_gre else CUT_GRE
 
     if dial_i is False and dial_f is not False:
-        return gre + CUT_REVERSE + CUT_FORWARD
+        return gre + CUT_REVERSE + CUT_FORWARD + CUT_UDPLINK
 
     if dial_i:
-        return gre + CUT_FORWARD + CUT_REVERSE
+        return gre + CUT_FORWARD + CUT_REVERSE + CUT_UDPLINK
 
-    return gre + CUT_REVERSE + CUT_FORWARD
+    return gre + CUT_REVERSE + CUT_FORWARD + CUT_UDPLINK
 
 
 def unreachable(dial_i: bool | None, dial_f: bool | None) -> frozenset:
@@ -328,6 +331,10 @@ def plan_for(iran_id: int, foreign_id: int, current: str, no_gre: bool, lossy: b
     cannot = unreachable(dial_i, dial_f) if not lossy else frozenset()
     hints = [] if lossy else sibling_kinds(iran_id, foreign_id, now)
     kinds = candidates(p, current, no_gre, lossy, now, limit=LIMIT if lossy else len(PRIOR), base=base, unreachable_kinds=cannot, prefer=hints)
+
+    if no_gre and current in UDP_LINK_KINDS:                 # the link under this tunnel is a UDP one and it is the link that is cut: the other UDP links would be cut the same way (GRE, another protocol, may still pass)
+        kinds = [k for k in kinds if k not in UDP_LINK_KINDS]
+
     pb = {} if (lossy or not cause) else playbook(iran_id, foreign_id, cause, now)
 
     if pb and pb["kind"] in kinds and pb["kind"] not in cannot and pb["kind"] not in blocked(p, now):
@@ -389,7 +396,7 @@ def survey_start(iran_id: int, foreign_id: int, source: str = "survey-manual", k
 
     order = [k for k in PRIOR if kinds is None or k in kinds]
     measure = "full" if source == "survey-manual" else "latency"      # the night survey asks only whether a type connects and what its delay and loss are (a few pings through a temporary tunnel): no speed test on servers that carry users
-    jid = tunnel_test.compare_start(iran_id, foreign_id, order, measure=measure, source=source)
+    jid = tunnel_test.compare_start(iran_id, foreign_id, order, measure=measure, source=source, install_wg=source == "survey-manual")      # (only a survey the owner asked for may install wireguard-tools; the night one never installs a package)
 
     with session() as db:
         how = "by hand: with a speed test" if source == "survey-manual" else "the first survey of this pair, on quiet servers: delay and loss only" if source == "survey-cold" else "the night survey: delay and loss only"

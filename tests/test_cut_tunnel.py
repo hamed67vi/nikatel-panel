@@ -26,7 +26,7 @@ NOW = 1_800_000_000
 # ------------------------------------------------------------------ the order of the replacements
 def test_a_cut_tunnel_tries_the_kinds_by_who_can_still_dial_whom():
     assert set(knowledge.PRIOR) == tunnel_test.KIND_KEYS and len(knowledge.PRIOR) == len(set(knowledge.PRIOR))          # the standard order names every kind of the tunnel test, once
-    assert set(knowledge.CUT_REVERSE) | set(knowledge.CUT_FORWARD) | set(knowledge.CUT_GRE) == tunnel_test.KIND_KEYS
+    assert set(knowledge.CUT_REVERSE) | set(knowledge.CUT_FORWARD) | set(knowledge.CUT_GRE) | set(knowledge.CUT_UDPLINK) == tunnel_test.KIND_KEYS
     assert set(knowledge.READY) <= tunnel_test.KIND_KEYS and len(knowledge.READY) == len(set(knowledge.READY)) and "bp:wssmux" in knowledge.READY
     assert knowledge.REVERSE_KINDS == set(knowledge.CUT_REVERSE) and knowledge.FORWARD_KINDS == set(knowledge.CUT_FORWARD)
     filtered = knowledge.cut_order(False, True, True)                                                                  # the foreign address is filtered from Iran: only the foreign server can dial
@@ -224,7 +224,7 @@ def test_when_nothing_connects_every_kind_is_tried_the_old_type_is_put_back_and_
     said, attempts = fake_repair(monkeypatch, {**GRE_CUT, "cause": "route_cut", "dial_i": False, "dial_f": False})
     assert ap.smart_fix(9, tid, "switch", "auto") is False
     assert len(attempts) == len(knowledge.PRIOR) - 4 and attempts[0][1] is True                                         # all of them except the GRE kinds
-    assert any(ln.startswith("None of the 20 tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
+    assert any(ln.startswith(f"None of the {len(knowledge.PRIOR) - 4} tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
     assert any("None of the tunnel types connects on this route right now. The repair tries again in 1 minute (then 2, 5 and every 10 minutes; the types that failed are not tried again)." in ln for ln in said)
     assert set(knowledge.blocked(knowledge.pair(ir, fr), int(time.time()))) == {a[0] for a in attempts}                  # each one failed here: none is tried again for two weeks
     assert knowledge.playbook(ir, fr, "route_cut") == {} and knowledge.repeats(ir, fr) == 1                              # the cut is remembered though nothing healed it

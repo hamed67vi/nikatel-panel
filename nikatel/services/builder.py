@@ -251,6 +251,190 @@ WantedBy=timers.target
             f"/etc/systemd/system/nikatel-gre-check-{name}.service": check_unit, f"/etc/systemd/system/nikatel-gre-check-{name}.timer": timer}
 
 
+# ------------------------------------------------------------------ the link under Backhaul: GRE, GRE inside UDP, WireGuard
+# Backhaul runs over the inner addresses of a point-to-point link between the two servers. The link is GRE (IP protocol 47) as always, or - where a route filters protocol 47, the commonest cut the Doctor meets - the same GRE
+# inside UDP ("fou": Foo-over-UDP, one symmetric UDP port) or a WireGuard link (UDP, encrypted, authenticated). Everything above the link (the units, the checks, the bandwidth, the Doctor) is the same: the link keeps the
+# names a GRE link has (the interface is called like the tunnel, the units are `nikatel-gre-<name>` ...). Idea and design taken from simple-tun-link (github.com/ach1992/simple-tun-link): a kernel link, keys that never
+# leave their server, an owner tag on the interface, a firewall rule that names the exact peer and port.
+LINKS = ("gre", "fou", "wg")
+LINK_TITLE = {"gre": "GRE", "fou": "GRE over UDP", "wg": "WireGuard"}
+LINK_PORTS = {"fou": (5500, 5599), "wg": (51820, 51919)}      # the UDP port range of a link of that kind: ONE port, the same on both servers
+_PUB_RE = re.compile(r"[A-Za-z0-9+/]{43}=")
+_IPV4_RE = re.compile(r"(\d{1,3}\.){3}\d{1,3}")
+_LINK_FW_DOWN = """if command -v iptables >/dev/null 2>&1; then
+  iptables() { command iptables -w 5 "$@"; }
+  for chain in INPUT OUTPUT FORWARD; do
+    iptables -S "$chain" 2>/dev/null | grep -- "--comment $TAG" | sed "s/^-A/-D/" | while read -r rule; do
+      iptables $rule 2>/dev/null || true
+    done
+  done
+  iptables -t mangle -S FORWARD 2>/dev/null | grep -- "--comment $TAG" | sed "s/^-A/-D/" | while read -r rule; do
+    iptables -t mangle $rule 2>/dev/null || true
+  done
+fi
+"""
+_LINK_FW_UP = """if command -v iptables >/dev/null 2>&1; then
+  iptables() { command iptables -w 5 "$@"; }      # (wait up to 5 s for the xtables lock: two links made at the same moment on one server do not fail on it)
+  iptables -C INPUT  -s "$REMOTE" -d "$LOCAL" @MATCH@ -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I INPUT 1  -s "$REMOTE" -d "$LOCAL" @MATCH@ -m comment --comment "$TAG" -j ACCEPT
+  iptables -C OUTPUT -s "$LOCAL" -d "$REMOTE" @MATCH@ -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I OUTPUT 1 -s "$LOCAL" -d "$REMOTE" @MATCH@ -m comment --comment "$TAG" -j ACCEPT
+  iptables -C INPUT -i "$NAME" -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I INPUT 1 -i "$NAME" -m comment --comment "$TAG" -j ACCEPT
+  iptables -C OUTPUT -o "$NAME" -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I OUTPUT 1 -o "$NAME" -m comment --comment "$TAG" -j ACCEPT
+  iptables -C FORWARD -i "$NAME" -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I FORWARD 1 -i "$NAME" -m comment --comment "$TAG" -j ACCEPT
+  iptables -C FORWARD -o "$NAME" -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I FORWARD 1 -o "$NAME" -m comment --comment "$TAG" -j ACCEPT
+  for dir in -o -i; do
+    iptables -t mangle -C FORWARD $dir "$NAME" -p tcp --tcp-flags SYN,RST SYN -m comment --comment "$TAG" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \\
+      iptables -t mangle -A FORWARD $dir "$NAME" -p tcp --tcp-flags SYN,RST SYN -m comment --comment "$TAG" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+  done
+fi
+"""
+_LINK_SYSCTL = """sysctl -qw net.ipv4.ip_forward=1 2>/dev/null || true
+sysctl -qw "net.ipv4.conf.$NAME.rp_filter=0" 2>/dev/null || true
+sysctl -qw net.ipv4.conf.all.rp_filter=0 2>/dev/null || true
+exit 0
+"""
+_WG_UP = """#!/bin/sh
+# Nikatel WireGuard link @NAME@  (idempotent: also used by the health-check timer; the private key is in KEY, made on this server, and is never in a command line)
+NAME=@NAME@
+LOCAL=@LOCAL@
+REMOTE=@REMOTE@
+PORT=@PORT@
+ADDR=@ADDR@
+MTU=@MTU@
+PEER_IP=@PEER_IP@
+PEER_PUB=@PEER_PUB@
+KEY=/etc/nikatel/wg/@NAME@.key
+TAG="nikatel-gre-$NAME"
+
+modprobe wireguard 2>/dev/null || true
+[ -s "$KEY" ] || { logger -t nikatel-wg "$NAME: the key file $KEY is missing"; exit 1; }
+@FIREWALL@
+if ! ip link show "$NAME" >/dev/null 2>&1; then
+  ip link add "$NAME" type wireguard || exit 1
+fi
+ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
+wg set "$NAME" listen-port "$PORT" private-key "$KEY" peer "$PEER_PUB" endpoint "$REMOTE:$PORT" allowed-ips "$PEER_IP/32" persistent-keepalive 25 || exit 1
+ip addr show dev "$NAME" | grep -q "inet ${ADDR%/*}/" || ip addr add "$ADDR" dev "$NAME"
+ip link set "$NAME" mtu "$MTU" up
+@SYSCTL@"""
+_WG_DOWN = """#!/bin/sh
+NAME=@NAME@
+TAG="nikatel-gre-$NAME"
+ip link set "$NAME" down 2>/dev/null || true
+if ip -d link show "$NAME" 2>/dev/null | grep -q wireguard; then ip link del "$NAME" 2>/dev/null || true; fi
+@FIREWALL@exit 0
+"""
+_FOU_UP = """#!/bin/sh
+# Nikatel GRE-over-UDP link @NAME@  (idempotent: also used by the health-check timer)
+NAME=@NAME@
+LOCAL=@LOCAL@
+REMOTE=@REMOTE@
+PORT=@PORT@
+KEY=@KEY@
+ADDR=@ADDR@
+MTU=@MTU@
+TTL=@TTL@
+TAG="nikatel-gre-$NAME"
+
+modprobe ip_gre 2>/dev/null || true
+modprobe fou 2>/dev/null || true
+ip fou show 2>/dev/null | grep -q "port $PORT " || ip fou add port "$PORT" ipproto 47 || exit 1
+@FIREWALL@
+if ! ip link show "$NAME" >/dev/null 2>&1; then
+  ip link add "$NAME" type gre local "$LOCAL" remote "$REMOTE" key "$KEY" ttl "$TTL" encap fou encap-sport auto encap-dport "$PORT" || exit 1
+fi
+ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
+ip link set "$NAME" mtu "$MTU"
+ip addr show dev "$NAME" | grep -q "inet ${ADDR%/*}/" || ip addr add "$ADDR" dev "$NAME"
+ip link set "$NAME" up
+@SYSCTL@"""
+_FOU_DOWN = """#!/bin/sh
+NAME=@NAME@
+PORT=@PORT@
+TAG="nikatel-gre-$NAME"
+ip link set "$NAME" down 2>/dev/null || true
+if ip -d link show "$NAME" 2>/dev/null | grep -q 'gre '; then ip link del "$NAME" 2>/dev/null || true; fi
+ip fou del port "$PORT" 2>/dev/null || true
+@FIREWALL@exit 0
+"""
+
+
+def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_cidr: str, mtu: int, port: int = 0, peer_pub: str = "", ttl: int = 255) -> dict[str, str]:
+    """The files of the link of one end, byte-compatible in names with `gre_scripts` (the check script, the units and the timer ARE those of a GRE link): for "gre" exactly `gre_scripts`; for "fou" (GRE inside UDP
+    on `port`) and "wg" (WireGuard on `port`, the peer's public key `peer_pub`) the up and down scripts differ. Everything is checked first: the scripts run as root on a server."""
+    if link not in LINKS:
+        raise ValueError("the link is gre, fou or wg")
+
+    files = gre_scripts(name, local, remote, key, addr_cidr, mtu, ttl)
+
+    if link == "gre":
+        return files
+
+    lo, hi = LINK_PORTS[link]
+
+    if not NAME_RE.fullmatch(name) or not _IPV4_RE.fullmatch(local) or not _IPV4_RE.fullmatch(remote) or not lo <= int(port) <= hi:
+        raise ValueError("a link needs a tunnel name, two IPv4 addresses and a UDP port of its range")
+
+    if link == "wg" and not _PUB_RE.fullmatch(peer_pub or ""):
+        raise ValueError("a WireGuard link needs the public key of the other end")
+
+    iface = ipaddress.ip_interface(addr_cidr)
+    peer_ip = next(str(h) for h in iface.network.hosts() if str(h) != str(iface.ip))
+    match = f"-p udp --dport {int(port)}"
+    fw_up, fw_down = _LINK_FW_UP.replace("@MATCH@", match), _LINK_FW_DOWN
+    put = {"@NAME@": name, "@LOCAL@": local, "@REMOTE@": remote, "@PORT@": str(int(port)), "@ADDR@": addr_cidr, "@MTU@": str(int(mtu)), "@PEER_IP@": peer_ip, "@PEER_PUB@": peer_pub,
+           "@KEY@": str(int(key)), "@TTL@": str(int(ttl)), "@FIREWALL@": "", "@SYSCTL@": _LINK_SYSCTL}
+
+    def fill(text: str, firewall: str) -> str:
+        text = text.replace("@FIREWALL@", firewall).replace("@SYSCTL@", put["@SYSCTL@"])
+
+        for k, v in put.items():
+            if k not in ("@FIREWALL@", "@SYSCTL@"):
+                text = text.replace(k, v)
+
+        return text
+
+    up_path, down_path = f"/usr/local/sbin/nikatel-gre-up-{name}", f"/usr/local/sbin/nikatel-gre-down-{name}"
+    files[up_path] = fill(_WG_UP if link == "wg" else _FOU_UP, fw_up)
+    files[down_path] = fill(_WG_DOWN if link == "wg" else _FOU_DOWN, fw_down)
+    unit = f"/etc/systemd/system/nikatel-gre-{name}.service"
+    files[unit] = files[unit].replace("Nikatel GRE tunnel", f"Nikatel {LINK_TITLE[link]} link")
+    return files
+
+
+def parse_link_facts(out: str) -> dict:
+    """Pure: the answer of the `link_facts` script."""
+    kv: dict[str, str] = {}
+
+    for line in str(out).splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            kv[k.strip()] = v.strip()
+
+    def ports(s: str) -> set[int]:
+        return {int(x) for x in s.split() if x.isdigit()}
+
+    return {"wg_mod": kv.get("WG_MOD") == "1", "wg_tool": kv.get("WG_TOOL") == "1", "fou_mod": kv.get("FOU_MOD") == "1", "udp": ports(kv.get("UDP", "")), "fou_ports": ports(kv.get("FOU_PORTS", "")),
+            "apt": kv.get("APT") == "1"}
+
+
+def pick_link_port(link: str, taken: set[int]) -> int:
+    """Pure: the first UDP port of the range of this link that nobody holds (0 when the range is full)."""
+    lo, hi = LINK_PORTS[link]
+    return next((p for p in range(lo, hi + 1) if p not in taken), 0)
+
+
+def parse_pub(out: str) -> str:
+    """Pure: the public key in the answer of `wg_keygen` ('' when there is none)."""
+    m = re.search(r"PUB=(" + _PUB_RE.pattern + ")", str(out))
+    return m.group(1) if m else ""
+
+
 BH_LOG = ("debug", "info", "warn", "error")
 
 
@@ -293,6 +477,18 @@ def clean_bh_opts(o: dict | None) -> dict:
 
     if "tune" in o:
         out["tune"] = bool(o["tune"])
+
+    if "install_wg" in o:                                         # the owner asked for this build (Create tunnel, a test he started): wireguard-tools may be installed with apt on a server that lacks it
+        out["install_wg"] = bool(o["install_wg"])
+
+    if o.get("link") not in (None, "", "gre"):                  # what Backhaul runs over: GRE (the default, not written), GRE inside UDP, WireGuard
+        if o["link"] not in LINKS:
+            raise ValueError("link must be gre, fou or wg")
+
+        out["link"] = o["link"]
+
+    if o.get("avoid_net") and re.fullmatch(r"(\d{1,3}\.){3}\d{1,3}/\d{1,2}", str(o["avoid_net"])):          # a rebuild with a NEW link: never the inner network the broken link had (it was dropped here before)
+        out["avoid_net"] = str(o["avoid_net"])
 
     return out
 
@@ -668,8 +864,66 @@ def _rollback(b: Build) -> None:
             log.warning("rollback on %s failed: %s", node.host, e)
 
 
+def _ensure_wg_tool(aid: int, node: Node, facts: dict, label: str, server: str, install: bool) -> None:
+    """The server needs `wg` (wireguard-tools). When the OWNER asked for this build (`install`) it is installed with apt if it is missing - nothing is copied from another machine. A build the Doctor or the night
+    survey makes by itself never installs a package on a server: it fails with the sentence that says what to do (and the Doctor tries the next tunnel type)."""
+    if facts["wg_tool"]:
+        return
+
+    if not install:
+        raise RuntimeError(f"{label} server {server}: wireguard-tools is not installed (apt install wireguard-tools, or build a WireGuard tunnel once from Create tunnel: that installs it)")
+
+    _say(aid, f"{label} server {server}: wireguard-tools is not installed - installing it with apt (a minute at most)")
+    out = run_action(node, "wg_install", timeout=330)
+
+    if "WG_OK" not in out:
+        raise RuntimeError(f"{label} server {server}: wireguard-tools could not be installed ({out.split('WG_FAIL', 1)[-1].strip()[:200] or 'no answer'}). Install it by hand (apt install wireguard-tools) and build again.")
+
+
+def _prepare_link(b: Build, iran: Node, foreign: Node, link: str) -> tuple[int, dict[str, str]]:
+    """Before the scripts of a link that is not GRE are written: both servers can do it (the kernel module; for WireGuard also the tool), the UDP port is free on BOTH and in no other tunnel, and - WireGuard - each server
+    makes its own key and says the public half (the private key never leaves its server). Returns (the UDP port, {"iran": public key, "foreign": public key})."""
+    aid = b.aid
+    raw_i, raw_f = _both(lambda: run_script(iran, "link_facts", timeout=40), lambda: run_script(foreign, "link_facts", timeout=40))
+    li, lf = parse_link_facts(raw_i), parse_link_facts(raw_f)
+
+    for label, f, srv in (("Iran", li, b.iran), ("Foreign", lf, b.foreign)):
+        if link == "wg" and not f["wg_mod"]:
+            raise RuntimeError(f"{label} server {srv.name} cannot load the WireGuard kernel module (it needs Linux 5.6 or newer, or the wireguard module)")
+
+        if link == "fou" and not f["fou_mod"]:
+            raise RuntimeError(f"{label} server {srv.name} cannot load the FOU kernel module (GRE over UDP)")
+
+    if link == "wg":
+        install = bool(b.opts.get("install_wg"))
+        _both(lambda: _ensure_wg_tool(aid, iran, li, "Iran", b.iran.name, install), lambda: _ensure_wg_tool(aid, foreign, lf, "Foreign", b.foreign.name, install))
+
+    with session() as db:
+        used = {int((t.record or {}).get("link_port") or 0) for t in db.scalars(select(Tunnel))}
+
+    port = pick_link_port(link, li["udp"] | lf["udp"] | li["fou_ports"] | lf["fou_ports"] | used)
+
+    if not port:
+        raise RuntimeError(f"no free UDP port for the {LINK_TITLE[link]} link ({LINK_PORTS[link][0]}-{LINK_PORTS[link][1]}) on the two servers")
+
+    pubs: dict[str, str] = {}
+
+    if link == "wg":
+        b.created.append(("wg", iran))
+        b.created.append(("wg", foreign))
+        out_i, out_f = _both(lambda: run_action(iran, "wg_keygen", {"NAME": b.name}, timeout=40), lambda: run_action(foreign, "wg_keygen", {"NAME": b.name}, timeout=40))
+        pubs = {"iran": parse_pub(out_i), "foreign": parse_pub(out_f)}
+
+        if not pubs["iran"] or not pubs["foreign"]:
+            raise RuntimeError("a server did not make its WireGuard key")
+
+    _say(aid, f"{LINK_TITLE[link]} link: UDP port {port} on both servers" + (", each server made its own key (the private key stays on it)" if link == "wg" else ""))
+    return port, pubs
+
+
 def _build(b: Build) -> None:
     aid, iran, foreign = b.aid, _node(b.iran), _node(b.foreign)
+    link = str(b.opts.get("link") or "gre")
     ihost, fhost = b.iran.host, b.foreign.host           # (read here, not inside the threads of `_both`)
 
     # 1. preflight (both servers asked at once)
@@ -680,13 +934,13 @@ def _build(b: Build) -> None:
         if f["broken"]:
             raise RuntimeError(f"{label} server {srv.name} has failed tunnel units: {', '.join(f['broken'][:4])}. Repair or delete them first.")
 
-        if not f["gre_mod"]:
+        if link == "gre" and not f["gre_mod"]:
             raise RuntimeError(f"{label} server {srv.name} cannot load the GRE kernel module")
 
         if srv.host not in [c.split("/")[0] for c in f["ips"]]:
             raise RuntimeError(f"{label} server {srv.name}: {srv.host} is not an address of the server itself (behind NAT?) - GRE needs the real interface address")
 
-    _say(aid, "Preflight: both servers inspected, GRE available, no broken tunnel units")
+    _say(aid, "Preflight: both servers inspected, GRE available, no broken tunnel units" if link == "gre" else f"Preflight: both servers inspected, no broken tunnel units; the {LINK_TITLE[link]} link is checked next")
     ensure_backhaul(iran, foreign, fi, ff, aid)
 
     with session() as db:
@@ -735,40 +989,44 @@ def _build(b: Build) -> None:
     key = random.randint(1, 2147483647)
     token = secrets.token_hex(16)
     _say(aid, f"Plan: {b.name}, inner network {network} (Iran {iran_ip}, foreign {foreign_ip})")
+    link_port, pubs = _prepare_link(b, iran, foreign, link) if link != "gre" else (0, {})
+    title = LINK_TITLE[link]
+    filtered = "GRE is probably filtered between these two servers" if link == "gre" else f"UDP port {link_port} is probably filtered between these two servers"
 
-    # 4. GRE both sides
-    def gre_side(label: str, node: Node, local: str, remote: str, addr: str) -> None:
+    # 4. the link on both sides (GRE, GRE inside UDP or WireGuard)
+    def link_side(label: str, node: Node, local: str, remote: str, addr: str, peer_pub: str) -> None:
         b.created.append(("gre", node))
 
-        for path, text in gre_scripts(b.name, local, remote, key, addr, b.mtu).items():
+        for path, text in link_scripts(link, b.name, local, remote, key, addr, b.mtu, port=link_port, peer_pub=peer_pub).items():
             _put(node, path, text, "0700" if "/sbin/" in path else "0644")
 
         st = _unit(node, f"nikatel-gre-{b.name}.service")
         _unit(node, f"nikatel-gre-check-{b.name}.timer")
 
         if st != "active":
-            raise RuntimeError(f"the GRE unit on the {label} server ended {st}")
+            logs = run_script(node, "unit_log", {"UNIT": f"nikatel-gre-{b.name}.service"}, timeout=20) if link != "gre" else ""
+            raise RuntimeError(f"the {title} unit on the {label} server ended {st}" + (f": {logs.strip()[-200:]}" if logs.strip() else ""))
 
-    _both(lambda: gre_side("Iran", iran, ihost, fhost, f"{iran_ip}/30"), lambda: gre_side("foreign", foreign, fhost, ihost, f"{foreign_ip}/30"))      # (a GRE end does not wait for the other: both are made at once)
-    _say(aid, "GRE: interfaces up on both servers")
-    time.sleep(1)
+    _both(lambda: link_side("Iran", iran, ihost, fhost, f"{iran_ip}/30", pubs.get("foreign", "")), lambda: link_side("foreign", foreign, fhost, ihost, f"{foreign_ip}/30", pubs.get("iran", "")))      # (an end does not wait for the other: both are made at once)
+    _say(aid, "GRE: interfaces up on both servers" if link == "gre" else f"{title}: link up on both servers")
+    time.sleep(1 if link == "gre" else 2)                  # (a WireGuard end shakes hands with the other first)
 
     ver_i, ver_f = _both(lambda: ping_stats(run_script(iran, "gre_verify", {"IFACE": b.name, "PEER": foreign_ip}, timeout=40)), lambda: ping_stats(run_script(foreign, "gre_verify", {"IFACE": b.name, "PEER": iran_ip}, timeout=40)))
     (_, ga), rtt = ver_i
     (_, gb), _ = ver_f
 
     if ga < 8 or gb < 8:
-        raise RuntimeError(f"the GRE tunnel is up but the inner addresses cannot ping each other (Iran→foreign {ga}/10, foreign→Iran {gb}/10). "
-                           "GRE is probably filtered between these two servers; try another Iran server for this foreign server.")
+        raise RuntimeError(f"the {title} link is up but the inner addresses cannot ping each other (Iran→foreign {ga}/10, foreign→Iran {gb}/10). "
+                           f"{filtered}; try another Iran server for this foreign server" + ("" if link == "gre" else " or another link type (GRE, GRE over UDP, WireGuard)") + ".")
 
-    _say(aid, f"GRE answers both ways (Iran→foreign {ga}/10, foreign→Iran {gb}/10, {rtt} ms). Waiting {GRE_HOLD_WAIT} s to see that it holds…")
+    _say(aid, f"{title} answers both ways (Iran→foreign {ga}/10, foreign→Iran {gb}/10, {rtt} ms). Waiting {GRE_HOLD_WAIT} s to see that it holds…")
     time.sleep(GRE_HOLD_WAIT)
     (sh, gh), _ = ping_stats(run_script(iran, "gre_hold", {"IFACE": b.name, "PEER": foreign_ip}, timeout=45))
 
     if not sh or gh < int(sh * 0.85):
-        raise RuntimeError(f"the GRE tunnel answered at first but then lost its packets ({gh}/{sh} after {GRE_HOLD_WAIT} s): the path filters GRE a few seconds into a flow. Another Iran server is needed for this foreign server.")
+        raise RuntimeError(f"the {title} link answered at first but then lost its packets ({gh}/{sh} after {GRE_HOLD_WAIT} s): the path filters {'GRE' if link == 'gre' else 'this UDP port'} a few seconds into a flow. Another Iran server is needed for this foreign server.")
 
-    _say(aid, f"GRE holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
+    _say(aid, f"{title} holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
 
     # 5. backhaul both sides
     if b.transport in ("wss", "wssmux"):          # the TLS WebSocket transport listens with a certificate: a self-signed one, made once on the Iran server
@@ -837,7 +1095,8 @@ def _build(b: Build) -> None:
         t = Tunnel(name=b.name, enabled=not is_temp(b.name), type="backhaul", transport=b.transport, engine="backhaul", iran_server_id=b.iran.id, foreign_server_id=b.foreign.id,
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
                    record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
-                           "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel"},
+                           "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel",
+                           **({"link": link, "link_port": link_port, **({"wg": {"iran_pub": pubs["iran"], "foreign_pub": pubs["foreign"]}} if link == "wg" else {})} if link != "gre" else {})},        # (public keys only: the private ones never left their servers)
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
         db.flush()

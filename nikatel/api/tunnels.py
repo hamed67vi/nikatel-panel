@@ -35,6 +35,18 @@ def build(body: BuildIn):
     """Build a tunnel (any engine) as an action; the answer is its id. 0 as the Iran server = the best one is chosen."""
     try:
         transport = body.transport or ("tcpmux" if body.kind == "backhaul" else "")     # an empty transport means the default of the engine
+        opts = dict(body.opts)
+
+        if body.kind == "backhaul" and ":" in transport:         # "wg:tcpmux" / "fou:tcpmux": Backhaul over WireGuard / GRE inside UDP (the kinds of the pair test)
+            link, _, transport = transport.partition(":")
+
+            if link not in ("wg", "fou"):
+                raise ValueError("the link of a Backhaul tunnel is GRE (the default), fou (GRE over UDP) or wg (WireGuard)")
+
+            opts["link"] = link
+
+            if link == "wg":
+                opts["install_wg"] = True                        # the owner asked for it: wireguard-tools may be installed (apt) on a server that lacks it
 
         if body.kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
             raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
@@ -50,10 +62,10 @@ def build(body: BuildIn):
         if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names:
             from ..services import create
 
-            aid = create.start(body.iran_id, body.foreign_id, body.ports, body.kind, transport, body.opts if body.kind == "backhaul" else other_opts,
+            aid = create.start(body.iran_id, body.foreign_id, body.ports, body.kind, transport, opts if body.kind == "backhaul" else other_opts,
                                body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units)
         elif body.kind == "backhaul":
-            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=body.opts)
+            aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=opts)
         else:
             from ..services import build_other
 
@@ -106,7 +118,10 @@ def tunnel_kinds():
 
     return {"ok": True, "kinds": [
         {"key": "backhaul", "title": "Backhaul over GRE", "note": "GRE link with local IPs, backhaul on top - like the existing tunnels", "direction": "reverse",
-         "transports": [{"key": k, "label": lbl, "note": n} for k, lbl, n in (("tcpmux", "TCP Mux", "many users, few connections (recommended)"), ("tcp", "TCP", "plain TCP"), ("wsmux", "WebSocket Mux", "clear-text WebSocket, multiplexed"), ("wssmux", "WebSocket TLS Mux", "TLS WebSocket, multiplexed"))]},
+         "transports": [{"key": k, "label": lbl, "note": n} for k, lbl, n in (("tcpmux", "TCP Mux", "many users, few connections (recommended)"), ("tcp", "TCP", "plain TCP"), ("wsmux", "WebSocket Mux", "clear-text WebSocket, multiplexed"), ("wssmux", "WebSocket TLS Mux", "TLS WebSocket, multiplexed"),
+                                                                     ("wg:tcpmux", "TCP Mux · WireGuard", "over an encrypted WireGuard link (one UDP port) instead of GRE: passes where GRE is filtered"),
+                                                                     ("wg:tcp", "TCP · WireGuard", "plain TCP over a WireGuard link"),
+                                                                     ("fou:tcpmux", "TCP Mux · GRE over UDP", "over GRE inside one UDP port: passes where protocol 47 is filtered, not encrypted"))]},
         {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
         {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers", "direction": "direct",
@@ -289,7 +304,7 @@ def compare_start(body: CompareIn):
     from ..services import tunnel_test as tt
 
     try:
-        return {"ok": True, "id": tt.compare_start(body.iran_id, body.foreign_id, body.kinds)}
+        return {"ok": True, "id": tt.compare_start(body.iran_id, body.foreign_id, body.kinds, install_wg=True)}      # (the owner started it: a WireGuard kind may install wireguard-tools)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:

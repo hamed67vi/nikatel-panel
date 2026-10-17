@@ -217,3 +217,24 @@ The owner: "show the stability and the quality of the users' internet inside the
 
 * **Users' internet** reads what the Doctor already keeps of the configs that ride the tunnel (`record.ux`, `services/userq.py`): the grade (Good / Fair / Poor / Bad - or "not known yet" when no config of the probe rides the tunnel, with the way to tie them in the Doctor page), how many configs are fine, what is wrong (slow / unstable / down), the two worst configs with their sentence and, for a poor or bad grade, the Doctor's reading of where the problem is (two lines, the whole of it in the tooltip).
 * **Stability** is `GET /api/tunnels/{id}/stability`: the share of the checks that answered over 24 hours and over 7 days, the cuts (the analyst's rule: two failed checks in a row; one lost check is noise and counts only against the share), the last cut and how long it lasted, how long the tunnel has been up, the verdict of the analyst (Stable / Watch / Unstable) and the strip of the last day (48 cells of half an hour).
+
+
+## The link under Backhaul: GRE, GRE inside UDP, WireGuard (1.66.0)
+
+A Backhaul tunnel runs over the inner addresses of a /30 link between the two servers. The link was always GRE (IP protocol 47). It can now be one of three, chosen in *Create tunnel* as the transport of the Backhaul type:
+
+| Transport | The link | Needs | Passes where |
+|---|---|---|---|
+| `tcpmux` `tcp` `wsmux` `wssmux` | GRE (as before) | the `ip_gre` module | IP protocol 47 is open |
+| `fou:tcpmux` | GRE inside **one UDP port** (5500-5599, the same on both servers) | the `fou`, `ip_gre` modules | UDP is open and protocol 47 is filtered; not encrypted |
+| `wg:tcpmux` `wg:tcp` | a kernel **WireGuard** link on **one UDP port** (51820-51919), encrypted and authenticated | the `wireguard` module and `wireguard-tools` | UDP is open and protocol 47 is filtered |
+
+Everything above the link is the same: the units (`nikatel-gre-<name>`, `nikatel-gre-check-<name>.timer`: a check pings the inner peer every minute and restarts the link after three silences), the checks and the sentinel, the live numbers, the bandwidth
+job, the Doctor's ladder, rebuilds and the trash. `record.link` (`wg`, `fou`; absent = GRE), `record.link_port` and - WireGuard - the two PUBLIC keys are kept; the private keys are made on each server (`wg_keygen`) and stay in
+`/etc/nikatel/wg/<name>.key` (0600) until the tunnel is removed. The tunnel list shows `WireGuard` or `GRE/UDP` where it showed `GRE`.
+
+**Packages:** the Doctor and the night survey never install anything on a server. A build the OWNER asked for (Create tunnel, a test he started, *Test now*, the Compare form) installs `wireguard-tools` with apt on a server that has none; if apt cannot,
+the build stops with a sentence that says to install it by hand.
+
+**In the Doctor:** the kinds `wg:tcpmux`, `wg:tcp`, `fou:tcpmux` are in the pair test, the night survey and the replacements of a cut tunnel (last in the static order; a pair whose survey found one connecting tries it first). Details and what was taken from
+simple-tun-link: [simple-tun-link.md](simple-tun-link.md).

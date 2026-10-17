@@ -56,7 +56,7 @@ starts the panel on `https://<server>:9443`. Run it again to upgrade. Non-intera
 |---|---|
 | **Dashboard** | health of everything, only the problems that exist *now*, one-click *Fix with AI* / *Fix all*, the event feed |
 | **Nodes** | Iran and foreign servers: CPU, RAM, disk, load, traffic every 2 minutes, 24 h charts, console, tools, the Iran gateway |
-| **Tunnels** | build, monitor every minute, alert, repair, test, update — five engines, 24 transports |
+| **Tunnels** | build, monitor every minute, alert, repair, test, update — five engines, 27 transports (Backhaul over GRE, over GRE-in-UDP or over WireGuard; the Doctor starts the moment a tunnel is down) |
 | **Users** | the Marzban / PasarGuard panels from one place: users, hosts, nodes, groups, cores, admins and roles, templates, settings, usage (every section of a PasarGuard panel's API) |
 | **Shop bot** | payments, orders, users, plans, categories, discounts, gift codes, broadcast, tickets, every text and switch |
 | **Mini App** | the customers' Telegram app: buy, renew, top up, tickets, referral |

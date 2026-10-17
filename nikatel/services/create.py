@@ -193,7 +193,7 @@ def smart_test(foreign_id: int, ports: str, kind: str) -> int:
 
             for _ in range(60):                                   # only one tunnel test runs at a time: wait for the turn
                 try:
-                    jid = tunnel_test.compare_start(r["id"], foreign_id, [kind], measure="full")
+                    jid = tunnel_test.compare_start(r["id"], foreign_id, [kind], measure="full", install_wg=True)      # (the owner's own Smart test: a WireGuard kind may install wireguard-tools)
                     break
                 except (ValueError, RuntimeError) as e:
                     if "still running" not in str(e):

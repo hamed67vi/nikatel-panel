@@ -199,8 +199,9 @@ def purge_leftovers(iran_id: int, foreign_id: int) -> None:
             log.warning("could not purge test leftovers on %s: %s", node.host, e)
 
 
-def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
-    """Validate and start; returns the action id of the test (the build has its own id in the story)."""
+def start(iran_id: int, foreign_id: int, transport: str = "tcpmux", link: str = "gre", install_wg: bool = False) -> int:
+    """Validate and start; returns the action id of the test (the build has its own id in the story). `link`: what Backhaul runs over (gre, fou, wg); `install_wg`: the owner asked for this test, so
+    wireguard-tools may be installed on a server that lacks it."""
     purge_leftovers(iran_id, foreign_id)
 
     with session() as db:
@@ -212,10 +213,10 @@ def start(iran_id: int, foreign_id: int, transport: str = "tcpmux") -> int:
         n += 1
 
     name = f"test-{n}"
-    build_aid = builder.start_build(iran_id, foreign_id, str(TEST_PORT), transport, forced_name=name)
+    build_aid = builder.start_build(iran_id, foreign_id, str(TEST_PORT), transport, forced_name=name, opts={"link": link, **({"install_wg": True} if install_wg and link == "wg" else {})} if link != "gre" else None)
 
     with session() as db:
-        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {transport} tunnel {name} is being built (build #{build_aid})…"])
+        entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {transport if link == 'gre' else link + ':' + transport} tunnel {name} is being built (build #{build_aid})…"])
         db.add(entry)
         db.flush()
         aid = entry.id
@@ -348,6 +349,9 @@ KINDS = [
     ("tcp", "Backhaul · TCP", "over GRE, plain TCP, one connection per user", "Backhaul over GRE", True),
     ("wsmux", "Backhaul · WebSocket Mux", "over GRE, clear-text WebSocket, multiplexed", "Backhaul over GRE", False),
     ("wssmux", "Backhaul · WebSocket TLS Mux", "over GRE, TLS WebSocket, multiplexed", "Backhaul over GRE", False),
+    ("wg:tcpmux", "Backhaul · TCP Mux over WireGuard", "an encrypted UDP link: passes where GRE is filtered, the kernel carries it", "Backhaul over WireGuard / UDP", True),
+    ("wg:tcp", "Backhaul · TCP over WireGuard", "an encrypted UDP link, plain TCP, one connection per user", "Backhaul over WireGuard / UDP", False),
+    ("fou:tcpmux", "Backhaul · TCP Mux over GRE-in-UDP", "GRE inside one UDP port: passes where protocol 47 is filtered, not encrypted", "Backhaul over WireGuard / UDP", False),
     ("bp:tcpmux", "BackPack · TCP Mux", "many users over few connections", "BackPack", True),
     ("bp:tcp", "BackPack · TCP", "plain TCP", "BackPack", True),
     ("bp:stealth", "BackPack · TCP + Stealth", "looks like random bytes", "BackPack", True),
@@ -373,10 +377,18 @@ KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}
 
 
+def kind_link(kind: str) -> str:
+    """The link a Backhaul kind runs over: "gre" (the bare keys), "wg" (WireGuard) or "fou" (GRE inside UDP)."""
+    return kind.split(":", 1)[0] if kind.startswith(("wg:", "fou:")) else "gre"
+
+
 def kind_parts(kind: str) -> tuple[str, str]:
-    """A test kind -> (builder kind, transport). Backhaul transports keep their bare key."""
+    """A test kind -> (builder kind, transport). Backhaul transports keep their bare key; "wg:tcpmux" and "fou:tcpmux" are Backhaul over another link (`kind_link`)."""
     if kind in ("tcpmux", "tcp", "wsmux", "wssmux"):
         return "backhaul", kind
+
+    if kind_link(kind) != "gre":
+        return "backhaul", kind.split(":", 1)[1]
 
     if kind.startswith("bp:"):
         return "backpack", kind[3:]
@@ -481,7 +493,9 @@ def explain_failure(kind: str, error: str) -> str:
     return e
 
 
-def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full", source: str = "manual") -> str:
+def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str = "full", source: str = "manual", install_wg: bool = False) -> str:
+    """Build the kinds one after the other and measure each. `install_wg`: the OWNER started this (the Compare form, a test in Create tunnel, Test now): a WireGuard kind may install wireguard-tools on a
+    server that lacks it. The Doctor's own tests and the night survey never do."""
     from . import license
 
     kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
@@ -496,7 +510,8 @@ def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str 
         raise RuntimeError("another tunnel test is still running")
 
     jid = f"cmp{int(time.time())}"
-    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "source": source, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time())}
+    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "source": source, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time()),
+           "install_wg": bool(install_wg)}
     _COMPARE[jid] = job
 
     for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
@@ -515,7 +530,7 @@ def _compare_worker(job: dict) -> None:
             job["current"] = kind
 
             try:
-                aid = start(job["iran_id"], job["foreign_id"], kind) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind, job.get("measure", "full"))
+                aid = start(job["iran_id"], job["foreign_id"], kind_parts(kind)[1], kind_link(kind), bool(job.get("install_wg"))) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind, job.get("measure", "full"))
             except (ValueError, RuntimeError) as e:
                 job["results"].append({"kind": kind, "ok": False, "error": str(e)[:160]})
                 continue

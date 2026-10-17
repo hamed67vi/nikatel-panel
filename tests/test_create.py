@@ -199,7 +199,7 @@ def test_the_smart_test_leaves_a_poor_server_and_takes_the_next(client, monkeypa
     tested = []
     scores = {w["ir1"]: 47, w["ir2"]: 71}
 
-    def fake_start(iran_id, foreign_id, kinds, measure="latency"):
+    def fake_start(iran_id, foreign_id, kinds, measure="latency", source="manual", install_wg=False):
         tested.append(iran_id)
         return f"job{iran_id}"
 

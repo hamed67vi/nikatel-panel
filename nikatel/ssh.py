@@ -477,6 +477,16 @@ echo "BACKHAUL=$([ -x /usr/local/bin/backhaul ] && /usr/local/bin/backhaul -v 2>
 echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
 """, {}),
 
+    # what a Backhaul link that is NOT plain GRE needs from a server (read-only apart from loading a module): the WireGuard module and tool, the FOU module (GRE inside UDP), the UDP ports in use,
+    # and whether apt can install wireguard-tools. "WG_MOD=1", "WG_TOOL=1", "FOU_MOD=1", "UDP=<ports>", "FOU_PORTS=<ports>", "APT=1"
+    "link_facts": (r"""modprobe wireguard 2>/dev/null; echo "WG_MOD=$( (lsmod | grep -q '^wireguard' || [ -d /sys/module/wireguard ]) && echo 1 || echo 0)"
+echo "WG_TOOL=$(command -v wg >/dev/null 2>&1 && echo 1 || echo 0)"
+modprobe ip_gre 2>/dev/null; modprobe fou 2>/dev/null; echo "FOU_MOD=$( (lsmod | grep -q '^fou' || [ -d /sys/module/fou ]) && echo 1 || echo 0)"
+echo "UDP=$(ss -lunH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
+echo "FOU_PORTS=$(ip fou show 2>/dev/null | grep -o 'port [0-9]*' | cut -d' ' -f2 | tr '\n' ' ')"
+echo "APT=$(command -v apt-get >/dev/null 2>&1 && echo 1 || echo 0)"
+""", {}),
+
     # largest ICMP payload that crosses to the peer with DF set (GRE inner MTU)
     "mtu_probe": (r"""best=0; for s in 1472 1464 1452 1440 1420 1400 1380 1350 1300 1250 1200; do ping -c 2 -W 1 -M do -s $s '@PEER@' >/dev/null 2>&1 && { best=$s; break; }; done; echo "MTU=$best"
 """, {"PEER": _IPV4}),
@@ -767,7 +777,7 @@ systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system
 chmod 600 "/etc/backhaul/$n.key"; echo "TLS_OK $n"
 """, {"NAME": _TNAME}),
 
-    # remove everything a tunnel of ours left on a server: units, scripts, configs, the GRE interface
+    # remove everything a tunnel of ours left on a server: units, scripts, configs, the link interface (GRE, GRE inside UDP or WireGuard) and the WireGuard key of the tunnel
     "remove_tunnel_files": (r"""n='@NAME@'; p='@PORT@'; tr='@TRANSPORT@'
 systemctl disable --now "nikatel-gre-check-$n.timer" >/dev/null 2>&1 || true
 systemctl disable --now "nikatel-gre-$n.service" >/dev/null 2>&1 || true
@@ -776,8 +786,25 @@ for u in "backhaul-iran-$tr-$p.service" "backhaul-kharej-$tr-$p.service"; do sys
 rm -f "/etc/backhaul/iran-$tr-$p.toml" "/etc/backhaul/kharej-$tr-$p.toml" "/etc/backhaul/$n.crt" "/etc/backhaul/$n.key"
 rm -f "/etc/systemd/system/nikatel-gre-$n.service" "/etc/systemd/system/nikatel-gre-check-$n.service" "/etc/systemd/system/nikatel-gre-check-$n.timer"
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/usr/local/sbin/nikatel-gre-check-$n"
-systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true; echo "REMOVED $n"
+systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true
+if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre '; then ip link del "$n" 2>/dev/null || true; fi
+rm -f "/etc/nikatel/wg/$n.key"; echo "REMOVED $n"
 """, {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "TRANSPORT": r"^(tcp|tcpmux|wsmux|wssmux)$"}),
+
+    # WireGuard for a Backhaul link: install wireguard-tools when the server has none (apt only; nothing is copied from another machine - a binary of another release does not run), then make the key of one tunnel
+    # on the server itself - the private key never leaves it and never appears in a command line or a log - and print the public key. "WG_OK ..." / "WG_FAIL <why>", "PUB=<key>"
+    "wg_install": (r"""export DEBIAN_FRONTEND=noninteractive
+command -v wg >/dev/null 2>&1 && { echo "WG_OK present"; exit 0; }
+command -v apt-get >/dev/null 2>&1 || { echo "WG_FAIL this server has no apt-get: install wireguard-tools by hand"; exit 0; }
+L=/tmp/nikatel-wg-install.log
+timeout 150 apt-get install -y -qq wireguard-tools >"$L" 2>&1 || { timeout 90 apt-get update -qq >>"$L" 2>&1; timeout 150 apt-get install -y -qq wireguard-tools >>"$L" 2>&1; } || true
+if command -v wg >/dev/null 2>&1; then echo "WG_OK installed"; else echo "WG_FAIL apt could not install wireguard-tools: $(tail -n 2 "$L" | tr '\n' ' ' | cut -c1-200)"; fi
+rm -f "$L"
+""", {}),
+    "wg_keygen": (r"""set -e; n='@NAME@'; d=/etc/nikatel/wg; umask 077; mkdir -p "$d"; chmod 700 "$d"
+k="$d/$n.key"; [ -s "$k" ] || wg genkey > "$k"
+chmod 600 "$k"; echo "PUB=$(wg pubkey < "$k")"
+""", {"NAME": _TNAME}),
 
     # kernel tuning for many connections (BBR, fq, big buffers); previous values kept once
     "sysctl_tune": (r"""set -e; mkdir -p /etc/nikatel
@@ -1060,6 +1087,8 @@ for f in $(grep -lE "\"$tp(=|\")|\"$tp:" /etc/backhaul/*.toml 2>/dev/null); do b
 for s in /usr/local/sbin/nikatel-gre-up-test-* /usr/local/sbin/nikatel-gre-down-test-* /usr/local/sbin/nikatel-gre-check-test-* /usr/local/sbin/nikatel-bpfw-test-* /usr/local/sbin/nikatel-paqet-fw-test-* /usr/local/sbin/nikatel-sink-test-*; do [ -e "$s" ] && rm -f "$s"; done
 rm -f /etc/backpack/test-*.toml /etc/backpack/test-*.metrics.json /etc/paqet/test-*.yaml /etc/nikatel-chisel/test-*.key /etc/nikatel-chisel/test-*.crt /etc/nikatel-chisel/test-*.env 2>/dev/null
 for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep '^test-'); do ip tunnel del "$i" 2>/dev/null || true; done
+for i in $(ip -o link show type wireguard 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep '^test-'); do ip link del "$i" 2>/dev/null || true; done
+rm -f /etc/nikatel/wg/test-*.key 2>/dev/null
 systemctl daemon-reload; echo "PURGED $n"
 """, {"TESTPORT": r"^\d{4,5}$"}),
 

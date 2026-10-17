@@ -78,7 +78,7 @@ def test_every_result_is_kept_per_pair_and_the_page_state_shows_it(client):
     row = next(p for p in s["pairs"] if p["iran_id"] == ir)
     assert row["foreign_id"] == fr and row["tunnels"] == 1 and row["tested"] == 2 and row["best"][0]["kind"] == "bpd:pck" and row["best"][0]["down_mbps"] == 665.0
     assert [b["kind"] for b in row["blocked"]] == ["bpd:udp"] and row["blocked"][0]["error"] == "handshake did not complete" and row["due"] == len(knowledge.READY) - 2
-    assert s["on"] is True and (s["from_hour"], s["to_hour"]) == (2, 6) and s["running"] is None and s["kinds"] == 24 and s["ready"] == knowledge.READY and row["cuts"] == 0        # the night survey is on: nights only, quiet servers only
+    assert s["on"] is True and (s["from_hour"], s["to_hour"]) == (2, 6) and s["running"] is None and s["kinds"] == len(knowledge.PRIOR) and s["ready"] == knowledge.READY and row["cuts"] == 0        # the night survey is on: nights only, quiet servers only
     j = client.get("/api/doctor/knowledge").json()
     assert j["ok"] and any(p["iran_id"] == ir for p in j["pairs"])
 
@@ -128,7 +128,7 @@ def test_a_pair_test_teaches_the_doctor_whatever_started_it(monkeypatch):
 def test_a_survey_tests_every_kind_in_the_standard_order_and_refuses_what_is_not_a_pair(monkeypatch):
     ir, fr = two_servers("k4")
     started = []
-    monkeypatch.setattr(tunnel_test, "compare_start", lambda iran_id, foreign_id, kinds, measure="full", source="manual": started.append((kinds, measure, source)) or "cmp9")
+    monkeypatch.setattr(tunnel_test, "compare_start", lambda iran_id, foreign_id, kinds, measure="full", source="manual", install_wg=False: started.append((kinds, measure, source)) or "cmp9")
     assert knowledge.survey_start(ir, fr) == "cmp9"
     assert started[0][0] == knowledge.PRIOR and started[0][1:] == ("full", "survey-manual")
     knowledge.survey_start(ir, fr, "survey", ["paqet", "bpd:pck"])
@@ -137,7 +137,7 @@ def test_a_survey_tests_every_kind_in_the_standard_order_and_refuses_what_is_not
     with session() as db:
         said = [e.text for e in db.scalars(select(Event).where(Event.ref == "ir-k4"))]
 
-    assert any(m.startswith("Survey of ir-k4 ⇄ fr-k4 started: 24 tunnel types") and "by hand: with a speed test" in m for m in said)
+    assert any(m.startswith(f"Survey of ir-k4 ⇄ fr-k4 started: {len(knowledge.PRIOR)} tunnel types") and "by hand: with a speed test" in m for m in said)
 
     for a, b in ((fr, ir), (ir, 99999)):
         with pytest.raises(ValueError, match="pick an Iran server and a foreign server"):
@@ -168,7 +168,7 @@ def test_a_repair_takes_the_place_of_a_survey_and_the_survey_can_be_stopped(monk
     job = fake_job(ir, fr, results=[{"kind": "tcpmux", "ok": False}])
     try:
         r = knowledge._running()
-        assert r == {"id": "cmp77", "iran_id": ir, "foreign_id": fr, "kind": "paqet", "done": 1, "total": 24, "source": "survey"}
+        assert r == {"id": "cmp77", "iran_id": ir, "foreign_id": fr, "kind": "paqet", "done": 1, "total": len(knowledge.PRIOR), "source": "survey"}
         assert knowledge.yield_slot() is True and stopped == ["cmp77"]
         job["source"] = "manual"                                                                                      # a pair test of the owner is not a survey: it is not touched
         assert knowledge._running() is None and knowledge.yield_slot() is False
@@ -306,7 +306,7 @@ def test_a_survey_stops_when_the_night_is_over_or_a_repair_needs_the_place_and_o
     with session() as db:
         said = [e.text for e in db.scalars(select(Event).where(Event.ref == "ir-n6"))]
 
-    assert sum(m.startswith("Survey of ir-n6 ⇄ fr-n6 stopped: 3 of 24 tunnel types tested, 2 work - best: bpd:pck 71, paqet 58.") for m in said) == 1        # told once
+    assert sum(m.startswith(f"Survey of ir-n6 ⇄ fr-n6 stopped: 3 of {len(knowledge.PRIOR)} tunnel types tested, 2 work - best: bpd:pck 71, paqet 58.") for m in said) == 1        # told once
     assert started and set(started) == {"survey-cold"}                                                                # (the night is over and the pair has no knowledge: by day it is the cold survey, never the night one)
 
 

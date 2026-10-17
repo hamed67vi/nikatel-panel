@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.66.0 - WireGuard and GRE-inside-UDP links for Backhaul (after the review of simple-tun-link)
+
+The owner (2026-10-17): "look closely at this project (github.com/ach1992/simple-tun-link) and add what we do not have, or replace what must be replaced; and I want WireGuard added". The review is in `docs/simple-tun-link.md` (what STL is, what the panel
+had, what was taken and what was not, and why).
+
+- **WireGuard.** *Create tunnel → Backhaul → TCP Mux · WireGuard* (also *TCP · WireGuard*): the Backhaul tunnel runs over a kernel WireGuard link on one UDP port (51820-51919, the same on both servers) instead of GRE. It passes where IP protocol 47 is
+  filtered - the commonest cut the Doctor meets (two of its three real repairs of the last two weeks were `gre_blocked`) - and it is encrypted and authenticated. The keys are made ON each server (`wg_keygen`: a file of 0600, only the public key comes back
+  and is kept); the up script reads the private key from its file, never from a command line. Interface `<tunnel name>`, tagged with the alias `nikatel:<name>`; a firewall rule names the exact peer, local address and port; MTU 1360.
+- **GRE inside UDP (FOU).** *TCP Mux · GRE over UDP*: the same GRE link carried in one UDP port (5500-5599) - for a route that drops protocol 47 but lets UDP through, with no package to install, not encrypted.
+- **Packages.** The tool `wg` comes with `wireguard-tools`. A build the OWNER asked for (Create tunnel, a test he started, *Test now*, the Compare form, Smart test) installs it with apt on a server that has none; the Doctor and the night survey never install
+  a package on a server - they fail with the sentence that says what to do, and the Doctor tries the next tunnel type.
+- **The Doctor knows the links.** New kinds `wg:tcpmux`, `wg:tcp`, `fou:tcpmux` (the pair test, the night survey, the replacements of a cut tunnel - last in the static order, first when a survey found one connecting on that pair). A rebuild or a
+  switch keeps the link of a tunnel (`kind_of`), a switch to a GRE kind drops it. A tunnel whose own UDP link is cut is not offered the other UDP links; a GRE tunnel cut by a protocol-47 filter is. The diagnosis says "the UDP port of the link is filtered".
+- **The list and the window** show `WireGuard` / `GRE/UDP` (and the UDP port) where they said `GRE`.
+- **Found on the way:** the "avoid the old inner network" option of a fresh-link rebuild (`avoid_net`) was dropped by the option check and never reached the build; it is kept now. Every `iptables` call of the new links waits up to 5 s for the xtables lock.
+- **Removing a tunnel** also deletes a WireGuard link, its key and a FOU port; the test purge removes a leftover WireGuard test link.
+- Tests: `tests/test_links.py` (the scripts of every link end, `bash -n` on each; the key never in a script; the facts, the port, the options; the kinds; the API; what a Doctor build may and may not do).
+
 ## 1.65.1 - The Doctor has no waiting time: it starts the moment a tunnel is down
 
 The owner (2026-10-17), his picture of *Auto Fix Tunnels* ("If a tunnel is down for 60 seconds, fix it automatically"): "remove this time here too - the Tunnel Doctor must start its work from the very first moment the tunnel has trouble: from rebooting the tunnel to everything else it has to do".

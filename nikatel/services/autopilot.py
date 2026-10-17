@@ -53,7 +53,8 @@ def kind_of(typ: str, transport: str, record: dict) -> str:
     typ, transport = (typ or "").lower(), (transport or "").lower()
 
     if typ in ("backhaul", "gre", ""):
-        return transport or "tcpmux"
+        link = (record or {}).get("link")           # Backhaul over WireGuard / GRE inside UDP is its own kind ("wg:tcpmux", "fou:tcpmux"): a rebuild or a switch keeps the link
+        return f"{link}:{transport or 'tcpmux'}" if link in ("wg", "fou") else (transport or "tcpmux")
 
     if typ == "paqet":
         return "paqet"
@@ -86,16 +87,25 @@ def classify(d: dict) -> tuple[str, str]:
     if (loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50):
         return "route_cut", f"the two servers cannot reach each other (loss {loss_i}% / {loss_f}%): the route between them is cut or filtered"
 
+    udp = d.get("link") in ("wg", "fou")             # the link under Backhaul is WireGuard / GRE inside UDP: what is filtered is its UDP port, not protocol 47 (the cause keeps the name "gre_blocked": the same ladder)
+    title = {"wg": "WireGuard", "fou": "GRE-over-UDP"}.get(d.get("link") or "", "GRE")
+
     if d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50) and (loss_i or 0) < 10 and (loss_f or 0) < 10:
+        if udp:
+            return "gre_blocked", f"plain ping between the servers passes both ways ({loss_i}% / {loss_f}% loss) but the {title} link does not (inner link {d.get('gre_loss')}% loss): the UDP port of the link is filtered on this route"
+
         return "gre_blocked", f"plain ping between the servers passes both ways ({loss_i}% / {loss_f}% loss) but GRE packets do not (inner link {d.get('gre_loss')}% loss): GRE (protocol 47) is filtered on this route"
 
     if (d.get("flap_fails") or 0) >= 3 and d.get("state") != "down":
         return "lossy_route", f"the link flaps: {d['flap_fails']} of the last {d.get('flap_n')} checks failed - the route is unstable, a restart does not cure that"
 
     if d.get("state") == "degraded" and max(v or 0 for v in (d.get("gre_loss"), loss_i, loss_f)) >= 15:
-        return "lossy_route", f"the link loses packets (GRE {d.get('gre_loss')} %, servers {loss_i} % / {loss_f} %): the route between these two servers is poor, a restart does not cure that"
+        return "lossy_route", f"the link loses packets ({title} {d.get('gre_loss')} %, servers {loss_i} % / {loss_f} %): the route between these two servers is poor, a restart does not cure that"
 
     if d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50):
+        if udp:
+            return "gre_blocked", f"the servers reach each other but the {title} link does not pass: the UDP port of the link is filtered on this route"
+
         return "gre_blocked", "the servers reach each other but GRE packets do not pass: GRE is filtered on this route"
 
     if d.get("port_open") is False:
@@ -205,7 +215,7 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
     gre = info["type"] in ("backhaul", "gre")
     units_bad = [f"{u} ({s})" for side in ("iran_units", "foreign_units") for u, s in (det.get(side) or {}).items() if s != "active"]
     facts = {"state": info["state"], "last_error": info["last_error"], "iran_error": det.get("iran_error", ""), "foreign_error": det.get("foreign_error", ""),
-             "units_bad": units_bad, "gre": gre, "gre_loss": det.get("loss_pct"), "port": info["port"]}
+             "units_bad": units_bad, "gre": gre, "gre_loss": det.get("loss_pct"), "port": info["port"], "link": rec.get("link") or "gre"}
 
     with session() as db:        # the recent history: a link that answers only now and then is a route problem, whatever this one check found
         recent = [bool(c.ok) for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id).order_by(TunnelCheck.id.desc()).limit(10))]
@@ -266,7 +276,7 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
             findings.append({"ok": v, "text": f"{label}: " + ("TCP connections open" if v else "TCP connections do NOT open (filtered)")})
 
     if gre:
-        findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": "GRE link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
+        findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": {"wg": "WireGuard", "fou": "GRE-over-UDP"}.get(facts["link"], "GRE") + " link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
 
     if facts["flap_n"]:
         findings.append({"ok": facts["flap_fails"] < 3, "text": f"Last {facts['flap_n']} checks: {facts['flap_n'] - facts['flap_fails']} passed, {facts['flap_fails']} failed" + (" - the link flaps" if facts["flap_fails"] >= 3 else "")})
@@ -479,7 +489,12 @@ def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict
     k, tr = tunnel_test.kind_parts(kind)
 
     if k == "backhaul":
-        return builder.start_build(iran_id, foreign_id, snap["ports"], tr, forced_name=snap["name"], opts=opts or {})
+        o = {x: v for x, v in (opts or {}).items() if x != "link"}      # (the link belongs to the KIND: a wg kind is built over WireGuard, a bare one over GRE, whatever the saved options of the old tunnel said)
+
+        if tunnel_test.kind_link(kind) != "gre":
+            o["link"] = tunnel_test.kind_link(kind)
+
+        return builder.start_build(iran_id, foreign_id, snap["ports"], tr, forced_name=snap["name"], opts=o)
 
     return build_other.start_build(iran_id, foreign_id, snap["ports"], k, tr, opts or {}, forced_name=snap["name"])
 

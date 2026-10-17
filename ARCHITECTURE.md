@@ -34,7 +34,7 @@ nikatel/
     profiles.py      profiles: what is on the Lab page - an Iran server, a foreign server or a PasarGuard node (1.49.0); a server that is made gets its profile (ensure_server), the servers the panel already has are picked in Add profile; api/profiles.py, web/lab.js
     uptime.py        the strip of cells that shows how a server looked over the last hours, read from the samples only (build_strip / up_percent are pure); api/servers.py and api/profiles.py serve it
     tunnels.py       tunnel health with hysteresis (plan_for / parse_side / judge / settle are pure)
-    builder.py       create / remove / rebuild a backhaul-over-GRE tunnel; set_ports; pending rebuilds that survive a
+    builder.py       create / remove / rebuild a Backhaul tunnel over a GRE, a GRE-in-UDP (FOU) or a WireGuard link (`link_scripts`, docs/simple-tun-link.md); set_ports; pending rebuilds that survive a
                      restart of the panel; follow_server_rename / follow_server_host (a server's new name or address)
     build_other.py   the other engines: BackPack (reverse and direct), Paqet, Chisel (reverse, or forward = the Iran server dials, transports fws / fwss) - plan, install, units, proof, rollback
     create.py        the Create story: precheck of ports and conflicts, Smart choice of the Iran side, replace, DNS follow
