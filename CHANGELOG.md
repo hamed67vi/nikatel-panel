@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.64.0 - Users' internet and Stability boxes in the tunnel window; the nodes close to the Bandwidth column; the CDN last; no Install button; small buttons with air
+## 1.64.1 - The IP-spoofing options reach the build; the packet-profile menu no longer clips
+
+The owner (2026-10-17): "fix the size of these too" (his picture of the packet-profile drop-down, every option wrapped and cut).
+
+- **The IP spoofing options are applied now.** On BackPack Direct → IP spoofing the form asks for a packet profile, a forged source IPv4 and a network interface, but the API kept an allow-list of option names and those three were not on it, so a profile or forged source chosen in the form was dropped before the build and the tunnel was always built with the defaults. The three keys are on the list now and reach the builder; a test covers it (`tests/test_build_other.py`).
+- **The packet-profile menu no longer clips.** Its options were joined with a plain hyphen, but the drop-down splits an option into a short title and a one-line note on an em dash, so the whole long string became the title, wrapped over three lines and was cut at the top (his picture). Each option is now a short title (`udp`, `icmp`, …) with a single-line description, like the other menus.
 
 The owner (2026-10-17): "show the stability and the quality of the users' internet inside their own box, not in the cards"; "bring these toward the Bandwidth column, there is too much space between them" (his picture of the table);
 "the CDN comes down, under the Tunnel Doctor"; "remove Install here too, and when a core has an update show the Update button instead of Up to date"; "make the buttons smaller here too, and keep a space above and below them" (his picture of the PasarGuard nodes); "show the users' traffic in the different tunnels" (his picture: two Paqet tunnels with a dash);
