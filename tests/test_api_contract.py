@@ -33,14 +33,18 @@ def test_an_unexpected_failure_is_internal_with_the_request_id_and_no_traceback(
 
 
 def test_long_work_answers_at_once_with_an_action_id(client, monkeypatch):
+    import threading
+
     from nikatel.services import actions
 
     rows = [{"id": 1, "name": "a", "state": "up", "why": ""}]
-    monkeypatch.setattr(actions, "health_all", lambda: (time.sleep(1.0), rows)[1])
+    gate = threading.Event()
+    monkeypatch.setattr(actions, "health_all", lambda: (gate.wait(10), rows)[1])                  # (held until the test lets it go: the proof does not depend on the speed of the machine)
     t0 = time.time()
     r = client.post("/api/tunnels/health-all")
-    assert r.status_code == 202 and r.json()["ok"] and time.time() - t0 < 0.8
+    assert r.status_code == 202 and r.json()["ok"] and not gate.is_set() and time.time() - t0 < 5
     aid = r.json()["action_id"]
+    gate.set()
 
     for _ in range(60):
         s = client.get(f"/api/actions/{aid}").json()

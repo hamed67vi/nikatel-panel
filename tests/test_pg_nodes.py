@@ -422,13 +422,18 @@ def test_the_dns_is_asked_once_in_ten_minutes_and_never_for_long(monkeypatch):
     assert pg_nodes.resolve_names(["a.example.test", "b.example.test"]) == {"a.example.test": ["203.0.113.20"], "b.example.test": []}
     assert pg_nodes.resolve_names(["a.example.test", "b.example.test"]) == {"a.example.test": ["203.0.113.20"], "b.example.test": []} and sorted(asked) == ["a.example.test", "b.example.test"]
 
+    import threading
+
+    gate = threading.Event()
+
     def slow(name):
-        time.sleep(0.6)
+        gate.wait(10)                                                                              # (held until the test lets it go: the proof does not depend on the speed of the machine)
         return ["203.0.113.30"]
 
     monkeypatch.setattr(pg_nodes, "_lookup", slow)
     t0 = time.time()
-    assert pg_nodes.resolve_names(["slow.example.test"], timeout=0.05) == {"slow.example.test": []} and time.time() - t0 < 0.4        # a lookup that hangs does not hold the page
+    assert pg_nodes.resolve_names(["slow.example.test"], timeout=0.05) == {"slow.example.test": []} and not gate.is_set() and time.time() - t0 < 5        # a lookup that hangs does not hold the page
+    gate.set()
     pg_nodes._DNS.clear()
 
 

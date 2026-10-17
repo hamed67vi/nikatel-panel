@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.67.2 - Tests that waited for the clock now wait for a gate
+
+- **Measured after 1.67.1** (the sentinel every 5 s; the same real GRE tunnel, link service stopped, four rounds): the panel said *down* **5, 5, 5 and 2 seconds** after the cut (23 s before 1.67.0, 8-10 s with the 10 s tick).
+- **CI.** The second GitHub run was green on Python 3.10 (the cookie test of 1.67.1 did it) and red on Python 3.12 on `test_the_check_is_started_not_awaited`: it asserted that a request returned in under 1.0 s while a fake check took 1.5 s - 1.05 s on a runner that runs the suite on every core
+  with the coverage on. A test that proves "it did not wait" now holds the fake at a gate (`threading.Event`) that the test lets go: the answer arrived while the gate was shut. The same was done in `test_long_work_answers_at_once_with_an_action_id`, `test_the_dns_is_asked_once_in_ten_minutes_and_never_for_long` (the lookup that hangs)
+  and the bound of the onboarding test was widened. `docs/development.md` already says a test that measures the clock needs a second proof that does not depend on it.
+
 ## 1.67.1 - The sentinel looks every 5 seconds; the first CI run found one test that depended on the Python version
 
 - **Measured after 1.67.0, on the test servers** (a real GRE tunnel, its link service stopped on the foreign server, four rounds; the time is `state_since` of the tunnel minus the moment of the cut): **8, 10, 9 and 9 seconds** until the panel said *down* - it was **23 s** before 1.67.0.

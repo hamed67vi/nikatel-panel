@@ -126,7 +126,7 @@ def test_the_api_starts_the_steps_in_the_background_and_answers_at_once(client, 
     monkeypatch.setattr(onboard, "run", slow)
     t0 = time.time()
     r = client.post(f"/api/servers/{sid}/onboard", json={"steps": ["cores"]})
-    assert r.status_code == 202 and r.json() == {"ok": True, "started": True, "steps": ["cores"]} and time.time() - t0 < 2
+    assert r.status_code == 202 and r.json() == {"ok": True, "started": True, "steps": ["cores"]} and time.time() - t0 < 4
     assert client.post(f"/api/servers/{sid}/onboard", json={}).json()["started"] is False         # one run at a time for a server
     gate.set()
 
