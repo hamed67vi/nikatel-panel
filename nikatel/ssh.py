@@ -744,7 +744,7 @@ def _script_text(name: str, params: Mapping[str, str] | None) -> str:
 # Same shape as SCRIPTS. They run only when the panel is not read-only, only through services/actions.py.
 _UNIT1 = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}\.(service|timer)$"
 _B64 = r"^[A-Za-z0-9+/=]{0,200000}$"
-_PATH = r"^/(etc/(systemd/system|backhaul|backpack|paqet|nikatel-chisel|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
+_PATH = r"^/(etc/(systemd/system|backhaul|backpack|paqet|nikatel-chisel|nikatel/ipsec|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
 _TNAME = r"^[a-z0-9][a-z0-9-]{0,14}$"
 
 ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {

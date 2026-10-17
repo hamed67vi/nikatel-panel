@@ -142,6 +142,23 @@ def test_every_script_of_every_model_is_valid_shell():
                 assert r.returncode == 0, f"{link} {path}: {r.stderr}"
 
 
+def test_every_file_of_every_model_is_accepted_by_the_action_that_writes_it_to_a_server():
+    """Found by the first live run of the link probe (2026-10-17): the IPsec key file was refused by `put_file` ("bad value for PATH") - the scripts were tested, the road to the server was not. Every file the builder
+    and the probe write goes through the reviewed `put_file` action with the mode the builder gives it."""
+    from nikatel import ssh as nssh
+
+    for link in linkmodels.LINKS:
+        for path in files(link):
+            mode = "0700" if "/sbin/" in path else "0600" if path.endswith(".keys") else "0644"
+            nssh.render_action("put_file", {"PATH": path, "B64": "", "MODE": mode})                    # raises ValueError when the path or the mode is not allowed
+
+    assert "/etc/nikatel/ipsec/ca-ir1.keys" in files("ipsec") and "/etc/nikatel/ipsec/ca-ir1.keys" in files("ipsecnat")
+
+    for bad in ("/etc/nikatel/ipsec/../shadow", "/etc/nikatel/ipsec/a/b.keys", "/etc/nikatel/other/x.keys", "/etc/nikatel/ipsec/"):
+        with pytest.raises(ValueError):
+            nssh.render_action("put_file", {"PATH": bad, "B64": "", "MODE": "0600"})
+
+
 def test_a_link_refuses_what_it_would_run_as_root_if_it_were_not_checked():
     for link in ("gue", "ipip", "ipipfou", "ipipgue", "ipsec", "ipsecnat"):
         for bad in ({"name": "x;reboot"}, {"name": "UPPER"}, {"local": "203.0.113.4;id"}, {"remote": "$(id)"}, {"mtu": 100}):

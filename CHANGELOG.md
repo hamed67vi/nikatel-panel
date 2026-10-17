@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.1 - The IPsec key file reaches the server (found by the first live run of the link probe)
+
+The first run of the link probe on the test panel (2026-10-17, right after 1.69.0, Iran test server -> build server) answered for seven of the nine links in 7 seconds each, 23 seconds in all - and said **"bad value for PATH: '/etc/nikatel/ipsec/lp-ipsec.keys'"** for the two IPsec links. The same would have happened to a BUILD of `ipsec:tcpmux` / `ipsecnat:tcpmux`: the key file of the link went to the server through the reviewed `put_file` action, and that action did not allow the directory `/etc/nikatel/ipsec`. The scripts of the IPsec links were proved (shell syntax, the right commands, a real run of them in the lab), the road that carries them to a server was not - the tests faked it.
+
+- **The fix.** `put_file` writes into `/etc/nikatel/ipsec/<name>.keys` (the mode 0600 the builder gives it; the file name pattern is the old one: no `/`, no `..`).
+- **The test that was missing.** `tests/test_linkmodels.py` runs every file of every one of the nine links through the same check that `put_file` makes (path and mode, as the builder and the probe give them), and proves that paths next to the key directory (`..`, a subdirectory, another directory under `/etc/nikatel`) are still refused.
+- **Said plainly.** Until this release the two IPsec links could not be built or probed on a real server; the other seven could (the probe above: GRE, FOU, GUE, IPIP, IPIP/FOU, IPIP/GUE passed; WireGuard did not complete a handshake in that run - it is the link whose handshake this route has refused before, see 1.66.0).
+
 ## 1.69.0 - Nine links under Backhaul, a link probe that answers in seconds, and what each one measured
 
 The owner (2026-10-17): "simple-tun-link has nine GRE models - add them all and test which is better, especially WireGuard; if one is better, put it in place of our GRE" and "combine all the GREs with the tunnels, test them - on one server one GRE model may answer and another not - the Doctor must keep all of it in its memory". 1.66.0 had taken three of the nine (GRE, GRE inside UDP, WireGuard). Now all nine are there, each was run for real between the two test servers, and the Doctor asks which of them pass **before** it builds anything.
