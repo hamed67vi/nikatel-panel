@@ -353,7 +353,7 @@ wait
 echo "NOW $(date +%s)"
 """, {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS, "QUICK": r"^[01]?$"}),
 
-    # the sentinel (services/sentinel.py), every 10 s, ONE command per server for ALL its tunnels: the state of every unit, of every GRE card and three quick pings of every GRE peer, in parallel (about two seconds when a
+    # the sentinel (services/sentinel.py), every 5 s, ONE command per server for ALL its tunnels: the state of every unit, of every GRE card and three quick pings of every GRE peer, in parallel (about two seconds when a
     # peer is silent). "UNIT <name> <state>", "IFACE <card> <state>" (the state is empty when there is no such card), "PEER <ip> <loss %>", "NOW <seconds>". Read-only.
     "sentinel": (r"""for u in @UNITS@; do echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
 for i in @IFACES@; do echo "IFACE $i $(ip -o link show "$i" 2>/dev/null | grep -o 'state [A-Z]*' | head -1 | cut -d' ' -f2)"; done

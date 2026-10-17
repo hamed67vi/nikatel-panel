@@ -306,13 +306,13 @@ def test_the_repair_job_runs_at_once_when_a_tunnel_is_cut_and_when_a_repair_ends
     assert woken == []                                                                                             # (no change of state, no wake-up)
 
 
-def test_the_repair_job_ticks_every_five_seconds_and_the_sentinel_every_ten():
+def test_the_repair_job_and_the_sentinel_tick_every_five_seconds():
     import inspect
 
     from nikatel import main
 
     src = inspect.getsource(main._register_jobs)
-    assert 'jobs.register("repair", 5, autopilot.repair_cycle)' in src and 'jobs.register("sentinel", 10, sentinel.run)' in src
+    assert 'jobs.register("repair", 5, autopilot.repair_cycle)' in src and 'jobs.register("sentinel", 5, sentinel.run)' in src
 
 
 # ------------------------------------------------------------------ the restart and its look

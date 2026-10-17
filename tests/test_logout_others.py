@@ -12,7 +12,9 @@ def test_logout_others_keeps_this_session_and_ends_the_others(client):
     assert client.get("/api/servers").status_code == 200                     # this browser got a new cookie
     new = client.cookies.get(auth.COOKIE)
     assert new and new != old
+    client.cookies.clear()                                                   # (a browser keeps ONE cookie of that name: set() on a jar that still holds the other one would send both, and which one the server reads depends on the Python version)
     client.cookies.set(auth.COOKIE, old)
     assert client.get("/api/servers").status_code == 401                     # the old session is over
+    client.cookies.clear()
     client.cookies.set(auth.COOKIE, new)
     assert auth.verify("admin", "test-password-1")                           # the password is the same

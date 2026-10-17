@@ -1,7 +1,7 @@
 """The sentinel: a tunnel that is UP and loses a unit, its GRE card or its GRE peer is looked at within seconds, not at the next turn of the minute cycle.
 (The owner, 2026-10-17: "bring the delay down to the minimum" - the cycle that checks every tunnel runs once a minute, so a tunnel that was up and fell could stand there, called healthy, for up to a minute.)
 
-  what it asks      every 10 s, ONE light command per server for ALL its tunnels (ssh.py `sentinel`): the state of every unit, the state of every GRE card (Iran side) and three quick pings of every GRE peer, in parallel.
+  what it asks      every 5 s (1.67.1; it was 10), ONE light command per server for ALL its tunnels (ssh.py `sentinel`): the state of every unit, the state of every GRE card (Iran side) and three quick pings of every GRE peer, in parallel.
                     It never changes a state itself.
   what it decides   a tunnel that is up (or degraded) and shows one of these signs gets a full check at once (`tunnels.check_tunnel`, with a fresh look from another Iran server), which judges by the usual rules:
                     a unit that is not active (either end), a GRE card that is not up, a GRE peer that answers none of the three pings (a tunnel whose provider drops ICMP is left out: its pings say nothing)
@@ -174,7 +174,7 @@ def _read_one(node: Node, ask: dict[str, list[str]]) -> dict | None:
 
 
 def run() -> None:
-    """The job (every 10 s): read every server once, and look at once at the tunnels that show a sign."""
+    """The job (every 5 s): read every server once, and look at once at the tunnels that show a sign."""
     if jobs.stopping():
         return
 

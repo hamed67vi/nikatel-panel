@@ -46,6 +46,7 @@ jobs:
         run: bash -n install.sh scripts/*.sh
 
   tests:
+    name: tests (python ${{ matrix.python }})
     # the whole suite on each Python, on every core of the runner (pytest-xdist); the Python we ship (3.12) installs the pinned libraries of requirements.lock, so the test runs on what a fresh install gets,
     # and also measures the coverage; 3.10 (the lowest we support) takes the newest libraries, which is the early warning for the next lock
     runs-on: ubuntu-latest

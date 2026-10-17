@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.67.1 - The sentinel looks every 5 seconds; the first CI run found one test that depended on the Python version
+
+- **Measured after 1.67.0, on the test servers** (a real GRE tunnel, its link service stopped on the foreign server, four rounds; the time is `state_since` of the tunnel minus the moment of the cut): **8, 10, 9 and 9 seconds** until the panel said *down* - it was **23 s** before 1.67.0.
+  From the line "sentinel: ... checking it now" to the state *down* there are now **0.3 s** (it was 15 s: the pings, the request through the port and the look from another server). Nearly all of what is left is the wait for the next tick of the sentinel, so the sentinel
+  now runs **every 5 seconds** (it was 10): one command per server over the SSH connection that is already open, so the cost is small. Expected: a cut is called down after about 4-6 s, and a DOWN message reaches Telegram `down_seconds` (10) later.
+- **CI.** The first run on GitHub (the commit of 1.67.0) was green on Python 3.12 (the pinned libraries, with the coverage), the installer on a clean machine, the quick checks and gitleaks, and red on Python 3.10 (newest libraries) on ONE test:
+  `test_logout_others_keeps_this_session_and_ends_the_others` set the old cookie into a client that still held the new one, so the client sent both and which one the server read depended on the version of Python. The test empties the cookie jar first now (a browser keeps one cookie of a name).
+  The jobs of the matrix are called `tests (python 3.10)` / `tests (python 3.12)`.
+
 ## 1.67.0 - Telegram in seconds, not minutes; the CI runs on every push again, and everything that can run at the same time does
 
 The owner (2026-10-17): "check the notifications that come to my Telegram: why does it say the Fastly account is down; an Iran server was switched off, I switched it on and the 'up' message never came; go through the list of errors from the start and bring the delay to the
