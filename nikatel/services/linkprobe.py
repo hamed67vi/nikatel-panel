@@ -45,7 +45,7 @@ def verdict(received_i: int, received_f: int) -> bool:
 
 
 def received(out: str) -> tuple[int, float | None]:
-    """Pure: (pings that came back, the average ms) in the answer of the `gre_verify` script."""
+    """Pure: (pings that came back, the average ms) in the answer of the `link_probe_ping` script."""
     m = re.search(r"(\d+) received", str(out))
     r = re.search(r"= [\d.]+/([\d.]+)/", str(out))
     return (int(m.group(1)) if m else 0), (float(r.group(1)) if r else None)
@@ -137,8 +137,8 @@ def _probe_one(link: str, name: str, nodes: tuple[Node, Node], hosts: tuple[str,
                 raise RuntimeError(f"the link did not come up on {local}: {out.strip()[-120:]}")
 
         builder._both(lambda: end(iran, ihost, fhost, f"{ip_i}/30", pubs.get("foreign", ""), ips.get("iran")), lambda: end(foreign, fhost, ihost, f"{ip_f}/30", pubs.get("iran", ""), ips.get("foreign")))
-        time.sleep(1.5)                                                           # (WireGuard and the SAs of IPsec need a moment)
-        (ri, rtt), (rf, _) = builder._both(lambda: received(run_script(iran, "gre_verify", {"IFACE": name, "PEER": ip_f}, timeout=40)), lambda: received(run_script(foreign, "gre_verify", {"IFACE": name, "PEER": ip_i}, timeout=40)))
+        time.sleep(1.0)                                                           # (WireGuard and the SAs of IPsec need a moment)
+        (ri, rtt), (rf, _) = builder._both(lambda: received(run_script(iran, "link_probe_ping", {"IFACE": name, "PEER": ip_f}, timeout=60)), lambda: received(run_script(foreign, "link_probe_ping", {"IFACE": name, "PEER": ip_i}, timeout=60)))
         res.update(ok=verdict(ri, rf), rtt_ms=rtt, loss_pct=round(100.0 - min(ri, rf) * 10.0, 1))
 
         if not res["ok"]:

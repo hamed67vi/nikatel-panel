@@ -522,6 +522,12 @@ echo "IPIP_PAIRS=$(ip -d -o link show type ipip 2>/dev/null | grep -oE 'remote [
     "gre_verify": (r"""ping -c 10 -i 0.3 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | tail -3
 """, {"IFACE": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}$", "PEER": _IPV4}),
 
+    # the LINK PROBE's pings (services/linkprobe.py): up to 8 single pings first - a UDP flow that is new on this route loses its first packets for a few seconds, and WireGuard repeats a lost handshake only after 5 s (found on the
+    # test servers: 40 % of the first pings lost, then none) - and, when one answers, the 10 pings that count. A link that does not pass costs the 8 s of the warm-up, one that passes costs no more than one ping.
+    "link_probe_ping": (r"""for i in 1 2 3 4 5 6 7 8; do ping -c 1 -W 1 -I '@IFACE@' '@PEER@' >/dev/null 2>&1 && break; done
+ping -c 10 -i 0.3 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | tail -3
+""", {"IFACE": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}$", "PEER": _IPV4}),
+
     # hold test: 20 slow pings, does the link keep passing packets
     "gre_hold": (r"""ping -c 20 -i 0.4 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | tail -3
 """, {"IFACE": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}$", "PEER": _IPV4}),

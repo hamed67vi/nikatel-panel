@@ -111,8 +111,8 @@ def test_a_link_that_answers_both_ways_passes_and_everything_is_removed(monkeypa
     w = World(monkeypatch)
     r = run_one("fou", port=5555)
     assert r["ok"] is True and r["rtt_ms"] == 72.5 and r["loss_pct"] == 0.0 and r["error"] == ""
-    assert [c[1] for c in w.calls if c[0] == "203.0.113.1"] == ["link_probe_run", "gre_verify", "link_probe_clean"]                  # up, the pings, away - on both servers
-    assert [c[1] for c in w.calls if c[0] == "198.51.100.2"] == ["link_probe_run", "gre_verify", "link_probe_clean"]
+    assert [c[1] for c in w.calls if c[0] == "203.0.113.1"] == ["link_probe_run", "link_probe_ping", "link_probe_clean"]                  # up, the pings, away - on both servers
+    assert [c[1] for c in w.calls if c[0] == "198.51.100.2"] == ["link_probe_run", "link_probe_ping", "link_probe_clean"]
     assert {p for _, p, _, _ in w.files} == {"/usr/local/sbin/nikatel-gre-up-lp-fou", "/usr/local/sbin/nikatel-gre-down-lp-fou"} and all(m == "0700" for _, _, m, _ in w.files)
 
 
@@ -127,7 +127,7 @@ def test_a_link_that_does_not_come_up_is_unknown_not_failed_and_is_removed(monke
     w = World(monkeypatch, up_rc=1)
     r = run_one("ipip", port=0)
     assert r["ok"] is None and "did not come up" in r["error"]                                                    # (the script failed: nothing is known about the carrier)
-    assert [c[1] for c in w.calls].count("link_probe_clean") == 2 and "gre_verify" not in [c[1] for c in w.calls]
+    assert [c[1] for c in w.calls].count("link_probe_clean") == 2 and "link_probe_ping" not in [c[1] for c in w.calls]
 
 
 def test_wireguard_makes_its_keys_on_the_servers_and_ipsec_gets_its_keys_in_a_file_of_0600(monkeypatch):
@@ -254,3 +254,15 @@ def test_the_api_asks_the_probe_and_the_knowledge_page_carries_the_answers(clien
     assert client.post("/api/doctor/knowledge/links", json={"iran_id": ir, "foreign_id": ir}).status_code == 400                                        # not an Iran server and a foreign one
     monkeypatch.setattr(get_settings(), "read_only", True)
     assert client.post("/api/doctor/knowledge/links", json={"iran_id": ir, "foreign_id": fr}).status_code == 403
+
+def test_the_probe_warms_a_new_udp_flow_up_before_it_counts_the_pings():
+    """Found on the test servers (2026-10-17): the first packets of a new UDP flow were lost for a few seconds on that route (10 - 45 % of the first pings), and WireGuard repeats a lost handshake only after 5 s - the
+    probe, with a fixed 1.5 s and 10 pings, said WireGuard did not pass; the lab, which waited longer, got 40 % loss and then none. The script tries up to eight single pings first and then counts ten."""
+    s = ssh.render_script("link_probe_ping", {"IFACE": "lp-wg", "PEER": "10.253.9.2"}) if hasattr(ssh, "render_script") else ssh._script_text("link_probe_ping", {"IFACE": "lp-wg", "PEER": "10.253.9.2"})
+    first, second = s.strip().splitlines()
+    assert first.startswith("for i in 1 2 3 4 5 6 7 8; do ping -c 1 -W 1 -I 'lp-wg' '10.253.9.2'") and first.endswith("&& break; done")
+    assert second == "ping -c 10 -i 0.3 -W 1 -I 'lp-wg' '10.253.9.2' 2>&1 | tail -3"                               # (the same ten pings the verdict has always been made of: GOOD of 10)
+
+    for bad in ({"IFACE": "lp-wg;id", "PEER": "10.253.9.2"}, {"IFACE": "lp-wg", "PEER": "10.253.9.2; id"}, {"IFACE": "lp-wg"}):
+        with pytest.raises(ValueError):
+            ssh._script_text("link_probe_ping", bad)
