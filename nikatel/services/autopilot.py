@@ -1216,15 +1216,17 @@ def observe_all() -> None:
 
 
 _SLOW_AT = [0.0]
+OBSERVE_EVERY = 30       # seconds between two looks at the tunnels that lose packets (it was five minutes: a loss was looked at long after it began)
+DEGRADED_AFTER = 120     # a tunnel that is only DEGRADED (it flaps, it loses packets, it moves no data) is repaired after this long (it was ten minutes); a tunnel that is DOWN waits for nothing
 
 
 def repair_cycle() -> None:
-    """The one repair job (every minute): the plain restarts of the tunnels that are down, and - every five minutes - the smart repair of those a restart could not heal
-    and the look at the tunnels that lose packets. (It replaces three jobs that woke up separately and looked at the same tunnels.)"""
+    """The one repair job (every 5 s, and at once when a tunnel is cut or a repair ends): the plain restarts of the tunnels that are down and the smart repair of those a restart could not heal - at the FIRST moment, with no
+    waiting time - and, every OBSERVE_EVERY seconds, the look at the tunnels that lose packets. (It replaces three jobs that woke up separately and looked at the same tunnels.)"""
     actions.auto_repair()
-    auto_escalate()                       # (every turn: it starts only what its own rules allow - a tunnel that is cut must not wait up to five minutes for the next look)
+    auto_escalate()                       # (every turn: it starts only what its own rules allow - a tunnel that is cut must not wait for the next look)
 
-    if time.time() - _SLOW_AT[0] < 290:
+    if time.time() - _SLOW_AT[0] < OBSERVE_EVERY:
         return
 
     _SLOW_AT[0] = time.time()
@@ -1233,11 +1235,11 @@ def repair_cycle() -> None:
 
 # ------------------------------------------------------------------ automatic escalation (Settings -> Repairs, level)
 def escalate_due(state: str, down_for: int, after_seconds: int, plain_fixes: int, route_fault: bool, cut_before: bool) -> bool:
-    """Pure: may the smart repair start now? A tunnel that is DOWN waits `after_seconds` (a blip is not a cut) and then - because a plain restart can cure a stopped service or a stuck data path - needs one
-    plain restart to have been tried and failed; a route that is silent (GRE does not answer, the port is cut in front of the server) and was cut like this before needs none (the Doctor goes straight to the
-    tunnel type that connects); and no tunnel waits more than five minutes beyond that whatever happened to its restart (nothing is left unrepaired). One that only flaps climbs after ten minutes."""
+    """Pure: may the smart repair start now? A tunnel that is DOWN waits `after_seconds` (the Doctor passes 0: it starts at the first moment) and - because a plain restart can cure a stopped service or a stuck data path -
+    needs one plain restart to have been tried and failed; a route that is silent (GRE does not answer, the port is cut in front of the server) and was cut like this before needs none (the Doctor goes straight to the
+    tunnel type that connects); and no tunnel waits more than five minutes beyond that whatever happened to its restart (nothing is left unrepaired). One that only flaps climbs after DEGRADED_AFTER seconds."""
     if state != "down":
-        return down_for >= 600
+        return down_for >= DEGRADED_AFTER
 
     if down_for < after_seconds:
         return False
@@ -1246,8 +1248,7 @@ def escalate_due(state: str, down_for: int, after_seconds: int, plain_fixes: int
 
 
 def auto_escalate() -> None:
-    """Job hook: a tunnel that plain restarts could not heal gets a smart repair, once per 6 hours, never `move`."""
-    conf = st.get("repair")
+    """Job hook: a tunnel that plain restarts could not heal gets a smart repair at once (no waiting time), never `move`."""
     level = "switch"                                    # the Doctor's modes "fix" and "move" climb the whole ladder (the old per-level setting is gone)
 
     if actions.doctor_mode() == "off" or get_settings().read_only:
@@ -1285,7 +1286,7 @@ def auto_escalate() -> None:
 
         plain = actions.recent_fixes(name, max(3600, now - since + 60)) if st_ == "down" else 0
 
-        if not escalate_due(st_, now - since, int(conf.get("after_seconds", 20)), plain, actions.is_route_fault(err), knowledge.cut_before(iran_id, foreign_id, ("gre_blocked", "route_cut"), now)):
+        if not escalate_due(st_, now - since, actions.DOWN_GRACE, plain, actions.is_route_fault(err), knowledge.cut_before(iran_id, foreign_id, ("gre_blocked", "route_cut"), now)):
             continue
 
         with session() as db:

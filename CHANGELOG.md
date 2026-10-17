@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.65.1 - The Doctor has no waiting time: it starts the moment a tunnel is down
+
+The owner (2026-10-17), his picture of *Auto Fix Tunnels* ("If a tunnel is down for 60 seconds, fix it automatically"): "remove this time here too - the Tunnel Doctor must start its work from the very first moment the tunnel has trouble: from rebooting the tunnel to everything else it has to do".
+
+- **The waiting time is gone.** The field (the number of seconds a down tunnel waited before its plain restart, 60 by default, 20 in 1.65.0) is removed from the *Auto Fix Tunnels* card, which now says "The moment a tunnel is down the Doctor starts - no waiting time". The restart begins at the first tick of the repair job after the check that found the tunnel down (the job is woken by that very check, so it is a second or two), and the smart repair follows the same second the restart has ended without healing the tunnel. A value saved by an older version is ignored (the setting stays in the API so that an old client does not break; it always reads 0). What still protects a blip: a tunnel is *down* only when a check found a unit stopped, the GRE card gone, the GRE link silent over twenty pings, or the users' path cut for four checks - an SSH hiccup is *unknown*, never *down* - and a tunnel gets ONE plain restart per cut.
+- **A degraded tunnel is repaired after 2 minutes, not 10** (`DEGRADED_AFTER`): one that flaps, loses packets or moves no data. Its repair tests the candidates beside it and swaps only for something clearly better at a quiet moment, so starting earlier costs the users nothing.
+- **The look at the tunnels that lose packets runs every 30 s** (it was every five minutes), at most one look per tunnel every half hour as before.
+
 ## 1.65.0 - The Doctor's delay, brought down in every step
 
 The owner (2026-10-17), after the step-by-step timing of the Tunnel Doctor (a cut tunnel took about 4 - 6 minutes from the cut to its return): "I want the delay in all the steps to be very low".

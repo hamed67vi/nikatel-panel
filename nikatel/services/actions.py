@@ -389,10 +389,13 @@ def doctor_mode() -> str:
     return "fix" if conf.get("auto", True) else "off"
 
 
+DOWN_GRACE = 0               # seconds a tunnel that is down waits before its plain restart: NONE. The Doctor starts at the first moment a tunnel is down (the owner, 2026-10-17: "remove the 60 seconds - the Doctor must
+                             # start from the first moment the tunnel has trouble"). What stays is what already protected a blip: a tunnel is *down* only when a check found a unit stopped, the card gone, the GRE link
+                             # silent over twenty pings, or the users' path cut for four checks - an SSH hiccup is "unknown", never "down" - and ONE plain restart is made per cut
+
+
 def auto_repair() -> None:
     """Job hook: when the Doctor is not off, start a fix for tunnels that are down and not muted."""
-    conf = st.get("repair")
-
     if doctor_mode() == "off" or get_settings().read_only:
         return
 
@@ -412,7 +415,7 @@ def auto_repair() -> None:
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 
-        if name in muted or now - since < grace_for(why, int(conf.get("after_seconds", 20))) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
+        if name in muted or now - since < grace_for(why, DOWN_GRACE) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
             continue
 
         log.info("auto repair of %s (down for %ss)", name, now - since)

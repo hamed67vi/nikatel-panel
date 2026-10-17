@@ -249,6 +249,43 @@ def test_a_cut_tunnel_waits_one_two_five_then_ten_minutes_after_the_end_of_its_l
     assert ap.MAX_AUTO_REPAIRS == 4 and ap.SOAK == 25
 
 
+# ------------------------------------------------------------------ no waiting time
+def test_the_doctor_starts_at_the_first_moment_a_tunnel_is_down_whatever_an_old_setting_says(monkeypatch):
+    from nikatel.models import ActionLog
+    from nikatel.services import settings as st
+
+    tid, _, _ = world("gr1", state="down")
+    now = int(time.time())
+
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        t.state_since, t.last_error = now - 1, "no answer from the foreign end over the GRE link"          # down for ONE second (a silent link: the case that used to wait the whole grace)
+
+    st.put("repair", {"after_seconds": 600, "mode": "fix"})                                                    # (an old saved value: it is ignored)
+    started, smart = [], []
+    monkeypatch.setattr(actions, "fix", lambda tunnel_id, source="manual", dry_run=False: started.append(tunnel_id) or 1)
+    monkeypatch.setattr(actions.get_settings(), "read_only", False)
+    monkeypatch.setattr(ap, "outage_state", lambda: {"storm": False})
+    monkeypatch.setattr(ap, "smart_fix_start", lambda tunnel_id, level="switch", source="manual": smart.append(tunnel_id) or 1)
+    actions.auto_repair()
+    assert actions.DOWN_GRACE == 0 and started == [tid]                                                        # the plain restart begins at once
+    ap.auto_escalate()
+    assert smart == []                                                                                         # (it waits for the restart's own outcome, as before)
+
+    with session() as db:
+        db.add(ActionLog(ref="gr1", action="fix", source="auto", ok=False, finished_at=now, story=["Every step was tried; the tunnel is still not up."], ts=now - 1))
+
+    ap.auto_escalate()
+    assert smart == [tid]                                                                                      # the restart did not heal it: the smart repair starts the same second, with no waiting time
+
+
+def test_the_waiting_time_is_gone_from_the_page_the_settings_and_the_state(client):
+    app = (__import__("pathlib").Path(__file__).parent.parent / "nikatel" / "web" / "app.js").read_text(encoding="utf-8")
+    assert 'cfg("after_seconds"' not in app and "no waiting time" in app and 'apNum("after_seconds"' not in app          # no field: nothing to set
+    assert client.get("/api/settings/repair").json()["after_seconds"] == 0
+    assert ap.OBSERVE_EVERY == 30 and ap.DEGRADED_AFTER == 120
+
+
 # ------------------------------------------------------------------ the fast lane
 def test_the_fast_lane_looks_at_a_degraded_tunnel_that_moves_no_data_but_not_at_one_that_only_loses_packets(monkeypatch):
     now = int(time.time())

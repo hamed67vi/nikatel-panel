@@ -393,7 +393,8 @@ def test_the_smart_repair_starts_by_rules_and_no_tunnel_waits_more_than_five_min
     assert ap.escalate_due("down", 70, 60, 1, False, False) is True                                                                     # one plain restart that did not heal it
     assert ap.escalate_due("down", 70, 60, 0, True, True) is True and ap.escalate_due("down", 70, 60, 0, True, False) is False          # a silent route that was cut like this before needs no restart first
     assert ap.escalate_due("down", 70, 60, 0, False, True) is False and ap.escalate_due("down", 61 + 300, 60, 0, False, False) is True  # (and nothing waits for ever for a restart that never came)
-    assert ap.escalate_due("degraded", 599, 60, 0, False, False) is False and ap.escalate_due("degraded", 600, 60, 0, False, False) is True
+    assert ap.escalate_due("degraded", ap.DEGRADED_AFTER - 1, 60, 0, False, False) is False and ap.escalate_due("degraded", ap.DEGRADED_AFTER, 60, 0, False, False) is True and ap.DEGRADED_AFTER == 120      # (was ten minutes)
+    assert ap.escalate_due("down", 0, actions.DOWN_GRACE, 1, False, False) is True and ap.escalate_due("down", 0, actions.DOWN_GRACE, 0, False, False) is False         # no waiting time: right after one restart that did not heal it
 
 
 def test_a_cut_tunnel_climbs_after_one_plain_restart_and_is_tried_again_after_one_two_five_then_ten_minutes(monkeypatch):

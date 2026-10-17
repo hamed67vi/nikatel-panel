@@ -115,7 +115,7 @@ def test_real_fix_in_read_only_turns_into_dry_run(client, tmp_path, monkeypatch)
 
 def test_auto_repair_setting_needs_read_write(client):
     assert client.put("/api/settings/repair", json={"auto": True, "after_seconds": 180}).status_code == 400
-    assert client.put("/api/settings/repair", json={"auto": False, "after_seconds": 300}).json()["after_seconds"] == 300
+    assert client.put("/api/settings/repair", json={"auto": False, "after_seconds": 300}).json()["after_seconds"] == 0                      # the waiting time is gone (1.65.1): an old client may still send it, it is not kept
     assert client.get("/api/settings/repair").json()["read_only"] is True
 
 
