@@ -1190,7 +1190,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert "▼${bwNum(usual" in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in capcell
+    assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"low\" ? \"low\" : \"ok\"" in capcell      # one number, coloured by state; no second red number in the row
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "(t.bw || {}).state === \"drop\"" in app
     assert 'slow = tl.filter(t => t.state === "up" && (t.bw || {}).state === "drop" && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
@@ -1216,7 +1216,7 @@ def test_the_cut_of_a_tunnel_is_a_tiny_tag_that_says_which_end_and_a_tunnel_with
     assert "const CUT_TAGS = [" in app and "const cutTag = t =>" in app and "stShort" not in app and "WHY_SHORT" not in app
     assert '<span class="cut-tag ${t.state === "down" ? "" : "unk"}"' in cell and 'class="st ${t.state === "down" ? "down" : "unknown"} why"' not in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && b.down < 1" in capcell and "<em>no data</em>" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell
+    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && b.down < 1" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell      # a stall (0 Mb/s) reads the same red as a drop: the "no data" sentence is in the tooltip, not a second word in the row
     assert "const bwPending = t => !(t.bw || {}).error &&" in app and 'NO DATA moved in the test' in app and "No data moves through this tunnel under load" in app and 'b.error ? "Could not be measured: "' in app
     assert ".tun-tbl .cut-tag {" in css and ".tun-tbl .cut-tag.unk" in css and ".tun-tbl .bwcap.pend" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag {' in css
     assert 'udp: "the GRE link of this tunnel, counted with UDP packets' in app                      # a link that drops ping shows the loss the bandwidth test counted with UDP, not "no ping"
@@ -1266,6 +1266,19 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     assert 'html[data-mode="light"] body #page .tun-tbl .bwsep {' in css
 
 
+def test_the_bandwidth_row_is_one_number_each_and_the_breakdown_moved_into_the_tunnel_window():
+    """The owner, 2026-10-17 (his picture: a PAQET row reading "199 ▼259 | ↓9.7 ↑3.8", both red): "what are these red numbers, not clear"; "instead of showing upload and download here, show one number"; "put more detail inside the tunnel box"."""
+    app = _web("app.js")
+    capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
+    usecell = app.split("const bwUse = t => {", 1)[1].split("const bwBar = t =>", 1)[0]
+    assert "<em>" not in capcell and "▼" not in capcell and capcell.count("bwNum(b.down)") == 1                                 # the row: one capacity number, no second one beside it
+    assert usecell.count("<i>↓</i>") == 1 and "↑" not in usecell and usecell.count("bwNum(u.down)") == 1 and "u.up" not in usecell      # the row: one usage number (the download), the upload is gone from here
+    status = app.split('box(SI.clock, "Status"', 1)[1].split("const link = box", 1)[0]
+    link = app.split("const link = box(SI.link", 1)[1].split("return `<div class=\"sgrid\">", 1)[0]
+    assert 'kv("In use now", useOf(t) ?' in status and "↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}" in status and "% of the capacity" in status      # the tunnel window still has both numbers, with the share of the capacity they use
+    assert 'kv("Capacity", ' in link and "usually ${t.bw.ref ?" in link and "ago</small>" in link and "bwWhy(t)" in link and "bwMeasure(" in link              # ... and the capacity, its usual level, when it was last measured, and why it dropped
+
+
 def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_owner_reads_them(tmp_path):
     import json
     import shutil
@@ -1300,17 +1313,17 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
     assert r.returncode == 0, r.stderr[-600:]
     res = json.loads(r.stdout)
     assert res["nums"] == ["87", "8.4", "0.40", "0", "1234", "15000", "1000", "1234 Mb/s", "—"]      # always Mb/s, never Gb/s (the owner, 2026-10-17: "do not write Gig, everything in Mb")
-    assert 'class="bwuse live"' in res["live"]["use"] and "<b>87</b>" in res["live"]["use"] and "<b>12</b>" in res["live"]["use"]
+    assert 'class="bwuse live"' in res["live"]["use"] and "<b>87</b>" in res["live"]["use"] and "<b>12</b>" not in res["live"]["use"]      # one number - the download; the upload stays in the tooltip and the tunnel window
     seen = re.sub(r'title="[^"]*"', "", res["live"]["use"])                                                                  # (what is SEEN: the tooltip keeps its units)
     assert "Mb/s" not in seen and "Gb/s" not in seen and "<small>" not in seen                                               # and no unit beside the numbers: it is in the header of the column
     assert res["live"]["util"] == pytest.approx(87 / 312) and 'class="bwbar"' in res["live"]["bar"] and "width:28%" in res["live"]["bar"]      # the bar is the part of the capacity the users use
     assert 'class="bwbar hot"' in res["hot"] and 'class="bwbar full"' in res["full"] and 'class="bwbar full"' in res["over"] and "width:100%" in res["over"]      # amber from 70 %, red from 90 %, never wider than the box
-    assert "<b>1500</b>" in res["mixed"] and "<b>20</b>" in res["mixed"] and "Gb" not in res["mixed"]                                                         # a download of 1.5 Gb/s is 1500, in Mb
-    assert 'class="bwuse old"' in res["cycle"] and "<b>5.0</b>" in res["cycle"] and "<b>1.0</b>" in res["cycle"]                                              # without a live number: the last check's, marked as not live
+    assert "<b>1500</b>" in res["mixed"] and "<b>20</b>" not in res["mixed"] and "Gb" not in res["mixed"]                                                     # a download of 1.5 Gb/s is 1500, in Mb (the upload, 20, is not in the row)
+    assert 'class="bwuse old"' in res["cycle"] and "<b>5.0</b>" in res["cycle"] and "<b>1.0</b>" not in res["cycle"]                                          # without a live number: the last check's download, marked as not live
     assert 'class="bwuse none"' in res["none"]["use"] and "—" in res["none"]["use"] and res["none"]["util"] is None and "width:0%" in res["none"]["bar"]    # no counter: a dash and an empty bar, never a made-up zero
     assert 'class="bwuse old"' in res["stale"] and "<b>40</b>" in res["stale"]                                                                               # a live number older than two minutes is not shown
-    assert "<b>1234</b>" in res["cap"]["big"] and "Gb" not in res["cap"]["big"] and "<small>" not in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<em>▼310</em>" in res["cap"]["drop"]
-    assert "<em>no data</em>" in res["cap"]["stall"] and 'class="bwcap drop"' in res["cap"]["stall"] and 'class="bwcap none"' in res["cap"]["none"] and "—" in res["cap"]["none"]
+    assert "<b>1234</b>" in res["cap"]["big"] and "Gb" not in res["cap"]["big"] and "<small>" not in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<b>90</b>" in res["cap"]["drop"] and "<em>" not in res["cap"]["drop"] and "▼" not in res["cap"]["drop"]      # the row shows only the number it dropped TO (90), red; the usual level (310) is the tooltip and the tunnel window (the owner, 2026-10-17: two red numbers were not clear)
+    assert "<b>0</b>" in res["cap"]["stall"] and 'class="bwcap drop"' in res["cap"]["stall"] and "<em>" not in res["cap"]["stall"] and 'class="bwcap none"' in res["cap"]["none"] and "—" in res["cap"]["none"]
 
 
 def test_the_ping_cell_has_the_ping_above_an_arrow_at_each_end_of_a_dotted_line_and_the_loss_below():

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.64.3 - The Bandwidth row is one number each; the breakdown moved into the tunnel window
+
+The owner (2026-10-17), his picture of a PAQET row reading "199 ▼259 | ↓9.7 ↑3.8", both red: "what are these red numbers, not clear"; "instead of showing upload and download here, show one number"; "put more detail inside the tunnel box".
+
+- **Capacity — one number.** The row showed the capacity it dropped to and, beside it in the same red, "▼" the usual level it dropped from - two red numbers with no label, read as noise. The row now shows one number, coloured by its state (green healthy, amber low, red dropped or stalled); the usual level, when it was last measured and why it dropped are the tooltip and the tunnel window (Link → Capacity, which already had all three, plus "measure now").
+- **Usage — one number, the download.** The row showed ↓ and ↑ side by side; it now shows the download alone, what the users actually get. The upload is still in the tooltip and in the tunnel window (Status → "In use now"), together with the share of the capacity in use.
+
 ## 1.64.2 - The cores table fills its width (Status at the right); the ping arrows shorter and the ping number smaller
 
 The owner (2026-10-17): "move the Status column to the right so the empty space fills" (his picture of the cores table); "make these arrows shorter, it is too crowded, and make the ping number smaller too" (his picture of the Ping/Loss column).
