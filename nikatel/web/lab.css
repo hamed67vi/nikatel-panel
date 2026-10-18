@@ -1048,3 +1048,14 @@ html body #page .abt-foot > button.abt-diag { flex: none; margin: 0 0 0 12px; }
 /* 1.69.7 - the PasarGuard box: two buttons under its headline - the panel, and the nodes only (the owner, 2026-10-18: "put an option here for the update of the panel and one for only the nodes") */
 html body #page .abt-pg .pgu-go { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: none; }
 html body #page .abt-pg .pgu-go button { box-sizing: border-box; min-width: 0; height: 28px !important; min-height: 28px !important; padding: 0 10px !important; border-radius: 9px !important; font-size: 12px !important; line-height: 1 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+
+/* 1.69.8 - the sign-in page and the PasarGuard box in the look of the owner's UI kit sheet (docs/design/ui-kit-components.webp; the owner, 2026-10-18: "make the sign-in page exactly like the MacBook" - the sheet, and the same for the PasarGuard update): the primary button is the sheet's "Connect" - a flat vivid blue with a thin light edge and no gloss (steel blue under the pointer, dark when pressed); the field is the sheet's Text Field - its icon sits INSIDE the field (no box and no line of its own) and the ring on focus is a bright blue line with a soft glow */
+html body .login button.pri::before, html body .login button.pri::after, html body #page .sf .abt-pg button.pri:not(.eye)::before, html body #page .sf .abt-pg button.pri:not(.eye)::after { content: none !important; display: none !important; }
+html body .login button.pri, html body #page .sf .abt-pg button.pri:not(.eye) { background-image: linear-gradient(180deg, #1a73ff, #0b5cf0) !important; background-color: #0b5cf0 !important; border: 1px solid rgba(124, 176, 255, .5) !important; box-shadow: 0 6px 16px rgba(11, 92, 240, .28) !important; text-shadow: none !important; font-weight: 600 !important; color: #fff !important; filter: none; }
+html body .login button.pri:not(:disabled):hover, html body #page .sf .abt-pg button.pri:not(.eye):not(:disabled):hover { background-image: linear-gradient(180deg, #40609d, #2e4b82) !important; border-color: rgba(150, 185, 255, .5) !important; box-shadow: none !important; filter: none; }
+html body .login button.pri:not(:disabled):active, html body #page .sf .abt-pg button.pri:not(.eye):not(:disabled):active { background-image: linear-gradient(180deg, #1b2438, #151c2c) !important; border-color: rgba(255, 255, 255, .12) !important; box-shadow: inset 0 2px 5px rgba(0, 0, 0, .35) !important; transform: none; filter: none; }
+html body .login .lg-go { height: 48px; border-radius: 12px; }
+html body .login .lg-in .lg-ic { width: 42px; background: transparent; border-inline-end: 0; color: #8d99b5; }
+html body .login .lg-in input:not([type=checkbox]) { padding-inline-start: 0; }
+html body .login .lg-in:focus-within { border-color: #2f7bff; box-shadow: 0 0 0 1px #2f7bff, 0 0 14px rgba(47, 123, 255, .38); }

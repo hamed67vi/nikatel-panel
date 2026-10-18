@@ -1591,3 +1591,16 @@ def test_every_section_has_its_own_address_and_it_costs_the_panel_nothing(tmp_pa
     assert res["nopage"]["r"] is False and res["junk"]["r"] is False and res["bot"]["r"] is False and res["nopage"]["went"] == []      # an address that names no page (or the Shop bot, which is off) opens what was open last
     assert res["again"]["r"] is True and res["again"]["went"] == []                                                      # the pop of an address the page wrote itself changes nothing
     assert res["push"] == [["push", "#/tunnels/list"]]                                                                   # a click on a tab is a new step of the history: the back button goes back
+
+
+def test_the_sign_in_page_and_the_pasarguard_box_follow_the_ui_kit_sheet():
+    """The owner, 2026-10-18: "make the sign-in page exactly like the MacBook" (the sheet docs/design/ui-kit-components.webp) and the same for the PasarGuard update: the primary button is the sheet's flat "Connect" (no gloss),
+    the field has its icon inside and a bright blue ring."""
+    css = _web("lab.css")
+    block = css[css.index("/* 1.69.8 - the sign-in page"):]
+    assert (Path(__file__).resolve().parent.parent / "docs" / "design" / "ui-kit-components.webp").exists()
+    assert "html body .login button.pri::before, html body .login button.pri::after, html body #page .sf .abt-pg button.pri:not(.eye)::before, html body #page .sf .abt-pg button.pri:not(.eye)::after { content: none !important; display: none !important; }" in block      # (no gloss pill)
+    assert "background-image: linear-gradient(180deg, #1a73ff, #0b5cf0) !important;" in block and "html body #page .sf .abt-pg button.pri:not(.eye) {" in block      # (the Settings frame's own quiet tint of a primary button is beaten by its own specificity: .sf .abt-pg ... :not(.eye))
+    assert "button.pri:not(:disabled):hover" in block and "linear-gradient(180deg, #40609d, #2e4b82)" in block and "button.pri:not(:disabled):active" in block      # (the sheet: steel blue under the pointer, dark when pressed)
+    assert "html body .login .lg-in .lg-ic { width: 42px; background: transparent; border-inline-end: 0;" in block and "html body .login .lg-in:focus-within { border-color: #2f7bff;" in block      # (the icon is INSIDE the field; login.css loads after lab.css, so the rules name .login)
+    assert "html body #page .sf button.pri:not(.eye) { background: rgba(122,176,255,.14) !important;" in _web("app.css")      # (what the PasarGuard box had: the quiet tint of the Settings frame)

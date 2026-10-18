@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.8 - The sign-in page and the PasarGuard box in the look of the owner's UI kit sheet
+
+The owner (2026-10-18): "make the sign-in page exactly like the MacBook" - the sheet `docs/design/ui-kit-components.webp` - "and the same for the PasarGuard update". Style only (`lab.css`, loaded before `login.css` and `uikit.css`, so every rule names `.login` / `#page .sf .abt-pg` to win):
+
+- **The primary button is the sheet's "Connect"**: a flat vivid blue (`#1a73ff` to `#0b5cf0`) with a thin light edge and a soft shadow, **no gloss** (the highlight pill that every primary button had is taken away on these two places), steel blue under the pointer and dark when pressed, exactly as the sheet shows its Default / Hover / Pressed. Sign in is 48 px high with 12 px corners. In the PasarGuard box the buttons were the quiet blue tint of the Settings frame (`#page .sf button.pri`); they are the sheet's blue now (Update panel..., Update nodes only..., Update..., Update N nodes...).
+- **The fields are the sheet's Text Field**: the icon sits **inside** the field - no box of its own and no dividing line (the user and password boxes had a darker square with a line) - and the ring on focus is a bright blue line with a soft glow.
+- **Said plainly**: the rest of the panel keeps its buttons (the glossy primary of the other pages and the quiet tint of Settings); only these two places follow the sheet. The sign-in page was already built from the sheet on 2026-10-16 ("MacBook style"); this takes the last differences away. Asked, not done: the macOS lock-screen look (round avatar, one round password field) - say so if that is what is meant.
+- **Looked at in a browser** on a private copy of the panel (the real sign-in page, logged out; the real Settings page with the PasarGuard box filled with a panel and two nodes that are behind): the Sign in button, the two fields with the focus ring, and the box's blue buttons, the secondary glass buttons and the disabled ones.
+- **Tests.** `tests/test_web_menu.py` (+1): the rules above, the sheet is in `docs/design`.
 ## 1.69.7 - Every section has its own address, the PasarGuard box gets its two buttons, the Problems tags are small, pale and wrap, the facts strip is evenly spaced
 
 Changes of the page asked for by the owner on 2026-10-18 (the script and the style of the page - nothing on the servers):
