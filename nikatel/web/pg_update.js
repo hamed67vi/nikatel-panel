@@ -31,7 +31,9 @@ function pgUpdHtml(d) {
       <span class="pgu-a"><button class="sm" ${n.behind === true && n.status === "connected" ? "" : "disabled"} onclick="pgUpdNodes([[${n.panel_id}, ${n.node_id}, 'node']])" title="Update the software of this node (it restarts: its users drop for a moment)">Update</button><button class="sm" ${n.xray_behind === true && n.status === "connected" ? "" : "disabled"} onclick="pgUpdNodes([[${n.panel_id}, ${n.node_id}, 'core']])" title="Update Xray on this node (it restarts the core: its users drop for a moment)">Xray</button></span></div>`;
   const nodesHtml = nodes.length ? `<div class="pgu-tbl"><div class="pgu-row pgu-hd"><span>Node</span><span>Server</span><span>Software</span><span>Xray</span><span></span></div>${nodes.map(nrow).join("")}</div>` : '<div class="pgu-none mut">No node is registered in a PasarGuard panel.</div>';
   const acts = (swN.length ? `<button class="sm pri" onclick="pgUpdAll('node')" title="Update the software of every connected node that is behind, one at a time">Update ${swN.length} node${swN.length === 1 ? "" : "s"}…</button>` : "") + (xrN.length ? `<button class="sm" onclick="pgUpdAll('core')" title="Update Xray on every connected node that is behind, one at a time">Xray on ${xrN.length} node${xrN.length === 1 ? "" : "s"}…</button>` : "");      // (the buttons are there only when there is something to update)
-  return hero + `<div class="pgu-list"><div class="pgu-cap">Panels</div>${panels.map(prow).join("") || '<div class="pgu-none mut">No PasarGuard panel yet: add one on the Panel page.</div>'}<div class="pgu-cap">Nodes (${nodes.length})<span class="sp"></span>${acts}</div>${nodesHtml}</div>`;      // (the owner, 2026-10-16: the panels and the nodes sit in ONE box of a fixed size that scrolls inside)
+  const ro = !!d.read_only, roWhy = "The panel is read-only (NIKATEL_READ_ONLY)";
+  const go = `<div class="pgu-go"><button class="sm ${panels.some(p => p.behind === true) ? "pri" : ""}" ${ro ? "disabled" : ""} onclick="pgUpdPanelTop()" title="${esc(ro ? roWhy : "Update the PasarGuard panel itself, on its own server: a backup first, and the name of the panel typed back. The nodes are not touched.")}">Update panel…</button><button class="sm ${swN.length || xrN.length ? "pri" : ""}" ${ro ? "disabled" : ""} onclick="pgUpdNodesOnly()" title="${esc(ro ? roWhy : "Update only the nodes: the software and Xray of every connected node that is behind, one at a time. The panel is not touched.")}">Update nodes only…</button></div>`;      // (the owner, 2026-10-18: one option for the panel and one for only the nodes - always there; what stands in the way is said when one is clicked)
+  return hero + go + `<div class="pgu-list"><div class="pgu-cap">Panels</div>${panels.map(prow).join("") || '<div class="pgu-none mut">No PasarGuard panel yet: add one on the Panel page.</div>'}<div class="pgu-cap">Nodes (${nodes.length})<span class="sp"></span>${acts}</div>${nodesHtml}</div>`;      // (the owner, 2026-10-16: the panels and the nodes sit in ONE box of a fixed size that scrolls inside)
 }
 window.pgUpdLoad = async force => {
   const box = $("#pgu-box"); if (!box) return;
@@ -59,17 +61,34 @@ const pgUpdFollow = async (title, aid, polls) => {
 /* ---- nodes: items are [panel id, node id, "node" | "core"] */
 window.pgUpdNodes = async items => {
   const all = (pgu.data && pgu.data.nodes) || [], find = it => all.find(n => n.panel_id === it[0] && n.node_id === it[1]) || {name: "#" + it[1]};
-  const names = items.map(it => find(it).name), what = items[0][2] === "node" ? "the software" : "Xray";
-  const many = items.length > 1, text = `Update ${what} of ${many ? items.length + " nodes (" + names.slice(0, 5).join(", ") + (items.length > 5 ? ", …" : "") + "), one at a time" : "node " + names[0]}? Each node restarts and the users connected through it drop for a moment. ${many ? "The next node starts only when the one before is connected again with the new version, and a node that does not come back stops the run (the nodes after it stay as they are). " : ""}It takes a minute or two per node.`;
+  const names = [...new Set(items.map(it => find(it).name))], kinds = new Set(items.map(it => it[2])), what = kinds.size > 1 ? "the software and Xray" : items[0][2] === "node" ? "the software" : "Xray";      // (a node may be in the list twice: its software, then its Xray)
+  const many = names.length > 1, text = `Update ${what} of ${many ? names.length + " nodes (" + names.slice(0, 5).join(", ") + (names.length > 5 ? ", …" : "") + "), one at a time" : "node " + names[0]}? Each node restarts and the users connected through it drop for a moment. ${many ? "The next node starts only when the one before is connected again with the new version, and a node that does not come back stops the run (the nodes after it stay as they are). " : ""}It takes a minute or two per node.`;
   if (!await gconfirm(text, {danger: true})) return;
   try {
     const r = await api("/api/pg-updates/nodes", {method: "POST", body: JSON.stringify({items: items.map(([panel_id, node_id, w]) => ({panel_id, node_id, what: w}))})});
-    pgUpdFollow(items.length === 1 ? `Updating ${names[0]}` : `Updating ${items.length} nodes, one at a time`, r.action_id, 3000);
+    pgUpdFollow(names.length === 1 ? `Updating ${names[0]}` : `Updating ${names.length} nodes, one at a time`, r.action_id, 3000);
   } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.pgUpdAll = what => {
   const list = ((pgu.data && pgu.data.nodes) || []).filter(n => n.status === "connected" && (what === "node" ? n.behind === true : n.xray_behind === true));
   if (list.length) pgUpdNodes(list.map(n => [n.panel_id, n.node_id, what]));
+};
+
+/* ---- the two buttons under the headline (the owner, 2026-10-18): the panel, and only the nodes */
+window.pgUpdNodesOnly = () => {
+  const nodes = ((pgu.data && pgu.data.nodes) || []).filter(n => n.status === "connected"), items = [];
+  for (const n of nodes) { if (n.behind === true) items.push([n.panel_id, n.node_id, "node"]); if (n.xray_behind === true) items.push([n.panel_id, n.node_id, "core"]); }      // (a node's software first, then its Xray: the run goes node by node)
+  if (items.length) return pgUpdNodes(items);
+  toast(nodes.length ? "Every connected node is up to date" : "No node is connected", nodes.length ? "ok" : "bad");
+};
+window.pgUpdPanelTop = () => {
+  const panels = (pgu.data && pgu.data.panels) || [], can = panels.filter(p => p.behind !== false && p.host && !p.error);
+  if (can.length === 1) return pgUpdPanel(can[0].id);
+  if (can.length > 1) return showModal("<b>Update a PasarGuard panel</b>", `<div class="pgu-pick">${can.map(p => `<div class="pgu-prow" style="display:flex;align-items:center;gap:10px;padding:7px 0"><b>${esc(p.name)}</b><span class="pill ${p.behind === true ? "warn" : ""}">${pguVer(p.version, p.latest, p.behind)}</span><small class="mut">on ${esc(p.host.name)}</small><span class="sp"></span><button class="sm ${p.behind ? "pri" : ""}" onclick="closeModal(); pgUpdPanel(${p.id})">Update…</button></div>`).join("")}</div><div class="frm-act"><span class="sp"></span><button type="button" onclick="closeModal()">Cancel</button></div>`, "wide");
+  const noHost = panels.find(p => !p.host && !p.error);      // a panel whose server is not in the Servers list cannot update itself: the form that adds it opens, with the address filled in
+  if (noHost) { toast(`The server that runs ${noHost.name} is not in the Servers list: add it first`, "bad"); return pgUpdAddHost(noHost.id); }
+  if (panels.length && panels.every(p => p.behind === false)) return toast("The panel is the newest already", "ok");
+  toast(!panels.length ? "No PasarGuard panel yet: add one on the Panel page" : (panels.find(p => p.error) || {}).error || "No panel can be updated now", "bad");
 };
 
 /* ---- the panel itself: the plan first (what it will do, what stands in the way), then the name typed back */

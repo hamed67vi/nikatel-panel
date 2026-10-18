@@ -429,6 +429,7 @@ async function refresh() {      // one draw at a time for the page and tab that 
   try { await p; } finally { if (refresh.p === p) refresh.p = null; }
 }
 async function refreshNow() {
+  routeWrite();      // (the address of the section that is open: a string compare)
   navMark(false);      // (the open tab may have changed: the menu shows it)
   if (window.labLockSync) labLockSync();      // whether a panel is connected (the Panel item of the menu is grey with a lock only while none is): asked at most every 30 s
   const snap = state.resetScroll ? [] : scrollSnapshot();
@@ -4529,11 +4530,33 @@ window.changePassword = async e => {
   return false;
 };
 
+/* ---- an address for every section (the owner, 2026-10-18: "each section should have its own address - unless it makes the panel slow"): #/tunnels/repairs, #/settings/update, #/pgpanel/users ...
+   The address follows the page and its tab (one string compare at every draw - nothing is fetched, nothing is drawn twice), the back button walks back through the sections, a copied link opens the same section, and a link is kept through the sign-in page
+   (the page it names is the one the sign-in goes on to). A tab that does not exist opens the page on its first tab; an address that names no page opens the page that was open last. */
+function routeOf() { const p = state.page, t = p === "settings" ? state.stab : SUB[p] ? sub(p) : ""; return "#/" + p + (t ? "/" + t : ""); }
+function routeWrite() {      // called at the start of every draw: the address says where the panel is
+  const h = routeOf(), first = !routeWrite.seen; routeWrite.seen = true;      // (the first draw only SETS the address of the page that was opened - it replaces, it does not add a step; the later ones add a step each)
+  if (location.hash.toLowerCase() === h) return;
+  try { history[first || routeWrite.fix ? "replaceState" : "pushState"](null, "", h); } catch (e) { /* a browser that refuses: the panel works without an address */ }
+}
+function routeApply(boot) {      // the address was typed, pasted or walked back to: open its section (false = it names none); `boot`: the panel was just opened - the page is always set up, also when the saved page is the one named
+  const m = /^#\/([a-z0-9]+)(?:\/([a-z0-9_-]+))?$/i.exec(location.hash);
+  if (!m) return false;
+  const page = m[1].toLowerCase(), tab = (m[2] || "").toLowerCase(), alias = NAV_ALIAS[page] ? NAV_ALIAS[page].split("/")[0] : page;
+  if (!PAGES[alias] || (alias === "bot" && !SHOPBOT_UI)) return false;
+  if (!boot && location.hash.toLowerCase() === routeOf() && state.page === alias) return true;      // (already there: the pop of an address this page wrote itself)
+  const ok = tab && (alias === "settings" ? !!SET_TABS[tab] && !SET_OFF.has(tab) : (SUB[alias] || []).some(x => x[0] === tab && x[3] !== "off" && x[3] !== "act"));
+  routeWrite.fix = true; try { go(page, ok ? tab : undefined); } finally { routeWrite.fix = false; }      // (an address that was corrected replaces itself in the history, it does not add a step)
+  return true;
+}
+const routeBack = () => { if (routeApply()) return; routeWrite.fix = true; try { routeWrite(); } finally { routeWrite.fix = false; } };      // (an address that names no page is put right in place; never pass the event on: the first argument of routeApply is "the panel was just opened")
+window.addEventListener("popstate", routeBack); window.addEventListener("hashchange", routeBack);
+
 /* ---- boot */
 navBuild();      // the groups of the left menu: the tabs of Servers, Tunnels and Settings hang under their pages (everything they need is defined above)
 (() => {
   const me = api("/api/auth/me").then(r => { showApp(); if (r && r.demo) demoBanner(); }, () => showLogin());
-  Promise.resolve().then(() => go(state.page));      // the page asks for its data at once, beside the sign-in check (a 401 answer shows the sign-in page): one round trip less before the first paint; it starts when the whole file has been read
+  Promise.resolve().then(() => { if (!routeApply(true)) go(state.page); });      // the page asks for its data at once, beside the sign-in check (a 401 answer shows the sign-in page): one round trip less before the first paint; it starts when the whole file has been read
   return me;
 })();
 

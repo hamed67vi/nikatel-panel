@@ -1031,3 +1031,20 @@ body #ask .ask-box .ask-act.ask-choices { justify-content: stretch; }
 body #ask .ask-box .ask-act.ask-choices button { height: auto; min-height: 40px; padding: 8px 14px; border-radius: 14px; line-height: 1.25; }
 body #ask .ask-box .ask-act.ask-choices button small { display: block; line-height: 1.2; }
 body #ask .ask-box .ask-act.ask-choices button.ask-no { min-height: 36px; border-radius: 18px; }
+
+/* 1.69.7 - the tags of the Problems column (Bad route, Filtered, GRE ✕ ...): smaller, paler at rest, as bright as before while the pointer is on their card, and - when the column has no room for all of them - on a second line inside the card instead of cut off at its edge (the owner, 2026-10-18: "paler, brighter when I go over the card, smaller; and stacked when there is no room, not out of the frame"; the list gave every cell `white-space: nowrap; overflow: hidden; text-overflow: ellipsis`, which cut the third tag to a "...") */
+html body #page .lab-tbl td.lab-pb { white-space: normal; text-overflow: clip; line-height: 1; padding-top: 5px; padding-bottom: 5px; }
+html body #page .lab-tbl td.lab-pb .lab-iss { height: 14px; max-width: 100%; margin: 2px 3px 2px 0; padding: 0 5px; gap: 3px; border-radius: 7px; font-size: 9px; opacity: .58; transition: opacity .16s ease; vertical-align: top; }
+html body #page .lab-tbl td.lab-pb .lab-iss svg { width: 8px; height: 8px; }
+html body #page .lab-tbl tr:hover td.lab-pb .lab-iss { opacity: 1; }
+@media (hover: none) { html body #page .lab-tbl td.lab-pb .lab-iss { opacity: .85; } }
+
+/* 1.69.7 - the facts of the service (Settings -> About & update): the strip is shared out between its facts - each one is centred between its two dividers, and the room that was left empty at the right end is theirs (the owner, 2026-10-18: "fix the spacing of these too") */
+html body #page .abt-foot { justify-content: flex-start; gap: 0; padding: 8px 12px; }
+html body #page .abt-foot > span, html body #page .abt-foot > span:nth-last-child(2) { flex: 1 0 auto; min-width: auto; justify-content: center; gap: 9px; padding: 0 18px; }
+html body #page .abt-foot > span:nth-last-child(2) .abt-fv { min-width: auto; }
+html body #page .abt-foot > button.abt-diag { flex: none; margin: 0 0 0 12px; }
+
+/* 1.69.7 - the PasarGuard box: two buttons under its headline - the panel, and the nodes only (the owner, 2026-10-18: "put an option here for the update of the panel and one for only the nodes") */
+html body #page .abt-pg .pgu-go { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: none; }
+html body #page .abt-pg .pgu-go button { box-sizing: border-box; min-width: 0; height: 28px !important; min-height: 28px !important; padding: 0 10px !important; border-radius: 9px !important; font-size: 12px !important; line-height: 1 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

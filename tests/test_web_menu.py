@@ -1503,3 +1503,91 @@ def test_the_doctor_page_has_a_knowledge_tab_for_what_it_knows_and_remembers():
     assert '<script src="/static/knowledge.js"></script>' in index and '"knowledge.js"' in main
     assert 'api("/api/doctor/knowledge")' in kn and '/api/doctor/knowledge/survey' in kn and '/api/doctor/knowledge/stop' in kn and 'window.knSet = async body =>' in kn and "What the Doctor remembers of cuts" in kn
     assert all(f'"{k}"' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] or f'{k}:' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] for k in ("bp:wss", "bp:ws", "bp:wsmux", "bp:kcp", "bp:quic", "bp:pck", "bp:xdi", "bpd:quic", "bpd:pck", "bpd:xdi", "tcpmux", "paqet", "chisel:fwd"))
+
+
+def test_the_pasarguard_box_has_an_option_for_the_panel_and_one_for_only_the_nodes():
+    """The owner, 2026-10-18: "put an option here for the update of the panel and one for only the nodes"."""
+    upd, css = _web("pg_update.js"), _web("lab.css")
+    assert 'const go = `<div class="pgu-go">' in upd and 'onclick="pgUpdPanelTop()"' in upd and 'onclick="pgUpdNodesOnly()"' in upd and ">Update panel…</button>" in upd and ">Update nodes only…</button>" in upd
+    assert "return hero + go + `<div class=\"pgu-list\"><div class=\"pgu-cap\">Panels</div>" in upd       # (always there, under the headline - not only when something is behind)
+    assert "window.pgUpdPanelTop = () =>" in upd and "window.pgUpdNodesOnly = () =>" in upd
+    nodes = upd.split("window.pgUpdNodesOnly = () =>", 1)[1].split("window.pgUpdPanelTop", 1)[0]
+    assert 'n.status === "connected"' in nodes and '[n.panel_id, n.node_id, "node"]' in nodes and '[n.panel_id, n.node_id, "core"]' in nodes and "return pgUpdNodes(items)" in nodes      # (the connected nodes that are behind, software then Xray, through the same question and the same one-at-a-time run)
+    assert "pgUpdPanel(" not in nodes                                                                                  # ... and never the panel
+    panel = upd.split("window.pgUpdPanelTop = () =>", 1)[1].split("/* ---- the panel itself", 1)[0]
+    assert "return pgUpdPanel(can[0].id)" in panel and "pgUpdAddHost(noHost.id)" in panel and "The panel is the newest already" in panel      # (one panel: its plan and the name typed back; none can update: the form that adds its server, or the reason)
+    assert "[...new Set(items.map(it => find(it).name))]" in upd and "names.length === 1 ?" in upd                         # (a node twice in one run - its software, then its Xray - is one node in the question and the title)
+    assert "html body #page .abt-pg .pgu-go { display: grid; grid-template-columns: 1fr 1fr;" in css and "html body #page .abt-pg .pgu-go button {" in css and "height: 28px !important;" in css
+
+
+def test_the_tags_of_the_problems_column_are_small_pale_and_bright_under_the_pointer():
+    """The owner, 2026-10-18: "the colour of the tags paler, brighter when I go over the card, and the tags smaller"."""
+    css = _web("lab.css")
+    assert "html body #page .lab-tbl td.lab-pb .lab-iss { height: 14px; max-width: 100%; margin: 2px 3px 2px 0; padding: 0 5px; gap: 3px; border-radius: 7px; font-size: 9px; opacity: .58;" in css
+    assert "html body #page .lab-tbl td.lab-pb { white-space: normal; text-overflow: clip; line-height: 1;" in css and ".srv-tbl td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in _web("app.css")       # (no room for all the tags: they go on a second line inside the card - the list's own rule for every cell was one line, cut with an ellipsis)
+    assert "html body #page .lab-tbl td.lab-pb .lab-iss svg { width: 8px; height: 8px; }" in css and "html body #page .lab-tbl tr:hover td.lab-pb .lab-iss { opacity: 1; }" in css
+    assert "@media (hover: none) { html body #page .lab-tbl td.lab-pb .lab-iss { opacity: .85; } }" in css            # (a phone has no pointer to brighten them)
+    assert ".lab-tbl td.lab-pb .lab-iss.bad { color: #ff8a9b;" in css                                                # (the colours themselves are the old ones: the opacity makes them paler in both modes)
+
+
+def test_the_facts_of_the_service_share_the_strip_between_their_dividers():
+    """The owner, 2026-10-18: "fix the spacing of these too" (Works by · Mode · Tunnel checks · Server checks · Session · Copy diagnostics)."""
+    css = _web("lab.css")
+    assert "html body #page .abt-foot { justify-content: flex-start; gap: 0; padding: 8px 12px; }" in css
+    assert "html body #page .abt-foot > span, html body #page .abt-foot > span:nth-last-child(2) { flex: 1 0 auto; min-width: auto; justify-content: center; gap: 9px; padding: 0 18px; }" in css
+    assert "html body #page .abt-foot > button.abt-diag { flex: none; margin: 0 0 0 12px; }" in css
+
+
+def test_every_section_has_its_own_address_and_it_costs_the_panel_nothing(tmp_path):
+    """The owner, 2026-10-18: "each section should have its own address - unless it makes the panel slow". The router is run for real under node with the pieces of the page stubbed."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    app = _web("app.js")
+    assert "async function refreshNow() {\n  routeWrite();" in app and "Promise.resolve().then(() => { if (!routeApply(true)) go(state.page); });" in app      # (one string compare per draw; the address is read before the first page is chosen)
+    assert 'window.addEventListener("popstate", routeBack); window.addEventListener("hashchange", routeBack);' in app and "const routeBack = () => { if (routeApply()) return; routeWrite.fix = true;" in app
+    assert "api(" not in app[app.index("function routeOf()"): app.index("window.addEventListener(\"popstate\"")]      # (the router asks the server for nothing)
+    node = shutil.which("node")
+
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    code = app[app.index("function routeOf()"): app.index('window.addEventListener("popstate"')]
+    driver = tmp_path / "route.js"
+    driver.write_text(
+        "const SUB = {tunnels: [['list', 'a'], ['repairs', 'b'], ['dns', 'c'], ['gateway', 'd', '', 'off']], nodes: [['lab', 'a'], ['add', 'b', '', 'act']], pgpanel: [['settings', 'a'], ['users', 'b']]};\n"
+        "const SET_TABS = {account: 1, backup: 1, ai: 1, bot: 1, look: 1, update: 1}, SET_OFF = new Set(['bot']), NAV_ALIAS = {servers: 'nodes', actions: 'tunnels/repairs'}, PAGES = {dashboard: 1, nodes: 1, tunnels: 1, pgpanel: 1, settings: 1, bot: 1}, SHOPBOT_UI = false;\n"
+        "const state = {page: 'dashboard', stab: 'account', sub: {}}; const sub = p => state.sub[p] || (SUB[p] || [])[0][0];\n"
+        "const loc = {hash: ''}; global.location = loc; const hist = []; global.history = {pushState: (a, b, h) => { hist.push(['push', h]); loc.hash = h; }, replaceState: (a, b, h) => { hist.push(['replace', h]); loc.hash = h; }};\n"
+        "const went = []; const go = (page, tab) => { went.push([page, tab]); const t = NAV_ALIAS[page] ? NAV_ALIAS[page].split('/') : [page, tab]; state.page = t[0]; if (t[0] === 'settings') { if (tab) state.stab = tab; } else if (tab || t[1]) state.sub[t[0]] = tab || t[1]; routeWrite(); };\n"
+        + code + "\n"
+        "const res = {}; const at = h => { loc.hash = h; went.length = 0; hist.length = 0; const r = routeApply(); return {r, went: went.slice(), hist: hist.slice(), now: routeOf()}; };\n"
+        "res.first = (() => { state.page = 'dashboard'; loc.hash = ''; routeWrite(); return hist.slice(); })();\n"
+        "res.tab = at('#/tunnels/repairs'); res.settings = at('#/settings/update'); res.pgpanel = at('#/pgpanel/users');\n"
+        "res.badtab = at('#/tunnels/nothing'); res.off = at('#/tunnels/gateway'); res.act = at('#/nodes/add'); res.offsettings = at('#/settings/bot');\n"
+        "res.alias = at('#/servers'); res.alias2 = at('#/actions'); res.nopage = at('#/nowhere/x'); res.junk = at('#hello'); res.bot = at('#/bot');\n"
+        "res.again = (() => { state.page = 'tunnels'; state.sub.tunnels = 'dns'; loc.hash = '#/tunnels/dns'; went.length = 0; const r = routeApply(); return {r, went: went.slice()}; })();\n"
+        "res.push = (() => { state.page = 'tunnels'; state.sub.tunnels = 'list'; loc.hash = '#/tunnels/dns'; hist.length = 0; routeWrite(); return hist.slice(); })();\n"
+        "res.boot = (() => { state.page = 'tunnels'; state.sub.tunnels = 'dns'; loc.hash = '#/tunnels/dns'; went.length = 0; const r = routeApply(true); return {r, went: went.slice()}; })();\n"
+        "res.junkfix = (() => { state.page = 'tunnels'; state.sub.tunnels = 'dns'; loc.hash = '#/nowhere'; hist.length = 0; routeBack(); return hist.slice(); })();\n"
+        "res.opened = (() => { routeWrite.seen = false; state.page = 'tunnels'; state.sub.tunnels = 'repairs'; loc.hash = '#/tunnels/repairs'; hist.length = 0; routeWrite(); const a = hist.slice(); state.page = 'settings'; state.stab = 'update'; routeWrite(); return [a, hist.slice()]; })();\n"
+        "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
+    r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    res = json.loads(r.stdout)
+    assert res["junkfix"] == [["replace", "#/tunnels/dns"]]                                                              # an address that names no page is put right in place (no step added to the history)
+    assert res["boot"]["r"] is True and res["boot"]["went"] == [["tunnels", "dns"]]                                       # the panel opened on the address of the page that was open last: the page is still set up (title, tab bar, draw) - only the pop of an address the page wrote itself is skipped
+    assert res["opened"] == [[], [["push", "#/settings/update"]]]                                                        # a page opened ON an address writes nothing, and the first click after it is a new step (it must not replace the page that was opened: the back button would skip it)
+    assert res["first"] == [["replace", "#/dashboard"]]                                                                 # the first address replaces the empty one: no extra step in the history
+    assert res["tab"]["r"] and res["tab"]["went"] == [["tunnels", "repairs"]] and res["tab"]["now"] == "#/tunnels/repairs"
+    assert res["settings"]["went"] == [["settings", "update"]] and res["settings"]["now"] == "#/settings/update"
+    assert res["pgpanel"]["went"] == [["pgpanel", "users"]]
+    assert res["badtab"]["went"] == [["tunnels", None]] and res["badtab"]["hist"][-1][0] == "replace"                  # a tab that does not exist: the page opens, the address is corrected in place
+    assert res["off"]["went"] == [["tunnels", None]] and res["act"]["went"] == [["nodes", None]] and res["offsettings"]["went"] == [["settings", None]]      # a tab that is switched off, a door to an action, a closed tab of Settings: never opened by an address
+    assert res["alias"]["went"] == [["servers", None]] and res["alias2"]["went"] == [["actions", None]]                  # an old page name goes through the page's own alias
+    assert res["nopage"]["r"] is False and res["junk"]["r"] is False and res["bot"]["r"] is False and res["nopage"]["went"] == []      # an address that names no page (or the Shop bot, which is off) opens what was open last
+    assert res["again"]["r"] is True and res["again"]["went"] == []                                                      # the pop of an address the page wrote itself changes nothing
+    assert res["push"] == [["push", "#/tunnels/list"]]                                                                   # a click on a tab is a new step of the history: the back button goes back
