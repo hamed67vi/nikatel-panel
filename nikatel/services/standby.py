@@ -15,8 +15,11 @@ a minute and a half (the owner, 2026-10-17: "bring the delay down to the minimum
   the rails          one standby per tunnel; nothing while the panel is read-only; no build in a storm, while the tunnel is not up, while a repair works on it, on a busy server, for a pair every type of which failed
                      lately; a build that is running when the tunnel falls is stopped, so the servers are free for the repair; a failed build waits 2, 4, 8 ... 60 minutes; a handover is refused when the standby
                      is not up (it is looked at again first when its last look is older than FRESH).
+  the carrier        a standby that ends up on the SAME carrier as its tunnel (the Doctor swapped the tunnel to another type, or brought it back, after the standby was built: a GRE filter would cut both) is built
+                     again on another carrier - but only when a type of another carrier is known to connect on this pair, the tunnel has been up for RETURN_AFTER, the standby is older than CLASH_AFTER and
+                     the last way back is older than CLASH_QUIET (removing the standby ends the connections that stayed on it).
 
-The pure helpers (`shifted`, `shift_mapping`, `standby_name`, `carrier`, `choose_kind`, `decide`, `parse_list`, `retry_wait`) carry the decisions and are tested."""
+The pure helpers (`shifted`, `shift_mapping`, `standby_name`, `carrier`, `choose_kind`, `better_carrier`, `decide`, `parse_list`, `retry_wait`) carry the decisions and are tested."""
 from __future__ import annotations
 
 import re
@@ -56,6 +59,9 @@ FRESH = 30                    # a look at the standby older than this is made ag
 UNHEALTHY_AFTER = 45          # a standby that is not up for this long gets its units restarted
 REBUILD_AFTER = 300           # ... and is built again after this long
 RESTART_EVERY = 300           # at most one restart of a standby this often
+CLASH_AFTER = 300             # a standby on the carrier of its tunnel is built again only when it is at least this old (no loop of rebuilds while the Doctor swaps the tunnel)
+CLASH_QUIET = 900             # ... and when the last way back is this old (the connections that stayed on the standby after it are mostly gone by then)
+BETTER_EVERY = 60             # the knowledge is asked for a type to replace a clashing standby this often
 MISSING_GRACE = 3 * 3600      # a marked tunnel whose row is gone this long is not coming back: the mark and its standby go
 BUSY_CPU, BUSY_RAM = 85.0, 90.0      # a server this busy does not get a second tunnel
 KIND_SKIP = 6 * 3600          # a type whose build failed is not chosen again for this long
@@ -68,6 +74,7 @@ _RESTARTED: dict[int, float] = {}     # standby id -> when its units were last r
 _MISSING: dict[str, int] = {}         # tunnel name -> since when its row is missing
 _TOLD: set[str] = set()               # standbys whose "ready" has been told
 _NOTE: dict[str, str] = {}            # tunnel name -> why nothing is built now (shown in the tunnel window)
+_BETTER: dict[tuple, tuple[int, str]] = {}      # (tunnel name, its type, its standby's type) -> (when asked, the type that should replace a standby on the carrier of its tunnel)
 _STATE = {"init": False, "reconciled": 0.0}
 
 
@@ -158,6 +165,25 @@ def choose_kind(kinds: list[str], primary_kind: str, pair: dict | None, now: int
     return best, f"{best}: {note}"
 
 
+def better_carrier(kinds: list[str], primary_kind: str, standby_kind: str, pair: dict | None, now: int, allowed=lambda k: True, skip: frozenset | set = frozenset()) -> str:
+    """The type that should replace a standby which shares the carrier of its tunnel (the Doctor swapped the tunnel to another type after the standby was built, or brought it back): the first of `kinds` (the Doctor's
+    candidates for this pair, best first) that has ANOTHER carrier and is known to connect on this pair. '' when the standby does not clash, or when no such type is known - a standby on the carrier of its tunnel
+    still saves the tunnel from a crashed service, and one removed for a type nobody has tried would leave the tunnel with none if that build fails."""
+    mine = carrier(primary_kind)
+
+    if carrier(standby_kind) != mine:
+        return ""
+
+    bad = set(knowledge.blocked(pair, now))
+    known = {r["kind"] for r in knowledge.ranked(pair, now)}
+
+    for k in kinds:
+        if k != primary_kind and k not in bad and k not in skip and allowed(k) and k in known and carrier(k) != mine:
+            return k
+
+    return ""
+
+
 def retry_wait(fails: int) -> int:
     """Seconds a standby build waits after `fails` failures in a row: 2, 4, 8 ... at most 60 minutes."""
     return min(3600, 120 * 2 ** max(0, int(fails) - 1)) if fails else 0
@@ -185,10 +211,11 @@ def nat_map(users: list[int], shifted_ports: list[int]) -> str:
 
 
 def decide(p: dict | None, s: dict | None, *, now: int, auto: bool, storm: bool = False, repairing: bool = False, building: bool = False, cannot_build: str = "", wait_until: int = 0,
-           after: int = AFTER) -> tuple[str, str]:
+           after: int = AFTER, better: str = "") -> tuple[str, str]:
     """(what to do now, why): 'handover', 'back', 'build', 'restart', 'rebuild', 'drop' or 'wait'. Pure. `p`: the tunnel {"state", "state_since", "last_check_at", "iran_id", "foreign_id", "off" (a server of it is off)} or
-    None (its row is missing: it is being rebuilt); `s`: its standby {"state", "state_since", "stale" (why it no longer fits the tunnel, "" = it does), "use" (the handover stands)} or None; `auto`: the Doctor is
-    in mode fix or move and the panel may write; `cannot_build`: the reason the rails give; `wait_until`: no build before this time (a failed build waits)."""
+    None (its row is missing: it is being rebuilt); `s`: its standby {"state", "state_since", "stale" (why it no longer fits the tunnel, "" = it does), "use" (the handover stands), "created_at", "parked_at" (the last way back)} or None; `auto`: the Doctor is
+    in mode fix or move and the panel may write; `cannot_build`: the reason the rails give; `wait_until`: no build before this time (a failed build waits); `better`: the type of another carrier that should
+    replace a standby on the carrier of its tunnel (`better_carrier`, "" = none)."""
     if p is None:
         return "wait", "the tunnel is being rebuilt or is gone: nothing is touched meanwhile"
 
@@ -260,6 +287,10 @@ def decide(p: dict | None, s: dict | None, *, now: int, auto: bool, storm: bool 
             return "restart", f"the standby has not been up for {sick} s: its services are restarted"
 
         return "wait", f"the standby is {s['state']} ({sick} s): it is restarted after {UNHEALTHY_AFTER} s and built again after {REBUILD_AFTER} s"
+
+    if (better and healthy and now - p["state_since"] >= RETURN_AFTER and now - p["last_check_at"] <= 120 and now - int(s.get("created_at") or 0) >= CLASH_AFTER
+            and now - int(s.get("parked_at") or 0) >= CLASH_QUIET):
+        return "rebuild", f"the standby has the carrier of its tunnel (a filter would cut both): it is built again as {better}"
 
     return "wait", "ready"
 
@@ -398,7 +429,7 @@ def _sview(t: Tunnel, p: dict | None) -> dict:
     return {"id": t.id, "name": t.name, "state": t.state, "state_since": int(t.state_since or 0), "last_check_at": int(t.last_check_at or 0), "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id,
             "kind": autopilot.kind_of(t.type, t.transport, rec), "ports": [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()], "use": rec.get("use") or None, "stale": _stale(t, p),
             "udp": bool((rec.get("opts") or {}).get("accept_udp")), "last_error": t.last_error or "", "iran": (t.iran.host, t.iran.ssh_user, t.iran.ssh_port), "created_at": int(t.created_at or 0),
-            "iran_off": t.iran.enabled is not False and t.iran.online is False, "parked": bool(rec.get("parked"))}
+            "iran_off": t.iran.enabled is not False and t.iran.online is False, "parked": bool(rec.get("parked")), "parked_at": int(rec.get("parked_at") or 0)}
 
 
 def standby_row(db, name: str) -> Tunnel | None:
@@ -439,9 +470,11 @@ def _set_use(standby_id: int, use: dict | None, parked: bool = False) -> None:
 
             if parked:
                 rec["parked"] = True
+                rec["parked_at"] = int(time.time())
         else:
             rec["use"] = use
             rec.pop("parked", None)
+            rec.pop("parked_at", None)
 
         t.record = rec
 
@@ -643,6 +676,26 @@ def build_plan(name: str) -> dict:
     return {"name": standby_name(name, taken), "kind": kind, "note": note, "ports": ports_text, "mapping": mapping}
 
 
+def _better_kind(p: dict, s: dict, name: str) -> str:
+    """The type of another carrier that should replace the standby when it has the carrier of its tunnel ('' = leave it). Read only; asked only when the two carriers are the same."""
+    if carrier(s["kind"]) != carrier(p["kind"]):
+        return ""
+
+    now = int(time.time())
+    key = (name, p["kind"], s["kind"])
+    hit = _BETTER.get(key)
+
+    if hit is not None and now - hit[0] < BETTER_EVERY:
+        return hit[1]
+
+    pair = knowledge.pair(p["iran_id"], p["foreign_id"])
+    kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
+    skip = {k for k, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
+    res = better_carrier(kinds, p["kind"], s["kind"], pair, now, allowed=license.tunnel_kind_allowed, skip=skip)
+    _BETTER[key] = (now, res)
+    return res
+
+
 def build(name: str) -> int:
     """Start the build of the standby of tunnel `name`: a real tunnel of the chosen type on the shifted ports, as a build action (its id). ValueError with the reason when it must not be built now."""
     if get_settings().read_only:
@@ -760,10 +813,10 @@ def _restart(s: dict) -> None:
         sides = [(_node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), plan.iran_units), (_node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port), plan.foreign_units)]
 
     for node, units in sides:
-        main = [u for u in units if not u.startswith("nikatel-gre-")] or list(units)
+        ordered = sorted(units, key=lambda u: not u.startswith("nikatel-gre-"))          # (the GRE card first - it carries the rest - then the services on it: a card that was stopped is not started by anything else)
 
         try:
-            run_action(node, "restart_units", {"UNITS": " ".join(main)})
+            run_action(node, "restart_units", {"UNITS": " ".join(ordered)})
         except (SSHError, ValueError) as e:
             log.info("standby: restart of %s failed: %s", s["name"], str(e)[:100])
 
@@ -957,8 +1010,9 @@ def _step(name: str) -> None:
     f = _failed(name)
     wait_until = int(f.get("at") or 0) + retry_wait(int(f.get("n") or 0)) if f.get("n") else 0
     needs_calm = p["state"] == "up" and (s is None or s["state"] != "up")           # (the look at the whole system is made only when a standby is to be built or mended)
-    act, why = decide(p, s, now=now, auto=auto, storm=autopilot.storm_now() if needs_calm else False, repairing=name in autopilot.repairing_names(), building=name in _BUILDS, wait_until=wait_until,
-                      after=after_seconds())
+    better = _better_kind(p, s, name) if auto and s is not None and not s["use"] and s["state"] == "up" and p["state"] == "up" else ""          # (a standby that took the carrier of its tunnel after a swap)
+    act, why = decide(p, s, now=now, auto=auto, storm=autopilot.storm_now() if needs_calm or better else False, repairing=name in autopilot.repairing_names(), building=name in _BUILDS, wait_until=wait_until,
+                      after=after_seconds(), better=better)
 
     if act == "handover":
         handover(name, why)

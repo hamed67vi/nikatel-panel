@@ -135,6 +135,24 @@ def test_the_standby_has_another_carrier_than_the_tunnel_and_what_is_known_to_co
     assert kind == "" and "no other tunnel type" in why                                                              # the tunnel's own type is never its standby
 
 
+def test_a_standby_on_the_carrier_of_its_tunnel_is_replaced_only_by_a_known_type_of_another_carrier():
+    """(the drill with real tunnels, 2026-10-18: the Doctor brought a swapped tunnel back to Backhaul over GRE while its standby was Backhaul over GRE too - a GRE filter would have cut both)"""
+    good = lambda kind, score=70: knowledge.merge(None, {"kind": kind, "ok": True, "score": score, "latency_ms": 120.0, "loss_pct": 0.0}, "latency", NOW)
+    failed = lambda kind: knowledge.merge(None, {"kind": kind, "ok": False, "error": "no data passes"}, "latency", NOW)
+    kinds = ["tcpmux", "wssmux", "bp:wssmux", "chisel:tls"]
+    pair = {"kinds": {"wssmux": good("wssmux"), "bp:wssmux": good("bp:wssmux"), "chisel:tls": good("chisel:tls", 90)}}
+    better = standby.better_carrier
+    assert better(kinds, "tcpmux", "wssmux", pair, NOW) == "bp:wssmux"                                                 # both on GRE: the first type of ANOTHER carrier that is known to connect
+    assert better(kinds, "tcpmux", "bp:wssmux", pair, NOW) == ""                                                       # another carrier already: nothing to do
+    assert better(kinds, "tcpmux", "wssmux", {"kinds": {"wssmux": good("wssmux")}}, NOW) == ""                         # nobody knows that another carrier connects here: the standby stays (it still saves a crashed service)
+    assert better(kinds, "tcpmux", "wssmux", {}, NOW) == ""
+    assert better(kinds, "tcpmux", "wssmux", {"kinds": {**pair["kinds"], "bp:wssmux": failed("bp:wssmux")}}, NOW) == "chisel:tls"      # what failed on this pair lately is not a replacement
+    assert better(kinds, "tcpmux", "wssmux", pair, NOW, skip={"bp:wssmux"}) == "chisel:tls"                          # nor what a standby build failed with lately
+    assert better(kinds, "tcpmux", "wssmux", pair, NOW, allowed=lambda k: k not in ("bp:wssmux", "chisel:tls")) == ""    # the licence decides what may be built
+    assert better(["bp:wss", "wssmux"], "bp:wssmux", "bp:wss", {"kinds": {"wssmux": good("wssmux")}}, NOW) == "wssmux"       # a BackPack tunnel and a BackPack standby: the first known type that is not BackPack
+    assert better(["tcpmux", "wssmux"], "tcpmux", "wssmux", {"kinds": {"tcpmux": good("tcpmux"), "wssmux": good("wssmux")}}, NOW) == ""       # (the tunnel's own type is never a replacement, and a GRE type is no other carrier)
+
+
 def test_a_failed_build_waits_two_four_eight_minutes_up_to_an_hour():
     assert [standby.retry_wait(n) for n in (0, 1, 2, 3, 5, 6, 12)] == [0, 120, 240, 480, 1920, 3600, 3600]
 
@@ -186,6 +204,26 @@ def test_the_standby_is_built_when_the_tunnel_is_healthy_and_mended_quietly_when
     assert d(P(), S("down", 900), repairing=True)[0] == "wait" and d(P("degraded"), S("down", 900))[0] == "wait"       # a standby is mended when the TUNNEL is fine
     assert d(P(), S(stale="the forwarded ports of the tunnel changed"))[0] == "drop"
     assert d(None, S())[0] == "wait"                                                                                   # the row of the tunnel is gone (being rebuilt): nothing is touched
+
+
+def test_a_standby_that_has_the_carrier_of_its_tunnel_is_built_again_only_when_everything_is_calm():
+    old = {"created_at": NOW - standby.CLASH_AFTER - 10, "parked_at": 0}
+    d = lambda p, s, **kw: standby.decide(p, s, now=NOW, auto=True, better="bp:wssmux", **kw)
+    act, why = d(P(), S(**old))
+    assert act == "rebuild" and "carrier" in why and "bp:wssmux" in why
+    assert standby.decide(P(), S(**old), now=NOW, auto=True)[0] == "wait"                                              # nothing better is known: it stays
+    assert d(P(), S(**{**old, "parked_at": NOW - standby.CLASH_QUIET - 5}))[0] == "rebuild"                              # the last way back is long over
+    assert d(P("up", standby.RETURN_AFTER - 1), S(**old))[0] == "wait"                                                 # the tunnel has just come back (the Doctor may still be swapping it)
+    assert d(P("up", 300, last_check_at=NOW - 500), S(**old))[0] == "wait"                                              # its last look is old: it is not known to be up
+    assert d(P(), S(created_at=NOW - 20, parked_at=0))[0] == "wait"                                                    # a standby that was just built is not built again at once (no loop while the Doctor swaps)
+    assert d(P(), S(created_at=NOW - 1000, parked_at=NOW - 60))[0] == "wait"                                           # the way back was a minute ago: open connections still stand on the standby
+    assert d(P(), S(**old), repairing=True)[0] == "wait" and d(P(), S(**old), storm=True)[0] == "wait" and d(P(off=True), S(**old))[0] == "wait"
+    assert d(P("down", 600), S(**old))[0] == "handover" and d(P("degraded", 600), S(**old))[0] == "wait"               # a cut tunnel is handed over, not touched
+    assert d(P("up", 300), S(**old, use={"since": NOW - 100}))[0] == "back"                                            # the users are on the standby: nothing is rebuilt under them
+    assert d(P("up", 30), S(**old, use={"since": NOW - 100}))[0] == "wait"
+    assert d(P(), S("down", 20, **old))[0] == "wait"                                                                   # a standby that is not up is mended first (restart, rebuild): the old rules
+    assert standby.decide(P(), S(**old), now=NOW, auto=False, better="bp:wssmux")[0] == "wait"                         # mode off: nothing by itself
+    assert d(P(), S(**old, stale="the forwarded ports of the tunnel changed"))[0] == "drop"
 
 
 def test_in_the_doctors_mode_off_nothing_happens_by_itself():
@@ -771,6 +809,74 @@ def test_a_standby_that_the_users_are_on_is_restarted_at_once_when_it_falls(monk
         time.sleep(0.05)
 
     assert restarted == ["jb5-sb"]
+
+
+def test_a_standby_on_the_carrier_of_its_tunnel_is_built_again_by_the_job(monkeypatch):
+    writable(monkeypatch)
+    w = world("jb6")
+    sid = add_standby(w, since=900)
+
+    with session() as db:
+        db.get(Tunnel, sid).created_at = clock() - 1000
+        db.get(Tunnel, sid).type, db.get(Tunnel, sid).transport = "backhaul", "wssmux"            # (the standby is Backhaul over GRE, like its tunnel)
+        db.get(Tunnel, sid).record = {**db.get(Tunnel, sid).record, "kind": "wssmux"}
+
+    fake_server(monkeypatch)
+    monkeypatch.setattr(actions, "doctor_mode", lambda: "fix")
+    monkeypatch.setattr(ap, "storm_now", lambda: False)
+    monkeypatch.setattr(ap, "repairing_names", list)
+    asked, removed = [], []
+    monkeypatch.setattr(standby, "_BETTER", {})
+    monkeypatch.setattr(standby.knowledge, "plan_for", lambda *a, **k: (["tcpmux", "wssmux", "bp:wssmux"], ""))
+    monkeypatch.setattr(standby, "better_carrier", lambda *a, **k: asked.append(1) or "bp:wssmux")                     # (a type of another carrier is known to connect on this pair)
+    monkeypatch.setattr(standby, "remove_standby", lambda name: removed.append(name) or [])
+    monkeypatch.setattr(standby, "build", lambda name: 1)
+    standby._mark("jb6", True)
+    standby._CHECKED[sid] = time.time()
+    standby._step("jb6")
+    assert removed == ["jb6"]                                                                                           # the standby shares the carrier of its tunnel and a type of another carrier is known: it is built again
+
+    standby._step("jb6")
+    assert len(asked) == 1                                                                                              # (the knowledge is asked once a minute, not at every turn of the job)
+
+    with session() as db:
+        t = db.get(Tunnel, sid)
+        t.type, t.transport = "chisel", "wss"
+        t.record = {**t.record, "kind": "chisel"}
+
+    removed.clear()
+    standby._BETTER.clear()
+    standby._step("jb6")
+    assert removed == [] and len(asked) == 1                                                                            # another carrier (Chisel against Backhaul over GRE): nothing is asked, nothing is done
+
+
+def test_a_stopped_gre_card_of_a_standby_is_restarted_first_with_its_services(monkeypatch):
+    w = world("jb7")
+    sid = add_standby(w, state="down", since=60)
+
+    with session() as db:
+        t = db.get(Tunnel, sid)
+        t.type, t.transport, t.port = "backhaul", "tcpmux", 9651
+
+    calls = []
+    monkeypatch.setattr(standby, "run_action", lambda node, name, params=None, timeout=90: calls.append((node.host, name, (params or {}).get("UNITS"))) or "")
+    monkeypatch.setattr(tn, "check_tunnel", lambda *a, **k: None)
+    monkeypatch.setattr(standby.time, "sleep", lambda s: None)
+    standby._restart({"id": sid, "name": "jb7-sb"})
+    assert [c[1] for c in calls] == ["restart_units", "restart_units"]
+    assert calls[0][2] == "nikatel-gre-jb7-sb.service backhaul-iran-tcpmux-9651.service"                                # the Iran side: the GRE card first (it carries the rest), then the Backhaul service on it
+    assert calls[1][2] == "nikatel-gre-jb7-sb.service backhaul-kharej-tcpmux-9651.service"                              # ... and the same on the foreign side
+
+
+def test_the_last_way_back_is_written_down_and_cleared_by_the_next_handover():
+    w = world("jb8")
+    sid = add_standby(w)
+    standby._set_use(sid, None, parked=True)
+    s = standby._view("jb8")["s"]
+    assert s["parked"] and abs(s["parked_at"] - clock()) < 5
+    standby._set_use(sid, {"since": clock(), "map": "1:2", "protos": "tcp", "move": ""})
+    s = standby._view("jb8")["s"]
+    assert not s["parked"] and s["parked_at"] == 0 and s["use"]
 
 
 # ------------------------------------------------------------------ the build

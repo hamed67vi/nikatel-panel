@@ -1,4 +1,4 @@
-# Warm standby of a tunnel (1.68.1)
+# Warm standby of a tunnel (1.68.1; drill and two corrections 1.69.6)
 
 The owner, 2026-10-17: "bring the delay down to the minimum - do items 1 to 9". Items 1 - 8 (the sentinel, the wake-ups, the quick read, the retries, the fast lane, the parallel builds, the cold-pair survey) made the Doctor notice a cut in about 5 s
 and start the repair at once. What cannot be made shorter by waiting less is the last part: **building a tunnel of another type takes 60 - 90 s** (an average of 86 s over the real repairs of two weeks on the test panel). A warm standby
@@ -41,7 +41,13 @@ deletes the redirect (and turns the `ACCEPT` of the shifted port into an accept 
 ## Never a cut of the tunnel
 
 A standby is checked by its own job every 15 s with the same check as any tunnel (`tunnels.check_tunnel`: the units of both ends, its link, the ports, the request through the shifted port), but the check is quiet for it: no event, no history rows, no wake-up of the repair
-job. A standby that is not up for 45 s has its services restarted; not up for 5 minutes it is **built again** (only while the tunnel itself is up and no repair works on it). It never shows in a list, a count or a message.
+job. A standby that is not up for 45 s has its services restarted (on both servers: the **GRE card first**, then the services on it - a card that was stopped is not started by anything else; before 1.69.6 the cards were left out and such a
+standby waited for the rebuild); not up for 5 minutes it is **built again** (only while the tunnel itself is up and no repair works on it). It never shows in a list, a count or a message.
+
+**The carrier after a swap (1.69.6).** The type of the standby is chosen when it is built, but the tunnel can change type later (the Doctor's smart repair swaps a cut tunnel to a type that connects, and the way back to the better tunnel brings it home): the drill of 2026-10-18 ended with
+a Backhaul-over-GRE tunnel and a Backhaul-over-GRE standby - a GRE filter would have cut both. So a standby that has **the carrier of its tunnel** is built again on another carrier (`standby.better_carrier`) - when a type of another carrier is **known to connect on this pair** (an untested
+type is not a reason to remove a working standby), the tunnel has been up for 60 s with a fresh look, no repair or storm is on, the standby is **older than 5 minutes** (no loop of rebuilds while the Doctor swaps the tunnel), and the last way back is **older than 15 minutes** (removing the
+standby ends the connections that stayed on it). Never while the users' ports are on the standby. The knowledge is asked at most once a minute, and only when the two carriers are the same.
 
 ## The rails
 
@@ -74,5 +80,20 @@ tunnel is not the traffic of its users until they are back.
 * **The redirect on a real kernel** (2026-10-17, the build server, never the live panel): the actions of the panel, rendered by its own code, run in two network namespaces joined by a veth pair (a user at 10.77.0.2, the "Iran server" at 10.77.0.1 with a "tunnel" on 8080 and a "standby" on 28080).
   Measured: the tunnel cut -> a connection refused; `standby_on` -> a NEW user gets the standby; the request on the server itself (127.0.0.1 and its own address) is NOT redirected and still sees the tunnel; the tunnel comes back -> the server sees it again, users stay on the standby; `standby_off`
   -> new users are on the tunnel again and a connection opened during the handover goes on working on the standby (with the parked rule; without it: reset by peer); a foreign redirect in the same chain survives; nothing is left behind.
-* **Not yet done - the proof on throw-away servers with a real tunnel** (the design asked for it before anything ships): build a tunnel and its standby between the two test servers, stop the tunnel's unit, measure the time from the cut to the first answer through the users' port, bring the
-  tunnel back and watch the return; repeat with GRE dropped on the route and with a reboot of the Iran server while the handover stands. The release ships with the switch off for this reason: do it on the test panel before a tunnel with real users is marked.
+* **The drill with REAL tunnels** (2026-10-18, v1.69.5; a PRIVATE copy of the panel on the build server - its own data and port, the Doctor in mode *fix*; the Iran test server and the build server as the pair; users = five requests a second to the users' port from outside the Iran server):
+
+  | case | measured |
+  |---|---|
+  | build | the tunnel (Backhaul tcpmux over GRE) 57 s; its standby (BackPack WSS mux) 42 s later; the list still shows one tunnel |
+  | the GRE card of the tunnel stopped | judged down after 9.0 s, the users' ports handed over 1.7 s later, the first answer again 11.7 s after the cut: **10.8 s of outage** for the users (11 failed requests of 252); the Doctor mended the tunnel at +22.7 s, the way back came 60 s later |
+  | the foreign end of a BackPack tunnel stopped | down after 8.8 s, handed over (5.8 s for the action that time), outage 12.3 s; the Doctor swapped the tunnel, the way back to the better tunnel (1.69.5) followed, the users went back to it after 132 s on the standby |
+  | GRE (protocol 47) dropped between the two servers | down after 10.7 s, handed over 6 s after the cut; the Doctor removed the tunnel and built it as another type (2 min) - the users' port answered through the standby the whole time, also while the tunnel row did not exist; back after the new tunnel held 60 s |
+  | the redirects deleted by hand on the Iran server | put again by the panel after 24 s |
+  | a reboot (the boot unit started by hand: the rules are gone, the unit puts them) | the redirect is back at once, no failed request from +1 s |
+  | *Switch now* / *Back now* / the standby turned off | 2.6 s / 2.6 s / 10 s, nothing left on either server |
+  | the standby itself falls while the tunnel is fine | the tunnel stays up and nothing is said (no event); the GRE card of the standby that was stopped was **not** restarted (fixed in 1.69.6, see above) and the standby was built again after 5 minutes |
+  | the carrier | after the swap and the way back the tunnel and its standby were both Backhaul over GRE (fixed in 1.69.6) |
+
+  The failures around a way back onto a **BackPack Direct PCK** tunnel are that tunnel's own (measured alone, nothing else going on: 26 of 150 requests took over 1 s and 3 failed at 5 s, median 0.32 s). One request of 252 (1 s timeout) failed 8 s after the first way back, onto a
+  Backhaul tunnel; it was not explained and did not come back in the other ways back.
+  The standby stays **off by default**: mark only the tunnels whose users cannot wait a minute.
