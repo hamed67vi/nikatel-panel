@@ -587,6 +587,49 @@ def _leftover(snap: dict, server_id: int) -> dict:
             "other": other, "type": snap.get("type") or "", "proto": "udp" if rec.get("udp_carrier") else "tcp"}
 
 
+PICK_BEST = True     # the type of a moved tunnel is chosen by a test on the new pair (tests switch it off where they do not test that)
+
+
+def _test_pair(aid: int, snap: dict, target: dict, old: str, first_ok: bool) -> list[dict]:
+    """Test the tunnel types between the TARGET Iran server and the foreign server (`autopilot._recommend_now`: delay and loss, the Doctor's order for this pair first). [] when the test could not run."""
+    from . import knowledge
+
+    try:
+        kinds, _notes = knowledge.plan_for(target["id"], snap["foreign_id"], old, False, True)
+        kinds = kinds if old in kinds else [old] + kinds
+        return autopilot._recommend_now(aid, target["id"], snap["foreign_id"], kinds, first_ok=first_ok)
+    except Exception as e:      # noqa: BLE001 - a test that cannot run (another test too long, an SSH error) must not stop the move: the old type is built as before
+        autopilot._say(aid, f"The test of the tunnel types on {target['name']} could not run ({str(e)[:120]}): the same type as now is built.")
+        return []
+
+
+def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool = False) -> str:
+    """The tunnel type to build on the new Iran server (the owner, 2026-10-19: "when it moves, the type stays the same as before unless the better ones do not answer - choose the best type here too"): the types are
+    TESTED between the target and the foreign server (once for a pair, the tunnels of the pair share it); the best one that connects is built - but the type it has now stays when nothing beats it clearly
+    (`autopilot.choose_better`: a clean line and BETTER_BY points more). When nothing connects the type it has now is built, as before."""
+    old = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+
+    if not PICK_BEST:
+        return old
+
+    key = (target["id"], snap["foreign_id"])
+
+    if key not in cache:
+        cache[key] = _test_pair(aid, snap, target, old, first_ok)
+
+    results = cache[key]
+    cur = next((r for r in results if r.get("kind") == old and autopilot.connected(r)), None)
+    best = autopilot.choose_better(cur.get("score") if cur else None, results) or (None if cur else autopilot.choose_better(None, results, cut=True))
+    shown = ", ".join(f"{r['kind']} {r.get('score')}" for r in results if autopilot.connected(r)) or "none connected"
+    autopilot._say(aid, f"{snap['name']}: tested {len(results)} tunnel type(s) between {target['name']} and {snap['foreign_name']}: {shown}.")
+
+    if best is None:
+        autopilot._say(aid, f"{snap['name']}: " + (f"nothing is clearly better than {old}: it stays {old}." if cur else f"no type connected in the test: {old} is built as before."))
+        return old
+
+    autopilot._say(aid, f"{snap['name']}: the best type here is {best['kind']} (score {best.get('score')})" + (f", not {old}." if best["kind"] != old else "."))
+    return best["kind"]
+
 def _apply_dns(aid: int, p: dict) -> tuple[list[dict], list[str], list[dict]]:
     done, errors, logged = [], [], []
 
@@ -618,16 +661,18 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                    + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
     moved, moved_names, leftover = 0, [], []
     built: list[tuple[int, str, dict]] = []          # (old tunnel id, temp name, snapshot) while both run
+    pairs: dict = {}                                  # (target, foreign) -> the test of the tunnel types of that pair
 
     for t in p["tunnels"]:
         try:
             snap = autopilot._snapshot(t["id"])
-            kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+            kind = old_kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
 
             if src_on:
                 temp = _temp_name(snap["name"], str((snap.get("record") or {}).get("slug") or ""))
                 autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
-                ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts")))
+                kind = _best_kind(aid, snap, p["target"], pairs)
+                ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts") if kind == old_kind else None))
 
                 if not ok:
                     autopilot._say(aid, f"{snap['name']}: the new tunnel did not come up ({story[-1][:120] if story else '?'}); the old one stays.")
@@ -642,6 +687,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                     if row is not None and row.iran is not None and row.iran.online is False:
                         leftover.append(_leftover({**snap, "port": row.port}, p["server_id"]))
 
+                kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
                 if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True):
                     moved += 1
                     moved_names.append(snap["name"])

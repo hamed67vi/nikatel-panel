@@ -583,6 +583,7 @@ function labMoveHtml(p, on, name) {
     + dns
     + (skipped.length ? labMoveBlock("Not chosen", skipped.map(x => `<div class="mv-r mut">${esc(x.name)}: ${esc(x.why)}</div>`).join("")) : "")
     + `<div class="mv-r mut">${on ? "Nothing is cut: the new tunnels are built and tested first, then the DNS records are changed, and the old tunnels are removed after the records' TTL + 5 minutes, and only when nobody uses them any more (a tunnel that is still in use is kept and you are told)." : "The server is off: its old tunnels are removed at once and the new ones are built on the new server."}</div>`
+    + `<div class="mv-r mut">The tunnel types are tested between the new server and the foreign server and the best one is built (a minute or more for each type; the type it has now stays when nothing is clearly better, or when none connects).</div>`
     + `<div class="mv-r mut">Every DNS change is kept with a Restore button (Tunnel Doctor → Moves).</div>`;
 }
 const labMoveWhy = (name, p) => `<b>${esc(name)} cannot be moved now</b>` + `<div class="mv-r">${esc(p.blocked || (p.problems || []).join("; ") || "no reason was given")}</div>`

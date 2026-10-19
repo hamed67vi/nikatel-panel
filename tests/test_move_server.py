@@ -357,6 +357,80 @@ def test_an_old_tunnel_that_is_still_in_use_is_kept_beside_the_new_one_and_the_o
     assert h["ok"] is False and "still in use" in h["errors"][0]
 
 
+def _snap_of(tid):
+    return autopilot._snapshot(tid)
+
+
+def _pair_results(rows):
+    return [{"kind": k, "score": s, "loss_pct": l} for k, s, l in rows]
+
+
+def test_the_best_type_is_built_on_the_new_server_and_the_old_type_stays_when_nothing_is_clearly_better(monkeypatch):
+    """The owner, 2026-10-19: "when it moves, the type stays the same as before unless the better ones do not answer - choose the best type here too"."""
+    ids = _servers_and_tunnels()
+    monkeypatch.setattr(failover, "PICK_BEST", True)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    from nikatel.services import knowledge
+
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["bp:tcpmux", "chisel:tls"], []))
+    said, asked = [], []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    target = {"id": ids["ir2"], "name": "ir2"}
+    snap = _snap_of(ids["t2"])                                                                              # a tcpmux tunnel
+    assert autopilot.kind_of(snap["type"], snap["transport"], snap["record"]) == "tcpmux"
+
+    def answer(rows):
+        def run(aid, iran_id, foreign_id, kinds, patience=1200, first_ok=False):
+            asked.append((iran_id, foreign_id, list(kinds), first_ok))
+            return _pair_results(rows)
+
+        return run
+
+    monkeypatch.setattr(autopilot, "_recommend_now", answer([("tcpmux", 40, 0), ("bp:tcpmux", 80, 1), ("chisel:tls", 50, 0)]))
+    cache = {}
+    assert failover._best_kind(1, snap, target, cache) == "bp:tcpmux"                                         # 80 beats the 40 it has by 10 or more, on a clean line
+    assert asked[0][:2] == (ids["ir2"], ids["fi1"]) and asked[0][3] is False and "tcpmux" in asked[0][2]      # tested between the TARGET and the foreign server; the type it has is in the test
+    assert failover._best_kind(1, snap, target, cache) == "bp:tcpmux" and len(asked) == 1                      # the same pair is tested once
+    assert any("best type here is bp:tcpmux" in x and "not tcpmux" in x for x in said)
+    monkeypatch.setattr(autopilot, "_recommend_now", answer([("tcpmux", 60, 0), ("bp:tcpmux", 65, 0)]))        # only 5 points more: not worth a change
+    assert failover._best_kind(1, snap, target, {}) == "tcpmux" and any("stays tcpmux" in x for x in said)
+    monkeypatch.setattr(autopilot, "_recommend_now", answer([("tcpmux", 40, 20), ("bp:tcpmux", 65, 0)]))      # the old one loses 20 %: the clean one wins
+    assert failover._best_kind(1, snap, target, {}) == "bp:tcpmux"
+    monkeypatch.setattr(autopilot, "_recommend_now", answer([("bp:tcpmux", 30, 8), ("chisel:tls", 45, 12)]))   # the old type did not connect and nothing is clean: the best that connects
+    assert failover._best_kind(1, snap, target, {}) == "chisel:tls"
+    monkeypatch.setattr(autopilot, "_recommend_now", answer([("tcpmux", None, 100), ("bp:tcpmux", None, 100)]))   # nothing connects: as before
+    assert failover._best_kind(1, snap, target, {}) == "tcpmux" and any("built as before" in x for x in said)
+    failover._best_kind(1, snap, target, {}, first_ok=True)
+    assert asked[-1][3] is True                                                                                # a dead server: the first that connects, no full comparison
+
+    def boom(*a, **k):
+        raise RuntimeError("another tunnel test is still running")
+
+    monkeypatch.setattr(autopilot, "_recommend_now", boom)
+    assert failover._best_kind(1, snap, target, {}) == "tcpmux" and any("could not run" in x for x in said)    # a test that cannot run never stops the move
+    monkeypatch.setattr(failover, "PICK_BEST", False)
+    assert failover._best_kind(1, snap, target, {}) == "tcpmux"
+
+
+def test_a_moved_tunnel_is_built_as_the_best_type_of_the_new_pair_without_the_options_of_the_old_type(client, monkeypatch):
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    _ranking(monkeypatch, [_row(ids["ir2"], "ir2")])
+    events, said, built = [], [], []
+    _tunnel_move_fakes(monkeypatch, events, said, [True])
+    first = autopilot._build_kind
+    monkeypatch.setattr(autopilot, "_build_kind", lambda snap, iran_id, foreign_id, kind, opts=None: built.append((snap["name"], kind, opts)) or first(snap, iran_id, foreign_id, kind, opts))
+    from nikatel.services import knowledge
+
+    monkeypatch.setattr(failover, "PICK_BEST", True)
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["bp:tcpmux"], []))
+    monkeypatch.setattr(autopilot, "_recommend_now", lambda aid, iran_id, foreign_id, kinds, patience=1200, first_ok=False: _pair_results([("tcpmux", 30, 0), ("bp:tcpmux", 85, 0)]))
+    r = client.post(f"/api/failover/move-tunnel/{ids['t2']}", json={"target_id": ids["ir2"], "tunnels": [ids["t2"]]})
+    assert r.status_code == 202 and built == [("t2-mv", "bp:tcpmux", None)] and ("delete", "t2", True) in events
+    assert st.get("failover")["history"][-1]["ok"] is True
+
+
 def test_the_menu_item_the_plan_box_and_the_words_are_in_the_page():
     lab, app, fa, css = (WEB / "lab.js").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
     assert lab.count('labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name)') == 1 and "srvMoveAway" not in lab and "Move the tunnels…" not in lab      # in the menu of a TUNNEL, no longer in the menu of a server

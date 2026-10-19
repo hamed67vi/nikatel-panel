@@ -39,6 +39,12 @@ def fresh_db():
     db.reset_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def _no_type_test_in_moves(monkeypatch):
+    """A moved tunnel's type is chosen by a test on the new pair (failover._best_kind): that needs SSH and minutes - the tests that are not about it build the type the tunnel has."""
+    from nikatel.services import failover
+
+    monkeypatch.setattr(failover, "PICK_BEST", False)
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
