@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.69.16 - A standby that is ready shows no bar
+
+The owner (2026-10-19), looking at the tunnel window: "do not show it there - if the tunnel gets into trouble it switches by itself". The bar "Standby · Ready - ... idle, looked at every 15 seconds" with *Switch now* / *Turn off* is not drawn any more while the warm standby is ready and idle. The handover itself was and is automatic (the modes fix and move: when the tunnel is down for 5 s and the standby is up, the users' ports are handed to it in about two seconds; they go back after a minute of the tunnel holding). The bar still shows in every other state: off (*Turn on*), building, being mended, not built, and **in use** (*Back now*). **Proved**: `tests/test_web_menu.py` (+1). The way to hand the ports over by hand for a drill is the Doctor's ledger and the standby API; the window no longer offers it while the standby is idle.
+
 ## 1.69.15 - The Tunnels page no longer jumps while a tunnel is repaired
 
 The owner (2026-10-19): "when a tunnel is repaired, the page jumps". Measured on the real page (a copy of it served beside the live panel, read only, in a browser, with the numbers of the live tunnels): a repair that only restarts a tunnel moves nothing - the row stays, with its wrench and its "repairing…" chip, in every state it passes (degraded, down, starting, unknown), the 4 s redraws change no position and no scroll. **A repair that REPLACES the tunnel (the Doctor's change of type after a cut route, the comeback to the wanted type) does**: the old tunnel is removed, the new one is not recorded for a minute or more, and in that time the row was not in the list - every row under it moved up 46 px when it went and down 46 px when it came back (and a placeholder of another type landed in another type group, at the bottom of the table).

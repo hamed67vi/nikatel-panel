@@ -1280,6 +1280,14 @@ def test_a_tunnel_a_repair_has_just_removed_keeps_its_row_so_the_page_does_not_j
     assert "sortType(x)) - TUN_TYPES.indexOf(sortType(y))" in page and "state.tunRowCache.get(t.name)" in page                          # (a placeholder of a tunnel built again as another type stays in its old group)
 
 
+def test_a_standby_that_is_ready_and_idle_shows_no_bar():
+    """The owner, 2026-10-19: "do not show it there - if the tunnel gets into trouble it switches by itself" (the handover is automatic in the modes fix and move)."""
+    app = _web("app.js")
+    fn = app.split("function tunStandby(t) {", 1)[1].split("const b = (label, click, pri, tip)", 1)[0]
+    assert 'if (st === "ready") return "";' in fn                                                              # idle and ready: nothing drawn
+    assert '"in_use" ? b("Back now"' in app and 'st === "off" ? b("Turn on"' in app                            # the bar stays for the other states: in use (Back now), off (Turn on), building, mended, failed
+
+
 def test_a_suggestion_to_change_the_type_has_its_own_tag_and_button():
     app = _web("app.js")
     row = app.split("const sugRow = s =>", 1)[1].split("const sugBox =", 1)[0]

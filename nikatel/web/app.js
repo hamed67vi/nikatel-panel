@@ -907,6 +907,7 @@ function tunWinHtml(t) {
 const SB_WORD = {off: "Off", building: "Building…", ready: "Ready", in_use: "In use", mending: "Being mended", waiting: "Waiting", failed: "Not built", removing: "Removing…"};
 function tunStandby(t) {
   const s = t.standby || {}, st = s.state || "off", id = t.id, tone = st === "in_use" ? "warn" : st === "ready" ? "ok" : st === "failed" ? "bad" : st === "off" ? "" : "warn", clock = ts => ts ? new Date(ts * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "";
+  if (st === "ready") return "";      // (1.69.16, the owner: a standby that is ready and idle shows nothing - the handover is automatic when the tunnel is cut; the bar comes back while it is built, mended or in use)
   const b = (label, click, pri, tip) => `<button class="sm ${pri ? "pri" : ""}" onclick="${click}" ${tip ? `title="${esc(tip)}"` : ""}>${label}</button>`;
   const meta = st === "off" ? "A second tunnel of another type waits beside this one. If this one is cut, its users' ports are handed to it in seconds." :
     st === "ready" ? `${esc(s.kind)} · ports ${esc(s.ports)} · idle, looked at every 15 seconds` :
