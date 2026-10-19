@@ -175,6 +175,28 @@ def test_a_text_cut_with_a_dash_tells_itself_in_a_tip_and_a_task_row_keeps_its_b
     assert '<th data-min="132">Expires</th>' in APP      # (the date pill of the users table was cut at 768 px)
 
 
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_rows_of_the_server_list_keep_their_places_while_the_list_is_scrolled():
+    """The owner, 2026-10-19: "the page jumps while a server is being installed". The end of an install gave the server a problem, the sort moved its row to the TOP and every row under it
+    went down while the list stayed where it was scrolled. Scrolled away from the head the order is kept (a new row goes last); at the head the sort is fresh (the problems come first)."""
+    code = ("const labCmp = (a, b) => a.k - b.k;\n" + "const labOrder = {ids: []};\n" + _function(LAB, "function labSorted(shown, scrolled) {") + "\n" + """
+      const P = (id, k) => ({id, k}), ids = rows => rows.map(p => p.id);
+      const a = [P(1, 1), P(2, 2), P(3, 3), P(4, 4)], out = [];
+      out.push(ids(labSorted(a, false)));                                            // the first draw: a fresh sort
+      a[3].k = 0;                                                                    // server 4 has a problem now: the sort wants it first
+      out.push(ids(labSorted(a, true)));                                             // scrolled: nothing moves
+      out.push(ids(labSorted(a.concat([P(5, 0)]), true)));                           // a new row while scrolled: at the end
+      out.push(ids(labSorted(a, true)));                                             // the row that went away is gone, the others keep their places
+      out.push(ids(labSorted(a, false)));                                            // back at the head: a fresh sort, the problem first
+      console.log(JSON.stringify(out));
+      """)
+    out = subprocess.run([NODE, "-e", code], check=False, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == [[1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4], [4, 1, 2, 3]]
+    assert "const box = $(\".lbox\"), rows = labSorted(shown, !!box && box.scrollTop > 40);" in LAB
+    assert "const snap = scrollSnapshot(); el.innerHTML = labBox(labShown()); applyQ(); scrollRestore(snap); pendScroll = snap;" in LAB      # (a list drawn from scratch keeps its scroll too)
+
+
 def test_the_tunnels_of_a_server_in_its_window_wrap_instead_of_being_cut():
     lab = (WEB / "lab.css").read_text(encoding="utf-8")
     assert "html body #modal .kv2 > div:has(> .tchip) { flex-wrap: wrap; overflow: visible; row-gap: 4px; }" in lab and "html body #modal .kv2 > div > .tchip { flex: none; }" in lab

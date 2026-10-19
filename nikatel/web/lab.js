@@ -181,9 +181,19 @@ const labKindNow = () => labTags().find(t => t.toLowerCase() === String(LAB.kind
 function labShown() { const k = labKindNow(); return k === "any" ? LAB.profiles : LAB.profiles.filter(p => String(p.tag || "").toLowerCase() === k.toLowerCase()); }
 const labLoc = p => { const s = labServer(p); if (!s) return "zzzz"; if (s.role === "iran") return "Iran"; const c = /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toUpperCase() : ""; if (!c) return "zzzz"; try { return new Intl.DisplayNames(["en"], {type: "region"}).of(c) || c; } catch (e) { return c; } };      // the LOCATION of a row: Iran, or the country of the server by its name in English ("zzzz": unknown, last)
 const labCmp = (a, b) => (labRank(a) < 2 ? 0 : 1) - (labRank(b) < 2 ? 0 : 1) || labLoc(a).localeCompare(labLoc(b), undefined, {sensitivity: "base"}) || a.name.localeCompare(b.name, undefined, {sensitivity: "base"});      // the order of the rows (the owner, 2026-10-19): a server with a problem (red or yellow) first, then every location together, the locations in alphabetical order, the servers of a location by name
+/* The rows keep their places while the list is scrolled (the owner, 2026-10-19: "the page jumps while a server is being installed"): the end of an install gave the server a problem, the sort put its row at the TOP, and every row under it moved down
+   while the list stayed where it was scrolled. Scrolled away from the head, the rows already on the screen keep the order they have (a new row goes to the end); at the head the sort is fresh, so the problems come first there. */
+const labOrder = {ids: []};
+function labSorted(shown, scrolled) {
+  const fresh = shown.slice().sort(labCmp);
+  if (!scrolled || !labOrder.ids.length) { labOrder.ids = fresh.map(p => p.id); return fresh; }
+  const pos = new Map(labOrder.ids.map((id, i) => [id, i])), at = p => pos.has(p.id) ? pos.get(p.id) : 1e9 + fresh.indexOf(p), rows = shown.slice().sort((a, b) => at(a) - at(b));
+  labOrder.ids = rows.map(p => p.id);
+  return rows;
+}
 function labListInner(shown) {
   if (!shown.length) return `<div class="lbox lab-box0"><div class="lab-empty"><b>Nothing here yet.</b><span class="mut">Add the first one.</span><button class="pri" onclick="labAdd()">＋ Add server</button>${labIsPgTag(labKindNow()) ? `<button onclick="labSyncNodes()" title="Read the PasarGuard panels now and bring their nodes here">⟳ Sync the nodes</button>` : ""}</div></div>`;      // (the empty page is a box of the SAME kind and size as the list: the first row that comes changes nothing around it - the owner, 2026-10-16: the page jumped when a server was added)
-  const rows = shown.slice().sort(labCmp);
+  const box = $(".lbox"), rows = labSorted(shown, !!box && box.scrollTop > 40);
   return `<table class="tbl lift srv-tbl joined lab-tbl"><colgroup><col style="width:21%"><col style="width:15%"><col style="width:15%"><col style="width:18%"><col style="width:13%"><col style="width:12%"><col style="width:6%"></colgroup>
     <thead><tr><th data-prio="0" data-fit="192">Name</th><th data-prio="1" data-min="168">IP</th><th data-prio="3" data-min="92" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" data-min="128" class="lab-ld">Load</th><th data-prio="3" title="Everything the network card has carried since the server started (the traffic the panel counted, for a node)">Traffic used</th><th data-prio="4" data-min="126" title="Megabits per second on the network card of the default route, over three seconds">Traffic Mbit/s</th><th></th></tr></thead><tbody>${rows.map(labRowOf).join("")}</tbody></table>`;      // (the table of the old Servers list: its cards, its icons, and the fluid layer that drops the less important columns when the box is narrow)
 }
@@ -216,7 +226,7 @@ async function labLoadNodes() {      // the panels of the node profiles are aske
 }
 function labRedraw() {      // the list drawn again from what is read: the rows in place when the same rows are there, else from scratch
   const el = $("#lab-list"); if (!el) return;
-  if (!labPatch()) { el.innerHTML = labBox(labShown()); applyQ(); }
+  if (!labPatch()) { const snap = scrollSnapshot(); el.innerHTML = labBox(labShown()); applyQ(); scrollRestore(snap); pendScroll = snap; setTimeout(() => { pendScroll = null; }, 500); }      // (a list drawn from scratch - a row came or went - keeps its scroll, as the page redraw does: it began at the top again)
 }
 function labPatch() {      // the rows, the chips and the counts of the tabs are rewritten WHERE THEY STAND: only what changed moves (the owner, 2026-10-16: the page jumped several times when a server was added). false = the set of rows is not the one on the screen: draw it again
   const el = $("#lab-list"), shown = labShown(), tb = el && el.querySelector("table.lab-tbl tbody");

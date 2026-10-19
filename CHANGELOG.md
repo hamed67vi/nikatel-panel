@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.32 - The page no longer jumps at the end of an install: the rows of the server list keep their places while it is scrolled
+
+The owner (2026-10-19, in Persian, with a picture of the list while a server was being installed): "the page jumps here while it installs".
+
+- **Cause, found by playing an install on a test panel** (the steps of `onboard` are written to the server's `busy` line, as the real install does): while the install runs the row of the server (the last one, blue) does not move. When it ends the server gets a problem of its own (a yellow or red lamp: a high RAM, a failed check ...), and the order of the list - "a server with a problem first" (1.69.23) - put its row at the TOP; every row under it went down by one row while the list stayed where the owner had scrolled it, so what was on the screen changed (a row went from y = 568 to y = -982, the rows below it by +62 px).
+- **Fix** (`lab.js labSorted`): scrolled away from the head of the list (more than 40 px), the rows keep the order they have; a new row goes last; back at the head of the list the sort is fresh and the problems come first there (checked: the row went to the third place when the list was scrolled to the top). The owner's rule "a server with a problem first" is kept at the place where it is looked at.
+- **The same page, drawn from scratch** (a row came or went; `labRedraw`) began at the top again: it keeps its scroll now, as the redraw of the other pages does.
+- **Proved**: `tests/test_fluid_layout.py` - `labSorted` run with node (a problem makes no row move while scrolled; a new row goes last; at the head the sort is fresh; the departed row is gone); in the browser a test panel with 29 servers: the install of the last server played step by step (Backhaul, BackPack, Paqet, Chisel, Xray) - the list did not move; the end with a problem: before the fix the row jumped to the third place, after it stayed (scrolled) and went up when the list was scrolled to the head.
+- **Not proved**: on the owner's real install (the steps and the problem that ends it were played by writing them to the test panel's database); a list that is scrolled by less than 40 px; the phone layout (there the page scrolls, not the list box, so the rule treats it as "at the head").
 ## 1.69.31 - A cut text tells all of itself in a tip; the Live button stays inside the row of the Doctor's tasks
 
 Second round of the walk through the test panel (1.69.29 was the first).
