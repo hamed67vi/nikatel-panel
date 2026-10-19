@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.20 - Under 20 Mb/s the Doctor acts
+
+The owner (2026-10-19): "if the bandwidth is under 20 Mb/s the Doctor acts". The line of "very slow" (1.69.14) was 5 Mb/s, and 1.69.19 moved it to 20 only where the Doctor's memory knew a type ten times faster; a tunnel that tested 5.2 Mb/s, just over the old line, was "fine" while another type had given 119 on the same pair.
+
+- **The line is 20 Mb/s** (`bandwidth.SLOW_MBPS`, and `BW_SLOW` on the page, which a test keeps equal): a tunnel with no usual level of 20 or more (new, rebuilt, or one that never gave 20) whose test gives under 20 Mb/s twice in a row (the second a minute later) is "very slow"; it ends at 32 Mb/s (1.6 x the line). What follows is as in 1.69.17: the look, the memory of the pair, and - in the modes fix and move - the change to the type that gave at least five times as much (at least 20 Mb/s), once in 24 hours per tunnel, at a quiet moment, the old type put back when the new one is clearly worse. A tunnel whose usual level is 20 or more is still judged against it (a drop).
+- The memory-dependent line of 1.69.19 (`_slow_line`) is gone: one line, easy to say.
+- **Proved**: `tests/test_bandwidth.py` (the verdicts at 5.2, 19.9, 20 and 25, the two tests in a row, the end at 32), `tests/test_web_menu.py` (the page's line is the Doctor's). **Not proved**: on real servers; a pair whose types were never speed-tested has nothing to change to (the Doctor says so).
+
 ## 1.69.19 - After a cut: the first type that connects, then the faster one - in about five minutes
 
 The owner (2026-10-19): "after a cut the Doctor puts the first tunnel that connects; then it tests, and when another type is faster it changes the tunnel - and the process must not take long". The first half was always so (a cut tunnel is replaced by the first type that connects: connecting comes before speed). The second half had three slow or missing steps; all are closed:

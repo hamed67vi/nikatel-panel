@@ -31,7 +31,7 @@ def test_the_usual_level_is_the_third_quarter_of_the_last_week_and_needs_four_sa
 def test_the_verdict_says_ok_low_or_drop_against_the_usual_level():
     assert bandwidth.verdict(None, 300) == "none" and bandwidth.verdict(250, None) == "learning"
     assert bandwidth.verdict(300, 300) == "ok" and bandwidth.verdict(250, 300) == "ok" and bandwidth.verdict(230, 300) == "low" and bandwidth.verdict(179, 300) == "drop"
-    assert bandwidth.verdict(5, 15) == "ok"                                                         # a tunnel that never gave more than 15 Mb/s: its noise is not a drop
+    assert bandwidth.verdict(25, 15) == "ok" and bandwidth.verdict(5, 15) == "slow"                   # a tunnel that never gave more than 15 Mb/s: its noise is not a drop - but under 20 it is "very slow" (1.69.20)
 
 
 def test_a_drop_needs_two_samples_and_ends_when_the_level_is_back():
@@ -443,7 +443,7 @@ def test_the_traffic_users_carry_is_the_middle_of_the_last_ten_minutes():
 
 # ------------------------------------------------------------------ a tunnel that answers every check and moves nothing (the owner, 2026-10-16: "it shows connected but has no bandwidth")
 def test_a_test_that_moved_nothing_is_a_stall_with_or_without_a_usual_level_and_a_sign_of_life_ends_it():
-    assert bandwidth.verdict(0.0, None) == "drop" and bandwidth.verdict(0.2, 300) == "drop" and bandwidth.verdict(0.6, None) == "slow" and bandwidth.verdict(5, 15) == "ok"      # (0.6 moved something: not a stall - since 1.69.14 it is "slow", it was "learning")
+    assert bandwidth.verdict(0.0, None) == "drop" and bandwidth.verdict(0.2, 300) == "drop" and bandwidth.verdict(0.6, None) == "slow" and bandwidth.verdict(25, 15) == "ok"      # (0.6 moved something: not a stall - since 1.69.14 it is "slow", it was "learning")
     bw, change = bandwidth.add_sample(None, NOW, 0.0, None, "door")                                  # the first test: measured again soon before anybody is told
     assert change == "" and bw["suspect"] is True and bw["drop"] is None and bandwidth.stalled(bw, NOW + 10) == ""
     bw, change = bandwidth.add_sample(bw, NOW + 180, 0.0, None, "door")
@@ -537,10 +537,11 @@ def test_the_probe_and_the_sink_echo_udp_and_take_the_new_argument():
 # ------------------------------------------------------------------ a tunnel that was never fast (the owner, 2026-10-19: a tunnel that tested 0.6 and 0.8 Mb/s showed red and the Doctor did nothing)
 def test_a_tunnel_with_no_usual_level_that_tests_under_five_is_slow_and_not_dropped():
     assert bandwidth.verdict(0.8, None) == "slow" and bandwidth.verdict(4.9, 12.0) == "slow"                 # a new tunnel, or one that never gave 20 Mb/s: no usual level can call it a drop
-    assert bandwidth.verdict(5.0, None) == "learning" and bandwidth.verdict(5.0, 12.0) == "ok" and bandwidth.verdict(30.0, 12.0) == "ok"
+    assert bandwidth.SLOW_MBPS == 20.0 and bandwidth.verdict(5.2, None) == "slow" and bandwidth.verdict(19.9, None) == "slow"      # (1.69.20, the owner: "if the bandwidth is under 20 the Doctor acts")
+    assert bandwidth.verdict(20.0, None) == "learning" and bandwidth.verdict(20.0, 12.0) == "ok" and bandwidth.verdict(30.0, 12.0) == "ok"
     assert bandwidth.verdict(0.4, None) == "drop" and bandwidth.verdict(0.4, 12.0) == "drop"                 # nothing moved: a stall, whatever the level
     assert bandwidth.verdict(3.0, 100.0) == "drop" and bandwidth.verdict(3.0, 20.0) == "drop"                # a tunnel that gave 20 or more: the usual level speaks, as before
-    assert bandwidth.SLOW_MBPS == bandwidth.ALIVE_MBPS and bandwidth.SLOW_OVER > bandwidth.SLOW_MBPS         # (a drop that is over "with a sign of life" and "very slow" never leave a gap between them)
+    assert bandwidth.SLOW_OVER == 1.6 * bandwidth.SLOW_MBPS                                                  # (a gap, so that a tunnel at 20 does not flicker)
 
 
 def test_slow_needs_two_tests_in_a_row_ends_at_eight_and_a_stall_takes_its_place():
@@ -551,14 +552,14 @@ def test_slow_needs_two_tests_in_a_row_ends_at_eight_and_a_stall_takes_its_place
     assert bw["next_at"] == NOW + 180 + bandwidth.WATCH_AFTER
     bw, change = bandwidth.add_sample(bw, NOW + 1500, 1.1, None, "link")                                     # still slow: the number follows, nothing new is announced
     assert change == "" and bw["state"] == "slow" and bw["slow"] == {"since": NOW + 180, "now": 1.1}
-    bw, change = bandwidth.add_sample(bw, NOW + 2700, 6.0, None, "link")                                     # over SLOW_MBPS, under SLOW_OVER: it stays (a tunnel at 5 does not flicker)
-    assert change == "" and bw["state"] == "slow" and bw["slow"]["now"] == 6.0
-    bw, change = bandwidth.add_sample(bw, NOW + 3900, 9.0, None, "link")
+    bw, change = bandwidth.add_sample(bw, NOW + 2700, 25.0, None, "link")                                    # over SLOW_MBPS, under SLOW_OVER: it stays (a tunnel at 20 does not flicker)
+    assert change == "" and bw["state"] == "slow" and bw["slow"]["now"] == 25.0
+    bw, change = bandwidth.add_sample(bw, NOW + 3900, 40.0, None, "link")
     assert change == "recovered" and bw["state"] == "ok" and bw["slow"] is None
 
     once, _ = bandwidth.add_sample(None, NOW, 0.7, None, "link")
     once, _ = bandwidth.add_sample(once, NOW + 180, 0.8, None, "link")
-    once, change = bandwidth.add_sample(once, NOW + 1500, 20.0, None, "link")                                # a good test in between: the first one of the pair is forgotten ...
+    once, change = bandwidth.add_sample(once, NOW + 1500, 40.0, None, "link")                                # a good test in between: the first one of the pair is forgotten ...
     assert change == "recovered" and once["slow"] is None
     again, change = bandwidth.add_sample(once, NOW + 1600, 0.9, None, "link")                                # ... and one very slow test again is only a suspicion
     assert change == "" and again["suspect"] is True and again["state"] != "slow"
@@ -699,27 +700,20 @@ def test_a_confirmed_slow_tunnel_is_looked_at_by_the_job_the_button_and_the_qual
     assert any(ln.startswith("Still very slow: 0.9 Mb/s. The reason found: Only this tunnel is that slow") for ln in said)
 
 
-def test_a_test_under_twenty_is_very_slow_too_when_the_memory_of_the_pair_knows_a_type_ten_times_faster(monkeypatch):
-    """The owner's tunnel tested 5.2 Mb/s - just over the line of 5 - while the memory had `tcp` at 119 on the pair."""
+def test_a_test_of_five_to_nineteen_is_very_slow_now_and_the_ratio_of_faster_kinds_can_be_changed():
+    """The owner's tunnel tested 5.2 Mb/s while the memory had `tcp` at 119 on the pair; the owner (1.69.20): "if the bandwidth is under 20, the Doctor acts"."""
     from nikatel.services import knowledge
 
-    assert bandwidth.verdict(5.2, None) == "learning" and bandwidth.verdict(5.2, None, bandwidth.SLOW_MEMORY_MBPS) == "slow" and bandwidth.verdict(25.0, None, bandwidth.SLOW_MEMORY_MBPS) == "learning"
-    bw, _ = bandwidth.add_sample(None, NOW, 5.2, None, "link", slow_line=20.0)
-    bw, change = bandwidth.add_sample(bw, NOW + 60, 5.6, None, "link", slow_line=20.0)
+    assert bandwidth.verdict(5.2, None) == "slow" and bandwidth.verdict(19.9, None) == "slow" and bandwidth.verdict(25.0, None) == "learning"
+    bw, _ = bandwidth.add_sample(None, NOW, 5.2, None, "link")
+    bw, change = bandwidth.add_sample(bw, NOW + 60, 5.6, None, "link")
     assert change == "slow" and bw["state"] == "slow"
-    bw, change = bandwidth.add_sample(bw, NOW + 1300, 25.0, None, "link", slow_line=20.0)                          # over 20 but under 1.6 x 20: it stays
+    bw, change = bandwidth.add_sample(bw, NOW + 1300, 25.0, None, "link")                                          # over 20 but under 1.6 x 20: it stays
     assert change == "" and bw["state"] == "slow"
-    bw, change = bandwidth.add_sample(bw, NOW + 2500, 40.0, None, "link", slow_line=20.0)
+    bw, change = bandwidth.add_sample(bw, NOW + 2500, 40.0, None, "link")
     assert change == "recovered"
-    tid, _, _, _ = make_tunnel("ml-a")
     now = int(time.time())
     pair = {"kinds": {"tcp": knowledge.merge(None, {"kind": "tcp", "ok": True, "score": 50, "down_mbps": 119.0}, "full", now - 3600), "paqet": knowledge.merge(None, {"kind": "paqet", "ok": True, "score": 40, "down_mbps": 30.0}, "full", now - 3600)}}
-    monkeypatch.setattr(knowledge, "pair", lambda i, f: pair)
-    assert bandwidth._slow_line(tid, 5.2, now) == 20.0                                                           # 119 is over ten times 5.2
-    assert bandwidth._slow_line(tid, 15.0, now) == 5.0                                                           # 150 would be needed: no
-    assert bandwidth._slow_line(tid, 30.0, now) == 5.0 and bandwidth._slow_line(99999, 5.2, now) == 5.0
-    monkeypatch.setattr(knowledge, "pair", lambda i, f: {})
-    assert bandwidth._slow_line(tid, 5.2, now) == 5.0                                                            # nothing known: the plain line
     assert [r["kind"] for r in knowledge.faster_kinds(pair, now, "tcpmux", 5.2, ratio=10.0)] == ["tcp"] and [r["kind"] for r in knowledge.faster_kinds(pair, now, "tcpmux", 5.2)] == ["tcp", "paqet"]
 
 
@@ -748,7 +742,7 @@ def test_a_slow_tunnel_is_stored_with_one_event_and_the_slow_ones_count_with_the
     assert sum("the bandwidth is very low - 0.9 Mb/s in two tests in a row (it did not drop: it was never higher)" in m for m in said) == 1 and rec["bw"]["state"] == "slow" and rec["bw"]["slow"]["since"] > 0
     other, _, _, _ = make_tunnel("sl-h", bw=good_history())
     assert bandwidth._facts(other)["same_iran"] == {"total": 1, "dropped": 0} and bandwidth._facts(tid)["same_iran"] == {"total": 1, "dropped": 1}        # (a slow tunnel counts with the dropped ones: "3 of 4 are slow or dropped together")
-    assert bandwidth._store(tid, 12.0, None, "link", 160.0)[1] == "recovered"
+    assert bandwidth._store(tid, 12.0, None, "link", 160.0)[1] == "" and bandwidth._store(tid, 40.0, None, "link", 160.0)[1] == "recovered"      # (12 is still under the line of 20)
 
     with session() as db:
         assert any("bandwidth is back" in e.text for e in db.scalars(select(Event).where(Event.domain == "tunnels")))

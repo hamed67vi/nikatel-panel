@@ -5,8 +5,8 @@
                        a tunnel with a test door (BackPack, Paqet, Chisel): the quality job of every half hour already measures it through the door - its number is taken from there.
   where it is kept     the record of the tunnel, `bw`: the last number, the history (60 samples), the usual level (`ref`), a verdict (learning / ok / low / drop) and, while it lasts, the drop.
   what is a drop       a sample under 60 % of the usual level (the 75th percentile of the last 7 days), confirmed by a second sample three minutes later; it ends when a sample is back over 80 %.
-  what is "slow"       a tunnel that has no usual level to drop from (new, rebuilt, or one that never gave 20 Mb/s) whose test gives under 5 Mb/s twice in a row (the second three minutes later): it is looked at like a drop,
-                       and what the Doctor's memory of the pair knows - a type that gave clearly more here - becomes a suggestion on the Doctor page (never done by itself). It ends when a test gives 8 Mb/s.
+  what is "slow"       a tunnel that has no usual level to drop from (new, rebuilt, or one that never gave 20 Mb/s) whose test gives under 20 Mb/s twice in a row (the second a minute later): it is looked at like a drop,
+                       and what the Doctor's memory of the pair knows - a type that gave clearly more here - is written on the Doctor page and, in the modes fix and move, done (1.69.17). It ends when a test gives 32 Mb/s.
   what the Doctor does  it looks, by itself, at what could explain it (the servers' load, the other tunnels of the same servers, the line's loss and delay, the users on the tunnel) and writes the
                        one sentence that says where the problem is (`explain`) - in the story of the look, in an event and on the Doctor's page. Nothing is repaired by it yet: it tells.
 
@@ -33,7 +33,6 @@ log = get_logger("bandwidth")
 INTERVAL = 90 * 60           # between two measurements of one tunnel (a little different for each, so they do not all fall in one minute)
 CONFIRM_AFTER = 180          # a sample that looks like a drop is measured again after this
 SLOW_CONFIRM_AFTER = 60      # the second test of a very slow one comes this soon (a drop keeps its 3 minutes): the owner, 2026-10-19: "the process must not take long"
-SLOW_MEMORY_MBPS = 20.0      # a test under this is VERY SLOW too when the Doctor's memory of the pair knows a type that gave ten times as much (5.2 Mb/s where another type gave 119 is not fine because it is over 5)
 POOR_SCORE = 40             # a tunnel whose quality test scored under this is measured every POOR_AFTER, not every INTERVAL
 POOR_AFTER = 10 * 60
 WATCH_AFTER = 20 * 60       # while a drop lasts the tunnel is measured this often (to see it end)
@@ -52,8 +51,8 @@ METHOD = 2                   # the way a sample is taken (streams, seconds): ano
 BUSY_CPU = 85.0              # a server this busy is not measured (the test would be slowed by it, and would slow the users more)
 STALL_MBPS = 0.5             # a test that moved less than this moved NOTHING: the tunnel answers its checks but carries no data under load (never noise, never "still learning")
 ALIVE_MBPS = 5.0             # a drop whose usual level is not known yet is over when a test moves at least this much
-SLOW_MBPS = 5.0              # a tunnel whose usual level is not known (or is under MIN_REF_MBPS) is VERY SLOW when two tests in a row give less than this (the owner, 2026-10-19: a tunnel that gave 0.6 and 0.8 Mb/s showed red and the Doctor did nothing: it never "dropped", it was slow from the first test; the other tunnels of that panel measure 137 - 1400)
-SLOW_OVER = 8.0              # a very slow tunnel is back when a test gives at least this much (a gap under SLOW_MBPS, so that a tunnel at 5 does not flicker)
+SLOW_MBPS = 20.0             # a tunnel whose usual level is not known (or is under MIN_REF_MBPS) is VERY SLOW when two tests in a row give less than this (the owner, 2026-10-19: a tunnel that gave 0.6 and 0.8 Mb/s showed red and the Doctor did nothing: it never "dropped", it was slow from the first test; the other tunnels of that panel measure 137 - 1400)
+SLOW_OVER = 32.0             # a very slow tunnel is back when a test gives at least this much (1.6 x SLOW_MBPS: a gap, so that a tunnel at 20 does not flicker). 1.69.20: the line is 20 Mb/s (the owner: "if the bandwidth is under 20, the Doctor acts")
 STALL_FRESH = 2400          # a confirmed stall counts for the state of the tunnel this long after its last test (the job measures a dropped tunnel every twenty minutes)
 SINK_V = 2                   # the version of the sink on the foreign server: 2 echoes UDP too (the loss of a link that drops ICMP); a sink of an older version is put again at the next measurement
 UDP_PACKETS = 30             # the UDP packets that measure the loss (20 ms apart, about two seconds in all)
@@ -247,31 +246,8 @@ def stalled(bw: dict | None, now: int) -> str:
 
 
 # ------------------------------------------------------------------ storing a sample
-def _slow_line(tunnel_id: int, down: float, now: int) -> float:
-    """SLOW_MBPS, or SLOW_MEMORY_MBPS when the Doctor's memory of the pair knows a type that gave TEN times this test (and at least 20 Mb/s): a tunnel at 5.2 Mb/s where another type gave 119 is slow."""
-    if down >= SLOW_MEMORY_MBPS:
-        return SLOW_MBPS
-
-    try:
-        from . import autopilot, knowledge, license
-
-        with session() as db:
-            t = db.get(Tunnel, tunnel_id)
-
-            if t is None:
-                return SLOW_MBPS
-
-            cur, pair = autopilot.kind_of(t.type, t.transport, t.record or {}), knowledge.pair(t.iran_server_id, t.foreign_server_id)
-
-        return SLOW_MEMORY_MBPS if knowledge.faster_kinds(pair, now, cur, down, license.tunnel_kind_allowed, ratio=10.0) else SLOW_MBPS
-    except Exception:
-        log.exception("the memory of the pair of tunnel %s could not be read", tunnel_id)
-        return SLOW_MBPS
-
-
 def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None, loss: float | None = None) -> tuple[dict, str] | None:
     now = int(time.time())
-    line = _slow_line(tunnel_id, down, now)
 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
@@ -280,7 +256,7 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
             return None
 
         rec = dict(t.record or {})
-        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss, line)
+        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss)
 
         if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
