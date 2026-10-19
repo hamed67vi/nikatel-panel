@@ -288,6 +288,68 @@ def test_the_confirmed_tunnel_move_builds_only_that_tunnel_and_changes_only_its_
         assert sorted((t.name, t.iran_server_id) for t in db.scalars(select(Tunnel))) == [("t1", ids["ir1"]), ("t2", ids["ir2"]), ("t3", ids["ir1"])]     # t1 and t3 stay where they are
 
 
+def _tunnel_move_fakes(monkeypatch, events, said, quiet):
+    """The builder, the waits and the DNS providers faked for a move of t2 from ir1 to ir2; `quiet`: what the wait for the old tunnel to be quiet answers (a list of answers, one per call)."""
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **kw: fn(1, *a) or 1)
+
+    def build(snap, iran_id, foreign_id, kind, opts=None):
+        events.append(("build", snap["name"], iran_id))
+
+        with session() as db:
+            db.add(Tunnel(name=snap["name"], type="backhaul", transport="tcpmux", iran_server_id=iran_id, foreign_server_id=foreign_id, state="up", forwarded_ports=[8075]))
+
+        return 0
+
+    def delete(tid, keep_record=False, trash=False, skip_offline=False):
+        with session() as db:
+            t = db.get(Tunnel, tid)
+            events.append(("delete", t.name, trash))
+            db.delete(t)
+
+        return ["Iran: removed", "foreign: removed"]
+
+    monkeypatch.setattr(autopilot, "_build_kind", build)
+    monkeypatch.setattr(autopilot, "_wait", _finished(True))
+    monkeypatch.setattr(autopilot, "_wait_quiet", lambda aid, tid, limit=1800: events.append(("quiet", tid, limit)) or quiet.pop(0))
+    monkeypatch.setattr(builder, "delete_tunnel", delete)
+    monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
+
+
+def test_the_old_tunnel_is_removed_only_when_nobody_uses_it_any_more(client, monkeypatch):
+    """The owner, 2026-10-19: "the old tunnel must not be cut until the new one is in place - the user must not feel a cut"."""
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    _ranking(monkeypatch, [_row(ids["ir2"], "ir2")])
+    events, said = [], []
+    _tunnel_move_fakes(monkeypatch, events, said, [True])
+    r = client.post(f"/api/failover/move-tunnel/{ids['t2']}", json={"target_id": ids["ir2"], "tunnels": [ids["t2"]]})
+    assert r.status_code == 202
+    assert events == [("build", "t2-mv", ids["ir2"]), ("sleep", 420), ("quiet", ids["t2"], failover.QUIET_LIMIT), ("delete", "t2", True)]      # build, the DNS, the TTL wait, the wait for quiet, and only then the old one goes
+    assert st.get("failover")["history"][-1]["ok"] is True
+
+
+def test_an_old_tunnel_that_is_still_in_use_is_kept_beside_the_new_one_and_the_owner_is_told(client, monkeypatch):
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    _ranking(monkeypatch, [_row(ids["ir2"], "ir2")])
+    events, said = [], []
+    _tunnel_move_fakes(monkeypatch, events, said, [False])                                                 # clients that hold the old address keep it busy
+    r = client.post(f"/api/failover/move-tunnel/{ids['t2']}", json={"target_id": ids["ir2"], "tunnels": [ids["t2"]]})
+    assert r.status_code == 202
+    assert ("quiet", ids["t2"], failover.QUIET_LIMIT) in events and not any(e[0] == "delete" for e in events)            # nothing is cut
+    assert FakeProv.calls == [("update", "arvan", "example.test", "r-b", ["203.0.113.9"], 120, True)]                      # the DNS did follow
+    assert any("NOT removed" in x and "t2-mv" in x for x in said)
+
+    with session() as db:
+        assert sorted((t.name, t.iran_server_id) for t in db.scalars(select(Tunnel))) == [("t1", ids["ir1"]), ("t2", ids["ir1"]), ("t2-mv", ids["ir2"]), ("t3", ids["ir1"])]       # both run
+
+    h = st.get("failover")["history"][-1]
+    assert h["ok"] is False and "still in use" in h["errors"][0]
+
+
 def test_the_menu_item_the_plan_box_and_the_words_are_in_the_page():
     lab, app, fa, css = (WEB / "lab.js").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
     assert lab.count('labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name)') == 1 and "srvMoveAway" not in lab and "Move the tunnels…" not in lab      # in the menu of a TUNNEL, no longer in the menu of a server

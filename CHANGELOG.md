@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.27 - A moved tunnel's old half is removed only when nobody uses it any more
+
+The owner (2026-10-19, in Persian, on the item "Move to a better server…"): "when I press it, the old tunnel must not be cut until the new one is in place - the user must not feel a cut."
+
+- **What already held** (`failover._work`, source server on): the new tunnel is built and checked on the target first (the old one keeps running); only when every tunnel of the plan is up are the DNS records changed; the old tunnel then stays for the records' TTL + 5 minutes (a proxied record counts 300 s).
+- **What did not hold**: after that wait the old tunnel was removed whatever it still carried - a client that kept the old address (a config with the address itself, a resolver that ignores the TTL) was cut at that moment. Now the old tunnel is first waited for to be quiet (`autopilot._wait_quiet`, the panel's own rule: under 1.5 Mb/s both ways together, up to 30 minutes, `failover.QUIET_LIMIT`). If it is still in use, it is **kept**: the new tunnel keeps running beside it under its temporary name, the story and the history say so (`ok` false, "the old tunnel is still in use, kept") and you remove the old one by hand from its menu when it is quiet. The DNS stays changed. The box of the menu item says it.
+- **Not changed**: when the source server is OFF (a dead server) the old tunnels are still dropped at once - nothing can be carried by a server that does not answer.
+- **Proved**: `tests/test_move_server.py` - the order build → DNS → TTL wait → wait for quiet → removal; and with a tunnel that stays busy: nothing is deleted, both tunnels run, the DNS did follow, the story and the history say it. **Not proved**: the 1.5 Mb/s rule on a real tunnel in a real move (a few users on the old address may still be under it and feel the cut); how many real clients ignore a TTL; on real servers at all.
 ## 1.69.26 - "Move to a better server…" is in the menu of a TUNNEL, not of a server; it moves that tunnel
 
 The owner (2026-10-19, in Persian, after seeing the menu of a tunnel without the item): "remove it from the server part - you must add it to the tunnel part."

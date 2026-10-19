@@ -37,6 +37,7 @@ log = get_logger("failover")
 ENABLED = True       # the kill switch of the whole DNS failover (tests flip it); what really decides is the Doctor's mode (services/doctor.py)
 TTL_GRACE = 300      # seconds the old tunnel lives on after the DNS changed, on top of the record's TTL (clients that still hold the old address)
 TTL_WAIT_MAX = 900
+QUIET_LIMIT = 1800   # after the DNS grace, an old tunnel that still carries the users' traffic is waited for this long; if it is still busy it is KEPT (never cut)
 ROUTE_CAUSES = ("gre_blocked", "route_cut", "lossy_route", "port_blocked")
 REASONS = {"down": "the server does not answer",
            "resources": "the server's resources are exhausted",
@@ -676,6 +677,12 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                 _sleep(grace)
 
             for old_id, temp, snap in built:
+                if not autopilot._wait_quiet(aid, old_id, QUIET_LIMIT):         # the owner, 2026-10-19: "the old tunnel must not be cut until the new one is in place - the user must not feel a cut": it goes only when nobody uses it
+                    autopilot._say(aid, f"{snap['name']}: users still use the old tunnel on {p['server']} {QUIET_LIMIT // 60} minutes after the DNS changed (clients that hold the old address, or a config that has the address itself), so it is NOT removed. "
+                                   f"The new tunnel runs beside it as {temp}; remove the old one by hand when it is quiet (its menu → Remove tunnel).")
+                    errors.append(f"{snap['name']}: the old tunnel is still in use, kept")
+                    continue
+
                 try:
                     res = builder.delete_tunnel(old_id, trash=True)
                     autopilot._say(aid, f"{snap['name']}: the old tunnel on {p['server']} removed: " + "; ".join(res))
