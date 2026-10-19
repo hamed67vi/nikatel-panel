@@ -43,6 +43,23 @@ def test_the_kinds_are_ranked_by_the_full_measurement_first_and_blocked_poor_and
     assert knowledge.due_kinds(pair, ["bpd:udp"], NOW + 15 * DAY) == ["bpd:udp"] and knowledge.due_kinds(pair, ["bpd:pck"], NOW + 5 * DAY) == []        # a failed kind after two weeks, a good one after one
 
 
+def test_a_faster_type_is_one_the_memory_saw_give_five_times_what_the_slow_tunnel_gives():
+    """The owner, 2026-10-19: a tunnel that tested 0.8 Mb/s on a pair where the memory had `tcp` at 119 Mb/s."""
+    pair = {"kinds": {"tcp": entry("tcp", True, 50, "full", NOW - 3600, down_mbps=119.0, latency_ms=167.0, loss_pct=0.0), "paqet": entry("paqet", True, 40, "full", NOW - 3600, down_mbps=9.0),
+                      "bpd:pck": entry("bpd:pck", True, 71, "full", NOW - 3600, down_mbps=300.0), "chisel:fwd": entry("chisel:fwd", True, 80, "latency", NOW - 3600, latency_ms=100.0),        # (a latency-only entry has no speed)
+                      "bp:wss": entry("bp:wss", False, 42, "latency", NOW - 3600, down_mbps=900.0), "bpd:udp": entry("bpd:udp", False, None, "latency", NOW - 3600, error="no data"),               # (poor / failed: never offered)
+                      "wssmux": entry("wssmux", True, 60, "full", NOW - 20 * DAY, down_mbps=500.0)}}                                                                                          # (twenty days old: only a hint)
+    got = knowledge.faster_kinds(pair, NOW, "tcpmux", 4.0)
+    assert [r["kind"] for r in got] == ["bpd:pck", "tcp"] and got[0]["down_mbps"] == 300.0                      # the fastest first; 20 Mb/s and 5 x 4 are the line: paqet (9) is under it
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, NOW, "tcpmux", 0.8)] == ["bpd:pck", "tcp"]            # a baseline under 1 counts as 1: the line is FASTER_MIN_MBPS, never "any speed"
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, NOW, "tcpmux", 20.0)] == ["bpd:pck", "tcp"]           # 5 x 20 = 100: tcp (119) is over it ...
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, NOW, "tcpmux", 25.0)] == ["bpd:pck"]                  # ... 5 x 25 = 125: tcp is not five times what the tunnel gives, only the 300 is
+    assert knowledge.faster_kinds(pair, NOW, "tcpmux", 61.0) == [] and knowledge.faster_kinds(None, NOW, "tcpmux", 1.0) == [] and knowledge.faster_kinds({}, NOW, "tcpmux", 1.0) == []
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, NOW, "bpd:pck", 4.0)] == ["tcp"]                      # the running type is never offered to itself
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, NOW, "tcpmux", 4.0, allowed=lambda k: k != "bpd:pck")] == ["tcp"]          # the licence
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, NOW + 15 * DAY, "tcpmux", 4.0)] == []                 # two weeks later every number is old
+
+
 def test_the_night_window_may_wrap_past_midnight_and_equal_hours_mean_any_time():
     tz = 210                                                           # Tehran: UTC+3:30
 

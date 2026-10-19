@@ -5,6 +5,8 @@
                        a tunnel with a test door (BackPack, Paqet, Chisel): the quality job of every half hour already measures it through the door - its number is taken from there.
   where it is kept     the record of the tunnel, `bw`: the last number, the history (60 samples), the usual level (`ref`), a verdict (learning / ok / low / drop) and, while it lasts, the drop.
   what is a drop       a sample under 60 % of the usual level (the 75th percentile of the last 7 days), confirmed by a second sample three minutes later; it ends when a sample is back over 80 %.
+  what is "slow"       a tunnel that has no usual level to drop from (new, rebuilt, or one that never gave 20 Mb/s) whose test gives under 5 Mb/s twice in a row (the second three minutes later): it is looked at like a drop,
+                       and what the Doctor's memory of the pair knows - a type that gave clearly more here - becomes a suggestion on the Doctor page (never done by itself). It ends when a test gives 8 Mb/s.
   what the Doctor does  it looks, by itself, at what could explain it (the servers' load, the other tunnels of the same servers, the line's loss and delay, the users on the tunnel) and writes the
                        one sentence that says where the problem is (`explain`) - in the story of the look, in an event and on the Doctor's page. Nothing is repaired by it yet: it tells.
 
@@ -46,7 +48,9 @@ METHOD = 2                   # the way a sample is taken (streams, seconds): ano
 BUSY_CPU = 85.0              # a server this busy is not measured (the test would be slowed by it, and would slow the users more)
 STALL_MBPS = 0.5             # a test that moved less than this moved NOTHING: the tunnel answers its checks but carries no data under load (never noise, never "still learning")
 ALIVE_MBPS = 5.0             # a drop whose usual level is not known yet is over when a test moves at least this much
-STALL_FRESH = 2400           # a confirmed stall counts for the state of the tunnel this long after its last test (the job measures a dropped tunnel every twenty minutes)
+SLOW_MBPS = 5.0              # a tunnel whose usual level is not known (or is under MIN_REF_MBPS) is VERY SLOW when two tests in a row give less than this (the owner, 2026-10-19: a tunnel that gave 0.6 and 0.8 Mb/s showed red and the Doctor did nothing: it never "dropped", it was slow from the first test; the other tunnels of that panel measure 137 - 1400)
+SLOW_OVER = 8.0              # a very slow tunnel is back when a test gives at least this much (a gap under SLOW_MBPS, so that a tunnel at 5 does not flicker)
+STALL_FRESH = 2400          # a confirmed stall counts for the state of the tunnel this long after its last test (the job measures a dropped tunnel every twenty minutes)
 SINK_V = 2                   # the version of the sink on the foreign server: 2 echoes UDP too (the loss of a link that drops ICMP); a sink of an older version is put again at the next measurement
 UDP_PACKETS = 30             # the UDP packets that measure the loss (20 ms apart, about two seconds in all)
 LOSS_FRESH = 3 * 3600        # the loss measured with UDP shows for this long (the job measures a tunnel about every 90 minutes)
@@ -70,7 +74,7 @@ def reference(hist: list, now: int) -> float | None:
 
 
 def verdict(down: float | None, ref: float | None) -> str:
-    """none (nothing measured) · learning (too few samples) · ok · low (under 80 %) · drop (under 60 %)."""
+    """none (nothing measured) · learning (too few samples) · ok · low (under 80 %) · drop (under 60 %) · slow (under SLOW_MBPS and no usual level that could tell a drop: slow from the start, not dropped)."""
     if down is None:
         return "none"
 
@@ -78,17 +82,18 @@ def verdict(down: float | None, ref: float | None) -> str:
         return "drop"                          # nothing moved: it needs no usual level to be a fault
 
     if ref is None:
-        return "learning"
+        return "slow" if down < SLOW_MBPS else "learning"
 
     if ref < MIN_REF_MBPS:
-        return "ok"
+        return "slow" if down < SLOW_MBPS else "ok"
 
     ratio = down / ref
     return "drop" if ratio < DROP_RATIO else "low" if ratio < LOW_RATIO else "ok"
 
 
 def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None, loss: float | None = None) -> tuple[dict, str]:
-    """Pure: (the new `bw` of the tunnel, what changed: "" | "drop" | "recovered") after one sample. The sample is judged against the level BEFORE it, so a drop never pulls its own reference down."""
+    """Pure: (the new `bw` of the tunnel, what changed: "" | "drop" | "slow" | "recovered") after one sample. The sample is judged against the level BEFORE it, so a drop never pulls its own reference down.
+    "slow": the tunnel is VERY slow (two tests in a row under SLOW_MBPS, no usual level that could call it a drop) - it was never fast, so nothing dropped; it ends when a test gives SLOW_OVER."""
     bw = dict(bw or {})
 
     if bw and (bw.get("m") != METHOD or (bw.get("how") and bw["how"] != how)):
@@ -97,7 +102,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
     hist = [list(x) for x in (bw.get("hist") or []) if now - int(x[0]) <= REF_WINDOW]
     ref_before = reference(hist, now)
     v = verdict(down, ref_before)
-    drop, suspect, change = bw.get("drop"), bool(bw.get("suspect")), ""
+    drop, slow, suspect, change = bw.get("drop"), bw.get("slow"), bool(bw.get("suspect")), ""
     next_at = now + INTERVAL
 
     if v == "drop":
@@ -105,12 +110,24 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
             if not drop:
                 change = "drop"
                 drop = {"since": now, "from": round(ref_before or 0.0, 1), "now": round(down, 1)}
+                slow = None                                        # (a drop is the worse word: it takes the place of "slow")
             else:
                 drop = {**drop, "now": round(down, 1)}
 
             suspect, next_at = False, now + WATCH_AFTER
         else:
             suspect, next_at = True, now + CONFIRM_AFTER           # the first sample under the line: measured again soon before anybody is told
+    elif v == "slow" and not drop:
+        if suspect or slow:
+            if not slow:
+                change = "slow"
+                slow = {"since": now, "now": round(down, 1)}
+            else:
+                slow = {**slow, "now": round(down, 1)}
+
+            suspect, next_at = False, now + WATCH_AFTER
+        else:
+            suspect, next_at = True, now + CONFIRM_AFTER           # the first very slow sample: measured again soon, nobody is told yet
     else:
         suspect = False
 
@@ -120,13 +137,20 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
             drop = {**drop, "now": round(down, 1)}
             next_at = now + WATCH_AFTER
 
+        if slow and not drop:
+            if down >= SLOW_OVER:
+                slow, change = None, "recovered"
+            else:
+                slow = {**slow, "now": round(down, 1)}
+                next_at = now + WATCH_AFTER
+
     hist.append([now, round(down, 1), None if up is None else round(up, 1)])
     hist = hist[-KEEP:]
-    state = "drop" if drop else v if v in ("low", "learning") else "ok"
+    state = "drop" if drop else "slow" if slow else v if v in ("low", "learning") else "learning" if v == "slow" else "ok"
     old_loss = (bw.get("loss") or {})
     keep = {"pct": old_loss["pct"], "at": old_loss["at"]} if loss is None and old_loss.get("pct") is not None and now - int(old_loss.get("at") or 0) <= LOSS_FRESH else None      # (a test without UDP keeps the last number for a while)
 
-    return {"m": METHOD, "down": round(down, 1), "up": None if up is None else round(up, 1), "at": now, "how": how, "ping": ping, "ref": reference(hist, now), "state": state, "drop": drop, "suspect": suspect,
+    return {"m": METHOD, "down": round(down, 1), "up": None if up is None else round(up, 1), "at": now, "how": how, "ping": ping, "ref": reference(hist, now), "state": state, "drop": drop, "slow": slow, "suspect": suspect,
             "next_at": next_at, "hist": hist, "loss": {"pct": float(loss), "at": now} if loss is not None else keep}, change
 
 
@@ -174,6 +198,39 @@ def explain(f: dict) -> tuple[str, str]:
                          "A restart of the tunnel, or another tunnel type for this pair, may bring the speed back.")
 
 
+def explain_slow(f: dict) -> tuple[str, str]:
+    """Pure: (a short code, ONE sentence) - where the problem of a tunnel that is VERY SLOW (never dropped: it was slow from its first test) most likely is. `f` as in `explain`. The "full" rule of `explain` does not
+    apply: a slow tunnel can carry more than its test reads (the test is two connections for three seconds), that is not "full of users"."""
+    now = float(f.get("now") or 0)
+
+    for side, label in (("iran", "Iran"), ("foreign", "foreign")):
+        s = f.get(side) or {}
+
+        if (s.get("cpu") or 0) >= BUSY_CPU:
+            return f"{side}_busy", f"The {label} server {s.get('name', '')} is busy (CPU {s['cpu']:.0f} %): everything on it is slow, not only this tunnel."
+
+    for key, side, label in (("same_iran", "iran", "the Iran server"), ("same_foreign", "foreign", "the foreign server")):
+        same = f.get(key) or {}
+
+        if same.get("total", 0) >= 2 and same.get("dropped", 0) >= max(2, 0.6 * same["total"]):
+            return f"{side}_wide", f"{same['dropped']} of the {same['total']} tunnels of {label} {(f.get(side) or {}).get('name', '')} are slow or dropped together: its own line or its provider is the cause, not this tunnel."
+
+    loss = f.get("loss")
+
+    if loss is not None and loss >= 5:
+        return "loss", f"The line loses {loss:.0f} % of its packets: the route is bad, and a tunnel over it is slow."
+
+    rtt, rtt_ref = f.get("rtt"), f.get("rtt_ref")
+
+    if rtt is not None and rtt_ref and rtt >= 1.5 * rtt_ref:
+        return "latency", f"The delay rose from {rtt_ref:.0f} to {rtt:.0f} ms: the route changed or is congested."
+
+    live = f.get("live")
+
+    return "slow_type", (f"Only this tunnel is that slow ({now:.1f} Mb/s in the test" + (f", the users carry {live:.0f} Mb/s through it now" if live is not None else "") + "): the servers are idle, the line loses nothing and its delay is as usual, "
+                         "so the way this tunnel is built (its type, or the link under it) is the likely cause - another type may carry more.")
+
+
 def stalled(bw: dict | None, now: int) -> str:
     """The sentence that says why the tunnel is not healthy when its last tests moved NO data (a CONFIRMED stall: two tests three minutes apart), "" otherwise. The state of the tunnel follows it:
     a tunnel that answers every check and carries nothing is not "up" (the owner, 2026-10-16: "it shows connected but has no bandwidth")."""
@@ -207,6 +264,8 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
 
         if change == "drop":
             emit(db, "warn", "tunnels", f"Tunnel {label}: the bandwidth dropped to {bw['down']} Mb/s (usually {bw['drop']['from']}). The Doctor is looking at why.", name)
+        elif change == "slow":
+            emit(db, "warn", "tunnels", f"Tunnel {label}: the bandwidth is very low - {bw['down']} Mb/s in two tests in a row (it did not drop: it was never higher). The Doctor is looking at why.", name)
         elif change == "recovered":
             emit(db, "ok", "tunnels", f"Tunnel {label}: the bandwidth is back, {bw['down']} Mb/s.", name)
 
@@ -220,7 +279,7 @@ def note_quality(tunnel_id: int, q: dict) -> None:
 
     res = _store(tunnel_id, float(q["down_mbps"]), None if q.get("up_mbps") is None else float(q["up_mbps"]), "door", q.get("latency_ms"))
 
-    if res and res[1] == "drop":
+    if res and res[1] in ("drop", "slow"):
         _investigate_later(tunnel_id)
 
 
@@ -449,7 +508,7 @@ def run() -> None:
             bw, change = measure(tid)
             log.info("bandwidth of tunnel %s: %s Mb/s (usual %s) %s", tid, bw.get("down"), bw.get("ref"), bw.get("state"))
 
-            if change == "drop":
+            if change in ("drop", "slow"):
                 _investigate_later(tid)
         except (ValueError, RuntimeError, SSHError) as e:
             log.info("bandwidth of tunnel %s not measured: %s", tid, str(e)[:140])
@@ -484,9 +543,9 @@ def _facts(tunnel_id: int) -> dict:
 
         def share(col, sid: int) -> dict:
             rows = [x for x in db.scalars(select(Tunnel).where(col == sid, Tunnel.enabled.is_(True))) if not is_temp(x.name)]
-            return {"total": len(rows), "dropped": sum(1 for x in rows if ((x.record or {}).get("bw") or {}).get("state") == "drop")}
+            return {"total": len(rows), "dropped": sum(1 for x in rows if ((x.record or {}).get("bw") or {}).get("state") in ("drop", "slow"))}
 
-        return {"name": t.name, "now": bw.get("down"), "ref": (bw.get("drop") or {}).get("from") or bw.get("ref"), "loss": loss, "live": live, "iran": sides["iran"], "foreign": sides["foreign"],
+        return {"name": t.name, "state": bw.get("state"), "now": bw.get("down"), "ref": (bw.get("drop") or {}).get("from") or bw.get("ref"), "loss": loss, "live": live, "iran": sides["iran"], "foreign": sides["foreign"],
                 "rtt": t.rtt_ms, "rtt_ref": rtts[len(rtts) // 2] if len(rtts) >= 20 else None, "same_iran": share(Tunnel.iran_server_id, t.iran_server_id), "same_foreign": share(Tunnel.foreign_server_id, t.foreign_server_id)}
 
 
@@ -549,14 +608,8 @@ def _engine_fix(tunnel_id: int, say) -> None:
     except Exception:
         log.exception("the slow tunnel %s could not be kept in the Doctor's memory", name)
 
-def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
-    """The story of the look (the Doctor's Live window shows it): what dropped, what was checked, where the problem is."""
-    from . import autopilot
-
-    f = _facts(tunnel_id)
-    say = lambda line: autopilot._say(aid, line)       # (one short line for the story)
-    say(f"{f['name']}: the bandwidth dropped to {f['now']} Mb/s; it usually gives {f['ref']}.")
-
+def _say_checks(say, f: dict) -> None:
+    """The checks of a look at a drop or at a very slow tunnel, one line each: the two servers, the other tunnels of the same servers, the loss, the delay, the users."""
     for side in ("iran", "foreign"):
         s = f[side]
         say(("✕ " if (s["cpu"] or 0) >= BUSY_CPU else "✓ ") + f"The {side} server {s['name']}: " + (f"CPU {s['cpu']:.0f} %" if s["cpu"] is not None else "no reading of its load just now"))
@@ -573,8 +626,9 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
     if f["live"] is not None:
         say(f"Users are carrying {f['live']:.0f} Mb/s through it right now.")
 
-    code, sentence = explain(f)
 
+def _keep_why(tunnel_id: int, code: str, sentence: str, what: str) -> None:
+    """The sentence that says where the problem is: kept in the record of the tunnel (the page shows it) and told as an event."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -584,8 +638,24 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
             bw["why"] = {"code": code, "text": sentence, "at": int(time.time())}
             rec["bw"] = bw
             t.record = rec
-            emit(db, "warn", "tunnels", f"Tunnel {t.name}: the bandwidth dropped - {sentence}", t.name)
+            emit(db, "warn", "tunnels", f"Tunnel {t.name}: the bandwidth {what} - {sentence}", t.name)
 
+
+def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
+    """The story of the look (the Doctor's Live window shows it): what dropped, what was checked, where the problem is. A tunnel that is VERY SLOW (it never dropped) has its own story, `_investigate_slow`."""
+    from . import autopilot
+
+    f = _facts(tunnel_id)
+    say = lambda line: autopilot._say(aid, line)       # (one short line for the story)
+
+    if f.get("state") == "slow":
+        _investigate_slow(aid, tunnel_id, f, say, finish)
+        return
+
+    say(f"{f['name']}: the bandwidth dropped to {f['now']} Mb/s; it usually gives {f['ref']}.")
+    _say_checks(say, f)
+    code, sentence = explain(f)
+    _keep_why(tunnel_id, code, sentence, "dropped")
     say("Where the problem is: " + sentence)
 
     if code == "this_only":
@@ -593,6 +663,49 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
 
     if finish:
         autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)
+
+
+def _investigate_slow(aid: int, tunnel_id: int, f: dict, say, finish: bool) -> None:
+    """A tunnel that was never fast (two tests in a row under SLOW_MBPS, no usual level to drop from): the same checks, the sentence, and - from what the Doctor KNOWS of the pair - a type that gave clearly more (a suggestion)."""
+    from . import autopilot
+
+    say(f"{f['name']}: the bandwidth is very low - {f['now']} Mb/s in the last two tests. It did not drop: this tunnel never gave more, so there is no usual level to compare with.")
+    _say_checks(say, f)
+    code, sentence = explain_slow(f)
+    _keep_why(tunnel_id, code, sentence, "is very low")
+    say("Where the problem is: " + sentence)
+
+    if code in ("slow_type", "latency", "loss"):                        # (a busy server or a slow line of the whole Iran / foreign server is not cured by another type of this tunnel)
+        _suggest_faster(tunnel_id, f, say)
+
+    if finish:
+        autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)
+
+
+def _suggest_faster(tunnel_id: int, f: dict, say) -> None:
+    """From the Doctor's memory of the pair: a type that gave clearly more here becomes a SUGGESTION with one click on the Doctor page (never done by itself: the test of one tunnel can read low, and a change of type
+    cuts the users for a minute or two). The owner, 2026-10-19: "do what you proposed" - suggest first. Nothing when the Doctor is off."""
+    from . import actions, autopilot, doctor, knowledge, license
+
+    if actions.doctor_mode() == "off":
+        say("The Doctor is off: it tells, it does not suggest a change.")
+        return
+
+    snap = autopilot._snapshot(tunnel_id)
+    cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+    now = int(time.time())
+    live = float(f.get("live") or 0)
+    rows = knowledge.faster_kinds(knowledge.pair(snap["iran_id"], snap["foreign_id"]), now, cur, max(float(f.get("now") or 0), live), license.tunnel_kind_allowed)
+
+    if not rows:
+        say(f"The Doctor's memory of {snap['iran_name']} ⇄ {snap['foreign_name']} knows no other type that gave clearly more than {cur} here. To find one: Doctor → Knowledge → test this pair.")
+        return
+
+    r = rows[0]
+    age = max(0, (now - int(r.get("at") or now)) // 3600)
+    why = (f"{cur} gives {f['now']} Mb/s in the test" + (f" (the users carry {live:.0f} Mb/s through it now)" if live else "") + f"; the Doctor's memory has {r['kind']} at {float(r['down_mbps']):.0f} Mb/s on this pair, measured {age} h ago.")
+    doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": f.get("now"), "memory_mbps": r["down_mbps"]})
+    say(f"Suggested on the Doctor page: change the type from {cur} to {r['kind']} - one click, the old type is put back if the new one does not build. {why}")
 
 
 def measure_start(tunnel_id: int) -> int:
@@ -613,10 +726,12 @@ def measure_start(tunnel_id: int) -> int:
         ref = bw.get("ref")
         autopilot._say(aid, f"Bandwidth: {bw.get('down')} Mb/s" + (f", usually {ref:.0f}" if ref else ", the usual level is still being learnt") + f" - {bw.get('state')}.")
 
-        if change == "drop":
+        if change in ("drop", "slow"):
             investigate(aid, tunnel_id)
         elif bw.get("state") == "drop":
             autopilot._say(aid, f"Still dropped: it usually gives {(bw.get('drop') or {}).get('from')} Mb/s. The reason found when it dropped: {(bw.get('why') or {}).get('text', 'not written yet')}", done=True, ok=True)
+        elif bw.get("state") == "slow":
+            autopilot._say(aid, f"Still very slow: {bw.get('down')} Mb/s. The reason found: {(bw.get('why') or {}).get('text', 'not written yet')}", done=True, ok=True)
         else:
             autopilot._say(aid, "Done.", done=True, ok=True)
 

@@ -1190,9 +1190,9 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5); no second red number in the row
-    assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "(t.bw || {}).state === \"drop\"" in app
-    assert 'slow = tl.filter(t => t.state === "up" && (t.bw || {}).state === "drop" && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
+    assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"slow\" ? \"slow\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5; a VERY SLOW one is amber, 1.69.14); no second red number in the row
+    assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
+    assert 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
     assert 'kv("Capacity", ' in app and 'kv("In use now", ' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
     assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bwcap.drop b" in css and "html body #page .tun-tbl td.bwc" in css
@@ -1216,10 +1216,34 @@ def test_the_cut_of_a_tunnel_is_a_tiny_tag_that_says_which_end_and_a_tunnel_with
     assert "const CUT_TAGS = [" in app and "const cutTag = t =>" in app and "stShort" not in app and "WHY_SHORT" not in app
     assert '<span class="cut-tag ${t.state === "down" ? "" : "unk"}"' in cell and 'class="st ${t.state === "down" ? "down" : "unknown"} why"' not in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && b.down < 1" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell      # a stall (0 Mb/s) reads the same red as a drop: the "no data" sentence is in the tooltip, not a second word in the row
+    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && b.down < BW_STALL" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell      # a stall (0 Mb/s) reads the same red as a drop: the "no data" sentence is in the tooltip, not a second word in the row (1.69.14: the line is the Doctor's own, 0.5 - not 1)
     assert "const bwPending = t => !(t.bw || {}).error &&" in app and 'NO DATA moved in the test' in app and "No data moves through this tunnel under load" in app and 'b.error ? "Could not be measured: "' in app
     assert ".tun-tbl .cut-tag {" in css and ".tun-tbl .cut-tag.unk" in css and ".tun-tbl .bwcap.pend" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag {' in css
     assert 'udp: "the GRE link of this tunnel, counted with UDP packets' in app                      # a link that drops ping shows the loss the bandwidth test counted with UDP, not "no ping"
+
+
+def test_the_page_paints_red_only_where_the_doctor_sees_a_stall_and_a_very_slow_tunnel_has_its_own_word():
+    """The owner, 2026-10-19: a tunnel that tested 0.6 and 0.8 Mb/s showed RED and the Doctor did nothing - the page painted red under 1 Mb/s, the Doctor saw a stall only under 0.5 and a drop only against a usual level
+    that a new or always-slow tunnel never has. The page now uses the Doctor's own lines, and a tunnel the Doctor calls VERY SLOW is amber with its sentence."""
+    import re
+
+    from nikatel.services import bandwidth
+
+    app, css = _web("app.js"), _web("lab.css")
+    m = re.search(r"const BW_STALL = ([\d.]+), BW_SLOW = ([\d.]+);", app)
+    assert m and float(m.group(1)) == bandwidth.STALL_MBPS and float(m.group(2)) == bandwidth.SLOW_MBPS            # (the same lines on the page and in the Doctor: one test keeps them so)
+    assert "b.down < 1" not in app and "b.down < BW_STALL" in app
+    capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
+    assert 'b.state === "slow" ? "slow" : "ok"' in capcell and ".bwcap.low b, .bwcap.slow b" in css
+    assert 'if (b.state === "slow") parts.push("VERY SLOW' in app and 'state === "slow" ? `Very slow:' in app
+    assert '["drop", "slow"].includes((t.bw || {}).state) ? "sev-yellow"' in app and 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state)' in app        # the row is looked at, and the Doctor page lists it under "to look at"
+
+
+def test_a_suggestion_to_change_the_type_has_its_own_tag_and_button():
+    app = _web("app.js")
+    row = app.split("const sugRow = s =>", 1)[1].split("const sugBox =", 1)[0]
+    assert 's.kind === "type" ? "speed"' in row and 's.kind === "type" ? `<button class="sm pri" onclick="apSugApply(' in row and "<span>Change type</span>" in row and "old type is put back" in row
+    assert 'sugs.some(s => s.kind !== "type")' in app                                                  # (the note "it would do this by itself" is about moves: a change of type is never done by itself)
 
 
 def test_the_tag_of_a_cut_tunnel_names_the_end_that_is_cut(tmp_path):
@@ -1292,7 +1316,8 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
         pytest.skip("node is not installed here")
 
     app = _web("app.js")
-    code = app[app.index("const bwFmt = v =>"): app.index("\n", app.index("const bwFmt = v =>"))] + "\n" + app[app.index("const bwNum = v =>"): app.index("/* the numbers of what the users use change by themselves")]
+    code = (app[app.index("const bwFmt = v =>"): app.index("\n", app.index("const bwFmt = v =>"))] + "\n" + app[app.index("const BW_STALL = "): app.index("\n", app.index("const BW_STALL = "))] + "\n"
+            + app[app.index("const bwNum = v =>"): app.index("/* the numbers of what the users use change by themselves")])
     driver = tmp_path / "bw.js"
     driver.write_text(
         "const esc = s => String(s == null ? '' : s); const mbps = v => v == null ? '-' : v.toFixed(1) + ' Mb/s'; const ago = () => '1m'; const bwPending = () => false; const bwTip = () => 'tip';\n"
@@ -1307,7 +1332,8 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
         "state.live = {}; res.cycle = bwUse(t);\n"
         "t = mk({down: 312, state: 'ok'}, null, null); t.last_check_at = 0; res.none = {use: bwUse(t), bar: bwBar(t), util: bwUtil(t)};\n"
         "live(87, 12, 200); res.stale = bwUse(mk({down: 312}, 40, 4));\n"
-        "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), low: bwCap(mk({down: 230, state: 'low', ref: 300})), none: bwCap(mk({}))};\n"
+        "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), low: bwCap(mk({down: 230, state: 'low', ref: 300})), none: bwCap(mk({})),\n"
+        "  slow: bwCap(mk({down: 0.8, state: 'slow'})), young: bwCap(mk({down: 0.8, state: 'learning'})), under: bwCap(mk({down: 0.4, state: 'drop'})), over: bwCap(mk({down: 0.6, state: 'drop', ref: 100, drop: {from: 100}}))};\n"
         "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
@@ -1325,6 +1351,9 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
     assert "<b>1234</b>" in res["cap"]["big"] and "Gb" not in res["cap"]["big"] and "<small>" not in res["cap"]["big"] and 'class="bwcap drop"' in res["cap"]["drop"] and "<b>90</b>" in res["cap"]["drop"] and "<em>" not in res["cap"]["drop"] and "▼" not in res["cap"]["drop"]      # the row shows only the number it dropped TO (90), red; the usual level (310) is the tooltip and the tunnel window (the owner, 2026-10-17: two red numbers were not clear)
     assert "<b>0</b>" in res["cap"]["stall"] and 'class="bwcap drop"' in res["cap"]["stall"] and "<em>" not in res["cap"]["stall"] and 'class="bwcap none"' in res["cap"]["none"] and "—" in res["cap"]["none"]
     assert 'class="bwcap ok"' in res["cap"]["low"] and "<b>230</b>" in res["cap"]["low"] and "low" not in re.sub(r'title="[^"]*"', "", res["cap"]["low"])      # a capacity a little under the usual (60-80 %) is not coloured: only a real drop or a stall is (the owner, 2026-10-17: "do not show these yellow numbers unless there is really a problem")
+    # 1.69.14, the owner's own numbers: 0.6 and 0.8 Mb/s were RED on the page while the Doctor saw no drop. Red is the Doctor's verdict (a drop, or a test under 0.5 that moved nothing); a very slow tunnel the Doctor confirmed is amber
+    assert 'class="bwcap slow"' in res["cap"]["slow"] and "<b>0.80</b>" in res["cap"]["slow"] and 'class="bwcap ok"' in res["cap"]["young"] and "<b>0.80</b>" in res["cap"]["young"]       # (a number the Doctor has not judged yet is not painted)
+    assert 'class="bwcap drop"' in res["cap"]["under"] and 'class="bwcap drop"' in res["cap"]["over"]                                                                                         # (a drop is red whatever its number)
 
 
 def test_the_ping_cell_has_the_ping_above_an_arrow_at_each_end_of_a_dotted_line_and_the_loss_below():

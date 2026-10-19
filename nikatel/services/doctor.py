@@ -1,7 +1,8 @@
 """The Tunnel Doctor's three modes, and the moves of tunnels between Iran servers.
 
   off   - watches and reports; every button still works by hand
-  fix   - the repair ladder (restart, rebuild, a new GRE link, another tunnel type); a move to another Iran server is only SUGGESTED
+  fix   - the repair ladder (restart, rebuild, a new GRE link, another tunnel type); a move to another Iran server is only SUGGESTED, and so is a change of TYPE for a tunnel that is very slow while
+          the Doctor's memory of the pair knows a type that gave clearly more (1.69.14; one click, never by itself)
   move  - the ladder, plus the move of tunnels to another Iran server, by itself and without asking:
           * an Iran server that is OFF (no answer) for `server_minutes` (default 10): ALL of its tunnels go to the best healthy Iran
             server and the DNS records that carried its address follow - in whichever account they live (ArvanCloud, another
@@ -82,6 +83,12 @@ def suggestion_valid(e: dict, tunnel: dict | None, saturated: set[int], now: int
     if e.get("kind") == "resources":
         return "" if int(e.get("from_id") or 0) in saturated else f"{e.get('from') or 'the server'} is no longer exhausted"
 
+    if e.get("kind") == "type":                                  # (a very slow tunnel is UP and clean all the time: the rule below would withdraw it at once; this one stands until the speed is back or the type was changed)
+        if tunnel.get("kind") and e.get("now_kind") and tunnel["kind"] != e["now_kind"]:
+            return f"{e.get('tunnel')} runs as {tunnel['kind']} now, not as {e['now_kind']}"
+
+        return "" if tunnel.get("bw_state") in ("slow", "drop") else f"{e.get('tunnel')} is no longer very slow"
+
     healthy = tunnel.get("state") == "up" and (tunnel.get("loss") or 0) < autopilot.ACT_FROM and now - int(tunnel.get("state_since") or now) >= HEALTHY_FOR
 
     return f"{e.get('tunnel')} has been up without loss for {(now - int(tunnel.get('state_since') or now)) // 60} minutes: the problem is over" if healthy else ""
@@ -97,7 +104,8 @@ def refresh_suggestions(now: int | None = None) -> list[str]:
     now = now or int(time.time())
 
     with session() as db:
-        rows = {t.name: {"state": t.state, "state_since": t.state_since, "loss": (t.detail or {}).get("loss_pct")} for t in db.scalars(select(Tunnel))}
+        rows = {t.name: {"state": t.state, "state_since": t.state_since, "loss": (t.detail or {}).get("loss_pct"), "kind": autopilot.kind_of(t.type, t.transport, t.record or {}), "bw_state": ((t.record or {}).get("bw") or {}).get("state")}
+                for t in db.scalars(select(Tunnel))}
 
     sat = {x["id"] for x in saturated_servers(now)}
     kept, told = [], []
@@ -209,11 +217,12 @@ def record_move(p: dict, moved: list[str], leftover: list[dict], ok: bool) -> di
     return e
 
 
-def suggest(kind: str, tunnel_id: int, tunnel: str, from_id: int, from_name: str, to_id: int | None, to_name: str, why: str) -> dict:
-    """A move the Doctor would make in mode "move": written down for the operator (one per tunnel, the newest wins)."""
+def suggest(kind: str, tunnel_id: int, tunnel: str, from_id: int, from_name: str, to_id: int | None, to_name: str, why: str, extra: dict | None = None) -> dict:
+    """A move the Doctor would make in mode "move": written down for the operator (one per tunnel, the newest wins). kind "type" (1.69.14): not a move - a change of the tunnel's type (`from`: the running type,
+    `to`: the type the Doctor's memory has seen give clearly more on this pair; `extra`: now_kind, to_kind, now_mbps, memory_mbps)."""
     s = _state()
     s["suggestions"] = [x for x in s["suggestions"] if x.get("tunnel") != tunnel]
-    e = {"id": f"s-{int(time.time())}-{tunnel_id}", "at": int(time.time()), "kind": kind, "tunnel_id": tunnel_id, "tunnel": tunnel, "from_id": from_id, "from": from_name, "to_id": to_id, "to": to_name, "why": why}
+    e = {"id": f"s-{int(time.time())}-{tunnel_id}", "at": int(time.time()), "kind": kind, "tunnel_id": tunnel_id, "tunnel": tunnel, "from_id": from_id, "from": from_name, "to_id": to_id, "to": to_name, "why": why, **(extra or {})}
     s["suggestions"].append(e)
     _save(s)
     return e
@@ -289,10 +298,74 @@ def apply_suggestion(sid: str) -> int:
     if e is None:
         raise ValueError("this suggestion is gone")
 
+    if e.get("kind") == "type":
+        return retype_now(int(e["tunnel_id"]), str(e.get("to_kind") or ""), str(e.get("now_kind") or ""), e.get("why", ""))
+
     if not e.get("to_id"):
         raise ValueError("no Iran server was found for it: choose one with “Move to another Iran server”")
 
     return move_now(int(e["tunnel_id"]), int(e["to_id"]), "manual", e.get("why", ""))
+
+
+# ------------------------------------------------------------------ a change of the tunnel's type (a "type" suggestion applied)
+def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str) -> None:
+    """The tunnel is built again as `kind` (same name, same ports), the old type is put back when the new one does not build; then it is measured again, and what it gave is told next to what it gave before."""
+    from ..ssh import SSHError
+    from . import bandwidth
+
+    snap = autopilot._snapshot(tunnel_id)
+    cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+    say = lambda line, **kw: autopilot._say(aid, line, **kw)
+
+    if not kind or not license.tunnel_kind_allowed(kind):
+        raise ValueError(f"{kind or 'this type'} is not allowed here (the licence)")
+
+    if cur == kind:
+        say(f"{snap['name']} runs as {kind} already: nothing to change.", done=True, ok=True)
+        return
+
+    if was and cur != was:
+        raise ValueError(f"{snap['name']} runs as {cur} now, not as {was}: the suggestion is out of date")
+
+    before = float(((snap["record"].get("bw") or {}).get("down")) or 0)
+    say(f"{snap['name']}: changing the type {cur} → {kind}. {why}")
+
+    if not autopilot._probe_links(aid, snap, [kind]):
+        say(f"The link of {kind} does not pass between {snap['iran_name']} and {snap['foreign_name']}: nothing is built, {snap['name']} is not touched.", done=True, ok=False)
+        return
+
+    if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor suggested it and you asked for it.", snap=snap):
+        say(f"The build of {kind} failed; {cur} was put back.", done=True, ok=False)
+        return
+
+    after = ""
+
+    try:
+        bw, _ = bandwidth.measure(tunnel_id)
+        after = f" It gives {bw.get('down')} Mb/s in the Doctor's test now (before: {before:g})."
+    except (ValueError, RuntimeError, SSHError, OSError) as ex:
+        after = f" It could not be measured just now ({str(ex)[:80]}): the Doctor measures it in a few minutes."
+
+    with session() as db:
+        emit(db, "ok", "tunnels", f"Tunnel {snap['name']} is now {kind} (it was {cur}): changed by your click on the Doctor's suggestion.{after}", snap["name"])
+
+    s = _state()
+    s["suggestions"] = [x for x in s["suggestions"] if x.get("tunnel") != snap["name"]]
+    _save(s)
+    say(f"{snap['name']} runs as {kind} now.{after}", done=True, ok=True)
+
+
+def retype_now(tunnel_id: int, kind: str, was: str = "", why: str = "") -> int:
+    """Start the change of a tunnel's type as an action (the story is followed by its id). `was`: the type the suggestion was written for - if the tunnel runs another type by now, nothing is changed."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        name = t.name
+
+    return autopilot._start(name, _run_retype, tunnel_id, kind, was, why, source="manual")
 
 
 def return_now(move_id: str) -> int:

@@ -53,7 +53,7 @@ def doctor_undo_dns(move_id: str):
 
 @router.post("/doctor/suggestions/{sid}/apply", status_code=202)
 def doctor_apply(sid: str):
-    """Do what the Doctor suggested: move the tunnel to the Iran server it named, as an action."""
+    """Do what the Doctor suggested: move the tunnel to the Iran server it named, or (a very slow tunnel) build it again as the type it named, as an action."""
     _writable()
 
     try:

@@ -293,3 +293,135 @@ def test_the_page_and_the_job_withdraw_a_suggestion_whose_tunnel_is_healthy_agai
         said = [e.text for e in db.scalars(select(Event).where(Event.domain == "actions"))]
 
     assert any("suggestion was withdrawn" in m and "t2" in m and "problem is over" in m for m in said)
+
+
+# ------------------------------------------------------------------ a suggestion to change the TYPE of a very slow tunnel (1.69.14)
+def test_a_type_suggestion_stands_while_the_tunnel_is_slow_even_when_it_is_up_and_clean():
+    """The "move" rule withdraws a suggestion when the tunnel has been up without loss for ten minutes; a very slow tunnel is up and clean all the time - that is what is wrong with it."""
+    now = 1_000_000
+    sug = {"id": "s-9", "kind": "type", "tunnel": "t1", "now_kind": "tcpmux", "to_kind": "tcp"}
+    slow_up = {"state": "up", "state_since": now - 7200, "loss": 0.0, "kind": "tcpmux", "bw_state": "slow"}
+    assert doctor.suggestion_valid(sug, slow_up, set(), now) == ""
+    assert doctor.suggestion_valid(sug, {**slow_up, "bw_state": "drop"}, set(), now) == ""                                  # (a stall is the worse word for the same fault)
+    assert "no longer very slow" in doctor.suggestion_valid(sug, {**slow_up, "bw_state": "ok"}, set(), now) and "no longer very slow" in doctor.suggestion_valid(sug, {**slow_up, "bw_state": None}, set(), now)
+    assert "runs as paqet now, not as tcpmux" in doctor.suggestion_valid(sug, {**slow_up, "kind": "paqet"}, set(), now)      # somebody changed the type already
+    assert "not in the list" in doctor.suggestion_valid(sug, None, set(), now)
+    assert doctor.suggestion_valid({**sug, "now_kind": None}, {**slow_up, "kind": "paqet"}, set(), now) == ""               # (an old entry that does not say its type is judged by the speed alone)
+
+
+def test_the_page_withdraws_a_type_suggestion_when_the_tunnel_is_no_longer_slow(monkeypatch):
+    from nikatel.models import Event
+
+    ids = _servers_and_tunnels()
+    now = int(time.time())
+
+    with session() as db:
+        t = db.get(Tunnel, ids["t2"])
+        t.state_since, t.detail, t.record = now - 3 * 3600, {"loss_pct": 0.0}, {"bw": {"down": 0.8, "state": "slow"}}
+
+    monkeypatch.setattr(doctor, "saturated_servers", lambda now=None: [])
+    e = doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcp", "tcpmux gives 0.8 Mb/s; tcp 119", extra={"now_kind": "tcpmux", "to_kind": "tcp", "now_mbps": 0.8, "memory_mbps": 119.0})
+    assert e["kind"] == "type" and e["to_kind"] == "tcp" and e["memory_mbps"] == 119.0 and e["from"] == "tcpmux" and e["to"] == "tcp" and e["to_id"] is None
+    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t2"]                                                   # up and clean for three hours: still there
+
+    with session() as db:
+        t = db.get(Tunnel, ids["t2"])
+        t.record = {"bw": {"down": 40.0, "state": "ok"}}
+
+    assert doctor.state()["suggestions"] == []
+
+    with session() as db:
+        said = [x.text for x in db.scalars(select(Event).where(Event.domain == "actions"))]
+
+    assert any("suggestion was withdrawn" in m and "t2" in m and "no longer very slow" in m for m in said)
+
+
+def _retype_world(monkeypatch, replaced_ok=True, links=True):
+    from nikatel.config import get_settings
+    from nikatel.services import bandwidth
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    ids = _servers_and_tunnels()
+
+    with session() as db:
+        db.get(Tunnel, ids["t2"]).record = {"bw": {"down": 0.8, "state": "slow"}}
+
+    said, replaced = [], []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append((line, done, ok)))
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: fn(1, *a) or 1)                                      # (run the work here, not in a thread)
+    monkeypatch.setattr(autopilot, "_probe_links", lambda aid, snap, kinds: kinds if links else [])
+    monkeypatch.setattr(autopilot, "_replace", lambda aid, tid, iran_id, foreign_id, kind, why, snap=None, **kw: replaced.append((tid, kind, why)) or replaced_ok)
+    monkeypatch.setattr(bandwidth, "measure", lambda tid: ({"down": 118.0}, ""))
+    e = doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcp", "tcpmux gives 0.8 Mb/s; the memory has tcp at 119", extra={"now_kind": "tcpmux", "to_kind": "tcp"})
+    return ids, e, said, replaced
+
+
+def test_one_click_builds_the_tunnel_again_as_the_suggested_type_and_tells_what_it_gives_now(monkeypatch):
+    from nikatel.models import Event
+
+    ids, e, said, replaced = _retype_world(monkeypatch)
+    assert doctor.apply_suggestion(e["id"]) == 1
+    assert replaced == [(ids["t2"], "tcp", "The Doctor suggested it and you asked for it.")]
+    assert said[0][0].startswith("t2: changing the type tcpmux → tcp. tcpmux gives 0.8 Mb/s")
+    assert said[-1] == ("t2 runs as tcp now. It gives 118.0 Mb/s in the Doctor's test now (before: 0.8).", True, True)
+    assert doctor.state()["suggestions"] == []                                                                             # done: the suggestion is gone
+
+    with session() as db:
+        said_events = [x.text for x in db.scalars(select(Event).where(Event.domain == "tunnels"))]
+
+    assert any("Tunnel t2 is now tcp (it was tcpmux): changed by your click on the Doctor's suggestion. It gives 118.0 Mb/s" in m for m in said_events)
+
+
+def test_a_type_that_does_not_build_or_whose_link_does_not_pass_leaves_the_tunnel_and_the_suggestion_alone(monkeypatch):
+    _ids, e, said, replaced = _retype_world(monkeypatch, replaced_ok=False)
+    doctor.apply_suggestion(e["id"])
+    assert replaced and said[-1] == ("The build of tcp failed; tcpmux was put back.", True, False)                      # (the swap itself puts the old type back)
+    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t2"]                                                   # it stands: the owner may try again or dismiss it
+    replaced.clear()
+    monkeypatch.setattr(autopilot, "_probe_links", lambda aid, snap, kinds: [])                                          # the link of the new type does not pass between the two servers
+    doctor.apply_suggestion(e["id"])
+    assert replaced == [] and said[-1][1:] == (True, False) and "link of tcp does not pass between ir1 and fi1: nothing is built, t2 is not touched" in said[-1][0]
+    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t2"]
+
+
+def test_a_type_suggestion_that_is_out_of_date_or_not_allowed_changes_nothing(monkeypatch):
+    import pytest
+
+    ids, e, said, replaced = _retype_world(monkeypatch)
+
+    with session() as db:
+        db.get(Tunnel, ids["t2"]).transport = "wssmux"                                                                      # somebody changed the type after the suggestion was written
+
+    with pytest.raises(ValueError, match="runs as wssmux now, not as tcpmux"):
+        doctor.apply_suggestion(e["id"])
+
+    with session() as db:
+        db.get(Tunnel, ids["t2"]).transport = "tcpmux"
+
+    monkeypatch.setattr(doctor.license, "tunnel_kind_allowed", lambda kind: False)
+
+    with pytest.raises(ValueError, match="not allowed here"):
+        doctor.apply_suggestion(e["id"])
+
+    monkeypatch.setattr(doctor.license, "tunnel_kind_allowed", lambda kind: True)
+    doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcpmux", "same", extra={"now_kind": "tcpmux", "to_kind": "tcpmux"})
+    doctor.apply_suggestion(next(x["id"] for x in doctor.state()["suggestions"]))
+    assert replaced == [] and said[-1][0] == "t2 runs as tcpmux already: nothing to change."                               # (the type it should become is the type it is)
+
+    with pytest.raises(ValueError, match="gone"):
+        doctor.apply_suggestion("s-0-0")
+
+    with pytest.raises(ValueError, match="not found"):
+        doctor.retype_now(98765, "tcp")
+
+
+def test_the_apply_button_of_the_api_starts_the_type_change_as_an_action(client, monkeypatch):
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    ids = _servers_and_tunnels()
+    e = doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcp", "why", extra={"now_kind": "tcpmux", "to_kind": "tcp"})
+    called = []
+    monkeypatch.setattr(doctor, "retype_now", lambda tid, kind, was="", why="": called.append((tid, kind, was, why)) or 55)
+    assert client.post(f"/api/doctor/suggestions/{e['id']}/apply").json() == {"ok": True, "id": 55}
+    assert called == [(ids["t2"], "tcp", "tcpmux", "why")]

@@ -443,7 +443,7 @@ def test_the_traffic_users_carry_is_the_middle_of_the_last_ten_minutes():
 
 # ------------------------------------------------------------------ a tunnel that answers every check and moves nothing (the owner, 2026-10-16: "it shows connected but has no bandwidth")
 def test_a_test_that_moved_nothing_is_a_stall_with_or_without_a_usual_level_and_a_sign_of_life_ends_it():
-    assert bandwidth.verdict(0.0, None) == "drop" and bandwidth.verdict(0.2, 300) == "drop" and bandwidth.verdict(0.6, None) == "learning" and bandwidth.verdict(5, 15) == "ok"
+    assert bandwidth.verdict(0.0, None) == "drop" and bandwidth.verdict(0.2, 300) == "drop" and bandwidth.verdict(0.6, None) == "slow" and bandwidth.verdict(5, 15) == "ok"      # (0.6 moved something: not a stall - since 1.69.14 it is "slow", it was "learning")
     bw, change = bandwidth.add_sample(None, NOW, 0.0, None, "door")                                  # the first test: measured again soon before anybody is told
     assert change == "" and bw["suspect"] is True and bw["drop"] is None and bandwidth.stalled(bw, NOW + 10) == ""
     bw, change = bandwidth.add_sample(bw, NOW + 180, 0.0, None, "door")
@@ -533,3 +533,177 @@ def test_the_probe_and_the_sink_echo_udp_and_take_the_new_argument():
     assert all(re.fullmatch(rules["UDPN"], v) for v in ("", "0", "30", "120")) and not any(re.fullmatch(rules["UDPN"], v) for v in ("1000", "3x", "-1", "30; id"))
     sink = render_action("sink_install", {"NAME": "bw7", "PORT": "39777", "KEY": "abcdef0123456789", "BIND": "10.2.1.2"})
     assert "def echo_udp():" in sink and "socket.SOCK_DGRAM" in sink and "if d[:len(KEY)] == KEY:" in sink and "u.sendto(d, a)" in sink
+
+# ------------------------------------------------------------------ a tunnel that was never fast (the owner, 2026-10-19: a tunnel that tested 0.6 and 0.8 Mb/s showed red and the Doctor did nothing)
+def test_a_tunnel_with_no_usual_level_that_tests_under_five_is_slow_and_not_dropped():
+    assert bandwidth.verdict(0.8, None) == "slow" and bandwidth.verdict(4.9, 12.0) == "slow"                 # a new tunnel, or one that never gave 20 Mb/s: no usual level can call it a drop
+    assert bandwidth.verdict(5.0, None) == "learning" and bandwidth.verdict(5.0, 12.0) == "ok" and bandwidth.verdict(30.0, 12.0) == "ok"
+    assert bandwidth.verdict(0.4, None) == "drop" and bandwidth.verdict(0.4, 12.0) == "drop"                 # nothing moved: a stall, whatever the level
+    assert bandwidth.verdict(3.0, 100.0) == "drop" and bandwidth.verdict(3.0, 20.0) == "drop"                # a tunnel that gave 20 or more: the usual level speaks, as before
+    assert bandwidth.SLOW_MBPS == bandwidth.ALIVE_MBPS and bandwidth.SLOW_OVER > bandwidth.SLOW_MBPS         # (a drop that is over "with a sign of life" and "very slow" never leave a gap between them)
+
+
+def test_slow_needs_two_tests_in_a_row_ends_at_eight_and_a_stall_takes_its_place():
+    bw, change = bandwidth.add_sample(None, NOW, 0.6, None, "link")                                          # the first very slow test: measured again soon, nobody is told
+    assert change == "" and bw["suspect"] is True and bw["slow"] is None and bw["state"] == "learning" and bw["next_at"] == NOW + bandwidth.CONFIRM_AFTER
+    bw, change = bandwidth.add_sample(bw, NOW + 180, 0.8, None, "link")                                      # the second: very slow
+    assert change == "slow" and bw["state"] == "slow" and bw["slow"] == {"since": NOW + 180, "now": 0.8} and bw["suspect"] is False and bw["drop"] is None
+    assert bw["next_at"] == NOW + 180 + bandwidth.WATCH_AFTER
+    bw, change = bandwidth.add_sample(bw, NOW + 1500, 1.1, None, "link")                                     # still slow: the number follows, nothing new is announced
+    assert change == "" and bw["state"] == "slow" and bw["slow"] == {"since": NOW + 180, "now": 1.1}
+    bw, change = bandwidth.add_sample(bw, NOW + 2700, 6.0, None, "link")                                     # over SLOW_MBPS, under SLOW_OVER: it stays (a tunnel at 5 does not flicker)
+    assert change == "" and bw["state"] == "slow" and bw["slow"]["now"] == 6.0
+    bw, change = bandwidth.add_sample(bw, NOW + 3900, 9.0, None, "link")
+    assert change == "recovered" and bw["state"] == "ok" and bw["slow"] is None
+
+    once, _ = bandwidth.add_sample(None, NOW, 0.7, None, "link")
+    once, _ = bandwidth.add_sample(once, NOW + 180, 0.8, None, "link")
+    once, change = bandwidth.add_sample(once, NOW + 1500, 20.0, None, "link")                                # a good test in between: the first one of the pair is forgotten ...
+    assert change == "recovered" and once["slow"] is None
+    again, change = bandwidth.add_sample(once, NOW + 1600, 0.9, None, "link")                                # ... and one very slow test again is only a suspicion
+    assert change == "" and again["suspect"] is True and again["state"] != "slow"
+
+    stall, _ = bandwidth.add_sample(None, NOW, 0.7, None, "link")
+    stall, _ = bandwidth.add_sample(stall, NOW + 180, 0.8, None, "link")
+    stall, change = bandwidth.add_sample(stall, NOW + 1500, 0.2, None, "link")                               # a test that moved nothing: a suspicion first (the tunnel is still slow in the meantime)
+    assert change == "" and stall["suspect"] is True and stall["state"] == "slow"
+    stall, change = bandwidth.add_sample(stall, NOW + 1700, 0.1, None, "link")                               # confirmed: a stall is the worse word and takes the place of "slow"
+    assert change == "drop" and stall["state"] == "drop" and stall["slow"] is None and stall["drop"]["now"] == 0.1
+
+    dropped, _ = bandwidth.add_sample(None, NOW, 0.0, None, "door")
+    dropped, _ = bandwidth.add_sample(dropped, NOW + 180, 0.0, None, "door")
+    dropped, change = bandwidth.add_sample(dropped, NOW + 1500, 2.0, None, "door")                           # a stalled tunnel that moves a little is still a drop, never "slow" on top of it
+    assert change == "" and dropped["state"] == "drop" and dropped["slow"] is None
+
+    old = {k: v for k, v in good_history().items() if k != "slow"}                                           # (a record from before 1.69.14 has no "slow")
+    assert bandwidth.add_sample(old, NOW, 290.0, None, "link")[0]["slow"] is None
+
+
+def test_the_sentence_for_a_slow_tunnel_never_calls_it_full_of_users():
+    base = {"now": 0.8, "ref": None, "loss": 0.0, "live": 4.0, "iran": {"name": "ir1", "cpu": 8}, "foreign": {"name": "fr1", "cpu": 10}, "rtt": 164.0, "rtt_ref": 163.0, "same_iran": {"total": 2, "dropped": 1}, "same_foreign": {"total": 1, "dropped": 1}}
+    assert bandwidth.explain(base)[0] == "full"                                                              # (the rule for a drop: users carry more than the test reads = "full of users" - wrong for a tunnel that is slow)
+    code, text = bandwidth.explain_slow(base)
+    assert code == "slow_type" and "0.8 Mb/s in the test" in text and "the users carry 4 Mb/s through it now" in text and "another type may carry more" in text
+    assert "users carry" not in bandwidth.explain_slow({**base, "live": None})[1]
+    assert bandwidth.explain_slow({**base, "iran": {"name": "ir1", "cpu": 93}})[0] == "iran_busy" and bandwidth.explain_slow({**base, "foreign": {"name": "fr1", "cpu": 91}})[0] == "foreign_busy"
+    code, text = bandwidth.explain_slow({**base, "same_iran": {"total": 3, "dropped": 2}})
+    assert code == "iran_wide" and "2 of the 3 tunnels of the Iran server ir1 are slow or dropped together" in text
+    assert bandwidth.explain_slow({**base, "same_foreign": {"total": 3, "dropped": 2}})[0] == "foreign_wide"
+    assert bandwidth.explain_slow({**base, "same_iran": {"total": 2, "dropped": 1}})[0] == "slow_type"       # one of two is not "together"
+    assert bandwidth.explain_slow({**base, "loss": 12.0})[0] == "loss" and bandwidth.explain_slow({**base, "rtt": 300.0})[0] == "latency"
+
+
+def _slow_world(monkeypatch, name="sl-a", mode="fix", memory=True):
+    """A very slow tunnel, calm servers, users carrying 4 Mb/s, and the Doctor's memory of its pair (a type that gave 119 Mb/s, a poor one, a failed one)."""
+    from nikatel.services import knowledge
+    from nikatel.services import settings as st
+
+    tid, _, ir, fr = make_tunnel(name, bw={**good_history(0.8, n=2), "state": "slow", "down": 0.8, "slow": {"since": NOW - 600, "now": 0.8}})
+    now = int(time.time())
+
+    with session() as db:
+        db.add_all([ServerSample(server_id=ir, ts=now - 20, cpu=8.0, ram=30.0, disk=30.0, load1=0.5, rx_mbps=1.0, tx_mbps=2.0, conn=7), ServerSample(server_id=fr, ts=now - 20, cpu=10.0, ram=30.0, disk=30.0, load1=0.5, rx_mbps=1.0, tx_mbps=2.0, conn=7)])
+        db.add_all([TunnelCheck(tunnel_id=tid, ts=now - 60 * i, ok=True, rtt_ms=164.0, rx_mbps=4.0, tx_mbps=1.0, error="") for i in range(6)])
+        t = db.get(Tunnel, tid)
+        t.rx_mbps, t.rtt_ms, t.detail = 4.0, 164.0, {"loss_pct": 0.0}
+
+    st.put("repair", {"mode": mode})
+    kinds = {"tcp": knowledge.merge(None, {"kind": "tcp", "ok": True, "score": 50, "down_mbps": 119.0, "latency_ms": 167.0, "loss_pct": 0.0}, "full", now - 3600),
+             "paqet": knowledge.merge(None, {"kind": "paqet", "ok": True, "score": 40, "down_mbps": 9.0, "latency_ms": 190.0, "loss_pct": 0.0}, "full", now - 3600),             # (9 is not five times the 4 the users carry)
+             "bp:tcp": knowledge.merge(None, {"kind": "bp:tcp", "ok": False, "error": "no data passes"}, "latency", now - 3600)}
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: {"kinds": kinds} if memory else {})
+    return tid, ir, fr
+
+
+def test_the_look_at_a_slow_tunnel_suggests_the_type_the_doctors_memory_knows_to_be_faster(monkeypatch):
+    from nikatel.services import doctor
+
+    tid, ir, _ = _slow_world(monkeypatch)
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append((line, done, ok)))
+    bandwidth.investigate(7, tid)
+    lines = [s[0] for s in said]
+    assert lines[0].startswith("sl-a: the bandwidth is very low - 0.8 Mb/s in the last two tests. It did not drop: this tunnel never gave more")
+    assert any(ln.startswith("✓ The iran server ir-sl-a: CPU 8 %") for ln in lines) and any("Users are carrying 4 Mb/s" in ln for ln in lines)
+    assert any(ln.startswith("Where the problem is: Only this tunnel is that slow (0.8 Mb/s in the test, the users carry 4 Mb/s through it now)") for ln in lines)
+    assert any(ln.startswith("Suggested on the Doctor page: change the type from tcpmux to tcp - one click") and "tcp at 119 Mb/s on this pair, measured 1 h ago" in ln for ln in lines) and said[-1][1:] == (True, True)
+    assert not any("engine" in ln for ln in lines)                                                           # (a restart of the engine is for a drop; a tunnel that was never fast has nothing to come back to)
+
+    with session() as db:
+        bw = db.get(Tunnel, tid).record["bw"]
+        said_events = [e.text for e in db.scalars(select(Event).where(Event.ref == "sl-a"))]
+
+    assert bw["why"]["code"] == "slow_type" and any("the bandwidth is very low - Only this tunnel is that slow" in m for m in said_events)
+    sug = doctor.state()["suggestions"]
+    assert len(sug) == 1 and sug[0]["kind"] == "type" and sug[0]["tunnel"] == "sl-a" and sug[0]["tunnel_id"] == tid and sug[0]["from"] == "tcpmux" and sug[0]["to"] == "tcp"
+    assert sug[0]["now_kind"] == "tcpmux" and sug[0]["to_kind"] == "tcp" and sug[0]["now_mbps"] == 0.8 and sug[0]["memory_mbps"] == 119.0 and "tcp at 119 Mb/s" in sug[0]["why"]
+    _ = ir
+
+
+def test_the_slow_look_suggests_nothing_when_the_memory_knows_nothing_better_or_the_doctor_is_off_or_the_fault_is_the_servers(monkeypatch):
+    from nikatel.services import doctor
+
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    tid, _, _ = _slow_world(monkeypatch, "sl-b", memory=False)                                               # nothing known of this pair
+    bandwidth.investigate(7, tid)
+    assert any("knows no other type that gave clearly more than tcpmux here" in ln and "Doctor → Knowledge" in ln for ln in said) and doctor.state()["suggestions"] == []
+    said.clear()
+    tid, _, _ = _slow_world(monkeypatch, "sl-c", mode="off")
+    bandwidth.investigate(7, tid)
+    assert any("The Doctor is off: it tells, it does not suggest a change." in ln for ln in said) and doctor.state()["suggestions"] == []
+    said.clear()
+    tid, ir, _ = _slow_world(monkeypatch, "sl-d")
+
+    with session() as db:
+        db.add(ServerSample(server_id=ir, ts=int(time.time()) - 5, cpu=95.0, ram=30.0, disk=30.0, load1=0.5, rx_mbps=1.0, tx_mbps=2.0, conn=7))
+
+    bandwidth.investigate(7, tid)
+    assert any("Where the problem is: The Iran server ir-sl-d is busy" in ln for ln in said) and doctor.state()["suggestions"] == []        # (another type of this tunnel does not cure a server on its knees)
+
+
+def test_a_confirmed_slow_tunnel_is_looked_at_by_the_job_the_button_and_the_quality_job(monkeypatch):
+    tid, _, _, _ = make_tunnel("sl-e", bw=good_history())
+    looked = []
+    monkeypatch.setattr(bandwidth, "_investigate_later", lambda t: looked.append(t))
+    monkeypatch.setattr(bandwidth.time, "time", lambda: NOW + 10_000)
+    monkeypatch.setattr(bandwidth.jobs, "stopping", lambda: False)
+    monkeypatch.setattr(bandwidth, "measure", lambda t: ({"down": 0.8, "state": "slow"}, "slow"))
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    bandwidth.run()
+    assert looked == [tid]                                                                                    # the job: the same look as for a drop
+
+    door, _, _, _ = make_tunnel("sl-f", "backpack", door=True)
+    monkeypatch.setattr(bandwidth, "_store", lambda *a, **k: ({"down": 0.8}, "slow"))
+    bandwidth.note_quality(door, {"down_mbps": 0.8, "latency_ms": 80.0})
+    assert looked == [tid, door]                                                                              # the quality job of a tunnel with a test door
+
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: fn(1, *a))
+    seen = []
+    monkeypatch.setattr(bandwidth, "investigate", lambda aid, t, finish=True: seen.append(t))
+    monkeypatch.setattr(bandwidth, "measure", lambda t: ({"down": 0.8, "ref": None, "state": "slow"}, "slow"))
+    bandwidth.measure_start(tid)
+    assert seen == [tid]                                                                                      # the Measure button: the look is in the same story
+    monkeypatch.setattr(bandwidth, "measure", lambda t: ({"down": 0.9, "ref": None, "state": "slow", "why": {"text": "Only this tunnel is that slow"}}, ""))
+    bandwidth.measure_start(tid)
+    assert any(ln.startswith("Still very slow: 0.9 Mb/s. The reason found: Only this tunnel is that slow") for ln in said)
+
+
+def test_a_slow_tunnel_is_stored_with_one_event_and_the_slow_ones_count_with_the_dropped_ones():
+    tid, _, _, _ = make_tunnel("sl-g", bw={**good_history(0.8, n=2), "down": 0.8})
+    assert bandwidth._store(tid, 0.7, None, "link", 160.0)[1] == "" and bandwidth._store(tid, 0.9, None, "link", 160.0)[1] == "slow"
+    assert bandwidth._store(tid, 1.0, None, "link", 160.0)[1] == ""                                         # (still slow: nothing more is said)
+
+    with session() as db:
+        said = [e.text for e in db.scalars(select(Event).where(Event.domain == "tunnels"))]
+        rec = db.get(Tunnel, tid).record
+
+    assert sum("the bandwidth is very low - 0.9 Mb/s in two tests in a row (it did not drop: it was never higher)" in m for m in said) == 1 and rec["bw"]["state"] == "slow" and rec["bw"]["slow"]["since"] > 0
+    other, _, _, _ = make_tunnel("sl-h", bw=good_history())
+    assert bandwidth._facts(other)["same_iran"] == {"total": 1, "dropped": 0} and bandwidth._facts(tid)["same_iran"] == {"total": 1, "dropped": 1}        # (a slow tunnel counts with the dropped ones: "3 of 4 are slow or dropped together")
+    assert bandwidth._store(tid, 12.0, None, "link", 160.0)[1] == "recovered"
+
+    with session() as db:
+        assert any("bandwidth is back" in e.text for e in db.scalars(select(Event).where(Event.domain == "tunnels")))
