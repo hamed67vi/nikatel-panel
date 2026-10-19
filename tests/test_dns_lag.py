@@ -114,3 +114,40 @@ def test_apply_pins_changes_adds_and_removes_and_never_touches_other_rows():
     assert [(r["id"], r["value"]) for r in out] == [("1", "9.9.9.9"), ("3", "3.3.3.3")] and base[0]["value"] == "1.1.1.1"      # (the rows that were read are not changed in place)
     dnscache.PINS.clear()
     assert dnscache.apply_pins(base) == base
+
+def test_a_write_does_not_make_the_next_look_read_every_domain_of_every_account_again(client, cf, monkeypatch):
+    """The owner, 2026-10-20: "when I change a name or a DNS I must refresh the page". The write dropped the copy (`forget`), so the read right after it asked every domain of every account before it
+    answered: 20-30 seconds with 26 domains, and the page said "Record changed" and kept the old record meanwhile. A write only marks the copy old (`stale`): the page gets the rows - with the write laid
+    on them - at once, and the providers are read in the background."""
+    cid = client.post("/api/dns/accounts", json={"provider": "cloudflare", "name": "CF", "key": TOKEN}).json()["account"]["id"]
+    rid = client.post("/api/dns/records", json={"account": cid, "domain": "cf.test", "name": "a", "ips": ["203.0.113.1"], "ttl": 1, "cloud": False}).json()["id"]
+    assert listed(client, fresh=True)["a.cf.test"]["value"] == "203.0.113.1"                                  # the copy is read once
+    reads, asked, real = [], [], cloudflare.req
+
+    def counting(token, method, path, body=None, params=None):
+        if method == "GET" and path.endswith("/dns_records"):
+            reads.append(path)
+
+        return real(token, method, path, body, params)
+
+    monkeypatch.setattr(cloudflare, "req", counting)
+    monkeypatch.setattr(dnscache, "refresh_in_background", lambda: asked.append(1))
+    assert client.put(f"/api/dns/records/{cid}/cf.test/{rid}", json={"account": cid, "domain": "cf.test", "name": "a", "ips": ["203.0.113.2"], "ttl": 1, "cloud": False}).status_code == 200
+    reads.clear()
+    assert listed(client)["a.cf.test"]["value"] == "203.0.113.2"                                              # the page's read right after the write: the new value ...
+    assert reads == [] and asked == [1]                                                                      # ... with no read of any provider before the answer; the renewal is asked for
+    assert client.delete(f"/api/dns/records/{cid}/cf.test/{rid}").status_code == 200
+    assert "a.cf.test" not in listed(client) and reads == []                                                 # a delete the same
+
+
+def test_stale_keeps_the_rows_and_never_makes_up_a_copy_that_was_not_read():
+    old = dict(dnscache.CACHE)
+    try:
+        dnscache.CACHE.update(at=0.0, rows=[])
+        dnscache.stale()
+        assert dnscache.CACHE["at"] == 0.0                                                                  # nothing was read: the next look reads
+        dnscache.CACHE.update(at=time.time(), rows=[{"id": "1"}])
+        dnscache.stale()
+        assert dnscache.CACHE["at"] == 1.0 and dnscache.CACHE["rows"] == [{"id": "1"}]                      # old, but its rows are kept
+    finally:
+        dnscache.CACHE.update(old)

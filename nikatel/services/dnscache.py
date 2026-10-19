@@ -117,6 +117,14 @@ def warm() -> None:
         log.exception("DNS warm-up skipped")
 
 
+def stale() -> None:
+    """A record was written (made, changed, deleted): the copy KEEPS its rows - `wrote` has laid the write on them - and is only marked old, so the next look gives the page those rows at once and the
+    providers are read again in the background. `forget()` made the next look read EVERY domain of EVERY account before it answered (20-30 seconds with 26 domains): the page said "Record changed"
+    and went on showing the old record until the answer came - or was refreshed by hand (the owner, 2026-10-20: "when I change a name or a DNS I must refresh the page")."""
+    if CACHE["at"]:
+        CACHE["at"] = 1.0
+
+
 def forget() -> None:
     """A record was changed: the copy is out of date (the next read asks the providers)."""
     CACHE["at"] = 0.0

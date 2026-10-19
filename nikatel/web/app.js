@@ -4793,7 +4793,7 @@ function dnsRecords(recs, err, byIp, cur, live) {
 window.dnsPickDom = d => { try { localStorage.setItem("nk.dns.sel", d); } catch (e) { /* private window */ } refresh(); };
 window.dnsCloud = async k => {
   const r = (state.dnsRecs || {})[k]; if (!r || !r.editable) return;
-  try { await api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`, {method: "PUT", body: JSON.stringify({account: r.account, domain: r.domain, name: r.name, ips: r.ips, ttl: +r.ttl || 120, cloud: !r.cloud})}); toast(r.cloud ? "Cloud turned off" : "Cloud turned on", "ok"); state.dnsFresh = true; refresh(); }
+  try { await api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`, {method: "PUT", body: JSON.stringify({account: r.account, domain: r.domain, name: r.name, ips: r.ips, ttl: +r.ttl || 120, cloud: !r.cloud})}); toast(r.cloud ? "Cloud turned off" : "Cloud turned on", "ok"); refresh(); }
   catch (e) { toast("✕ " + e.message, "bad"); refresh(); }
 };
 /* make / change / delete an A record by hand (each kept under Changes with a Restore) */
@@ -4850,14 +4850,14 @@ window.dnsSave = async (e, k) => {
   if (po && !po.disabled && po.value !== (po.dataset.orig || "")) body.port = po.value === "" ? 0 : +po.value;
   if (up && up.value !== (up.dataset.orig || "default")) body.upstream = up.value;
   const btn = f.querySelector(".qp-pri"); btn.disabled = true; formErr(f, "");
-  try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); state.dnsFresh = true; refresh(); }
+  try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); refresh(); }      // (no "fresh": the server lays the write on its copy and answers at once; a fresh read of 26 domains took 20 s and the page kept the old record meanwhile)
   catch (err) { btn.disabled = false; formErr(f, err.message); }
   return false;
 };
 window.dnsDel = async k => {
   const r = (state.dnsRecs || {})[k]; if (!r) return;
   if (!await gconfirm(`Delete ${r.fqdn} (${r.value})? It is kept under Changes: Restore makes it again.`, {danger: true})) return;
-  try { await api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`, {method: "DELETE"}); toast("✓ Record deleted", "ok"); state.dnsFresh = true; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  try { await api(`/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}`, {method: "DELETE"}); toast("✓ Record deleted", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 function dnsChanges(log, accounts) {
   const an = id => (accounts.find(a => a.id === (id || "arvan")) || {}).name || "ArvanCloud", opName = {create: "made", edit: "changed", delete: "deleted"};

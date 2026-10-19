@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.36 - A DNS record that was changed shows so at once: the page no longer waits for every domain of every account to be read again
+
+The owner (2026-10-20, with a picture of the CDN page: the toast "Record changed" and the old record in the list): "when I change a name or a DNS I must refresh the page for it to update".
+
+- **Cause, found by playing it on a test panel with a Cloudflare account of 20 domains and a provider that needs a second for each request**: the write called `dnscache.forget()`, which throws the whole copy of the records away, and the page then asked for a FRESH read - every domain of every account (the owner has 26 domains and 327 records: 20-30 seconds). The toast came after 2.3 s and the old record stayed on the screen until 22.5 s; a refresh by hand got the copy with the write laid on it at once. (1.69.10 had laid the write on the list for 45 seconds for a lagging provider; that was right and stays, the wait was the problem.)
+- **Fix** (`services/dnscache.py stale()`, `api/dns.py`, `app.js`): a record that is made, changed, deleted or has its cloud switched only marks the copy OLD (`stale`): the rows are kept with the write laid on them, the next look gets them at once and the providers are read again in the background. The page does not ask for a `fresh` read after such a write any more (it still does after an account is added, tested or removed). Test panel, same Cloudflare: the new value showed 0.6 s after the toast instead of 20 s.
+- **Proved**: `tests/test_dns_lag.py` - after a write the page's read has the new value with NO read of any provider before the answer and the renewal asked for in the background; a delete the same; `stale()` keeps the rows and never makes up a copy that was never read (the DNS, outbound and alignment suites still pass).
+- **Not proved**: the owner's real ArvanCloud and Cloudflare (the providers were the suite's fakes and a slow fake); that the background read finishes while the page is open (the page asks again every 15 seconds); the write itself (the PUT) still takes as long as the provider takes (2.3 s with the slow fake).
 ## 1.69.35 - A build whose link does not pass tries the other link models
 
 The owner (2026-10-20), after a build between two servers stopped with "the GRE link is up but the inner addresses cannot ping each other (0/10)": "there are several GRE models - when the build finds that one does not answer it must test the others".
