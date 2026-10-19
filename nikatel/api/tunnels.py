@@ -164,7 +164,26 @@ def tunnel_kinds():
 def tunnels_live():
     """What the users use of each tunnel right now (Mb/s down and up, from the counters of its link or, for a reverse proxy with no link, of its TCP connections; counted over about 15 s and read every 5 s while this is asked). Only a read of memory: the servers are read by a job."""
     livebw.ask()
-    return {"ok": True, "at": time.time(), "live": livebw.view()}
+    return {"ok": True, "at": time.time(), "live": livebw.view(), "use24": use_summary(int(time.time()))}
+
+
+_USE: dict = {"at": 0, "rows": {}}
+
+
+def use_summary(now: int, window: int = 86400, keep: int = 60) -> dict:
+    """What the users carried through every tunnel in the last 24 hours - the PEAK and the average of the Iran end's counters, read by the checks every minute - so that the page can show what the users get (the owner,
+    2026-10-19: "show how much bandwidth the user gets, in place of these numbers": the little capacity test of the Doctor read 0.40 on a tunnel whose users carried 6 - 13). Kept `keep` seconds: the page asks every 4 s."""
+    from sqlalchemy import func
+
+    if now - int(_USE["at"]) < keep and _USE["rows"]:
+        return _USE["rows"]
+
+    with session() as db:
+        rows = db.execute(select(TunnelCheck.tunnel_id, func.max(TunnelCheck.rx_mbps), func.avg(TunnelCheck.rx_mbps), func.count(TunnelCheck.rx_mbps))
+                          .where(TunnelCheck.ts >= now - window, TunnelCheck.rx_mbps.is_not(None)).group_by(TunnelCheck.tunnel_id)).all()
+
+    _USE["at"], _USE["rows"] = now, {int(tid): {"peak": round(float(mx), 1), "avg": round(float(av), 1)} for tid, mx, av, n in rows if n >= 5}
+    return _USE["rows"]
 
 
 class TestIn(BaseModel):

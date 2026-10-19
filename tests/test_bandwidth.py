@@ -767,3 +767,50 @@ def test_users_carrying_the_line_or_more_prove_that_the_tunnel_is_not_slow_and_t
     assert bandwidth._live_peak(tid, now) == 12.0
     _, change = bandwidth._store(tid, 0.7, None, "link", 160.0)
     assert change == ""                                                                                              # 12 is under 20: the first very slow test, a suspicion
+
+
+def test_a_tunnel_that_is_already_slow_gets_its_change_at_the_next_watch(monkeypatch):
+    """The owner's tunnel was judged very slow before the update that made the Doctor change the type by itself; the change is only started on the step from "ok" to "slow", so it never came. The watch (every 20 minutes) tries it."""
+    from nikatel.services import doctor
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    tid, ir, _ = _slow_world(monkeypatch, "al-a")
+    doctor.suggest("type", tid, "al-a", ir, "tcpmux", None, "tcp", "why", extra={"now_kind": "tcpmux", "to_kind": "tcp"})
+    started = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: started.append((label, fn, a, k)) or 1)
+    bandwidth._retype_later(tid)
+    assert len(started) == 1 and started[0][0] == "al-a" and started[0][1] is doctor._run_retype and started[0][2] == (tid, "tcp", "tcpmux", "why", True) and started[0][3]["source"] == "auto"
+    started.clear()
+    doctor.mark_retyped("al-a", int(time.time()))
+    bandwidth._retype_later(tid)
+    assert started == []                                                                                      # once in 24 hours
+    other, _, _ = _slow_world(monkeypatch, "al-b")
+    bandwidth._retype_later(other)
+    assert started == []                                                                                      # no suggestion stands (nothing faster is known): nothing is done
+    looked = []
+    monkeypatch.setattr(bandwidth, "_retype_later", lambda t: looked.append(t))
+    monkeypatch.setattr(bandwidth, "measure", lambda t: ({"down": 0.4, "ref": None, "state": "slow"}, ""))
+    monkeypatch.setattr(bandwidth.time, "time", lambda: NOW + 10_000)
+    monkeypatch.setattr(bandwidth.jobs, "stopping", lambda: False)
+    bandwidth.run()
+    assert looked                                                                                              # the job: a measurement that finds it still slow tries the change
+
+
+def test_the_live_route_carries_the_peak_and_the_average_of_what_the_users_carried_in_24_hours(client, monkeypatch):
+    from nikatel.api import tunnels as tapi
+    from nikatel.services import livebw
+
+    monkeypatch.setattr(livebw, "ask", lambda: None)
+    tid, _, _, _ = make_tunnel("us-a")
+    few, _, _, _ = make_tunnel("us-b")
+    now = int(time.time())
+
+    with session() as db:
+        db.add_all([TunnelCheck(tunnel_id=tid, ts=now - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=v, tx_mbps=1.0, error="") for i, v in enumerate([2.0, 13.0, 5.0, 6.0, 4.0, 3.0])])
+        db.add(TunnelCheck(tunnel_id=tid, ts=now - 2 * 86400, ok=True, rtt_ms=80.0, rx_mbps=500.0, tx_mbps=1.0, error=""))             # (two days old: not counted)
+        db.add_all([TunnelCheck(tunnel_id=few, ts=now - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=9.0, tx_mbps=1.0, error="") for i in range(3)])
+
+    tapi._USE["at"], tapi._USE["rows"] = 0, {}
+    j = client.get("/api/tunnels/live").json()
+    assert j["ok"] and j["use24"][str(tid)] == {"peak": 13.0, "avg": 5.5} and str(few) not in j["use24"]                               # fewer than five readings say nothing
+    tapi._USE["at"], tapi._USE["rows"] = 0, {}

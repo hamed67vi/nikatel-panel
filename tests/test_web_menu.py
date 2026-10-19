@@ -1216,7 +1216,7 @@ def test_the_cut_of_a_tunnel_is_a_tiny_tag_that_says_which_end_and_a_tunnel_with
     assert "const CUT_TAGS = [" in app and "const cutTag = t =>" in app and "stShort" not in app and "WHY_SHORT" not in app
     assert '<span class="cut-tag ${t.state === "down" ? "" : "unk"}"' in cell and 'class="st ${t.state === "down" ? "down" : "unknown"} why"' not in cell
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && b.down < BW_STALL" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell      # a stall (0 Mb/s) reads the same red as a drop: the "no data" sentence is in the tooltip, not a second word in the row (1.69.14: the line is the Doctor's own, 0.5 - not 1)
+    assert "bwPending(t)" in capcell and "measuring…" in capcell and "stall = b.down != null && capOf(t) < BW_STALL" in capcell and "stall || b.state === \"drop\" ? \"drop\"" in capcell      # a stall (0 Mb/s) reads the same red as a drop: the "no data" sentence is in the tooltip, not a second word in the row (1.69.14: the line is the Doctor's own, 0.5 - not 1)
     assert "const bwPending = t => !(t.bw || {}).error &&" in app and 'NO DATA moved in the test' in app and "No data moves through this tunnel under load" in app and 'b.error ? "Could not be measured: "' in app
     assert ".tun-tbl .cut-tag {" in css and ".tun-tbl .cut-tag.unk" in css and ".tun-tbl .bwcap.pend" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag {' in css
     assert 'udp: "the GRE link of this tunnel, counted with UDP packets' in app                      # a link that drops ping shows the loss the bandwidth test counted with UDP, not "no ping"
@@ -1344,7 +1344,7 @@ def test_the_bandwidth_row_is_one_number_each_and_the_breakdown_moved_into_the_t
     app = _web("app.js")
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
     usecell = app.split("const bwUse = t => {", 1)[1].split("const bwBar = t =>", 1)[0]
-    assert "<em>" not in capcell and "▼" not in capcell and capcell.count("bwNum(b.down)") == 1                                 # the row: one capacity number, no second one beside it
+    assert "<em>" not in capcell and "▼" not in capcell and capcell.count("bwNum(capOf(t))") == 1                                 # the row: one capacity number, no second one beside it
     assert usecell.count("<i>↓</i>") == 1 and "↑" not in usecell and usecell.count("bwNum(u.down)") == 1 and "u.up" not in usecell      # the row: one usage number (the download), the upload is gone from here
     status = app.split('box(SI.clock, "Status"', 1)[1].split("const link = box", 1)[0]
     link = app.split("const link = box(SI.link", 1)[1].split("return `<div class=\"sgrid\">", 1)[0]
@@ -1383,10 +1383,12 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
         "live(87, 12, 200); res.stale = bwUse(mk({down: 312}, 40, 4));\n"
         "res.cap = {big: bwCap(mk({down: 1234, state: 'ok'})), drop: bwCap(mk({down: 90, state: 'drop', ref: 310, drop: {from: 310}})), stall: bwCap(mk({down: 0, state: 'drop', ref: 300})), low: bwCap(mk({down: 230, state: 'low', ref: 300})), none: bwCap(mk({})),\n"
         "  slow: bwCap(mk({down: 0.8, state: 'slow'})), young: bwCap(mk({down: 0.8, state: 'learning'})), under: bwCap(mk({down: 0.4, state: 'drop'})), over: bwCap(mk({down: 0.6, state: 'drop', ref: 100, drop: {from: 100}}))};\n"
+        "state.use24 = {7: {peak: 13.0, avg: 5.2}}; res.day = {slow: bwCap(mk({down: 0.4, state: 'slow'})), small: bwCap(mk({down: 300, state: 'ok'})), util: bwUtil(mk({down: 0.4, state: 'slow'}), 0)};\n"
         "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     res = json.loads(r.stdout)
+    assert '<b>13</b>' in res["day"]["slow"] and 'class="bwcap slow"' in res["day"]["slow"] and '<b>300</b>' in res["day"]["small"]      # 1.69.21: the users carried 13 in the last 24 hours, the little test said 0.4: the row says 13 (at least what the users got); a test above the peak says itself
     assert res["nums"] == ["87", "8.4", "0.40", "0", "1234", "15000", "1000", "1234 Mb/s", "—"]      # always Mb/s, never Gb/s (the owner, 2026-10-17: "do not write Gig, everything in Mb")
     assert 'class="bwuse live"' in res["live"]["use"] and "<b>87</b>" in res["live"]["use"] and "<b>12</b>" not in res["live"]["use"]      # one number - the download; the upload stays in the tooltip and the tunnel window
     seen = re.sub(r'title="[^"]*"', "", res["live"]["use"])                                                                  # (what is SEEN: the tooltip keeps its units)

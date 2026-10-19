@@ -535,6 +535,8 @@ def run() -> None:
 
             if change in ("drop", "slow"):
                 _investigate_later(tid)
+            elif bw.get("state") == "slow":
+                _retype_later(tid)                                  # a tunnel that is ALREADY very slow (judged before an update, or a change that could not start): tried again at every watch, until it is changed
         except (ValueError, RuntimeError, SSHError) as e:
             log.info("bandwidth of tunnel %s not measured: %s", tid, str(e)[:140])
             _failed(tid, str(e))
@@ -773,6 +775,32 @@ def measure_start(tunnel_id: int) -> int:
             autopilot._say(aid, "Done.", done=True, ok=True)
 
     return autopilot._start(name, work, action="speed", allow_read_only=True)
+
+
+def _retype_later(tunnel_id: int) -> None:
+    """A very slow tunnel whose type suggestion stands (the Doctor page) and that the Doctor has not changed in the last 24 hours: the change is done now, as its own story (modes fix and move). Nothing when no suggestion
+    stands (nothing faster is known), when the Doctor is off, or the panel is read-only."""
+    from . import actions, autopilot, doctor
+
+    if get_settings().read_only or actions.doctor_mode() == "off":
+        return
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        name = t.name if t is not None else ""
+
+    if not name:
+        return
+
+    sug = next((x for x in doctor.state()["suggestions"] if x.get("tunnel_id") == tunnel_id and x.get("kind") == "type" and x.get("to_kind")), None)
+
+    if sug is None or doctor.may_retype(name, doctor._state()["retype_done"], int(time.time())):
+        return
+
+    try:
+        autopilot._start(name, doctor._run_retype, tunnel_id, sug["to_kind"], sug.get("now_kind") or "", sug.get("why") or "", True, action="autopilot", source="auto")
+    except ValueError as e:
+        log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
 
 
 def _investigate_later(tunnel_id: int) -> None:

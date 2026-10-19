@@ -837,7 +837,7 @@ const bwTip = t => {
   if (b.down == null) return (b.error ? "Could not be measured: " + b.error + " - " : "") + ((t.record || {}).test_port ? "The Doctor measures it with its quality test every half hour - nothing yet" : (t.type === "backhaul" || t.type === "gre") ? "The Doctor measures it with two light connections over the GRE link, about every 90 minutes - nothing yet" : "This tunnel has no link or test door to measure") + uxTip(t);
   const parts = [`Capacity - what this tunnel can carry (download): ${bwFmt(b.down)}`, b.ref ? `usually ${bwFmt(b.ref)}` : "the usual level is still being learnt", `the Doctor's last test, ${ago(b.at)} ago (a light test every ${(t.record || {}).test_port ? "half hour" : "90 minutes"}; it cannot be live)`];
   if (b.state === "drop") parts.push((b.down < BW_STALL ? "NO DATA moved in the test" : "DROPPED") + ((b.why || {}).text ? ": " + b.why.text : ""));
-  const use = useOf(t); if (use && b.down < BW_SLOW && use.down > b.down * 1.5) parts.push(`The users carry ${bwFmt(use.down)} through it now - more than this test shows: the little test reads low on this tunnel, so the real capacity is at least what the users get`);
+  const day = useDay(t); if (day) parts.push(`USERS, last 24 hours: peak ${bwFmt(day.peak)}, average ${bwFmt(day.avg)}` + (day.peak > b.down ? " - more than the little test shows, so the number in the row is that peak: the real capacity is at least what the users got" : ""));
   if (b.state === "slow") parts.push("VERY SLOW: the last two tests gave under " + BW_SLOW + " Mb/s - it did not drop, it never gave more" + ((b.why || {}).text ? ". " + b.why.text : ""));
   return parts.join(" · ") + uxTip(t);
 };
@@ -854,14 +854,17 @@ const useOf = t => {      // what the users use of this tunnel: the live reader'
   if (t.rx_mbps != null && t.last_check_at) return {down: t.rx_mbps, up: t.tx_mbps, age: Date.now() / 1000 - t.last_check_at, live: false, via: "link"};
   return null;
 };
-const bwUtil = t => { const u = useOf(t), c = (t.bw || {}).down; return u && c > 0 ? Math.min(1, u.down / c) : null; };      // the part of the capacity the users use
+/* what the tunnel can carry, as the row says it: the Doctor's little test - or, when the users carried MORE than the test reads through it in the last 24 hours, that peak (the capacity is at least what the users got; the owner, 2026-10-19: "0.40 while the users use 6") */
+const useDay = t => (state.use24 || {})[t.id] || null;
+const capOf = t => { const d = (t.bw || {}).down; if (d == null) return null; const u = useDay(t); return u && u.peak > d ? u.peak : d; };
+const bwUtil = t => { const u = useOf(t), c = capOf(t); return u && c > 0 ? Math.min(1, u.down / c) : null; };      // the part of the capacity the users use
 const useTip = (t, u) => !u ? "What the users use of this tunnel cannot be read now: its Iran server does not answer, or the tunnel has no forwarded port to count the users' connections on" : `Users use it now: ↓ ${bwFmt(u.down)} (download) ↑ ${bwFmt(u.up)} (upload) - counted ${u.via === "users" ? "from the users' own connections to the ports of the tunnel (what the Iran server sends them is their download)" : u.via === "connections" ? "from the TCP connections of the tunnel (with the framing of the tunnel: a few percent more than the users' own data)" : "from the link of the tunnel"} on its Iran server over about 15 seconds; ${u.live ? "live, read " + Math.round(u.age) + " s ago" : "from the last check, " + Math.round(u.age) + " s ago (the live reading starts in a few seconds)"}${bwUtil(t) != null ? " · " + Math.round(bwUtil(t) * 100) + " % of its capacity" : ""}`;
 const bwUse = t => { const u = useOf(t); if (!u) return `<span class="bwuse none" title="${esc(useTip(t, null))}">—</span>`; return `<span class="bwuse ${u.live ? "live" : "old"}" title="${esc(useTip(t, u))}"><i>↓</i><b>${bwNum(u.down)}</b></span>`; };      // one number - the download, what the users actually get (the owner, 2026-10-17: "instead of showing upload and download, show one number"); both are still in the tunnel window ("In use now") and this tooltip
 const bwBar = t => { const f = bwUtil(t); return `<i class="bwbar${f == null ? "" : f >= 0.9 ? " full" : f >= 0.7 ? " hot" : ""}" title="${f == null ? "" : esc("The part of its capacity the users use now: " + Math.round(f * 100) + " %")}"><u style="width:${f == null ? 0 : f > 0 ? Math.max(2, Math.round(f * 100)) : 0}%"></u></i>`; };
 const bwCap = t => {      // the capacity: the download speed the Doctor measured, ONE number in the colour of its state - green/healthy, amber/low, red/dropped or stalled (the owner, 2026-10-17: "these red numbers, what are they, not clear" - two numbers side by side, one a drop arrow, read as noise). The usual level, when it dropped and why are the tooltip and the tunnel window (Link -> Capacity), not crowded into the row.
-  const b = t.bw || {}, stall = b.down != null && b.down < BW_STALL;
+  const b = t.bw || {}, stall = b.down != null && capOf(t) < BW_STALL;
   if (b.down == null) return bwPending(t) ? `<span class="bwcap none pend" title="${esc(bwTip(t))}"><i class="spin"></i>measuring…</span>` : `<span class="bwcap none" title="${esc(bwTip(t))}">—</span>`;
-  return `<span class="bwcap ${stall || b.state === "drop" ? "drop" : b.state === "slow" ? "slow" : "ok"}" title="${esc(bwTip(t))}"><b>${bwNum(b.down)}</b></span>`;      // (a "low" capacity - 60-80 % of the usual level - is NOT coloured: only a real drop or a stall is; the owner, 2026-10-17: "do not show these yellow numbers unless there is really a problem or a real drop")
+  return `<span class="bwcap ${stall || b.state === "drop" ? "drop" : b.state === "slow" ? "slow" : "ok"}" title="${esc(bwTip(t))}"><b>${bwNum(capOf(t))}</b></span>`;      // (a "low" capacity - 60-80 % of the usual level - is NOT coloured: only a real drop or a stall is; the owner, 2026-10-17: "do not show these yellow numbers unless there is really a problem or a real drop")
 };
 /* the numbers of what the users use change by themselves: while the Tunnels page is on screen they are asked every 4 s and the cells change in place (nothing is drawn again) */
 let tunLiveT = null;
@@ -870,7 +873,7 @@ const tunLiveStop = () => { clearInterval(tunLiveT); tunLiveT = null; };
 const tunLiveTick = async () => {
   if (state.page !== "tunnels" || document.hidden || !document.querySelector(".tun-tbl")) { tunLiveStop(); return; }
   let r; try { r = await api("/api/tunnels/live"); } catch (e) { return; }      // (a read that failed leaves what is shown: only the next number is late)
-  state.live = r.live || {}; state.liveAt = Date.now(); tunLivePaint();
+  state.live = r.live || {}; state.use24 = r.use24 || state.use24 || {}; state.liveAt = Date.now(); tunLivePaint();
 };
 const tunLiveStart = () => { if (!tunLiveT) { tunLiveT = setInterval(tunLiveTick, 4000); tunLiveTick(); } };
 document.addEventListener("visibilitychange", () => { if (!document.hidden && state.page === "tunnels") tunLiveStart(); });
