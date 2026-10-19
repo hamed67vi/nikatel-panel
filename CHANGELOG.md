@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.26 - "Move to a better server…" is in the menu of a TUNNEL, not of a server; it moves that tunnel
+
+The owner (2026-10-19, in Persian, after seeing the menu of a tunnel without the item): "remove it from the server part - you must add it to the tunnel part."
+
+- **Moved** (`lab.js`): the item is gone from the menu of an Iran server (row and window) and stands in the menu of a tunnel, before Remove: **Move to a better server…** (`tunMoveAway`). It moves THAT tunnel - and, when another tunnel shares a DNS record with it, that one too (listed in the box as "moved with them"). The DNS records that serve only the moved tunnels follow; a record that also serves a tunnel that stays is left alone. The box, the buttons for the best three servers and the rules for choosing the target (line quality, resources, tunnels carried after the move, free ports - the panel's and what listens) are those of 1.69.25.
+- **API**: `GET /api/failover/tunnel-move-plan/{tunnel_id}` and `POST /api/failover/move-tunnel/{tunnel_id}` (the plan is made again at the confirm, as before); `failover.move_plan` / `move_server` take the tunnels to move (`failover.server_of`). The routes of 1.69.25 for a whole server (`move-plan/{server_id}`, `move-server/{server_id}`) stay in the API and move every tunnel of the server; no page uses them now.
+- **Proved**: `tests/test_move_server.py` - the plan of a tunnel (only its tunnel and the records that serve only it; a tunnel that shares a record pulls the other in), the refusal when the tunnels changed since the plan was shown, the confirmed move through `POST` with the builder and DNS providers faked (one tunnel built first, the wait, the old one removed, one record changed, the other tunnels untouched), and the page (the item in the tunnel menu only, the box, the Persian texts). **Not proved**: as in 1.69.25 - a real move on real servers and DNS accounts, the box on screen, "better than the source server" is not compared.
 ## 1.69.25 - "Move the tunnels…" in the menu of an Iran server: the tunnels go to a better Iran server and the DNS records follow
 
 The owner (2026-10-19, in Persian, paraphrased): "an option in the menu of every server: when it is pressed on an Iran server, the panel moves the tunnels of that server to a better-quality Iran server that has free ports and free resources, and changes the IP in the DNS records by itself - ArvanCloud or Cloudflare."

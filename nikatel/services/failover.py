@@ -412,15 +412,27 @@ def move_blocked() -> str:
     return ""
 
 
-def move_plan(server_id: int, target_id: int | None = None) -> dict:
-    """What the "Move the tunnels" button of an Iran server would do (nothing is changed): EVERY tunnel of it goes to the best Iran server that has the room (`room_for`) and free ports, and every DNS
-    record that carries its address - in whichever account - follows. `blocked` says why the button cannot run (license, DNS account, read-only), `candidates` are the best targets."""
-    p = _make_plan(server_id, None, "manual", target_id=target_id, strict=True)
+def server_of(tunnel_id: int) -> int:
+    """The Iran server a tunnel runs on."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        return t.iran_server_id
+
+
+def move_plan(server_id: int, target_id: int | None = None, tunnels: list[int] | None = None) -> dict:
+    """What the "Move…" button would do (nothing is changed): the tunnels - EVERY tunnel of the Iran server, or only `tunnels` (the one of the tunnel menu, plus the ones that share a DNS record with it) -
+    go to the best Iran server that has the room (`room_for`) and free ports, and every DNS record that serves only the moved tunnels - in whichever account - follows. `blocked` says why the button
+    cannot run (license, DNS account, read-only), `candidates` are the best targets."""
+    p = _make_plan(server_id, set(tunnels) if tunnels else None, "manual", target_id=target_id, strict=True)
     p["blocked"] = move_blocked()
     return p
 
 
-def move_server(server_id: int, target_id: int, expect: list[int] | None = None) -> int:
+def move_server(server_id: int, target_id: int, expect: list[int] | None = None, tunnels: list[int] | None = None) -> int:
     """Run the move the operator confirmed: the plan is made again NOW (the world may have changed since the confirm), and it runs only when it is still the same - the same tunnels, the target still
     has room and free ports. The new tunnels are built and checked first, the DNS follows, the old ones go after the TTL (`_work`). Returns the repair story id."""
     why = move_blocked()
@@ -428,10 +440,10 @@ def move_server(server_id: int, target_id: int, expect: list[int] | None = None)
     if why:
         raise ValueError(why)
 
-    p = move_plan(server_id, target_id)
+    p = move_plan(server_id, target_id, tunnels)
 
     if not p["tunnels"]:
-        raise ValueError(f"{p['server']} carries no tunnel: nothing to move")
+        raise ValueError(f"{p['server']} carries no tunnel: nothing to move" if not tunnels else f"this tunnel is not an enabled tunnel of {p['server']}: nothing to move")
 
     if not p["target"]:
         raise ValueError("no Iran server can take these tunnels now: " + "; ".join(p["problems"])[:300])

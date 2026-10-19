@@ -231,9 +231,66 @@ def test_the_confirmed_move_builds_the_tunnels_changes_the_dns_of_every_account_
     assert client.post(f"/api/failover/{h['id']}/undo").status_code == 200 and FakeProv.calls[-1][0] == "back"                                         # every record can be put back
 
 
+def test_a_tunnel_move_takes_this_tunnel_and_the_records_that_serve_only_it(client, monkeypatch):
+    """The owner, 2026-10-19: "remove it from the server, add it to the tunnel": the item of a tunnel's menu moves THAT tunnel (and the ones that share a DNS record with it)."""
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    _ranking(monkeypatch, [_row(ids["ir2"], "ir2")])
+    p = client.get(f"/api/failover/tunnel-move-plan/{ids['t2']}").json()
+    assert p["blocked"] == "" and [t["name"] for t in p["tunnels"]] == ["t2"] and p["whole"] is False and p["pulled"] == [] and p["target"]["id"] == ids["ir2"]
+    assert [d["fqdn"] for d in p["dns"]] == ["b.example.test"]                                           # a and c serve other tunnels (or none): left alone
+    p = client.get(f"/api/failover/tunnel-move-plan/{ids['t1']}").json()
+    assert sorted(t["name"] for t in p["tunnels"]) == ["t1", "t3"] and p["pulled"] == ["t3"] and [d["fqdn"] for d in p["dns"]] == ["a.example.test"]      # t3 shares the record a with t1: it goes too
+    assert client.get("/api/failover/tunnel-move-plan/9999").status_code == 400
+    assert client.post("/api/failover/move-tunnel/9999", json={"target_id": ids["ir2"]}).status_code == 400
+    started = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **kw: started.append(label) or 1)
+    r = client.post(f"/api/failover/move-tunnel/{ids['t2']}", json={"target_id": ids["ir2"], "tunnels": [ids["t2"], ids["t3"]]})                              # the plan the operator saw had two tunnels, now it has one
+    assert r.status_code == 400 and "changed since you looked" in r.text and started == []
+
+
+def test_the_confirmed_tunnel_move_builds_only_that_tunnel_and_changes_only_its_record(client, monkeypatch):
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    _ranking(monkeypatch, [_row(ids["ir2"], "ir2")])
+    events = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: None)
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **kw: fn(1, *a) or 1)
+
+    def build(snap, iran_id, foreign_id, kind, opts=None):
+        events.append(("build", snap["name"], iran_id))
+
+        with session() as db:
+            db.add(Tunnel(name=snap["name"], type="backhaul", transport="tcpmux", iran_server_id=iran_id, foreign_server_id=foreign_id, state="up", forwarded_ports=[8075]))
+
+        return 0
+
+    def delete(tid, keep_record=False, trash=False, skip_offline=False):
+        with session() as db:
+            t = db.get(Tunnel, tid)
+            events.append(("delete", t.name, trash))
+            db.delete(t)
+
+        return ["Iran: removed", "foreign: removed"]
+
+    monkeypatch.setattr(autopilot, "_build_kind", build)
+    monkeypatch.setattr(autopilot, "_wait", _finished(True))
+    monkeypatch.setattr(builder, "delete_tunnel", delete)
+    monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
+    r = client.post(f"/api/failover/move-tunnel/{ids['t2']}", json={"target_id": ids["ir2"], "tunnels": [ids["t2"]]})
+    assert r.status_code == 202
+    assert events == [("build", "t2-mv", ids["ir2"]), ("sleep", 420), ("delete", "t2", True)]
+    assert FakeProv.calls == [("update", "arvan", "example.test", "r-b", ["203.0.113.9"], 120, True)]       # one record, the one that serves only t2
+
+    with session() as db:
+        assert sorted((t.name, t.iran_server_id) for t in db.scalars(select(Tunnel))) == [("t1", ids["ir1"]), ("t2", ids["ir2"]), ("t3", ids["ir1"])]     # t1 and t3 stay where they are
+
+
 def test_the_menu_item_the_plan_box_and_the_words_are_in_the_page():
     lab, app, fa, css = (WEB / "lab.js").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
-    assert lab.count('labIt("Move the tunnels…", "ports", () => srvMoveAway(s.id, nm)') == 1 and lab.count("...mv,") == 2 and 's.role === "iran"' in lab         # in the row menu AND the window menu, Iran servers only
-    assert "window.srvMoveAway = async (id, name) =>" in lab and "/api/failover/move-plan/${id}" in lab and "/api/failover/move-server/${id}" in lab and "tunnels: p.move" in lab
+    assert lab.count('labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name)') == 1 and "srvMoveAway" not in lab and "Move the tunnels…" not in lab      # in the menu of a TUNNEL, no longer in the menu of a server
+    assert "window.tunMoveAway = async (id, name) =>" in lab and "/api/failover/tunnel-move-plan/${id}" in lab and "/api/failover/move-tunnel/${id}" in lab and "tunnels: p.move" in lab
     assert "function glassChoice(text, choices, o)" in app and "o && o.html" in app and ".ask-text.mv-plan" in css
-    assert '"Move the tunnels":' in fa and '"Move the tunnels of {} to another Iran server?":' in fa and "Nothing is cut: the new tunnels are built and tested first" in fa
+    assert '"Move to a better server":' in fa and '"Move {} to another Iran server?":' in fa and "Nothing is cut: the new tunnels are built and tested first" in fa

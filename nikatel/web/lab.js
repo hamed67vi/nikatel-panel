@@ -556,28 +556,28 @@ const labSvg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${LAB_P[k] || "
 function labServerItems(p, s, ctx) {      // a server's menu: what is done most stands on its own, the rest opens flyouts (the owner: like Move to profile)
   const off = s.online === false && s.enabled !== false, nm = s.name, f = s.facts || {}, ab = (s.extra || {}).abuse || {}, abuseOn = ab.installed || (f.abuse_rules || 0) > 0, tip = off ? "The server is off or does not answer" : "";
   const gone = p ? labIt("Off the page", "exit", () => labRemove(p.id)) : labIt("Put on the page", "plus", () => labAdopt(s.id)), del = labIt("Delete server…", "trash", () => deleteServer(s.id, nm), {danger: true});
-  const mv = s.role === "iran" ? [labIt("Move the tunnels…", "ports", () => srvMoveAway(s.id, nm), {tip: "Moves every tunnel of this Iran server to the best other Iran server that has room, and points the DNS records at it"})] : [];      // (the owner, 2026-10-19: "an option in the menu of every server: it moves the tunnels to a better Iran server and changes the IP in the DNS by itself")
   if (ctx === "row") {
     const pgn = typeof pgSrvOn === "function" ? pgSrvOn(s).find(x => x.type === "pasarguard" && x.node_id != null) : null;      // a server that carries a PasarGuard node keeps ALL the actions of the node in its menu (the owner, 2026-10-15: they must not go when the node is one row with its server): in one flyout
     const np = pgn ? labNodeParts({panel_id: pgn.panel_id, node_id: pgn.node_id}) : null, nodeFly = np ? [labSubItem("PasarGuard node", "box", [...np.mon, labSep, ...np.main, ...np.mng, labSep, ...np.upd]), labSep] : [];
-    return [labGrp("Server"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}), ...mv,
+    return [labGrp("Server"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
       labSep, labSubItem("Move to profile", "tag", labMoveItems(p.id)), ...(labCanMakeNode(s) ? [labIt("Make a PasarGuard node…", "box", () => labMakeNode(p.id), {off, tip})] : []), ...nodeFly, gone, labSep, del];
   }
   const access = [labIt("Connect SSH…", "key", () => srvConnect(s.id, nm)), labIt("Change SSH password…", "lock", () => srvPassword(s.id, nm)), labIt("Forget host key…", "forget", () => forgetKey(s.id, nm)), labIt("Open in an SSH program…", "ext", async () => { const v = await glassChoice(`Open ${nm} in:`, [{label: "Windows ssh", v: "ssh", note: "a .bat with your own key"}, {label: "PuTTY", v: "putty"}, {label: "MobaXterm", v: "mobaxterm"}]); if (v) srvOpen(s.id, v); })];
   const tests = [labIt("GRE test", "gre", () => greCheck(s.id)), labIt("Spoof test…", "spoof", () => srvSpoof(s.id, nm)), ...(s.role === "foreign" ? [labIt("Is it filtered in Iran?", "shield", () => srvFilter(s.id)), labIt(abuseOn ? "Abuse-Defender: remove…" : "Abuse-Defender: install…", "abuse", () => srvAbuse(s.id, abuseOn ? "remove" : "install"))] : [])];
   const install = [labIt("Nodes and tools…", "box", () => wtab("install")), labIt("Tunnel cores…", "box", () => srvCores(s.id, nm)), labIt("Update the server…", "up", () => srvInstall(s.id, "os_update"))];
-  return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}), ...mv,
+  return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
     labSep, labSubItem("Access", "key", access), labSubItem("Tests", "gre", tests, {off, tip}), labSubItem("Install", "box", install, {off, tip}),
     labSep, gone, labSep, del];
 }
-/* "Move the tunnels…" of an Iran server (1.69.24): the plan (GET /api/failover/move-plan/<id>) is shown in ONE box - the tunnels, the DNS records that follow, why this server, what is not cut - with one button for each
-   of the best servers; the pressed one starts the move (POST /api/failover/move-server/<id>, which makes the plan again and refuses when it is no longer the same). Every part is its own element, so the Persian layer translates each by itself. */
+/* "Move to a better Iran server…" in the menu of a tunnel (1.69.25 put it in the menu of a server; the owner, 2026-10-19: "remove it from the server, add it to the tunnel"): the plan (GET /api/failover/tunnel-move-plan/<id>) is shown in ONE box -
+   the tunnel (and any that must go with it because they share a DNS record), the DNS records that follow, why this server, what is not cut - with one button for each of the best servers; the pressed one starts the move
+   (POST /api/failover/move-tunnel/<id>, which makes the plan again and refuses when it is no longer the same). Every part is its own element, so the Persian layer translates each by itself. */
 const labMoveBlock = (head, body) => `<div class="mv-h">${esc(head)}</div>${body}`;
-function labMoveHtml(p, on) {
+function labMoveHtml(p, on, name) {
   const names = (p.tunnels || []).map(t => esc(t.name)).join(", "), recs = p.dns || [], pulled = p.pulled || [], skipped = (p.skipped || []).slice(0, 3);
   const dns = recs.length ? labMoveBlock(`DNS records that will point at the new server (${recs.length})`, recs.map(d => `<div class="mv-r"><b class="mono">${esc(d.fqdn)}</b> <span class="mut">${esc(d.account_name || d.account || "")}</span></div>`).join(""))
-    : labMoveBlock("DNS records", `<div class="mv-r mut">No record carries the address of ${esc(p.server)}: only the tunnels move.</div>`);
-  return `<b>Move the tunnels of ${esc(p.server)} to another Iran server?</b>`
+    : labMoveBlock("DNS records", `<div class="mv-r mut">No DNS record serves only these tunnels: only the tunnels move.</div>`);
+  return `<b>Move ${esc(name || p.server)} to another Iran server?</b>`
     + labMoveBlock(`Tunnels (${(p.tunnels || []).length})`, `<div class="mv-r">${names}</div>`)
     + (pulled.length ? `<div class="mv-r mut">Moved with them, because they share a DNS record: ${pulled.map(esc).join(", ")}</div>` : "")
     + dns
@@ -585,29 +585,29 @@ function labMoveHtml(p, on) {
     + `<div class="mv-r mut">${on ? "Nothing is cut: the new tunnels are built and tested first, then the DNS records are changed, and the old tunnels are removed after the records' TTL + 5 minutes." : "The server is off: its old tunnels are removed at once and the new ones are built on the new server."}</div>`
     + `<div class="mv-r mut">Every DNS change is kept with a Restore button (Tunnel Doctor → Moves).</div>`;
 }
-const labMoveWhy = (name, p) => `<b>The tunnels of ${esc(name)} cannot be moved now</b>` + `<div class="mv-r">${esc(p.blocked || (p.problems || []).join("; ") || "no reason was given")}</div>`
+const labMoveWhy = (name, p) => `<b>${esc(name)} cannot be moved now</b>` + `<div class="mv-r">${esc(p.blocked || (p.problems || []).join("; ") || "no reason was given")}</div>`
   + ((p.skipped || []).length ? labMoveBlock("Left out", p.skipped.slice(0, 5).map(x => `<div class="mv-r mut">${esc(x.name)}: ${esc(x.why)}</div>`).join("")) : "");
-window.srvMoveAway = async (id, name) => {
-  const s = (state.serversCache || []).find(x => x.id === id) || {};
-  toast(`Looking for the best Iran server for the tunnels of ${name}… (a few seconds)`);
-  let p; try { p = await api(`/api/failover/move-plan/${id}`); } catch (e) { toast("✕ " + e.message, "bad"); return; }
-  if (!(p.tunnels || []).length) { toast(`${name} carries no tunnel: nothing to move`, "bad"); return; }
+window.tunMoveAway = async (id, name) => {
+  const t = (state.tunnelsCache || []).find(x => x.id === id) || {}, s = (state.serversCache || []).find(x => x.name === t.iran_name) || {};
+  toast(`Looking for the best Iran server for ${name}… (a few seconds)`);
+  let p; try { p = await api(`/api/failover/tunnel-move-plan/${id}`); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  if (!(p.tunnels || []).length) { toast(`${name} is not an enabled tunnel of its server: nothing to move`, "bad"); return; }
   if (p.blocked || !p.target || p.dns_error) { await glassChoice("", [{label: "OK", v: 1}], {html: labMoveWhy(name, p.blocked || !p.target ? p : {...p, problems: [p.dns_error]})}); return; }
   const cands = p.candidates && p.candidates.length ? p.candidates : [{...p.target, reason: ""}];
-  const pick = await glassChoice("", cands.map((c, i) => ({label: i ? `Move to ${c.name} instead` : `Move to ${c.name}`, note: `${c.ip || ""}${c.reason ? " · " + c.reason : ""}`, cls: i ? "" : "pri", v: c.id})), {html: labMoveHtml(p, s.online !== false)});
+  const pick = await glassChoice("", cands.map((c, i) => ({label: i ? `Move to ${c.name} instead` : `Move to ${c.name}`, note: `${c.ip || ""}${c.reason ? " · " + c.reason : ""}`, cls: i ? "" : "pri", v: c.id})), {html: labMoveHtml(p, s.online !== false, name)});
   if (pick == null) return;
   try {
-    const r = await api(`/api/failover/move-server/${id}`, {method: "POST", body: JSON.stringify({target_id: pick, tunnels: p.move})});
-    toast(`✓ Moving the tunnels of ${name}: the new tunnels are being built (the story is in the Tunnel Doctor); the DNS follows when they are up`, "ok");
+    const r = await api(`/api/failover/move-tunnel/${id}`, {method: "POST", body: JSON.stringify({target_id: pick, tunnels: p.move})});
+    toast(`✓ Moving ${name}: the new tunnel is being built (the story is in the Tunnel Doctor); the DNS follows when it is up`, "ok");
     followAction(r.action_id, 5000, 3600).then(st => { toast(lastLine(st), st.ok ? "ok" : "bad"); refresh(); }).catch(() => {});
   } catch (e) { toast("✕ " + e.message, "bad"); }
-};
-function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
+};function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
   const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return [];
   const up = t.state === "up", offs = typeof tunOffServers === "function" ? tunOffServers(t) : "", muted = (state.mutedSet || new Set()).has(t.name), tipOff = offs ? "A server of this tunnel is off (" + offs + ")" : "", tipUp = up ? "Nothing to fix: the tunnel is healthy" : "";
   return [labGrp("Repair"), labIt("Fix…", "fix", () => fixTunnel(t.id, false), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Dry run", "eye", () => fixTunnel(t.id, true), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Health check", "pulse", () => healthTunnel(t.id), {off: !!offs, tip: tipOff}), labIt("Speed test…", "monitor", () => tunSpeed(t.id, t.name), {off: !!offs, tip: tipOff}), labIt("Restart…", "check", () => restartTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
     labSep, labIt("History", "history", () => tunHistory(t.id, t.name)), labIt(muted ? "Unmute alerts" : "Mute alerts", "bell", () => muteRef(t.name, !muted)),
     labSep, labIt("Rename…", "edit", () => renameTunnel(t.id, t.name)), ...(t.type === "backhaul" ? [labIt("Ports…", "ports", () => editPorts(t.id, (t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")))] : []), labIt("Rebuild…", "rebuild", () => rebuildTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
+    labSep, labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name), {tip: "Moves this tunnel to the best other Iran server that has room and free ports, and points the DNS records that serve only it at that server"}),
     labSep, labIt("Remove tunnel…", "trash", () => deleteTunnel(t.id, t.name), {danger: true})];
 }
 function labNodeParts(cur) {      // the actions of a node in short lists: the important ones (Edit, Restart), Monitor, Manage, Update - and its Delete
