@@ -631,7 +631,7 @@ window.gprompt = (text, value = "", o = {}) => glassAsk(text, Object.assign({inp
 /* a window of a server or a tunnel is open: the page behind it is NOT drawn again while an operation runs (nothing behind the window moves); it is brought up to date once, when the window closes */
 const pageTarget = () => { if (state.open != null && !state.build && document.querySelector("#modal .modal")) { state.pageStale = true; return document.createElement("div"); } return $("#page"); };
 window.closeModal = () => {
-  state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = document.querySelector("#pg-kind-page #pg-kind-form") ? "kinds" : null; cf.open = null;      // (the Add form of Configs stays held while it is on the page: closing a window - a config's Modify, a protocol of your own - must not let the page draw itself again over what was typed)
+  state.keepWin = null; state.open = null; state.edit = null; state.con = null; state.flt = null; state.wtab = null; state.build = document.querySelector("#pg-kind-page #pg-kind-form") ? "kinds" : null; cf.open = null;      // (the Add form of Configs stays held while it is on the page: closing a window - a config's Modify, a protocol of your own - must not let the page draw itself again over what was typed)
   cf.edit = null; cf.subEdit = null; cf.add = null; if (!cf.edit) cf.sub = null;
   hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
   if (state.pageStale) { state.pageStale = false; setTimeout(() => { if (state.open == null && !state.build) refresh(); }, 280); }      // what was held back while the window was open
@@ -1531,7 +1531,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
   if (openT) tunModal(openT);
  
   else if (state.build) { const story = $("#build-story"); const keep = story && !story.classList.contains("hidden") ? story.innerHTML : ""; showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); if (keep) { const s2 = $("#build-story"); s2.classList.remove("hidden"); s2.innerHTML = keep; } }
-  else hideModal();
+  else if (!state.keepWin) hideModal();      // (state.keepWin: the box that follows a move stays on the screen while the page behind is drawn again - only its Close button closes it)
   if (state.open) { const ot = (state.tunnelsCache || []).find(x => x.id === state.open); if (ot) tunAfter(ot); }
 };
 function tunGrid(t) {
@@ -1932,7 +1932,7 @@ const apWhyHtml = s => { const w = apWhy(s); return w ? `<em class="fx-why">${es
 function storyHtml(s) {
   const cls = l => /healthy|works|finished|succeeded/i.test(l) ? "ok" : /not repaired|failed|still|does not answer|No safe|read-only|Stopped/i.test(l) ? "bad" : /^Plan:|^\[dry run\]/.test(l) ? "plan" : "do";
   return s.story.map(l => `<div class="fx-line ${cls(l)}"><b>${{ok: "✓", bad: "!", plan: "›", do: "·"}[cls(l)]}</b><span>${esc(l)}</span></div>`).join("") +
-    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${["autopilot", "fix"].includes(s.action) && !s.dry_run ? (s.ok ? "All done - the problem is fixed." : "Repair did not succeed." + apWhyHtml(s)) : `${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : s.action === "observe" ? "Look" : s.action === "pgupdate" ? "Update" : s.action === "pgnode" ? "Making the node" : s.action === "install" ? "Install" : s.action === "speed" ? "Speed test" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.${s.ok ? "" : apWhyHtml(s)}`}</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
+    (s.done ? `<div class="fx-line ${s.ok ? "ok" : "bad"}"><b>${s.ok ? "✓" : "✕"}</b><span>${["autopilot", "fix"].includes(s.action) && !s.dry_run ? (s.ok ? "All done - the problem is fixed." : "Repair did not succeed." + apWhyHtml(s)) : `${s.dry_run ? "Dry run" : s.action === "build" ? "Build" : s.action === "create" ? "Create" : s.action === "delete" ? "Removal" : s.action === "observe" ? "Look" : s.action === "pgupdate" ? "Update" : s.action === "pgnode" ? "Making the node" : s.action === "install" ? "Install" : s.action === "speed" ? "Speed test" : s.action === "move" ? "Move" : "Repair"} ${s.ok ? "finished" : "did not succeed"}.${s.ok ? "" : apWhyHtml(s)}`}</span></div>` : '<div class="fx-line run"><i></i>Working…</div>');
 }
 /* ---- Tunnel Doctor: what needs attention, the network advisor ("which tunnel is best today"), the history ---- */
 const ARVAN_UI = true;    // the DNS accounts (ArvanCloud, Cloudflare) live under Tunnels → CDN; the Doctor (Tunnels → Tunnel Doctor) decides when a server is replaced

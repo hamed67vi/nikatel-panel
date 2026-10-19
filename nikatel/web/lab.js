@@ -587,7 +587,13 @@ function labMoveHtml(p, on, name) {
 }
 const labMoveWhy = (name, p) => `<b>${esc(name)} cannot be moved now</b>` + `<div class="mv-r">${esc(p.blocked || (p.problems || []).join("; ") || "no reason was given")}</div>`
   + ((p.skipped || []).length ? labMoveBlock("Left out", p.skipped.slice(0, 5).map(x => `<div class="mv-r mut">${esc(x.name)}: ${esc(x.why)}</div>`).join("")) : "");
-window.tunMoveAway = async (id, name) => {
+/* the box that follows a move (the owner, 2026-10-19: "a box must open and not close, so we see how the steps go - and if we close it the steps must go on"): the story of the action, line by line, in a window that only its Close button closes ("keep");
+   the work runs on the server, so closing the box changes nothing - the story goes on in the Tunnel Doctor (Moves) and the end comes as a toast */
+window.tunMoveProgress = (aid, name, to) => {
+  state.keepWin = true; state.open = null;      // (the window of the tunnel that was open is replaced by this box)
+  showModal(`<b>Moving ${esc(name)} to ${esc(to)}</b>`, `<div class="mut" style="margin-bottom:8px">You can close this box: the move goes on by itself, and its steps stay in the Tunnel Doctor.</div><div class="fix" id="mv-story"><div class="fx-line run"><i></i>Starting…</div></div>`, "keep");
+  followStory(aid, $("#mv-story"), 2400).then(s => { toast(`${name}: ${(s.story || []).slice(-1)[0] || (s.ok ? "done" : "stopped")}`, s.ok ? "ok" : "bad"); refresh(); }).catch(() => {});
+};window.tunMoveAway = async (id, name) => {
   const t = (state.tunnelsCache || []).find(x => x.id === id) || {}, s = (state.serversCache || []).find(x => x.name === t.iran_name) || {};
   toast(`Looking for the best Iran server for ${name}… (a few seconds)`);
   let p; try { p = await api(`/api/failover/tunnel-move-plan/${id}`); } catch (e) { toast("✕ " + e.message, "bad"); return; }
@@ -598,8 +604,7 @@ window.tunMoveAway = async (id, name) => {
   if (pick == null) return;
   try {
     const r = await api(`/api/failover/move-tunnel/${id}`, {method: "POST", body: JSON.stringify({target_id: pick, tunnels: p.move})});
-    toast(`✓ Moving ${name}: the new tunnel is being built (the story is in the Tunnel Doctor); the DNS follows when it is up`, "ok");
-    followAction(r.action_id, 5000, 3600).then(st => { toast(lastLine(st), st.ok ? "ok" : "bad"); refresh(); }).catch(() => {});
+    tunMoveProgress(r.action_id, name, (cands.find(c => c.id === pick) || {}).name || "the new server");
   } catch (e) { toast("✕ " + e.message, "bad"); }
 };function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
   const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return [];

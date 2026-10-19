@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.28 - "Move to a better server…" opens a box that follows the steps and stays; closing it does not stop the move
+
+The owner (2026-10-19, in Persian): "when I press it, a box must open and not close, so we can see how the steps go - and if we close the box the steps must go on."
+
+- **The box** (`lab.js tunMoveProgress`): after the confirm, a window opens with the story of the move line by line - the new tunnel built, the DNS records, the wait for the TTL, the wait for the old tunnel to be quiet, the removal - read every 1.5 s while it is on the screen. It closes only with its **Close** button (it is a "keep" window; the page behind it is drawn again without taking it away: `state.keepWin`); the last line also comes as a toast. A window of a tunnel that was open is replaced by it.
+- **Closing it changes nothing**: the move runs on the server in its own thread; the story goes on in the Tunnel Doctor (History / Moves) and is followed again every 6 s while the box is shut, so the toast at the end still comes.
+- **The move is now an action of its own** (`failover.run_plan` starts it as `move`, like the Doctor's single-tunnel move): its story ends "Move finished." / "Move did not succeed." - it ended with "All done - the problem is fixed" / "Repair did not succeed", words of a repair. It is listed with the other moves in the Doctor's history.
+- **Proved**: `tests/test_move_server.py` (the plan starts as a `move` action; the page holds the box, the follow of 2400 polls, the Close-only window and the end line), the other suites unchanged. **Not proved**: the box on a real screen (the look, the follow while the page redraws, closing and opening again) - it was not opened in a browser; a move on real servers.
 ## 1.69.27 - A moved tunnel's old half is removed only when nobody uses it any more
 
 The owner (2026-10-19, in Persian, on the item "Move to a better server…"): "when I press it, the old tunnel must not be cut until the new one is in place - the user must not feel a cut."

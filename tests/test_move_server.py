@@ -316,6 +316,13 @@ def _tunnel_move_fakes(monkeypatch, events, said, quiet):
     monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
 
 
+def test_the_move_is_an_action_of_its_own_so_its_story_ends_with_move_not_repair(monkeypatch):
+    seen = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **kw: seen.append((label, kw)) or 5)
+    assert failover.run_plan({"server": "ir1", "target": {"id": 1, "name": "ir2", "ip": "203.0.113.9"}}) == 5
+    assert seen == [("failover ir1", {"action": "move"})]
+
+
 def test_the_old_tunnel_is_removed_only_when_nobody_uses_it_any_more(client, monkeypatch):
     """The owner, 2026-10-19: "the old tunnel must not be cut until the new one is in place - the user must not feel a cut"."""
     ids = _servers_and_tunnels()
@@ -354,5 +361,7 @@ def test_the_menu_item_the_plan_box_and_the_words_are_in_the_page():
     lab, app, fa, css = (WEB / "lab.js").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
     assert lab.count('labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name)') == 1 and "srvMoveAway" not in lab and "Move the tunnels…" not in lab      # in the menu of a TUNNEL, no longer in the menu of a server
     assert "window.tunMoveAway = async (id, name) =>" in lab and "/api/failover/tunnel-move-plan/${id}" in lab and "/api/failover/move-tunnel/${id}" in lab and "tunnels: p.move" in lab
+    assert "window.tunMoveProgress = (aid, name, to) =>" in lab and 'followStory(aid, $("#mv-story"), 2400)' in lab and '"keep");' in lab and "tunMoveProgress(r.action_id, name," in lab       # the box that follows the move and does not close by itself
+    assert "else if (!state.keepWin) hideModal();" in app and "state.keepWin = null; state.open = null;" in app and 's.action === "move" ? "Move"' in app           # the page drawn again behind it does not take it away; only Close does
     assert "function glassChoice(text, choices, o)" in app and "o && o.html" in app and ".ask-text.mv-plan" in css
     assert '"Move to a better server":' in fa and '"Move {} to another Iran server?":' in fa and "Nothing is cut: the new tunnels are built and tested first" in fa

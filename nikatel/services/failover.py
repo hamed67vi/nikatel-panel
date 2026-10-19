@@ -727,7 +727,7 @@ def run_plan(p: dict) -> int:
     if not p.get("target"):
         raise ValueError("there is no replacement server for this plan")
 
-    return autopilot._start(f"failover {p['server']}", _work, p)
+    return autopilot._start(f"failover {p['server']}", _work, p, action="move")
 
 
 def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
