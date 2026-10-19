@@ -1239,6 +1239,47 @@ def test_the_page_paints_red_only_where_the_doctor_sees_a_stall_and_a_very_slow_
     assert '["drop", "slow"].includes((t.bw || {}).state) ? "sev-yellow"' in app and 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state)' in app        # the row is looked at, and the Doctor page lists it under "to look at"
 
 
+def test_a_tunnel_a_repair_has_just_removed_keeps_its_row_so_the_page_does_not_jump(tmp_path):
+    """The owner, 2026-10-19: "the page jumps when a tunnel is repaired". Measured on the real page (a copy of it in a browser): while the Doctor replaces a tunnel the old one is removed and the new one is not
+    recorded for a minute or more - the row was gone and every row under it moved up 46 px and back down at the end. Its last row now stays as a placeholder while a repair works on it."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    app = _web("app.js")
+    code = app[app.index("const tunGhosts = "): app.index("PAGES.tunnelsList = async")]
+    driver = tmp_path / "gh.js"
+    driver.write_text(
+        code + "\nconst row = (id, name, type) => ({id, name, type, state: 'up', rtt_ms: 90, bw: {down: 300}, detail: {loss_pct: 0}});\n"
+        "const cache = new Map(), res = {};\n"
+        "res.first = tunGhosts([row(1, 'a', 'backhaul'), row(2, 'b', 'backhaul')], [], cache).length;\n"
+        "res.gone = tunGhosts([row(1, 'a', 'backhaul')], [{name: 'b', mode: 'repair'}], cache);\n"
+        "res.still = tunGhosts([row(1, 'a', 'backhaul')], [{name: 'b', mode: 'repair'}, {name: 'b', mode: 'repair'}], cache).length;\n"
+        "res.never = tunGhosts([row(1, 'a', 'backhaul')], [{name: 'zzz', mode: 'repair'}], cache).length;\n"
+        "res.back = tunGhosts([row(1, 'a', 'backhaul'), row(5, 'b', 'paqet')], [{name: 'b', mode: 'repair'}], cache).length;\n"
+        "res.deleted = tunGhosts([row(1, 'a', 'backhaul')], [], cache).length + '/' + cache.has('b') + '/' + tunGhosts([row(1, 'a', 'backhaul')], [{name: 'b', mode: 'repair'}], cache).length;\n"
+        "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
+    r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    res = json.loads(r.stdout)
+    assert res["first"] == 0                                                                                   # nothing is gone: no placeholder
+    g = res["gone"]
+    assert len(g) == 1 and g[0]["name"] == "b" and g[0]["id"] < 0 and g[0]["state"] == "starting" and g[0]["type"] == "backhaul" and g[0]["bw"] is None and g[0]["ghost"] is True      # its old row, inert, in its old place
+    assert res["still"] == 1 and res["never"] == 0                                                              # one placeholder however many times the repair is listed; a name never seen has none
+    assert res["back"] == 0                                                                                    # the new row is there: the placeholder goes (the real row takes its own place)
+    assert res["deleted"] == "0/false/0"                                                                       # a tunnel that is gone and not being repaired is forgotten for good (a later repair of that name finds no old row)
+    page = app[app.index("PAGES.tunnelsList = async"): app.index("function tunGrid(t)")]
+    assert "const all = list.concat(tunGhosts(" in page and "const rows = all.filter(" in page and "nProblems = all.filter(tunSev).length" in page and 'All <i class="cnt">${all.length}</i>' in page
+    assert "sortType(x)) - TUN_TYPES.indexOf(sortType(y))" in page and "state.tunRowCache.get(t.name)" in page                          # (a placeholder of a tunnel built again as another type stays in its old group)
+
+
 def test_a_suggestion_to_change_the_type_has_its_own_tag_and_button():
     app = _web("app.js")
     row = app.split("const sugRow = s =>", 1)[1].split("const sugBox =", 1)[0]
