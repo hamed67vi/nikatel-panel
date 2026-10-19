@@ -35,6 +35,53 @@ def test_delete_refused_when_a_tunnel_uses_it(client, tmp_path):
     assert r.status_code == 409 and "t1" in r.json()["error"]
 
 
+def test_a_server_is_deleted_together_with_its_tunnels_and_a_server_that_is_off_is_not_asked(client, tmp_path, monkeypatch):
+    """The owner, 2026-10-19: a server that went off could not be deleted - the refusal (a tunnel uses it) was a toast that went by. Now the question has its way out: `tunnels=true`."""
+    from sqlalchemy import select
+
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services import builder, standby
+
+    (tmp_path / "iran-servers.json").write_text(json.dumps([{"name": "ir1", "host": "1.1.1.1"}]))
+    (tmp_path / "foreign-servers.json").write_text(json.dumps([{"name": "fi1", "host": "2.2.2.2"}]))
+    (tmp_path / "tunnels.json").write_text(json.dumps({"tunnels": [{"name": "t1", "type": "backhaul", "iran_host": "1.1.1.1", "foreign_host": "2.2.2.2"}]}))
+    import_seed_dir(tmp_path)
+    fid = client.get("/api/servers?role=foreign").json()[0]["id"]
+
+    with session() as db:
+        t1 = db.scalar(select(Tunnel).where(Tunnel.name == "t1"))
+        t1_id = t1.id
+        db.add(Tunnel(name="t1-sb", type="chisel", transport="wss", enabled=False, port=9650, iran_server_id=t1.iran_server_id, foreign_server_id=t1.foreign_server_id, forwarded_ports=[28080], record={"standby_of": "t1"}))
+        db.get(Server, fid).online = False
+
+    calls, forgot = [], []
+
+    def fake_delete(tunnel_id, keep_record=False, trash=False, skip_offline=False):
+        calls.append((tunnel_id, trash, skip_offline))
+
+        with session() as db:
+            row = db.get(Tunnel, tunnel_id)
+
+            if row is not None:
+                db.delete(row)
+
+        return ["skipped"]
+
+    monkeypatch.setattr(builder, "delete_tunnel", fake_delete)
+    monkeypatch.setattr(standby, "forget", lambda name: forgot.append(name))
+    r = client.delete(f"/api/servers/{fid}")
+    assert r.status_code == 409 and "t1" in r.json()["error"] and "t1-sb" not in r.json()["error"] and "delete the tunnel with it" in r.json()["error"]      # the refusal names the real tunnel, not its standby, and says the way out
+    assert calls == [] and client.get(f"/api/servers/{fid}").status_code == 200                                                                              # nothing was touched by the refusal
+    r = client.delete(f"/api/servers/{fid}?tunnels=true")
+    assert r.status_code == 200 and r.json() == {"ok": True, "tunnels": ["t1"]}
+    assert calls[0][0] == t1_id and calls[0][1:] == (True, True) and forgot == ["t1"]                                                                          # the tunnel goes to the trash, a server that is off is not asked over SSH, its standby is forgotten
+    assert len(calls) == 2 and calls[1][1:] == (False, True)                                                                                                  # a warm standby that was left is removed too
+    assert client.get(f"/api/servers/{fid}").status_code == 404
+    ev = client.get("/api/events?domain=servers").json()["events"]
+    assert any("with its tunnel t1" in e["text"] for e in ev)
+
+
 def test_forget_hostkey_touches_only_our_file(client):
     kh = get_settings().known_hosts
     kh.parent.mkdir(parents=True, exist_ok=True)

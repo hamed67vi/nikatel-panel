@@ -1604,3 +1604,20 @@ def test_the_sign_in_page_and_the_pasarguard_box_follow_the_ui_kit_sheet():
     assert "button.pri:not(:disabled):hover" in block and "linear-gradient(180deg, #40609d, #2e4b82)" in block and "button.pri:not(:disabled):active" in block      # (the sheet: steel blue under the pointer, dark when pressed)
     assert "html body .login .lg-in .lg-ic { width: 42px; background: transparent; border-inline-end: 0;" in block and "html body .login .lg-in:focus-within { border-color: #2f7bff;" in block      # (the icon is INSIDE the field; login.css loads after lab.css, so the rules name .login)
     assert "html body #page .sf button.pri:not(.eye) { background: rgba(122,176,255,.14) !important;" in _web("app.css")      # (what the PasarGuard box had: the quiet tint of the Settings frame)
+
+
+def test_a_server_that_cannot_be_deleted_because_a_tunnel_uses_it_asks_whether_to_remove_the_tunnel_too():
+    """The owner, 2026-10-19: "this server is off and when I delete it from here it is not deleted" - the 409 was a toast that went by."""
+    app = _web("app.js")
+    body = app[app.index("window.deleteServer = async (id, name) =>"): app.index("window.forgetKey = async")]
+    assert "if (!/uses this server/.test(e.message)) { toast(\"✕ \" + e.message, \"bad\"); return; }" in body                      # (any other refusal is still said)
+    assert "cannot be removed while the tunnel ${list} uses it. Remove the tunnel too, and then the server?" in body and "{danger: true}" in body
+    assert "`/api/servers/${id}?tunnels=true`" in body and 'method: "DELETE"' in body
+    assert "state.tunnelsCache" in body                                                                                         # (the tunnels it names are the ones the page already knows)
+
+
+def test_the_abuse_defender_install_shows_its_log_in_a_box():
+    """The owner, 2026-10-19: "when something is installed, put its log in the box"."""
+    app = _web("app.js")
+    body = app[app.index("window.srvAbuse = async (id, action) =>"): app.index("/* the result of the GRE test and of the filtering check")]
+    assert "JSON.stringify({action, stream: true})" in body and 'id="ap-story"' in body and "followStory(r.id, $(\"#ap-story\"), 400)" in body and "toast(r.installed" not in body      # (the box follows the action; the toast of the result is gone)

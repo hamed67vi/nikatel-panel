@@ -355,7 +355,13 @@ def _whitelist() -> str:
     return " ".join(sorted(ips)[:200])
 
 
-def abuse(server_id: int, action: str) -> dict:
+def abuse_steps(out: str) -> list[str]:
+    """Pure: the lines of the install script that tell what it did ("STEP 2/5 ...") - the log the page shows."""
+    return [ln[5:].strip()[:200] for ln in str(out).splitlines() if ln.startswith("STEP ")][:20]
+
+
+def abuse(server_id: int, action: str, say=None) -> dict:
+    """`say(line)`: where the lines of the log go (the story of an action the page follows in a box)."""
     node, name, role, _host = _srv(server_id)
 
     if action == "install":
@@ -363,6 +369,10 @@ def abuse(server_id: int, action: str) -> dict:
             raise ValueError("Abuse-Defender goes on foreign servers only, never on Iran servers")
 
         out = run_action(node, "abuse_install", {"URL": ABUSE_LIST_URL, "WL": _whitelist()}, timeout=300)
+
+        for ln in abuse_steps(out) if say else []:
+            say(ln)
+
         m = re.search(r"ABUSE_OK=(\d+)", out)
 
         if not m:
@@ -386,6 +396,34 @@ def abuse(server_id: int, action: str) -> dict:
         return {"installed": False, "rules": 0}
 
     raise ValueError("unknown action")
+
+
+def abuse_start(server_id: int, action: str) -> int:
+    """`abuse` as an action with a story that the page follows in a box (the owner, 2026-10-19: "when something is installed, put its log in the box"): what the script did, step by step, then the result - or what it
+    failed with, which used to be a toast that went by."""
+    from . import autopilot
+
+    if action not in ("install", "remove"):
+        raise ValueError("unknown action")
+
+    _node, name, role, _host = _srv(server_id)
+
+    if action == "install" and role != "foreign":
+        raise ValueError("Abuse-Defender goes on foreign servers only, never on Iran servers")
+
+    def work(aid: int) -> None:
+        verb = "installing on" if action == "install" else "removing from"
+        autopilot._say(aid, f"Abuse-Defender: {verb} {name} - the server does the work, up to a minute…")
+
+        try:
+            res = abuse(server_id, action, lambda line: autopilot._say(aid, line))
+        except (SSHError, RuntimeError, ValueError) as e:
+            autopilot._say(aid, f"Failed: {str(e)[:500]}", done=True, ok=False)
+            return
+
+        autopilot._say(aid, f"Done: Abuse-Defender is on, {res['rules']} ranges are blocked." if res["installed"] else "Done: Abuse-Defender is removed.", done=True, ok=True)
+
+    return autopilot._start(f"abuse {name}", work, action="install")
 
 
 def reboot(server_id: int) -> None:

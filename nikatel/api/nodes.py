@@ -156,11 +156,15 @@ def user_key(part: str = "private"):
 
 class Act(BaseModel):
     action: str
+    stream: bool = False          # true: an action with a story the page follows in a box (answers {"ok", "id"} at once); false: the answer comes when the server has finished
 
 
 @router.post("/servers/{server_id}/abuse")
 def abuse(server_id: int, body: Act):
-    """Install, update or remove the Abuse-Defender rules (torrent and abuse traffic blocked) on a server."""
+    """Install, update or remove the Abuse-Defender rules (torrent and abuse traffic blocked) on a server. `stream`: as an action whose log the page follows (see /api/actions/{id})."""
+    if body.stream:
+        return {"ok": True, "id": _wrap(nodes.abuse_start, server_id, body.action)}
+
     return {"ok": True, **_wrap(nodes.abuse, server_id, body.action)}
 
 

@@ -1132,13 +1132,18 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
         db.flush()
         aid = entry.id
         results = []
+        rm = None
 
         if other:
             from . import build_other
 
-            results = build_other.remove(t, skip=off)
+            rm = build_other.remove_args(t)          # (read here; the servers are asked below, with no session - and so no write lock - open)
 
-    if not other:
+    if other:
+        from . import build_other
+
+        results = build_other.remove_on(rm[0], rm[1], off)
+    else:
         for side, node in nodes:
             if side in off:
                 results.append(f"{side}: skipped (the server is off; its files are purged when it is back)")

@@ -918,13 +918,19 @@ def _build(b: Build) -> None:
 
 
 # ------------------------------------------------------------------ remove / quality of an existing tunnel
-def remove(t: Tunnel, skip: set[str] | None = None) -> list[str]:
-    """Remove a BackPack / Paqet / Chisel tunnel from both servers. Returns per-side results. `skip`: sides whose server is off (not asked)."""
+def remove_args(t: Tunnel) -> tuple[dict, list]:
+    """What removing a BackPack / Paqet / Chisel tunnel needs - the parameters of the action and the two servers - read while the row is loaded, so that the asking (`remove_on`) can happen with no database session open."""
     rec = t.record or {}
     params = {"NAME": sname(t), "KIND": t.type, "PORT": str(int(t.port or 0)), "PROTO": "udp" if rec.get("udp_carrier") else "tcp"}
+    return params, [("Iran", _node(t.iran)), ("foreign", _node(t.foreign))]
+
+
+def remove_on(params: dict, nodes: list, skip: set[str] | None = None) -> list[str]:
+    """Ask the servers to remove the tunnel (up to 90 s each: a server that does not answer is waited for). Returns per-side results. `skip`: sides whose server is off (not asked).
+    Never call it inside a session: SQLite lets one writer in, and a write transaction held for the whole wait stops every job and every page (the owner, 2026-10-19: deleting a tunnel of an off server froze the panel for 30 s)."""
     results = []
 
-    for side, node in (("Iran", _node(t.iran)), ("foreign", _node(t.foreign))):
+    for side, node in nodes:
         if side in (skip or set()):
             results.append(f"{side}: skipped (the server is off; its files are purged when it is back)")
             continue
@@ -936,6 +942,12 @@ def remove(t: Tunnel, skip: set[str] | None = None) -> list[str]:
             results.append(f"{side}: not removed ({e})")
 
     return results
+
+
+def remove(t: Tunnel, skip: set[str] | None = None) -> list[str]:
+    """Remove a BackPack / Paqet / Chisel tunnel from both servers. Returns per-side results. `skip`: sides whose server is off (not asked)."""
+    params, nodes = remove_args(t)
+    return remove_on(params, nodes, skip)
 
 
 def quality(tunnel_id: int, secs: float = 4) -> dict:

@@ -368,13 +368,14 @@ def tunnel_test(body: TestIn):
 
 @router.delete("/tunnels/{tunnel_id}")
 def delete(tunnel_id: int):
-    """Remove a tunnel from both servers; it goes to the trash, from where it can be put back. Its warm standby (if it has one) is removed with it."""
+    """Remove a tunnel from both servers; it goes to the trash, from where it can be put back. Its warm standby (if it has one) is removed with it. A server that is off is not asked (its files are purged when it is back):
+    waiting for it took 30 - 90 s per side and the tunnel of an off server could not be removed from the page (the owner, 2026-10-19)."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
         name = t.name if t is not None and not is_standby(t) else ""
 
     try:
-        res = builder.delete_tunnel(tunnel_id, trash=True)
+        res = builder.delete_tunnel(tunnel_id, trash=True, skip_offline=True)
     except ValueError as e:
         raise HTTPException(400 if "read-only" in str(e) else 404, str(e))
 

@@ -1246,21 +1246,26 @@ systemctl daemon-reload; echo "REMOVED $n"
 export DEBIAN_FRONTEND=noninteractive
 command -v iptables >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y iptables >/dev/null 2>&1; }
 command -v curl >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y curl >/dev/null 2>&1; }
+command -v crontab >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y cron >/dev/null 2>&1; systemctl enable --now cron >/dev/null 2>&1 || true; }          # (a minimal server has no cron: "crontab: command not found" ended the install after the rules were already in - the owner, 2026-10-19)
 if ! dpkg -s iptables-persistent >/dev/null 2>&1; then
   echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections 2>/dev/null || true
   echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections 2>/dev/null || true
   apt-get install -y iptables-persistent >/dev/null 2>&1 || true
 fi
+echo "STEP 1/5 packages checked: iptables, curl, cron"
 URL="@URL@"; WL="@WL@"
 tmp=$(mktemp)
 curl -fsS --max-time 25 "$URL" -o "$tmp" || { echo "LIST-DOWNLOAD-FAILED"; exit 3; }
 [ -s "$tmp" ] || { echo "LIST-EMPTY"; exit 3; }
+echo "STEP 2/5 the list was downloaded ($(wc -l < "$tmp") lines)"
 for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do
   while iptables -D OUTPUT -j "$c" 2>/dev/null; do :; done
   iptables -F "$c" 2>/dev/null || true; iptables -X "$c" 2>/dev/null || true
 done
 ( crontab -l 2>/dev/null | grep -v -i 'abuse-defender' || true ) | crontab - 2>/dev/null || true
 rm -f /root/abuse-defender*.sh /etc/cron.d/abuse-defender*
+systemctl disable --now abuse-defender-update.timer >/dev/null 2>&1 || true; rm -f /etc/systemd/system/abuse-defender-update.service /etc/systemd/system/abuse-defender-update.timer
+echo "STEP 3/5 an earlier Abuse-Defender was taken off first (chains, cron lines, scripts)"
 for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do iptables -N "$c"; done
 for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1); do
   case "$i" in gre0|gretap0|erspan0) continue;; esac
@@ -1276,6 +1281,7 @@ rm -f "$tmp"
 for c in abuse-defender abuse-defender-custom abuse-defender-whitelist; do
   iptables -I OUTPUT 1 -j "$c"
 done
+echo "STEP 4/5 the rules are in: $(iptables -S abuse-defender | grep -c DROP) ranges blocked; the panel's servers, the tunnel links and the DNS stay allowed"
 cat > /root/abuse-defender-update.sh <<'EOF'
 #!/bin/bash
 tmp=$(mktemp)
@@ -1286,7 +1292,28 @@ rm -f "$tmp"
 mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4
 EOF
 chmod +x /root/abuse-defender-update.sh
-( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh' || true; echo "0 0 * * * /root/abuse-defender-update.sh" ) | crontab -          # (|| true: with set -e an empty crontab - grep finds nothing, status 1 - ended the subshell before the echo, so the cron line was never written)
+if command -v crontab >/dev/null 2>&1; then
+  ( crontab -l 2>/dev/null | grep -v 'abuse-defender-update.sh' || true; echo "0 0 * * * /root/abuse-defender-update.sh" ) | crontab -          # (|| true: with set -e an empty crontab - grep finds nothing, status 1 - ended the subshell before the echo, so the cron line was never written)
+else      # (no cron here and none could be installed: a systemd timer refreshes the list every night instead)
+  cat > /etc/systemd/system/abuse-defender-update.service <<'EOT'
+[Unit]
+Description=Abuse-Defender list refresh
+[Service]
+Type=oneshot
+ExecStart=/root/abuse-defender-update.sh
+EOT
+  cat > /etc/systemd/system/abuse-defender-update.timer <<'EOT'
+[Unit]
+Description=Abuse-Defender list refresh every night
+[Timer]
+OnCalendar=*-*-* 00:00:00
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOT
+  systemctl daemon-reload; systemctl enable --now abuse-defender-update.timer >/dev/null 2>&1 || true
+fi
+echo "STEP 5/5 the list is refreshed every night by $(command -v crontab >/dev/null 2>&1 && echo cron || echo a systemd timer)"
 mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4
 echo "ABUSE_OK=$(iptables -S abuse-defender | grep -c DROP)"
 """, {"URL": r"^https://raw\.githubusercontent\.com/[A-Za-z0-9._/-]{5,120}$", "WL": r"^(\d{1,3}(\.\d{1,3}){3}( \d{1,3}(\.\d{1,3}){3}){0,200})?$"}),
@@ -1295,6 +1322,7 @@ echo "ABUSE_OK=$(iptables -S abuse-defender | grep -c DROP)"
   iptables -F "$c" 2>/dev/null; iptables -X "$c" 2>/dev/null
 done
 ( crontab -l 2>/dev/null | grep -v -i 'abuse-defender' ) | crontab - 2>/dev/null || true
+systemctl disable --now abuse-defender-update.timer >/dev/null 2>&1 || true; rm -f /etc/systemd/system/abuse-defender-update.service /etc/systemd/system/abuse-defender-update.timer
 rm -f /root/abuse-defender*.sh /etc/cron.d/abuse-defender*; mkdir -p /etc/iptables; iptables-save > /etc/iptables/rules.v4 2>/dev/null || true; echo ABUSE_REMOVED
 """, {}),
 

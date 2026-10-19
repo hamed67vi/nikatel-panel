@@ -9,7 +9,7 @@ from ..auth import current_user
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Server, ServerSample, Tunnel
+from ..models import Server, ServerSample, Tunnel, is_standby
 from ..services import profiles, uptime
 from ..services.events import emit
 from ..services.facts import sample_server
@@ -201,28 +201,67 @@ def update_server(server_id: int, body: ServerIn):
     return out
 
 
+def _tunnels_of(db, server_id: int) -> list[Tunnel]:
+    """The tunnels that use a server, the warm standbys (switched-off rows) after the real ones."""
+    rows = list(db.scalars(select(Tunnel).where((Tunnel.iran_server_id == server_id) | (Tunnel.foreign_server_id == server_id))))
+    return sorted(rows, key=lambda t: (is_standby(t), t.id))
+
+
 @router.delete("/servers/{server_id}")
-def delete_server(server_id: int):
-    """Delete a server from the inventory (nothing changes on the server; refused while tunnels use it)."""
+def delete_server(server_id: int, tunnels: bool = False):
+    """Delete a server from the inventory (nothing changes on the server; refused while tunnels use it). `tunnels=true` removes those tunnels first, the way the tunnel window does (to the trash, their warm standbys with them);
+    a server that is off is not asked over SSH, so a dead server can be taken off the panel with its tunnels in one step."""
     with session() as db:
         s = db.get(Server, server_id)
 
         if s is None:
             raise HTTPException(404, "server not found")
 
-        used = db.scalar(select(Tunnel).where((Tunnel.iran_server_id == server_id) | (Tunnel.foreign_server_id == server_id)))
+        used = [(t.id, t.name, is_standby(t)) for t in _tunnels_of(db, server_id)]
 
-        if used:
-            raise HTTPException(409, f"the tunnel {used.name} uses this server; disable the server instead of deleting it")
+        if used and not tunnels:
+            real = [name for _, name, sb in used if not sb] or [name for _, name, _ in used]
+            raise HTTPException(409, f"the tunnel {', '.join(real)} uses this server; delete the tunnel with it, or disable the server instead of deleting it")
 
-        emit(db, "warn", "servers", f"Server {s.name} removed from the panel (nothing was changed on the server).", s.name)
+    gone: list[str] = []
+
+    if used:
+        from ..services import builder, standby
+
+        for tid, name, sb in used:
+            if not sb:
+                try:
+                    builder.delete_tunnel(tid, trash=True, skip_offline=True)
+                except ValueError as e:
+                    raise HTTPException(400 if "read-only" in str(e) else 404, str(e))
+
+                standby.forget(name)
+                gone.append(name)
+
+        with session() as db:
+            left = _tunnels_of(db, server_id)          # (a warm standby whose tunnel is gone and that is still there)
+            left_ids = [t.id for t in left]
+
+        for tid in left_ids:
+            try:
+                builder.delete_tunnel(tid, skip_offline=True)
+            except ValueError:
+                pass
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            return {"ok": True, "tunnels": gone}
+
+        emit(db, "warn", "servers", f"Server {s.name} removed from the panel (nothing was changed on the server)" + (f", with its tunnel{'s' if len(gone) > 1 else ''} {', '.join(gone)}." if gone else "."), s.name)
         profiles.drop_server(db, server_id)          # (its profile on the Lab page goes with it)
         db.delete(s)
 
     from ..services import knowledge
 
     knowledge.forget_server(server_id)               # (what the Doctor knew about its pairs goes with it)
-    return {"ok": True}
+    return {"ok": True, "tunnels": gone}
 
 
 @router.post("/servers/{server_id}/check", response_model=ServerOut)
