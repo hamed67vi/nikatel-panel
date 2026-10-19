@@ -826,6 +826,7 @@ I18N.add({
 "sending alerts": "هشدار می‌فرستد", "saved, switched off": "ذخیره شده، خاموش است", "not set": "تنظیم نشده", "set": "تنظیم شده", "encrypted": "رمزشده",
 "Its mode is": "حالت آن:", "(main · the failover uses it)": "(اصلی · جابه‌جایی خودکار از آن استفاده می‌کند)",
  "Rebooting": "در حال ری‌استارت", "waiting for it to come back": "منتظر برگشتن سرور",
+  "Bandwidth Mbit/s": "پهنای باند Mbit/s", "The line of the server in megabits per second: the speed its network card reports or, when it does not say, the highest speed seen on it in the last week (shown with ≥). Not the traffic it carries now.": "ظرفیت خط سرور به مگابیت بر ثانیه: سرعتی که کارت شبکه‌اش اعلام می‌کند، یا اگر نگوید بیشترین سرعتی که در هفتهٔ گذشته روی آن دیده شده (با ≥). ترافیکی که همین حالا رد می‌کند نیست.",
 });
 
 /* families of texts that carry a number: only a whole number in front, never "My account" or "Connection error" */
@@ -836,6 +837,8 @@ I18N.explain(t => {
   if ((m = /^(\d+) accounts?$/.exec(t))) return m[1] + " حساب";
   if ((m = /^(\d+) domains?$/.exec(t))) return m[1] + " دامنه";
   if ((m = /^(\d+) errors?$/.exec(t))) return m[1] + " خطا";
+  if ((m = /^The speed of the server's line: its network card reports (\d+) Mb\/s$/.exec(t))) return "ظرفیت خط سرور: کارت شبکه‌اش " + m[1] + " Mb/s اعلام می‌کند";
+  if ((m = /^The network card does not report its speed\. The highest speed seen on this server in the last week: ([\d.,]+) Mb\/s \(the line can carry at least that\)$/.exec(t))) return "کارت شبکه سرعتش را اعلام نمی‌کند. بیشترین سرعتی که در هفتهٔ گذشته روی این سرور دیده شده: " + m[1] + " Mb/s (خط دست‌کم این‌قدر می‌برد)";
 
   return null;
 });

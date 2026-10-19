@@ -87,3 +87,33 @@ def test_a_sample_does_not_hold_a_database_connection_while_the_server_is_asked(
     with session() as s:
         srv = s.query(Server).one()
         assert srv.online is False and "ssh connection lost" in srv.last_error
+
+def test_the_speed_the_card_reports_is_read_and_a_card_that_does_not_say_gives_none():
+    """The owner, 2026-10-20: the Bandwidth column of the Lab is the LINE of the server: the speed of its card (/sys/class/net/<card>/speed), -1 on most virtual servers."""
+    assert 'echo "LINK=$(cat /sys/class/net/$IF/speed 2>/dev/null || echo -1)"' in SCRIPTS["facts"][0]
+    base = SAMPLE if SAMPLE.endswith("\n") else SAMPLE + "\n"
+    assert parse_facts(base + "LINK=1000\n")["link_mbps"] == 1000
+    assert parse_facts(base + "LINK=-1\n")["link_mbps"] is None and parse_facts(base)["link_mbps"] is None and parse_facts(base + "LINK=oops\n")["link_mbps"] is None
+    assert parse_facts(base + "LINK=10000\n")["link_mbps"] == 10000
+
+
+def test_the_highest_speed_seen_is_kept_for_a_week_and_written_only_when_it_changes():
+    import time
+    from types import SimpleNamespace
+
+    from nikatel.services import facts
+
+    srv = SimpleNamespace(extra={})
+    facts._peak(srv, {"rx_mbps": 3.0, "tx_mbps": 12.5})
+    assert srv.extra["peak"]["v"] == 12.5
+    keep = srv.extra
+    facts._peak(srv, {"rx_mbps": 1.0, "tx_mbps": 2.0})                                                  # lower: the peak stays (and nothing is written)
+    assert srv.extra is keep and srv.extra["peak"]["v"] == 12.5
+    facts._peak(srv, {"rx_mbps": 40.0, "tx_mbps": 2.0})                                                 # beaten
+    assert srv.extra["peak"]["v"] == 40.0
+    srv.extra = {"peak": {"v": 40.0, "at": int(time.time()) - facts.PEAK_SECONDS - 10}}
+    facts._peak(srv, {"rx_mbps": 1.0, "tx_mbps": 2.0})                                                  # a week old: the peak is renewed with what is seen now
+    assert srv.extra["peak"]["v"] == 2.0
+    srv.extra = {}
+    facts._peak(srv, {"rx_mbps": 0.0, "tx_mbps": 0.0})                                                  # nothing moved: nothing is made up
+    assert srv.extra == {}

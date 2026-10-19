@@ -85,7 +85,12 @@ b, strong { font-weight: 700; }
 .btn.ok { background: linear-gradient(135deg, #0f9f6e, #3ddc97); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(61,220,151,.3), inset 0 1px 0 rgba(255,255,255,.35); }
 .btn.danger { color: var(--bad); border-color: rgba(255,107,139,.35); }
 .btn.sm { height: 32px; padding: 0 13px; font-size: 12px; } .btn.w { width: 100%; } .btn.ghost { background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
-.btns { display: flex; gap: 8px; margin-top: 12px; } .btns .btn { flex: 1; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* a button row never cuts a label (the owner, 2026-10-20: "Pay 130,000 Toman from the wallet" was cut on both sides on a narrow phone): the buttons share the row, the main one gets the larger part, and a label that does not fit goes on a second line instead of being clipped */
+.btns .btn { flex: 1 1 auto; min-width: 0; height: auto; min-height: 44px; padding: 8px 16px; white-space: normal; text-align: center; line-height: 1.5; overflow-wrap: anywhere; }
+.btns .btn.pri { flex: 2 1 60%; }
+.sheet { overflow-x: hidden; } .sheet > * { min-width: 0; max-width: 100%; }
+.note { overflow-wrap: anywhere; } .note.descr { white-space: pre-line; }
 
 /* ---- pills, bars */
 .pill { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); background: var(--panel); white-space: nowrap; }
@@ -126,6 +131,10 @@ label.lb { display: block; color: var(--mut); font-size: 11.5px; margin: 8px 0 4
 .code .cp { position: absolute; right: 8px; top: 7px; font-size: 14px; opacity: .8; }
 .copyrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-radius: var(--r2); margin-bottom: 7px; }
 .copyrow b { font-size: 16px; letter-spacing: .5px; direction: ltr; }
+/* a long value (a wallet address is 42 letters with no space) wraps inside its box and the copy button keeps its place (the owner, 2026-10-20: the address came out of the card on the left) */
+.copyrow > div { flex: 1; min-width: 0; } .copyrow > .btn { flex: none; }
+.copyrow b { display: block; overflow-wrap: anywhere; word-break: break-all; }
+.note code, .note pre, .note kbd { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; max-width: 100%; }
 .qr { display: grid; place-items: center; margin: 10px auto 4px; padding: 10px; background: #fff; border-radius: 16px; width: fit-content; } .qr img { display: block; width: 190px; height: 190px; image-rendering: pixelated; }
 
 /* ---- bottom sheet (the glass window) */

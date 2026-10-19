@@ -109,7 +109,7 @@ def _facts(row: tuple, ts: float, seed: int, uptime: int) -> dict:
         "disk": 28.0 + seed % 17, "disk_used_gb": round(0.4 * (28 + seed % 17), 1), "disk_total_gb": 40.0,
         "load1": round(cores * cpu / 100 * 0.9, 2), "load5": round(cores * cpu / 100 * 0.85, 2), "load15": round(cores * cpu / 100 * 0.8, 2),
         "cores": cores, "uptime": uptime, "rx_mbps": round(mbps * 0.62, 2), "tx_mbps": round(mbps * 0.38, 2),
-        "conn": int(mbps * 11 + 40), "hostname": name, "kernel": "5.15.0-demo",
+        "link_mbps": 1000 if cores > 1 else None, "conn": int(mbps * 11 + 40), "hostname": name, "kernel": "5.15.0-demo",
         "top": f"{'backhaul' if role == 'iran' else 'xray'} {min(98, cpu * 0.8):.0f}%" if cpu else "", "abuse_rules": 0 if role == "iran" else 214,
     }
 

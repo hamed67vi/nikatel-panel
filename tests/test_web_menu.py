@@ -262,7 +262,7 @@ def test_the_list_of_servers_has_an_ip_column_in_place_of_the_state_column_and_s
     assert "State · last 24 h" not in lab and "labStateHtml" not in lab and "labGreTag" not in lab and "labCells" not in lab and "LAB.strips" not in lab
     assert '<th data-prio="1" data-min="168">IP</th>' in lab and 'class="lab-ip mono ip-copy" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); labCopyIp(this)"' in lab and 'const addr = d ? d.address : p.address' in lab          # (an address is copied by a click; a node shows no port)
     assert "/api/profiles/strips" not in lab                                                         # the list does not ask for the strips any more
-    assert lab.count('<col style="width:') == 7 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
+    assert lab.count('<col style="width:') == 7 and "Bandwidth Mbit/s" in lab and "const labRate = v =>" in lab and "const labCap = s =>" in lab
     assert ".lab-ip {" in _web("lab.css")
 
 
@@ -491,14 +491,17 @@ def test_move_to_profile_is_a_flyout_and_a_plain_server_can_be_made_a_pasarguard
     assert "--lab-pad: 16px; --lab-dot: 14px; --lab-gap: 20px;" in css and "srv-ic::before" not in css
 
 
-def test_the_server_row_shows_one_total_for_the_traffic_and_one_live_number_for_what_the_server_gives():
-    """The owner, 2026-10-19: "the traffic column only the total use, download and upload together; the bandwidth column only the bandwidth the server gives - live"."""
+def test_the_server_row_shows_one_total_for_the_traffic_and_the_line_of_the_server_in_the_bandwidth_column():
+    """The owner, 2026-10-19: "the traffic column only the total use, download and upload together". 2026-10-20: "the Bandwidth column: the overall bandwidth of the server, not what is used" (the port
+    of the server): the speed its card reports or, when it does not say, the highest speed seen in the last week with a ≥; no live traffic in that column any more."""
     lab = _web("lab.js")
     used = lab.split("const labUsed = (rx, tx) =>", 1)[1].split("\n", 1)[0]
     assert "sum = (+rx || 0) + (+tx || 0)" in used and "one(sum)" in used and 'class="ta d"' not in used and 'class="ta u"' not in used and "since the server started" in used       # one number: both ways added, the two parts in the tooltip
-    row = lab.split('<td class="lab-trf lab-live"', 1)[1].split("</td>", 1)[0]
-    assert "f.tx_mbps" in row and "f.rx_mbps != null" not in row and "LAB_AU" in row and "LAB_AD" not in row and "What the server gives out right now" in row      # the speed column: what the server sends out, one number
-
+    cap = lab.split("const labCap = s =>", 1)[1].split("\nconst labCapCell", 1)[0]
+    assert "f.link_mbps" in cap and "extra" in cap and ".peak" in cap and "ge: true" in cap and "highest speed seen" in cap
+    cell = lab.split("const labCapCell = (s, on) =>", 1)[1].split("\n", 1)[0]
+    assert 'class="lab-trf lab-live"' in cell and 'c.ge ? "≥ " : ""' in cell and "LAB_AU" not in cell and "tx_mbps" not in cell and "rx_mbps" not in cell      # the line, never the traffic
+    assert lab.count("${labCapCell(") == 2 and "labCapCell(srv, !!(srv && srv.enabled))" in lab and "labCapCell(s, on)" in lab      # the server rows and the rows of the PasarGuard nodes (the server they run on)
 
 def test_the_server_list_puts_the_servers_with_a_problem_first_then_every_location_together_in_alphabetical_order(tmp_path):
     """The owner, 2026-10-19: "every location next to each other, the locations in alphabetical order; any server with a problem at the top"; and a PasarGuard server shows the ordinary server icon (with its profile tag only)."""
@@ -533,7 +536,7 @@ def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_c
     lab, css = _web("lab.js"), _web("lab.css")
     assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "s.provider ?" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
-    assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab      # (1.69.23: the used column is ONE total, the speed column ONE number - what the server gives out) and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
+    assert lab.count('<span class="tv"><b>') == 1 and ">Mb/s</small>" in lab      # (1.69.23: the used column is ONE total, the speed column ONE number - what the server gives out) and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
     assert ":is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
 
 
@@ -632,16 +635,16 @@ def test_the_geometry_of_a_lab_row_is_three_numbers_and_every_row_has_one_cell_p
     node = lab.split("function labNodeRowHtml(p) {", 1)[1].split("const labGoneRow", 1)[0]
     gone = lab.split("const labGoneRow = ", 1)[1].split("const labRowOf", 1)[0]
     assert sum(map(int, cols)) == 100 and len(cols) == len(heads) == 7
-    assert len(re.findall(r"<td[ >]", server)) == len(re.findall(r"<td[ >]", node)) == len(re.findall(r"<td[ >]", gone)) == 7
+    assert len(re.findall(r"<td[ >]|\$\{labCapCell\(", server)) == len(re.findall(r"<td[ >]|\$\{labCapCell\(", node)) == len(re.findall(r"<td[ >]", gone)) == 7      # (the Bandwidth cell of a server and of a node row is labCapCell)
     assert all(t.count('<i class="lab-lamp"') == 1 and t.index('<i class="lab-lamp"') < t.index('<div class="lab-nmw">') for t in (server, node, gone))     # the lamp is the first thing in the name cell
 
 
 def test_the_lab_has_a_traffic_used_column_made_of_the_bytes_since_boot():
-    """The owner, 2026-10-15: "put a traffic usage column here": the bytes the server's card carried since it started (a node: what its panel counted), value over unit, in the order Load | Traffic used | Traffic Mbit/s."""
+    """The owner, 2026-10-15: "put a traffic usage column here": the bytes the server's card carried since it started (a node: what its panel counted), value over unit, in the order Load | Traffic used | Bandwidth Mbit/s."""
     lab = _web("lab.js")
     assert '<th data-prio="3" title="Everything the network card has carried since the server started' in lab and ">Traffic used</th>" in lab
     assert lab.count('class="lab-trf lab-used"') == 2 and "labUsed(f.rx_bytes, f.tx_bytes)" in lab and "labUsed(I.d.downlink, I.d.uplink)" in lab and "const labUsed = (rx, tx) =>" in lab
-    assert lab.index('class="lab-trf lab-used"') < lab.index('<td class="lab-trf lab-live" title="${sf.tx_mbps')                               # (the used cell comes before the speed cell; 1.69.37: a node row shows the bandwidth of its server, as the server rows do)
+    assert lab.index('class="lab-trf lab-used"') < lab.index('${labCapCell(s, on)}')      # (the used cell comes before the bandwidth cell, the line of the server)
 
 
 def test_the_problems_of_a_server_are_tags_after_its_name_and_the_search_finds_them():

@@ -112,6 +112,7 @@ awk '/^MemTotal/{t=$2}/^MemAvailable/{a=$2}/^SwapTotal/{st=$2}/^SwapFree/{sf=$2}
 df -P / | awk 'NR==2{print "DISK="$2" "$3}'
 echo "LOAD=$(cut -d' ' -f1-3 /proc/loadavg) $(nproc)"
 echo "UP=$(cut -d. -f1 /proc/uptime)"
+echo "LINK=$(cat /sys/class/net/$IF/speed 2>/dev/null || echo -1)"
 echo "CONN=$(ss -tan state established 2>/dev/null | tail -n +2 | wc -l)"
 echo "HOST=$(hostname) $(uname -r)"
 echo "TOP=$(ps -eo comm=,pcpu= --sort=-pcpu 2>/dev/null | head -1)"

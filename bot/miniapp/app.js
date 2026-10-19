@@ -268,7 +268,7 @@ function buySheet(id) {
   const wallet = S.me ? S.me.wallet : 0, short = x.price - wallet;
   sheet(`<h3>${esc(x.title)}</h3>
     <div class="grid"><div class="tile"><small>سرور</small><b>${esc(x.server)}</b></div><div class="tile"><small>قیمت</small><b>${T(x.price)} تومان</b></div><div class="tile"><small>حجم</small><b>${vol(x.volume)}</b></div><div class="tile"><small>مدت</small><b>${x.days ? T(x.days) + " روز" : "نامحدود"}</b></div></div>
-    ${x.descr ? `<div class="note mt">${esc(x.descr)}</div>` : ""}
+    ${x.descr ? `<div class="note descr mt">${esc(x.descr)}</div>` : ""}
     ${x.discount ? `<div class="note ok mt">تخفیف همکار: ${T(x.discount)}٪ (قیمت اصلی ${T(x.list_price)} تومان)</div>` : ""}
     ${S.feat.hold ? `<div class="note mt">⏱ زمان سرویس از اولین اتصال شروع می‌شود.</div>` : ""}
     <div class="row mt"><span class="mut">کیف پول</span><b>${T(wallet)} تومان</b></div>

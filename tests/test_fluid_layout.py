@@ -92,7 +92,7 @@ def test_a_header_can_say_its_least_width_or_that_it_fits_its_content():
     assert 'th.getAttribute("data-min")' in FLUID_JS and 'th.getAttribute("data-fit")' in FLUID_JS
     assert "natural(tbl, i, 40)" in FLUID_JS      # (the widest of the first 40 cells, measured with the font in use - Persian too - not the first three)
     # the server list: the name keeps its lamp, icon and letters; an address and the speed are not cut
-    assert '<th data-prio="0" data-fit="192">Name</th><th data-prio="1" data-min="168">IP</th>' in LAB and 'data-min="126" title="Megabits per second' in LAB
+    assert '<th data-prio="0" data-fit="192">Name</th><th data-prio="1" data-min="168">IP</th>' in LAB and 'data-min="126" title="The line of the server in megabits per second' in LAB
     assert '<th data-prio="2" data-min="128" class="lab-ld">Load</th>' in LAB
     # the tunnel list: the name, the type badge, both nodes with their addresses, the bandwidth
     assert '<th data-fit="196">Tunnel</th><th data-min="176">Type</th>' in APP and '<th class="r" data-fit="190">Iran node</th>' in APP and '<th data-fit="190">Foreign node</th>' in APP and 'data-prio="1" data-min="130"' in APP

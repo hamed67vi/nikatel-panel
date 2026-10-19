@@ -90,6 +90,15 @@ function botTexts(): array {
 function mainText(string $key, string $fallback = ''): string { [$m] = botTexts(); $v = $m[$key] ?? $fallback; return is_string($v) ? $v : $fallback; }
 function buttonText(string $key, string $fallback): string { [, $b] = botTexts(); $v = $b[$key] ?? $fallback; return is_string($v) && trim($v) !== '' ? $v : $fallback; }
 /** the bot's texts use a little HTML; only harmless tags reach the browser */
+/* The invite text of the bot is kept by the bot as a message record ({"type":"text","text":"..."}) in some versions: the page shows the words of it, and nothing at all when what is kept is not words (the owner, 2026-10-20: a raw {"type":"text","text":"\u0644..."} was drawn in the invite page). */
+function bannerText($raw): string {
+    $s = trim((string) $raw);
+    if ($s !== '' && ($s[0] === '{' || $s[0] === '[')) {
+        $j = json_decode($s, true);
+        $s = is_array($j) && isset($j['text']) && is_string($j['text']) ? trim($j['text']) : '';
+    }
+    return preg_match('/\\\\u[0-9a-fA-F]{4}|^\s*[{\[]/', $s) ? '' : $s;
+}
 function safeHtml(string $s): string {
     $s = strip_tags($s, '<b><strong><i><em><code><u><s><br>');
     return nl2br($s, false);
@@ -676,7 +685,7 @@ case 'wheel': {
 case 'referral': {
     $n = (int) (row("SELECT COUNT(*) AS n FROM users WHERE refered_by = ?", [$uid])['n'] ?? 0);
     $buyers = (int) (row("SELECT COUNT(DISTINCT o.userid) AS n FROM orders_list o JOIN users u ON u.userid = o.userid WHERE u.refered_by = ?", [$uid])['n'] ?? 0);
-    out(['ok' => true, 'link' => 'https://t.me/' . ($botUsername ?? '') . '?start=' . $uid, 'invited' => $n, 'buyers' => $buyers, 'reward' => (int) settingValue('INVITE_BANNER_AMOUNT'), 'text' => safeHtml(settingValue('INVITE_BANNER_TEXT'))]);
+    out(['ok' => true, 'link' => 'https://t.me/' . ($botUsername ?? '') . '?start=' . $uid, 'invited' => $n, 'buyers' => $buyers, 'reward' => (int) settingValue('INVITE_BANNER_AMOUNT'), 'text' => safeHtml(str_replace('LINK', 'https://t.me/' . ($botUsername ?? '') . '?start=' . $uid, bannerText(settingValue('INVITE_BANNER_TEXT'))))]);
 }
 
 case 'apps': {

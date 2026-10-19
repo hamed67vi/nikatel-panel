@@ -61,6 +61,11 @@ def parse_facts(out: str) -> dict:
     top = kv.get("TOP", "").split()
     abuse = kv.get("ABUSE", "").strip()
 
+    try:
+        link = int(float(kv.get("LINK", "-1").split()[0]))          # the speed the network card reports, in Mbit/s; -1 when it does not say (most virtual servers)
+    except (ValueError, IndexError):
+        link = -1
+
     return {
         "ts": int(time.time()),
         "cpu": round(cpu, 1),
@@ -80,6 +85,7 @@ def parse_facts(out: str) -> dict:
         "tx_mbps": round(max(0.0, tx2 - tx1) * 8 / 1e6 / netdt, 2),
         "rx_bytes": int(rx2), "tx_bytes": int(tx2),      # everything the card of the default route has carried since the server started (the "Traffic used" column of the Lab)
         "conn": conn,
+        "link_mbps": link if 0 < link <= 1_000_000 else None,           # the line of the server (the Bandwidth column of the Lab)
         "hostname": host[0] if host else "",
         "kernel": host[1] if len(host) > 1 else "",
         "top": f"{top[0]} {float(top[-1]):.0f}%" if len(top) >= 2 else "",      # busiest process
@@ -98,6 +104,21 @@ def _wake_tunnels() -> None:
 
 
 REBOOT_WAIT = 180          # seconds: a server that still answers with its old uptime this long after "Reboot" did not restart (the command failed): the mark goes
+
+
+PEAK_SECONDS = 7 * 86400          # the highest speed seen on a server is kept this long (the Bandwidth column shows it when the card does not report its speed)
+
+
+def _peak(srv, facts: dict) -> None:
+    """extra.peak = {"v": Mbit/s, "at": time}: the highest of the download and the upload seen at a sample, renewed when it is beaten or when it is a week old. Written only when it changes."""
+    cur = max(float(facts.get("rx_mbps") or 0), float(facts.get("tx_mbps") or 0))
+    p = (srv.extra or {}).get("peak") or {}
+    now = time.time()
+
+    if cur > 0 and (cur >= float(p.get("v") or 0) or now - float(p.get("at") or 0) > PEAK_SECONDS):
+        ex = dict(srv.extra or {})
+        ex["peak"] = {"v": round(cur, 1), "at": int(now)}
+        srv.extra = ex
 
 
 def _rebooting(srv) -> bool:
@@ -177,6 +198,7 @@ def sample_server(server_id: int) -> None:
         srv.last_error = ""
         srv.facts = facts
         _reboot_done(srv, facts)
+        _peak(srv, facts)
         db.add(ServerSample(server_id=srv.id, ts=facts["ts"], cpu=facts["cpu"], ram=facts["ram"], disk=facts["disk"],
                             load1=facts["load1"], rx_mbps=facts["rx_mbps"], tx_mbps=facts["tx_mbps"], conn=facts["conn"]))
 

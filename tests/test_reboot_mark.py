@@ -105,14 +105,11 @@ def test_another_busy_mark_is_left_alone(srv, monkeypatch):
     facts.sample_server(srv)
     assert _busy(srv).get("what") == "installing"
 
-def test_the_bandwidth_of_a_pasarguard_server_is_what_the_server_gives_out_not_what_its_users_use():
-    """The owner, 2026-10-20: "show the server's own bandwidth in the Bandwidth column, not the bandwidth the users use". The rows of the PasarGuard profile showed the up and the down of the users of the node
-    (what the panel counts); they show the card of the server (its upload, as every other row) when the server is one of ours and answers."""
+def test_the_bandwidth_of_a_pasarguard_server_is_the_line_of_the_server_not_what_its_users_use():
+    """The owner, 2026-10-20: "show the server's own bandwidth in the Bandwidth column, not the bandwidth the users use" (and later: its line, not the traffic). The rows of the PasarGuard profile
+    showed the up and the down of the users of the node (what the panel counts); they show the line of the server they run on, as every other row."""
     lab = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "lab.js").read_text(encoding="utf-8")
-    assert 'sf = (srv && srv.enabled && srv.online !== false && srv.facts) || {};' in lab
-    cell = lab[lab.index('<td class="lab-trf lab-live" title="${sf.tx_mbps != null'):]
-    cell = cell[:cell.index("</td>")]
-    assert "${sf.tx_mbps != null ? `<span class=\"trf\"><i class=\"ta u\">${LAB_AU}</i><span class=\"tv\"><b>${labRate(sf.tx_mbps)}</b>" in cell
-    assert "live && live.rx != null ?" in cell and cell.index("sf.tx_mbps") < cell.index("live && live.rx")      # (a node with no server of ours keeps the numbers of the panel)
+    node = lab.split("function labNodeRowHtml(p) {", 1)[1].split("const labGoneRow", 1)[0]
+    assert "labCapCell(srv, !!(srv && srv.enabled))" in node and "live.rx" not in node.split("labCapCell(srv", 1)[1].split("</tr>", 1)[0]
     ui2 = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "i18n.fa.ui2.js").read_text(encoding="utf-8")
     assert '"Rebooting":' in ui2 and '"waiting for it to come back":' in ui2
