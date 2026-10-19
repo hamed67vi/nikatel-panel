@@ -465,6 +465,9 @@ def clean_bh_opts(o: dict | None) -> dict:
 
         out["link"] = o["link"]
 
+    if o.get("link_fallback"):                                    # (not kept in the record: start_build takes it out)
+        out["link_fallback"] = True
+
     if o.get("avoid_net") and re.fullmatch(r"(\d{1,3}\.){3}\d{1,3}/\d{1,2}", str(o["avoid_net"])):          # a rebuild with a NEW link: never the inner network the broken link had (it was dropped here before)
         out["avoid_net"] = str(o["avoid_net"])
 
@@ -561,6 +564,8 @@ class Build:
     opts: dict = field(default_factory=dict)
     name: str = ""
     created: list[tuple[str, Node]] = field(default_factory=list)   # (what, where) for rollback
+    link_fallback: bool = False        # the owner built it from Create tunnel: a link that does not pass is followed by the other link models (`_build_worker`)
+    link_tried: list = field(default_factory=list)
     standby_of: str = ""   # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock (the repair of the real tunnel may build at the same time)
 
 
@@ -569,6 +574,20 @@ CANCEL: set[int] = set()   # build ids the operator stopped: the next step of th
 
 class BuildCancelled(RuntimeError):
     pass
+
+
+class LinkFailed(RuntimeError):
+    """The LINK under Backhaul (GRE, GRE in UDP, IPIP, WireGuard, IPsec) could not be made or does not carry packets between these two servers: another link model may pass where this one does not."""
+
+
+# The models tried after the one the owner chose, when it does not pass (the owner, 2026-10-20: "there are several GRE models - when the build finds that one does not answer it must test the others"). The ones in UDP come first (a route that
+# filters IP protocol 47 passes UDP most of the time), then the ones in raw IP protocols. WireGuard is last and only where `wg` is on the servers already: a build never installs a package by itself for a fall-back.
+FALLBACK_LINKS = ("gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "wg")
+
+
+def next_link(tried: list[str], wg_ok: bool = False) -> str:
+    """The next link model to try after the ones in `tried` (the order of FALLBACK_LINKS), or "" when none is left."""
+    return next((k for k in FALLBACK_LINKS if k not in tried and k in LINKS and (k != "wg" or wg_ok)), "")
 
 
 def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) -> None:
@@ -707,6 +726,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
 
     ports = parse_ports(ports_text)
     opts = clean_bh_opts(opts)
+    fallback = bool(opts.pop("link_fallback", False))
 
     if mtu and not 1200 <= mtu <= 1476:
         raise ValueError("MTU must be between 1200 and 1476 (0 = measure)")
@@ -736,7 +756,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
         db.add(entry)
         db.flush()
         aid = entry.id
-        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of)
+        b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of, link_fallback=fallback)
         db.expunge(iran)
         db.expunge(foreign)
 
@@ -822,7 +842,26 @@ class server_locks:
 def _build_worker(b: Build, pair: str) -> None:
     try:
         with server_locks([b.iran.id, b.foreign.id], b.aid):
-            _build(b)
+            while True:
+                try:
+                    _build(b)
+                    break
+                except LinkFailed as e:
+                    cur = str(b.opts.get("link") or "gre")
+                    b.link_tried.append(cur)
+                    nxt = next_link(b.link_tried, wg_ok=bool(b.opts.get("install_wg"))) if b.link_fallback and not b.standby_of else ""
+
+                    if not nxt:
+                        if len(b.link_tried) > 1:
+                            _say(b.aid, "None of the link models passed between these two servers (tried: " + ", ".join(LINK_TITLE[k] for k in b.link_tried) + "). The path between them is filtered for all of them.")
+
+                        raise
+
+                    _say(b.aid, f"{LINK_TITLE[cur]} did not pass between these two servers: {str(e)[:160]}")
+                    _rollback(b)
+                    b.created = []
+                    b.opts["link"] = nxt
+                    _say(b.aid, f"Everything of it was removed. Trying the next link model: {LINK_TITLE[nxt]}…")
     except Exception as e:  # thread boundary
         log.exception("build #%s crashed", b.aid)
         _rollback(b)
@@ -928,7 +967,7 @@ def _build(b: Build) -> None:
             raise RuntimeError(f"{label} server {srv.name} has failed tunnel units: {', '.join(f['broken'][:4])}. Repair or delete them first.")
 
         if link == "gre" and not f["gre_mod"]:
-            raise RuntimeError(f"{label} server {srv.name} cannot load the GRE kernel module")
+            raise LinkFailed(f"{label} server {srv.name} cannot load the GRE kernel module")
 
         if srv.host not in [c.split("/")[0] for c in f["ips"]]:
             raise RuntimeError(f"{label} server {srv.name}: {srv.host} is not an address of the server itself (behind NAT?) - GRE needs the real interface address")
@@ -987,7 +1026,12 @@ def _build(b: Build) -> None:
     key = random.randint(1, 2147483647)
     token = secrets.token_hex(16)
     _say(aid, f"Plan: {b.name}, inner network {network} (Iran {iran_ip}, foreign {foreign_ip})")
-    link_port, pubs = _prepare_link(b, iran, foreign, link) if link != "gre" else (0, {})
+    try:
+        link_port, pubs = _prepare_link(b, iran, foreign, link) if link != "gre" else (0, {})
+    except BuildCancelled:
+        raise
+    except RuntimeError as e:
+        raise LinkFailed(str(e)) from e
     title = LINK_TITLE[link]
     filtered = (f"UDP port {link_port} is probably filtered between these two servers" if link_port else
                 {"gre": "GRE (protocol 47)", "ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)"}[link] + " is probably filtered between these two servers")
@@ -1004,7 +1048,7 @@ def _build(b: Build) -> None:
 
         if st != "active":
             logs = run_script(node, "unit_log", {"UNIT": f"nikatel-gre-{b.name}.service"}, timeout=20) if link != "gre" else ""
-            raise RuntimeError(f"the {title} unit on the {label} server ended {st}" + (f": {logs.strip()[-200:]}" if logs.strip() else ""))
+            raise LinkFailed(f"the {title} unit on the {label} server ended {st}" + (f": {logs.strip()[-200:]}" if logs.strip() else ""))
 
     ips = ({"iran": {"spi_tx": pubs["spi_a"], "spi_rx": pubs["spi_b"], "key_tx": pubs["key_a"], "key_rx": pubs["key_b"]},
             "foreign": {"spi_tx": pubs["spi_b"], "spi_rx": pubs["spi_a"], "key_tx": pubs["key_b"], "key_rx": pubs["key_a"]}} if link in ("ipsec", "ipsecnat") else {})      # (the Iran end sends with A and receives with B; the foreign end the other way round)
@@ -1018,7 +1062,7 @@ def _build(b: Build) -> None:
     (_, gb), _ = ver_f
 
     if ga < 8 or gb < 8:
-        raise RuntimeError(f"the {title} link is up but the inner addresses cannot ping each other (Iran→foreign {ga}/10, foreign→Iran {gb}/10). "
+        raise LinkFailed(f"the {title} link is up but the inner addresses cannot ping each other (Iran→foreign {ga}/10, foreign→Iran {gb}/10). "
                            f"{filtered}; try another Iran server for this foreign server" + ("" if link == "gre" else " or another link type") + ".")
 
     _say(aid, f"{title} answers both ways (Iran→foreign {ga}/10, foreign→Iran {gb}/10, {rtt} ms). Waiting {GRE_HOLD_WAIT} s to see that it holds…")
@@ -1026,7 +1070,7 @@ def _build(b: Build) -> None:
     (sh, gh), _ = ping_stats(run_script(iran, "gre_hold", {"IFACE": b.name, "PEER": foreign_ip}, timeout=45))
 
     if not sh or gh < int(sh * 0.85):
-        raise RuntimeError(f"the {title} link answered at first but then lost its packets ({gh}/{sh} after {GRE_HOLD_WAIT} s): the path filters {'GRE' if link == 'gre' else 'this UDP port' if link_port else 'this IP protocol'} a few seconds into a flow. Another Iran server is needed for this foreign server.")
+        raise LinkFailed(f"the {title} link answered at first but then lost its packets ({gh}/{sh} after {GRE_HOLD_WAIT} s): the path filters {'GRE' if link == 'gre' else 'this UDP port' if link_port else 'this IP protocol'} a few seconds into a flow. Another Iran server is needed for this foreign server.")
 
     _say(aid, f"{title} holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
 
@@ -1062,7 +1106,7 @@ def _build(b: Build) -> None:
         logs = run_script(foreign, "unit_log", {"UNIT": foreign_unit}, timeout=20)
         raise RuntimeError("the backhaul client did not connect to the Iran inner address over GRE. " + logs[-300:])
 
-    _say(aid, "Backhaul: control connection established over GRE")
+    _say(aid, f"Backhaul: control connection established over {title}")
 
     # 6. data test through the first port
     first = b.ports[0]
@@ -1105,7 +1149,7 @@ def _build(b: Build) -> None:
         db.flush()
         tid = t.id
         if not is_temp(b.name) and not b.standby_of:          # a temporary test tunnel and a standby are not an event
-            emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: ports {', '.join(p.spec() for p in b.ports)}, {rtt} ms over GRE.", b.name)
+            emit(db, "ok", "tunnels", f"Tunnel {b.name} ({b.iran.name} ⇄ {b.foreign.name}) built: ports {', '.join(p.spec() for p in b.ports)}, {rtt} ms over {title}.", b.name)
 
     check_tunnel(tid)
     _say(aid, f"Tunnel {b.name} is ready.", done=True, ok=True)

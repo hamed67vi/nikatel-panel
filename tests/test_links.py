@@ -178,9 +178,9 @@ def test_the_api_turns_a_wireguard_transport_into_a_build_over_wireguard(client,
     assert client.post("/api/tunnels", json={**body, "transport": "wg:tcpmux"}).json() == {"ok": True, "id": 7}
     assert client.post("/api/tunnels", json={**body, "transport": "fou:tcpmux"}).status_code == 202
     assert client.post("/api/tunnels", json={**body, "transport": "tcpmux"}).status_code == 202
-    assert seen == [("tcpmux", {"link": "wg", "install_wg": True}), ("tcpmux", {"link": "fou"}), ("tcpmux", {})]       # the owner asked for WireGuard: wireguard-tools may be installed; GRE over UDP needs no package
+    assert seen == [("tcpmux", {"link": "wg", "install_wg": True, "link_fallback": True}), ("tcpmux", {"link": "fou", "link_fallback": True}), ("tcpmux", {"link_fallback": True})]       # the owner asked for WireGuard: wireguard-tools may be installed; GRE over UDP needs no package
     assert client.post("/api/tunnels", json={**body, "transport": "ipsec:tcpmux"}).status_code == 202               # (1.69.0: ESP, GUE, IPIP ... are links too)
-    assert seen[-1] == ("tcpmux", {"link": "ipsec"})
+    assert seen[-1] == ("tcpmux", {"link": "ipsec", "link_fallback": True})
     assert client.post("/api/tunnels", json={**body, "transport": "sit:tcpmux"}).status_code == 400 and client.post("/api/tunnels", json={**body, "transport": "gre:tcpmux"}).status_code == 400
     kinds = client.get("/api/tunnels/kinds").json()["kinds"]
     assert {"wg:tcpmux", "wg:tcp", "fou:tcpmux", "gue:tcpmux", "ipip:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsec:tcpmux", "ipsecnat:tcpmux"} <= {t["key"] for k in kinds if k["key"] == "backhaul" for t in k["transports"]}

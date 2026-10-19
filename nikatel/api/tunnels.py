@@ -71,6 +71,9 @@ def build(body: BuildIn):
         if kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
             raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
+        if kind == "backhaul" and body.kind != "auto":
+            opts["link_fallback"] = True                         # the link under it does not pass between the two servers: the other link models are tried, one by one, before the build gives up
+
         other_opts = {k: v for k, v in ({} if body.kind == "auto" else body.opts).items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
         measure = "full" if body.opts.get("measure") != "latency" else "latency"
 
