@@ -533,7 +533,7 @@ def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_c
     lab, css = _web("lab.js"), _web("lab.css")
     assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "s.provider ?" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
-    assert lab.count('<span class="tv"><b>') == 3 and ">Mb/s</small>" in lab      # (1.69.23: the used column is ONE total, the speed column ONE number - what the server gives out) and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
+    assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab      # (1.69.23: the used column is ONE total, the speed column ONE number - what the server gives out) and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
     assert ":is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
 
 
@@ -641,7 +641,7 @@ def test_the_lab_has_a_traffic_used_column_made_of_the_bytes_since_boot():
     lab = _web("lab.js")
     assert '<th data-prio="3" title="Everything the network card has carried since the server started' in lab and ">Traffic used</th>" in lab
     assert lab.count('class="lab-trf lab-used"') == 2 and "labUsed(f.rx_bytes, f.tx_bytes)" in lab and "labUsed(I.d.downlink, I.d.uplink)" in lab and "const labUsed = (rx, tx) =>" in lab
-    assert lab.index('class="lab-trf lab-used"') < lab.index('<td class="lab-trf">')                               # (the used cell comes before the speed cell)
+    assert lab.index('class="lab-trf lab-used"') < lab.index('<td class="lab-trf lab-live" title="${sf.tx_mbps')                               # (the used cell comes before the speed cell; 1.69.37: a node row shows the bandwidth of its server, as the server rows do)
 
 
 def test_the_problems_of_a_server_are_tags_after_its_name_and_the_search_finds_them():

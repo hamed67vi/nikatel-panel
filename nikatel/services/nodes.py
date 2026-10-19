@@ -426,9 +426,13 @@ def abuse_start(server_id: int, action: str) -> int:
     return autopilot._start(f"abuse {name}", work, action="install")
 
 
+REBOOTING = "Rebooting"      # the `what` of the busy mark of a restart asked from the panel
+
+
 def reboot(server_id: int) -> None:
     node, name, _role, _host = _srv(server_id)
     run_action(node, "reboot", timeout=20)
+    set_busy(server_id, REBOOTING, "waiting for it to come back")          # (the row says so, in blue, until the server answers again after a restart - services/facts.py; it was a red "offline" row that jumped to the top of the list)
 
     with session() as db:
         emit(db, "warn", "nodes", f"Server {name} is rebooting (asked from the panel).", name)

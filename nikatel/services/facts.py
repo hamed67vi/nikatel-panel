@@ -97,6 +97,29 @@ def _wake_tunnels() -> None:
         pass
 
 
+REBOOT_WAIT = 180          # seconds: a server that still answers with its old uptime this long after "Reboot" did not restart (the command failed): the mark goes
+
+
+def _rebooting(srv) -> bool:
+    return (((srv.extra or {}).get("busy") or {}).get("what")) == "Rebooting"
+
+
+def _reboot_done(srv, facts: dict) -> None:
+    """The "Rebooting" mark of a row goes when the server answers and its uptime is shorter than the time since the restart was asked (it has started again), or when it still answers with its old uptime
+    long after (the command did not restart it). A server that answers in the first seconds, before it goes down, keeps the mark."""
+    b = ((srv.extra or {}).get("busy") or {})
+
+    if b.get("what") != "Rebooting":
+        return
+
+    since = time.time() - (b.get("at") or 0)
+
+    if since > REBOOT_WAIT or float(facts.get("uptime") or 0) < since + 30:
+        ex = dict(srv.extra or {})
+        ex.pop("busy", None)
+        srv.extra = ex
+
+
 def sample_server(server_id: int) -> None:
     """One server: ssh, parse, store. Errors become the server's last_error, never an exception.
 
@@ -143,7 +166,7 @@ def sample_server(server_id: int) -> None:
             srv.online = False
             srv.last_error = str(e)[:300]
 
-            if was_online:
+            if was_online and not _rebooting(srv):          # (a restart asked from the panel is no alarm: its row says "Rebooting")
                 emit(db, "bad", "servers", f"Server {srv.name} does not answer: {e}", srv.name)
                 _wake_tunnels()
 
@@ -153,6 +176,7 @@ def sample_server(server_id: int) -> None:
         srv.last_seen_at = facts["ts"]
         srv.last_error = ""
         srv.facts = facts
+        _reboot_done(srv, facts)
         db.add(ServerSample(server_id=srv.id, ts=facts["ts"], cpu=facts["cpu"], ram=facts["ram"], disk=facts["disk"],
                             load1=facts["load1"], rx_mbps=facts["rx_mbps"], tx_mbps=facts["tx_mbps"], conn=facts["conn"]))
 

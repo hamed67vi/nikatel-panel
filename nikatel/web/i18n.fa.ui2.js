@@ -825,6 +825,7 @@ I18N.add({
 "{} Iran · {} foreign": "{} ایران · {} خارج",
 "sending alerts": "هشدار می‌فرستد", "saved, switched off": "ذخیره شده، خاموش است", "not set": "تنظیم نشده", "set": "تنظیم شده", "encrypted": "رمزشده",
 "Its mode is": "حالت آن:", "(main · the failover uses it)": "(اصلی · جابه‌جایی خودکار از آن استفاده می‌کند)",
+ "Rebooting": "در حال ری‌استارت", "waiting for it to come back": "منتظر برگشتن سرور",
 });
 
 /* families of texts that carry a number: only a whole number in front, never "My account" or "Connection error" */

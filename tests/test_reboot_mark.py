@@ -1,0 +1,118 @@
+"""A restart asked from the panel (the owner, 2026-10-20: "I rebooted the server - the row must show a reboot mark"): the row says "Rebooting" (the blue busy mark, not a red "offline" row that jumps to the top
+of the list) until the server answers again after a restart; the stop of its SSH is no alarm while it restarts."""
+import time
+from pathlib import Path
+
+import pytest
+from sqlalchemy import select
+
+from nikatel.db import session
+from nikatel.models import Event, Server
+from nikatel.services import facts, nodes
+
+
+def _facts(uptime):
+    return {"ts": int(time.time()), "cpu": 5.0, "ram": 20.0, "disk": 30.0, "load1": 0.1, "rx_mbps": 1.0, "tx_mbps": 2.0, "conn": 10, "uptime": uptime}
+
+
+@pytest.fixture
+def srv(client, monkeypatch):
+    with session() as db:
+        db.add(Server(name="s1", host="203.0.113.5", role="foreign", online=True, extra={}))
+        sid = db.scalar(select(Server.id))
+
+    monkeypatch.setattr(nodes, "run_action", lambda *a, **k: "")
+    return sid
+
+
+def _busy(sid):
+    with session() as db:
+        return ((db.get(Server, sid).extra or {}).get("busy")) or {}
+
+
+def _ask(monkeypatch, answer):
+    def run(node, script, *a, **k):
+        if isinstance(answer, Exception):
+            raise answer
+
+        return ""
+
+    monkeypatch.setattr(facts, "run_script", run)
+    monkeypatch.setattr(facts, "parse_facts", lambda out: answer)
+
+
+def test_a_reboot_asked_from_the_panel_puts_the_mark_on_the_row(srv):
+    nodes.reboot(srv)
+    b = _busy(srv)
+    assert b["what"] == nodes.REBOOTING == "Rebooting" and b["detail"] == "waiting for it to come back" and abs(b["at"] - time.time()) < 5
+
+
+def test_the_stop_of_the_ssh_while_it_restarts_is_no_alarm_and_the_mark_stays(srv, monkeypatch):
+    nodes.reboot(srv)
+    _ask(monkeypatch, facts.SSHError("ssh connection lost"))
+    facts.sample_server(srv)
+    facts.sample_server(srv)
+
+    with session() as db:
+        assert db.get(Server, srv).online is False
+        assert not [e for e in db.scalars(select(Event)) if e.level == "bad"]                 # (no "does not answer" alarm for a restart that was asked for)
+
+    assert _busy(srv).get("what") == "Rebooting"                                              # the row stays "Rebooting" while it is down
+
+
+def test_a_server_that_does_not_restart_for_real_still_gives_the_alarm(srv, monkeypatch):
+    _ask(monkeypatch, facts.SSHError("ssh connection lost"))
+    facts.sample_server(srv)
+
+    with session() as db:
+        assert [e for e in db.scalars(select(Event)) if e.level == "bad"]
+
+
+def test_the_mark_goes_when_the_server_answers_with_an_uptime_shorter_than_the_wait(srv, monkeypatch):
+    nodes.reboot(srv)
+    _ask(monkeypatch, _facts(uptime=12 * 86400))                                              # it answers in the first seconds, before it goes down: it has not restarted yet
+    facts.sample_server(srv)
+    assert _busy(srv).get("what") == "Rebooting"
+    _ask(monkeypatch, _facts(uptime=20))                                                      # started again: its uptime is 20 s, the restart was asked for longer ago than that
+    with session() as db:
+        s = db.get(Server, srv)
+        ex = dict(s.extra)
+        ex["busy"] = {**ex["busy"], "at": int(time.time()) - 90}
+        s.extra = ex
+
+    facts.sample_server(srv)
+    assert _busy(srv) == {}
+    with session() as db:
+        assert db.get(Server, srv).online is True
+
+
+def test_a_restart_that_did_not_happen_loses_its_mark_after_the_wait(srv, monkeypatch):
+    nodes.reboot(srv)
+    with session() as db:
+        s = db.get(Server, srv)
+        ex = dict(s.extra)
+        ex["busy"] = {**ex["busy"], "at": int(time.time()) - facts.REBOOT_WAIT - 5}
+        s.extra = ex
+
+    _ask(monkeypatch, _facts(uptime=30 * 86400))                                              # it answers with the old uptime, long after: the command did nothing
+    facts.sample_server(srv)
+    assert _busy(srv) == {}
+
+
+def test_another_busy_mark_is_left_alone(srv, monkeypatch):
+    nodes.set_busy(srv, "installing", "Marzban node (minutes)")
+    _ask(monkeypatch, _facts(uptime=20))
+    facts.sample_server(srv)
+    assert _busy(srv).get("what") == "installing"
+
+def test_the_bandwidth_of_a_pasarguard_server_is_what_the_server_gives_out_not_what_its_users_use():
+    """The owner, 2026-10-20: "show the server's own bandwidth in the Bandwidth column, not the bandwidth the users use". The rows of the PasarGuard profile showed the up and the down of the users of the node
+    (what the panel counts); they show the card of the server (its upload, as every other row) when the server is one of ours and answers."""
+    lab = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "lab.js").read_text(encoding="utf-8")
+    assert 'sf = (srv && srv.enabled && srv.online !== false && srv.facts) || {};' in lab
+    cell = lab[lab.index('<td class="lab-trf lab-live" title="${sf.tx_mbps != null'):]
+    cell = cell[:cell.index("</td>")]
+    assert "${sf.tx_mbps != null ? `<span class=\"trf\"><i class=\"ta u\">${LAB_AU}</i><span class=\"tv\"><b>${labRate(sf.tx_mbps)}</b>" in cell
+    assert "live && live.rx != null ?" in cell and cell.index("sf.tx_mbps") < cell.index("live && live.rx")      # (a node with no server of ours keeps the numbers of the panel)
+    ui2 = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "i18n.fa.ui2.js").read_text(encoding="utf-8")
+    assert '"Rebooting":' in ui2 and '"waiting for it to come back":' in ui2
