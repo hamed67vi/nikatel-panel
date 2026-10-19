@@ -1637,3 +1637,11 @@ def test_the_knowledge_tab_does_not_jump_and_a_pair_is_two_small_lines():
     assert f"{row} > .kn-bad {{ grid-area: bad; font-size: 9.5px;" in css and "white-space: normal; overflow-wrap: anywhere;" in css and "max-width: 230px" not in css.split(".kn-bad", 1)[1].split("}", 1)[0]          # (no longer cut with ...)
     assert f"{row} .kn-k {{" in css and f"{row} .kn-k b {{ font-weight: 800; font-size: 10px;" in css and 'html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-k {' in css
     assert 'class="pill warn kn-cuts"' in kn and '<span class="kn-bad"' in kn
+
+
+def test_the_type_list_has_best_of_the_day_which_the_panel_resolves_when_build_is_pressed():
+    """The owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it"."""
+    app = _web("app.js")
+    assert 'const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}]};' in app
+    assert 'bk.kinds = kd.kinds.some(k => k.key === "auto") ? kd.kinds : [BK_AUTO, ...kd.kinds];' in app and '"auto:best": "the type that connects best between these two servers today"' in app
+    assert 'if (K.key === "auto") options = ' in app and 'if (bk.kind === "auto") { box.innerHTML = ' in app and 'if (r.why) toast("★ Best of the day: " + r.why, "ok");' in app

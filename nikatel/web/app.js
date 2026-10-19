@@ -1560,7 +1560,8 @@ async function loadTunnelCharts(id) {
   state.chartCache = state.chartCache || {}; state.chartCache["t" + id + ":" + state.mrange] = box.innerHTML;
 }/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
-const BK_ICON = {backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
+const BK_ICON = {auto: "★", backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
+const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}]};      // (the owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it": the panel picks the type - knowledge.best_kind - when Build is pressed)
 /* what to pick, and why - the defaults below every engine are already the many-users settings (mux, 8 mux channels, 16-24 pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels) */
 window.bkPick = (k, t) => { bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); };
 const BK_GUIDE = [
@@ -1578,7 +1579,7 @@ const BK_GUIDE = [
 ];
 const SPOOF_PROFILES = [["udp", "plain datagrams · the default"], ["icmp", "for paths that filter UDP"], ["tcp", "looks like a TCP flow"], ["icmpv6", "ICMPv6 echo in an IPv4 packet"], ["proto58", "bare protocol 58"], ["ipip", "IP-in-IP (protocol 4)"], ["gre", "GRE (protocol 47)"]];      // (the packet profiles of BackPack's IP spoofing carrier: docs/ip-spoofing.md of the project)
 /* two or three words per type, shown in the drop-down */
-const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp": "few users, plain route", "backhaul:wsmux": "behind a CDN, clear", "backhaul:wssmux": "behind a CDN, TLS",
+const BK_FOR = {"auto:best": "the type that connects best between these two servers today", "backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp": "few users, plain route", "backhaul:wsmux": "behind a CDN, clear", "backhaul:wssmux": "behind a CDN, TLS",
   "backhaul:wg:tcpmux": "GRE filtered, UDP open, encrypted", "backhaul:wg:tcp": "GRE filtered, UDP open, few users", "backhaul:fou:tcpmux": "GRE filtered, UDP open, no encryption", "backhaul:gue:tcpmux": "GRE filtered, UDP open, GUE shape", "backhaul:ipip:tcpmux": "GRE filtered, the lightest link", "backhaul:ipipfou:tcpmux": "GRE filtered, IPIP in UDP", "backhaul:ipipgue:tcpmux": "GRE filtered, IPIP in UDP (GUE)", "backhaul:ipsec:tcpmux": "GRE filtered, ESP open, encrypted", "backhaul:ipsecnat:tcpmux": "GRE filtered, UDP open, IPsec",
   "backpack:tcpmux": "many users, GRE blocked", "backpack:tcp": "few users, GRE blocked", "backpack:stealth": "very heavy filtering", "backpack:pck": "Iran stalls plain TCP (root)", "backpack:kcp": "lossy route, games", "backpack:udp": "UDP-only services", "backpack:quic": "UDP open, wants QUIC", "backpack:ws": "behind your own TLS", "backpack:wsmux": "WebSocket + many users", "backpack:wss": "must look like HTTPS", "backpack:wssmux": "heavy filtering + many users", "backpack:xdi": "Iran blocks almost everything",
   "backpack_direct:udp": "low latency, voice, games", "backpack_direct:quic": "low latency, UDP open", "backpack_direct:pck": "Iran throttles TCP (root)", "backpack_direct:sni": "fake TLS hello: only a domain passes (root)", "backpack_direct:spoof": "forged source address (root)", "backpack_direct:xdi": "UDP and TCP both blocked",
@@ -1586,7 +1587,7 @@ const BK_FOR = {"backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp
   "chisel:fws": "Iran dials: fast downloads", "chisel:fwss": "Iran dials: fast downloads, TLS"};
 async function buildFormHtml() {
   const [servers, kd, av, dacc] = await Promise.all([api("/api/servers"), bk.kinds ? Promise.resolve({kinds: bk.kinds}) : api("/api/tunnels/kinds"), api("/api/settings/arvan").catch(() => ({})), api("/api/dns/accounts").catch(() => ({accounts: []}))]);
-  bk.kinds = kd.kinds; bk.arvan = ARVAN_UI && (!!av.has_api_key || (dacc.accounts || []).length > 0); bk.arvanMode = av.mode || "off";      // the DNS names can be in any DNS account (ArvanCloud or Cloudflare)
+  bk.kinds = kd.kinds.some(k => k.key === "auto") ? kd.kinds : [BK_AUTO, ...kd.kinds]; bk.arvan = ARVAN_UI && (!!av.has_api_key || (dacc.accounts || []).length > 0); bk.arvanMode = av.mode || "off";      // the DNS names can be in any DNS account (ArvanCloud or Cloudflare)
   const K = bk.kinds.find(k => k.key === bk.kind) || bk.kinds[0]; bk.kind = K.key;
   const tr = K.transports.find(t => t.key === bk.transport) || K.transports[0]; bk.transport = tr.key;
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
@@ -1599,7 +1600,7 @@ async function buildFormHtml() {
   const sel = (name, label, list, dflt) => `<label>${label}<select name="${name}" data-dd>${list.map(p => `<option ${val(name, dflt) === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>`;
   const muxed = BP_MUXED.includes(tr.key.split(":").pop());          // ("wg:tcpmux" is TCP Mux over WireGuard)
   let options = "";
-  if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", muxed ? 24 : 32, 1, 256, "(client connections kept ready)") + (muxed ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + num("dial_timeout", "Dial timeout (s)", 10, 3, 60) + num("retry_interval", "Retry interval (s)", 2, 1, 30) + sel("log_level", "Log level", ["warn", "error", "info", "debug"], "warn") + nodelay + chk("aggressive_pool", "Aggressive pool", "reconnect lost pool connections at once") + chk("tune", "Tune the kernel", "BBR + fq + big buffers on both servers", true);
+  if (K.key === "auto") options = '<small class="mut">Best of the day is built with the default settings of the type it picks: the one that connects best between these two servers - what the Doctor measured on this pair, a fresh full measurement first, then the score. Nothing measured yet: the first choice of the Doctor for a new pair. Pick the Iran server first (the smart choice cannot know the pair).</small>'; else if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", muxed ? 24 : 32, 1, 256, "(client connections kept ready)") + (muxed ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + num("dial_timeout", "Dial timeout (s)", 10, 3, 60) + num("retry_interval", "Retry interval (s)", 2, 1, 30) + sel("log_level", "Log level", ["warn", "error", "info", "debug"], "warn") + nodelay + chk("aggressive_pool", "Aggressive pool", "reconnect lost pool connections at once") + chk("tune", "Tune the kernel", "BBR + fq + big buffers on both servers", true);
   else if (K.key === "backpack") options = `<label>Preset<select name="preset" data-dd>${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", BP_MUXED.includes(tr.key) ? 16 : 24, 1, 256, "(client connections kept ready)") + (BP_MUXED.includes(tr.key) ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + nodelay + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>Fake SNI <small>(the domain the fake TLS hello names: one your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "")
     + (tr.key === "spoof" ? `<label>Packet profile <small>(both ends use it)</small><select name="spoof_profile" data-dd>${SPOOF_PROFILES.map(([p, n]) => `<option value="${p}" ${val("spoof_profile", "udp") === p ? "selected" : ""}>${p} — ${n}</option>`).join("")}</select></label><label>Forged source IPv4 <small>(empty = do not forge: the right first build - test the path, then set it)</small><input name="spoof_src_ip" value="${val("spoof_src_ip", "")}" placeholder="10.10.10.10" autocomplete="off"></label><label>Network interface <small>(only for a server with several)</small><input name="spoof_interface" value="${val("spoof_interface", "")}" placeholder="eth0" autocomplete="off"></label>` : "")
@@ -1728,6 +1729,7 @@ window.startTest = async e => {
   const trn = bk.transport || f.get("transport") || "tcpmux";
   const kind = bk.kind === "backhaul" ? trn : bk.kind === "backpack" ? "bp:" + trn : bk.kind === "backpack_direct" ? "bpd:" + trn : bk.kind === "paqet" ? "paqet" : ({wss: "chisel:tls", fws: "chisel:fwd", fwss: "chisel:fwdtls"}[trn] || "chisel");
   const box = $("#build-story"); box.classList.remove("hidden");
+  if (bk.kind === "auto") { box.innerHTML = '<div class="fx-line plan"><b>›</b>Best of the day is chosen when you press Build; to test one type between these two servers, pick that type.</div>'; return; }
   let iranId = +f.get("iran_id") || 0;
   try {
     if (!iranId) {   // Smart: the Iran servers are tested one after the other, best first; a poor one is left for the next
@@ -1777,6 +1779,7 @@ window.startBuild = async e => {
     body.dns_names = form.querySelector("input[name=dns_set]:checked") ? String(f.get("dns_names") || "").split(/[,\s]+/).filter(Boolean) : [];
     box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
     const r = await api("/api/tunnels", {method: "POST", body: JSON.stringify(body)});
+    if (r.why) toast("★ Best of the day: " + r.why, "ok");
     bkRun({type: "build", id: r.id});
     await followStory(r.id, box, 600);
   } catch (err) { box.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(err.message)}</div>`; } finally { bkRun(null); }

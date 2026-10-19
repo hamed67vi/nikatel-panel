@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.12 - A tunnel type "Best of the day"
+
+The owner (2026-10-19): "a tunnel mode that puts the best tunnel of the day on it". **Create tunnel -> Type -> Automatic -> Best of the day**: when Build is pressed the panel picks the type that connects best between the two chosen servers and builds it with that type's defaults.
+
+- **What "best" is** (`knowledge.best_kind`, the same knowledge the Doctor repairs with): the types that connect on this pair, a fresh full measurement before a latency-only one, each by score; what the licence allows; what failed on the pair lately is not there. A pair nobody measured yet gets the Doctor's first choice for a new pair - never a WireGuard type (it needs a package nobody put on the servers). The toast after Build says which type and why ("bp:wssmux: the best that connects between these two servers - score 90, measured 3 h ago").
+- **`POST /api/tunnels` with `"kind": "auto"`** (the Iran server must be named: the smart choice of the Iran server cannot know the pair yet - 400 with that sentence); the options of the form are not sent to the chosen type; the answer is `{"ok", "id", "kind", "transport", "why"}`. A Backhaul type goes the Backhaul way (over GRE, or over the link it was measured on), the others through their builders - the same paths as a type chosen by hand.
+- **The form**: the first group of the Type list; no advanced settings (a note says why); *Test this pair first* says to pick a type to test, since the chosen one is not known before Build. The knowledge is the Doctor's: a pair that was never surveyed gives the default, and the type "of the day" improves as the Doctor measures the pair (Tunnel Doctor -> Knowledge).
+- **Tests.** `tests/test_best_of_the_day.py` (+3): the best kind (best score, the licence, nothing measured, never WireGuard), the API (the pair must be known, a BackPack choice goes through `build_other`, a Backhaul choice through `builder` with the form's options dropped, an unknown kind refused); `tests/test_web_menu.py` (+1): the Type list, its note, the test button, the toast.
 ## 1.69.11 - The Marzban node: a folder is not a node; a DNS record you changed shows as changed at once
 
 Two things the owner met on 2026-10-19.

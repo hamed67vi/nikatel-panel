@@ -18,7 +18,7 @@ class BuildIn(BaseModel):
     iran_id: int = Field(ge=0)                                  # 0 = the smart choice: the Iran server that ranks best for this foreign server
     foreign_id: int
     ports: str = Field(min_length=1, max_length=300)
-    kind: str = Field("backhaul", pattern=r"^(backhaul|backpack|backpack_direct|paqet|chisel)$")
+    kind: str = Field("backhaul", pattern=r"^(auto|backhaul|backpack|backpack_direct|paqet|chisel)$")          # auto = "Best of the day": the panel picks the type that connects best between the two servers (knowledge.best_kind)
     transport: str = Field("tcpmux", pattern=r"^[a-z0-9:]{0,16}$")
     mtu: int = Field(0, ge=0, le=1476)
     keepalive: int = Field(75, ge=10, le=600)
@@ -32,12 +32,32 @@ class BuildIn(BaseModel):
 
 @router.post("/tunnels", status_code=202)
 def build(body: BuildIn):
-    """Build a tunnel (any engine) as an action; the answer is its id. 0 as the Iran server = the best one is chosen."""
+    """Build a tunnel (any engine) as an action; the answer is its id. 0 as the Iran server = the best one is chosen. `kind: "auto"` (Best of the day) = the type that connects best between these two servers today is chosen;
+    the answer says which (`kind`, `transport`, `why`)."""
     try:
-        transport = body.transport or ("tcpmux" if body.kind == "backhaul" else "")     # an empty transport means the default of the engine
+        kind, why = body.kind, ""
+        transport = body.transport or ("tcpmux" if kind == "backhaul" else "")     # an empty transport means the default of the engine
         opts = dict(body.opts)
 
-        if body.kind == "backhaul" and ":" in transport:         # "wg:tcpmux" / "fou:tcpmux" / "ipsec:tcp" ...: Backhaul over another link (the kinds of the pair test)
+        if kind == "auto":
+            from ..services import knowledge, license, tunnel_test
+
+            if body.iran_id == 0:
+                raise ValueError("Best of the day is chosen for a pair of servers: pick the Iran server first (the smart choice of the Iran server cannot know the pair yet)")
+
+            key, why = knowledge.best_kind(body.iran_id, body.foreign_id, allowed=license.tunnel_kind_allowed)
+
+            if not key:
+                raise ValueError(why)
+
+            kind, transport = tunnel_test.kind_parts(key)
+
+            if kind == "backhaul" and tunnel_test.kind_link(key) != "gre":
+                transport = f"{tunnel_test.kind_link(key)}:{transport}"
+
+            opts = {}
+
+        if kind == "backhaul" and ":" in transport:         # "wg:tcpmux" / "fou:tcpmux" / "ipsec:tcp" ...: Backhaul over another link (the kinds of the pair test)
             link, _, transport = transport.partition(":")
 
             if link not in builder.LINKS or link == "gre":
@@ -48,10 +68,10 @@ def build(body: BuildIn):
             if link == "wg":
                 opts["install_wg"] = True                        # the owner asked for it: wireguard-tools may be installed (apt) on a server that lacks it
 
-        if body.kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
+        if kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
             raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
-        other_opts = {k: v for k, v in body.opts.items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+        other_opts = {k: v for k, v in ({} if body.kind == "auto" else body.opts).items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
         measure = "full" if body.opts.get("measure") != "latency" else "latency"
 
         names = [n.strip().lower() for n in body.dns_names if n.strip()]
@@ -62,18 +82,18 @@ def build(body: BuildIn):
         if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names:
             from ..services import create
 
-            aid = create.start(body.iran_id, body.foreign_id, body.ports, body.kind, transport, opts if body.kind == "backhaul" else other_opts,
+            aid = create.start(body.iran_id, body.foreign_id, body.ports, kind, transport, opts if kind == "backhaul" else other_opts,
                                body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units)
-        elif body.kind == "backhaul":
+        elif kind == "backhaul":
             aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=opts)
         else:
             from ..services import build_other
 
-            aid = build_other.start_build(body.iran_id, body.foreign_id, body.ports, body.kind, transport, other_opts, measure=measure)
+            aid = build_other.start_build(body.iran_id, body.foreign_id, body.ports, kind, transport, other_opts, measure=measure)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return {"ok": True, "id": aid}
+    return {"ok": True, "id": aid, **({"kind": kind, "transport": transport, "why": why} if body.kind == "auto" else {})}          # (the answer of every other build is what it always was)
 
 
 class PrecheckIn(BaseModel):

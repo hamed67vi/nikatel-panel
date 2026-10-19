@@ -105,6 +105,26 @@ def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict
     return sorted(out, key=lambda r: (r["measure"] != "full", -(r["score"] or 0), PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
 
 
+def best_kind(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int | None = None) -> tuple[str, str]:
+    """(the type, the sentence that says why) a NEW tunnel between this pair gets in the mode "Best of the day" (the owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it"): the first of `ranked` - the types
+    that connect on this pair, a fresh full measurement before a latency-only one, each by score - that the licence allows. Nothing measured on this pair yet: the Doctor's first choice for a new pair (never a WireGuard type: it
+    needs a package that nobody has put on the servers). ('', why) when no type may be built."""
+    now = now or int(time.time())
+    p = pair(iran_id, foreign_id)
+
+    for r in ranked(p, now):
+        if allowed(r["kind"]):
+            when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
+            return r["kind"], f"{r['kind']}: the best that connects between these two servers - score {r['score'] if r['score'] is not None else '-'}{when}"
+
+    kinds, _ = plan_for(iran_id, foreign_id, "", False, False, now=now)
+
+    for k in kinds:
+        if allowed(k) and linkmodels.split_kind(k)[0] != "wg":
+            return k, f"{k}: nothing is measured between these two servers yet - the Doctor's first choice for a new pair"
+
+    return "", "no tunnel type may be built here (the licence)"
+
 def blocked(pair: dict | None, now: int) -> list[str]:
     """The kinds that did not work on the pair lately (a test that failed less than FAIL_FRESH ago)."""
     return sorted(k for k, e in ((pair or {}).get("kinds") or {}).items() if verdict(e) == "failed" and now - int(e["last"].get("at") or 0) < FAIL_FRESH)
