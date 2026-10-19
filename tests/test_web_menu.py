@@ -260,7 +260,7 @@ def test_the_list_of_servers_has_an_ip_column_in_place_of_the_state_column_and_s
     """The owner, 2026-10-15: "remove this column" (State · last 24 h), "a column with the IP of the servers instead", "show the numbers of the traffic right"."""
     lab = _web("lab.js")
     assert "State · last 24 h" not in lab and "labStateHtml" not in lab and "labGreTag" not in lab and "labCells" not in lab and "LAB.strips" not in lab
-    assert '<th data-prio="1">IP</th>' in lab and 'class="lab-ip mono ip-copy" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); labCopyIp(this)"' in lab and 'const addr = d ? d.address : p.address' in lab          # (an address is copied by a click; a node shows no port)
+    assert '<th data-prio="1" data-min="168">IP</th>' in lab and 'class="lab-ip mono ip-copy" data-ip="${esc(s.host)}" onclick="event.stopPropagation(); labCopyIp(this)"' in lab and 'const addr = d ? d.address : p.address' in lab          # (an address is copied by a click; a node shows no port)
     assert "/api/profiles/strips" not in lab                                                         # the list does not ask for the strips any more
     assert lab.count('<col style="width:') == 7 and "Traffic Mbit/s" in lab and "const labRate = v =>" in lab and "labRate(f.rx_mbps)" in lab
     assert ".lab-ip {" in _web("lab.css")
@@ -461,7 +461,7 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th data-prio="0">Name</th><th data-prio="1">IP</th><th data-prio="3" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" class="lab-ld">Load</th>' in lab
+    assert '<th data-prio="0" data-fit="196">Name</th><th data-prio="1" data-min="168">IP</th><th data-prio="3" data-min="88" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" data-min="128" class="lab-ld">Load</th>' in lab
     assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css
@@ -1222,7 +1222,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     app, css, lab = _web("app.js"), _web("lab.css"), _web("lab.js")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc"', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
-    assert "<thead><tr><th>Tunnel</th><th>Type</th><th>Status</th>" not in app and '<thead><tr><th>Tunnel</th><th>Type</th><th class="bwh" data-prio="1" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
+    assert "<thead><tr><th data-fit=\"196\">Tunnel</th><th data-min=\"176\">Type</th><th>Status</th>" not in app and '<thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
     assert "<small><i>capacity</i>" not in app                                                    # the header says the word and the unit, nothing else (the owner, 2026-10-17: "write only mb/s here"); the legend is in the tooltip
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell

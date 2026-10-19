@@ -180,7 +180,7 @@ html body #page .lab-tabact .lab-ib:hover { background: rgba(255,255,255,.16); }
 .lab-ip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mut); }      /* the IP column (1.53.2: it took the place of the state column) */
 .lab-first-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; max-width: 420px; } .lab-first-form input { width: 100%; height: 38px; }      /* the first page asks the name of the profile in its own card */
 /* 1.54.7 - the Add a server window fits its box (the owner's picture: the SSH box ran off the right edge): two columns while there is room, one when not; long lines wrap */
-html body #modal .srv-form2 { max-width: 100%; overflow-x: hidden; } html body #modal .srv-form2 .srv-two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important; }
+html body #modal .srv-form2 { max-width: 100%; overflow-x: hidden; } html body #modal .srv-form2 .srv-two { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)) !important; }
 html body #modal .srv-form2 .sbox, html body #modal .srv-form2 .kv2, html body #modal .srv-form2 .bf { min-width: 0; } html body #modal .srv-form2 .bf-note, html body #modal .srv-form2 .bld-foot small, html body #modal .srv-form2 .srv-after small { white-space: normal; overflow-wrap: anywhere; }
 html body #modal .srv-form2 .srv-opts { flex-wrap: wrap; row-gap: 8px; } html body #modal .srv-form2 .bld-foot { flex-wrap: wrap; }
 
@@ -205,7 +205,7 @@ html body #ask .ask-check input { flex: none; width: 18px; height: 18px; margin-
 html body #ask .ask-check:has(input:checked) { border-color: rgba(255,101,119,.55); background: rgba(214,48,70,.14); }
 /* 1.55.8 - the suggested tags, calmer: ONE quiet row (the label, then small outline pills of one height; no gloss, no wrapping) */
 html body .lab-np .lab-np-sug { flex-wrap: nowrap; gap: 12px; margin-top: 2px; } html body .lab-np .lab-np-sug > small { flex: none; font-size: 10.5px; letter-spacing: .8px; }
-html body .lab-np .lab-np-chips { flex-wrap: nowrap; gap: 6px; min-width: 0; overflow: hidden; }
+html body .lab-np .lab-np-chips { flex-wrap: wrap; gap: 6px; min-width: 0; }      /* (nowrap + hidden cut the last suggestion, PasarGuard, in a window of 420 px) */
 html body .lab-np .lab-np-chip.ghost { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; background: transparent; box-shadow: none; font-size: 12px; font-weight: 500; color: var(--mut); white-space: nowrap; }
 html body .lab-np .lab-np-chip.ghost:hover { color: var(--text); border-color: rgba(120,170,255,.5); background: rgba(77,163,255,.10); }
 html body .lab-np .lab-np-chip.ghost .lab-logo { width: 13px; height: 13px; margin: 0; opacity: .85; }
@@ -441,6 +441,7 @@ html body #page .lab-tbl tr:hover td.name .srv-ic img.lab-logo { filter: graysca
 html[data-mode="light"] body #page .lab-tbl tr:hover td.name :is(.lab-nm b, .lab-nm small) { text-shadow: none; }
 /* 1.57.13 - the bar of the panels is the bar of the profiles (the owner: "like the Profile section, no edit button, a locked box"): the same segmented control, the same + and bin icon buttons; the box has ONE fixed height and the panels scroll inside it, they never push the facts out of the page */
 html body #page .pn-bar { height: 56px; box-sizing: border-box; overflow: hidden; }
+html body #page .pn-bar.pn-pick { height: auto; min-height: 56px; }      /* (Users / Configs / Admins: the tools beside the panels wrap to a second row at 768 px - a bar fixed at 56 px was drawn over by the table; the bar of General stays fixed) */
 html body #page .pn-bar .pn-ksw { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 html body #page .pn-bar .pn-seg { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 html body #page .pn-bar .pn-seg::-webkit-scrollbar { display: none; }
@@ -1083,3 +1084,9 @@ html body .login .lg-in:focus-within { border-color: #2f7bff; box-shadow: 0 0 0 
 body #ask .ask-box .ask-text.mv-plan { white-space: normal; max-height: 52vh; overflow: auto; display: grid; gap: 4px; }
 .mv-plan .mv-h { margin-top: 8px; font-weight: 600; font-size: 13px; }
 .mv-plan .mv-r { font-size: 13px; line-height: 1.45; word-break: break-word; }
+/* the line under the load bar (RAM · Disk) is cut with a dash at its END when the column is narrow; it was cut on both sides (it is centred) and began with "AM 57%" */
+html body #page .lab-tbl .lab-ldx { min-width: 0; }
+html body #page .lab-tbl .lab-ldx > small { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the tunnels of a server in its window (Access & status): the chips were one nowrap row cut at 49 px each ("ae1-no", "de1-no") when a server has three tunnels; they wrap */
+html body #modal .kv2 > div:has(> .tchip) { flex-wrap: wrap; overflow: visible; row-gap: 4px; }
+html body #modal .kv2 > div > .tchip { flex: none; }

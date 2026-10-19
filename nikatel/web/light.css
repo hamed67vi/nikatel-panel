@@ -105,3 +105,5 @@ html[data-mode="light"] body .pwi .eye { color: #4d5b7c; } html[data-mode="light
 /* the sparklines of the nodes: lines drawn with currentColor, on white */
 html[data-mode="light"] body .pg-nodes-spark, html[data-mode="light"] body .pg-nodes-spark.tx { color: #1456c8; } html[data-mode="light"] body .pg-nodes-spark.cpu { color: #a35a00; } html[data-mode="light"] body .pg-nodes-spark.mem { color: #6b32c8; } html[data-mode="light"] body .pg-nodes-spark.rx { color: #0a7a52; }
 html[data-mode="light"] body :is(.ip-copy, .mh-ip):hover, html[data-mode="light"] body #page :is(.ip-copy, .srv-tbl td:nth-child(4)):hover { color: #1456c8 !important; }
+/* the chips of a task row of the Doctor (waiting for the server, watching ...) kept the light grey of the dark theme: 1.5 : 1 on white */
+html[data-mode="light"] body #page .ap-tasks .ap-row .work-chip { color: #3a4a6b; background: rgba(30, 50, 100, .06); border-color: rgba(30, 50, 100, .2); }

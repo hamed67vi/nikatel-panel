@@ -26,6 +26,9 @@ html body #page .pn-facts .dns-stats { gap: 6px; }
 html body #page .pn-facts .lab { font-style: normal; }
 html body #page .pn-facts button { display: inline-flex; align-items: center; gap: 6px; }
 html body #page .pn-facts button .ic { font-style: normal; }
+/* the bar of Users / Configs / Admins: the panel box keeps its name (it was squeezed to "P…" by the tools beside it) and the tools take what is left, wrapping inside themselves */
+html[data-fluid] body #page .pn-bar.pn-pick .pn-one > .pn-ksw { flex: 0 0 auto; max-width: 40%; }
+html[data-fluid] body #page .pn-bar.pn-pick .pn-ctl { flex: 1 1 0; }
 /* ---- Panels: the tabs and the tools under the bar are ONE row too (the tabs shrink and cut their words, the search takes what is left) */
 html body #pn-body > .pn-bars { flex-wrap: nowrap; min-width: 0; }
 html body #pn-body > .pn-bars > .toolbar.pn-tabs { flex: 0 1 auto; min-width: 0; overflow: hidden; }
@@ -102,6 +105,7 @@ html[data-fluid] body #page .ap-row { min-width: 0; }
 @container (max-width: 800px) { html[data-fluid] body #page .ap-row > .ap-why { display: none; } }
 @container (max-width: 700px) { html[data-fluid] body #page .ap-row > .mut:not(.work-chip):not(.ap-why) { display: none; } }
 @container (max-width: 460px) { html[data-fluid] body #page .ap-row > .work-chip { display: none; } }
+@media (max-width: 480px) { html[data-fluid] body #page .ap-tasks .ap-row { flex-wrap: wrap; row-gap: 6px; } }      /* (a phone: state, name, Detail and Live are 325 px of fixed parts - Live went 43 px beyond the screen; now the row takes a second line) */
 html[data-fluid] body .set-top::before { right: 0; }      /* (the strip behind the tabs of Settings reached 6 px beyond the box and made it scroll) */
 
 /* ---- tables */
@@ -110,6 +114,7 @@ html[data-fluid] body :is(#page, #modal) :is(.lbox, .pa-box) { overflow-x: hidde
 @media (max-width: 1180px) { html[data-fluid] body .usr-tbl thead th:last-child, html[data-fluid] body .usr-tbl tbody td:last-child { padding-left: 14px !important; } }
 html[data-fluid] body :is(#page, #modal) table.tbl :is(th, .hide-sm):not(.fl-off) { display: table-cell; }      /* (app.css hid every header and every .hide-sm cell under 820 px: here fluid.js decides what drops) */
 html[data-fluid] body :is(#page, #modal) table.tbl th, html[data-fluid] body :is(#page, #modal) table.tbl td:not(:last-child) { overflow: hidden; text-overflow: ellipsis; }
+html[data-fluid] body :is(#page, #modal) table.tbl td[colspan] { white-space: normal; overflow-wrap: anywhere; }      /* (a note over all the columns - "No account yet. Add an ArvanCloud account or …" - is a sentence: on a phone it ran past the box in one line) */
 
 /* ---- bars: ONE row (a bar that holds two rows keeps them under each other) */
 html[data-fluid] body #page :is(.sb-r1, .sb-r2, .dns-r, .ap-thead, .toolbar:not(:has(> :is(.sb-r1, .dns-r)))) { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; }
@@ -129,6 +134,16 @@ html[data-fluid] body #page .dns-accbar > .dns-cw > .dns-chip { width: 100%; min
 html[data-fluid] body #page .dns-accbar .dns-chip b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1060px) { html[data-fluid] body #page .opt3 { display: none !important; } }
 @media (max-width: 940px) { html[data-fluid] body #page .bt { display: none !important; } html[data-fluid] body #page .cta:has(> .bt) { padding: 0 12px; } }
+/* a button whose words go (.bt) keeps its icon: without one it was an empty round button (Check all, Restart all of the tunnels) */
+html[data-fluid] body #page .toolbar button > .tb-ic { display: inline-grid; flex: none; place-items: center; width: 15px; height: 15px; vertical-align: middle; }
+html[data-fluid] body #page .toolbar button > .tb-ic svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+html[data-fluid] body #page .toolbar button > .tb-ic + .bt { margin-left: 6px; }
+@media (max-width: 940px) { html[data-fluid] body #page .toolbar button:has(> .tb-ic) { padding: 0 11px; } }
+/* the tunnel bar: the buttons, the counts and the tabs keep their size, the search is what gives way (all of them were shrinking alike and cut "Check all" to "Chec…") */
+html[data-fluid] body #page .toolbar:has(> .tcount) > :is(button, .tcount, .tabs) { flex: none; }
+html[data-fluid] body #page .toolbar:has(> .tcount) > .tb-search { flex: 0 1 184px; min-width: 120px; }
+html[data-fluid] body #page .toolbar:has(> .tcount) { container: tunbar / inline-size; }
+@container tunbar (max-width: 960px) { html[data-fluid] body #page .tcount .lab { display: none; } }      /* (the words "up / down / unstable" go before the search box is squeezed to nothing; the dots and the tip keep the meaning) */
 @media (max-width: 780px) { html[data-fluid] body #page :is(.lab, .opt2, .dns-lab) { display: none !important; } }
 @media (max-width: 560px) {
   html[data-fluid] body #page :is(.opt1) { display: none !important; }
@@ -138,6 +153,7 @@ html[data-fluid] body #page .dns-accbar .dns-chip b { min-width: 0; overflow: hi
   html[data-fluid] body #page :is(.sb-r1, .sb-r2, .dns-r, .ap-thead, .toolbar:not(:has(> :is(.sb-r1, .dns-r)))) > .tabs { flex: 1 1 0; min-width: 0; }
   html[data-fluid] body #page .tabs { overflow-x: auto; scrollbar-width: none; }
   html[data-fluid] body #page .tabs > button { flex: none; }
+  html[data-fluid] body #page .toolbar:has(> .tcount) > .tabs { flex: none; }      /* (the tunnel bar scrolls sideways as a whole; its All / Problems tabs were left 8 px wide, a sliver) */
 }
 
 html[data-fluid] body .modal .sbar .sg { flex-wrap: wrap !important; max-width: 100%; }      /* (the buttons of the server window: a group that is wider than the window goes on a second line inside itself) */

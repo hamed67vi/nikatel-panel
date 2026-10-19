@@ -78,7 +78,7 @@ html body #page .pg-usage-card .tbl td.name small { display: block; font-size: 1
 /* 1.57.0 - the Usage tab as round stats (the owner: "short, useful, packed; easy on the eye, like a round stats menu; a section of the nodes' usage only"): the section chips, the cards of the overview (rings, gauges, a strip of bars), the Nodes section */
 html body #page .pg-usec { align-self: flex-start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 html body #page .pg-usec button { height: 28px; padding: 0 14px; font-size: 13px; }
-html body #page .pg-rcs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+html body #page .pg-rcs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
 html body #page .pg-rc { margin: 0; padding: 10px 14px 12px; min-width: 0; border-radius: 14px; }
 html body #page .pg-rc-h { display: flex; align-items: center; gap: 10px; min-height: 24px; margin: 0 0 8px; }
 html body #page .pg-rc-h h3 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px; font-weight: 650; }
@@ -120,7 +120,7 @@ html body #page .pg-mini { display: block; height: 5px; border-radius: 3px; back
 html body #page .pg-ns { display: grid; grid-template-columns: minmax(230px, 310px) minmax(0, 1fr); gap: 18px; align-items: start; }
 html body #page .pg-ns-ring { display: flex; flex-direction: column; align-items: center; gap: 12px; } html body #page .pg-ns-ring .pg-leg { width: 100%; }
 html body #page .pg-ns .pg-usage-nodes { max-height: calc(100vh - 360px); min-height: 160px; }
-html body #page .pg-usage-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 10px; align-items: start; } html body #page .pg-usage-two > div:empty { display: none; }
+html body #page .pg-usage-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 10px; align-items: start; } html body #page .pg-usage-two > div:empty { display: none; }
 html[data-mode="light"] body #page .pg-ring-track { stroke: rgba(30,50,100,.10); } html[data-mode="light"] body #page .pg-rc-go { background: rgba(30,50,100,.07); }
 @media (max-width: 760px) { html body #page .pg-ns { grid-template-columns: minmax(0, 1fr); } }
 /* 1.57.6 - the range of the Usage tab is ONE button; a small panel opens softly under it: tabs Relative / Absolute, rows of chips, the chosen one in blue (the owner's picture) */

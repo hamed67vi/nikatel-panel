@@ -229,7 +229,7 @@ html body #modal .pgu-tool .pgu-two input[type="date"] { width: 128px; min-width
 html body #modal .modal.pgh { max-width: 940px; }
 html body #modal .pgh [hidden] { display: none !important; }
 html body #modal .pgh form.pgh-form { display: block !important; }
-html body #modal .pgh .pgh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; align-items: stretch; margin: 0 0 14px; }
+html body #modal .pgh .pgh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 14px; align-items: stretch; margin: 0 0 14px; }
 html body #modal .pgh .pgh-card { margin: 0; border: 1px solid var(--uk-line); border-radius: 16px; background: var(--uk-surface); overflow: hidden; }
 html body #modal .pgh .pgh-card > header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 48px; box-sizing: border-box; border-bottom: 1px solid var(--uk-line); }
 html body #modal .pgh .pgh-card > header b { font-size: 13.5px; font-weight: 650; color: var(--uk-text); }

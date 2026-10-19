@@ -41,7 +41,7 @@
 
   /* what a column of buttons needs: the cells of the first rows are copied into a hidden table of their own (inside the same box, so the same rules apply) that is as wide as its content;
      the buttons in the real cell may be squeezed already, so they can not be measured there */
-  function natural(tbl, i) {
+  function natural(tbl, i, limit) {
     var rows = tbl.tBodies[0] ? tbl.tBodies[0].rows : [], best = 0, probe, body, k, c, tr;
 
     if (!tbl.parentElement) return 0;
@@ -54,7 +54,7 @@
     body = document.createElement("tbody");
     probe.appendChild(body);
 
-    for (k = 0; k < rows.length && k < 3; k++) {
+    for (k = 0; k < rows.length && k < (limit || 3); k++) {
       c = rows[k].cells[i];
 
       if (!c || c.colSpan > 1) continue;
@@ -90,6 +90,8 @@
 
       if (act) d.min = Math.max(natural(tbl, i), kind === "px" ? Math.min(v, 40) : 40);
       else if (!t) d.min = i === 0 ? Math.min(v || 52, 52) : 40;
+      else if (th.getAttribute("data-min")) d.min = num(th.getAttribute("data-min"));      // a header can say its own least width: a column of addresses is no use cut to "198.51.1…"
+      else if (th.getAttribute("data-fit")) d.min = Math.min(Math.max(natural(tbl, i, 40), 92), num(th.getAttribute("data-fit")));      // ... or "as wide as its content, up to this": the name cell holds a lamp and an icon before the text, so 92 px left room for one letter
       else d.min = MINW[t] || (d.p <= 1 ? 92 : 72);
 
       return d;
@@ -135,6 +137,21 @@
     return {vis: vis, d: d};
   }
 
+  /* do the cells of the rows still carry the mark of their column (a row with a colspan is left out) */
+  function marked(tbl, off) {
+    var rows = tbl.tBodies[0] ? tbl.tBodies[0].rows : [], r, i, c;
+
+    for (r = 0; r < rows.length; r++) {
+      c = rows[r].cells;
+
+      if (c.length !== off.length) continue;
+
+      for (i = 0; i < c.length; i++) if (c[i].classList.contains("fl-off") !== !!off[i]) return false;
+    }
+
+    return true;
+  }
+
   function mark(tbl) {
     var heads = Array.prototype.slice.call(tbl.querySelectorAll(":scope > thead > tr:first-child > th")),
         cols = Array.prototype.slice.call(tbl.querySelectorAll(":scope > colgroup > col"));
@@ -151,9 +168,11 @@
         body = tbl.tBodies[0], first = body && body.firstElementChild, last = body && body.lastElementChild,
         same = tbl.__f === first && tbl.__l === last && tbl.__n === tbl.rows.length;
 
-    if (tbl.__v === vsig && tbl.__w === wsig && same) return;       // nothing changed since the last pass
+    var kept = same && marked(tbl, off);                            // (a table that is redrawn in place - the same rows, new cells - lost the marks of its cells: the last column was then an empty one beside the dropped ones)
 
-    if (tbl.__v !== vsig || !same) {
+    if (tbl.__v === vsig && tbl.__w === wsig && kept) return;       // nothing changed since the last pass
+
+    if (tbl.__v !== vsig || !kept) {
       heads.forEach(function (th, i) { th.classList.toggle("fl-off", off[i]); });
       cols.forEach(function (col, i) { col.classList.toggle("fl-off", !!off[i]); });
       Array.prototype.forEach.call(tbl.querySelectorAll(":scope > tbody > tr"), function (tr) {

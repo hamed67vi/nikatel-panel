@@ -101,13 +101,18 @@
     for (let n = w.nextNode(); n; n = w.nextNode()) n.nodeType === 3 ? textNode(n) : attrs(n);
   }
   let queue = new Set(), scheduled = false;
-  const flush = () => { scheduled = false; const q = queue; queue = new Set(); obs.disconnect(); try { q.forEach(walk); } finally { watch(); } };
-  const obs = new MutationObserver(list => {
+  const take = list => {
     for (const m of list) {
       if (m.type === "childList") m.addedNodes.forEach(n => queue.add(n));
       else if (m.type === "characterData") queue.add(m.target);
       else if (m.type === "attributes") queue.add(m.target);
     }
+  };
+  /* disconnect() throws away the changes that are waiting for the observer: a page that wrote its HTML in a microtask between the observer's call and this one stayed English (Settings → Api & Key in Persian)
+     until the language was switched twice; takeRecords() hands them over first */
+  const flush = () => { scheduled = false; take(obs.takeRecords()); const q = queue; queue = new Set(); obs.disconnect(); try { q.forEach(walk); } finally { watch(); } };
+  const obs = new MutationObserver(list => {
+    take(list);
     if (!scheduled) { scheduled = true; queueMicrotask(flush); }
   });
   const watch = () => obs.observe(document.documentElement, {childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ATTRS});
