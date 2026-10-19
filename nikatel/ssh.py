@@ -996,6 +996,30 @@ rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" 
 echo "LINK_PROBE_CLEAN $n"
 """, {"NAME": r"^lp-[a-z]{2,9}$"}),
 
+    # SPOOF TEST, before it: what a server needs for its part is installed when it is missing (the owner started the test; 1.69.13: a new Debian 12 server has no iptables, no ping, no tcpdump and the test stopped with "iptables is not installed on the
+    # sending server"). ROLE send needs iptables and ping, ROLE listen needs tcpdump. Done BEFORE the listener starts, so a slow apt does not eat its listening time. "TRIED <packages>" says what was missing and tried, then READY or what is still missing.
+    "spoof_prepare": (r"""set -u; export DEBIAN_FRONTEND=noninteractive
+role='@ROLE@'; need=""
+if [ "$role" = send ]; then
+  command -v iptables >/dev/null 2>&1 || need="$need iptables"
+  command -v ping >/dev/null 2>&1 || need="$need iputils-ping"
+else
+  command -v tcpdump >/dev/null 2>&1 || need="$need tcpdump"
+fi
+if [ -n "$need" ] && command -v apt-get >/dev/null 2>&1; then
+  apt-get update -qq >/dev/null 2>&1 || true
+  apt-get install -y -qq $need >/dev/null 2>&1 || true
+  echo "TRIED$need"
+fi
+if [ "$role" = send ]; then
+  command -v iptables >/dev/null 2>&1 || { echo NOIPTABLES; exit 0; }
+  command -v ping >/dev/null 2>&1 || { echo NOPING; exit 0; }
+else
+  command -v tcpdump >/dev/null 2>&1 || { echo NOTCPDUMP; exit 0; }
+fi
+echo READY
+""", {"ROLE": r"^(send|listen)$"}),
+
     # SPOOF TEST, the sending end (the owner's method, 2026-10-17: "put an SNAT rule on the Iran server, ping the other server, look with tcpdump there"): CONTROL ordinary pings of a size nobody else uses (115 bytes in all), then COUNT
     # of the same pings whose source address is rewritten to SPOOF. The rule is the narrowest there can be - ICMP echo requests to TARGET only, tagged - so nothing else the server sends (not the tunnels to TARGET) is touched;
     # it is put in after the control pings and taken out again at the end, ALWAYS (a trap removes it however the script ends). Nothing is written to disk. spoof_listen on the other server counts what arrives.

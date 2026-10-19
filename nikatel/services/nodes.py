@@ -909,6 +909,23 @@ def parse_spoof_listen(out: str) -> tuple[list[str], str]:
     return [m for m in re.findall(r"^PKT (\d{1,3}(?:\.\d{1,3}){3})\s*$", text, re.MULTILINE)], ""
 
 
+def _spoof_ready(node: Node, role: str, name: str) -> str:
+    """Make a server ready for its part of the spoof test. What it needs (iptables and ping to send, tcpdump to listen) is installed with apt when it is missing - the owner started the test. Returns the packages that were
+    installed ("" when nothing was missing); a ValueError says what is still missing when apt could not."""
+    try:
+        out = run_action(node, "spoof_prepare", {"ROLE": role}, timeout=300)
+    except (SSHError, ValueError) as e:
+        raise ValueError(f"the test could not run on {name}: {str(e)[:160]}") from None
+
+    for word, why in (("NOIPTABLES", "iptables is not installed on the sending server and could not be installed (no apt, or apt failed): install it by hand, apt install iptables"), ("NOPING", "ping is not installed on the sending server and could not be installed: apt install iputils-ping"),
+                      ("NOTCPDUMP", "tcpdump is not installed on the other server and could not be installed: apt install tcpdump")):
+        if word in out:
+            raise ValueError(f"{name}: {why}")
+
+    tried = re.search(r"^TRIED (.+)$", out, re.MULTILINE)
+    return tried.group(1).strip() if tried and "READY" in out else ""
+
+
 def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
     """Does the provider of this server let packets with a forged source address out? This server pings the target five times as it is and ten times with the source rewritten to `spoof_ip` (a tagged SNAT rule for ICMP echo
     requests to the target only, taken out again whatever happens); the target listens with tcpdump and says what arrived. The answer is kept in the extra data of the server."""
@@ -942,6 +959,7 @@ def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
         ns, nt = Node(s.host, s.ssh_user, s.ssh_port), Node(t.host, t.ssh_user, t.ssh_port)
         sender, target, target_host = s.name, t.name, t.host
 
+    ready = {"send": _spoof_ready(ns, "send", sender), "listen": _spoof_ready(nt, "listen", target)}          # (what is missing is installed first, before the listener starts: a slow apt must not eat its listening time)
     got: dict = {}
 
     def listen() -> None:
@@ -976,7 +994,8 @@ def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
 
     level, text, forged, real = spoof_verdict(sources, str(ip))
     left = re.search(r"^LEFT (\d+)", tx, re.MULTILINE)
-    note = " The temporary NAT rule could not be removed: run  iptables -t nat -S POSTROUTING | grep nikatel-spoof-test  on the sending server and delete it." if left and int(left.group(1)) else ""
+    note = "".join(f" ({pk.strip()} was missing on {name} and was installed for this test.)" for name, pk in ((sender, ready["send"]), (target, ready["listen"])) if pk)
+    note += " The temporary NAT rule could not be removed: run  iptables -t nat -S POSTROUTING | grep nikatel-spoof-test  on the sending server and delete it." if left and int(left.group(1)) else ""
     res = {"can": level in ("yes", "part"), "level": level, "verdict": text + note, "forged": forged, "real": real, "sent": SPOOF_COUNT, "control": SPOOF_CONTROL, "spoof_ip": str(ip), "target": target, "target_id": target_id, "at": int(time.time())}
     _set_extra(server_id, spoof=res)
 

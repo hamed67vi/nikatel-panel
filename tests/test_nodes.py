@@ -1,4 +1,6 @@
 import re
+import shutil
+import subprocess
 
 import pytest
 
@@ -137,6 +139,80 @@ def test_the_spoof_test_runs_both_ends_keeps_the_answer_and_refuses_what_makes_n
     monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90: "SENT 5 10\nLEFT 1\n")
     r = client.post("/api/servers/1/spoof-test", json={"target_id": 2, "spoof_ip": "10.10.10.10"})
     assert r.status_code == 200 and r.json()["level"] == "no" and r.json()["can"] is False and "could not be removed" in r.json()["verdict"] and "nikatel-spoof-test" in r.json()["verdict"]      # a rule that stayed is said, with the command
+
+
+def test_a_new_server_gets_what_the_spoof_test_needs_before_the_test_starts(client, monkeypatch):
+    """The owner, 2026-10-19 (tr-test, a new Debian 12 machine): "tr-test: iptables is not installed on the sending server". The test is something the owner starts, so what is missing (iptables and ping to send, tcpdump
+    to listen) is installed with apt - BEFORE the listener starts, so that a slow apt does not eat its listening time; and what cannot be installed is said with the command."""
+    client.post("/api/servers", json={"name": "ir1", "host": "203.0.113.1", "role": "iran"})
+    client.post("/api/servers", json={"name": "fi1", "host": "198.51.100.2", "role": "foreign"})
+    seen = []
+    monkeypatch.setattr(nodes.time, "sleep", lambda s: None)
+    monkeypatch.setattr(nodes, "run_script", lambda node, name, params=None, timeout=40: (seen.append(("listen", node.host)), "LISTENING\n" + "PKT 10.10.10.10\n" * 9 + "PKT 203.0.113.1\n" * 5 + "DONE\n")[1])
+
+    def act(node, name, params=None, timeout=90):
+        seen.append((name, node.host, (params or {}).get("ROLE")))
+        return {"spoof_prepare": "TRIED iptables iputils-ping\nREADY\n" if (params or {}).get("ROLE") == "send" else "TRIED tcpdump\nREADY\n"}.get(name, "SENT 5 10\nLEFT 0\n")
+
+    monkeypatch.setattr(nodes, "run_action", act)
+    d = client.post("/api/servers/1/spoof-test", json={"target_id": 2, "spoof_ip": "10.10.10.10"}).json()
+    assert d["ok"] is True and "iptables iputils-ping was missing on ir1 and was installed for this test" in d["verdict"] and "tcpdump was missing on fi1 and was installed for this test" in d["verdict"]
+    assert [x[:2] for x in seen if x[0] == "spoof_prepare"] == [("spoof_prepare", "203.0.113.1"), ("spoof_prepare", "198.51.100.2")]
+    assert seen.index(("spoof_prepare", "198.51.100.2", "listen")) < seen.index(("listen", "198.51.100.2")) < seen.index(("spoof_send", "203.0.113.1", None))           # both ends are ready before the listener starts and before the sender sends
+
+    for answer, words in (("TRIED iptables\nNOIPTABLES\n", ("ir1: iptables is not installed", "could not be installed", "apt install iptables")), ("NOPING\n", ("ir1: ping is not installed", "iputils-ping")), ("NOTCPDUMP\n", ("tcpdump is not installed", "apt install tcpdump"))):
+        monkeypatch.setattr(nodes, "run_action", lambda node, name, params=None, timeout=90, a=answer: a if name == "spoof_prepare" else "SENT 5 10\nLEFT 0\n")
+        r = client.post("/api/servers/1/spoof-test", json={"target_id": 2, "spoof_ip": "10.10.10.10"})
+        assert r.status_code == 400 and all(w in r.json()["error"] for w in words), (answer, r.text)
+
+
+def test_the_spoof_prepare_action_installs_only_what_is_missing_for_its_role():
+    send, listen = ssh.render_action("spoof_prepare", {"ROLE": "send"}), ssh.render_action("spoof_prepare", {"ROLE": "listen"})
+    assert "role='send'" in send and "role='listen'" in listen and "apt-get install -y -qq $need" in send and "command -v iptables" in send and "command -v tcpdump" in send     # (the same text, the role decides)
+    assert "spoof_prepare" in ssh.ACTIONS and "spoof_prepare" not in ssh.SCRIPTS                                            # (it can install a package: an action, refused while the panel is read-only)
+
+    for bad in ("sender", "send; reboot", ""):
+        with pytest.raises(ValueError):
+            ssh.render_action("spoof_prepare", {"ROLE": bad})
+
+def _run_prepare(tmp_path, name, role, have, apt):
+    # the script of spoof_prepare in a real bash whose PATH holds nothing but stand-ins (the script itself uses builtins only); apt: None (no apt-get), "works" (it makes the tools it is asked for) or "fails"
+    bin_ = tmp_path / name
+    bin_.mkdir()
+
+    def stub(tool, text):
+        (bin_ / tool).write_text("#!/bin/sh\n" + text + "\n")
+        (bin_ / tool).chmod(0o755)
+
+    stub("ok", "exit 0")
+    for tool in have:
+        stub(tool, "exit 0")
+    if apt:
+        make = f'case "$p" in iptables|tcpdump) cp "{bin_}/ok" "{bin_}/$p";; iputils-ping) cp "{bin_}/ok" "{bin_}/ping";; esac' if apt == "works" else ":"
+        stub("apt-get", f'PATH=/usr/bin:/bin\necho "$@" >> "{bin_}/apt.log"\nfor p in "$@"; do {make}; done\n' + ("exit 0" if apt == "works" else "exit 100"))
+    r = subprocess.run([shutil.which("bash"), "-c", ssh.render_action("spoof_prepare", {"ROLE": role})], check=False, env={"PATH": str(bin_)}, capture_output=True, text=True, timeout=30)
+    log = bin_ / "apt.log"
+    return r.stdout.split(), (log.read_text() if log.exists() else "")
+
+
+def test_the_spoof_prepare_script_run_in_a_real_shell_with_stand_ins_for_the_tools(tmp_path):
+    if not shutil.which("bash"):
+        pytest.skip("no bash here")
+    cases = [
+        ("send", {"iptables", "ping"}, "works", ["READY"], None),                                                            # all there: apt is not even called
+        ("send", {"ping"}, "works", ["TRIED", "iptables", "READY"], "install -y -qq iptables"),
+        ("send", set(), "works", ["TRIED", "iptables", "iputils-ping", "READY"], "install -y -qq iptables iputils-ping"),    # a new Debian 12
+        ("send", set(), None, ["NOIPTABLES"], None),                                                                         # no apt: told, not guessed
+        ("send", {"iptables"}, None, ["NOPING"], None),
+        ("listen", set(), "works", ["TRIED", "tcpdump", "READY"], "install -y -qq tcpdump"),
+        ("listen", {"iptables", "ping"}, "works", ["TRIED", "tcpdump", "READY"], "install -y -qq tcpdump"),                  # the listener needs tcpdump only
+        ("listen", {"tcpdump"}, "works", ["READY"], None),
+        ("listen", set(), "fails", ["TRIED", "tcpdump", "NOTCPDUMP"], "install -y -qq tcpdump"),                             # apt tried and failed
+    ]
+    for i, (role, have, apt, answer, asked) in enumerate(cases):
+        got, log = _run_prepare(tmp_path, f"c{i}", role, have, apt)
+        assert got == answer, (i, role, got)
+        assert (asked in log) if asked else (log == ""), (i, log)
 
 
 def test_gre_links_are_read_from_the_scan():
