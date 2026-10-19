@@ -906,8 +906,8 @@ html body #page .tun-tbl .bwx { display: inline-flex; flex-direction: column; ga
 html body #page .tun-tbl .bwr { display: flex; align-items: center; gap: 7px; line-height: 1.1; white-space: nowrap; }
 html body #page .tun-tbl .bwcap { display: inline-flex; align-items: baseline; gap: 2px; min-width: 24px; font-variant-numeric: tabular-nums; }
 html body #page .tun-tbl .bwcap b { font-size: 12.5px; font-weight: 800; letter-spacing: .1px; color: var(--acc-2, #7aa7f0); }
-html body #page .tun-tbl .bwcap.low b, html body #page .tun-tbl .bwcap.slow b { color: var(--warn, #ffc44d); }      /* (slow: the Doctor's own verdict "very slow" - amber; red is only a drop or a test that moved nothing) */
-html body #page .tun-tbl .bwcap.drop b { color: var(--bad, #ff6b8b); }
+html body #page .tun-tbl .bwcap.low b { color: var(--warn, #ffc44d); }      /* (slow: the Doctor's own verdict "very slow" - amber; red is only a drop or a test that moved nothing) */
+html body #page .tun-tbl .bwcap.drop b, html body #page .tun-tbl .bwcap.slow b { color: var(--bad, #ff6b8b); }      /* (the overall bandwidth is red when it is low - dropped, stalled or very slow; the number of the users and its bar never change colour: the owner, 2026-10-19) */
 html body #page .tun-tbl .bwcap.none { color: var(--mut); font-weight: 700; }
 html body #page .tun-tbl .bwsep { flex: none; width: 1px; height: 14px; background: rgba(255, 255, 255, .18); }
 html body #page .tun-tbl .bwuse { display: inline-flex; align-items: baseline; gap: 2px; min-width: 0; font-variant-numeric: tabular-nums; }
@@ -930,8 +930,6 @@ html body #page .tun-tbl .bwx .bwsep { height: 9px; }
 html body #page .tun-tbl .bwx .bwcap b, html body #page .tun-tbl .bwx .bwuse b { text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 html[data-mode="light"] body #page .tun-tbl .bwx .bwbar { background: rgba(30, 50, 100, .1); box-shadow: inset 0 0 0 1px rgba(30, 50, 100, .1), inset 0 1px 2px rgba(30, 50, 100, .16); }
 html[data-mode="light"] body #page .tun-tbl .bwx .bwcap b, html[data-mode="light"] body #page .tun-tbl .bwx .bwuse b { text-shadow: none; }
-html body #page .tun-tbl .bwbar.hot u { background: var(--warn, #ffc44d); }
-html body #page .tun-tbl .bwbar.full u { background: var(--bad, #ff6b8b); }
 html body #page .tun-tbl th.bwh .bwh-in { display: block; white-space: nowrap; }
 html body #page .tun-tbl th.bwh .bwh-in em { margin-left: 6px; font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--mut); }      /* (the unit is written ONCE, up here: the owner, 2026-10-17 - never beside every number, never Gb/s; and nothing else: no "capacity | in use" legend, it is in the tooltip) */
 html[data-mode="light"] body #page .tun-tbl .bwbar { background: rgba(30, 50, 100, .14); }

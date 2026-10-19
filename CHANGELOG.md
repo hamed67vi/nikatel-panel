@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.24 - In the bandwidth cell only the overall number is red; the number of the users never changes colour
+
+The owner (2026-10-19): "when the overall bandwidth is low only its colour must be red"; asked what makes the users' number red, he answered: "the users' bandwidth must never change colour, only the overall bandwidth is red when it is low".
+
+- **The overall (capacity) number is red when it is low**: a drop, a test that moved nothing, and now also the Doctor's verdict "very slow" (it was amber; `lab.css .bwcap.slow`). The amber of a "low" state class is kept for the old rule only.
+- **The number of the users and its bar have ONE colour at any load**: the bar was amber from 70 % and red from 90 % of the capacity (`bwbar hot / full`); that colouring is gone (`app.js bwBar`, `lab.css`), the percentage is still in the tooltip.
+- **Proved**: `tests/test_web_menu.py` (the classes of the cell and of the bar, the CSS rules). **Not proved**: how it looks on the owner's screen (the colours were checked in the tests, not in a browser).
+
 ## 1.69.23 - A new server: no cores at adding, the GRE and spoof tests choose their targets, one total and one live number in the server list; the standby on by itself; a slim bar
 
 The owner (2026-10-19), a run of requests on the pages of servers and tunnels.

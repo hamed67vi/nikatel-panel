@@ -1271,7 +1271,7 @@ def test_the_page_paints_red_only_where_the_doctor_sees_a_stall_and_a_very_slow_
     assert m and float(m.group(1)) == bandwidth.STALL_MBPS and float(m.group(2)) == bandwidth.SLOW_MBPS            # (the same lines on the page and in the Doctor: one test keeps them so)
     assert "b.down < 1" not in app and "b.down < BW_STALL" in app
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert 'b.state === "slow" ? "slow" : "ok"' in capcell and "html body #page .tun-tbl .bwcap.low b, html body #page .tun-tbl .bwcap.slow b" in css
+    assert 'b.state === "slow" ? "slow" : "ok"' in capcell and "html body #page .tun-tbl .bwcap.drop b, html body #page .tun-tbl .bwcap.slow b" in css
     assert 'if (b.state === "slow") parts.push("VERY SLOW' in app and 'state === "slow" ? `Very slow:' in app
     assert '["drop", "slow"].includes((t.bw || {}).state) ? "sev-yellow"' in app and 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state)' in app        # the row is looked at, and the Doctor page lists it under "to look at"
 
@@ -1280,7 +1280,7 @@ def test_the_capacity_and_the_use_are_written_inside_one_bar():
     """The owner, 2026-10-19: "instead of the two numbers over a thin line - a bar with the numbers inside it" (1.69.23): the same markup, the numbers laid over a 22 px bar that is as high as the two lines were."""
     css = _web("lab.css")
     assert 'html body #page .tun-tbl .bwx .bwbar { height: 16px;' in css and 'html body #page .tun-tbl .bwx .bwr { position: absolute; inset: 0;' in css and 'html body #page .tun-tbl .bwx.bwx { position: relative;' in css
-    assert "html body #page .tun-tbl .bwcap.low b, html body #page .tun-tbl .bwcap.slow b" in css and "html body #page .tun-tbl .bwbar.hot u" in css            # (the amber of "very slow" and of a busy bar win over the plain blue in the table)
+    assert "html body #page .tun-tbl .bwcap.drop b, html body #page .tun-tbl .bwcap.slow b" in css and "bwbar.hot" not in css and "bwbar.full" not in css            # (a very slow overall number is red; the bar of the users has one colour, always)
     assert "html body #page .tun-tbl /*" not in css                                                                                                          # (a comment never sits inside a selector)
 
 
@@ -1379,7 +1379,7 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
     assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" in app
     assert "const liveAge = l => l.age + (Date.now() - (state.liveAt || Date.now())) / 1000;" in app                                # (the age comes from the server: no clock of the browser is compared with the server's)
-    for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", ".bwbar.hot u", ".bwbar.full u", "th.bwh .bwh-in em {"):
+    for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", "th.bwh .bwh-in em {"):
         assert "html body #page .tun-tbl " + sel in css, sel
     assert 'html[data-mode="light"] body #page .tun-tbl .bwsep {' in css
 
@@ -1439,7 +1439,7 @@ def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_
     seen = re.sub(r'title="[^"]*"', "", res["live"]["use"])                                                                  # (what is SEEN: the tooltip keeps its units)
     assert "Mb/s" not in seen and "Gb/s" not in seen and "<small>" not in seen                                               # and no unit beside the numbers: it is in the header of the column
     assert res["live"]["util"] == pytest.approx(87 / 312) and 'class="bwbar"' in res["live"]["bar"] and "width:28%" in res["live"]["bar"]      # the bar is the part of the capacity the users use
-    assert 'class="bwbar hot"' in res["hot"] and 'class="bwbar full"' in res["full"] and 'class="bwbar full"' in res["over"] and "width:100%" in res["over"]      # amber from 70 %, red from 90 %, never wider than the box
+    assert 'class="bwbar"' in res["hot"] and 'class="bwbar"' in res["full"] and 'class="bwbar"' in res["over"] and "width:100%" in res["over"]      # one colour at any load (the owner, 2026-10-19: the number of the users and its bar never change colour), never wider than the box
     assert "<b>1500</b>" in res["mixed"] and "<b>20</b>" not in res["mixed"] and "Gb" not in res["mixed"]                                                     # a download of 1.5 Gb/s is 1500, in Mb (the upload, 20, is not in the row)
     assert 'class="bwuse old"' in res["cycle"] and "<b>5.0</b>" in res["cycle"] and "<b>1.0</b>" not in res["cycle"]                                          # without a live number: the last check's download, marked as not live
     assert 'class="bwuse none"' in res["none"]["use"] and "—" in res["none"]["use"] and res["none"]["util"] is None and "width:0%" in res["none"]["bar"]    # no counter: a dash and an empty bar, never a made-up zero
