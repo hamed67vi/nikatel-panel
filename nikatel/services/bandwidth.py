@@ -32,7 +32,9 @@ from .tunnels import link_of
 log = get_logger("bandwidth")
 INTERVAL = 90 * 60           # between two measurements of one tunnel (a little different for each, so they do not all fall in one minute)
 CONFIRM_AFTER = 180          # a sample that looks like a drop is measured again after this
-POOR_SCORE = 40              # a tunnel whose quality test scored under this is measured every POOR_AFTER, not every INTERVAL
+SLOW_CONFIRM_AFTER = 60      # the second test of a very slow one comes this soon (a drop keeps its 3 minutes): the owner, 2026-10-19: "the process must not take long"
+SLOW_MEMORY_MBPS = 20.0      # a test under this is VERY SLOW too when the Doctor's memory of the pair knows a type that gave ten times as much (5.2 Mb/s where another type gave 119 is not fine because it is over 5)
+POOR_SCORE = 40             # a tunnel whose quality test scored under this is measured every POOR_AFTER, not every INTERVAL
 POOR_AFTER = 10 * 60
 WATCH_AFTER = 20 * 60       # while a drop lasts the tunnel is measured this often (to see it end)
 RETRY_AFTER = 15 * 60        # a tunnel that could not be measured is left alone this long
@@ -75,7 +77,7 @@ def reference(hist: list, now: int) -> float | None:
     return vals[round(0.75 * (len(vals) - 1))]
 
 
-def verdict(down: float | None, ref: float | None) -> str:
+def verdict(down: float | None, ref: float | None, slow_line: float = SLOW_MBPS) -> str:
     """none (nothing measured) · learning (too few samples) · ok · low (under 80 %) · drop (under 60 %) · slow (under SLOW_MBPS and no usual level that could tell a drop: slow from the start, not dropped)."""
     if down is None:
         return "none"
@@ -84,16 +86,16 @@ def verdict(down: float | None, ref: float | None) -> str:
         return "drop"                          # nothing moved: it needs no usual level to be a fault
 
     if ref is None:
-        return "slow" if down < SLOW_MBPS else "learning"
+        return "slow" if down < slow_line else "learning"
 
     if ref < MIN_REF_MBPS:
-        return "slow" if down < SLOW_MBPS else "ok"
+        return "slow" if down < slow_line else "ok"
 
     ratio = down / ref
     return "drop" if ratio < DROP_RATIO else "low" if ratio < LOW_RATIO else "ok"
 
 
-def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None, loss: float | None = None) -> tuple[dict, str]:
+def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None, loss: float | None = None, slow_line: float = SLOW_MBPS) -> tuple[dict, str]:
     """Pure: (the new `bw` of the tunnel, what changed: "" | "drop" | "slow" | "recovered") after one sample. The sample is judged against the level BEFORE it, so a drop never pulls its own reference down.
     "slow": the tunnel is VERY slow (two tests in a row under SLOW_MBPS, no usual level that could call it a drop) - it was never fast, so nothing dropped; it ends when a test gives SLOW_OVER."""
     bw = dict(bw or {})
@@ -103,7 +105,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
 
     hist = [list(x) for x in (bw.get("hist") or []) if now - int(x[0]) <= REF_WINDOW]
     ref_before = reference(hist, now)
-    v = verdict(down, ref_before)
+    v = verdict(down, ref_before, slow_line)
     drop, slow, suspect, change = bw.get("drop"), bw.get("slow"), bool(bw.get("suspect")), ""
     next_at = now + INTERVAL
 
@@ -129,7 +131,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
 
             suspect, next_at = False, now + WATCH_AFTER
         else:
-            suspect, next_at = True, now + CONFIRM_AFTER           # the first very slow sample: measured again soon, nobody is told yet
+            suspect, next_at = True, now + SLOW_CONFIRM_AFTER      # the first very slow sample: measured again within a minute, nobody is told yet
     else:
         suspect = False
 
@@ -140,7 +142,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
             next_at = now + WATCH_AFTER
 
         if slow and not drop:
-            if down >= SLOW_OVER:
+            if down >= max(SLOW_OVER, 1.6 * slow_line):
                 slow, change = None, "recovered"
             else:
                 slow = {**slow, "now": round(down, 1)}
@@ -245,8 +247,31 @@ def stalled(bw: dict | None, now: int) -> str:
 
 
 # ------------------------------------------------------------------ storing a sample
+def _slow_line(tunnel_id: int, down: float, now: int) -> float:
+    """SLOW_MBPS, or SLOW_MEMORY_MBPS when the Doctor's memory of the pair knows a type that gave TEN times this test (and at least 20 Mb/s): a tunnel at 5.2 Mb/s where another type gave 119 is slow."""
+    if down >= SLOW_MEMORY_MBPS:
+        return SLOW_MBPS
+
+    try:
+        from . import autopilot, knowledge, license
+
+        with session() as db:
+            t = db.get(Tunnel, tunnel_id)
+
+            if t is None:
+                return SLOW_MBPS
+
+            cur, pair = autopilot.kind_of(t.type, t.transport, t.record or {}), knowledge.pair(t.iran_server_id, t.foreign_server_id)
+
+        return SLOW_MEMORY_MBPS if knowledge.faster_kinds(pair, now, cur, down, license.tunnel_kind_allowed, ratio=10.0) else SLOW_MBPS
+    except Exception:
+        log.exception("the memory of the pair of tunnel %s could not be read", tunnel_id)
+        return SLOW_MBPS
+
+
 def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None, loss: float | None = None) -> tuple[dict, str] | None:
     now = int(time.time())
+    line = _slow_line(tunnel_id, down, now)
 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
@@ -255,7 +280,7 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
             return None
 
         rec = dict(t.record or {})
-        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss)
+        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss, line)
 
         if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
@@ -454,7 +479,7 @@ def _due(now: int) -> list[int]:
                 q = (t.record or {}).get("quality") or {}
 
                 if bw.get("state") == "learning" and float(bw.get("down") if bw.get("down") is not None else 99) < SLOW_MBPS:
-                    nxt = min(nxt, at + CONFIRM_AFTER)                    # a very slow test that nobody has judged (the first of a pair, or one of a schedule from before 1.69.15) is not left for 90 minutes
+                    nxt = min(nxt, at + SLOW_CONFIRM_AFTER)               # a very slow test that nobody has judged (the first of a pair, or one of a schedule from before 1.69.15) is not left for 90 minutes
                 elif q.get("score") is not None and float(q["score"]) < POOR_SCORE and bw.get("state") not in ("drop", "slow"):
                     nxt = min(nxt, at + POOR_AFTER)                       # a tunnel the quality test calls poor is measured again soon: "when a tunnel has a problem, do not wait for the next sample" (the owner, 2026-10-19)
 

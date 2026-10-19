@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.19 - After a cut: the first type that connects, then the faster one - in about five minutes
+
+The owner (2026-10-19): "after a cut the Doctor puts the first tunnel that connects; then it tests, and when another type is faster it changes the tunnel - and the process must not take long". The first half was always so (a cut tunnel is replaced by the first type that connects: connecting comes before speed). The second half had three slow or missing steps; all are closed:
+
+- **The line of "very slow" follows the Doctor's memory** (`bandwidth._slow_line`, `knowledge.faster_kinds(ratio=10)`): a test under 5 Mb/s was "very slow"; one at 5.2 Mb/s where the memory of the pair held a type at 119 was "fine" because it was over the line. Now a test under 20 Mb/s is very slow as well when the memory knows a type that gave **ten times** as much (and at least 20 Mb/s); it ends at 1.6 x the line.
+- **The second test comes in a minute, not three** (`SLOW_CONFIRM_AFTER` 60 s; a drop keeps its three minutes), and a tunnel that was just built (the emergency type after a cut) is measured within its first minute (as before: the first test of a tunnel that has none).
+- **The change** is 1.69.17's: in the modes fix and move the Doctor builds the tunnel again as the faster type at a quiet moment, measures it, and goes back to the old type when the new one is clearly worse. No new test of every type is run: the numbers are the ones the Doctor's memory already holds (a night survey, a "Test this pair", the tests of earlier repairs) - so it is quick; a pair whose types were never speed-tested has nothing to choose from (Doctor page → Knowledge → test the pair gives it).
+- **Time**: first test about a minute after the cut is mended, the second a minute later, the build of the other type one to two minutes, its test seconds: about five minutes in all, against up to an hour and a half before.
+- **Proved**: `tests/test_bandwidth.py` (+1: the line by the memory, the end at 1.6 x, the memory read for the tunnel, nothing known = the plain line; the 60 s of the second test). **Not proved**: on real servers.
+
 ## 1.69.18 - A tunnel with a problem is measured at once, not at the next turn of 90 minutes
 
 The owner (2026-10-19): "when a tunnel has a problem, do not wait for the next sample - do the tests and move it". The bandwidth test of a tunnel runs every 90 minutes; a tunnel with a problem waited for that turn before the Doctor judged it (and so before 1.69.17 could change its type).

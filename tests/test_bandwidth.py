@@ -545,7 +545,7 @@ def test_a_tunnel_with_no_usual_level_that_tests_under_five_is_slow_and_not_drop
 
 def test_slow_needs_two_tests_in_a_row_ends_at_eight_and_a_stall_takes_its_place():
     bw, change = bandwidth.add_sample(None, NOW, 0.6, None, "link")                                          # the first very slow test: measured again soon, nobody is told
-    assert change == "" and bw["suspect"] is True and bw["slow"] is None and bw["state"] == "learning" and bw["next_at"] == NOW + bandwidth.CONFIRM_AFTER
+    assert change == "" and bw["suspect"] is True and bw["slow"] is None and bw["state"] == "learning" and bw["next_at"] == NOW + bandwidth.SLOW_CONFIRM_AFTER == NOW + 60
     bw, change = bandwidth.add_sample(bw, NOW + 180, 0.8, None, "link")                                      # the second: very slow
     assert change == "slow" and bw["state"] == "slow" and bw["slow"] == {"since": NOW + 180, "now": 0.8} and bw["suspect"] is False and bw["drop"] is None
     assert bw["next_at"] == NOW + 180 + bandwidth.WATCH_AFTER
@@ -697,6 +697,30 @@ def test_a_confirmed_slow_tunnel_is_looked_at_by_the_job_the_button_and_the_qual
     monkeypatch.setattr(bandwidth, "measure", lambda t: ({"down": 0.9, "ref": None, "state": "slow", "why": {"text": "Only this tunnel is that slow"}}, ""))
     bandwidth.measure_start(tid)
     assert any(ln.startswith("Still very slow: 0.9 Mb/s. The reason found: Only this tunnel is that slow") for ln in said)
+
+
+def test_a_test_under_twenty_is_very_slow_too_when_the_memory_of_the_pair_knows_a_type_ten_times_faster(monkeypatch):
+    """The owner's tunnel tested 5.2 Mb/s - just over the line of 5 - while the memory had `tcp` at 119 on the pair."""
+    from nikatel.services import knowledge
+
+    assert bandwidth.verdict(5.2, None) == "learning" and bandwidth.verdict(5.2, None, bandwidth.SLOW_MEMORY_MBPS) == "slow" and bandwidth.verdict(25.0, None, bandwidth.SLOW_MEMORY_MBPS) == "learning"
+    bw, _ = bandwidth.add_sample(None, NOW, 5.2, None, "link", slow_line=20.0)
+    bw, change = bandwidth.add_sample(bw, NOW + 60, 5.6, None, "link", slow_line=20.0)
+    assert change == "slow" and bw["state"] == "slow"
+    bw, change = bandwidth.add_sample(bw, NOW + 1300, 25.0, None, "link", slow_line=20.0)                          # over 20 but under 1.6 x 20: it stays
+    assert change == "" and bw["state"] == "slow"
+    bw, change = bandwidth.add_sample(bw, NOW + 2500, 40.0, None, "link", slow_line=20.0)
+    assert change == "recovered"
+    tid, _, _, _ = make_tunnel("ml-a")
+    now = int(time.time())
+    pair = {"kinds": {"tcp": knowledge.merge(None, {"kind": "tcp", "ok": True, "score": 50, "down_mbps": 119.0}, "full", now - 3600), "paqet": knowledge.merge(None, {"kind": "paqet", "ok": True, "score": 40, "down_mbps": 30.0}, "full", now - 3600)}}
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: pair)
+    assert bandwidth._slow_line(tid, 5.2, now) == 20.0                                                           # 119 is over ten times 5.2
+    assert bandwidth._slow_line(tid, 15.0, now) == 5.0                                                           # 150 would be needed: no
+    assert bandwidth._slow_line(tid, 30.0, now) == 5.0 and bandwidth._slow_line(99999, 5.2, now) == 5.0
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: {})
+    assert bandwidth._slow_line(tid, 5.2, now) == 5.0                                                            # nothing known: the plain line
+    assert [r["kind"] for r in knowledge.faster_kinds(pair, now, "tcpmux", 5.2, ratio=10.0)] == ["tcp"] and [r["kind"] for r in knowledge.faster_kinds(pair, now, "tcpmux", 5.2)] == ["tcp", "paqet"]
 
 
 def test_a_tunnel_with_a_problem_is_not_left_for_the_next_turn_of_ninety_minutes(monkeypatch):

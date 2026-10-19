@@ -131,11 +131,11 @@ FASTER_MIN_MBPS = 20.0          # ... and at least this much
 FASTER_FRESH = 14 * 86400       # ... measured within this long ago (a number of last month says little about today's route)
 
 
-def faster_kinds(pair: dict | None, now: int, current: str, baseline: float, allowed=lambda k: True) -> list[dict]:
+def faster_kinds(pair: dict | None, now: int, current: str, baseline: float, allowed=lambda k: True, ratio: float = FASTER_RATIO) -> list[dict]:
     """Pure: the types the Doctor's memory of the pair knows to have given clearly more than a very slow tunnel gives (the owner, 2026-10-19: a tunnel that tested 0.8 Mb/s on a pair where another type had measured 119):
     kinds that connected on the pair (never the running one, never one that failed or only scored poor), whose download is at least FASTER_RATIO times `baseline` (and FASTER_MIN_MBPS), measured less than FASTER_FRESH ago,
     that the licence allows - the fastest first (a tie by score). Empty when the memory knows none: nothing is guessed."""
-    need = max(FASTER_MIN_MBPS, FASTER_RATIO * max(float(baseline or 0), 1.0))
+    need = max(FASTER_MIN_MBPS, ratio * max(float(baseline or 0), 1.0))
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need and now - int(r.get("at") or 0) <= FASTER_FRESH and allowed(r["kind"])]
     return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r["score"] or 0)))
 
