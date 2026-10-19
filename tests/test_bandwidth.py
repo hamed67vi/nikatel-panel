@@ -699,6 +699,19 @@ def test_a_confirmed_slow_tunnel_is_looked_at_by_the_job_the_button_and_the_qual
     assert any(ln.startswith("Still very slow: 0.9 Mb/s. The reason found: Only this tunnel is that slow") for ln in said)
 
 
+def test_a_tunnel_with_a_problem_is_not_left_for_the_next_turn_of_ninety_minutes(monkeypatch):
+    """The owner, 2026-10-19: "when a tunnel has a problem, do not wait for the next sample - do the tests". A very slow test nobody has judged, and a tunnel the quality test calls poor, are measured again soon."""
+    later = NOW + 5000
+    young, _, _, _ = make_tunnel("pb-young", bw={**good_history(0.7, n=3), "state": "learning", "down": 0.7, "at": NOW - 400, "next_at": later})            # (the schedule of before 1.69.15: 90 minutes)
+    poor, _, _, _ = make_tunnel("pb-poor", bw={**good_history(300.0), "at": NOW - 700, "next_at": later}, record={"quality": {"score": 25, "latency_ms": 360.0}})
+    fine, _, _, _ = make_tunnel("pb-fine", bw={**good_history(300.0), "at": NOW - 700, "next_at": later}, record={"quality": {"score": 60}})
+    slow_known, _, _, _ = make_tunnel("pb-slow", bw={**good_history(0.7, n=3), "state": "slow", "slow": {"since": NOW - 900, "now": 0.7}, "down": 0.7, "at": NOW - 700, "next_at": later}, record={"quality": {"score": 20}})
+    fast, _, _, _ = make_tunnel("pb-fast", bw={**good_history(300.0), "at": NOW - 100, "next_at": later}, record={"quality": {"score": 20}})                  # (measured 100 s ago: not yet)
+    assert sorted(bandwidth._due(NOW)) == sorted([young, poor])                                                                                            # young: 3 min after its test; poor: 10 min after its test
+    assert sorted(bandwidth._due(NOW + 300)) == sorted([young, poor, fast]) or sorted(bandwidth._due(NOW + 300)) == sorted([young, poor])
+    assert fine not in bandwidth._due(NOW + 4000) and slow_known not in bandwidth._due(NOW)                                                                # (a good score waits its turn; a confirmed slow one is on its own 20-minute watch)
+
+
 def test_a_slow_tunnel_is_stored_with_one_event_and_the_slow_ones_count_with_the_dropped_ones():
     tid, _, _, _ = make_tunnel("sl-g", bw={**good_history(0.8, n=2), "down": 0.8})
     assert bandwidth._store(tid, 0.7, None, "link", 160.0)[1] == "" and bandwidth._store(tid, 0.9, None, "link", 160.0)[1] == "slow"

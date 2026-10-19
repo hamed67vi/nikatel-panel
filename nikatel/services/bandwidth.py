@@ -32,7 +32,9 @@ from .tunnels import link_of
 log = get_logger("bandwidth")
 INTERVAL = 90 * 60           # between two measurements of one tunnel (a little different for each, so they do not all fall in one minute)
 CONFIRM_AFTER = 180          # a sample that looks like a drop is measured again after this
-WATCH_AFTER = 20 * 60        # while a drop lasts the tunnel is measured this often (to see it end)
+POOR_SCORE = 40              # a tunnel whose quality test scored under this is measured every POOR_AFTER, not every INTERVAL
+POOR_AFTER = 10 * 60
+WATCH_AFTER = 20 * 60       # while a drop lasts the tunnel is measured this often (to see it end)
 RETRY_AFTER = 15 * 60        # a tunnel that could not be measured is left alone this long
 REF_WINDOW = 7 * 86400       # the usual level is what the last week gave
 REF_MIN = 4                  # samples needed before anything is judged
@@ -446,6 +448,15 @@ def _due(now: int) -> list[int]:
 
             bw = (t.record or {}).get("bw") or {}
             nxt = int(bw.get("next_at") or 0) or (int(bw.get("at") or 0) + INTERVAL + (t.id * 97) % 600)
+            at = int(bw.get("at") or 0)
+
+            if at:
+                q = (t.record or {}).get("quality") or {}
+
+                if bw.get("state") == "learning" and float(bw.get("down") if bw.get("down") is not None else 99) < SLOW_MBPS:
+                    nxt = min(nxt, at + CONFIRM_AFTER)                    # a very slow test that nobody has judged (the first of a pair, or one of a schedule from before 1.69.15) is not left for 90 minutes
+                elif q.get("score") is not None and float(q["score"]) < POOR_SCORE and bw.get("state") not in ("drop", "slow"):
+                    nxt = min(nxt, at + POOR_AFTER)                       # a tunnel the quality test calls poor is measured again soon: "when a tunnel has a problem, do not wait for the next sample" (the owner, 2026-10-19)
 
             if now >= nxt:
                 out.append((int(bw.get("at") or 0), t.id))

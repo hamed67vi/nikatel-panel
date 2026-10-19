@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.18 - A tunnel with a problem is measured at once, not at the next turn of 90 minutes
+
+The owner (2026-10-19): "when a tunnel has a problem, do not wait for the next sample - do the tests and move it". The bandwidth test of a tunnel runs every 90 minutes; a tunnel with a problem waited for that turn before the Doctor judged it (and so before 1.69.17 could change its type).
+
+- **What is measured sooner** (`bandwidth._due`): a very slow test that nobody has judged yet (state "learning", under 5 Mb/s - the first test of a rebuilt tunnel, or the schedule that a panel from before 1.69.15 left behind) is measured again 3 minutes after it; a tunnel whose **quality test scored under 40** is measured again 10 minutes after its last test (a confirmed "very slow" or a drop keeps its own 20-minute watch). The rest of the chain is as before: two very slow tests in a row, the look, the memory of the pair, and - in the modes fix and move - the change of type by itself.
+- **Proved**: `tests/test_bandwidth.py` (+1: the young slow one and the poor one are due, a good score and a confirmed slow one are not, a test of 100 s ago is not). **Not proved**: on real servers.
+
 ## 1.69.17 - The Doctor changes the type of a very slow tunnel by itself
 
 The owner (2026-10-19), about a tunnel that tested 0.7 Mb/s while the Doctor's memory held a type that had given 119 on that pair: "when the Doctor sees it is slow, let it do the other types it tested before - what is it waiting for?". It waited for two things: the next scheduled bandwidth test of the tunnel (every 90 minutes; a tunnel that is new or rebuilt is confirmed within four minutes of its first test), and the owner's click on the suggestion of 1.69.14. The click is gone in the modes **fix** and **move**.
