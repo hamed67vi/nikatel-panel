@@ -205,3 +205,48 @@ html body #page .sb-r1 > button.cta.ico.lbl .bt { white-space: nowrap; }
   html[data-fluid] body #pn-body > .pn-bars > .toolbar { width: 100%; max-width: 100%; min-width: 0; flex: none; margin: 0; }
   html[data-fluid] body #pn-body > .pn-bars > .toolbar.pn-sb input { width: 100%; }
 }
+
+/* ---- the CDN bar (Tunnels > CDN): the second row (Add record, domain, counts, tabs, search) had every item shrink alike, so "Add record", "Records 6", "Changes", "Failover" and the counts were all cut at 1280 px and below,
+   and under 800 px the tabs and the search ran out of the box. Now the button, the counts and the tabs keep their words; the domain box and the search give way; the counts go when there is no room for them; and a narrow bar wraps into two rows
+   (the bar itself is the container: a container cannot ask about its own width) */
+html[data-fluid] body #page .toolbar.dns-bar { container: dnsbar / inline-size; }
+html[data-fluid] body #page .dns-bar .dns-r.dns-main > :is(.cta, .tabs, .dns-stats) { flex: none; }
+html[data-fluid] body #page .dns-bar .dns-r.dns-main .tabs > button { flex: none; overflow: visible; text-overflow: clip; }
+html[data-fluid] body #page .dns-bar .dns-r.dns-main > .dns-dsel { flex: 0 1 230px; min-width: 120px; }
+html[data-fluid] body #page .dns-bar .dns-dsel select { box-sizing: border-box; min-width: 0; }      /* (width 100% plus the padding for the icon made the box 51 px wider than its label) */
+html[data-fluid] body #page .dns-bar .dns-r.dns-main > .tb-search { flex: 0 1 190px; min-width: 96px; }
+html[data-fluid] body #page .dns-bar .dns-r.dns-main .dns-stats > .dns-stat { flex: none; overflow: visible; }
+html[data-fluid] body #page .dns-bar .dns-accbar > .cta { flex: none; }
+@container dnsbar (max-width: 1060px) { html[data-fluid] body #page .dns-bar .dns-stats:has(> .dns-stat) { display: none; } }
+@container dnsbar (max-width: 840px) {
+  html[data-fluid] body #page .dns-bar .dns-r.dns-main, html[data-fluid] body #page .dns-bar .dns-r.dns-accbar { flex-wrap: wrap; row-gap: 8px; }
+  html[data-fluid] body #page .dns-bar .dns-r.dns-main > .sp { display: none; }
+  html[data-fluid] body #page .dns-bar .dns-r.dns-main > .tb-search { flex: 1 1 140px; max-width: none; }
+  html[data-fluid] body #page .dns-bar .dns-accbar > .dns-cw { max-width: 100%; }
+}
+@container dnsbar (max-width: 420px) { html[data-fluid] body #page .dns-bar .dns-r.dns-main .tabs > button .cnt { display: none; } html[data-fluid] body #page .dns-bar .dns-r.dns-main > .dns-dsel { flex: 1 1 100%; max-width: none; } }/* the value of a record (the address) is what the table is for: when the Value column has no room (a phone), the address is shown under the name instead of vanishing with its column */
+html[data-fluid] body #page .dns-tbl td.name > .dns-sub { display: none; }
+html[data-fluid] body #page .dns-tbl:has(> thead th.dns-vh.fl-off) td.name > .dns-sub { display: block; font-size: 11px; font-weight: 500; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the Changes table: "who and what" ("ArvanCloud · by hand · deleted") says what was done - it wraps onto a second line instead of being cut before the verb */
+html[data-fluid] body #page .dns-box table.tbl td.dns-who { white-space: normal; overflow-wrap: anywhere; }
+/* the page header: the title block (title + the line under it) is a flex item that would not shrink below its text (900 px of subtitle), so on a screen of 1280 px the Persian / mode buttons ran 19 px out of the window.
+   The block gives way, the subtitle is cut with "..." (its tip tells all of it) and the buttons stay */
+html[data-fluid] body .head > div:first-child { flex: 1 1 0; min-width: 0; }
+html[data-fluid] body .head p#subtitle { max-width: 100%; }
+html[data-fluid] body .head > .head-r { flex: none; }
+/* a grid with no column size makes ONE column as wide as its widest item (a text that must not wrap): the setup cards ("Getting started": the inputs of Telegram and AI ran 28 px out of their card) and the health list of the Dashboard
+   (the numbers on the right of each row were cut) were such grids - the column is told it may be narrower than its content */
+html[data-fluid] body #page .su-b { grid-template-columns: minmax(0, 1fr); }
+html[data-fluid] body #page .su-f { grid-template-columns: minmax(0, 1fr); }
+html[data-fluid] body #page .dash-cols :is(.hl-list, .pb-list) { grid-template-columns: minmax(0, 1fr); }
+/* the hint of a setup card ("Marzban or PasarGuard: its address and a ...") is what tells a new user what to do: it wraps (the full text was only in its tip) */
+html[data-fluid] body #page .su-i:not(.done) .su-b small { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+/* the Shop bot head: the Services box (all the chips in ONE row, as wide as they are) took 732 px of 970 and left 230 px for four counters, which were squeezed to slivers 52 px wide with their numbers drawn outside.
+   Now the two boxes share the row only when each has 430 px; the chips wrap inside their box and the counters take as many columns as fit */
+html[data-fluid] body #page .sb-head { grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); }
+html[data-fluid] body #page .sb-svc, html[data-fluid] body #page .sb-svc .sb-chips { flex-wrap: wrap; }
+html[data-fluid] body #page .sb-head { container: sbhead / inline-size; }
+html[data-fluid] body #page .sb-stat4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }      /* (a counter - "8,650,000 T / 41 orders" - needs about 210 px: two in a row, four only on a very wide screen, one on a phone) */
+@container sbhead (max-width: 440px) { html[data-fluid] body #page .sb-stat4 { grid-template-columns: minmax(0, 1fr) !important; } }      /* (the phone rules of app.css say two columns with !important) */
+@container sbhead (min-width: 1750px) { html[data-fluid] body #page .sb-stat4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+html[data-fluid] body #page .sb-ch > :is(.sb-btn, .sb-link) { flex: none; white-space: nowrap; }      /* ("Manage" beside "Panels the bot sells from" was cut by 5 px on a phone: the label gives way, not the button) */

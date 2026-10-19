@@ -95,9 +95,10 @@
   function walk(root) {
     if (!root) return;
     if (root.nodeType === 3) { textNode(root); return; }
+    if (root.nodeType === 1 && root.tagName === "TEXTAREA") attrs(root);      // (a text box keeps its own text, but its tip and its hint are texts of the panel)
     if (root.nodeType !== 1 || SKIP.has(root.tagName) || root.hasAttribute("data-notr")) return;
     attrs(root);
-    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {acceptNode: n => n.nodeType === 1 && (SKIP.has(n.tagName) || n.hasAttribute("data-notr")) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {acceptNode: n => { if (n.nodeType !== 1) return NodeFilter.FILTER_ACCEPT; if (n.tagName === "TEXTAREA") attrs(n); return SKIP.has(n.tagName) || n.hasAttribute("data-notr") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; }});
     for (let n = w.nextNode(); n; n = w.nextNode()) n.nodeType === 3 ? textNode(n) : attrs(n);
   }
   let queue = new Set(), scheduled = false;
@@ -122,7 +123,7 @@
     document.documentElement.lang = fa ? "fa" : "en";
     document.documentElement.dir = fa ? "rtl" : "ltr";
     document.title = fa ? "نیکاتل" : "Nikatel";
-    document.querySelectorAll(".lang-btn").forEach(b => { b.textContent = fa ? "EN" : "فا"; b.title = fa ? "English" : "فارسی"; });
+    document.querySelectorAll(".lang-btn").forEach(b => { b.textContent = fa ? "EN" : "فا"; b.title = fa ? "English" : "فارسی"; b.setAttribute("aria-label", fa ? "زبان" : "Language"); });
   }
   I18N.apply = () => { chrome(); obs.disconnect(); walk(document.body); watch(); };
   I18N.set = lang => { I18N.lang = lang === "fa" ? "fa" : "en"; try { localStorage.setItem("nk.lang", I18N.lang); } catch (e) { /* private mode */ } cache.clear(); I18N.apply(); if (window.onLangChange) window.onLangChange(I18N.lang); };
