@@ -1,5 +1,7 @@
 """Install after adding a server: the reviewed actions, the certificate check, the story, the API."""
 import base64
+import shutil
+import subprocess
 import time
 
 import pytest
@@ -191,3 +193,54 @@ def test_the_server_row_says_what_the_panel_is_doing(client, monkeypatch):
     assert client.get(f"/api/servers/{sid}").json()["extra"]["busy"]["what"] == "installing"
     nodes.set_busy(sid, "")
     assert client.get(f"/api/servers/{sid}").json()["extra"]["busy"] is None
+
+
+# ------------------------------------------------------------------ 1.69.9: what is on the server decides, not the folder
+def test_a_node_that_runs_is_done_a_foreign_installer_is_respected_and_a_half_install_is_redone(client, monkeypatch):
+    """The owner, 2026-10-19: the Marzban node did not install from the panel - the folder /opt/marzban-node was there (an installer started by hand had made it seconds before), nothing ran, and the panel said
+    "already installed, nothing changed" and ended OK."""
+    sid = _server()
+    _fast(monkeypatch, [], start_answer="MZNODE_EXISTS\n")
+    s = _wait(client, client.post(f"/api/servers/{sid}/install", json={"items": ["marzban_node"], "cert": CERT}).json()["id"])
+    assert s["ok"] is True and "already installed and running on this server" in "\n".join(s["story"])
+    _fast(monkeypatch, ["STATE none\n"], start_answer="MZNODE_BUSY\n")
+    s = _wait(client, client.post(f"/api/servers/{sid}/install", json={"items": ["marzban_node"], "cert": CERT}).json()["id"])
+    text = "\n".join(s["story"])
+    assert s["ok"] is False and "another installer of the Marzban node is running" in text and "does not call it done" in text and "Done with problems" in text
+    _fast(monkeypatch, ["STATE ok\nMZNODE_OK marzban-node Up 5 seconds\n"], start_answer="STARTED OVER_OLD\n")
+    s = _wait(client, client.post(f"/api/servers/{sid}/install", json={"items": ["marzban_node"], "cert": CERT}).json()["id"])
+    text = "\n".join(s["story"])
+    assert s["ok"] is True and "the folder /opt/marzban-node is there but no node runs" in text and "installing it again over it" in text and "Marzban node: running" in text
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="needs a shell")
+@pytest.mark.parametrize("docker_says, foreign, folder, first, over", [
+    ("marzban-node Up 3 minutes", False, True, "MZNODE_EXISTS", False),          # a node that runs is done - folder or not
+    ("", True, True, "MZNODE_BUSY", False),                                       # nothing runs, an installer started by hand does: not started over, not done
+    ("", False, True, "STARTED", True),                                           # a folder and nothing running (TR3): installed again over it
+    ("", False, False, "STARTED", False),                                         # nothing there: a clean install
+    ("marzban-node Exited (1) 2 minutes ago", False, True, "STARTED", True),      # a node that stopped is not a node that runs
+])
+def test_the_install_script_decides_by_what_runs_on_the_server(docker_says, foreign, folder, first, over, tmp_path):
+    """The real script, run with stand-ins for docker / pgrep / nohup and its two folders in a temporary place: its first word and whether it will answer the installer's "override?" with y."""
+    bin_dir, inst, node_dir = tmp_path / "bin", tmp_path / "inst", tmp_path / "opt-marzban-node"
+    bin_dir.mkdir()
+
+    if folder:
+        node_dir.mkdir()
+
+    stubs = {"docker": f"#!/bin/sh\n[ \"$1\" = ps ] && echo '{docker_says}'\nexit 0\n", "id": "#!/bin/sh\necho 0\n", "nohup": "#!/bin/sh\nexit 0\n",
+             "pgrep": "#!/bin/sh\ncase \"$*\" in *'[m]arzban-node.sh'*) " + ("exit 0" if foreign else "exit 1") + ";; *) exit 1;; esac\n"}
+
+    for name, text in stubs.items():
+        (bin_dir / name).write_text(text)
+        (bin_dir / name).chmod(0o755)
+
+    script = render_action("install_marzban_node", {"B64": base64.b64encode(extras.check_cert(CERT).encode()).decode()}).replace("/var/lib/nikatel-install", str(inst)).replace("/opt/marzban-node", str(node_dir))
+    r = subprocess.run(["sh", "-s"], input=script, env={"PATH": f"{bin_dir}:/usr/bin:/bin"}, capture_output=True, text=True, timeout=30, check=False)
+    assert r.stdout.split()[0] == first, r.stdout + r.stderr
+    assert ("OVER_OLD" in r.stdout) == over
+
+    if first == "STARTED":
+        feed = (inst / "mznode.sh").read_text()
+        assert "[ -d " + str(node_dir) + " ] && echo y; cat mznode.cert" in feed          # the answer to "override the previous installation?" comes before the certificate

@@ -143,12 +143,19 @@ def _run_item(aid: int, node: Node, ip: str, item: str, cert: str, resume: bool 
     word = out.split()[0] if out else ""
 
     if word == "MZNODE_EXISTS":
-        autopilot._say(aid, "Marzban node: already installed on this server (/opt/marzban-node), nothing changed.")
+        autopilot._say(aid, "Marzban node: already installed and running on this server (the container marzban-node is up), nothing changed.")
         return True
+
+    if word == "MZNODE_BUSY":          # an installer started by hand is running: not started over it, and NOT called done (the folder it makes is not a node that runs)
+        autopilot._say(aid, "Marzban node: another installer of the Marzban node is running on this server right now (one started by hand?). The panel does not start a second one on top of it and does not call it done. Wait until it ends (or stop it), then press Install again: if the node runs by then, the panel says so.")
+        return False
 
     if word == "PGNODE_EXISTS":
         autopilot._say(aid, "PasarGuard node: already installed on this server (the pg-node command exists), nothing changed.")
         return True
+
+    if word == "STARTED" and "OVER_OLD" in out:
+        autopilot._say(aid, f"{LABEL[item]}: the folder /opt/marzban-node is there but no node runs (an install that was cut short?): installing it again over it.")
 
     if word not in ("STARTED", "ALREADY_RUNNING"):
         why = {"BAD_CERT": "the certificate is not valid", "NOT_ROOT": "the SSH user is not root", "NO_APT": "this server does not use apt (Debian / Ubuntu)", "NO_CLI": "the pasarguard command is not on this server"}.get(word, out[-160:] or "no answer")

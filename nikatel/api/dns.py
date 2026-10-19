@@ -143,6 +143,7 @@ def record_create(body: RecordIn):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
+    dnscache.wrote(body.account, body.domain, row["id"], row)
     dnscache.forget()
     failover.log_manual("create", body.domain, row["fqdn"], row["id"], "", row["value"], None, body.account)
     return {"ok": True, "id": row["id"]}
@@ -179,6 +180,7 @@ def record_edit(account: str, domain: str, record_id: str, body: RecordIn):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
+    dnscache.wrote(account, domain, record_id, r["after"])
     dnscache.forget()
     failover.log_manual("edit", domain, r["after"]["fqdn"], record_id, r["before_row"]["value"], r["after"]["value"], r["before"], account)
     return {"ok": True}
@@ -196,6 +198,7 @@ def record_delete(account: str, domain: str, record_id: str):
     except RuntimeError as e:
         raise HTTPException(502, str(e))
 
+    dnscache.wrote(account, domain, record_id, None)
     dnscache.forget()
     failover.log_manual("delete", domain, r["before_row"]["fqdn"], record_id, r["before_row"]["value"], "", r["before"], account)
     return {"ok": True}

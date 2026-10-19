@@ -1520,8 +1520,12 @@ echo STARTED
     # Detached like the torrent block: Docker alone can take minutes.
     "install_marzban_node": (r"""set -e; d=/var/lib/nikatel-install; mkdir -p $d
 [ "$(id -u)" = 0 ] || { echo NOT_ROOT; exit 1; }
-[ -d /opt/marzban-node ] && { echo MZNODE_EXISTS; exit 0; }
+# What is on the server decides (1.69.9; the owner, 2026-10-19: "the Marzban node did not install from the panel" - the folder /opt/marzban-node was there, made by an installer started by hand a few seconds before, nothing ran, and the panel said "already installed, nothing changed" and ended OK):
+#   a node that RUNS is done; the panel's own install is followed; ANOTHER installer running (by hand) is not started over and not called done; a folder with nothing running is a half install - it is installed again over it (the official script then asks "override?": y).
+if docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -qi 'marzban-node.* Up'; then echo MZNODE_EXISTS; exit 0; fi
 if pgrep -f 'nikatel-install/mznode.sh' >/dev/null 2>&1; then echo ALREADY_RUNNING; exit 0; fi
+if pgrep -f '[m]arzban-node.sh' >/dev/null 2>&1; then echo MZNODE_BUSY; exit 0; fi
+over=""; [ -d /opt/marzban-node ] && over=" OVER_OLD"
 rm -f $d/mznode.ok $d/mznode.fail $d/mznode.out
 echo '@B64@' | base64 -d | sed '/^[[:space:]]*$/d' > $d/mznode.cert; chmod 600 $d/mznode.cert
 grep -q 'BEGIN CERTIFICATE' $d/mznode.cert || { echo BAD_CERT; exit 1; }
@@ -1531,7 +1535,7 @@ d=/var/lib/nikatel-install; cd $d
 command -v curl >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq curl >/dev/null; }
 curl -fsSL https://github.com/Gozargah/Marzban-scripts/raw/master/marzban-node.sh -o mz.sh
 [ -s mz.sh ] || { echo DOWNLOAD_FAILED; exit 1; }
-( cat mznode.cert; printf '\n\n\n\n\n' ) | setsid bash mz.sh install > mz-install.log 2>&1 &
+( [ -d /opt/marzban-node ] && echo y; cat mznode.cert; printf '\n\n\n\n\n' ) | setsid bash mz.sh install > mz-install.log 2>&1 &
 ok=0
 for i in $(seq 1 200); do sleep 3; if docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -qi 'marzban-node.* Up'; then ok=1; break; fi; done
 sleep 3
@@ -1540,7 +1544,7 @@ if [ "$ok" = 1 ]; then echo "MZNODE_OK $(docker ps --format '{{.Names}} {{.Statu
 shred -u mznode.cert 2>/dev/null || true
 EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/mznode.sh > /var/lib/nikatel-install/mznode.log 2>&1 && touch /var/lib/nikatel-install/mznode.ok || touch /var/lib/nikatel-install/mznode.fail' >/dev/null 2>&1 &
-echo STARTED
+echo "STARTED$over"
 """, {"B64": _B64}),
 
     # a PasarGuard node, installed the way PasarGuard documents it: bash -c "$(curl -sL .../pg-node.sh)" @ install. Every answer is given as a flag of the installer (it asks questions in a different order
