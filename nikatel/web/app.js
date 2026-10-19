@@ -837,6 +837,7 @@ const bwTip = t => {
   if (b.down == null) return (b.error ? "Could not be measured: " + b.error + " - " : "") + ((t.record || {}).test_port ? "The Doctor measures it with its quality test every half hour - nothing yet" : (t.type === "backhaul" || t.type === "gre") ? "The Doctor measures it with two light connections over the GRE link, about every 90 minutes - nothing yet" : "This tunnel has no link or test door to measure") + uxTip(t);
   const parts = [`Capacity - what this tunnel can carry (download): ${bwFmt(b.down)}`, b.ref ? `usually ${bwFmt(b.ref)}` : "the usual level is still being learnt", `the Doctor's last test, ${ago(b.at)} ago (a light test every ${(t.record || {}).test_port ? "half hour" : "90 minutes"}; it cannot be live)`];
   if (b.state === "drop") parts.push((b.down < BW_STALL ? "NO DATA moved in the test" : "DROPPED") + ((b.why || {}).text ? ": " + b.why.text : ""));
+  const use = useOf(t); if (use && b.down < BW_SLOW && use.down > b.down * 1.5) parts.push(`The users carry ${bwFmt(use.down)} through it now - more than this test shows: the little test reads low on this tunnel, so the real capacity is at least what the users get`);
   if (b.state === "slow") parts.push("VERY SLOW: the last two tests gave under " + BW_SLOW + " Mb/s - it did not drop, it never gave more" + ((b.why || {}).text ? ". " + b.why.text : ""));
   return parts.join(" · ") + uxTip(t);
 };

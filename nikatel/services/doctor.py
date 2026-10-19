@@ -64,15 +64,16 @@ def _state() -> dict:
     s.setdefault("back", {})
     s.setdefault("tried", {})
     s.setdefault("res_at", {})
-    s.setdefault("retyped", {})
+    s.setdefault("retype_done", {})
     return s
 
 
 def _save(s: dict) -> None:
-    st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"], "retyped": s["retyped"]})
+    st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"], "retype_done": s["retype_done"]})
 
 
-RETYPE_GAP = 24 * 3600      # the Doctor changes the TYPE of a very slow tunnel by itself at most once in this time (1.69.17)
+QUIET_WAIT = 300            # an automatic change of type waits this long for a quiet moment, then goes on
+RETYPE_GAP = 24 * 3600     # the Doctor changes the TYPE of a very slow tunnel by itself at most once in this time (1.69.17)
 
 
 def may_retype(name: str, retyped: dict, now: int, gap: int = RETYPE_GAP) -> str:
@@ -90,8 +91,8 @@ def may_retype(name: str, retyped: dict, now: int, gap: int = RETYPE_GAP) -> str
 
 def mark_retyped(name: str, now: int) -> None:
     s = _state()
-    s["retyped"] = {k: v for k, v in s["retyped"].items() if now - int(v) < RETYPE_GAP * 7}
-    s["retyped"][name] = now
+    s["retype_done"] = {k: v for k, v in s["retype_done"].items() if now - int(v) < RETYPE_GAP * 7}
+    s["retype_done"][name] = now
     _save(s)
 
 
@@ -358,9 +359,11 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
         say(f"The link of {kind} does not pass between {snap['iran_name']} and {snap['foreign_name']}: nothing is built, {snap['name']} is not touched.", done=True, ok=False)
         return
 
-    if auto and not autopilot._wait_quiet(aid, tunnel_id, limit=900):
-        say(f"{snap['name']} is busy: the change waits for a quiet moment (the suggestion stands on the Doctor page).", done=True, ok=True)
-        return
+    if auto:
+        if not autopilot._wait_quiet(aid, tunnel_id, limit=QUIET_WAIT):      # (1.69.21: it gave up after 15 minutes and never came back - the users of the owner's tunnel carry 5 - 10 Mb/s all day, "quiet" never came, and nothing was changed)
+            say(f"The users are still active after {QUIET_WAIT // 60} minutes: the change goes on anyway - the tunnel is very slow, the users are cut for a minute or two.")
+
+        mark_retyped(snap["name"], int(time.time()))                          # (counted when it really starts: a change that did not start is not "once in 24 hours")
 
     if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor changed it by itself: the tunnel was very slow." if auto else "The Doctor suggested it and you asked for it.", snap=snap):
         say(f"The build of {kind} failed; {cur} was put back.", done=True, ok=False)

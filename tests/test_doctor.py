@@ -438,7 +438,7 @@ def test_the_doctor_changes_the_type_by_itself_once_in_a_day_and_never_when_it_i
     st.put("repair", {"mode": "off"})
     assert doctor.may_retype("t1", {}, now) == "the Doctor is off"
     doctor.mark_retyped("t1", int(time.time()))
-    assert "t1" in doctor._state()["retyped"]
+    assert "t1" in doctor._state()["retype_done"]
 
 
 def test_an_automatic_change_waits_for_a_quiet_moment_keeps_what_it_measured_and_goes_back_when_it_is_worse(monkeypatch):
@@ -449,7 +449,9 @@ def test_an_automatic_change_waits_for_a_quiet_moment_keeps_what_it_measured_and
     quiet = [False]
     monkeypatch.setattr(autopilot, "_wait_quiet", lambda aid, tid, limit=1800: quiet[0])
     doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
-    assert replaced == [] and "waits for a quiet moment" in said[-1][0]                                                    # busy: nothing is touched, the suggestion stands
+    assert len(replaced) == 1 and any("still active after 5 minutes: the change goes on anyway" in s[0] for s in said)    # no quiet moment came (the users carry 5 - 10 Mb/s all day): it goes on, the users are cut for a minute or two
+    assert "t2" in doctor._state()["retype_done"]                                                                           # (counted when it really starts)
+    replaced.clear()
     quiet[0] = True
     kept = []
     monkeypatch.setattr(knowledge, "record", lambda i, f, result, measure: kept.append((result, measure)))

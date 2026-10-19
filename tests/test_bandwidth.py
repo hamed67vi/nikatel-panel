@@ -623,7 +623,7 @@ def test_the_look_at_a_slow_tunnel_suggests_the_type_the_doctors_memory_knows_to
     said, calls = [], []
     monkeypatch.setattr(get_settings(), "read_only", False)
     monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append((line, done, ok)))
-    monkeypatch.setattr(doctor, "_run_retype", lambda aid, t, kind, was, why, auto=False: calls.append((aid, t, kind, was, auto)))      # (the swap itself is tested in test_doctor)
+    monkeypatch.setattr(doctor, "_run_retype", lambda aid, t, kind, was, why, auto=False: (calls.append((aid, t, kind, was, auto)), doctor.mark_retyped("sl-a", int(time.time()))))      # (the swap itself is tested in test_doctor; it marks the day when it starts)
     bandwidth.investigate(7, tid)
     assert calls == [(7, tid, "tcp", "tcpmux", True)]                                                          # the Doctor does it by itself (mode fix), inside the same story
     assert any(s[0] == "The Doctor does it by itself (fix mode): tcpmux → tcp." for s in said)
@@ -746,3 +746,24 @@ def test_a_slow_tunnel_is_stored_with_one_event_and_the_slow_ones_count_with_the
 
     with session() as db:
         assert any("bandwidth is back" in e.text for e in db.scalars(select(Event).where(Event.domain == "tunnels")))
+
+
+def test_users_carrying_the_line_or_more_prove_that_the_tunnel_is_not_slow_and_the_peak_is_read_from_the_checks():
+    """The owner, 2026-10-19: the test said 0.70 while the users carried 7.5 - the little test reads low on that tunnel. Users at 20 Mb/s or more through it: not "very slow"."""
+    bw, change = bandwidth.add_sample(None, NOW, 0.7, None, "link", live=25.0)
+    assert change == "" and bw["state"] == "learning" and bw["suspect"] is False
+    bw, change = bandwidth.add_sample(None, NOW, 0.7, None, "link", live=10.0)                                      # under the line: still a suspicion
+    assert bw["suspect"] is True
+    bw, change = bandwidth.add_sample(None, NOW, 0.7, None, "link", live=None)
+    assert bw["suspect"] is True
+    tid, _, _, _ = make_tunnel("lp-a")
+    now = int(time.time())
+    assert bandwidth._live_peak(tid, now) is None
+
+    with session() as db:
+        db.add_all([TunnelCheck(tunnel_id=tid, ts=now - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=v, tx_mbps=1.0, error="") for i, v in enumerate([4.0, 9.0, 12.0, 5.0, 6.0, 7.0])])
+        db.add(TunnelCheck(tunnel_id=tid, ts=now - 4000, ok=True, rtt_ms=80.0, rx_mbps=900.0, tx_mbps=1.0, error=""))        # (more than half an hour old: not counted)
+
+    assert bandwidth._live_peak(tid, now) == 12.0
+    _, change = bandwidth._store(tid, 0.7, None, "link", 160.0)
+    assert change == ""                                                                                              # 12 is under 20: the first very slow test, a suspicion

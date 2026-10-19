@@ -94,7 +94,7 @@ def verdict(down: float | None, ref: float | None, slow_line: float = SLOW_MBPS)
     return "drop" if ratio < DROP_RATIO else "low" if ratio < LOW_RATIO else "ok"
 
 
-def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None, loss: float | None = None, slow_line: float = SLOW_MBPS) -> tuple[dict, str]:
+def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: str, ping: float | None = None, loss: float | None = None, slow_line: float = SLOW_MBPS, live: float | None = None) -> tuple[dict, str]:
     """Pure: (the new `bw` of the tunnel, what changed: "" | "drop" | "slow" | "recovered") after one sample. The sample is judged against the level BEFORE it, so a drop never pulls its own reference down.
     "slow": the tunnel is VERY slow (two tests in a row under SLOW_MBPS, no usual level that could call it a drop) - it was never fast, so nothing dropped; it ends when a test gives SLOW_OVER."""
     bw = dict(bw or {})
@@ -105,6 +105,10 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
     hist = [list(x) for x in (bw.get("hist") or []) if now - int(x[0]) <= REF_WINDOW]
     ref_before = reference(hist, now)
     v = verdict(down, ref_before, slow_line)
+
+    if v == "slow" and live is not None and live >= SLOW_MBPS:
+        v = "learning"                                            # the users carry the line or more through it: the tunnel is not slow, the little test reads low (1.69.21)
+
     drop, slow, suspect, change = bw.get("drop"), bw.get("slow"), bool(bw.get("suspect")), ""
     next_at = now + INTERVAL
 
@@ -246,8 +250,17 @@ def stalled(bw: dict | None, now: int) -> str:
 
 
 # ------------------------------------------------------------------ storing a sample
+def _live_peak(tunnel_id: int, now: int) -> float | None:
+    """The most the users carried through the tunnel in the last half hour (the checks' counters of the Iran end): what the little test of the Doctor must not contradict. None: fewer than five readings."""
+    with session() as db:
+        rx = [c.rx_mbps for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - 1800)) if c.rx_mbps is not None]
+
+    return max(rx) if len(rx) >= 5 else None
+
+
 def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None, loss: float | None = None) -> tuple[dict, str] | None:
     now = int(time.time())
+    live = _live_peak(tunnel_id, now) if down < SLOW_MBPS else None
 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
@@ -256,7 +269,7 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
             return None
 
         rec = dict(t.record or {})
-        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss)
+        bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss, live=live)
 
         if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
@@ -719,7 +732,7 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
     why = (f"{cur} gives {f['now']} Mb/s in the test" + (f" (the users carry {live:.0f} Mb/s through it now)" if live else "") + f"; the Doctor's memory has {r['kind']} at {float(r['down_mbps']):.0f} Mb/s on this pair, measured {age} h ago.")
     doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": f.get("now"), "memory_mbps": r["down_mbps"]})
     say(f"Suggested on the Doctor page: change the type from {cur} to {r['kind']} - one click, the old type is put back if the new one does not build. {why}")
-    block = doctor.may_retype(snap["name"], doctor._state().get("retyped") or {}, now)
+    block = doctor.may_retype(snap["name"], doctor._state().get("retype_done") or {}, now)
 
     if block:
         say(f"Not done by itself now: {block}.")
@@ -729,7 +742,6 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
         return
 
     say(f"The Doctor does it by itself ({actions.doctor_mode()} mode): {cur} → {r['kind']}.")
-    doctor.mark_retyped(snap["name"], now)
     doctor._run_retype(aid, tunnel_id, r["kind"], cur, why, auto=True)
 
 

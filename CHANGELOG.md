@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.21 - The automatic change of type really happens (it was waiting for a quiet moment that never came)
+
+The owner (2026-10-19): "still nothing changed - the page says 0.70 but the users use more". The live panel (1.69.20) had done its part: the tunnel was judged "very slow" (1.5, then 0.7 Mb/s), the Doctor decided "fou:tcpmux → tcp", probed the link (GRE passes, 169 ms) - and then **waited for a quiet moment** ("10.8 Mb/s flow now, under 1.5 Mb/s is quiet"), gave up after 15 minutes and never came back; and the once-in-24-hours mark had already been written, so nothing could be tried again until tomorrow.
+
+- **It goes on after five minutes** (`doctor.QUIET_WAIT`): it waits up to five minutes for a quiet moment, then changes the type anyway and says so ("the users are still active after 5 minutes: the change goes on anyway - the users are cut for a minute or two"). A tunnel whose users never leave would otherwise never be changed.
+- **The once-in-24-hours mark is written when the change really starts**, not before the wait (and under a new name, `retype_done`, so the stale mark the old version left on the owner's panel does not hold the tunnel back).
+- **Users carrying 20 Mb/s or more prove the tunnel is not slow** (`bandwidth._live_peak`, `add_sample(live=...)`): the most the users carried in the last half hour (the counters of the checks); at the line or above, a low little test (two connections for three seconds) is not "very slow". Under the line the tunnel is judged by its test as before.
+- **The tooltip of the capacity** says it when the users carry more than the test shows ("the little test reads low on this tunnel, so the real capacity is at least what the users get"). Why the test reads 0.7 on that tunnel while its users carry 5 - 10 is **not isolated** (the test is two TCP connections for three seconds over the link; the users' traffic is many connections inside one multiplexed tunnel).
+- **Proved**: `tests/test_doctor.py` (the change goes on when no quiet moment comes, the mark is written when it starts), `tests/test_bandwidth.py` (the peak of the users read from the checks, the guard). **Not proved**: on real servers.
+
 ## 1.69.20 - Under 20 Mb/s the Doctor acts
 
 The owner (2026-10-19): "if the bandwidth is under 20 Mb/s the Doctor acts". The line of "very slow" (1.69.14) was 5 Mb/s, and 1.69.19 moved it to 20 only where the Doctor's memory knew a type ten times faster; a tunnel that tested 5.2 Mb/s, just over the old line, was "fine" while another type had given 119 on the same pair.
