@@ -434,8 +434,11 @@ def test_a_moved_tunnel_is_built_as_the_best_type_of_the_new_pair_without_the_op
 def test_the_menu_item_the_plan_box_and_the_words_are_in_the_page():
     lab, app, fa, css = (WEB / "lab.js").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
     assert lab.count('labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name)') == 1 and "srvMoveAway" not in lab and "Move the tunnels…" not in lab      # in the menu of a TUNNEL, no longer in the menu of a server
-    assert "window.tunMoveAway = async (id, name) =>" in lab and "/api/failover/tunnel-move-plan/${id}" in lab and "/api/failover/move-tunnel/${id}" in lab and "tunnels: p.move" in lab
-    assert "window.tunMoveProgress = (aid, name, to) =>" in lab and 'followStory(aid, $("#mv-story"), 2400)' in lab and '"keep");' in lab and "tunMoveProgress(r.action_id, name," in lab       # the box that follows the move and does not close by itself
+    assert "window.tunMoveAway = async (id, name) =>" in lab and "/api/failover/tunnel-move-plan/${id}" in lab and "/api/failover/move-tunnel/${m.id}" in lab and "tunnels: m.p.move" in lab
+    assert "window.tunMoveProgress = (aid, name, to) =>" in lab and 'followStory(aid, $("#mv-story"), 2400)' in lab and '"keep");' in lab and "tunMoveProgress(r.action_id, m.name, to)" in lab       # the box that follows the move and does not close by itself
     assert "else if (!state.keepWin) hideModal();" in app and "state.keepWin = null; state.open = null;" in app and 's.action === "move" ? "Move"' in app           # the page drawn again behind it does not take it away; only Close does
-    assert "function glassChoice(text, choices, o)" in app and "o && o.html" in app and ".ask-text.mv-plan" in css
+    body = lab.split("window.tunMoveAway = async", 1)[1].split("window.tunMoveGo", 1)[0]
+    assert body.index("Looking for the best Iran server for") < body.index("/api/failover/tunnel-move-plan/") and "toast(" not in body and "glassChoice" not in body                  # the box opens AT the click, before the servers are looked at, and stays (no toast, no second box)
+    assert 'onclick="tunMoveGo(' in body and "Cancel" in body and "window.tunMoveGo = async pick =>" in lab and "window.__mv" in lab                                                  # the plan and its buttons are inside the same box
+    assert ".mv-plan .mv-choices" in css
     assert '"Move to a better server":' in fa and '"Move {} to another Iran server?":' in fa and "Nothing is cut: the new tunnels are built and tested first" in fa

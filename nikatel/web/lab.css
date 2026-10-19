@@ -1080,8 +1080,7 @@ html body .login .lg-go { height: 48px; border-radius: 12px; }
 html body .login .lg-in .lg-ic { width: 42px; background: transparent; border-inline-end: 0; color: #8d99b5; }
 html body .login .lg-in input:not([type=checkbox]) { padding-inline-start: 0; }
 html body .login .lg-in:focus-within { border-color: #2f7bff; box-shadow: 0 0 0 1px #2f7bff, 0 0 14px rgba(47, 123, 255, .38); }
-/* 1.69.25 - the plan box of "Move the tunnels…" (glassChoice with html): short parts, each its own line; a long list scrolls inside the box */
-body #ask .ask-box .ask-text.mv-plan { white-space: normal; max-height: 52vh; overflow: auto; display: grid; gap: 4px; }
+/* 1.69.25 / 1.69.34 - the window of "Move to a better server…": the plan, one line per part */
 .mv-plan .mv-h { margin-top: 8px; font-weight: 600; font-size: 13px; }
 .mv-plan .mv-r { font-size: 13px; line-height: 1.45; word-break: break-word; }
 /* the line under the load bar (RAM · Disk) is cut with a dash at its END when the column is narrow; it was cut on both sides (it is centred) and began with "AM 57%" */
@@ -1090,3 +1089,7 @@ html body #page .lab-tbl .lab-ldx > small { min-width: 0; max-width: 100%; overf
 /* the tunnels of a server in its window (Access & status): the chips were one nowrap row cut at 49 px each ("ae1-no", "de1-no") when a server has three tunnels; they wrap */
 html body #modal .kv2 > div:has(> .tchip) { flex-wrap: wrap; overflow: visible; row-gap: 4px; }
 html body #modal .kv2 > div > .tchip { flex: none; }
+.mv-plan .mv-choices { display: grid; gap: 8px; margin-top: 14px; }
+.mv-plan .mv-choices button { height: auto; min-height: 40px; padding: 8px 14px; border-radius: 14px; line-height: 1.25; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.mv-plan .mv-choices button small { font-size: 11px; font-weight: 500; opacity: .75; }
+.mv-plan .mv-choices button.sm { min-height: 34px; }

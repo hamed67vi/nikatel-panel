@@ -604,20 +604,31 @@ window.tunMoveProgress = (aid, name, to) => {
   state.keepWin = true; state.open = null;      // (the window of the tunnel that was open is replaced by this box)
   showModal(`<b>Moving ${esc(name)} to ${esc(to)}</b>`, `<div class="mut" style="margin-bottom:8px">You can close this box: the move goes on by itself, and its steps stay in the Tunnel Doctor.</div><div class="fix" id="mv-story"><div class="fx-line run"><i></i>Starting…</div></div>`, "keep");
   followStory(aid, $("#mv-story"), 2400).then(s => { toast(`${name}: ${(s.story || []).slice(-1)[0] || (s.ok ? "done" : "stopped")}`, s.ok ? "ok" : "bad"); refresh(); }).catch(() => {});
-};window.tunMoveAway = async (id, name) => {
-  const t = (state.tunnelsCache || []).find(x => x.id === id) || {}, s = (state.serversCache || []).find(x => x.name === t.iran_name) || {};
-  toast(`Looking for the best Iran server for ${name}… (a few seconds)`);
-  let p; try { p = await api(`/api/failover/tunnel-move-plan/${id}`); } catch (e) { toast("✕ " + e.message, "bad"); return; }
-  if (!(p.tunnels || []).length) { toast(`${name} is not an enabled tunnel of its server: nothing to move`, "bad"); return; }
-  if (p.blocked || !p.target || p.dns_error) { await glassChoice("", [{label: "OK", v: 1}], {html: labMoveWhy(name, p.blocked || !p.target ? p : {...p, problems: [p.dns_error]})}); return; }
+};/* the ONE window of a move (the owner, 2026-10-20: "this box must open from the moment I click Move"): it opens at the click, shows that the best server is being looked for, then the plan with a button for each of the best servers (and Cancel),
+   and - after the choice - the steps of the move; it is a "keep" window, so only its Close button closes it. */
+window.tunMoveAway = async (id, name) => {
+  const t = (state.tunnelsCache || []).find(x => x.id === id) || {}, s = (state.serversCache || []).find(x => x.name === t.iran_name) || {}, title = `<b>Move ${esc(name)} to a better server</b>`;
+  const win = body => { state.keepWin = true; state.open = null; showModal(title, body, "keep"); };      // (the window of the tunnel that was open is replaced by this box)
+  const note = (html, ok) => win(`<div class="mv-plan">${html}<div class="mv-choices"><button class="sm" onclick="closeModal()">${ok || "Close"}</button></div></div>`);
+  win(`<div class="fix"><div class="fx-line run"><i></i>Looking for the best Iran server for ${esc(name)}… the line, the resources and the free ports of each Iran server are checked (a few seconds)</div></div>`);
+  let p; try { p = await api(`/api/failover/tunnel-move-plan/${id}`); } catch (e) { if (state.keepWin) note(`<b>✕ ${esc(e.message)}</b>`); return; }
+  if (!state.keepWin) return;      // the box was closed while the servers were being looked at: nothing more is done
+  if (!(p.tunnels || []).length) { note(`<b>${esc(name)} is not an enabled tunnel of its server: nothing to move</b>`); return; }
+  if (p.blocked || !p.target || p.dns_error) { note(labMoveWhy(name, p.blocked || !p.target ? p : {...p, problems: [p.dns_error]})); return; }
   const cands = p.candidates && p.candidates.length ? p.candidates : [{...p.target, reason: ""}];
-  const pick = await glassChoice("", cands.map((c, i) => ({label: i ? `Move to ${c.name} instead` : `Move to ${c.name}`, note: `${c.ip || ""}${c.reason ? " · " + c.reason : ""}`, cls: i ? "" : "pri", v: c.id})), {html: labMoveHtml(p, s.online !== false, name)});
-  if (pick == null) return;
+  window.__mv = {id, name, p, cands};
+  win(`<div class="mv-plan">${labMoveHtml(p, s.online !== false, name)}<div class="mv-choices">${cands.map((c, i) => `<button class="${i ? "" : "pri"}" onclick="tunMoveGo(${+c.id})">${i ? "Move to " + esc(c.name) + " instead" : "Move to " + esc(c.name)}<small>${esc((c.ip || "") + (c.reason ? " · " + c.reason : ""))}</small></button>`).join("")}<button class="sm" onclick="closeModal()">Cancel</button></div></div>`);
+};
+window.tunMoveGo = async pick => {      // the button of a server in the plan: the plan is made again by the server and the move starts
+  const m = window.__mv; if (!m) return; window.__mv = null;
+  const to = (m.cands.find(c => c.id === pick) || {}).name || "the new server";
+  showModal(`<b>Moving ${esc(m.name)} to ${esc(to)}</b>`, `<div class="fix"><div class="fx-line run"><i></i>Starting…</div></div>`, "keep");
   try {
-    const r = await api(`/api/failover/move-tunnel/${id}`, {method: "POST", body: JSON.stringify({target_id: pick, tunnels: p.move})});
-    tunMoveProgress(r.action_id, name, (cands.find(c => c.id === pick) || {}).name || "the new server");
-  } catch (e) { toast("✕ " + e.message, "bad"); }
-};function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
+    const r = await api(`/api/failover/move-tunnel/${m.id}`, {method: "POST", body: JSON.stringify({target_id: pick, tunnels: m.p.move})});
+    tunMoveProgress(r.action_id, m.name, to);
+  } catch (e) { showModal(`<b>Move ${esc(m.name)} to a better server</b>`, `<div class="mv-plan"><b>✕ ${esc(e.message)}</b><div class="mv-choices"><button class="sm" onclick="closeModal()">Close</button></div></div>`, "keep"); }
+};
+function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
   const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return [];
   const up = t.state === "up", offs = typeof tunOffServers === "function" ? tunOffServers(t) : "", muted = (state.mutedSet || new Set()).has(t.name), tipOff = offs ? "A server of this tunnel is off (" + offs + ")" : "", tipUp = up ? "Nothing to fix: the tunnel is healthy" : "";
   return [labGrp("Repair"), labIt("Fix…", "fix", () => fixTunnel(t.id, false), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Dry run", "eye", () => fixTunnel(t.id, true), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Health check", "pulse", () => healthTunnel(t.id), {off: !!offs, tip: tipOff}), labIt("Speed test…", "monitor", () => tunSpeed(t.id, t.name), {off: !!offs, tip: tipOff}), labIt("Restart…", "check", () => restartTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),

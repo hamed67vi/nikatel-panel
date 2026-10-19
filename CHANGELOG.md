@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.34 - The box of "Move to a better server…" opens at the click
+
+The owner (2026-10-20, in Persian, with a picture of the box that opened only after the confirm): "this box must open from the moment I click Move."
+
+- **One window from the click** (`lab.js tunMoveAway`, `tunMoveGo`): the window opens at once with "Looking for the best Iran server… the line, the resources and the free ports of each Iran server are checked" (before: a toast, and nothing on the screen for those seconds); when the servers have been looked at, the SAME window shows the plan with a button for each of the best servers and Cancel (before: a second, small box); the pressed button turns it into the steps of the move (1.69.28). A refusal (license, DNS account, no server with room, ...) is shown in it too, with Close.
+- It is a "keep" window: only its Close button closes it (1.69.28). Closing it while the servers are still being looked at stops there - nothing is started; closing it during the move changes nothing, the move goes on.
+- The generic `html` option that 1.69.25 gave `glassChoice` for the plan, and its CSS, are gone: nothing uses them any more.
+- **Proved**: `tests/test_move_server.py` (the page code: the window opens before the plan is asked for, no toast and no second box, the buttons and Cancel inside it, the steps follow in the same window). **Not proved**: how it looks and behaves in a browser - it was not opened.
 ## 1.69.33 - Third walk of the test panel: the CDN page, the first-run card, the Shop bot page, and ~400 tooltips that stayed English in Persian
 
 Third round (1.69.29 and 1.69.31 were the first two), on a test panel (never the live one): the CDN page with two DNS accounts (the suite's own fake ArvanCloud and Cloudflare, with long names and a TXT record), an empty panel for the first-run card, a copy with the Shop bot page switched on and its data answered by a stand-in, at 1280 / 1024 / 768 / 375 px, in English and in Persian. Measured, not guessed: text cut without an ellipsis, a box wider than its parent, a button pushed out of the window, placeholders wider than their box.
