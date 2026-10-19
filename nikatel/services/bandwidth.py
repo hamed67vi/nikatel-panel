@@ -676,15 +676,16 @@ def _investigate_slow(aid: int, tunnel_id: int, f: dict, say, finish: bool) -> N
     say("Where the problem is: " + sentence)
 
     if code in ("slow_type", "latency", "loss"):                        # (a busy server or a slow line of the whole Iran / foreign server is not cured by another type of this tunnel)
-        _suggest_faster(tunnel_id, f, say)
+        _suggest_faster(aid, tunnel_id, f, say)
 
     if finish:
         autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)
 
 
-def _suggest_faster(tunnel_id: int, f: dict, say) -> None:
-    """From the Doctor's memory of the pair: a type that gave clearly more here becomes a SUGGESTION with one click on the Doctor page (never done by itself: the test of one tunnel can read low, and a change of type
-    cuts the users for a minute or two). The owner, 2026-10-19: "do what you proposed" - suggest first. Nothing when the Doctor is off."""
+def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
+    """From the Doctor's memory of the pair: a type that gave clearly more here becomes a SUGGESTION on the Doctor page (1.69.14). Since 1.69.17 the Doctor DOES it by itself in the modes fix and move (the owner,
+    2026-10-19: "when the Doctor sees it is slow, let it do the other types it tested before - what is it waiting for?"), under rails: once in 24 hours per tunnel, at a quiet moment, the link probed first, the old
+    type put back when the new one does not build or is clearly worse. Nothing when the Doctor is off."""
     from . import actions, autopilot, doctor, knowledge, license
 
     if actions.doctor_mode() == "off":
@@ -706,6 +707,18 @@ def _suggest_faster(tunnel_id: int, f: dict, say) -> None:
     why = (f"{cur} gives {f['now']} Mb/s in the test" + (f" (the users carry {live:.0f} Mb/s through it now)" if live else "") + f"; the Doctor's memory has {r['kind']} at {float(r['down_mbps']):.0f} Mb/s on this pair, measured {age} h ago.")
     doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": f.get("now"), "memory_mbps": r["down_mbps"]})
     say(f"Suggested on the Doctor page: change the type from {cur} to {r['kind']} - one click, the old type is put back if the new one does not build. {why}")
+    block = doctor.may_retype(snap["name"], doctor._state().get("retyped") or {}, now)
+
+    if block:
+        say(f"Not done by itself now: {block}.")
+        return
+
+    if get_settings().read_only:
+        return
+
+    say(f"The Doctor does it by itself ({actions.doctor_mode()} mode): {cur} → {r['kind']}.")
+    doctor.mark_retyped(snap["name"], now)
+    doctor._run_retype(aid, tunnel_id, r["kind"], cur, why, auto=True)
 
 
 def measure_start(tunnel_id: int) -> int:

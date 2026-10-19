@@ -64,11 +64,35 @@ def _state() -> dict:
     s.setdefault("back", {})
     s.setdefault("tried", {})
     s.setdefault("res_at", {})
+    s.setdefault("retyped", {})
     return s
 
 
 def _save(s: dict) -> None:
-    st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"]})
+    st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"], "retyped": s["retyped"]})
+
+
+RETYPE_GAP = 24 * 3600      # the Doctor changes the TYPE of a very slow tunnel by itself at most once in this time (1.69.17)
+
+
+def may_retype(name: str, retyped: dict, now: int, gap: int = RETYPE_GAP) -> str:
+    """Pure: '' when the Doctor may change the type of this very slow tunnel by itself now, else the sentence that says why not. Only in the modes fix and move."""
+    if mode() == "off":
+        return "the Doctor is off"
+
+    last = int((retyped or {}).get(name) or 0)
+
+    if last and now - last < gap:
+        return f"{name} was changed by the Doctor {(now - last) // 3600} hours ago (once in {gap // 3600} hours)"
+
+    return ""
+
+
+def mark_retyped(name: str, now: int) -> None:
+    s = _state()
+    s["retyped"] = {k: v for k, v in s["retyped"].items() if now - int(v) < RETYPE_GAP * 7}
+    s["retyped"][name] = now
+    _save(s)
 
 
 HEALTHY_FOR = 600           # a suggestion to move a tunnel is withdrawn once the tunnel has been up, without loss, for this long: the problem it was written for is over
@@ -308,10 +332,10 @@ def apply_suggestion(sid: str) -> int:
 
 
 # ------------------------------------------------------------------ a change of the tunnel's type (a "type" suggestion applied)
-def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str) -> None:
+def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: bool = False) -> None:
     """The tunnel is built again as `kind` (same name, same ports), the old type is put back when the new one does not build; then it is measured again, and what it gave is told next to what it gave before."""
     from ..ssh import SSHError
-    from . import bandwidth
+    from . import bandwidth, knowledge
 
     snap = autopilot._snapshot(tunnel_id)
     cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
@@ -334,20 +358,46 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str) -> None
         say(f"The link of {kind} does not pass between {snap['iran_name']} and {snap['foreign_name']}: nothing is built, {snap['name']} is not touched.", done=True, ok=False)
         return
 
-    if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor suggested it and you asked for it.", snap=snap):
+    if auto and not autopilot._wait_quiet(aid, tunnel_id, limit=900):
+        say(f"{snap['name']} is busy: the change waits for a quiet moment (the suggestion stands on the Doctor page).", done=True, ok=True)
+        return
+
+    if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor changed it by itself: the tunnel was very slow." if auto else "The Doctor suggested it and you asked for it.", snap=snap):
         say(f"The build of {kind} failed; {cur} was put back.", done=True, ok=False)
         return
 
-    after = ""
+    after, down = "", None
 
     try:
         bw, _ = bandwidth.measure(tunnel_id)
+        down = float(bw.get("down") or 0)
         after = f" It gives {bw.get('down')} Mb/s in the Doctor's test now (before: {before:g})."
     except (ValueError, RuntimeError, SSHError, OSError) as ex:
         after = f" It could not be measured just now ({str(ex)[:80]}): the Doctor measures it in a few minutes."
 
+    if down is not None:                                              # what it gave is kept in the Doctor's memory of the pair, so the next choice stands on today's number
+        try:
+            knowledge.record(snap["iran_id"], snap["foreign_id"], {"kind": kind, "ok": True, "works": True, "down_mbps": down}, "full")
+        except Exception:
+            log.exception("the speed of %s could not be kept", kind)
+
+    if auto and down is not None and before and down < 0.8 * before:      # clearly WORSE than before: the old type goes back (one more cut, but the users are not left on something slower)
+        say(f"{kind} gave {down:g} Mb/s, less than {cur} ({before:g}): the old type is put back.")
+
+        with session() as db:
+            new_id = db.scalar(select(Tunnel.id).where(Tunnel.name == snap["name"]))
+
+        if new_id is not None and autopilot._replace(aid, new_id, snap["iran_id"], snap["foreign_id"], cur, "It was slower than the old type."):
+            with session() as db:
+                emit(db, "warn", "tunnels", f"Tunnel {snap['name']}: the Doctor tried {kind} ({down:g} Mb/s) and went back to {cur} ({before:g} Mb/s).", snap["name"])
+
+            say(f"{snap['name']} runs as {cur} again.", done=True, ok=True)
+            return
+
+    who = "by the Doctor itself (the tunnel was very slow)" if auto else "by your click on the Doctor's suggestion"
+
     with session() as db:
-        emit(db, "ok", "tunnels", f"Tunnel {snap['name']} is now {kind} (it was {cur}): changed by your click on the Doctor's suggestion.{after}", snap["name"])
+        emit(db, "ok", "tunnels", f"Tunnel {snap['name']} is now {kind} (it was {cur}): changed {who}.{after}", snap["name"])
 
     s = _state()
     s["suggestions"] = [x for x in s["suggestions"] if x.get("tunnel") != snap["name"]]

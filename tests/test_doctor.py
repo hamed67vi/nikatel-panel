@@ -425,3 +425,48 @@ def test_the_apply_button_of_the_api_starts_the_type_change_as_an_action(client,
     monkeypatch.setattr(doctor, "retype_now", lambda tid, kind, was="", why="": called.append((tid, kind, was, why)) or 55)
     assert client.post(f"/api/doctor/suggestions/{e['id']}/apply").json() == {"ok": True, "id": 55}
     assert called == [(ids["t2"], "tcp", "tcpmux", "why")]
+
+
+# ------------------------------------------------------------------ the Doctor changes the type of a very slow tunnel by itself (1.69.17)
+def test_the_doctor_changes_the_type_by_itself_once_in_a_day_and_never_when_it_is_off():
+    now = 1_000_000
+    st.put("repair", {"mode": "fix"})
+    assert doctor.may_retype("t1", {}, now) == "" and doctor.may_retype("t1", {"t1": now - 3 * 3600}, now) == "t1 was changed by the Doctor 3 hours ago (once in 24 hours)"
+    assert doctor.may_retype("t1", {"t1": now - 25 * 3600}, now) == "" and doctor.may_retype("t2", {"t1": now - 3600}, now) == ""            # (another tunnel is not held back)
+    st.put("repair", {"mode": "move"})
+    assert doctor.may_retype("t1", {}, now) == ""
+    st.put("repair", {"mode": "off"})
+    assert doctor.may_retype("t1", {}, now) == "the Doctor is off"
+    doctor.mark_retyped("t1", int(time.time()))
+    assert "t1" in doctor._state()["retyped"]
+
+
+def test_an_automatic_change_waits_for_a_quiet_moment_keeps_what_it_measured_and_goes_back_when_it_is_worse(monkeypatch):
+    from nikatel.models import Event
+    from nikatel.services import bandwidth, knowledge
+
+    ids, _e, said, replaced = _retype_world(monkeypatch)
+    quiet = [False]
+    monkeypatch.setattr(autopilot, "_wait_quiet", lambda aid, tid, limit=1800: quiet[0])
+    doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
+    assert replaced == [] and "waits for a quiet moment" in said[-1][0]                                                    # busy: nothing is touched, the suggestion stands
+    quiet[0] = True
+    kept = []
+    monkeypatch.setattr(knowledge, "record", lambda i, f, result, measure: kept.append((result, measure)))
+    doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
+    assert replaced == [(ids["t2"], "tcp", "The Doctor changed it by itself: the tunnel was very slow.")] and kept == [({"kind": "tcp", "ok": True, "works": True, "down_mbps": 118.0}, "full")]
+    assert said[-1][0].startswith("t2 runs as tcp now.")
+
+    with session() as db:
+        assert any("changed by the Doctor itself (the tunnel was very slow)" in x.text for x in db.scalars(select(Event).where(Event.domain == "tunnels")))
+
+    replaced.clear()
+    said.clear()
+    monkeypatch.setattr(bandwidth, "measure", lambda tid: ({"down": 0.3}, ""))                                              # the new type is clearly WORSE than the 0.8 it replaced
+    doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcp", "again", extra={"now_kind": "tcpmux", "to_kind": "tcp"})
+    doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
+    assert [r[1] for r in replaced] == ["tcp", "tcpmux"] and replaced[1][2] == "It was slower than the old type."
+    assert any("gave 0.3 Mb/s, less than tcpmux (0.8): the old type is put back." in s[0] for s in said) and said[-1][0] == "t2 runs as tcpmux again."
+
+    with session() as db:
+        assert any("went back to tcpmux" in x.text for x in db.scalars(select(Event).where(Event.domain == "tunnels")))

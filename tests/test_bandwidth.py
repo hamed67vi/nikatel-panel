@@ -619,9 +619,17 @@ def test_the_look_at_a_slow_tunnel_suggests_the_type_the_doctors_memory_knows_to
     from nikatel.services import doctor
 
     tid, ir, _ = _slow_world(monkeypatch)
-    said = []
+    said, calls = [], []
+    monkeypatch.setattr(get_settings(), "read_only", False)
     monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append((line, done, ok)))
+    monkeypatch.setattr(doctor, "_run_retype", lambda aid, t, kind, was, why, auto=False: calls.append((aid, t, kind, was, auto)))      # (the swap itself is tested in test_doctor)
     bandwidth.investigate(7, tid)
+    assert calls == [(7, tid, "tcp", "tcpmux", True)]                                                          # the Doctor does it by itself (mode fix), inside the same story
+    assert any(s[0] == "The Doctor does it by itself (fix mode): tcpmux → tcp." for s in said)
+    bandwidth.investigate(8, tid)
+    assert len(calls) == 1 and any("Not done by itself now: sl-a was changed by the Doctor 0 hours ago (once in 24 hours)" in s[0] for s in said)      # once in 24 hours per tunnel
+    said.clear()
+    bandwidth.investigate(9, tid)
     lines = [s[0] for s in said]
     assert lines[0].startswith("sl-a: the bandwidth is very low - 0.8 Mb/s in the last two tests. It did not drop: this tunnel never gave more")
     assert any(ln.startswith("✓ The iran server ir-sl-a: CPU 8 %") for ln in lines) and any("Users are carrying 4 Mb/s" in ln for ln in lines)
