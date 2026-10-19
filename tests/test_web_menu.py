@@ -183,7 +183,7 @@ def test_the_lab_has_the_cards_and_icons_of_the_old_list_and_one_menu_in_place_o
     (the picture of a single ⋯ menu), "much more compact"."""
     lab = (WEB / "lab.js").read_text(encoding="utf-8")
     css = (WEB / "lab.css").read_text(encoding="utf-8")
-    assert '<table class="tbl lift srv-tbl joined lab-tbl">' in lab and ": SRV_IC}</i>" in lab and 'class="srv-ic"' in lab          # the table, the server icon and the flag of the old list
+    assert '<table class="tbl lift srv-tbl joined lab-tbl">' in lab and "${SRV_IC}</i>" in lab and 'class="srv-ic"' in lab          # the table, the server icon and the flag of the old list
     assert 'cc = s.role === "iran" ? "ir"' in lab and "has-flag" in lab                                                        # Iran has its flag too
     assert ".lab-root" in css and not re.search(r"^\.lab \{", css, re.MULTILINE)                                              # (".lab" is hidden by the fluid layer on a narrow window)
     assert "const labKebab" in lab and lab.count("labKebab(") >= 4 and "window.labMenu = " in lab and "const two = false" in lab         # one menu, always ONE column (the owner)
@@ -491,12 +491,49 @@ def test_move_to_profile_is_a_flyout_and_a_plain_server_can_be_made_a_pasarguard
     assert "--lab-pad: 16px; --lab-dot: 14px; --lab-gap: 20px;" in css and "srv-ic::before" not in css
 
 
+def test_the_server_row_shows_one_total_for_the_traffic_and_one_live_number_for_what_the_server_gives():
+    """The owner, 2026-10-19: "the traffic column only the total use, download and upload together; the bandwidth column only the bandwidth the server gives - live"."""
+    lab = _web("lab.js")
+    used = lab.split("const labUsed = (rx, tx) =>", 1)[1].split("\n", 1)[0]
+    assert "sum = (+rx || 0) + (+tx || 0)" in used and "one(sum)" in used and 'class="ta d"' not in used and 'class="ta u"' not in used and "since the server started" in used       # one number: both ways added, the two parts in the tooltip
+    row = lab.split('<td class="lab-trf lab-live"', 1)[1].split("</td>", 1)[0]
+    assert "f.tx_mbps" in row and "f.rx_mbps != null" not in row and "LAB_AU" in row and "LAB_AD" not in row and "What the server gives out right now" in row      # the speed column: what the server sends out, one number
+
+
+def test_the_server_list_puts_the_servers_with_a_problem_first_then_every_location_together_in_alphabetical_order(tmp_path):
+    """The owner, 2026-10-19: "every location next to each other, the locations in alphabetical order; any server with a problem at the top"; and a PasarGuard server shows the ordinary server icon (with its profile tag only)."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    lab = _web("lab.js")
+    assert 'labLogo("PasarGuard")' not in lab and 'title="PasarGuard node">${SRV_IC}</i>' in lab      # (the lion is gone from the rows: the PasarGuard servers and nodes have the ordinary server icon)
+    code = lab[lab.index("const labLoc = p =>"): lab.index("\nfunction labListInner")]
+    driver = tmp_path / "order.js"
+    driver.write_text(
+        "const SRVS = {1: {role: 'foreign', country: 'DE'}, 2: {role: 'foreign', country: 'FI'}, 3: {role: 'iran', country: ''}, 4: {role: 'foreign', country: 'DE'}, 5: {role: 'foreign', country: 'CA'}, 6: {role: 'foreign', country: 'NL'}, 7: {role: 'foreign', country: ''}};\n"
+        "const labServer = p => SRVS[p.id] || null; const TONES = {6: 'bad', 2: 'warn', 5: 'busy', 7: 'off'}; const labRank = p => ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[TONES[p.id] || 'ok'];\n"
+        + code + "\n"
+        "const rows = [{id: 1, name: 'DE2'}, {id: 2, name: 'FI'}, {id: 3, name: 'rapido'}, {id: 4, name: 'DE1'}, {id: 5, name: 'CA'}, {id: 6, name: 'NL1'}, {id: 7, name: 'zz'}, {id: 8, name: 'gone'}];\n"
+        "process.stdout.write(JSON.stringify(rows.slice().sort(labCmp).map(r => r.name)));\n",
+        encoding="utf-8")
+    r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    assert json.loads(r.stdout) == ["FI", "NL1", "CA", "DE1", "DE2", "rapido", "gone", "zz"]      # problems first (by location), then Canada, Germany (by name), Iran, and the unknown location last
+
+
 def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_chart_traffic_and_two_buttons():
     """The owner, 2026-10-15: "make the design like this" (a lamp, the flag and the icon, the name with its PROVIDER under it - not the country, the address with a globe, the CPU number with a thin bar and RAM / Disk - the small CPU chart was taken out again, the traffic in two lines, the menu and a chevron)."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "s.provider ?" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
-    assert lab.count('<span class="tv"><b>') == 4 and ">Mb/s</small>" in lab and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
+    assert lab.count('<span class="tv"><b>') == 3 and ">Mb/s</small>" in lab      # (1.69.23: the used column is ONE total, the speed column ONE number - what the server gives out) and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
     assert ":is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
 
 
@@ -1072,7 +1109,7 @@ def test_adding_a_server_moves_nothing_and_says_what_is_being_done_from_the_firs
     save = app.split("window.saveServer = async (e, id) => {", 1)[1].split("window.srvPassword", 1)[0]
     assert "/onboard" in save and 'const first = id ? ["gre"] : ["read", "gre"]' in save and 'f.get("x_cores") === "on"' in save and "labFollow(30)" in save and "labFollow(20)" in save and "/gre-check" not in save
     assert "if (later && cores && connected) await prep([\"cores\"]);" in save and "submit.textContent = id ? \"Saving…\" : \"Adding…\"" in save and "r.online === true" in save      # the cores come last after a node or extras; the button says Adding…; a key that does not log in is told
-    assert 'name="x_cores" type="checkbox" checked' in app and "Put the tunnel cores on it" in app      # the tick of the Add form (on by default: "they must install by themselves")
+    assert 'name="x_cores" type="checkbox"' in app and 'name="x_cores" type="checkbox" checked' not in app and "Put the tunnel cores on it now" in app      # the tick of the Add form is NOT ticked (1.69.23, the owner: "the cores come with the first tunnel, not with the adding of the server")
 
 
 def test_the_cores_box_has_no_install_button_the_update_button_takes_the_place_of_up_to_date_and_a_server_has_tunnel_cores_in_its_menu():
@@ -1234,9 +1271,17 @@ def test_the_page_paints_red_only_where_the_doctor_sees_a_stall_and_a_very_slow_
     assert m and float(m.group(1)) == bandwidth.STALL_MBPS and float(m.group(2)) == bandwidth.SLOW_MBPS            # (the same lines on the page and in the Doctor: one test keeps them so)
     assert "b.down < 1" not in app and "b.down < BW_STALL" in app
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
-    assert 'b.state === "slow" ? "slow" : "ok"' in capcell and ".bwcap.low b, .bwcap.slow b" in css
+    assert 'b.state === "slow" ? "slow" : "ok"' in capcell and "html body #page .tun-tbl .bwcap.low b, html body #page .tun-tbl .bwcap.slow b" in css
     assert 'if (b.state === "slow") parts.push("VERY SLOW' in app and 'state === "slow" ? `Very slow:' in app
     assert '["drop", "slow"].includes((t.bw || {}).state) ? "sev-yellow"' in app and 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state)' in app        # the row is looked at, and the Doctor page lists it under "to look at"
+
+
+def test_the_capacity_and_the_use_are_written_inside_one_bar():
+    """The owner, 2026-10-19: "instead of the two numbers over a thin line - a bar with the numbers inside it" (1.69.23): the same markup, the numbers laid over a 22 px bar that is as high as the two lines were."""
+    css = _web("lab.css")
+    assert 'html body #page .tun-tbl .bwx .bwbar { height: 16px;' in css and 'html body #page .tun-tbl .bwx .bwr { position: absolute; inset: 0;' in css and 'html body #page .tun-tbl .bwx.bwx { position: relative;' in css
+    assert "html body #page .tun-tbl .bwcap.low b, html body #page .tun-tbl .bwcap.slow b" in css and "html body #page .tun-tbl .bwbar.hot u" in css            # (the amber of "very slow" and of a busy bar win over the plain blue in the table)
+    assert "html body #page .tun-tbl /*" not in css                                                                                                          # (a comment never sits inside a selector)
 
 
 def test_a_tunnel_a_repair_has_just_removed_keeps_its_row_so_the_page_does_not_jump(tmp_path):
@@ -1284,7 +1329,7 @@ def test_a_standby_that_is_ready_and_idle_shows_no_bar():
     """The owner, 2026-10-19: "do not show it there - if the tunnel gets into trouble it switches by itself" (the handover is automatic in the modes fix and move)."""
     app = _web("app.js")
     fn = app.split("function tunStandby(t) {", 1)[1].split("const b = (label, click, pri, tip)", 1)[0]
-    assert 'if (st === "ready") return "";' in fn                                                              # idle and ready: nothing drawn
+    assert 'if (st === "ready" || st === "off") return "";' in fn                                                              # idle and ready: nothing drawn
     assert '"in_use" ? b("Back now"' in app and 'st === "off" ? b("Turn on"' in app                            # the bar stays for the other states: in use (Back now), off (Turn on), building, mended, failed
 
 
@@ -1507,16 +1552,17 @@ def test_a_server_has_a_spoof_test_in_its_tests_menu_and_the_picker_names_both_s
     """The owner, 2026-10-17: "this is the way to tell whether a server eats spoofs - add it to the Servers section"; "SNI spoofing is not there at all - fix its name or its description"."""
     app, lab, css = _web("app.js"), _web("lab.js"), _web("lab.css")
     assert "body #ask .ask-box .ask-act.ask-choices button { height: auto; min-height: 40px;" in css and "body #ask .ask-box .ask-act.ask-choices button small { display: block;" in css      # (the second line of a choice - the address of a server - is not cut: his picture of the dialog)
-    assert 'labIt("Spoof test…", "spoof", () => srvSpoof(s.id, nm))' in lab and "window.srvSpoof = async (id, name) =>" in lab and "`/api/servers/${id}/spoof-test`" in lab and "target_id: target, spoof_ip: ip.trim()" in lab
-    assert "  spoof: '<path d=" in lab and 'glassChoice(`Spoof test of ${name}' in lab and "10.10.10.10" in lab                       # (the icon, the target of the forged packets, the address to forge)
+    assert 'labIt("Spoof test…", "spoof", () => srvSpoof(s.id, nm))' in lab and "window.srvSpoof = async (id, name) =>" in lab and "`/api/servers/${id}/spoof-test`" in lab and "spoof_ip: ip.trim()" in lab
+    assert "  spoof: '<path d=" in lab and 'glassChoice(`Spoof test of ${name}' not in lab and "10.10.10.10" in lab                       # (the icon, the target of the forged packets, the address to forge)
     assert "const spfTxt = p =>" in app and 'row("Spoofing", "spf", x.spoof ? spfTxt(x.spoof)' in app
     assert '"backpack_direct:sni": "fake TLS hello: only a domain passes (root)"' in app and '"backpack_direct:spoof": "forged source address (root)"' in app and "Fake SNI <small>(the domain the fake TLS hello names" in app
     assert 'name="spoof_profile"' in app and 'name="spoof_src_ip"' in app and 'name="spoof_interface"' in app and '"spoof_profile", "spoof_src_ip", "spoof_interface"' in app and "const SPOOF_PROFILES = [[" in app
     assert "BackPack Direct · IP spoofing" in app and "BackPack Direct · PCK / SNI spoofing" in app and "FAKE TLS hello" in app
 
 
-def test_the_spoof_test_reuses_a_target_already_proven_and_only_asks_when_none_is(tmp_path):
-    """The owner, 2026-10-17, on the target picker (his picture: a list of ten Iran servers to choose from): "instead of this list, can't it use an Iran server that already tested OK and just run the test with that"."""
+def test_the_spoof_test_never_opens_a_list_the_system_picks_the_target(tmp_path):
+    """The owner, 2026-10-17: "instead of this list, use a server that already tested OK"; 2026-10-19 (his picture: a list of Iran servers for an Iran server): "I do not want a list at all - the system checks which server can be the target"
+    (the panel picks it: services/nodes.py spoof_auto - a server of the other kind, a proven listener first, the next one when a target cannot be used)."""
     import json
     import shutil
     import subprocess
@@ -1534,37 +1580,22 @@ def test_the_spoof_test_reuses_a_target_already_proven_and_only_asks_when_none_i
     driver.write_text(
         "const window = {};\n"
         "const state = {serversCache: []};\n"
-        "let glassChoiceCalls = 0, glassChoiceReturn = null, apiCalls = [];\n"
-        "const glassChoice = async () => { glassChoiceCalls++; return glassChoiceReturn; };\n"
+        "let apiCalls = [], toasts = [];\n"
         "const gprompt = async () => '10.10.10.10';\n"
-        "const api = async (url, opts) => { apiCalls.push({url, body: JSON.parse((opts || {}).body || '{}')}); return {can: true, level: 'yes', verdict: 'ok'}; };\n"
-        "const toast = () => {}; const refresh = () => {};\n"
+        "const api = async (url, opts) => { apiCalls.push({url, body: JSON.parse((opts || {}).body || '{}')}); return {can: true, level: 'yes', verdict: 'ok', target: 'fo01'}; };\n"
+        "const toast = m => toasts.push(m); const refresh = () => {};\n"
         + code + "\n"
-        "const iran = (id, name, spoof) => ({id, name, role: 'iran', enabled: true, online: true, extra: spoof ? {spoof} : {}});\n"
-        "const pad = () => [iran(4, 'ir04'), iran(5, 'ir05'), iran(6, 'ir06'), iran(7, 'ir07'), iran(8, 'ir08'), iran(9, 'ir09'), iran(10, 'ir10'), iran(11, 'ir11')];\n"
-        "const src = {id: 1, name: 'fr01', role: 'foreign', enabled: true, online: true, extra: {}};\n"
-        "const witness = iran(3, 'ir03', {can: true, target_id: 2, target: 'ir02', at: 1000});\n"
-        "const res = {};\n"
-        "async function run(tag, cache, gc) {\n"
-        "  state.serversCache = cache; glassChoiceCalls = 0; glassChoiceReturn = gc; apiCalls.length = 0;\n"
-        "  await window.srvSpoof(1, 'fr01');\n"
-        "  res[tag] = {glassChoiceCalls, target: apiCalls.length ? apiCalls[0].body.target_id : null};\n"
-        "}\n"
         "(async () => {\n"
-        "  await run('proven', [src, iran(2, 'ir02'), witness, ...pad()], 99);\n"
-        "  await run('none', [src, iran(2, 'ir02'), iran(3, 'ir03'), ...pad()], 5);\n"
-        "  await run('provenButOff', [src, {...iran(2, 'ir02'), enabled: false}, witness, ...pad()], 7);\n"
-        "  process.stdout.write(JSON.stringify(res));\n"
+        "  await window.srvSpoof(1, 'ir01');\n"
+        "  process.stdout.write(JSON.stringify({apiCalls, toasts}));\n"
         "})();\n",
         encoding="utf-8",
     )
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     res = json.loads(r.stdout)
-    assert res["proven"] == {"glassChoiceCalls": 0, "target": 2}            # ir02 was proven (ir03's own last test used it and got "can"): picked straight away, the list never opens
-    assert res["none"] == {"glassChoiceCalls": 1, "target": 5}              # nothing proven yet: the list opens and whatever is chosen there is used
-    assert res["provenButOff"] == {"glassChoiceCalls": 1, "target": 7}      # the proven server is disabled now, so it is not a candidate: the list opens again
-
+    assert res["apiCalls"] == [{"url": "/api/servers/1/spoof-test", "body": {"spoof_ip": "10.10.10.10"}}]      # no target is named: the panel picks it
+    assert any("(target: fo01)" in m for m in res["toasts"])                                                         # ... and says which one it used
 
 def test_the_password_box_of_the_sign_in_page_keeps_the_colour_of_the_field_when_the_browser_fills_it():
     """The owner, 2026-10-17 (his picture: a white box with the dots of the password hardly visible): a saved password painted the box light blue and the light dots could not be read on it."""

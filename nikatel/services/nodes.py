@@ -757,7 +757,7 @@ def _probe_pair(tester: dict, target: dict) -> dict:
     net = ipaddress.ip_network(f"10.253.{rnd.randint(0, 255)}.{rnd.randrange(0, 256, 4)}/30")
     ip_t, ip_s = (str(h) for h in list(net.hosts())[:2])
     nt, ns = Node(tester["host"], tester["user"], tester["port"]), Node(target["host"], target["user"], target["port"])
-    res = {"tester": tester["name"], "ok": False, "received": 0, "detail": ""}
+    res = {"tester": tester["name"], "target": target["name"], "ok": False, "received": 0, "detail": ""}
 
     try:
         run_action(nt, "gre_probe_up", {"NAME": name, "LOCAL": tester["host"], "REMOTE": target["host"], "KEY": str(key), "ADDR": f"{ip_t}/30"}, timeout=40)
@@ -789,17 +789,20 @@ def gre_probe(server_id: int) -> dict:
         if s is None:
             raise ValueError("server not found")
 
-        target = {"id": s.id, "name": s.name, "host": s.host, "user": s.ssh_user, "port": s.ssh_port}
-        testers = [{"id": x.id, "name": x.name, "host": x.host, "user": x.ssh_user, "port": x.ssh_port}
-                   for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.id != server_id).order_by(Server.name)) if x.online is not False]
+        me = {"id": s.id, "name": s.name, "host": s.host, "user": s.ssh_user, "port": s.ssh_port}
+        iran_side = s.role == "iran"
+        others = [{"id": x.id, "name": x.name, "host": x.host, "user": x.ssh_user, "port": x.ssh_port}
+                  for x in db.scalars(select(Server).where(Server.role == ("foreign" if iran_side else "iran"), Server.enabled.is_(True), Server.id != server_id).order_by(Server.name)) if x.online is not False]
 
-    if not testers:
-        raise ValueError("no other Iran server is online to test from: add or enable one in Servers → Iran")
+    if not others:
+        raise ValueError("no foreign server is online to test toward: add or enable one in Servers → Foreign" if iran_side else "no Iran server is online to test from: add or enable one in Servers → Iran")
 
+    # an Iran server is tested the way it is used - FROM Iran TOWARD abroad (the owner, 2026-10-19: "the Iran server must test toward a foreign server, not toward an Iran server"); a foreign server is tested from an Iran server
+    pairs = [(me, o) for o in others] if iran_side else [(o, me) for o in others]
     tried = []
 
-    for t in testers[:2]:
-        r = _probe_pair(t, target)
+    for tester, target in pairs[:2]:
+        r = _probe_pair(tester, target)
         tried.append(r)
 
         if r["ok"]:
@@ -807,7 +810,9 @@ def gre_probe(server_id: int) -> dict:
 
     ok = any(r["ok"] for r in tried)
     detail = tried[-1]["detail"] if ok else " ; ".join(r["detail"] for r in tried)
-    res = {"ok": ok, "links": len(tried), "bad": [] if ok else [r["tester"] for r in tried], "at": int(time.time()), "detail": detail, "via": tried[-1]["tester"], "mode": "probe", "tried": tried}
+    peer = lambda r: r["target"] if iran_side else r["tester"]
+    target = me
+    res = {"ok": ok, "links": len(tried), "bad": [] if ok else [peer(r) for r in tried], "at": int(time.time()), "detail": detail, "via": peer(tried[-1]), "mode": "probe", "tried": tried}
 
     with session() as db:
         s = db.get(Server, server_id)
@@ -848,6 +853,32 @@ def gre_check_all(role: str = "") -> dict:
     return {"rows": rows, "total": len(rows), "ok": len(ok), "no_gre": len(nolinks), "bad": [f"{r['server']}: {r['detail']}" for r in bad]}
 
 
+def _tcp_rows(host: str, port: int, limit: int = 5) -> tuple[int, int]:
+    """(opened, asked): does a TCP connection to host:port open from up to `limit` of the Iran servers of the panel? Pings can be closed by a firewall; a connection that opens from Iran proves the address is not cut."""
+    with session() as db:
+        iran = [Node(s.host, s.ssh_user, s.ssh_port) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name))][:limit]
+
+    def one(node: Node) -> bool | None:
+        try:
+            return f"REACH {host}:{int(port)} 1 " in run_script(node, "tcp_reach", {"TARGETS": f"{host}:{int(port)}"}, timeout=20)      # (the script of the configs: "REACH host:port 1 ms" when it opens)
+        except (SSHError, ValueError):
+            return None
+
+    with ThreadPoolExecutor(5) as ex:
+        got = [g for g in ex.map(one, iran) if g is not None]
+
+    return sum(1 for g in got if g), len(got)
+
+
+def tcp_override(level: str, text: str, opened: int, asked: int) -> tuple[str, str]:
+    """Pure: a verdict of "blocked" / "filtered" that came from PINGS only is taken back when a TCP connection opens from at least half of the Iran servers asked (the owner, 2026-10-19: "this server shows filtered, a public site
+    says it is not"; its tunnel ran): the server does not answer ping (ICMP is closed on it), which is not a filter."""
+    if level in ("blocked", "filtered") and asked and opened * 2 >= asked:
+        return "clean", f"Not filtered - a TCP connection opens from {opened} of {asked} Iran servers; the server does not answer ping (ICMP is closed on it), which is not a filter"
+
+    return level, text
+
+
 def filter_check(server_id: int, wait: int = 28) -> dict:
     _node, name, _role, host = _srv(server_id)
     rows = _own_rows(host)
@@ -859,6 +890,13 @@ def filter_check(server_id: int, wait: int = 28) -> dict:
         note = "check-host.net unavailable (" + str(e)[:60] + ")"
 
     level, text = verdict(rows)
+
+    if level in ("blocked", "filtered"):
+        try:
+            level, text = tcp_override(level, text, *_tcp_rows(host, _node.port))
+        except (SSHError, ValueError, RuntimeError):
+            pass                                                           # (the second look could not be made: the ping verdict stands)
+
     res = {"checked_at": int(time.time()), "level": level, "verdict": text, "nodes": rows, "source": "your Iran servers" + ("" if note else " + check-host.net"), "note": note}
     _set_extra(server_id, iran_filter=res)
 
@@ -1003,6 +1041,58 @@ def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
         emit(db, "ok" if res["can"] else "warn", "servers", f"Spoof test {sender} -> {target} (source {ip}): {text}", sender)
 
     return res
+
+
+SPOOF_TRIES = 3             # the targets the automatic spoof test tries at most
+
+
+def spoof_candidates(sender: dict, servers: list[dict]) -> list[int]:
+    """Pure: the ids of the servers the spoof test may use as the listening target, best first: servers of the OTHER kind (a foreign server for an Iran sender - the owner, 2026-10-19: "it must bring a foreign one") that
+    are on, those that were proven listeners in anyone's last test first, then by name. Servers of the sender's own kind only when no other kind is there. `servers`: {"id", "name", "role", "enabled", "online", "spoof_target_ok"}."""
+    live = [x for x in servers if x["id"] != sender["id"] and x["enabled"] and x["online"] is not False]
+    other = [x for x in live if x["role"] != sender["role"]] or live
+    return [x["id"] for x in sorted(other, key=lambda x: (not x.get("spoof_target_ok"), str(x["name"])))]
+
+
+def spoof_auto(server_id: int, spoof_ip: str) -> dict:
+    """The spoof test with the target chosen BY THE SYSTEM (no list for the owner to pick from): the candidates of `spoof_candidates` one after the other - at most SPOOF_TRIES - until a test gives an answer about THIS server
+    (it spoofs / only in part / it does not / the rewrite did not happen). A target that cannot listen or that no ping reaches (ICMP filtered between the two) is left and the next one is tried. The answer says which target it came from."""
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        rows = db.scalars(select(Server)).all()
+        proven = {int((x.extra or {}).get("spoof", {}).get("target_id") or 0) for x in rows if ((x.extra or {}).get("spoof") or {}).get("can")}
+        servers = [{"id": x.id, "name": x.name, "role": x.role, "enabled": x.enabled, "online": x.online, "spoof_target_ok": x.id in proven} for x in rows]
+        sender = {"id": s.id, "role": s.role}
+
+    ids = spoof_candidates(sender, servers)
+
+    if not ids:
+        raise ValueError("another server that is on is needed as the target")
+
+    names = {x["id"]: x["name"] for x in servers}
+    failed: list[str] = []
+
+    for tid in ids[:SPOOF_TRIES]:
+        try:
+            res = spoof_test(server_id, tid, spoof_ip)
+        except ValueError as e:
+            if names[server_id] in str(e) and "listen" not in str(e):
+                raise                                                      # (a problem of the SENDER - no iptables, the test could not run on it, it is off - is the same with every target)
+
+            failed.append(f"{names[tid]}: {str(e)[:120]}")
+            continue
+
+        if res["level"] == "blind":
+            failed.append(f"{names[tid]}: {res['verdict'][:100]}")
+            continue
+
+        return {**res, "tried_targets": [names[tid]] if not failed else [x.split(":")[0] for x in failed] + [names[tid]]}
+
+    raise ValueError("no target could be used - " + " | ".join(failed))
 
 
 def filter_daily_job() -> None:

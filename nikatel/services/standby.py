@@ -300,19 +300,25 @@ def _marks() -> dict:
     return dict(st.get("standby").get("marked") or {})
 
 
-def _mark(name: str, on: bool) -> None:
+def _mark(name: str, on: bool, manual: bool = False) -> None:
     with _LOCK:
         d = st.get("standby")
         marked = dict(d.get("marked") or {})
         failed = dict(d.get("failed") or {})
 
+        optout = dict(d.get("optout") or {})
+
         if on:
             marked.setdefault(name, {"since": int(time.time())})
+            optout.pop(name, None)
         else:
             marked.pop(name, None)
             failed.pop(name, None)
 
-        st.put("standby", {"marked": marked, "failed": failed})
+            if manual:
+                optout[name] = int(time.time())               # the owner switched it off by hand: the automatic standby leaves this tunnel alone
+
+        st.put("standby", {"marked": marked, "failed": failed, "optout": optout})
 
 
 def _failed(name: str) -> dict:
@@ -854,10 +860,41 @@ def switch(tunnel_id: int, on: bool) -> dict:
 
         wake()
     else:
-        _mark(name, False)
+        _mark(name, False, manual=True)
         threading.Thread(target=_safe_cleanup, args=(name,), name=f"standby-off-{name}", daemon=True).start()
 
     return status(name)
+
+
+AUTO_EVERY = 120            # the automatic standby marks ONE more tunnel at most this often (and none while a standby is being built): twenty builds at once would load the servers of the owner
+
+
+def auto_pick(candidates: list[dict], marked: set[str], optout: set[str], building: bool, auto: bool, last: float, now: float, every: int = AUTO_EVERY) -> str:
+    """Pure: the name of the ONE tunnel that gets a standby now ('' when none): every real tunnel that is up and forwards a port has one (the owner, 2026-10-19: "always on, by itself - and do not show it"), except those
+    the owner switched off by hand, one at a time, the oldest first, only in the modes fix and move, never while the panel is read-only or a standby is being built. `candidates`: {"name", "state", "ports", "created_at"}."""
+    if not auto or building or now - last < every:
+        return ""
+
+    todo = [c for c in candidates if c["name"] not in marked and c["name"] not in optout and c["state"] == "up" and c["ports"]]
+    return min(todo, key=lambda c: (c.get("created_at") or 0, c["name"]))["name"] if todo else ""
+
+
+def _auto_mark() -> None:
+    """The job: give the next tunnel its standby (see `auto_pick`)."""
+    d = st.get("standby")
+
+    with session() as db:
+        cands = [{"name": t.name, "state": t.state, "ports": list(t.forwarded_ports or []), "created_at": t.created_at}
+                 for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if not is_temp(t.name) and not is_standby(t)]
+
+    name = auto_pick(cands, set(d.get("marked") or {}), set(d.get("optout") or {}), bool(_BUILDS), actions.doctor_mode() != "off" and not get_settings().read_only, _STATE.get("auto_at", 0.0), time.time())
+
+    if not name:
+        return
+
+    _STATE["auto_at"] = time.time()
+    _mark(name, True)
+    log.info("standby: %s gets its standby by itself", name)
 
 
 def forget(name: str) -> None:
@@ -1098,6 +1135,12 @@ def run() -> None:
     _init_once()
     _apply_renames()
     _collect()
+
+    try:
+        _auto_mark()
+    except Exception:
+        log.exception("standby: automatic mark")
+
     names = set(_marks())
 
     with session() as db:

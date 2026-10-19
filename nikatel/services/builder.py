@@ -936,6 +936,11 @@ def _build(b: Build) -> None:
     _say(aid, "Preflight: both servers inspected, GRE available, no broken tunnel units" if link == "gre" else f"Preflight: both servers inspected, no broken tunnel units; the {LINK_TITLE[link]} link is checked next")
     ensure_backhaul(iran, foreign, fi, ff, aid)
 
+    if not is_temp(b.name):
+        from . import onboard
+
+        onboard.ensure_all_cores([b.iran.id, b.foreign.id], lambda line: _say(aid, line))      # (the first tunnel of a server brings every core to it - not the adding of the server)
+
     with session() as db:
         used_ports = {t.port for t in db.scalars(select(Tunnel))}
         taken_names = {t.name for t in db.scalars(select(Tunnel))} | set(fi["links"]) | set(ff["links"])

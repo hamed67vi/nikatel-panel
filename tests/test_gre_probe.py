@@ -71,14 +71,15 @@ def test_the_link_is_removed_even_when_the_target_cannot_be_reached(client, monk
     assert ("gre_probe_down", "203.0.113.11") in seen and ("gre_probe_down", "198.51.100.21") in seen
 
 
-def test_an_iran_server_is_tested_from_another_iran_server_and_needs_one(client, monkeypatch, calls):
+def test_an_iran_server_is_tested_toward_a_foreign_server_and_needs_one(client, monkeypatch, calls):
+    """1.69.23, the owner: "the Iran server must test toward a foreign server, not toward an Iran server" (it was tested from another Iran server)."""
     a = _add(client, "ir-a", "203.0.113.11", "iran")
-    r = client.post(f"/api/servers/{a}/gre-probe")
-    assert r.status_code >= 400 and "no other Iran server" in r.text
     _add(client, "ir-b", "203.0.113.12", "iran")
+    r = client.post(f"/api/servers/{a}/gre-probe")
+    assert r.status_code >= 400 and "no foreign server is online" in r.text                                 # another Iran server is not a peer for an Iran server
+    _add(client, "fo-a", "198.51.100.21", "foreign")
     monkeypatch.setattr(nodes, "run_script", lambda *a, **k: "10 packets transmitted, 9 received")
-    assert client.post(f"/api/servers/{a}/gre-probe").json()["via"] == "ir-b"
-
+    assert client.post(f"/api/servers/{a}/gre-probe").json()["via"] == "fo-a"
 
 def test_the_two_actions_are_validated_and_touch_only_their_own_interface():
     script = ssh.render_action("gre_probe_up", {"NAME": "nkgp7", "LOCAL": "203.0.113.11", "REMOTE": "198.51.100.21", "KEY": "123456", "ADDR": "10.253.4.1/30"})
