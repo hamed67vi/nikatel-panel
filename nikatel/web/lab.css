@@ -1079,3 +1079,7 @@ html body .login .lg-go { height: 48px; border-radius: 12px; }
 html body .login .lg-in .lg-ic { width: 42px; background: transparent; border-inline-end: 0; color: #8d99b5; }
 html body .login .lg-in input:not([type=checkbox]) { padding-inline-start: 0; }
 html body .login .lg-in:focus-within { border-color: #2f7bff; box-shadow: 0 0 0 1px #2f7bff, 0 0 14px rgba(47, 123, 255, .38); }
+/* 1.69.25 - the plan box of "Move the tunnels…" (glassChoice with html): short parts, each its own line; a long list scrolls inside the box */
+body #ask .ask-box .ask-text.mv-plan { white-space: normal; max-height: 52vh; overflow: auto; display: grid; gap: 4px; }
+.mv-plan .mv-h { margin-top: 8px; font-weight: 600; font-size: 13px; }
+.mv-plan .mv-r { font-size: 13px; line-height: 1.45; word-break: break-word; }

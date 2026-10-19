@@ -73,6 +73,35 @@ def fo_plan(server_id: int):
         raise HTTPException(400, str(e))
 
 
+@router.get("/failover/move-plan/{server_id}")
+def fo_move_plan(server_id: int, target_id: int | None = None):
+    """The "Move the tunnels" item of an Iran server's menu: what it would do now (nothing is changed) - the tunnels, the best Iran server with room and free ports (and two more), the DNS records
+    that follow, and `blocked` = why it cannot run (empty when it can)."""
+    try:
+        return {"ok": True, **failover.move_plan(server_id, target_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class MoveServerIn(BaseModel):
+    target_id: int
+    tunnels: list[int] | None = None       # the tunnels the plan showed: the move runs only when they are still the ones to move
+
+
+@router.post("/failover/move-server/{server_id}", status_code=202)
+def fo_move_server(server_id: int, body: MoveServerIn):
+    """Do the move the operator confirmed (the plan is made again first): tunnels to the target, DNS records follow, as one repair story."""
+    why = failover.move_blocked()
+
+    if why:
+        raise HTTPException(403, why)
+
+    try:
+        return {"ok": True, "action_id": failover.move_server(server_id, body.target_id, body.tunnels)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 def _writable():
     if not failover.has_key():
         raise HTTPException(403, "no DNS account is saved (Tunnels → CDN → Add account)" if failover.ENABLED else "the DNS failover is switched off")

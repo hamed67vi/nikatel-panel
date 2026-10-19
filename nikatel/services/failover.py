@@ -10,6 +10,10 @@ after a server came back); this module knows HOW:
                            dropped (their files are purged when the server is back) and the new ones built at once
   restore(log_id)          point ONE changed record back at the address it had before (the tunnels are left where they are)
   undo(plan_id)            the same for every record of one failover
+  move_plan(server_id) · move_server(server_id, target_id, expect)
+                           the "Move the tunnels…" item of an Iran server's menu (1.69.24): every tunnel of it to the best Iran server that has the ROOM (line quality, resources, tunnels
+                           on it after the move) and FREE PORTS (its own tunnels there, and what listens - read over SSH), the DNS records of every account follow; the operator sees
+                           the plan and confirms, and the plan is made again at the confirm - it runs only if it is still the same
 
 The target is the Iran server that ranks best for every moved tunnel (ping to the foreign server, free resources, how many tunnels
 it already carries, free ports). A record that serves a moved tunnel and a staying one would break the staying one, so such tunnels
@@ -113,10 +117,31 @@ def follow_ip_change(aid: int, old_ip: str, new_ip: str, server_name: str) -> li
 
 
 # ------------------------------------------------------------------ the plan
-def pick_target(rankings: dict[int, list[dict]]) -> dict | None:
-    """Pure: {tunnel_id: [candidate servers best first]} -> the one server that can carry them all with the best total rank."""
+MOVE_MIN_QUALITY = 50     # the "Move the tunnels" button (1.69.24): a server must reach the foreign server at least this well (ping and loss, 0-100 as in detect.auto_iran) ...
+MOVE_MIN_RESOURCES = 40   # ... have at least this much CPU / RAM / load room (0-100) ...
+MOVE_MAX_TUNNELS = 8      # ... and carry no more than this many tunnels once the moved ones are on it (the ranking spends 12.5 points of "unused" on each: 8 tunnels = none left)
+
+
+def room_for(c: dict, n: int) -> str:
+    """Pure: '' when this ranked Iran server (a row of autopilot.ranking) can take `n` more tunnels, else the sentence that says why not."""
+    if c.get("quality", 100) < MOVE_MIN_QUALITY:
+        return f"its line to the foreign server is poor (quality {c.get('quality')} of 100, needs {MOVE_MIN_QUALITY})"
+
+    if c.get("resources", 100) < MOVE_MIN_RESOURCES:
+        return f"its CPU, RAM and load leave too little room (resources {c.get('resources')} of 100, needs {MOVE_MIN_RESOURCES})"
+
+    have = int(c.get("tunnels") or 0)
+
+    if have + n > MOVE_MAX_TUNNELS:
+        return f"it carries {have} tunnels already; {n} more would pass {MOVE_MAX_TUNNELS}"
+
+    return ""
+
+
+def rank_targets(rankings: dict[int, list[dict]]) -> list[dict]:
+    """Pure: {tunnel_id: [candidate servers best first]} -> every server that can carry them ALL, the best total rank first (a tie goes to the one the first tunnel ranks higher)."""
     if not rankings:
-        return None
+        return []
 
     common = None
 
@@ -125,13 +150,20 @@ def pick_target(rankings: dict[int, list[dict]]) -> dict | None:
         common = ids if common is None else common & ids
 
     if not common:
-        return None
+        return []
 
-    def total(sid: int) -> int:
-        return sum(next(i for i, c in enumerate(lst) if c["id"] == sid) for lst in rankings.values())
+    first = next(iter(rankings.values()))
 
-    best = min(common, key=total)
-    return next(c for lst in rankings.values() for c in lst if c["id"] == best)
+    def total(sid: int) -> tuple[int, int]:
+        return sum(next(i for i, c in enumerate(lst) if c["id"] == sid) for lst in rankings.values()), next(i for i, c in enumerate(first) if c["id"] == sid)
+
+    return [next(c for lst in rankings.values() for c in lst if c["id"] == sid) for sid in sorted(common, key=total)]
+
+
+def pick_target(rankings: dict[int, list[dict]]) -> dict | None:
+    """Pure: {tunnel_id: [candidate servers best first]} -> the one server that can carry them all with the best total rank."""
+    ranked = rank_targets(rankings)
+    return ranked[0] if ranked else None
 
 
 def closure(move: set[int], recs: list[dict]) -> set[int]:
@@ -199,9 +231,48 @@ def _records(ip: str, tunnels: list[dict]) -> tuple[list[dict], str]:
     return recs, err
 
 
-def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: int | None = None) -> dict:
+def _live_busy(server_id: int, ports: set[int]) -> list[int]:
+    """Which of `ports` something already listens on (TCP) at this Iran server - read-only over SSH. Tests replace it."""
+    from ..ssh import Node, run_script
+    from . import build_other
+
+    with session() as db:
+        s = db.get(Server, server_id)
+        node = Node(s.host, s.ssh_user, s.ssh_port)
+
+    return sorted(ports & build_other.parse_simple_facts(run_script(node, "simple_facts", timeout=45))["tcp"])
+
+
+def _ports_problem(server_id: int, ports: set[int]) -> str:
+    """'' when every port of `ports` is free on this Iran server: no tunnel of the panel forwards it there AND nothing listens on it (looked at over SSH); else the sentence that says why not.
+    A server that cannot be looked at counts as not usable: a move must not start on a guess."""
+    if not ports:
+        return ""
+
+    with session() as db:
+        used = {}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == server_id)):
+            for x in t.forwarded_ports or []:
+                if str(x).isdigit() and int(x) in ports:
+                    used[int(x)] = t.name
+
+    if used:
+        return "port " + ", ".join(f"{p} (tunnel {n})" for p, n in sorted(used.items())) + " is used there"
+
+    try:
+        busy = _live_busy(server_id, ports)
+    except Exception as e:      # noqa: BLE001 - SSH, a missing script, a bad answer: whatever it was, the port is not proved free
+        return f"its listening ports could not be read ({str(e)[:80]})"
+
+    return ("port " + ", ".join(str(p) for p in busy) + " already has a program listening on it") if busy else ""
+
+
+def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: int | None = None, strict: bool = False) -> dict:
     """move=None: every tunnel of the server (it is dead). Otherwise the given tunnels, widened so that the DNS stays consistent.
-    `target_id`: the Iran server the operator (or the return) chose; else the one that ranks best for every moved tunnel."""
+    `target_id`: the Iran server the operator (or the return) chose; else the one that ranks best for every moved tunnel.
+    `strict` (the "Move the tunnels" button): only a server with room is a target - `room_for` (line quality, resources, tunnels on it after the move) - and every port of the moved tunnels is proved free on it
+    (the panel's own tunnels there AND what listens on the server); the plan also lists the best three targets (`candidates`) and the servers left out with the reason (`skipped`)."""
     with session() as db:
         s = db.get(Server, server_id)
 
@@ -219,7 +290,10 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
     moving = [t for t in tunnels if t["id"] in moved]
     dns = [r for r in recs if whole or (r["tunnels"] and set(r["tunnels"]) <= moved)]
     left = [] if whole else [{"fqdn": r["fqdn"], "configs": r["configs"]} for r in recs if r not in dns]
-    rankings, problems = {}, []
+    rankings, problems, skipped, candidates = {}, [], {}, []
+    ports = set().union(*(t["ports"] for t in moving)) if moving else set()
+
+    target = None
 
     if target_id:
         with session() as db:
@@ -228,35 +302,75 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
             if ts is None or ts.role != "iran" or not ts.enabled or ts.online is False:
                 raise ValueError("the target must be an Iran server that is on")
 
+            if ts.id == server_id:
+                raise ValueError("choose another Iran server")
+
             target = {"id": ts.id, "name": ts.name}
-    else:
+
+    if strict or not target_id:
         for t in moving:
             try:
                 rankings[t["id"]] = [r for r in autopilot.ranking(t["id"]) if r.get("online", True) is not False and r.get("score", 0) > 0]
             except (ValueError, RuntimeError) as e:
                 problems.append(f"{t['name']}: {str(e)[:120]}")
 
-        target = pick_target(rankings) if rankings else None
+    if not strict:
+        if not target_id:
+            target = pick_target(rankings) if rankings else None
+    else:                                   # an explicit target (the one the operator confirmed) is judged by the same rules as an automatic one: the world may have changed since the plan was shown
+        if len(rankings) < len(moving):
+            rankings = {}                   # one tunnel could not be ranked: no server is proved to carry all of them
 
+        for lst in rankings.values():
+            for c in lst:
+                why = room_for(c, len(moving))
+
+                if why:
+                    skipped.setdefault(c["id"], {"name": c["name"], "why": why})
+
+        ranked = rank_targets({tid: [c for c in lst if c["id"] not in skipped] for tid, lst in rankings.items()})
+
+        if target:
+            if not any(c["id"] == target["id"] for c in ranked):
+                problems.append(f"{target['name']}: " + (skipped.get(target["id"]) or {}).get("why", "it is not one of the servers that can carry all of these tunnels"))
+
+            ranked = [c for c in ranked if c["id"] == target["id"]]
+
+        for c in ranked[:5]:
+            bad = _ports_problem(c["id"], ports)
+
+            if bad:
+                skipped[c["id"]] = {"name": c["name"], "why": bad}
+            elif len(candidates) < 3:
+                candidates.append(c)
+
+        target = candidates[0] if candidates else None
     if moving and not target:
-        problems.append("no other Iran server can carry all of these tunnels")
+        problems.append("no other Iran server can carry all of these tunnels" + (" (" + "; ".join(f"{v['name']}: {v['why']}" for v in skipped.values())[:300] + ")" if skipped else ""))
 
     if dns_error:
         problems.append(dns_error)
 
     new_ip = None
 
-    if target:
-        with session() as db:
-            ts = db.get(Server, target["id"])
-            new_ip = ts.host if ts else None
+    with session() as db:
+        hosts = {x.id: x.host for x in db.scalars(select(Server).where(Server.id.in_([c["id"] for c in candidates] + ([target["id"]] if target else []))))}
 
-    return {**info, "reason": reason, "why": REASONS.get(reason, reason), "whole": whole,
-            "tunnels": [{"id": t["id"], "name": t["name"]} for t in moving], "move": sorted(moved),
-            "pulled": [t["name"] for t in moving if t["id"] not in asked],
-            "target": ({"id": target["id"], "name": target.get("name"), "ip": new_ip} if target else None),
-            "dns": [{k: v for k, v in r.items() if k != "tunnels"} for r in dns], "left_alone": left,
-            "dns_error": dns_error, "problems": problems, "made_at": int(time.time())}
+    if target:
+        new_ip = hosts.get(target["id"])
+
+    out = {**info, "reason": reason, "why": REASONS.get(reason, reason), "whole": whole,
+           "tunnels": [{"id": t["id"], "name": t["name"]} for t in moving], "move": sorted(moved),
+           "pulled": [t["name"] for t in moving if t["id"] not in asked],
+           "target": ({"id": target["id"], "name": target.get("name"), "ip": new_ip} if target else None),
+           "dns": [{k: v for k, v in r.items() if k != "tunnels"} for r in dns], "left_alone": left,
+           "dns_error": dns_error, "problems": problems, "made_at": int(time.time())}
+
+    if strict:
+        out["candidates"] = [{"id": c["id"], "name": c["name"], "ip": hosts.get(c["id"]), "reason": c.get("reason", ""), "quality": c.get("quality"), "resources": c.get("resources"), "tunnels": c.get("tunnels")} for c in candidates]
+        out["skipped"] = list(skipped.values())
+
+    return out
 
 
 def plan_for(server_id: int) -> dict:
@@ -277,6 +391,59 @@ def route_plan(tunnel_id: int, cause: str = "route_cut") -> dict:
 
     broken = {x["id"] for x in _tunnels_of(sid) if x["state"] != "up"} | {tunnel_id}
     return _make_plan(sid, broken, cause if cause in REASONS else "route_cut")
+
+
+def move_blocked() -> str:
+    """'' when the "Move the tunnels" button may run, else the sentence that says why not (the move changes DNS records, so it needs the failover license and a DNS account)."""
+    from . import license
+
+    if not ENABLED:
+        return "the DNS failover is switched off"
+
+    if not license.has("failover"):
+        return "moving tunnels together with their DNS records needs the failover license (Settings → About → License)"
+
+    if get_settings().read_only:
+        return "the panel is read-only"
+
+    if not dnsprov.accounts():
+        return "no DNS account is saved (Tunnels → CDN → Add account): the DNS records could not follow the tunnels"
+
+    return ""
+
+
+def move_plan(server_id: int, target_id: int | None = None) -> dict:
+    """What the "Move the tunnels" button of an Iran server would do (nothing is changed): EVERY tunnel of it goes to the best Iran server that has the room (`room_for`) and free ports, and every DNS
+    record that carries its address - in whichever account - follows. `blocked` says why the button cannot run (license, DNS account, read-only), `candidates` are the best targets."""
+    p = _make_plan(server_id, None, "manual", target_id=target_id, strict=True)
+    p["blocked"] = move_blocked()
+    return p
+
+
+def move_server(server_id: int, target_id: int, expect: list[int] | None = None) -> int:
+    """Run the move the operator confirmed: the plan is made again NOW (the world may have changed since the confirm), and it runs only when it is still the same - the same tunnels, the target still
+    has room and free ports. The new tunnels are built and checked first, the DNS follows, the old ones go after the TTL (`_work`). Returns the repair story id."""
+    why = move_blocked()
+
+    if why:
+        raise ValueError(why)
+
+    p = move_plan(server_id, target_id)
+
+    if not p["tunnels"]:
+        raise ValueError(f"{p['server']} carries no tunnel: nothing to move")
+
+    if not p["target"]:
+        raise ValueError("no Iran server can take these tunnels now: " + "; ".join(p["problems"])[:300])
+
+    if p["dns_error"]:
+        raise ValueError(f"a DNS account did not answer ({p['dns_error'][:200]}): its records could not follow the tunnels - fix the account (Tunnels → CDN) and try again")
+
+    if expect is not None and set(expect) != set(p["move"]):
+        raise ValueError("the tunnels of this server changed since you looked: look at the plan again")
+
+    p["id"] = f"{server_id}-{int(time.time())}"
+    return run_plan(p)
 
 
 # ------------------------------------------------------------------ state: the pending plans, history, DNS changes, who has been offline since when

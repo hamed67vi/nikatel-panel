@@ -610,12 +610,13 @@ function glassAsk(text, {input = false, value = "", danger, password = false, ch
     setTimeout(() => { if (inp) { inp.focus(); inp.select(); } else $(".ask-yes", el).focus(); }, 30);
   });
 }
-/* a question with several answers: resolves to the chosen value, or null on Cancel / Esc / a click outside */
-function glassChoice(text, choices) {
+/* a question with several answers: resolves to the chosen value, or null on Cancel / Esc / a click outside. `o.html`: the body as ready HTML (every dynamic part already esc()-ed by the caller) in place of the plain text -
+   used where the text has parts of its own (the plan of "Move the tunnels": each part is translated by itself) */
+function glassChoice(text, choices, o) {
   return new Promise(resolve => {
     const old = $("#ask"); if (old) old.remove();
     const el = document.createElement("div"); el.id = "ask";
-    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic">?</div><div class="ask-text">${esc(text)}</div><div class="ask-act ask-choices">${choices.map((c, i) => `<button class="${c.cls || ""}" data-i="${i}">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ""}</button>`).join("")}<button class="ask-no">Cancel</button></div></div></div>`;
+    el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic">?</div>${o && o.html ? `<div class="ask-text mv-plan">${o.html}</div>` : `<div class="ask-text">${esc(text)}</div>`}<div class="ask-act ask-choices">${choices.map((c, i) => `<button class="${c.cls || ""}" data-i="${i}">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ""}</button>`).join("")}<button class="ask-no">Cancel</button></div></div></div>`;
     document.body.appendChild(el);
     const done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
     function key(e) { if (e.key === "Escape") { e.stopPropagation(); done(null); } }
