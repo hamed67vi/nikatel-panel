@@ -92,7 +92,7 @@ def test_a_header_can_say_its_least_width_or_that_it_fits_its_content():
     assert 'th.getAttribute("data-min")' in FLUID_JS and 'th.getAttribute("data-fit")' in FLUID_JS
     assert "natural(tbl, i, 40)" in FLUID_JS      # (the widest of the first 40 cells, measured with the font in use - Persian too - not the first three)
     # the server list: the name keeps its lamp, icon and letters; an address and the speed are not cut
-    assert '<th data-prio="0" data-fit="196">Name</th><th data-prio="1" data-min="168">IP</th>' in LAB and 'data-min="126" title="Megabits per second' in LAB
+    assert '<th data-prio="0" data-fit="192">Name</th><th data-prio="1" data-min="168">IP</th>' in LAB and 'data-min="126" title="Megabits per second' in LAB
     assert '<th data-prio="2" data-min="128" class="lab-ld">Load</th>' in LAB
     # the tunnel list: the name, the type badge, both nodes with their addresses, the bandwidth
     assert '<th data-fit="196">Tunnel</th><th data-min="176">Type</th>' in APP and '<th class="r" data-fit="190">Iran node</th>' in APP and '<th data-fit="190">Foreign node</th>' in APP and 'data-prio="1" data-min="130"' in APP
@@ -165,6 +165,14 @@ def test_a_redrawn_page_gives_the_keyboard_focus_back():
     assert "fsnap = focusSnap()" in refresh and "focusBack(fsnap);" in refresh
     assert refresh.index("await PAGES[state.page]();") < refresh.index("focusBack(fsnap);")      # (after the page is drawn, not before)
     assert "if (b && c.textContent !== String(labCount(b.dataset.k))) c.textContent = labCount(b.dataset.k);" in LAB      # (a count that did not change is not written: every quiet refresh replaced the text of every tab count)
+
+
+def test_a_text_cut_with_a_dash_tells_itself_in_a_tip_and_a_task_row_keeps_its_button_inside():
+    assert 'document.addEventListener("mouseover", function (e) {' in FLUID_JS
+    tip = FLUID_JS[FLUID_JS.index('document.addEventListener("mouseover"'):FLUID_JS.index('addEventListener("resize", later);')]
+    assert 'getComputedStyle(el).textOverflow !== "ellipsis"' in tip and "if (el.title && !el.__nkTip) continue;" in tip and "el.title = t;" in tip      # (a text that has a tip of its own keeps it)
+    assert ".ap-tasks .ap-row > .mut:not(.work-chip):not(.ap-why) { flex: 0 1 auto; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in FLUID_CSS
+    assert '<th data-min="132">Expires</th>' in APP      # (the date pill of the users table was cut at 768 px)
 
 
 def test_the_tunnels_of_a_server_in_its_window_wrap_instead_of_being_cut():

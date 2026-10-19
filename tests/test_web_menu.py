@@ -461,7 +461,7 @@ def test_the_lab_table_has_no_serves_column_the_address_is_next_to_the_name_and_
     """The owner, 2026-10-15: "remove Serves, put the profile tag there instead, and the IP in the column nearest to the name"."""
     lab, css = _web("lab.js"), _web("lab.css")
     assert "lab-serves" not in lab and "labServes" not in lab and ">Serves<" not in lab
-    assert '<th data-prio="0" data-fit="196">Name</th><th data-prio="1" data-min="168">IP</th><th data-prio="3" data-min="88" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" data-min="128" class="lab-ld">Load</th>' in lab
+    assert '<th data-prio="0" data-fit="192">Name</th><th data-prio="1" data-min="168">IP</th><th data-prio="3" data-min="92" title="What is wrong with the server: GRE, the filter, a cut, a load ...">Problems</th><th data-prio="2" data-min="128" class="lab-ld">Load</th>' in lab
     assert lab.count("${labTagChip(p.tag, 1)}</b>") == 2 and "lab-prof" not in lab and "lab-tagp" not in lab
     assert "const labSub = s =>" in lab and "${labSub(s)}</div></div></td>" in lab
     assert ".lab-tbl .lab-tagc {" in css and ".lab-nm small .lab-busy" in css

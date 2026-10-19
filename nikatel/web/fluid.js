@@ -223,6 +223,23 @@
     if (hit) pass();
   }).observe(document.body, {childList: true, subtree: true});
 
+  /* a text that was cut with a dash tells all of itself in a tip (a long name, an address, a message): found when the pointer comes to it, so nothing is drawn in advance and a text that has a tip of its own keeps it */
+  document.addEventListener("mouseover", function (e) {
+    var el = e.target, i, t;
+
+    for (i = 0; i < 4 && el && el !== document.body && el.nodeType === 1; i++, el = el.parentElement) {
+      if (el.title && !el.__nkTip) continue;                          // (its own tip)
+
+      if (el.scrollWidth <= el.clientWidth + 1 || getComputedStyle(el).textOverflow !== "ellipsis") continue;
+
+      t = (el.textContent || "").replace(/\s+/g, " ").trim();
+
+      if (t && el.title !== t) { el.title = t; el.__nkTip = 1; }
+
+      return;
+    }
+  }, true);
+
   addEventListener("resize", later);
   document.addEventListener("DOMContentLoaded", later);
   pass();

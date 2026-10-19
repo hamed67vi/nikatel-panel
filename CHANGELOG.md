@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.31 - A cut text tells all of itself in a tip; the Live button stays inside the row of the Doctor's tasks
+
+Second round of the walk through the test panel (1.69.29 was the first).
+
+- **A text that is cut with a dash tells all of itself in a tip** (`fluid.js`): a server named `a-very-long-server-name-for-testing-0123456789` showed `a-very-lon…` and nothing said more (the row's own tip is "Click for the details"). When the pointer comes to a text whose box is cut with an ellipsis, the whole text is written into its `title` (a text that has a tip of its own keeps it). Nothing is drawn in advance.
+- **The Doctor's task rows at 1024 px** (`fluid.css`): the route of a row ("ir-north-1 ⇄ ae-edge-1 · backhaul · tcpmux", 232 px) kept its whole width and the Live button was drawn 70 px outside the row's box; the route is the text that gives way now. 
+- **The server list**: the header "Problems" was 2 px too narrow (cut), the name column gives 4 px for it; **the users table of a PasarGuard panel**: the date pill of Expires (129 px) was cut at 768 px - the column says its least width.
+- **Proved**: `tests/test_fluid_layout.py` (the tip's code and its rule that an own tip stays, the task row rule, the Expires header). In the browser: the long name gets its full title on the pointer, the Live buttons of twelve task rows end inside their rows (950 < 965 px). **Not proved**: a live resize of an open window (the browser pane that tested this was hidden, and a hidden page does not run the size observers: after a resize the table was fitted only by a `resize` event sent by hand); the tip's look (the browser draws it).
+- **Looked at in this round and found fine**: an empty panel (no server, no tunnel, no panel: the Servers, Tunnels and Doctor pages say so in one box); Escape closes only the top box (a confirm over a window); the text size "Large"; the long name in the window of a server, on a phone; the double click on a confirm sends ONE request; searching the server list does not move the page (no layout shift, the box keeps its height); the Doctor and the Dashboard keep their scroll over 30 seconds. **Not walked**: the CDN page with real DNS accounts, the Shop bot page, the 2-step sign-in and password forms, the first-run wizard, the tooltips in Persian (many are still English).
+
 ## 1.69.30 - A moved tunnel gets the BEST type for its new pair, not the type it had
 
 The owner (2026-10-19, in Persian, watching a move that was building the same type again - a Chisel WSS tunnel with 50 % loss): "at the moment of a move the tunnel type stays the same as before, when the better ones do not answer - here too you must pick the best tunnel type."

@@ -105,7 +105,8 @@ html[data-fluid] body #page .ap-row { min-width: 0; }
 @container (max-width: 800px) { html[data-fluid] body #page .ap-row > .ap-why { display: none; } }
 @container (max-width: 700px) { html[data-fluid] body #page .ap-row > .mut:not(.work-chip):not(.ap-why) { display: none; } }
 @container (max-width: 460px) { html[data-fluid] body #page .ap-row > .work-chip { display: none; } }
-@media (max-width: 480px) { html[data-fluid] body #page .ap-tasks .ap-row { flex-wrap: wrap; row-gap: 6px; } }      /* (a phone: state, name, Detail and Live are 325 px of fixed parts - Live went 43 px beyond the screen; now the row takes a second line) */
+@media (max-width: 480px) { html[data-fluid] body #page .ap-tasks .ap-row { flex-wrap: wrap; row-gap: 6px; } }
+html[data-fluid] body #page .ap-tasks .ap-row > .mut:not(.work-chip):not(.ap-why) { flex: 0 1 auto; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }      /* (the route of a task row - "ir-north-1 ⇄ ae-edge-1 · backhaul · tcpmux" - kept its whole width and pushed the Live button 70 px out of the row at 1024 px: it is the text that gives way) */      /* (a phone: state, name, Detail and Live are 325 px of fixed parts - Live went 43 px beyond the screen; now the row takes a second line) */
 html[data-fluid] body .set-top::before { right: 0; }      /* (the strip behind the tabs of Settings reached 6 px beyond the box and made it scroll) */
 
 /* ---- tables */
