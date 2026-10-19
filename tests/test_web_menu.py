@@ -1621,3 +1621,19 @@ def test_the_abuse_defender_install_shows_its_log_in_a_box():
     app = _web("app.js")
     body = app[app.index("window.srvAbuse = async (id, action) =>"): app.index("/* the result of the GRE test and of the filtering check")]
     assert "JSON.stringify({action, stream: true})" in body and 'id="ap-story"' in body and "followStory(r.id, $(\"#ap-story\"), 400)" in body and "toast(r.installed" not in body      # (the box follows the action; the toast of the result is gone)
+
+
+def test_the_knowledge_tab_does_not_jump_and_a_pair_is_two_small_lines():
+    """The owner, 2026-10-19 (a screenshot of Doctor -> Knowledge): "make the type smaller so that everything fits - the speeds and the red texts smaller, two rows" and "this page jumps - fix the jump".
+    The Doctor page is drawn again every 15 s: the Knowledge box used to turn into "Reading what the Doctor knows..." (the page shrank), the scroll of the open tab went back to the top and the tab faded in again."""
+    app, kn, css, doc = _web("app.js"), _web("knowledge.js"), _web("lab.css"), _web("doctor.css")
+    # no jump: the box is filled at once from what was read last time; nothing is drawn again when nothing changed; the scroll is kept; the fade-in is not played again
+    assert "window.knHtml = () => state.kn ? knMarkup(state.kn) : null;" in kn and "JSON.stringify(state.kn)" in kn and "was === JSON.stringify(k)" in kn and "sc.scrollTop = top;" in kn
+    assert "${(window.knHtml && knHtml()) ||" in app and 'keep = shown && shown.id === "ap-t-" + apTab ? shown.scrollTop : -1' in app and 'tb.classList.add("still")' in app and "tb.scrollTop = keep;" in app
+    assert "html body #page .ap-tasks .ap-tbody.still { animation: none !important; }" in doc
+    # two small lines: the name, the types with their speed, the cuts, the age and the button on the first, what failed - written out - on the second; the prefix is as specific as the Doctor's own row rules
+    row = "html body #page .ap-tasks .ap-row.kn-row"
+    assert f"{row} {{ display: grid;" in css and 'grid-template-areas: "name n best cuts time btn" ". . bad bad bad bad"' in css
+    assert f"{row} > .kn-bad {{ grid-area: bad; font-size: 9.5px;" in css and "white-space: normal; overflow-wrap: anywhere;" in css and "max-width: 230px" not in css.split(".kn-bad", 1)[1].split("}", 1)[0]          # (no longer cut with ...)
+    assert f"{row} .kn-k {{" in css and f"{row} .kn-k b {{ font-weight: 800; font-size: 10px;" in css and 'html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-k {' in css
+    assert 'class="pill warn kn-cuts"' in kn and '<span class="kn-bad"' in kn

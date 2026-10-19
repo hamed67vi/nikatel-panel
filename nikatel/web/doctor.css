@@ -89,3 +89,5 @@ html body #page .ap-tasks .ap-row button.pri { background: #2f7bf5; border: 1px 
 html body #page .ap-tasks .ap-row button:hover { filter: brightness(1.1); }
 html body #page .ap-tasks .ap-row button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 html[data-mode="light"] body #page .ap-tasks .ap-row { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .ap-tasks .ap-row button:not(.pri), html[data-mode="light"] body #page .ap-tasks .ap-row a.ap-detail { background: #f3f6fc; color: #1b2540; }
+/* the page is drawn again every 15 s: a tab that was open and is drawn again does not fade in again (it flashed) */
+html body #page .ap-tasks .ap-tbody.still { animation: none !important; }

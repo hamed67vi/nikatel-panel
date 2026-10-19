@@ -2004,6 +2004,7 @@ PAGES.actions = async () => {
   const movesTab = `<div class="mv-bar"><span class="mv-plan"><span class="mut">What if</span><select id="fo-srv">${irn.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select><span class="mut">went off?</span><button type="button" class="sm" onclick="foPreview()" title="The tunnels that would move, the server that would take them, the DNS records of every account that would change - nothing is changed">👁 Show the plan</button></span>${backChips}<span class="sp"></span><small class="mut">At most ${rails.max_per_day} moves a day per tunnel, ${rails.cooldown_hours} hours between two, one at a time; Telegram tells before and after.</small></div>
     <div class="mv-list">${mv.map(mvRow).join("") || drEmpty("No moves yet", "When the Doctor moves the tunnels of an Iran server (or you do, from a tunnel window), it is written here with a way back.")}</div>`;
 
+  const shown = $(".ap-tasks .ap-tbody:not(.hidden)"), keep = shown && shown.id === "ap-t-" + apTab ? shown.scrollTop : -1;          // the same tab is drawn again (the ticker, every 15 s): its scroll is kept and its fade-in is not played again - the page used to jump to the top and flash
   $("#page").innerHTML = `<div class="dr-top">${storm}${disturb}${modes}</div>
     <div class="card ap-tasks fx-box">
       <div class="ap-thead"><div class="ap-ttabs">${tabBtn("now", "wrench", "Active Tasks", nowN, "")}${tabBtn("done", "check", "Completed", doneN, "")}${tabBtn("moves", "sync", "Auto Moves", openN, "Every move of tunnels between Iran servers, with Return and DNS back")}${tabBtn("ana", "bars", "Analytics", 0, "What the history says about the tunnels and the servers, and the CPU cores")}${tabBtn("know", "spark", "Knowledge", 0, "What the Doctor already knows about every pair of servers - which tunnel types connect - and why tunnels were cut before")}</div>${acts}</div>
@@ -2013,9 +2014,10 @@ PAGES.actions = async () => {
       <div class="ap-tbody ${apTab === "done" ? "" : "hidden"}" id="ap-t-done"><div class="ap-hist">${doneRows || drEmpty("No completed fixes yet", "Every fix the Doctor finishes, and how it ended, is listed here.")}</div></div>
       <div class="ap-tbody ${apTab === "moves" ? "" : "hidden"}" id="ap-t-moves">${movesTab}</div>
       <div class="ap-tbody ${apTab === "ana" ? "" : "hidden"}" id="ap-t-ana"><div id="ana-box"><div class="loading"><i class="spin"></i><span>Reading the history…</span></div></div></div>
-      <div class="ap-tbody ${apTab === "know" ? "" : "hidden"}" id="ap-t-know"><div id="kn-box"><div class="loading"><i class="spin"></i><span>Reading what the Doctor knows…</span></div></div></div>
+      <div class="ap-tbody ${apTab === "know" ? "" : "hidden"}" id="ap-t-know"><div id="kn-box">${(window.knHtml && knHtml()) || `<div class="loading"><i class="spin"></i><span>Reading what the Doctor knows…</span></div>`}</div></div>
     </div>
     `;
+  if (keep >= 0) { const tb = $(".ap-tasks .ap-tbody:not(.hidden)"); if (tb) { tb.classList.add("still"); tb.scrollTop = keep; } }
   if (apTab === "ana") anaLoad();
   if (apTab === "know") knLoad();          // the Analyst is the fourth list of the Doctor's box (In progress · Finished · Moves · Analyst); the CPU cores live under it
   apFit(null); fxFit();
