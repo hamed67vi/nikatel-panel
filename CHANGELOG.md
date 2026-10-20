@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.51 - The Bandwidth column of the tunnel list is empty while the tunnel is fine
+
+The owner (2026-10-20, in Persian, with a picture of the list): "this column has become too busy - I think it should show something only when the bandwidth drops, or has a problem, or the tunnel is cut; put the bandwidth inside the box of each card."
+
+- **The cell** (`app.js bwCell`): nothing while the tunnel runs well. It shows a **red chip** - the number and one word (**dropped**, **no data**, **very slow**) - only when the Doctor sees the capacity dropped, stalled or very slow (the Doctor's own lines, unchanged); a **cut** tag when the tunnel is cut; **repairing…** while the Doctor works on it; and the short reason of an unstable tunnel, as before. The bar and the two numbers are gone from the row; the header's tooltip says where they are.
+- **In the tunnel window** (click the row): **Link → Capacity** (the number, what it usually is, "measure now") and **Status → In use now** (↓ ↑ and the part of the capacity they use) were already there; **In use now now changes by itself** every few seconds while the window is open (before, it was the number of the moment the window opened). The live numbers are asked only while a tunnel window is open - the list does not ask any more. The peak and the busy hours are in its Monitor tab (1.69.48).
+- **Proved**: `tests/test_web_menu.py` (the cell is empty/red chip/cut tag/repairing and has no bar; the live row of the window, its poll only from the window; the header's tooltip). **Not proved**: how the list and the window look in a browser; the next step the owner asked for - the nload-like Live view - is not in this version.
 ## 1.69.50 - After an update the page reloads by itself; the update's state files follow the panel's own data directory
 
 > **به زبان ساده:** بعد از آپدیت، صفحه خودش تازه می‌شود: صبر می‌کند تا پنل با نسخهٔ جدید جواب بدهد، اگر بارگذاری گیر کرد دوباره امتحان می‌کند و آخرش یک لینک نشان می‌دهد. فایل وضعیت آپدیت دیگر مسیر ثابت پنل زنده را نمی‌نویسد.

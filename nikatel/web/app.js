@@ -896,15 +896,16 @@ const bwCap = t => {      // the capacity: the download speed the Doctor measure
 };
 /* the numbers of what the users use change by themselves: while the Tunnels page is on screen they are asked every 4 s and the cells change in place (nothing is drawn again) */
 let tunLiveT = null;
-const tunLivePaint = () => { const byId = new Map((state.tunnelsCache || []).map(t => [t.id, t])); document.querySelectorAll(".tun-tbl td.bwc[data-tid]").forEach(td => { const t = byId.get(+td.dataset.tid), r = td.querySelector(".bwx .bwr"), bar = td.querySelector(".bwx .bwbar"); if (!t || !r) return; r.innerHTML = bwCap(t) + '<i class="bwsep"></i>' + bwUse(t); if (bar) bar.outerHTML = bwBar(t); }); };
+const tunUseHtml = t => useOf(t) ? `↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}${bwUtil(t) != null ? ` <small class="mut">${Math.round(bwUtil(t) * 100)} % of the capacity</small>` : ""}` : '<span class="mut">cannot be read for this tunnel</span>';      // (the "In use now" row of the tunnel window)
+const tunLivePaint = () => { const u = document.querySelector('[id^="tun-use-"]'); if (!u) return; const t = (state.tunnelsCache || []).find(x => x.id === +u.id.slice(8)); if (t) u.innerHTML = tunUseHtml(t); };      // (the window of a tunnel: its numbers change in place while it is open)
 const tunLiveStop = () => { clearInterval(tunLiveT); tunLiveT = null; };
 const tunLiveTick = async () => {
-  if (state.page !== "tunnels" || document.hidden || !document.querySelector(".tun-tbl")) { tunLiveStop(); return; }
+  if (state.page !== "tunnels" || document.hidden || !document.querySelector('[id^="tun-use-"]')) { tunLiveStop(); return; }      // (asked only while the window of a tunnel is open: the list no longer shows the live numbers)
   let r; try { r = await api("/api/tunnels/live"); } catch (e) { return; }      // (a read that failed leaves what is shown: only the next number is late)
   state.live = r.live || {}; state.use24 = r.use24 || state.use24 || {}; state.liveAt = Date.now(); tunLivePaint();
 };
 const tunLiveStart = () => { if (!tunLiveT) { tunLiveT = setInterval(tunLiveTick, 4000); tunLiveTick(); } };
-document.addEventListener("visibilitychange", () => { if (!document.hidden && state.page === "tunnels") tunLiveStart(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state.page === "tunnels" && document.querySelector('[id^="tun-use-"]')) tunLiveStart(); });
 /* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
 const srvBusy = s => { const b = (s.extra || {}).busy; return b && b.what && Date.now() / 1000 - b.at < 900 ? b : null; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
@@ -994,7 +995,7 @@ async function tunStrip(id) {      // the Stability box (GET /api/tunnels/{id}/s
     const pv = document.getElementById("tun-ov-pct-" + id), v = UP_WORD[d.verdict]; if (pv) pv.innerHTML = v ? `<span class="${v[1]}">${v[0]}</span>` : "collecting data";
   } catch (e) { box.innerHTML = `<span class="mut">${esc(e.message)}</span>`; }
 }
-function tunAfter(t) { if (state.tsec === "monitor") loadTunnelCharts(t.id); else tunStrip(t.id); }      // what a section loads by itself
+function tunAfter(t) { if (state.tsec === "monitor") loadTunnelCharts(t.id); else { tunStrip(t.id); tunLiveStart(); } }      // what a section loads by itself
 window.tunWtab = k => { state.tsec = k === "monitor" ? "monitor" : "overview"; const t = (state.tunnelsCache || []).find(x => x.id === state.open), body = $("#modal .modal-body"); if (!t || !body) { refresh(); return; } body.innerHTML = `<div id="tun-detail-${t.id}">${tunWinHtml(t)}</div>`; tunAfter(t); };
 /* small flag images (Windows has no flag emoji); the text code stays as the fallback when the image cannot load */
 const flagImg = cc => cc && /^[A-Za-z]{2}$/.test(cc) ? `<img class="flg" src="/flags/${cc.toLowerCase()}.png" width="24" height="24" alt="${cc.toUpperCase()}" title="${cc.toUpperCase()}" onerror="this.outerHTML='<small class=flgt>${cc.toUpperCase()}</small>'">` : "";
@@ -1540,12 +1541,13 @@ const CUT_TAGS = [[/both servers do not answer/i, "both servers off"], [/the for
 const cutTag = t => { const e = t.last_error || ""; for (const [re, s] of CUT_TAGS) if (re.test(e)) return s; return e.length > 20 ? e.slice(0, 18) + "…" : (e || stText(t).toLowerCase()); };
 const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "UNSTABLE" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
-  /* the Bandwidth cell (it took the place of the Status column, whose lamp now sits before the name): the number and its bar; while the Doctor works on the tunnel, or the tunnel is cut, what is going on in two or three words */
+  /* the Bandwidth cell (it took the place of the Status column, whose lamp now sits before the name): EMPTY while the tunnel is fine; a dropped, stalled or very slow capacity in red; a cut tag; or, while the Doctor works on the tunnel, what is going on in two or three words */
   const bwCell = t => {      // (a cut tunnel: only the tag that says which end; a tunnel that runs: the capacity | what the users use now, and the bar of how much of it they use - the owner, 2026-10-17)
     if (workMap.has(t.name)) return `<span class="busy-chip" title="the Tunnel Doctor is working on this tunnel"><i class="spin"></i>${workMap.get(t.name).mode === "look" ? "checking" : "repairing"}…</span>`;
     if (!["up", "degraded"].includes(t.state)) return `<span class="cut-tag ${t.state === "down" ? "" : "unk"}" title="${esc(t.last_error || stText(t))}">${esc(t.last_error && t.state !== "starting" ? cutTag(t) : stText(t).toLowerCase())}</span>`;
     const b = t.bw || {}, stall = b.down != null && b.down < BW_STALL, why = t.state === "degraded" && t.last_error && !stall ? `<small class="mut td-err" title="${esc(t.last_error)}">${esc(shortWhy(t))}</small>` : "";
-    return `<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>${why}`;
+    const prob = stall || b.state === "drop" || b.state === "slow";      // (the owner, 2026-10-20: "this column is too busy - show it only when the bandwidth drops or has a problem or the tunnel is cut; the bandwidth goes in the box of each tunnel": the numbers are in the tunnel window, Link -> Capacity and Status -> In use now)
+    return (prob ? `<span class="bwprob ${stall || b.state === "drop" ? "drop" : "slow"}" title="${esc(bwTip(t))}"><b>${bwNum(capOf(t))}</b><small>${stall ? "no data" : b.state === "drop" ? "dropped" : "very slow"}</small></span>` : "") + why;
   };
   /* the Ping / Loss cell after the owner's picture (2026-10-17): the ping above, an arrow at each end of a dotted line, the loss below; a cut link is red with a cross and says nothing above or below */
   const ARR_L = '<svg class="ah" viewBox="0 0 22 14" aria-hidden="true"><path d="M21 7H2M8 1L2 7l6 6"/></svg>', ARR_R = '<svg class="ah" viewBox="0 0 22 14" aria-hidden="true"><path d="M1 7h19M14 1l6 6-6 6"/></svg>';
@@ -1567,9 +1569,9 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
     <div class="lbox tun-box fx-box">${trashBox()}
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${rows.length ? `<table class="tbl lift tun-tbl"><colgroup><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%"><col style="width:8%"><col style="width:56px"></colgroup>
-      <thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Capacity | in use. Capacity (blue): what this tunnel can carry - the download speed of the Doctor's last light test, which cannot be live. In use: what the users use of it now, down and up - the counters of the tunnel's own link on its Iran server, read every few seconds while this page is open. The bar is the part of the capacity they use. A dash: it cannot be read for this tunnel. The lamp before the name is the state of the tunnel."><span class="bwh-in">Bandwidth<em>Mb/s</em></span></th><th class="r" data-fit="190">Iran node</th><th class="c" title="Round-trip time / packets lost on the link">ping/loss%</th><th data-fit="190">Foreign node</th><th>Ports</th><th></th></tr></thead>
+      <thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Shown only when there is something to see: a capacity that dropped, stalled or is very slow (red), a cut, or a repair in progress. The numbers - the capacity, what the users use now, the peak of the day - are in the window of the tunnel (click the row). The lamp before the name is the state of the tunnel."><span class="bwh-in">Bandwidth<em>Mb/s</em></span></th><th class="r" data-fit="190">Iran node</th><th class="c" title="Round-trip time / packets lost on the link">ping/loss%</th><th data-fit="190">Foreign node</th><th>Ports</th><th></th></tr></thead>
       <tbody>${[...rows].sort((x, y) => TUN_TYPES.indexOf(sortType(x)) - TUN_TYPES.indexOf(sortType(y)) || String(x.name).localeCompare(String(y.name))).map(row).join("")}</tbody></table>` : '<div class="empty">No tunnel.</div>'}</div>`;      // ONE table for every tunnel of every type: a new type only brings its own tag (no header, no table of its own)
-  applyQ(); fxFit(); tunLiveStart();      // (the numbers of what the users use are asked every 4 s from here on)
+  applyQ(); fxFit();
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);
  
@@ -1588,7 +1590,7 @@ function tunGrid(t) {
     kv("Type", `${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}`), kv("Direction", esc(rec.direction || "reverse")),
     kv("Ports", `<div class="td-ports">${(t.forwarded_ports || []).map(p => `<i class="${d.listen && d.listen[p] === false ? "bad" : ""}">${p}</i>`).join("") || "—"}</div>`), kv("Control port", t.port || "—")]);
   const status = box(SI.clock, "Status", [kv("State", `<span class="st ${t.state}">${esc(stName(t.state))}</span>${err}`), kv("Since", t.state_since ? ago(t.state_since) + " ago" : "—"), kv("Checked", when(t.last_check_at)), kv("Created", when(t.created_at)),
-    kv("In use now", useOf(t) ? `↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}${bwUtil(t) != null ? ` <small class="mut">${Math.round(bwUtil(t) * 100)} % of the capacity</small>` : ""}` : '<span class="mut">cannot be read for this tunnel</span>'),
+    `<div class="kv2"><span>In use now</span><div id="tun-use-${t.id}">${tunUseHtml(t)}</div></div>`,
     kv("Score", q.score != null ? `<b class="${q.score >= 70 ? "gw-ok" : q.score >= 40 ? "warn" : "err"}">${q.score} / 100</b> <small class="mut">${q.at ? ago(q.at) + " ago" : ""}</small>` : '<span class="mut">not measured</span>')]);
   const link = box(SI.link, "Link", [kv("Latency", t.rtt_ms != null ? `${t.rtt_ms.toFixed(0)} ms${q.jitter_ms != null ? ` <small class="mut">jitter ${q.jitter_ms} ms</small>` : ""}` : "—"), kv("Packet loss", `<span title="${esc(lossTip(t))}">${tunLoss(t).v != null ? tunLoss(t).v + " %" : tunLoss(t).blocked ? "ping blocked <small class=\"mut\">(the data passes)</small>" : "—"}</span>`),
     kv("Speed", q.down_mbps != null ? `↓ ${q.down_mbps} ↑ ${q.up_mbps} Mb/s` : "—"),

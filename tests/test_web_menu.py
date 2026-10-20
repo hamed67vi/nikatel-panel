@@ -1225,16 +1225,16 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     app, css, lab = _web("app.js"), _web("lab.css"), _web("lab.js")
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert '<td class="name"><i class="tun-lamp ${esc(t.state)}"' in row and '<td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>' in row and "stText(t)}</span>" not in row.split('<td class="bwc"', 1)[0].split('<td class="name">', 1)[1].split("</td>", 1)[1]
-    assert "<thead><tr><th data-fit=\"196\">Tunnel</th><th data-min=\"176\">Type</th><th>Status</th>" not in app and '<thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Capacity | in use.' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
+    assert "<thead><tr><th data-fit=\"196\">Tunnel</th><th data-min=\"176\">Type</th><th>Status</th>" not in app and '<thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Shown only when there is something to see' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
     assert "<small><i>capacity</i>" not in app                                                    # the header says the word and the unit, nothing else (the owner, 2026-10-17: "write only mb/s here"); the legend is in the tooltip
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
-    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwx"><span class="bwr">${bwCap(t)}<i class="bwsep"></i>${bwUse(t)}</span>${bwBar(t)}</span>' in cell
+    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwprob ${stall || b.state === "drop" ? "drop" : "slow"}"' in cell and 'const prob = stall || b.state === "drop" || b.state === "slow";' in cell and "bwx" not in cell and "bwUse(t)" not in cell      # (1.69.50: EMPTY while the tunnel is fine - the numbers are in the window of the tunnel)
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
     assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"slow\" ? \"slow\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5; a VERY SLOW one is amber, 1.69.14); no second red number in the row
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
     assert 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
-    assert 'kv("Capacity", ' in app and 'kv("In use now", ' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
+    assert 'kv("Capacity", ' in app and '<span>In use now</span><div id="tun-use-${t.id}">' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
     assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bwcap.drop b" in css and "html body #page .tun-tbl td.bwc" in css
     assert "Speed test…" in lab                                                                   # (the menu of a tunnel is as it was)
 
@@ -1380,7 +1380,7 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     assert '<col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%"><col style="width:8%"><col style="width:56px">' in app and app.count("<col ") >= 8      # (the owner, 2026-10-17: "the address cells are very crowded, too much empty space between the columns": every column but the last has a share of the width (the shares were tuned in a demo panel at 2000 / 1440 / 1180 px so the gaps between the columns come out about equal; the fluid layer spreads what they do not add up to), so no column piles up the room that is left)
     assert '"bandwidthmb s": 118' in _web("fluid.js")
     assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
-    assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" in app
+    assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" not in app and "else { tunStrip(t.id); tunLiveStart(); }" in app and 'id="tun-use-${t.id}">${tunUseHtml(t)}' in app
     assert "const liveAge = l => l.age + (Date.now() - (state.liveAt || Date.now())) / 1000;" in app                                # (the age comes from the server: no clock of the browser is compared with the server's)
     for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", "th.bwh .bwh-in em {"):
         assert "html body #page .tun-tbl " + sel in css, sel
@@ -1396,7 +1396,7 @@ def test_the_bandwidth_row_is_one_number_each_and_the_breakdown_moved_into_the_t
     assert usecell.count("<i>↓</i>") == 1 and "↑" not in usecell and usecell.count("bwNum(u.down)") == 1 and "u.up" not in usecell      # the row: one usage number (the download), the upload is gone from here
     status = app.split('box(SI.clock, "Status"', 1)[1].split("const link = box", 1)[0]
     link = app.split("const link = box(SI.link", 1)[1].split("return `<div class=\"sgrid\">", 1)[0]
-    assert 'kv("In use now", useOf(t) ?' in status and "↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}" in status and "% of the capacity" in status      # the tunnel window still has both numbers, with the share of the capacity they use
+    assert "const tunUseHtml = t => useOf(t) ?" in app and "↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}" in app.split("const tunUseHtml = t =>", 1)[1].split("const tunLivePaint", 1)[0] and "% of the capacity" in app.split("const tunUseHtml = t =>", 1)[1].split("const tunLivePaint", 1)[0] and "tunUseHtml(t)" in status      # the tunnel window still has both numbers, with the share of the capacity they use
     assert 'kv("Capacity", ' in link and "usually ${t.bw.ref ?" in link and "ago</small>" in link and "bwWhy(t)" in link and "bwMeasure(" in link              # ... and the capacity, its usual level, when it was last measured, and why it dropped
 
 
