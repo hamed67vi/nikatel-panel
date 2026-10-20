@@ -1315,7 +1315,7 @@ def test_the_standby_job_runs_every_five_seconds_and_does_nothing_when_nothing_i
 def test_the_tunnel_window_and_the_moves_tab_know_the_standby():
     web = Path(__file__).resolve().parent.parent / "nikatel" / "web"
     app = (web / "app.js").read_text(encoding="utf-8")
-    assert "function tunStandby(t)" in app and "tunBanner(t) + tunStandby(t) + tunGrid(t)" in app                         # a bar in the window, under the banner
+    assert "function tunStandby(t)" in app and "tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunGrid(t)" in app                         # a bar in the window, under the banner
     assert all(f"window.{f} = async" in app for f in ("tunStandbySet", "tunStandbyNow", "tunStandbyBack", "apStandbyBack"))
     assert "/standby/handover" in app and "/standby/back" in app and "{method: \"PUT\", body: JSON.stringify({on})}" in app
     assert 'standby: "standby"' in app and "apStandbyBack(" in app                                                      # the Moves tab: the reason, and Back now on the entry

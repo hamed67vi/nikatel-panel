@@ -1133,10 +1133,31 @@ html body #page .tun-tbl td.td-ty2 { line-height: 1.15; white-space: nowrap; }
 html body #page .tun-tbl td.td-ty2 .td-type { display: inline-block; font-size: 9px; letter-spacing: .3px; padding: 1px 6px; }
 html body #page .tun-tbl td.td-ty2 small { display: block; margin-top: 4px; padding-left: 2px; font-size: 10px; }
 html body #page .tun-tbl .cut-tag { height: 16px; padding: 0 7px; font-size: 9.5px; }
-/* 1.69.50 - the Bandwidth cell of the tunnel list is EMPTY while the tunnel is fine: a red chip (the number and one word) only for a dropped, stalled or very slow capacity */
-html body #page .tun-tbl .bwprob { display: inline-flex; align-items: baseline; gap: 6px; padding: 2px 11px; border-radius: 999px; font-variant-numeric: tabular-nums; color: var(--bad, #ff6b8b); background: rgba(255, 107, 139, .12); border: 1px solid rgba(255, 107, 139, .35); }
-html body #page .tun-tbl .bwprob b { font-size: 12.5px; font-weight: 800; }
-html body #page .tun-tbl .bwprob small { font-size: 10.5px; font-weight: 700; letter-spacing: .2px; opacity: .9; }
+/* 1.69.50 / 1.69.52 - the Bandwidth cell of the tunnel list is EMPTY while the tunnel is fine; for a problem or a nearly full tunnel it is a METER: a thin bar (the capacity is the track, what the users use the fill) and "use / capacity" with one word */
+html body #page .tun-tbl .bwm { display: inline-flex; flex-direction: column; gap: 3px; min-width: 120px; max-width: 100%; font-variant-numeric: tabular-nums; }
+html body #page .tun-tbl .bwm-bar { display: block; height: 7px; border-radius: 4px; overflow: hidden; background: rgba(255, 255, 255, .1); }
+html body #page .tun-tbl .bwm-bar u { display: block; height: 100%; border-radius: 4px; background: var(--acc-2, #6ea8ff); }
+html body #page .tun-tbl .bwm-t { display: flex; align-items: baseline; gap: 4px; font-size: 12px; color: var(--mut); white-space: nowrap; }
+html body #page .tun-tbl .bwm-t b { font-size: 13px; font-weight: 800; color: var(--text); }
+html body #page .tun-tbl .bwm-t i { font-style: normal; opacity: .6; }
+html body #page .tun-tbl .bwm-t small { margin-left: 4px; padding: 0 7px; border-radius: 9px; font-size: 10.5px; font-weight: 700; }
+html body #page .tun-tbl .bwm.drop .bwm-bar u, html body #page .tun-tbl .bwm.slow .bwm-bar u { background: var(--bad, #ff6b8b); }
+html body #page .tun-tbl .bwm.drop .bwm-t small, html body #page .tun-tbl .bwm.slow .bwm-t small { color: var(--bad, #ff6b8b); background: rgba(255, 107, 139, .14); }
+html body #page .tun-tbl .bwm.full .bwm-bar u { background: var(--warn, #ffc44d); }
+html body #page .tun-tbl .bwm.full .bwm-t small { color: var(--warn, #ffc44d); background: rgba(255, 196, 77, .14); }
+/* the big meter of the tunnel window */
+.bwbox .bwbig-track { position: relative; height: 14px; border-radius: 8px; background: rgba(255, 255, 255, .1); overflow: visible; margin: 6px 0 8px; }
+.bwbox .bwbig-track u { display: block; height: 100%; border-radius: 8px; background: var(--acc-2, #6ea8ff); transition: width .6s ease; }
+.bwbox .bwbig-track i.pk { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text, #e7ecf8); opacity: .75; }
+.bwbox .bwbig.warm .bwbig-track u { background: var(--warn, #ffc44d); }
+.bwbox .bwbig.full .bwbig-track u { background: linear-gradient(90deg, var(--warn, #ffc44d), #ff9a4d); }
+.bwbox .bwbig.drop .bwbig-track u { background: var(--bad, #ff6b8b); }
+.bwbox .bwbig-n { display: flex; flex-wrap: wrap; gap: 4px 22px; align-items: baseline; }
+.bwbox .bwbig-n span b { font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
+.bwbox .bwbig-n small { font-size: 10.5px; color: var(--mut); text-transform: uppercase; letter-spacing: .6px; font-weight: 700; }
+.bwbox .bwbig-w { margin-top: 6px; font-size: 12px; color: var(--mut); }
+.bwbox .bwbig.drop .bwbig-w { color: var(--bad, #ff6b8b); } .bwbox .bwbig.full .bwbig-w, .bwbox .bwbig.warm .bwbig-w { color: var(--warn, #ffc44d); }
+.bwbox { margin-bottom: 10px; }
 
 /* the failed-update note of the About card is ONE row (the owner, 2026-10-20: "show the error briefly in one row, and if the update fixes it, say so"): it was a red paragraph in a box that scrolled */
 html body #about-box .abt-fail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 1.5; }

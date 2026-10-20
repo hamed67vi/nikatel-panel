@@ -1228,7 +1228,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     assert "<thead><tr><th data-fit=\"196\">Tunnel</th><th data-min=\"176\">Type</th><th>Status</th>" not in app and '<thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Shown only when there is something to see' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
     assert "<small><i>capacity</i>" not in app                                                    # the header says the word and the unit, nothing else (the owner, 2026-10-17: "write only mb/s here"); the legend is in the tooltip
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
-    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and '<span class="bwprob ${stall || b.state === "drop" ? "drop" : "slow"}"' in cell and 'const prob = stall || b.state === "drop" || b.state === "slow";' in cell and "bwx" not in cell and "bwUse(t)" not in cell      # (1.69.50: EMPTY while the tunnel is fine - the numbers are in the window of the tunnel)
+    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and 'bwMeter(t, stall || b.state === "drop" ? "drop" : "slow", ' in cell and 'const prob = stall || b.state === "drop" || b.state === "slow";' in cell and "bwx" not in cell and "bwUse(t)" not in cell      # (1.69.50: EMPTY while the tunnel is fine - the numbers are in the window of the tunnel)
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
     assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"slow\" ? \"slow\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5; a VERY SLOW one is amber, 1.69.14); no second red number in the row
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
@@ -1506,7 +1506,7 @@ def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stabi
     """The owner, 2026-10-17: "show the stability and the quality of the users' internet inside their own box, not in the cards - I do not want the cards to be crowded". Row one: Servers | Status | Link; row two: Users' internet | Stability | Last results."""
     app, css = _web("app.js"), _web("lab.css")
     body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
-    assert "tunBanner(t) + tunStandby(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
+    assert "tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
     assert 'data-b="users"' in app and 'data-b="stability"' in app and 'data-b="results"' in app and "<i>${SI.users}</i>Users' internet" in app and "<i>${SI.pulse}</i>Stability" in app
     users = app.split("const tunUsersBox = t => {", 1)[1].split("const tunUpBox = t =>", 1)[0]
     assert all(f'kv("{w}", ' in users for w in ("Quality", "Problems")) and "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two rows, two lines of the problems, two of the Doctor's sentence: the row of boxes stays as tall as the Stability box)

@@ -1228,7 +1228,7 @@ def repairing_names() -> list[str]:
             for label, aid in busy.items():
                 e = db.get(ActionLog, aid)
 
-                if e is not None and e.action not in ("observe",) and not label.startswith(("create ", "failover ", "install ", "dns ")):
+                if e is not None and e.action not in ("observe",) and not label.startswith(("create ", "failover ", "install ", "dns ", "capacity ")):
                     names.add(label)
 
     return sorted(names)
@@ -1245,7 +1245,7 @@ def working() -> list[dict]:
         for label, aid in busy.items():
             e = db.get(ActionLog, aid)
 
-            if e is None or label.startswith(("create ", "failover ", "install ", "dns ")):
+            if e is None or label.startswith(("create ", "failover ", "install ", "dns ", "capacity ")):
                 continue
 
             seen.add(label)

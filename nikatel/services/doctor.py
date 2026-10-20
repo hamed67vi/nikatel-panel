@@ -108,6 +108,9 @@ def suggestion_valid(e: dict, tunnel: dict | None, saturated: set[int], now: int
     if e.get("kind") == "resources":
         return "" if int(e.get("from_id") or 0) in saturated else f"{e.get('from') or 'the server'} is no longer exhausted"
 
+    if e.get("kind") == "capacity":                              # (stands while the capacity of the tunnel is filling)
+        return "" if tunnel.get("cap_state") in ("warm", "full") else f"{e.get('tunnel')} no longer fills its capacity"
+
     if e.get("kind") == "type" and e.get("upgrade"):             # (a better type known for a tunnel that WORKS: it stands while the tunnel runs the same type, a week - then the look asks again)
         if tunnel.get("kind") and e.get("now_kind") and tunnel["kind"] != e["now_kind"]:
             return f"{e.get('tunnel')} runs as {tunnel['kind']} now, not as {e['now_kind']}"
@@ -127,6 +130,8 @@ def suggestion_valid(e: dict, tunnel: dict | None, saturated: set[int], now: int
 
 def refresh_suggestions(now: int | None = None) -> list[str]:
     """Withdraw the suggestions whose problem is over (see `suggestion_valid`); returns the sentences. Called by the job and whenever the Doctor's state is read, so the page never shows an old verdict."""
+    from . import capacity
+
     s = _state()
 
     if not s["suggestions"]:
@@ -135,7 +140,7 @@ def refresh_suggestions(now: int | None = None) -> list[str]:
     now = now or int(time.time())
 
     with session() as db:
-        rows = {t.name: {"state": t.state, "state_since": t.state_since, "loss": (t.detail or {}).get("loss_pct"), "kind": autopilot.kind_of(t.type, t.transport, t.record or {}), "bw_state": ((t.record or {}).get("bw") or {}).get("state")}
+        rows = {t.name: {"state": t.state, "state_since": t.state_since, "loss": (t.detail or {}).get("loss_pct"), "kind": autopilot.kind_of(t.type, t.transport, t.record or {}), "bw_state": ((t.record or {}).get("bw") or {}).get("state"), "cap_state": capacity.state_of(t.name)}
                 for t in db.scalars(select(Tunnel))}
 
     sat = {x["id"] for x in saturated_servers(now)}
@@ -643,6 +648,13 @@ def run() -> None:
         refresh_suggestions()
     except Exception:       # (a job that must go on: the rest below does not depend on it)
         log.exception("doctor: suggestions")
+
+    try:
+        from . import capacity
+
+        capacity.check()                  # (the capacity that is filling is told in every mode; the Doctor acts on it in fix and move)
+    except Exception:
+        log.exception("doctor: capacity")
 
     if mode() == "off":
         return

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck, is_standby, is_temp
-from ..services import analyst, builder, linkmodels, livebw, standby
+from ..services import analyst, builder, capacity, linkmodels, livebw, standby
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -558,6 +558,7 @@ class TunnelOut(BaseModel):
     ux: dict = {}           # what the users get through it (services/userq.py): the grade, the configs with a problem, the Doctor's reading
     bw: dict = {}           # the bandwidth the Doctor keeps (services/bandwidth.py) without its history; GET /tunnels/{id}/bandwidth has the history
     record: dict = {}       # port mapping, direction, test door, engine options - never secrets
+    cap: dict = {}          # the capacity that is filling (services/capacity.py): {state: warm | full, util, cap, since}; {} while it is fine or unknown
     standby: dict = {}      # the warm standby of the tunnel (services/standby.py): on, state, type, since, why, the shifted ports
 
 
@@ -572,7 +573,7 @@ def _out(t: Tunnel, sb: dict | None = None) -> TunnelOut:
                      bw={k: v for k, v in ((t.record or {}).get("bw") or {}).items() if k != "hist"},
                      ux={k: v for k, v in ((t.record or {}).get("ux") or {}).items() if k != "pend"},
                      record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw", "ux")},
-                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, standby=sb or {})
+                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, cap=capacity.view(t.name), standby=sb or {})
 
 
 def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], known: set[str], now: int) -> list[TunnelOut]:
