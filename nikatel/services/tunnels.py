@@ -756,6 +756,19 @@ def check_unhealthy() -> None:
             list(ex.map(lambda i: check_tunnel(i, fresh_ext=True), ids))
 
 
+def check_of_servers(server_ids: list[int]) -> None:
+    """A server went off or came back (the pulse, every 3 s): EVERY tunnel that ends on it is looked at at once, whatever its state, each with a fresh look from another Iran server. The fast lane looks only at the
+    tunnels that are not up; a tunnel of a server that had just gone off was still "up" until the slow cycle (up to a minute) - the owner, 2026-10-20: "it detected very late, show it at once"."""
+    from sqlalchemy import or_
+
+    with session() as db:
+        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), or_(Tunnel.iran_server_id.in_(server_ids), Tunnel.foreign_server_id.in_(server_ids))))]
+
+    if ids:
+        with ThreadPoolExecutor(max(1, min(4, len(ids)))) as ex:
+            list(ex.map(lambda i: check_tunnel(i, fresh_ext=True), ids))
+
+
 def check_all() -> None:
     with session() as db:
         ids = list(db.scalars(select(Tunnel.id).where(Tunnel.enabled.is_(True))))

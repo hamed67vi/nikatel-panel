@@ -482,6 +482,15 @@ async function refreshNow() {
 }
 let lastTick = Date.now();
 setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
+/* a change of the STATE of a server (on / off) or a tunnel (up, down ...) shows within ~2 s (the owner, 2026-10-20: "it detected very late - show it at once when a tunnel or a server is cut"): one signature of the
+   states is asked every 2 s; when it changes the round of the page above is made due (lastTick = 0), so it redraws at once, under the same guards (no window open, nothing typed). */
+let briefSig = null;
+setInterval(async () => {
+  if (document.hidden || $("#app").classList.contains("hidden")) return;
+  let r; try { r = await api("/api/tunnels/brief"); } catch (e) { return; }      // (a read that failed leaves what is shown)
+  if (briefSig !== null && r.sig !== briefSig) lastTick = 0;
+  briefSig = r.sig;
+}, 2000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 /* a window that is drawn again changes only what is different, in place: a value that changed is rewritten where it stands, everything else is not touched - so nothing blinks or jumps when Health, Quality, a check ... end */
 function morphNode(a, b) {
@@ -1525,9 +1534,9 @@ PAGES.tunnelsList = async () => {
   /* the problem of a cut tunnel in two or three words, in place of the state */
 /* what is cut, in two words, as a tiny tag (the owner, 2026-10-16: not a red dot and "GRE link cut" but a small red tag that says WHICH END: "GRE foreign") */
 const CUT_TAGS = [[/both servers do not answer/i, "both servers off"], [/the foreign server does not answer/i, "foreign server off"], [/the Iran server does not answer/i, "Iran server off"],
-  [/no answer from the foreign end over the GRE link/i, "GRE foreign"], [/GRE interface .* on the Iran server/i, "GRE Iran"], [/^Iran: nikatel-gre-\S+ is /i, "GRE Iran"], [/^foreign: nikatel-gre-\S+ is /i, "GRE foreign"],
+  [/no answer from the foreign end over the GRE link/i, "foreign link"], [/GRE interface .* on the Iran server/i, "Iran link"], [/^Iran: nikatel-gre-\S+ is /i, "Iran link"], [/^foreign: nikatel-gre-\S+ is /i, "foreign link"],
   [/^Iran: \S+ is (inactive|failed|dead|unknown)/i, "Iran service"], [/^foreign: \S+ is (inactive|failed|dead|unknown)/i, "foreign service"], [/blocked in front of the server/i, "port blocked"],
-  [/not listening on the Iran server/i, "port closed"], [/no data (comes back|passes|moves)|no answer through/i, "no data"], [/flaps|keeps dropping/i, "flapping"], [/GRE/i, "GRE cut"], [/timeout|timed out/i, "no answer"]];
+  [/not listening on the Iran server/i, "port closed"], [/no data (comes back|passes|moves)|no answer through/i, "no data"], [/flaps|keeps dropping/i, "flapping"], [/GRE/i, "link cut"], [/timeout|timed out/i, "no answer"]];
 const cutTag = t => { const e = t.last_error || ""; for (const [re, s] of CUT_TAGS) if (re.test(e)) return s; return e.length > 20 ? e.slice(0, 18) + "…" : (e || stText(t).toLowerCase()); };
 const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : t.state === "degraded" ? "UNSTABLE" : t.state === "starting" ? "STARTING" : "UNKNOWN";
   const ports = t => String((t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")).split(",").map(x => x.trim()).filter(Boolean);
@@ -1546,7 +1555,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
   };
   const row = t => { const gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}${t.id < 0 ? "" : " clk"}" ${t.id < 0 ? "" : `onclick="toggleDetail(${t.id})" title="Click for the details"`} data-q="${esc([t.name, t.iran_name, t.foreign_name, t.type, t.transport, t.state, (t.iran_host || ""), (t.foreign_host || ""), (t.forwarded_ports || []).join(" "), ...[t.iran_name, t.foreign_name].map(n => { const sv = (state.serversCache || []).find(x => x.name === n) || {}; return [sv.provider, ((sv.extra || {}).geo || {}).provider, ((sv.extra || {}).geo || {}).domain, sv.country].filter(Boolean).join(" "); })].filter(Boolean).join(" ").toLowerCase())}">
       <td class="name"><i class="tun-lamp ${esc(t.state)}" title="${esc(stText(t) + (t.last_error && t.state !== "up" ? " - " + t.last_error : ""))}"></i>${esc(t.name)}${wrench(t)}${newest.has(t.id) ? '<span class="newtag" title="One of the two newest tunnels, built in the last 30 minutes">new</span>' : ""}</td>
-      <td><span class="td-type ty-${esc(tunType(t))}">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut"> ${gre ? linkTag(t) : ["direct", "forward"].includes((t.record || {}).direction) ? (t.record || {}).direction : "public"}</small></td>
+      <td class="td-ty2"><span class="td-type ty-${esc(tunType(t))}">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut">${gre ? linkTag(t) : ["direct", "forward"].includes((t.record || {}).direction) ? (t.record || {}).direction : "public"}</small></td>
       <td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>
       <td class="td-node ir"><b>${esc(t.iran_name)}</b><span class="mono mut ip-copy" onclick="event.stopPropagation();copyFrom(this, '${esc(t.iran_host)}')" title="Click to copy the address">${esc(t.iran_host)}</span></td>
       <td class="td-arrow">${pingCell(t)}</td>

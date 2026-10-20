@@ -45,11 +45,23 @@ def tcp_ok_recently(sid: int, seconds: float = 30.0) -> bool:
     return time.time() - _seen.get(sid, 0.0) <= seconds
 
 
-def _wake_tunnels() -> None:
+def _wake_tunnels(server_ids: list[int] | None = None) -> None:
     try:
         jobs.trigger("tunnels-fast")
     except KeyError:
-        pass                           # not registered (tests)
+        return                         # not registered (tests)
+
+    if server_ids:          # (the fast lane looks only at tunnels that are NOT up: a tunnel of a server that just went off was still "up" until the slow cycle, up to a minute - the owner, 2026-10-20: "it detected very late")
+        threading.Thread(target=_look_at, args=(list(server_ids),), name="pulse-look", daemon=True).start()
+
+
+def _look_at(server_ids: list[int]) -> None:
+    from . import tunnels
+
+    try:
+        tunnels.check_of_servers(server_ids)
+    except Exception:
+        log.exception("pulse: the tunnels of the servers %s could not be looked at", server_ids)
 
 
 def _ask_over_ssh(sid: int) -> None:
@@ -76,6 +88,7 @@ def run() -> None:
 
     now = int(time.time())
     changed = False
+    moved: list[int] = []          # the servers that went off or came back in this round
     ask: list[int] = []
 
     with session() as db:
@@ -95,6 +108,7 @@ def run() -> None:
                         emit(db, "ok", "servers", f"Server {s.name} answers again.", s.name)
                         log.info("pulse: %s answers again", s.name)
                         changed = True
+                        moved.append(sid)
                     elif sid not in _ASKING and time.time() - _asked.get(sid, 0) >= RETRY_SECONDS:
                         ask.append(sid)
 
@@ -108,6 +122,7 @@ def run() -> None:
                 emit(db, "bad", "servers", f"Server {s.name} does not answer: {s.last_error}", s.name)
                 log.warning("pulse: %s does not answer on port %s", s.name, s.ssh_port)
                 changed = True
+                moved.append(sid)
 
     for sid in ask:
         _asked[sid] = time.time()
@@ -115,4 +130,4 @@ def run() -> None:
         threading.Thread(target=_ask_over_ssh, args=(sid,), name=f"pulse-ask-{sid}", daemon=True).start()
 
     if changed:
-        _wake_tunnels()
+        _wake_tunnels(moved)

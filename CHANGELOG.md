@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.49 - A cut server or tunnel shows at once; the cut tags do not say GRE; the Type column is two rows
+
+> **به زبان ساده:** قطع‌شدن سرور یا تانل حالا تقریباً در همان لحظه (حدود ۲ تا ۸ ثانیه) در صفحه دیده می‌شود. نوشتهٔ قرمز تانل قطع‌شده دیگر «GRE» نمی‌گوید. ستون نوع تانل دو ردیف شد و برچسب‌ها کوچک‌تر شدند.
+>
+> **In short:** a cut server or tunnel shows within about 2-8 s instead of up to a minute; the red cut tag no longer says GRE; the Type column is two rows with smaller tags.
+
+The owner (2026-10-20), looking at a tunnel that still showed as connected after its foreign server had stopped answering: "it detected very late - I want it shown at once when a tunnel or a server is cut; the error must be corrected, GRE removed from it; my tags smaller and in two rows".
+
+- **Why it was late** (read on the live data): the pulse marks a server off in about 12 s, but the tunnels that end on it were not looked at: the fast lane (`tunnels.check_unhealthy`) takes only the tunnels that are NOT up, so a tunnel of the server that had just gone off stayed "up" until the slow cycle (every 60 s). Then the page itself redrew only every 15 s (tunnels) or 8 s (servers) and the Lab every 30 s.
+- **The tunnels of a server that goes off or comes back are looked at at once** (`pulse._wake_tunnels`, `tunnels.check_of_servers`): every ENABLED tunnel that ends on it, whatever its state, with a fresh look from another Iran server. The pulse runs every 3 s instead of 5 (two misses: a server is called off after about 8 s).
+- **The page notices a change in about 2 s** (`GET /api/tunnels/brief`, `app.js briefSig`): one signature of the states of the servers (on / off) and of the tunnels (up, down, unknown ...), a few bytes, read every 2 s while the page is open; when it changes the round of the page is made due at once (it redraws under the same guards: no window open, nothing being typed). No names, no numbers that change by themselves go through it.
+- **The tags of a cut tunnel say no GRE** (`CUT_TAGS`): "foreign link", "Iran link" and "link cut" in place of "GRE foreign", "GRE Iran" and "GRE cut" (the tunnel may be any engine; the words of the tooltip are unchanged).
+- **The Type column is two rows with smaller tags** (`td-ty2`, `lab.css`): the engine tag above (9 px), the link below (10 px); the red cut tag is 16 px high.
+- **Proved**: `tests/test_instant_state.py` (every tunnel of a server that goes off or comes back is looked at, also the ones that are up, not the disabled or the ones of other servers; two misses before a server is off; the signature changes with a server or a tunnel and carries no name; the page code: the 2 s ask, the tags, the two rows), `tests/test_web_menu.py` (the tags). **Not proved**: on the owner's panel and in a browser (the redraw within 2 s was not watched); a tunnel that is cut while both servers answer keeps its own faster path (the sentinel, every 5 s), which this release does not change.
+
 ## 1.69.48 - Real use by the users: the peak, when, the busy hours of the day and the part of the capacity used at the peak
 
 The owner (2026-10-20, in Persian, on the tunnel list): "I want to see the real bandwidth the user gets and the real bandwidth the user uses - not something made up, something really useful - for example the peak times: how much a tunnel really uses."

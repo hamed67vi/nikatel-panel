@@ -1127,3 +1127,9 @@ html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:no
 .mcard.pk .pk-bars i.on { box-shadow: 0 0 0 1px var(--warn, #ffc44d); }
 .mcard.pk .pk-x { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; color: var(--mut); }
 .mcard.pk .pk-n { margin-top: 4px; font-size: 10.5px; line-height: 1.4; }
+
+/* 1.69.49 - the Type cell is TWO rows and its tags are smaller (the owner, 2026-10-20: "my tags smaller and in 2 rows"): the engine tag above, the link below; the red tag of a cut tunnel is smaller too */
+html body #page .tun-tbl td.td-ty2 { line-height: 1.15; white-space: nowrap; }
+html body #page .tun-tbl td.td-ty2 .td-type { display: inline-block; font-size: 9px; letter-spacing: .3px; padding: 1px 6px; }
+html body #page .tun-tbl td.td-ty2 small { display: block; margin-top: 4px; padding-left: 2px; font-size: 10px; }
+html body #page .tun-tbl .cut-tag { height: 16px; padding: 0 7px; font-size: 9.5px; }

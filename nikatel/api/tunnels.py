@@ -176,6 +176,22 @@ def tunnels_live():
     return {"ok": True, "at": time.time(), "live": livebw.view(), "use24": use_summary(int(time.time()))}
 
 
+@router.get("/tunnels/brief")
+def tunnels_brief():
+    """ONE signature of the states of every server (on / off) and every tunnel (up, down ...): the open page asks for it every 2 s and redraws at once when it changes (the owner, 2026-10-20: "show it at once when a
+    tunnel or a server is cut" - the page waited its 15 s or 30 s round). A few bytes, one read of two small tables; no names, no numbers that change by themselves."""
+    import hashlib
+    import json
+
+    from ..models import Server
+
+    with session() as db:
+        servers = sorted((s.id, s.online is not False) for s in db.scalars(select(Server).where(Server.enabled.is_(True))))
+        states = sorted((t.id, t.state) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))))
+
+    return {"ok": True, "sig": hashlib.md5(json.dumps([servers, states]).encode()).hexdigest()[:12], "servers": len(servers), "tunnels": len(states)}
+
+
 _USE: dict = {"at": 0, "rows": {}}
 
 

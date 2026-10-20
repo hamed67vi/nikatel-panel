@@ -1250,7 +1250,7 @@ def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
 
 
 def test_the_cut_of_a_tunnel_is_a_tiny_tag_that_says_which_end_and_a_tunnel_without_a_number_says_why():
-    """The owner, 2026-10-16: not a red dot and "GRE link cut" but a small red tag that says which end is cut ("GRE foreign"); "some tunnels show no bandwidth", "it shows connected but has no bandwidth"."""
+    """The owner, 2026-10-16: not a red dot and "GRE link cut" but a small red tag that says which end is cut ("foreign link"); "some tunnels show no bandwidth", "it shows connected but has no bandwidth"."""
     app, css = _web("app.js"), _web("lab.css")
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
     assert "const CUT_TAGS = [" in app and "const cutTag = t =>" in app and "stShort" not in app and "WHY_SHORT" not in app
@@ -1360,8 +1360,8 @@ def test_the_tag_of_a_cut_tunnel_names_the_end_that_is_cut(tmp_path):
     driver = tmp_path / "tag.js"
     driver.write_text("const stText = t => t.state === 'up' ? 'ACTIVE' : t.state === 'down' ? 'DOWN' : 'UNKNOWN';\n" + code + "\nconst cases = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
                       "process.stdout.write(JSON.stringify(cases.map(c => cutTag(c))));\n", encoding="utf-8")
-    cases = [("no answer from the foreign end over the GRE link", "GRE foreign"), ("the GRE interface pl-ir3 is DOWN on the Iran server", "GRE Iran"),
-             ("Iran: nikatel-gre-pl-ir3.service is inactive", "GRE Iran"), ("foreign: nikatel-gre-pl-ir3.service is failed", "GRE foreign"),
+    cases = [("no answer from the foreign end over the GRE link", "foreign link"), ("the GRE interface pl-ir3 is DOWN on the Iran server", "Iran link"),
+             ("Iran: nikatel-gre-pl-ir3.service is inactive", "Iran link"), ("foreign: nikatel-gre-pl-ir3.service is failed", "foreign link"),
              ("Iran: backhaul-iran-tcpmux-9906.service is inactive", "Iran service"), ("foreign: backhaul-kharej-tcpmux-9906.service is dead", "foreign service"),
              ("both servers do not answer (timeout)", "both servers off"), ("the Iran server does not answer (timeout after 35s)", "Iran server off"), ("the foreign server does not answer (x)", "foreign server off"),
              ("port 8072 answers on the server but not from ir9: blocked in front of the server", "port blocked"), ("port 8075 is not listening on the Iran server", "port closed"),
