@@ -92,6 +92,19 @@ def get_server(server_id: int):
         return ServerOut.model_validate(s)
 
 
+@router.get("/servers/{server_id}/live-read")
+def live_read(server_id: int):
+    """ONE reading, now, of the main network card of a server (any role) for its Live window - what nload shows; read-only, asked once a second while the window is open."""
+    from ..services import livebw
+    from ..ssh import SSHError
+
+    try:
+        return {"ok": True, **livebw.server_sample(server_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (SSHError, RuntimeError) as e:
+        raise HTTPException(502, str(e))
+
 @router.get("/servers/{server_id}/uptime")
 def server_uptime(server_id: int, hours: int = Query(24, ge=1, le=uptime.MAX_HOURS), buckets: int = Query(48, ge=6, le=168)):
     """One strip of cells for the server over the last hours (2 answered, 1 now and then, 0 silent, - not added yet) and the share of the time it was heard; read from the samples, nothing is asked of the server."""

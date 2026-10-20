@@ -169,6 +169,19 @@ def tunnel_kinds():
     ]}
 
 
+@router.get("/tunnels/{tunnel_id}/live-read")
+def live_read(tunnel_id: int, via: str = "card"):
+    """ONE reading, now, of a network card's counters for the Live window of a tunnel (read-only; the page asks once a second while the window is open): `via` card = the tunnel's own card on its Iran server,
+    iran_nic / foreign_nic = the main card of that server (like nload). The page turns two readings into Mb/s with the server's uptime clock."""
+    from ..ssh import SSHError
+
+    try:
+        return {"ok": True, **livebw.sample(tunnel_id, via)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (SSHError, RuntimeError) as e:
+        raise HTTPException(502, str(e))
+
 @router.get("/tunnels/live")
 def tunnels_live():
     """What the users use of each tunnel right now (Mb/s down and up, from the counters of its link or, for a reverse proxy with no link, of its TCP connections; counted over about 15 s and read every 5 s while this is asked). Only a read of memory: the servers are read by a job."""

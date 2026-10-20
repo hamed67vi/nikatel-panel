@@ -402,6 +402,13 @@ echo "UP $(cut -d' ' -f1 /proc/uptime)"
 """, {"IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39})?$",
       "SOCKS": r"^((s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})( (s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})){0,39})?$"}),
 
+    # read-only: the byte counters of ONE network card and the uptime - the Live window (services/livebw.py `sample`), asked once a second while the window is open. IFACE "auto" = the card of the default route
+    # (the one nload shows). "IF <card> <rx_bytes> <tx_bytes>" (nothing when the card does not exist), "UP <seconds>" (the clock of the rate).
+    "live_sample": (r"""i=@IFACE@
+if [ "$i" = auto ]; then i=$(ip -o route get 1.1.1.1 2>/dev/null | awk '{ for (k = 1; k <= NF; k++) if ($k == "dev") { print $(k + 1); exit } }'); fi
+if [ -n "$i" ] && [ -r "/sys/class/net/$i/statistics/rx_bytes" ]; then echo "IF $i $(cat /sys/class/net/$i/statistics/rx_bytes) $(cat /sys/class/net/$i/statistics/tx_bytes)"; fi
+echo "UP $(cut -d' ' -f1 /proc/uptime)"
+""", {"IFACE": r"^(auto|[A-Za-z0-9][A-Za-z0-9._-]{0,14})$"}),
     # the users' path, looked at from another Iran server: one HTTP request to host:port (several at once, in parallel) - http first,
     # then https without verification for TLS ports. "REACH host port <http code> <seconds>": any code but 000 proves the port answers from Iran.
     "reach_many": (r"""i=0; for hp in @TARGETS@; do i=$((i+1)); [ $((i % 6)) -eq 0 ] && wait; ( h=${hp%:*}; p=${hp##*:}; r=$(curl -s -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "http://$h:$p/" 2>/dev/null); c=${r%% *}; if [ -z "$r" ] || [ "$c" = "000" ]; then r=$(curl -sk -o /dev/null -m 6 --connect-timeout 4 -w '%{http_code} %{time_total}' "https://$h:$p/" 2>/dev/null); fi; [ -n "$r" ] || r="000 0"; echo "REACH $h $p $r" ) & done; wait

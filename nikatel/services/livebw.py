@@ -351,6 +351,60 @@ def ask() -> None:
     _ASKED[0] = time.time()
 
 
+LIVE_VIA = ("card", "iran_nic", "foreign_nic")
+
+
+def _live_read(node: Node, card: str, server: str, via: str) -> dict:
+    out = run_light(node, "live_sample", {"IFACE": card}, timeout=6)
+    up, cards = parse_counters(out)
+
+    if up is None or not cards:
+        raise RuntimeError(f"the network card could not be read on {server}")
+
+    name, (rx, tx) = next(iter(cards.items()))
+    return {"via": via, "server": server, "card": name, "up": up, "rx": rx, "tx": tx}
+
+
+def sample(tunnel_id: int, via: str) -> dict:
+    """ONE reading, now, for the Live window (the page asks it once a second while the window is open; nothing is kept): the byte counters of a card and the uptime of its server - {via, server, card, up, rx, tx}.
+    via "card": the card of the tunnel on its Iran server (what its users move; rx = what comes in from the foreign server = their download); "iran_nic" / "foreign_nic": the main network card of that server,
+    the one nload shows. ValueError: no such tunnel or via, a tunnel with no card of its own; SSHError / RuntimeError: the server did not answer."""
+    if via not in LIVE_VIA:
+        raise ValueError("via must be card, iran_nic or foreign_nic")
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        srv = t.foreign if via == "foreign_nic" else t.iran
+        node, name, card = Node(srv.host, srv.ssh_user, srv.ssh_port), srv.name, "auto"
+
+        if via == "card":
+            plan = plan_for(t)
+            card = plan.iface or plan.ping_iface or ""
+
+            if not card or not CARD.fullmatch(card):
+                raise ValueError("this tunnel has no network card of its own on its Iran server: choose the network card of the Iran server")
+
+    return _live_read(node, card, name, via)
+
+
+def server_sample(server_id: int) -> dict:
+    """ONE reading of the main network card of a server (any role), as `sample`: via "nic"."""
+    from ..models import Server
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        node, name = Node(s.host, s.ssh_user, s.ssh_port), s.name
+
+    return _live_read(node, "auto", name, "nic")
+
 def view() -> dict[str, dict]:
     """What the page gets: {tunnel id: {down, up, span, at, age, via}} for the tunnels read in the last two minutes (Mb/s; `age` in seconds; `via`: "link" = the card of the tunnel, "connections" = the TCP connections
     between its servers, "users" = the users' own connections to its ports)."""

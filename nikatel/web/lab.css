@@ -1193,6 +1193,20 @@ html[data-fluid] body #page .lab-bar:has(.lab-kinds > button:nth-child(5)) .tabs
 /* the meter of the list is drawn for EVERY tunnel that runs, the TOTAL on the left and what the users use beside it (the owner, 2026-10-21): a tunnel without a problem has no word */
 html body #page .tun-tbl .bwm-t small:empty { display: none; }
 html body #page .tun-tbl .bwm-t .bwm-u { font-size: 12px; font-weight: 600; color: var(--text); }
+/* 1.69.57 - the Live window (nload-like): the source buttons, Curr / Avg / Min / Max / Ttl for the incoming and the outgoing side, the graph of the last two minutes */
+.lv .lv-src { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.lv .lv-src button.on { background: var(--acc, #2f7bff); color: #fff; border-color: transparent; }
+.lv .lv-row { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(5, minmax(0, 1fr)); gap: 8px; align-items: baseline; padding: 8px 12px; margin-bottom: 6px; border-radius: 12px; background: var(--panel-2, rgba(255, 255, 255, .05)); border: 1px solid var(--line, rgba(255, 255, 255, .08)); }
+.lv .lv-row b { font-size: 12.5px; } .lv .lv-row.in b { color: #6ea8ff; } .lv .lv-row.out b { color: #3ddc97; }
+.lv .lv-row span { display: flex; flex-direction: column; min-width: 0; } .lv .lv-row small { font-size: 9.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); font-weight: 700; }
+.lv .lv-row em { font-style: normal; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.3px; white-space: nowrap; }
+.lv .lv-graph { margin: 8px 0 4px; border-radius: 12px; background: var(--panel-2, rgba(255, 255, 255, .04)); border: 1px solid var(--line, rgba(255, 255, 255, .08)); padding: 6px 8px; }
+.lv .lv-g { display: block; width: 100%; height: 150px; }
+.lv .lv-g .lg { stroke: rgba(255, 255, 255, .1); stroke-width: 1; vector-effect: non-scaling-stroke; } .lv .lv-g .lt { font-size: 10px; fill: var(--mut, #8d99b5); }
+.lv .lv-g .l0, .lv .lv-g .l1 { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; } .lv .lv-g .l0 { stroke: #6ea8ff; } .lv .lv-g .l1 { stroke: #3ddc97; }
+.lv .lv-g .a0 { fill: rgba(110, 168, 255, .18); } .lv .lv-g .a1 { fill: rgba(61, 220, 151, .14); }
+.lv .lv-foot { font-size: 11px; }
+@media (max-width: 640px) { .lv .lv-row { grid-template-columns: repeat(5, minmax(0, 1fr)); } .lv .lv-row b { grid-column: 1 / -1; } }
 
 /* a tunnel with no capacity yet (a new one): an empty bar and one word */
 html body #page .tun-tbl .bwm.pend .bwm-bar u { background: transparent; }

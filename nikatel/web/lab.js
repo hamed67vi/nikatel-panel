@@ -584,13 +584,13 @@ function labServerItems(p, s, ctx) {      // a server's menu: what is done most 
   if (ctx === "row") {
     const pgn = typeof pgSrvOn === "function" ? pgSrvOn(s).find(x => x.type === "pasarguard" && x.node_id != null) : null;      // a server that carries a PasarGuard node keeps ALL the actions of the node in its menu (the owner, 2026-10-15: they must not go when the node is one row with its server): in one flyout
     const np = pgn ? labNodeParts({panel_id: pgn.panel_id, node_id: pgn.node_id}) : null, nodeFly = np ? [labSubItem("PasarGuard node", "box", [...np.mon, labSep, ...np.main, ...np.mng, labSep, ...np.upd]), labSep] : [];
-    return [labGrp("Server"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
+    return [labGrp("Server"), labIt("Overview", "overview", () => labOpen(p.id)), labIt("Check now", "check", () => labCheckOne(p.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Live traffic…", "pulse", () => liveOpen("server", s.id, nm), {off, tip: off ? tip : "The traffic of the main network card of this server second by second, like nload"}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
       labSep, labSubItem("Move to profile", "tag", labMoveItems(p.id)), ...(labCanMakeNode(s) ? [labIt("Make a PasarGuard node…", "box", () => labMakeNode(p.id), {off, tip})] : []), ...nodeFly, gone, labSep, del];
   }
   const access = [labIt("Connect SSH…", "key", () => srvConnect(s.id, nm)), labIt("Change SSH password…", "lock", () => srvPassword(s.id, nm)), labIt("Forget host key…", "forget", () => forgetKey(s.id, nm)), labIt("Open in an SSH program…", "ext", async () => { const v = await glassChoice(`Open ${nm} in:`, [{label: "Windows ssh", v: "ssh", note: "a .bat with your own key"}, {label: "PuTTY", v: "putty"}, {label: "MobaXterm", v: "mobaxterm"}]); if (v) srvOpen(s.id, v); })];
   const tests = [labIt("GRE test", "gre", () => greCheck(s.id)), labIt("Spoof test…", "spoof", () => srvSpoof(s.id, nm)), ...(s.role === "foreign" ? [labIt("Is it filtered in Iran?", "shield", () => srvFilter(s.id)), labIt(abuseOn ? "Abuse-Defender: remove…" : "Abuse-Defender: install…", "abuse", () => srvAbuse(s.id, abuseOn ? "remove" : "install"))] : [])];
   const install = [labIt("Nodes and tools…", "box", () => wtab("install")), labIt("Tunnel cores…", "box", () => srvCores(s.id, nm)), labIt("WireGuard tools…", "box", () => srvWg(s.id, nm)), labIt("Update the server…", "up", () => srvInstall(s.id, "os_update"))];
-  return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
+  return [labGrp("Server"), labIt("Check now", "check", () => checkServer(s.id)), labIt("Console", "console", () => srvConsole(s.id), {off, tip}), labIt("Live traffic…", "pulse", () => liveOpen("server", s.id, nm), {off, tip: off ? tip : "The traffic of the main network card of this server second by second, like nload"}), labIt("Edit…", "edit", () => editServer(s.id)), labIt("Reboot…", "reboot", () => srvReboot(s.id, nm), {off, tip}),
     labSep, labSubItem("Access", "key", access), labSubItem("Tests", "gre", tests, {off, tip}), labSubItem("Install", "box", install, {off, tip}),
     labSep, gone, labSep, del];
 }
@@ -643,10 +643,77 @@ window.tunMoveGo = async pick => {      // the button of a server in the plan: t
     tunMoveProgress(r.action_id, m.name, to);
   } catch (e) { showModal(`<b>Move ${esc(m.name)} to a better server</b>`, `<div class="mv-plan"><b>✕ ${esc(e.message)}</b><div class="mv-choices"><button class="sm" onclick="closeModal()">Close</button></div></div>`, "keep"); }
 };
-function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
+/* the LIVE window (the owner, 2026-10-20: "I used nload on the Iran or the foreign server, it showed the bandwidth at that moment - show it like that"): a network card second by second, the way nload shows it - Curr, Avg, Min, Max and
+   the total since the window opened, for the incoming and the outgoing side, and the last two minutes as a graph. The page asks ONE reading a second (GET /api/tunnels/<id>/live-read or /api/servers/<id>/live-read: the byte counters of
+   the card and the uptime of the server) only while the window is open, and turns two readings into Mb/s with the server's own clock. A tunnel can show its own card (its users' traffic), the main card of its Iran server or of its
+   foreign server; a server shows its main card. Nothing is kept: a closed window stops everything. */
+const LIVE_KEEP = 120;
+let LIVE_W = null;
+const liveFmt = v => v == null ? "—" : v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+const liveBytes = n => n >= 1e12 ? (n / 1e12).toFixed(2) + " TB" : n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? (n / 1e3).toFixed(0) + " KB" : Math.round(n) + " B";
+const liveNice = v => { const e = Math.pow(10, Math.floor(Math.log10(v))), m = v / e; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * e; };
+const liveNew = () => ({pts: [], secs: 0, rx: 0, tx: 0, down: {cur: null, min: null, max: null, sum: 0}, up: {cur: null, min: null, max: null, sum: 0}});
+function liveRate(prev, cur) {      // pure: two readings {up (the server's uptime, s), rx, tx (bytes)} -> {down, up (Mb/s), dt, bytes} - null for the first one, a clock or a counter that went back, or a rate no card can carry
+  if (!prev || !cur) return null;
+  const dt = cur.up - prev.up;
+  if (!(dt >= 0.2) || cur.rx < prev.rx || cur.tx < prev.tx) return null;
+  const down = (cur.rx - prev.rx) * 8 / dt / 1e6, up = (cur.tx - prev.tx) * 8 / dt / 1e6;
+  return down > 400000 || up > 400000 ? null : {down, up, dt, rx: cur.rx - prev.rx, tx: cur.tx - prev.tx};
+}
+function liveFold(st, r) {      // pure: one rate into the window's numbers (the last LIVE_KEEP seconds for the graph; Curr, Min, Max, the sum for Avg, the bytes for Ttl)
+  st.pts.push([r.down, r.up]); if (st.pts.length > LIVE_KEEP) st.pts.shift();
+  for (const k of ["down", "up"]) { const s = st[k]; s.cur = r[k]; s.min = s.min == null ? r[k] : Math.min(s.min, r[k]); s.max = s.max == null ? r[k] : Math.max(s.max, r[k]); s.sum += r[k] * r.dt; }
+  st.secs += r.dt; st.rx += r.rx; st.tx += r.tx;
+  return st;
+}
+function liveGraph(pts) {      // the last two minutes: incoming (blue) and outgoing (green), the newest at the right edge, the scale 1-2-5
+  const W = 640, H = 150, pl = 44, pr = 8, pt = 8, pb = 18, n = LIVE_KEEP, top = liveNice(Math.max(1, ...pts.map(p => Math.max(p[0], p[1])))), off = n - pts.length;
+  const X = i => pl + (i + off) / (n - 1) * (W - pl - pr), Y = v => pt + (1 - Math.min(v, top) / top) * (H - pt - pb);
+  const line = k => pts.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p[k]).toFixed(1)).join(""), area = k => line(k) + `L${X(pts.length - 1).toFixed(1)} ${H - pb}L${X(0).toFixed(1)} ${H - pb}Z`;
+  const grid = [0, .5, 1].map(f => { const y = (pt + (1 - f) * (H - pt - pb)).toFixed(1); return `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" class="lg"/><text x="${pl - 5}" y="${(+y + 3).toFixed(1)}" class="lt" text-anchor="end">${liveFmt(top * f)}</text>`; }).join("");
+  return `<svg class="lv-g" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<text x="${pl}" y="${H - 4}" class="lt">-2 min</text><text x="${W - pr}" y="${H - 4}" class="lt" text-anchor="end">now</text><path class="a0" d="${area(0)}"/><path class="l0" d="${line(0)}"/><path class="a1" d="${area(1)}"/><path class="l1" d="${line(1)}"/></svg>`;
+}
+function liveBody(L) {
+  const el = document.getElementById("lv-body"); if (!el) return;
+  const st = L.st, m = L.meta || {};
+  if (!st.pts.length) { el.innerHTML = L.err ? `<div class="err">${esc(L.err)}</div>` : '<div class="mut">Waiting for the first readings…</div>'; return; }
+  const row = (k, lab, cls, bytes) => `<div class="lv-row ${cls}"><b>${lab}</b><span><small>Curr</small><em>${liveFmt(st[k].cur)}</em></span><span><small>Avg</small><em>${liveFmt(st.secs ? st[k].sum / st.secs : null)}</em></span><span><small>Min</small><em>${liveFmt(st[k].min)}</em></span><span><small>Max</small><em>${liveFmt(st[k].max)}</em></span><span><small>Ttl</small><em>${liveBytes(bytes)}</em></span></div>`;
+  const card = L.via === "card";
+  el.innerHTML = row("down", card ? "Incoming ↓ (the users' download)" : "Incoming ↓", "in", st.rx) + row("up", card ? "Outgoing ↑ (the users' upload)" : "Outgoing ↑", "out", st.tx)
+    + `<div class="lv-graph">${liveGraph(st.pts)}</div><div class="mut lv-foot">${esc(m.card || "")} on ${esc(m.server || L.name)} - one reading a second over SSH while this window is open${L.err ? ` · <span class="err">${esc(L.err)}</span>` : ""}</div>`;
+}
+function liveDraw(L) {
+  const chips = L.kind === "tunnel" ? `<div class="lv-src">${[["card", "Tunnel card", L.hasCard], ["iran_nic", "Iran server card", true], ["foreign_nic", "Foreign server card", true]].map(([v, l, ok]) => `<button class="sm ${L.via === v ? "on" : ""}" ${ok ? "" : 'disabled title="This tunnel has no network card of its own"'} onclick="liveVia('${v}')">${l}</button>`).join("")}<small class="mut">Mb/s</small></div>` : '<div class="lv-src"><small class="mut">Mb/s - the main network card of the server, like nload</small></div>';
+  state.keepWin = true; state.open = null; state.nodeWin = state.nodeWin || {lab: 1};      // (the window of the tunnel that was open is replaced by this one; the pages behind do not close it, only its Close button does)
+  showModal(`<b>Live traffic · ${esc(L.name)}</b>`, `<div class="lv" id="lv-${L.token}">${chips}<div id="lv-body"></div></div>`, "keep");
+  liveBody(L);
+}
+async function liveLoop(L) {
+  while (LIVE_W === L && document.getElementById("lv-" + L.token)) {
+    const t0 = Date.now(), via = L.via;
+    try {
+      const r = await api(L.kind === "tunnel" ? `/api/tunnels/${L.id}/live-read?via=${via}` : `/api/servers/${L.id}/live-read`);
+      if (LIVE_W !== L || L.via !== via) continue;      // (the source was changed while the reading was on its way: it belongs to the old one)
+      L.fails = 0; L.err = ""; L.meta = r;
+      const rate = liveRate(L.prev, r); L.prev = r;
+      if (rate) liveFold(L.st, rate);
+    } catch (e) {
+      if (LIVE_W !== L) return;
+      L.fails++; L.err = e.message;
+      if (L.fails >= 5) { liveBody(L); return; }      // (five readings in a row failed: the window says why and stops asking)
+    }
+    liveBody(L);
+    await new Promise(res => setTimeout(res, Math.max(150, 1000 - (Date.now() - t0))));
+  }
+}
+window.liveVia = v => { const L = LIVE_W; if (!L || L.via === v) return; L.via = v; L.st = liveNew(); L.prev = null; L.err = ""; L.fails = 0; liveDraw(L); };
+window.liveOpen = (kind, id, name, hasCard) => {
+  const L = LIVE_W = {token: String(Date.now()), kind, id, name, hasCard: !!hasCard, via: kind === "tunnel" ? (hasCard ? "card" : "iran_nic") : "nic", st: liveNew(), prev: null, meta: {}, err: "", fails: 0};
+  liveDraw(L); liveLoop(L);
+};function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner, 2026-10-16: "like the server box"): what is done on the tunnel, in groups; Remove last, in red
   const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return [];
   const up = t.state === "up", offs = typeof tunOffServers === "function" ? tunOffServers(t) : "", muted = (state.mutedSet || new Set()).has(t.name), tipOff = offs ? "A server of this tunnel is off (" + offs + ")" : "", tipUp = up ? "Nothing to fix: the tunnel is healthy" : "";
-  return [labGrp("Repair"), labIt("Fix…", "fix", () => fixTunnel(t.id, false), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Dry run", "eye", () => fixTunnel(t.id, true), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Health check", "pulse", () => healthTunnel(t.id), {off: !!offs, tip: tipOff}), labIt("Speed test…", "monitor", () => tunSpeed(t.id, t.name), {off: !!offs, tip: tipOff}), labIt("Restart…", "check", () => restartTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
+  return [labGrp("Repair"), labIt("Fix…", "fix", () => fixTunnel(t.id, false), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Dry run", "eye", () => fixTunnel(t.id, true), {off: up || !!offs, tip: tipUp || tipOff}), labIt("Health check", "pulse", () => healthTunnel(t.id), {off: !!offs, tip: tipOff}), labIt("Speed test…", "monitor", () => tunSpeed(t.id, t.name), {off: !!offs, tip: tipOff}), labIt("Live traffic…", "pulse", () => liveOpen("tunnel", t.id, t.name, !!(t.units || {}).iface), {tip: "The traffic of a network card second by second, like nload: the card of this tunnel or the main card of its Iran or foreign server"}), labIt("Restart…", "check", () => restartTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
     labSep, labIt("History", "history", () => tunHistory(t.id, t.name)), labIt(muted ? "Unmute alerts" : "Mute alerts", "bell", () => muteRef(t.name, !muted)),
     labSep, labIt("Rename…", "edit", () => renameTunnel(t.id, t.name)), ...(t.type === "backhaul" ? [labIt("Ports…", "ports", () => editPorts(t.id, (t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")))] : []), labIt("Rebuild…", "rebuild", () => rebuildTunnel(t.id, t.name), {off: !!offs, tip: tipOff}),
     labSep, labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name), {tip: "Moves this tunnel to the best other Iran server that has room and free ports, and points the DNS records that serve only it at that server"}),
