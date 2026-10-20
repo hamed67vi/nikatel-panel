@@ -4404,6 +4404,20 @@ window.aiAddMenu = (btn, ev) => {      // "Add another AI": the ones without a r
   const open = state.aiOpen || (state.aiOpen = new Set()), more = (aiCur().catalog || []).filter(c => !c.has_key && !AI_MAIN.includes(c.id) && !open.has(c.id));
   nkMenu(btn, [labGrp("Add another AI"), ...more.map(c => labItem(c.name, () => { open.add(c.id); refresh(); let n = 0; const t = setInterval(() => { const f = document.getElementById("aim-" + c.id); if (f || ++n > 25) { clearInterval(t); if (f) { f.scrollIntoView({block: "center", behavior: "smooth"}); const i = f.querySelector("input[name=api_key]"); if (i) i.focus({preventScroll: true}); } } }, 120); }, {ic: `<i class="aim-mono" style="--c:${AIM_C[c.id] || "#98a2bd"}">${AIM_M[c.id] || "AI"}</i>`}))], ev);
 };
+/* after an update the page is loaded again - but only once the panel answers as the NEW version (twice in a row), and when the load hangs it is tried again with a fresh address and, at last, a visible link (the owner, 2026-10-20:
+   "after the update the page does not refresh by itself, it seems stuck": the old code asked for the page 0.9 s after the percentage said 100, and a request that met the restarting panel hung in the tab). */
+const aboutReload = async () => {
+  const t0 = Date.now(); let ok = 0;
+  while (Date.now() - t0 < 90000 && ok < 2) {
+    try { const u = await api("/api/system/update"); ok = u.version && u.version !== aboutV0 ? ok + 1 : 0; } catch (e) { ok = 0; }
+    if (ok < 2) await new Promise(r => setTimeout(r, 1000));
+  }
+  const fresh = () => location.pathname + "?r=" + Date.now() + location.hash;
+  location.replace(fresh());
+  setTimeout(() => location.replace(fresh()), 10000);      // (still here after 10 s: the load hung)
+  setTimeout(() => { const b = $("#about-box"); if (b) b.innerHTML = `<span class="gw-ok">Updated.</span> <a href="${fresh()}">The page did not reload by itself: click here</a>`; }, 20000);
+};
+if (/[?&]r=\d+/.test(location.search)) { try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) { /* (the address keeps its ?r=) */ } }
 let aboutAuto = null, aboutV0 = "", aboutTimer = null;      // the timer of the automatic look for a new version, the version that runs, and the timer of the progress of an update
 const aboutPill = (txt, cls, tip) => { const p = $("#about-pill"); if (p) { p.className = "abt-pill" + (cls ? " " + cls : ""); p.textContent = txt; p.title = tip || ""; } };
 const aboutBtn = (off, tip) => { const b = document.querySelector("#about-hero .abt-row"); if (b) { b.disabled = off; b.title = tip; } };      // (the owner, 2026-10-16: the button is off while this is the newest version)
@@ -4436,7 +4450,7 @@ window.aboutWatch = p0 => {      // the update runs: only its percentage, moving
     if (down) server = Math.min(Math.max(server, 90), server + 0.02);      // (the panel restarts: the bar waits, and creeps a little so that it does not look frozen)
     shown += ((end === "done" ? 100 : end === "failed" ? shown : server) - shown) * (end === "done" ? 0.2 : 0.12);
     if (end === "failed") { stop(); aboutLoad(); return; }      // (the card draws what went wrong from the same file, and the button is free again)
-    if (end === "done" && shown > 99.4) { shown = 100; paint("Updated 100%", "gw-ok"); stop(); setTimeout(() => location.reload(), 900); return; }
+    if (end === "done" && shown > 99.4) { shown = 100; paint("Updated 100%", "gw-ok"); stop(); aboutReload(); return; }
     if (!end && Date.now() - t0 > 600000) { stop(); aboutLoad(); return; }      // (ten minutes without an end: look again at what the server says)
     if (!paint(`Updating… ${Math.round(shown)}%`, "mut")) stop();
   };

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.50 - After an update the page reloads by itself; the update's state files follow the panel's own data directory
+
+> **به زبان ساده:** بعد از آپدیت، صفحه خودش تازه می‌شود: صبر می‌کند تا پنل با نسخهٔ جدید جواب بدهد، اگر بارگذاری گیر کرد دوباره امتحان می‌کند و آخرش یک لینک نشان می‌دهد. فایل وضعیت آپدیت دیگر مسیر ثابت پنل زنده را نمی‌نویسد.
+>
+> **In short:** the page reloads by itself after an update (it waits for the new version, retries a hung load, ends with a link); the update's state files follow the panel's own data directory.
+
+The owner (2026-10-20, a picture of the About page after an update): "after the update the page does not refresh by itself, it seems stuck" - the card said "Updated 100%", the version under it was still the old one and the tab was loading.
+
+- **The reload waits for the NEW version** (`app.js aboutReload`): the old code asked for the page 0.9 s after the percentage said 100 (`location.reload()`), and a request that met the restarting panel (the old process needs about 4 s to stop) hung in the tab. Now the page asks `/api/system/update` until the panel answers as another version than the one that was running, twice in a row (at most 90 s: a rollback keeps the old version), then loads with a fresh address (`?r=<time>`, taken off the address bar when the new page starts); a load that is still pending after 10 s is asked again, and after 20 s the card shows a link ("the page did not reload by itself: click here").
+- **The update's state files follow the data directory** (`updater.STATE_DIR` = the parent of the configured data directory; `deploy.sh` gets it as `STATE_DIR`): the path was fixed to `/var/lib/nikatel`, so a second panel or a test run with its own data directory that called the update route wrote the progress and the log of the LIVE panel - on 2026-10-20 a robustness run left "could not download the new version: process spawn blocked by fuzz harness" in the live file and the About page said "the last update did not finish". For the live panel the path is the same as before.
+- **Proved**: `tests/test_update_reload.py` (the page: waits for the new version twice in a row, 90 s limit, fresh address, a second try after 10 s, the link after 20 s, the `?r=` taken off; the state directory follows the data directory and is not the live path under the tests; the update unit is given `STATE_DIR`). **Not proved**: in the owner's browser (the hang itself was not reproduced here: the panel answered at once after the restart when it was looked at); a record left by that run stays in the live file until the next update replaces it.
+
 ## 1.69.49 - A cut server or tunnel shows at once; the cut tags do not say GRE; the Type column is two rows
 
 > **به زبان ساده:** قطع‌شدن سرور یا تانل حالا تقریباً در همان لحظه (حدود ۲ تا ۸ ثانیه) در صفحه دیده می‌شود. نوشتهٔ قرمز تانل قطع‌شده دیگر «GRE» نمی‌گوید. ستون نوع تانل دو ردیف شد و برچسب‌ها کوچک‌تر شدند.

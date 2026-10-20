@@ -20,10 +20,12 @@ import time
 from pathlib import Path
 
 from .. import __version__
+from ..config import get_settings
 from ..log import get_logger
 
 log = get_logger("updater")
-STATE_DIR = Path("/var/lib/nikatel")
+STATE_DIR = get_settings().data_dir.parent          # next to the data directory (the live panel: /var/lib/nikatel). NOT a fixed path: a second panel or a test run with its own data directory must never write the
+                                                    # progress and the log of the LIVE panel (2026-10-20: a robustness run called the update route and the live About page said "the last update did not finish")
 PROGRESS_FILE = STATE_DIR / "update-progress.json"
 LOG_FILE = STATE_DIR / "update.log"
 SRC = Path(__file__).resolve().parent.parent.parent
@@ -191,7 +193,7 @@ def start() -> dict:
     cmd = f"cd {shlex.quote(str(SRC))} && echo '== update started' && bash scripts/deploy.sh"
 
     try:
-        subprocess.run(["systemd-run", "--no-block", "--unit", f"nikatel-update-{run}", f"--setenv=UPDATE_RUN={run}", f"--setenv=UPDATE_FROM={__version__}",
+        subprocess.run(["systemd-run", "--no-block", "--unit", f"nikatel-update-{run}", f"--setenv=UPDATE_RUN={run}", f"--setenv=UPDATE_FROM={__version__}", f"--setenv=STATE_DIR={STATE_DIR}",
                         f"--property=StandardOutput=append:{LOG_FILE}", f"--property=StandardError=append:{LOG_FILE}", "bash", "-c", cmd], check=True, capture_output=True, timeout=20)
     except (OSError, subprocess.SubprocessError) as e:
         return _failed({**rec, "to": to}, "could not start the update: " + str(e)[:160])
