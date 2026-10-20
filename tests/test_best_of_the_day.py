@@ -57,3 +57,28 @@ def test_the_build_with_kind_auto_builds_the_type_that_was_chosen_and_says_which
 
     r = client.post("/api/tunnels", json={"iran_id": ir, "foreign_id": fr, "ports": "8443", "kind": "nonsense"})
     assert r.status_code == 422                                                                                          # (only the five engines and auto)
+
+
+def weak(iran, foreign, kind, score, down, measure="latency"):
+    knowledge.record(iran, foreign, {"kind": kind, "ok": False, "measured": True, "score": score, "down_mbps": down, "latency_ms": 170.0, "loss_pct": 0.0}, measure)
+
+
+def test_when_nothing_scored_well_the_best_of_the_weak_ones_is_the_one_that_carried_the_most_not_the_freshest():
+    """The owner, 2026-10-20: the automatic type chose Paqet (4.9 Mb/s, measured a moment ago) on a pair where other types had carried 66 and 76 Mb/s."""
+    ir, fr = two_servers("bk4")
+    weak(ir, fr, "wsmux", 48, 65.7)
+    weak(ir, fr, "ipipfou:tcpmux", 48, 76.2)
+    weak(ir, fr, "paqet", 34, 4.9, "full")                                    # (the only FRESH full measurement: it used to win)
+    assert knowledge.ranked(knowledge.pair(ir, fr), 2**31) == []             # (nothing is good: the old path went on to the first choice for a NEW pair)
+    kind, why = knowledge.best_kind(ir, fr)
+    assert kind == "ipipfou:tcpmux" and "best of the weak ones" in why and "76.2 Mb/s" in why and "nothing is measured" not in why
+    assert knowledge.best_kind(ir, fr, allowed=lambda k: k != "ipipfou:tcpmux")[0] == "wsmux"
+    assert knowledge.best_kind(ir, fr, allowed=lambda k: k == "paqet")[0] == "paqet"                  # (what the licence allows, even if it is the weakest)
+
+
+def test_a_good_type_still_wins_over_every_weak_one():
+    ir, fr = two_servers("bk5")
+    weak(ir, fr, "wsmux", 48, 900.0)
+    measured(ir, fr, "chisel:tls", 70)
+    kind, why = knowledge.best_kind(ir, fr)
+    assert kind == "chisel:tls" and "the best that connects" in why

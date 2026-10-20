@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.45 - "Best of the day" on a pair where nothing scored well no longer picks the freshest weak type
+
+The owner (2026-10-20), after a tunnel built with the automatic best type came up as Paqet: "didn't you say Paqet is weak? and in the tests BackPack was the best - why did it choose Paqet?"
+
+- **What happened** (`knowledge.best_kind`): on the owner's pair every type that carried data was only "poor" (a long route, 167 - 190 ms; the Doctor's memory held 24 weak types and none good). With no good type the function did not look at the weak ones: it fell through to the Doctor's "first choice for a new pair" (`plan_for`), whose first entry sorted the weak types by "a fresh FULL measurement before a latency-only one" - so a Paqet that had carried 4.9 Mb/s a moment before won over types that had carried 66 and 76 Mb/s some days earlier. The sentence said "nothing is measured between these two servers yet", which was also wrong: 33 types were measured.
+- **Now**: when no type is good, the best of the weak ones is the one that CARRIED the most (a measured download first, by Mb/s, then by score), among what the licence allows; the sentence says "no type scored well between these two servers - this is the best of the weak ones (76.2 Mb/s, measured N h ago)". A good type still wins over every weak one; a pair nobody measured still gets the first choice for a new pair.
+- **Not changed (said so, to be done separately)**: a build of such a type is still called "ready" when its test door carried 0 Mb/s download (the Paqet of that pair showed "one connection: down 0.0 up 99.0"); the build should refuse it and the automatic type should try the next one. This release only makes the automatic choice not pick the weakest.
+- **Proved**: `tests/test_best_of_the_day.py` (the weak ones: the one that carried the most wins over a fresher weaker one; the licence filter; a good type still wins). **Not proved**: on the owner's panel (the choice for the pair of that tunnel can be seen in Create tunnel, Type, Automatic, Best of the day, after the update).
+
 ## 1.69.44 - WireGuard is complete: the owner installs the tools with one press, every part says "installed / missing" and "not tested" instead of "blocked", the link checks its handshake and restarts on a stale one, the MTU counts the 80 bytes
 
 The owner (2026-10-20, through the other session): "make WireGuard COMPLETE". WireGuard existed as the link `wg` (`wg:tcpmux`, `wg:tcp`, from 1.69.40 the whole `wg:*` grid) but was never really used: `wireguard-tools` is on none of the owner's servers, and the probe, the night survey and the Doctor never install a package - so every probe said "unknown" and the survey counted WireGuard as **blocked** on all 21 pairs it looked at. The rule stays: a build the Doctor or the survey makes by itself never installs a package. Details in `docs/wireguard.md`.

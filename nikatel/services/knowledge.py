@@ -129,6 +129,15 @@ def best_kind(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int | 
             when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
             return r["kind"], f"{r['kind']}: the best that connects between these two servers - score {r['score'] if r['score'] is not None else '-'}{when}"
 
+    weak = [r for r in ranked(p, now, include_poor=True) if allowed(r["kind"])]
+
+    if weak:          # (the owner, 2026-10-20: "I pressed the automatic best type and it chose Paqet - in the tests BackPack was the best, and you said Paqet is weak"): on a pair where NOTHING scored well every kind that carried
+        # data is "poor", and the freshest FULL measurement used to win - a Paqet that carried 4.9 Mb/s was chosen over a type that had carried 66 and 76. The best of the weak ones is the one that CARRIED the most.
+        r = max(weak, key=lambda r: (r.get("down_mbps") is not None, float(r.get("down_mbps") or 0), r.get("score") or 0))
+        when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
+        down = f"{float(r['down_mbps']):g} Mb/s" if r.get("down_mbps") is not None else f"score {r['score'] if r['score'] is not None else '-'}"
+        return r["kind"], f"{r['kind']}: no type scored well between these two servers - this is the best of the weak ones ({down}{when})"
+
     kinds, _ = plan_for(iran_id, foreign_id, "", False, False, now=now)
 
     for k in kinds:
