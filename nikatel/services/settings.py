@@ -34,6 +34,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # CPU balance: the Tunnel Doctor turns RPS on for a busy multi-core server whose network work sits on one core (auto), what was found per server
     # DNS accounts added on the DNS page (ArvanCloud accounts, Cloudflare); the main ArvanCloud key stays in "arvan" (the failover uses it). Keys never come back through the API.
     "dns": {"accounts": []},
+    # the usage of the CONFIGS (hosts) of a PasarGuard panel (services/cfgstats.py): read the CDN reports of the DNS accounts (read only), and what the last read of each said
+    "cfgstats": {"cdn": True, "cdn_state": {}},
     "balance": {"auto": True, "servers": {}},
     "underuse": {"auto": True},       # the Doctor fixes what the kernel settings can fix on a server that carries little (services/underuse.py)
     "failover": {"seen": {}, "pending": [], "history": [], "dns_log": [], "tried": {}},   # dns_log: every record the failover re-pointed, so each one can be put back; tried: dead servers looked at without a target

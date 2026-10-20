@@ -330,6 +330,35 @@ class OutboundHub(Base):
     server: Mapped[Server] = relationship()
 
 
+class CfgMeter(Base):
+    """The config meter of one server (services/cfgmeter.py): is the counting table (nft `inet nikatel_meter`) on it, which ports it counts, and where the last read stood. The owner switches it on per server."""
+    __tablename__ = "cfg_meters"
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    ports: Mapped[list] = mapped_column(JSON, default=list)                  # the ports the table counts now
+    since: Mapped[int] = mapped_column(Integer, default=0)                   # when it was first switched on (the history starts there)
+    applied_at: Mapped[int] = mapped_column(Integer, default=0)
+    last_ok: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(300), default="")
+    state: Mapped[dict] = mapped_column(JSON, default=dict)                  # the last read: {boot, ts, c: {port: [rx, tx]}} - the counters are cumulative, only differences are stored
+
+
+class CfgBucket(Base):
+    """One hour of one counter (services/cfgmeter.py): `src` is `p:<server id>:<port>` for a port of one of our servers or `c:<account>:<name>` for a domain of a CDN report; rx = bytes from the
+    users, tx = bytes to them. Added to, never rewritten; hours older than KEEP_DAYS go."""
+    __tablename__ = "cfg_buckets"
+    __table_args__ = (Index("ix_cfg_buckets_hour", "hour"),)
+
+    src: Mapped[str] = mapped_column(String(160), primary_key=True)
+    hour: Mapped[int] = mapped_column(Integer, primary_key=True)            # the start of the hour (UTC epoch seconds)
+    rx: Mapped[int] = mapped_column(Integer, default=0)
+    tx: Mapped[int] = mapped_column(Integer, default=0)
+    conn_max: Mapped[int] = mapped_column(Integer, default=0)               # the most simultaneous connections seen in a sample of this hour
+    conn_sum: Mapped[int] = mapped_column(Integer, default=0)
+    n: Mapped[int] = mapped_column(Integer, default=0)                      # how many samples
+
+
 class ApiToken(Base):
     """The sign-in of a machine (docs/api.md section 3): only the hash of the token is kept; the token itself is shown once when it is made."""
     __tablename__ = "api_tokens"

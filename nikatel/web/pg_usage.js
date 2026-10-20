@@ -331,15 +331,16 @@ function pgUsageRestore(id) {
 }
 function pgUsageDrawCards() {          // the overview: EVERY card has its place from the first frame; what is known is drawn in it, the rest waits as grey shapes
   const s = pgUsageState, pg = pgUsageIsPg(), card = (data, err, title, kind, draw) => data ? draw(data) : pgUsageRcWait(title, kind, err);
+  const cfg = pg && typeof pgCfgRc === "function" ? [card(pgCfgState.d, pgCfgState.err, "Configs", "list", pgCfgRc)] : [];          // (pg_configs.js: the usage of every config, measured by this panel)
   const cards = [card(s.ov, s.err.cards, "Users", "ring", pgUsageUsersRc), card(s.ov, s.err.cards, "Server", "gauges", pgUsageServerRc),
-    ...(pg ? [card(s.range, s.err.range, "Traffic", "spark", pgUsageTrafficRc), card(s.range, s.err.range, "Nodes", "ring", pgUsageNodesRc), card(s.apps, s.err.apps, "Apps", "ring", pgUsageAppsRc)] : []),
+    ...(pg ? [card(s.range, s.err.range, "Traffic", "spark", pgUsageTrafficRc), card(s.range, s.err.range, "Nodes", "ring", pgUsageNodesRc), ...cfg, card(s.apps, s.err.apps, "Apps", "ring", pgUsageAppsRc)] : []),
     card(s.top, s.err.top, "Top users", "list", pgUsageTopRc)];
   pgUsagePut("#pg-usage-ubox", s.ov ? pgUsageUsersBoxHtml(s.ov) : "");
   pgUsagePut("#pg-usage-ov", `<div class="pg-rcs">${cards.join("")}</div>`);
   pgUsageDrawAge(); pgUsageSave();
 }
 /* ---- the sections: chips under the range bar; Marzban has Overview, Users and Look up only (it does not answer the usage of all users) */
-const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nodes", "Nodes", false], ["users", "Users", true], ["apps", "Apps", false], ["look", "Look up", true]];      // [key, name, also on Marzban] (no chips: the cards of the overview open the sections; "Look up" has a button of its own in the row beside the range)
+const PGU_SECS = [["ov", "Overview", true], ["traffic", "Traffic", false], ["nodes", "Nodes", false], ["configs", "Configs", false], ["users", "Users", true], ["apps", "Apps", false], ["look", "Look up", true]];      // [key, name, also on Marzban] (no chips: the cards of the overview open the sections; "Look up" has a button of its own in the row beside the range)
 const pgUsageSecCur = () => { const s = pgUsageState; return PGU_SECS.some(x => x[0] === s.sec && (pgUsageIsPg() || x[2])) ? s.sec : "ov"; };
 function pgUsageSecBarHtml() {          // no chips (the owner, 2026-10-15): the overview is the page, a › on a card opens its section, and this row then says where you are and brings you back
   const cur = pgUsageSecCur(), name = (PGU_SECS.find(x => x[0] === cur) || [])[1] || "";
@@ -470,6 +471,7 @@ function pgUsageDrawPair() {          // the users over time (section Users) and
   if (!pgUsageIsPg()) { pgUsagePut("#pg-usage-counts", ""); pgUsagePut("#pg-usage-apps", ""); pgUsageApplySec(); return; }
   pgUsagePut("#pg-usage-counts", pgUsageErr(s.err.counts) + (s.counts ? pgUsageCountsHtml(s.counts, s.countsKey !== pgUsageCountsKey()) : s.err.counts ? "" : pgUsageWait("Reading the user counts…")));
   pgUsagePut("#pg-usage-apps", pgUsageErr(s.err.apps) + (s.apps ? pgUsageAppsHtml(s.apps, s.appsKey !== pgUsageAppsKey()) : s.err.apps ? "" : pgUsageWait("Reading the apps…")));
+  if (typeof pgCfgDraw === "function") pgCfgDraw();          // (the apps beside the configs)
   pgUsageDrawCards();
 }async function pgUsageLoadCounts() {
   const s = pgUsageState, id = s.id, key = pgUsageCountsKey(), mine = pgUsageTick("counts");
@@ -538,6 +540,7 @@ const pgUsageSkeleton = () => `<div class="pg-usage" id="pg-usage"><div id="pg-u
   <div data-for="ov" id="pg-usage-ov"></div>
   <div data-for="traffic" id="pg-usage-range"></div>
   <div data-for="nodes" id="pg-usage-nodes"></div>
+  <div data-for="configs" id="pg-usage-configs"></div>
   <div data-for="users"><div id="pg-usage-ubox"></div><div class="pg-usage-two"><div id="pg-usage-counts"></div><div id="pg-usage-top"></div></div></div>
   <div data-for="look">${pgUsageCard("Usage of an admin or a user", "", '<div id="pg-usage-look-form"></div><div id="pg-usage-look-res"></div>', false, "pg-usage-look")}</div>
   <div data-for="apps" id="pg-usage-apps"></div>
@@ -555,6 +558,7 @@ function pgUsageKick(force) {
   if (pgUsageIsPg() && (force || !s.range || s.rangeKey !== pgUsageQuery() || (now - s.rangeAt > 29000 && !pgUsageRangeIsOld()))) pgUsageLoadRange();
   if (pgUsageIsPg() && (force || !s.counts || s.countsKey !== pgUsageCountsKey() || (now - s.countsAt > 29000 && !pgUsageEnded(s.counts)))) pgUsageLoadCounts();
   if (pgUsageIsPg() && (force || !s.apps || s.appsKey !== pgUsageAppsKey() || (now - s.appsAt > 29000 && !pgUsageEnded(s.apps)))) pgUsageLoadApps();
+  if (pgUsageIsPg() && typeof pgCfgKick === "function") pgCfgKick(force);
   if (force || !s.top || s.topKey !== pgUsageTopKey() || now - s.topAt > 29000) pgUsageLoadTop();
   if (s.admins == null) pgUsageLoadAdmins();
   if (force || now - s.rangesAt > 300000) pgUsageLoadRanges().then(() => { pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); }).catch(() => { /* the dates on show stay as they are */ });
@@ -564,6 +568,7 @@ async function pgUsageRender(id, box) {          // (async: the Panels page chai
   if (s.id !== id || s.type !== type) { pgUsageReset(id, type); pgUsageRestore(id); }
   pgPaint(box, pgUsageSkeleton());
   pgUsagePut("#pg-usage-bar", pgUsageBarHtml()); pgUsageApplySec(); pgUsageDrawCards(); pgUsageDrawRange(); pgUsageDrawPair(); pgUsageDrawTop();
+  if (typeof pgCfgDraw === "function") pgCfgDraw();
   pgUsagePut("#pg-usage-look-form", pgUsageLookFormHtml()); pgUsageDrawLook();
   pgUsageKick(false);          // (the dates of the ranges come with it: the range button already says its name without them)
 }

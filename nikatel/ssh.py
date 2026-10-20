@@ -52,8 +52,25 @@ _IDENT = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$"
 _IPV4 = r"^\d{1,3}(\.\d{1,3}){3}$"
 _PORTS = r"^(\d{1,5}( \d{1,5})*)?$"
 _UNITS = r"^([A-Za-z0-9][A-Za-z0-9._@-]{0,63}(\.service)?( |$))+$"
+# the config meter (services/cfgmeter.py): the counters of the table `inet nikatel_meter` as "C <port> <rx|tx> <bytes>" lines (the chain of a port is named p<port>, its two counters carry the comments rx and tx)
+_NFT_AWK = r"""/^[ \t]*chain p[0-9]+ [{]/ {p=$2; sub(/^p/,"",p)} /counter packets/ {d=""; if ($0 ~ /comment "rx"/) d="rx"; else if ($0 ~ /comment "tx"/) d="tx"; b=""; for(i=1;i<=NF;i++) if ($i=="bytes") b=$(i+1); if (d!="" && b!="") print "C " p " " d " " b}"""
 
 SCRIPTS: dict[str, tuple[str, Mapping[str, str]]] = {
+    # the config meter, a read: boot id and uptime (a reboot zeroes the counters), the counters of the table when it is there, which of the given ports have a listener ("L"), how many connections are open on each ("S" from the
+    # sockets of a listener, "T" from conntrack for a port nobody listens on = a port that is forwarded to another machine; "CT no" when this machine can say nothing about conntrack: no /proc/net/nf_conntrack - newer
+    # kernels leave it out - and no `conntrack` tool). Only reads; the connections of the server's OWN outgoing sessions are not counted.
+    "meter_read": (r"""echo "BOOT $(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+echo "UP $(cut -d' ' -f1 /proc/uptime 2>/dev/null)"
+t=$(nft list table inet nikatel_meter 2>/dev/null) && { echo "TABLE ok"; echo "$t" | awk '@NFTAWK@'; } || echo "TABLE missing"
+ss -Hltn 2>/dev/null | awk -v ports='@PORTS@' 'BEGIN{n=split(ports,a," "); for(i=1;i<=n;i++) want[a[i]]=1} {m=split($(NF-1),x,":"); p=x[m]; if (p in want) l[p]=1} END{for(p in l) print "L " p}'
+ss -Htn state established 2>/dev/null | awk -v ports='@PORTS@' 'BEGIN{n=split(ports,a," "); for(i=1;i<=n;i++) want[a[i]]=1} {m=split($(NF-1),x,":"); p=x[m]; if (p in want) c[p]++} END{for(p in c) print "S " p " " c[p]}'
+ct="${NIKATEL_CT_FILE:-/proc/net/nf_conntrack}"; src=""
+if [ -r "$ct" ]; then src="cat $ct"; elif command -v conntrack >/dev/null 2>&1; then src="conntrack -L -p tcp"; fi
+if [ -n "$src" ]; then echo "CT yes"; $src 2>/dev/null | awk -v ports='@PORTS@' -v ips="$(ip -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | tr '\n' ' ')" 'BEGIN{n=split(ports,a," "); for(i=1;i<=n;i++) want[a[i]]=1; m=split(ips,b," "); for(i=1;i<=m;i++) loc[b[i]]=1} {st=0; for(i=1;i<=NF;i++) if ($i=="ESTABLISHED") {st=i; break} if (!st) next; s="";d=""; for(i=st+1;i<=NF;i++){ if (s=="" && substr($i,1,4)=="src=") s=substr($i,5); else if (d=="" && substr($i,1,6)=="dport=") d=substr($i,7); if (s!="" && d!="") break } if ((d in want) && !(s in loc)) k[d]++} END{for(p in k) print "T " p " " k[p]}'; else echo "CT no"; fi
+echo DONE
+""".replace("@NFTAWK@", _NFT_AWK), {"PORTS": _PORTS}),
+
+
     # how the network work is spread over the cores: cores, receive queues and their RPS masks, per-core load and NET_RX over two seconds (read only)
     "cpu_spread": (r"""IF=$(ip -o -4 route show default 2>/dev/null | awk '{print $5}' | head -1); echo "IF $IF"
 echo "CORES $(nproc)"
@@ -1790,6 +1807,21 @@ echo LOG; tail -n 4 /opt/nikatel-xrelay/error.log 2>/dev/null | cut -c1-200
     # remove the gateway completely (the list in the panel stays)
     "xgw_remove": (r"""systemctl disable --now nikatel-xgw >/dev/null 2>&1 || true; rm -f /etc/systemd/system/nikatel-xgw.service; systemctl daemon-reload; rm -rf /opt/nikatel-xgw; echo REMOVED
 """, {}),
+
+    # the CONFIG METER (services/cfgmeter.py): ONE nftables table `inet nikatel_meter` that only COUNTS the bytes of the given ports (policy accept, no drop / redirect / nat verdict anywhere, nothing restarted, no file left on the
+    # disk and no boot unit: after a reboot the panel puts the table back at its next turn). The ruleset (base64) is loaded in one transaction (add, delete, new): the old table is read first and printed between OLD and ENDOLD, so
+    # the bytes counted since the last read are not lost. "METER_ON" / "METER_FAIL <why>".
+    "meter_apply": (r"""command -v nft >/dev/null 2>&1 || { echo "METER_FAIL this server has no nft (nftables is not installed)"; exit 0; }
+echo "BOOT $(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+t=$(nft list table inet nikatel_meter 2>/dev/null) && { echo OLD; echo "$t" | awk '@NFTAWK@'; echo ENDOLD; }
+err=$(echo '@B64@' | base64 -d | nft -f - 2>&1) && echo METER_ON || echo "METER_FAIL $(echo "$err" | head -3 | tr '\n' ' ' | cut -c1-200)"
+""".replace("@NFTAWK@", _NFT_AWK), {"B64": _B64}),
+
+    # the way back: the table is deleted (its counters are printed first). Nothing else was ever changed, so nothing else is undone. "METER_OFF" / "METER_FAIL <why>".
+    "meter_remove": (r"""command -v nft >/dev/null 2>&1 || { echo "METER_OFF this server has no nft"; exit 0; }
+t=$(nft list table inet nikatel_meter 2>/dev/null) && { echo OLD; echo "$t" | awk '@NFTAWK@'; echo ENDOLD; nft delete table inet nikatel_meter 2>&1 | head -2; }
+nft list table inet nikatel_meter >/dev/null 2>&1 && echo "METER_FAIL the table is still there" || echo METER_OFF
+""".replace("@NFTAWK@", _NFT_AWK), {}),
 }
 
 

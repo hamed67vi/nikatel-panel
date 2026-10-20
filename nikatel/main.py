@@ -29,6 +29,7 @@ from .services import (
     bandwidth,
     besttoday,
     builder,
+    cfgstats,
     comeback,
     configs,
     demo,
@@ -74,7 +75,7 @@ def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for name in ("app.js", "analyst.js", "knowledge.js", "outbound.js", "pg_common.js", "pg_access.js", "pg_nodes.js", "pg_srvnode.js", "pg_cores.js", "pg_admin.js", "pg_roles.js", "pg_client.js", "pg_users.js", "pg_hosts.js", "pg_kinds.js", "pg_usage.js", "pg_update.js", "lab.js", "pg.css", "pg_access.css", "pg_nodes.css", "pg_cores.css", "pg_admin.css", "pg_usage.css", "pg_kinds.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "login.css", "light.css", "app.css", "mobile.css", "mobile2.css", "early.js", "fluid.js", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
+    for name in ("app.js", "analyst.js", "knowledge.js", "outbound.js", "pg_common.js", "pg_access.js", "pg_nodes.js", "pg_srvnode.js", "pg_cores.js", "pg_admin.js", "pg_roles.js", "pg_client.js", "pg_users.js", "pg_hosts.js", "pg_kinds.js", "pg_usage.js", "pg_configs.js", "pg_update.js", "lab.js", "pg.css", "pg_access.css", "pg_nodes.css", "pg_cores.css", "pg_admin.css", "pg_usage.css", "pg_configs.css", "pg_kinds.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "login.css", "light.css", "app.css", "mobile.css", "mobile2.css", "early.js", "fluid.js", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
         try:
             stamp = int((WEB / name).stat().st_mtime)
         except OSError:
@@ -180,6 +181,7 @@ def _register_jobs() -> None:
     jobs.register("panels", 15, panels.check_all)          # a panel that stops answering or a node that drops off a Marzban / PasarGuard panel shows within ~30 s (two checks; the reconnect request is still sent at most every 30 s)
     jobs.register("geo", 3600, nodes.geo_missing_job)
     jobs.register("filter", 3600, nodes.filter_daily_job)
+    jobs.register("cfgstats", 300, cfgstats.run)               # the usage of the configs of a PasarGuard panel (services/cfgstats.py): the counters of the servers whose meter the owner switched on are read every five minutes into hours, the CDN reports of the DNS accounts once an hour (read only); nothing happens while no meter is on and no host is behind a CDN
 
 
 @asynccontextmanager

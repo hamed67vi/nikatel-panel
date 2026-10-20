@@ -1,0 +1,64 @@
+/* PasarGuard > Usage > Configs (pg_configs.js): ONE compact bar chart of the usage of every config, the counters (meters) and the client apps. Every class starts with .pg-cfg-. Colours come from the page's own variables. */
+html body #page .pg-cfg-stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+html body #page .pg-cfg-below { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; align-items: start; }
+html body #page .pg-cfg-below > * { min-width: 0; }
+@media (max-width: 1100px) { html body #page .pg-cfg-below { grid-template-columns: minmax(0, 1fr); } }
+html body #page .pg-cfg-card { margin: 0; padding: 12px 14px; min-width: 0; border-radius: 14px; }
+html body #page .pg-cfg-card .pg-usage-row { gap: 6px; margin-bottom: 8px; }
+
+/* the filters */
+html body #page .pg-cfg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+html body #page .pg-cfg-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.04); color: var(--mut); font-size: 12px; cursor: pointer; }
+html body #page .pg-cfg-chip b { font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+html body #page .pg-cfg-chip:hover { color: var(--text); background: rgba(255,255,255,.07); }
+html body #page .pg-cfg-chip.on { background: #2a3a5e; color: #fff; border-color: rgba(120,170,255,.4); }
+html body #page .pg-cfg-dir { flex: none; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.04); color: var(--mut); font-size: 10px; cursor: pointer; }
+html body #page .pg-cfg-dir:hover { color: var(--text); background: rgba(255,255,255,.08); }
+
+/* the chart: a row is the name, the bar, the number and the trend */
+html body #page .pg-cfg-chart { max-height: 78vh; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+html body #page .pg-cfg-r { display: grid; grid-template-columns: minmax(120px, 1.1fr) minmax(90px, 2.2fr) 72px 64px; align-items: center; gap: 10px; min-height: 26px; padding: 2px 6px; border-radius: 7px; }
+html body #page .pg-cfg-r:hover { background: rgba(255,255,255,.05); }
+html body #page .pg-cfg-r.dis { opacity: .55; }
+html body #page .pg-cfg-n { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+html body #page .pg-cfg-n .ell { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pg-cfg-bar { display: block; height: 10px; border-radius: 5px; background: rgba(255,255,255,.06); overflow: hidden; }
+html body #page .pg-cfg-bar i { display: block; height: 100%; border-radius: 5px; background: var(--acc); opacity: .85; }
+html body #page .pg-cfg-bar i.little { background: var(--warn); } html body #page .pg-cfg-bar i.falling { background: var(--bad); } html body #page .pg-cfg-bar i.shared { background: var(--mut); opacity: .6; }
+html body #page .pg-cfg-v { font-size: 12.5px; font-weight: 600; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html body #page .pg-cfg-r.none .pg-cfg-v { color: var(--mut); font-weight: 400; }
+html body #page .pg-cfg-tr { font-size: 11.5px; font-weight: 600; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html body #page .pg-cfg-tr.up { color: var(--ok); } html body #page .pg-cfg-tr.down { color: var(--bad); } html body #page .pg-cfg-tr.flat { color: var(--mut); }
+html body #page .pg-cfg-bd { flex: none; display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; white-space: nowrap; background: rgba(255,255,255,.07); color: var(--mut); }
+html body #page .pg-cfg-bd.little { background: rgba(255,196,77,.14); color: var(--warn); }
+html body #page .pg-cfg-bd.falling { background: rgba(255,107,107,.14); color: var(--bad); }
+html body #page .pg-cfg-bd.rare { background: none; color: #a9b2ff; padding: 0 2px; }
+@media (max-width: 640px) {
+  html body #page .pg-cfg-r { grid-template-columns: minmax(0, 1fr) 70px 58px; row-gap: 2px; padding: 4px 6px; }
+  html body #page .pg-cfg-n { grid-column: 1 / -1; }
+  html body #page .pg-cfg-bar { grid-column: 1; }
+}
+
+/* the counters card */
+html body #page .pg-cfg-mbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+html body #page .pg-cfg-sl { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 5px; }
+html body #page .pg-cfg-srv { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 8px; border-radius: 9px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.05); font-size: 12.5px; }
+html body #page .pg-cfg-srv b { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+html body #page .pg-cfg-srv button { flex: none; height: 24px; }
+html body #page .pg-cfg-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mut); opacity: .7; }
+html body #page .pg-cfg-dot.ok { background: var(--ok); opacity: 1; } html body #page .pg-cfg-dot.bad { background: var(--bad); opacity: 1; } html body #page .pg-cfg-dot.wait { background: var(--warn); opacity: 1; }
+html body #page .pg-cfg-sw { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; font-size: 11.5px; text-transform: none; letter-spacing: 0; font-weight: 500; cursor: pointer; }
+
+/* the overview card */
+html body #page .pg-cfg-rc { display: flex; flex-direction: column; gap: 8px; }
+html body #page .pg-cfg-rcn { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+html body #page .pg-cfg-rcn span { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: 9px; background: rgba(255,255,255,.04); min-width: 0; }
+html body #page .pg-cfg-rcn b { font-size: 20px; font-weight: 650; letter-spacing: -.3px; } html body #page .pg-cfg-rcn small { font-size: 10.5px; color: var(--mut); white-space: nowrap; }
+html body #page .pg-cfg-rcl { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+html body #page .pg-cfg-rcl li { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; cursor: pointer; }
+html body #page .pg-cfg-rcl li .ell { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body #page .pg-cfg-apps .pg-rc-b { margin-bottom: 0; }
+
+/* right to left (Persian): numbers keep their own direction, the bar fills from the right */
+html[dir="rtl"] body #page .pg-cfg-v, html[dir="rtl"] body #page .pg-cfg-tr { direction: ltr; unicode-bidi: isolate; text-align: left; }
+html[dir="rtl"] body #page .pg-cfg-bar i { margin-left: auto; }

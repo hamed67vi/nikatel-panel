@@ -5315,6 +5315,109 @@ I18N.add({
 });
 
 /* families of texts that carry a number: only a whole number in front, never "My account" or "Connection error" */
+/* ---- the usage of the configs (PasarGuard > Usage > Configs, pg_configs.js; 1.70.0) */
+I18N.add({
+"Config": "کانفیگ", "24 h": "۲۴ ساعت", "Peak conns": "اوج اتصال", "Trend": "روند", "Last 30 days": "۳۰ روز اخیر", "Source": "منبع",
+"Little used": "کم‌مصرف", "Falling": "رو به کاهش", "No data": "بدون داده", 
+"little used": "کم‌مصرف", "falling": "رو به کاهش", "no data yet": "هنوز داده‌ای نیست",
+"Usage of the configs": "مصرف کانفیگ‌ها", "Usage of the inbounds": "مصرف اینباندها", 
+"No config matches": "هیچ کانفیگی مطابقت ندارد", "No inbound": "اینباندی نیست", "(no name)": "(بدون نام)", "(none)": "(هیچ)",
+"Reading the configs": "در حال خواندن کانفیگ‌ها", "the panel did not give the configs": "پنل کانفیگ‌ها را نداد",
+
+
+
+
+
+
+
+/* the badges and their tips */
+"A day of its last week carries under {} % of what the average measured config carries (under {} a day)": "در یک روز هفته‌ی اخیرش کمتر از {1} ٪ ترافیک یک کانفیگ متوسط اندازه‌گیری‌شده را دارد (کمتر از {2} در روز)",
+"A day of its last week carries under {} % of what the average measured config carries": "در یک روز هفته‌ی اخیرش کمتر از {} ٪ ترافیک یک کانفیگ متوسط اندازه‌گیری‌شده را دارد",
+"The last {} complete days carried {} % less than the {} days before them": "{1} روز کامل اخیر {2} ٪ کمتر از {3} روز قبلش ترافیک داشت",
+"The last {} complete days carried much less than the {} days before them": "{1} روز کامل اخیر خیلی کمتر از {2} روز قبلش ترافیک داشت",
+"Behind a CDN, and the CDN gives no number for this host: this is the origin port that every host of the inbound shares": "پشت CDN است و CDN برای این هاست عددی نمی‌دهد: این پورت مبدأ است که همه‌ی هاست‌های اینباند در آن شریک‌اند",
+"Another host ends on the same server and port: no counter can tell them apart, so the number is for all of them and no verdict is given": "هاست دیگری روی همین سرور و پورت تمام می‌شود: هیچ شمارنده‌ای آن‌ها را از هم جدا نمی‌کند، پس عدد برای همه‌ی آن‌هاست و حکمی داده نمی‌شود",
+"The host is switched off in the panel": "هاست در پنل خاموش است",
+"{} is a newer transport: an old version of an app may not open it (see the apps beside the table)": "{} ترنسپورت تازه‌ای است: نسخه‌ی قدیمی برنامه شاید آن را باز نکند (برنامه‌های کنار جدول را ببینید)",
+"{} is a newer transport: an old version of an app may not open it": "{} ترنسپورت تازه‌ای است: نسخه‌ی قدیمی برنامه شاید آن را باز نکند",
+
+/* the rows */
+
+"24 h: {}": "۲۴ ساعت: {}", "7 days: {}": "۷ روز: {}", "30 days: {}": "۳۰ روز: {}", "needs {} more days on record": "{} روز سابقه‌ی بیشتر لازم است", "nothing to compare": "چیزی برای مقایسه نیست", 
+
+
+
+
+"port {} on {} (tunnel {})": "پورت {1} روی {2} (تانل {3})", "port {} on {}": "پورت {1} روی {2}", "port of the inbound on {} nodes": "پورت اینباند روی {} سرور", "the CDN report of {}": "گزارش CDN برای {}",
+"the CDN report of {} has not been read yet; the origin port {} on {} is not counted yet": "گزارش CDN برای {1} هنوز خوانده نشده؛ پورت مبدأ {2} روی {3} هم هنوز شمرده نمی‌شود",
+"origin port {} on {}: every host behind the CDN of this inbound shares it ({})": "پورت مبدأ {1} روی {2}: همه‌ی هاست‌های پشت CDN این اینباند در آن شریک‌اند ({3})",
+"origin port {} on {}: every host behind the CDN of this inbound shares it": "پورت مبدأ {1} روی {2}: همه‌ی هاست‌های پشت CDN این اینباند در آن شریک‌اند",
+"the host has no address": "هاست آدرس ندارد", "{} is not one of our servers": "{} یکی از سرورهای ما نیست", "{} does not point at a server of ours": "{} به سروری از ما اشاره نمی‌کند",
+"{} is not in a DNS account of this panel and does not resolve to a server of ours": "{} در هیچ حساب DNS این پنل نیست و به سروری از ما هم نمی‌رسد",
+"no node of ours carries the inbound {}": "هیچ سروری از ما اینباند {} را ندارد",
+"{} carries no node with the inbound {} and the host has no port of its own": "روی {1} نودی با اینباند {2} نیست و هاست پورت مخصوص خودش را هم ندارد",
+"the host's port {} is not the inbound's port {} (a redirect on the server is counted by the port the user dials)": "پورت هاست ({1}) همان پورت اینباند ({2}) نیست (ریدایرکت روی سرور با پورتی که کاربر می‌زند شمرده می‌شود)",
+"the address is the node itself: every node that carries the inbound": "آدرس خود سرور است: همه‌ی سرورهایی که این اینباند را دارند",
+"the CDN record has no origin server of ours": "رکورد CDN سرور مبدأ ما را ندارد", "the origin port behind the CDN is not known": "پورت مبدأ پشت CDN معلوم نیست",
+/* the counters (meters) and the CDN reports */
+"Counters": "شمارنده‌ها", "Turn on all": "روشن کردن همه", "Remove all meters": "حذف همه‌ی شمارنده‌ها", "ports changed": "پورت‌ها تغییر کرد",
+"The ports to count changed: the next turn (within five minutes) loads the new list": "پورت‌های مورد شمارش عوض شده: نوبت بعدی (تا پنج دقیقه دیگر) فهرست تازه را بارگذاری می‌کند",
+"Delete the counting table from this server (the numbers already collected stay)": "جدول شمارش را از این سرور پاک می‌کند (عددهای جمع‌شده می‌مانند)",
+"Put the counting table on this server: it only counts bytes": "جدول شمارش را روی این سرور می‌گذارد: فقط بایت‌ها را می‌شمارد",
+"Put the counting table on every server of the list": "جدول شمارش را روی همه‌ی سرورهای فهرست می‌گذارد", "Delete the counting table from every server where it is on": "جدول شمارش را از همه‌ی سرورهایی که روشن است پاک می‌کند",
+"not read yet": "هنوز خوانده نشده", "per-host numbers are not available": "عدد هر هاست در دسترس نیست", "the report could not be read": "گزارش خوانده نشد",
+"No server of ours carries a node of this panel or a host address, so there is nothing to count on a server": "هیچ سروری از ما نودی از این پنل یا آدرس هاستی را ندارد، پس چیزی برای شمارش روی سرور نیست",
+
+
+
+"CDN reports": "گزارش‌های CDN", "read them": "خواندن گزارش‌ها", "Read the traffic report of each CDN domain of the DNS accounts once an hour (read only)": "گزارش ترافیک هر دامنه‌ی CDN از حساب‌های DNS را ساعتی یک بار می‌خواند (فقط خواندن)",
+"Read the report of one name now and say what the CDN answered": "گزارش یک نام را همین حالا می‌خواند و می‌گوید CDN چه جوابی داد",
+/* the apps */
+"Client apps": "برنامه‌های کاربران", "subscription fetches": "دریافت‌های اشتراک", "fetches": "دریافت", "No fetch in this range": "در این بازه دریافتی نیست", "Reading the apps": "در حال خواندن برنامه‌ها", 
+
+
+
+/* the overview card */
+"Most used first": "پرمصرف‌ترین اول", "Least used first": "کم‌مصرف‌ترین اول", "Sort": "مرتب‌سازی", "On record since {}": "ثبت از {}", "Open Configs": "باز کردن کانفیگ‌ها", "Nothing little used or falling": "چیزی کم‌مصرف یا رو به کاهش نیست", "Turn on the meters to see the usage": "برای دیدن مصرف، شمارنده‌ها را روشن کنید",
+/* asking and answering */
+"Put": "بگذار",
+"Put the counting table on {}? It only counts the bytes and connections of its {} ports: nothing is stopped, redirected or restarted, and Remove deletes it.": "روی {1} جدول شمارش گذاشته شود؟ فقط بایت‌ها و اتصال‌های {2} پورتش را می‌شمارد: چیزی متوقف، منحرف یا ری‌استارت نمی‌شود و «حذف» آن را برمی‌دارد.",
+"Remove the counting table from {}? The numbers collected so far stay.": "جدول شمارش از {} برداشته شود؟ عددهای جمع‌شده تا الان می‌مانند.",
+"{}: counting {} ports": "{1}: شمارش {2} پورت", "{}: the table is removed": "{}: جدول برداشته شد", "the CDN reports are read once an hour": "گزارش‌های CDN ساعتی یک بار خوانده می‌شود", "the CDN reports are not read": "گزارش‌های CDN خوانده نمی‌شود", "tested": "آزمایش شد",
+"the host filter works": "فیلتر هاست کار می‌کند",
+"ArvanCloud ignored the host filter (a host that does not exist got the whole domain): per-host numbers are not available": "ArvanCloud فیلتر هاست را نادیده گرفت (هاستی که وجود ندارد کل دامنه را گرفت): عدد هر هاست در دسترس نیست",
+"the host filter gave more than the whole domain: not trusted": "فیلتر هاست بیشتر از کل دامنه داد: قابل‌اعتماد نیست",
+"the report with a host filter could not be read (the plan may not include it)": "گزارش با فیلتر هاست خوانده نشد (شاید طرح شما آن را شامل نشود)", "the report of the domain could not be read": "گزارش دامنه خوانده نشد",
+"ArvanCloud answered, but not in the shape we know (data.charts.traffics.series): nothing is stored from it": "ArvanCloud جواب داد، اما نه به شکلی که می‌شناسیم (data.charts.traffics.series): چیزی از آن ذخیره نمی‌شود",
+"ArvanCloud refused or did not answer: {}": "ArvanCloud رد کرد یا جواب نداد: {}",
+"no host or inbound of this panel needs a counter on that server": "هیچ هاست یا اینباندی از این پنل روی آن سرور شمارنده نمی‌خواهد", "there is no port to count on this server": "پورتی برای شمارش روی این سرور نیست",
+"the server did not confirm that the meter is on": "سرور تأیید نکرد که شمارنده روشن شد", "the server did not confirm that the table is gone": "سرور تأیید نکرد که جدول برداشته شد",
+"this server has no nft (nftables is not installed)": "این سرور nft ندارد (nftables نصب نیست)", "the meter script gave no answer": "اسکریپت شمارنده جوابی نداد",
+"the config statistics are a part of PasarGuard panels": "آمار کانفیگ‌ها بخشی از پنل‌های PasarGuard است", "this name is not in a domain of that DNS account": "این نام در هیچ دامنه‌ای از آن حساب DNS نیست",
+});
+I18N.explain(t => {
+  let m;
+
+  if ((m = /^(\d+) of (\d+) measured$/.exec(t))) return m[1] + " از " + m[2] + " اندازه‌گیری شد";
+  if ((m = /^(\d+) configs?$/.exec(t))) return m[1] + " کانفیگ";
+  if ((m = /^(\d+) inbounds?$/.exec(t))) return m[1] + " اینباند";
+  if ((m = /^(\d+) of (\d+) servers$/.exec(t))) return m[1] + " از " + m[2] + " سرور";
+  if ((m = /^counting (\d+) ports?$/.exec(t))) return "در حال شمارش " + m[1] + " پورت";
+  if ((m = /^(\d+) ports? to count$/.exec(t))) return m[1] + " پورت برای شمارش";
+  if ((m = /^(\d+) hosts?$/.exec(t))) return m[1] + " هاست";
+  if ((m = /^(\d+) min ago$/.exec(t))) return m[1] + " دقیقه پیش";
+  if ((m = /^(\d+) h ago$/.exec(t))) return m[1] + " ساعت پیش";
+  if ((m = /^(\d+) days ago$/.exec(t))) return m[1] + " روز پیش";
+  if (t === "just now") return "همین الان";
+  if ((m = /^last read (.+)$/.exec(t))) return "آخرین خواندن " + I18N.tr(m[1]);
+  if ((m = /^(\d+) servers? done$/.exec(t))) return m[1] + " سرور انجام شد";
+  if ((m = /^Cloudflare analytics answered: (\d+) hosts? in the last hour$/.exec(t))) return "آنالیتیکس Cloudflare جواب داد: " + m[1] + " هاست در ساعت گذشته";
+  if ((m = /^Put the counting table on (\d+) servers?\? It only counts the bytes and connections of the listed ports: nothing is stopped, redirected or restarted, and Remove deletes it\.$/.exec(t))) return "روی " + m[1] + " سرور جدول شمارش گذاشته شود؟ فقط بایت‌ها و اتصال‌های پورت‌های فهرست را می‌شمارد: چیزی متوقف، منحرف یا ری‌استارت نمی‌شود و «حذف» آن را برمی‌دارد.";
+  if ((m = /^Remove the counting table from (\d+) servers?\? The numbers collected so far stay\.$/.exec(t))) return "جدول شمارش از " + m[1] + " سرور برداشته شود؟ عددهای جمع‌شده تا الان می‌مانند.";
+
+  return null;
+});
+
 I18N.explain(t => {
   let m;
 
