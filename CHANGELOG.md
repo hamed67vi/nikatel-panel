@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.53 - Create tunnel: picking another server wipes the port check of the old pair and every tick made for it
+
+The owner (2026-10-21), with a picture of the form: "I changed the foreign server and that check box did not go - if the server changed, the box of the previous server must go, even if I ticked it."
+
+- **The cause, two faults in `bkCheck` (`web/app.js`)**: (1) the form keeps the last state of EVERY checkbox it ever showed (`bk.chk`), so a "replace it" tick made for the old pair of servers came back ticked under the new one - a build could remove a tunnel nobody meant to replace; (2) the answer of the port check was put in `bk.ck` BEFORE it was compared with the pair on the screen, so the answer for an OLDER pair (a slow one) replaced the current one: the Build button was judged by the old servers' ports.
+- **The fix**: when the Iran or the foreign server changes (the key `iran|foreign|ports` changes in its first two parts), the box under the form is emptied at once - before the new answer is asked for -, `bk.ck` is dropped and every tick that belongs to a pair (`replace_*`, `stale_*`, the CDN-records tick) is forgotten (`bkPairOf`, `bkTickKeys`); emptying the foreign server or the ports does the same. The answer of an older pair is dropped (`if (key !== bk.ckKey) return;`) and only then kept. A tick the owner makes for the pair on the screen is still remembered across a redraw of the form, and another PORT on the same pair keeps its ticks. If the same Iran port is really used by another tunnel under the new pair, the warning comes back - fresh and unticked, as a new question.
+- **Proved**: `tests/test_create_form_reset.py` (the two helpers run for real with node: the pair of a key, the ticks that belong to a pair and the options that do not; the order of the steps in `bkCheck`; the empty-foreign case; the wiring of the foreign list). **Not proved**: the picture itself in a browser with a real slow answer (the order of the steps is tested; the race needs two answers in flight at once, which the tests do not stage).
+
 ## 1.69.52 - The failed-update note in the About card is one row and says whether updating fixes it
 
 > **به زبان ساده:** در کارت About، پیام «آپدیت قبلی تمام نشد» حالا فقط یک ردیف کوتاه است (دلیل کوتاه، متن کامل با نگه‌داشتن ماوس). اگر نسخهٔ جدیدتری منتشر شده باشد، همان ردیف می‌گوید «آپدیت به نسخهٔ ... باید درستش کند».

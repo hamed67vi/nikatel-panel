@@ -1750,15 +1750,20 @@ window.bkKeep = form => { const f = new FormData(form); bk.v = {__t: "1"}; for (
 /* the port check under the form: a port already used on the chosen Iran server (by a tunnel of the panel; on Build also by any process) stops the build,
    a tunnel that already carries the port to the foreign server can be replaced (removed first), and its CDN records can follow the new server */
 const bkKey = f => (+f.get("iran_id") || 0) + "|" + (+f.get("foreign_id") || 0) + "|" + (f.get("ports") || "").trim();
+const bkPairOf = k => String(k || "").split("|").slice(0, 2).join("|");      // "<iran id>|<foreign id>" of a key
+const bkTickKeys = chk => Object.keys(chk).filter(n => /^(replace_|stale_|dns_follow$)/.test(n));      // the ticks that belong to ONE pair of servers: replace a tunnel, remove an old unit, point the CDN records
 window.bkCheck = async (form, force) => {
   const f = new FormData(form), box = $("#build-check"); if (!box) return;
   const key = bkKey(f), ports = (f.get("ports") || "").trim();
-  if (!+f.get("foreign_id") || !ports) { box.innerHTML = ""; bk.ckKey = ""; return; }
+  if (!+f.get("foreign_id") || !ports) { if (bk.ckKey && bkPairOf(bk.ckKey) !== bkPairOf(key)) bkTickKeys(bk.chk).forEach(n => delete bk.chk[n]); box.innerHTML = ""; bk.ckKey = ""; bk.ck = null; bkBtn(form); return; }
   if (!force && key === bk.ckKey) return;
+  if (bk.ckKey && bkPairOf(bk.ckKey) !== bkPairOf(key)) { bkTickKeys(bk.chk).forEach(n => delete bk.chk[n]); box.innerHTML = ""; bk.ck = null; bkBtn(form); }      // (the owner, 2026-10-21: another server was picked and the box about the old one stayed - ticked or not: what was said about the old pair is gone at once, nothing ticked for it is carried over)
   bk.ckKey = key; bk.ck = null;
-  try { bk.ck = await api("/api/tunnels/precheck", {method: "POST", body: JSON.stringify({iran_id: +f.get("iran_id") || 0, foreign_id: +f.get("foreign_id"), ports, live: false})}); }
+  let res;
+  try { res = await api("/api/tunnels/precheck", {method: "POST", body: JSON.stringify({iran_id: +f.get("iran_id") || 0, foreign_id: +f.get("foreign_id"), ports, live: false})}); }
   catch (e) { if (key === bk.ckKey) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  if (key === bk.ckKey) bkCheckRender(form);
+  if (key !== bk.ckKey) return;      // (the answer of an older pair never replaces what belongs to the pair on the screen: it used to be put in bk.ck first, and the Build button was judged by the OLD servers' ports)
+  bk.ck = res; bkCheckRender(form);
 };
 function bkCheckRender(form) {
   const box = $("#build-check"), c = bk.ck, btn = form.querySelector("button.pri"); if (!box || !c) return;
