@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.41 - A server that is being rebooted keeps its place among the servers with problems
+
+The owner (2026-10-20, with a picture of the list: UA with "Filtered" and "Bad route" in the middle): "a server had a problem, I rebooted it, and it went to the middle of the list - every server with a problem must be at the top".
+
+- **Cause** (`lab.js labRank`): the reboot mark (1.69.37) makes the row "busy", and a busy row was ranked with the healthy ones, below the servers with problems - although its own problems (Filtered, Bad route, a tunnel down, CPU ...) were still there and still drawn as tags.
+- **Fix**: a busy server that still has a problem of its own keeps the rank of the problems (top of the list). What a restart itself causes - it does not answer, SSH does not answer, no login - is not counted, so a healthy server that is being rebooted does not jump to the top (the no-jump rule of 1.69.32 and 1.69.37 stays).
+- **Proved**: `tests/test_reboot_mark.py` - the real `labRank` from `lab.js` run in node: busy + Filtered / Bad route is ranked with the problems, busy + only "does not answer" stays a busy row, a busy node and a red or green row are as before.
+- **Not proved**: the owner's real list. By design (1.69.32) a list that is scrolled down away from its head keeps the order it has, so a server that gets a problem while the list is scrolled rises to the top when the list is back at its head, not under the owner's eyes.
 ## 1.69.40 - Every Backhaul transport over every link model can be tested; the IPIP "exists already" message says why
 
 The owner (2026-10-20): "test the kinds of GRE with the Backhaul tunnel - completely", and "is the 'an IPIP tunnel exists between these servers' answer a wrong detection? check it fully".

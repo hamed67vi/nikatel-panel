@@ -51,7 +51,9 @@ function labNodeInfo(p) {      // a PasarGuard node profile: what the health job
   return {r, d, st, live: (d && d.live) || null, msg: (d && d.message) || (r && r.message) || "", tone: p.missing || !r ? "bad" : st === "connected" ? "ok" : st === "disabled" ? "off" : st === "connecting" ? "busy" : "bad"};
 }
 const labTone = p => p.kind === "node" ? labNodeInfo(p).tone : (s => s ? labSrvTone(s) : "bad")(labServer(p));
-const labRank = p => ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[labTone(p)];
+/* The rank of a row in the list. A server that is being worked on (rebooting, installing) keeps the place of its problems: the owner, 2026-10-20, "a server had a problem, I rebooted it, and it went to the middle of the list" - the busy mark hid the problems it still has (Filtered, Bad route, a tunnel down ...). What a restart itself causes (it does not answer, SSH) is no problem of the server. */
+const labBusyOk = new Set(["Offline", "SSH ✕", "No login"]);
+const labRank = p => { const t = labTone(p), s = t === "busy" && p.kind !== "node" ? labServer(p) : null; return s && labIssues(s).some(i => !labBusyOk.has(i.txt)) ? 1 : ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[t]; };
 const labBar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</b>`;
 const labNum = (v, warn, bad) => v == null ? "—" : `<span class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</span>`;
 

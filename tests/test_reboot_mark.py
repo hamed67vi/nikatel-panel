@@ -113,3 +113,27 @@ def test_the_bandwidth_of_a_pasarguard_server_is_the_line_of_the_server_not_what
     assert "labCapCell(srv, !!(srv && srv.enabled))" in node and "live.rx" not in node.split("labCapCell(srv", 1)[1].split("</tr>", 1)[0]
     ui2 = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "i18n.fa.ui2.js").read_text(encoding="utf-8")
     assert '"Rebooting":' in ui2 and '"waiting for it to come back":' in ui2
+
+def test_a_server_that_is_being_rebooted_keeps_the_place_of_its_problems_in_the_list():
+    """The owner, 2026-10-20: "a server had a problem, I rebooted it, and it went to the middle of the list": the busy mark ranked it with the healthy ones. A busy server that still has a problem of its own
+    (Filtered, Bad route, a tunnel down ...) stays with the problems at the top; one whose only "problem" is that it does not answer while it restarts does not jump there."""
+    import json
+    import re
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed here")
+
+    lab = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "lab.js").read_text(encoding="utf-8")
+    src = "\n".join(re.search(rf"^{re.escape(k)}.*$", lab, re.MULTILINE).group(0) for k in ("const labBusyOk", "const labRank"))
+    code = (
+        "const TONE = {1: 'busy', 2: 'busy', 3: 'busy', 4: 'ok', 5: 'bad'}, ISS = {1: ['Filtered', 'Bad route'], 2: ['Offline', 'SSH ✕'], 3: ['Offline', 'Filtered'], 4: [], 5: ['Offline']};\n"
+        "const labTone = p => p.kind === 'node' ? 'busy' : TONE[p.id], labServer = p => ({id: p.id}), labIssues = s => ISS[s.id].map(txt => ({txt}));\n"
+        + src
+        + "\nprocess.stdout.write(JSON.stringify([1, 2, 3, 4, 5].map(id => labRank({id})).concat([labRank({id: 1, kind: 'node'})])));"
+    )
+    out = subprocess.run([node, "-e", code], check=False, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == [1, 2, 1, 3, 0, 2]      # (busy + Filtered / Bad route: with the problems; busy + only "does not answer": as a busy one; a busy node: as before; red stays first)
