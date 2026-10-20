@@ -232,3 +232,12 @@ def test_the_question_box_is_the_alert_of_macos_and_leaves_the_plan_box_and_the_
     assert acts + " { display: flex; width: 100%;" in css and acts + " button { flex: 1 1 0;" in css
     assert acts + " .ask-yes { background: #0a84ff;" in css and acts + " .ask-yes.danger-fill { background: #ff453a; }" in css      # (blue, red for a dangerous question)
     assert 'html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan))' in css                                                         # (the plan of "Move the tunnels" keeps its wide left-aligned box)
+
+
+def test_the_update_question_has_the_update_emoji_and_its_buttons_are_flat_in_every_theme():
+    """The owner, 2026-10-20: "put the update emoji in place of the question mark" (the Update from GitHub box); his theme gave the blue button a gradient, a glow and a gloss on top of the alert."""
+    assert '/^(Update|Upgrade)$/i.test(verb) ? "🔄" : "?"' in APP
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    acts = "html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices)"
+    assert acts + " .ask-yes, " + acts + " .ask-no { background-image: none !important; box-shadow: none !important; text-shadow: none !important; border: 0 !important;" in css
+    assert acts + " .ask-yes::before, " in css and acts + " .ask-yes { background-color: #0a84ff !important;" in css

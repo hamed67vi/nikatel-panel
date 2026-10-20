@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.42 - The "Update" question has the update emoji; the alert's buttons are flat in every theme
+
+The owner (2026-10-20, with a picture of the "Update the panel from GitHub now?" box): "put the update emoji in place of the question mark".
+
+- **The icon** (`app.js glassAsk`): a question that starts with Update (or Upgrade) shows 🔄 in the icon square instead of "?"; the other questions are as before (⚠ for a dangerous one, ✎ for a text, ? for the rest).
+- **The buttons** (`lab.css`): in the owner's theme (calm) the blue button still had a gradient, a glow, a gloss line and a text shadow on top of the new alert (1.69.39). They are flat now - blue (red for a dangerous question) and a quiet grey Cancel - in the calm, aurora and classic themes, dark and light.
+- **Proved**: `tests/test_fluid_layout.py` pins the icon rule and the flat-button rules; on a private demo panel in the built-in browser the computed styles of both buttons were read in 3 themes x 2 modes: no gradient, no shadow, no text shadow, no border, no gloss, the right colours; the icon was 🔄 for the update question, ⚠ for a delete and ? for another one.
+- **Not proved**: a picture of it (the pane is hidden, so only computed styles were read); the box of the shop bot or a phone width.
 ## 1.69.41 - A server that is being rebooted keeps its place among the servers with problems
 
 The owner (2026-10-20, with a picture of the list: UA with "Filtered" and "Bad route" in the middle): "a server had a problem, I rebooted it, and it went to the middle of the list - every server with a problem must be at the top".
