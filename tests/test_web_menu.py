@@ -982,7 +982,7 @@ def test_the_update_card_goes_on_from_the_server_and_never_claims_a_new_version_
     assert 'api("/api/system/update/progress")' in app and "ABOUT_STEPS" not in app and "aboutWatch(p);" in app and "aboutWatch({percent: 2});" in app      # (only the file is asked while it runs, not GitHub)
     assert "window.aboutWatch = p0 =>" in app and "shown = server" in app                      # (the bar starts at the number the server says, not at 1)
     assert 'if (p.state === "running") { aboutPill(p.to ? "Updating to " + p.to : "Updating", "busy"); aboutBtn(true, "An update is running"); aboutWatch(p); return; }' in app
-    assert 'aboutPill("Could not reach GitHub", "warn"' in app and "The last update did not finish (" in app and "u.checked" in app
+    assert 'aboutPill("Could not reach GitHub", "warn"' in app and "Last update did not finish (" in app and "u.checked" in app
     assert "html body #page .abt-pill.busy {" in css and 'html[data-mode="light"] body #page .abt-pill.busy {' in _web("light.css")
 
 

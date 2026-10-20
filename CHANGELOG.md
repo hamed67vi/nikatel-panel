@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.52 - The failed-update note in the About card is one row and says whether updating fixes it
+
+> **به زبان ساده:** در کارت About، پیام «آپدیت قبلی تمام نشد» حالا فقط یک ردیف کوتاه است (دلیل کوتاه، متن کامل با نگه‌داشتن ماوس). اگر نسخهٔ جدیدتری منتشر شده باشد، همان ردیف می‌گوید «آپدیت به نسخهٔ ... باید درستش کند».
+>
+> **In short:** the failed-update note is one short row; it says "updating to vX should fix it" when a newer version than the failed one is out.
+
+The owner (2026-10-20, a picture of the About card showing the note of a failed update as a red paragraph in a box that scrolled): "show the error briefly in one row, and if the update fixes it, say so". (He first asked to switch the update button off until a stable update is ready, then withdrew it in the same hour; the button is as it was.)
+
+- **One row** (`app.js aboutLoad`, `lab.css .abt-fail`): "⚠ Last update did not finish (7m ago): could not download the new version - updating to v1.69.50 should fix it": the short reason is what stands before the first colon of the server's words; the whole reason, "the version that was running stays" and the tail of the update log are in the tip. The row is nowrap with an ellipsis, so the box no longer needs its scroll bar.
+- **"Should fix it"** only when a newer version than the one that failed is out (`u.newer` and the latest is greater than the failed target; a download that failed has no target: any newer version counts). A failed update to the very version that is offered again says nothing - the same update is not a fix. "Should", not "will": the panel cannot know the cause.
+- **Proved**: `tests/test_about_failed_row.py` (the row's markup, the short reason, the tip, the hint, the CSS; the rule of the hint run through node with the cases: download failed, the failed version again, a newer one, nothing newer, 1.69.10 after 1.69.9), `tests/test_web_menu.py` (the text). **Not proved**: in the owner's browser.
+
 ## 1.69.51 - The Bandwidth column of the tunnel list is empty while the tunnel is fine
 
 The owner (2026-10-20, in Persian, with a picture of the list): "this column has become too busy - I think it should show something only when the bandwidth drops, or has a problem, or the tunnel is cut; put the bandwidth inside the box of each card."

@@ -1137,3 +1137,7 @@ html body #page .tun-tbl .cut-tag { height: 16px; padding: 0 7px; font-size: 9.5
 html body #page .tun-tbl .bwprob { display: inline-flex; align-items: baseline; gap: 6px; padding: 2px 11px; border-radius: 999px; font-variant-numeric: tabular-nums; color: var(--bad, #ff6b8b); background: rgba(255, 107, 139, .12); border: 1px solid rgba(255, 107, 139, .35); }
 html body #page .tun-tbl .bwprob b { font-size: 12.5px; font-weight: 800; }
 html body #page .tun-tbl .bwprob small { font-size: 10.5px; font-weight: 700; letter-spacing: .2px; opacity: .9; }
+
+/* the failed-update note of the About card is ONE row (the owner, 2026-10-20: "show the error briefly in one row, and if the update fixes it, say so"): it was a red paragraph in a box that scrolled */
+html body #about-box .abt-fail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 1.5; }
+html body #about-box .abt-fail b { font-weight: 700; color: var(--text); }
