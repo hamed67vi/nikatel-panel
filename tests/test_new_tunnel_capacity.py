@@ -57,3 +57,23 @@ def test_the_meter_without_a_total_is_an_empty_bar_with_a_word_and_the_create_wi
     opener = js.split("window.openBuild = async () => {", 1)[1].split("window.newTunnel", 1)[0]
     assert 'if (bk.run && bk.run.type === "build" && state.page === "tunnels" && $("#page .tun-box")) {' in opener and "followStory(run.id, box, 600).finally(() => bkRun(null))" in opener
     assert opener.index("bk.run && bk.run.type") < opener.index("Array.isArray(state.serversCache)")          # (before the other checks: the window of a running build comes back first)
+
+
+def test_the_sink_runs_on_the_python_the_server_has_and_on_python_2():
+    """The owner, 2026-10-21: the new tunnel's foreign server had no /usr/bin/python3 - the journal said status=203/EXEC; the capacity never came."""
+    text = ssh.render_action("sink_install", {"NAME": "bw8", "PORT": "39777", "KEY": "abcdefgh12", "BIND": "10.1.2.3"})
+    assert "for c in python3 python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3.6 python python2.7; do" in text and "ExecStart=/usr/bin/python3 /usr/local/sbin/nikatel-sink-bw8.py" in text
+    assert 'sed -i "s#^ExecStart=/usr/bin/python3 #ExecStart=$PY #" /etc/systemd/system/nikatel-sink-bw8.service' in text
+    assert 'echo "SINK_DOWN this server has no python (the test of the capacity needs it)"' in text and "daemon=True" not in text         # (python 2.7 has no daemon= keyword)
+    assert text.index("PY=\"\"; for c in") < text.index("systemctl daemon-reload")                                                     # (the interpreter is chosen before the unit is started)
+
+
+def test_a_server_with_no_python_is_not_tried_again_every_90_seconds():
+    tid = _tunnel("p1", None)
+    now = int(time.time())
+    bandwidth._failed(tid, "the bandwidth sink did not start on the foreign server: SINK_DOWN this server has no python (the test of the capacity needs it)")
+
+    with session() as db:
+        nxt = db.get(Tunnel, tid).record["bw"]["next_at"]
+
+    assert bandwidth.RETRY_AFTER - 20 <= nxt - now <= bandwidth.RETRY_AFTER + 20

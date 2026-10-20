@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.61 - The capacity test service runs on the python the server has (a new server without python3 had no total bandwidth)
+
+> **به زبان ساده:** علت واقعی نبودن پهنای کل برای تانل سرور تازه: آن سرور python3 نداشت و سرویس کوچک تست هیچ‌وقت بالا نمی‌آمد. حالا از python3 یا python۲ هر کدام که هست استفاده می‌شود و اگر هیچ‌کدام نبود صریح می‌گوید.
+>
+> **In short:** the test service of the capacity now runs on the python the server has (3.x or 2.7); a server with none says so plainly.
+
+The owner (2026-10-21), asking whether the empty total of a new tunnel was fixed (a picture of the new tunnel "— | ↓ 0.05"): "it seems the total bandwidth is not shown for a server that was just added". 1.69.59 only made the row honest (an empty bar, a retry after 90 s); the new tunnel was still without a total on the live panel, so the cause was read there (the journal of the test service, a read-only script).
+
+- **The cause**: on that foreign server the unit of the capacity test service ended with `status=203/EXEC` and restarted every 3 s: its `ExecStart` was a FIXED `/usr/bin/python3`, and the server (an old CentOS-like one, systemd 219) has no python3 there. (The race of the first second was real too - 1.69.59 - but it was not this server's problem.)
+- **Now** (`ssh.py sink_install`): the install script looks for the interpreter the server has (python3, python3.12 ... python3.6, python, python2.7) and puts its path in the unit; the small service itself no longer uses the `daemon=True` keyword that python 2.7 does not know; a server with NO python answers "SINK_DOWN this server has no python (the test of the capacity needs it)" and is not tried again every 90 s (15 minutes, as before).
+- **Proved**: `tests/test_new_tunnel_capacity.py` (the interpreter loop and the `sed` before the unit starts, no `daemon=True` in the service, the message, the retry). **Not proved**: that the service really runs under python 2.7 on that server (no python2 was available to run it here; the rest of the script is plain sockets and threads), and the capacity of that tunnel after an update (it comes at the next retry: press "Measure" in the tunnel's menu, or wait a few minutes).
+
 ## 1.69.60 - The Live window: a network card second by second, like nload
 
 > **به زبان ساده:** از منوی هر تانل و هر سرور حالا «Live traffic» هست: ترافیک یک کارت شبکه ثانیه‌به‌ثانیه، مثل nload - عدد اکنون، میانگین، کمینه، بیشینه و مجموع برای ورودی و خروجی، و نمودار دو دقیقهٔ آخر. برای تانل می‌توانید کارت خود تانل (ترافیک کاربران آن)، کارت اصلی سرور ایران یا کارت اصلی سرور خارج را انتخاب کنید.

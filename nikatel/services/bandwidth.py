@@ -504,7 +504,7 @@ def _failed(tunnel_id: int, why: str) -> None:
         if t is not None:
             rec = dict(t.record or {})
             bw = dict(rec.get("bw") or {})
-            bw["next_at"], bw["error"] = int(time.time()) + (RETRY_AFTER if bw.get("down") is not None else RETRY_FIRST), why[:120]
+            bw["next_at"], bw["error"] = int(time.time()) + (RETRY_AFTER if bw.get("down") is not None or "has no python" in why else RETRY_FIRST), why[:120]          # (a server with no python is not tried again every 90 s)
             rec["bw"] = bw
             t.record = rec
 

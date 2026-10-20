@@ -1287,10 +1287,10 @@ def echo_udp():
                 u.sendto(d, a)
         except Exception:
             pass
-threading.Thread(target=echo_udp, daemon=True).start()
+_u = threading.Thread(target=echo_udp); _u.daemon = True; _u.start()      # (python 2.7 has no daemon keyword for a thread: the attribute)
 while True:
     c, _ = s.accept()
-    threading.Thread(target=h, args=(c,), daemon=True).start()
+    _t = threading.Thread(target=h, args=(c,)); _t.daemon = True; _t.start()
 __NK_SINK__
 cat > /etc/systemd/system/nikatel-sink-@NAME@.service <<'__NK_UNIT__'
 [Unit]
@@ -1307,6 +1307,9 @@ NoNewPrivileges=yes
 [Install]
 WantedBy=multi-user.target
 __NK_UNIT__
+PY=""; for c in python3 python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3.6 python python2.7; do p=$(command -v $c 2>/dev/null) && { PY=$p; break; }; done      # (the owner, 2026-10-21: a new foreign server had no /usr/bin/python3 - the unit ended "203/EXEC" and its tunnel never got a capacity)
+if [ -z "$PY" ]; then echo "SINK_DOWN this server has no python (the test of the capacity needs it)"; exit 0; fi
+sed -i "s#^ExecStart=/usr/bin/python3 #ExecStart=$PY #" /etc/systemd/system/nikatel-sink-@NAME@.service
 systemctl daemon-reload; systemctl enable nikatel-sink-@NAME@.service >/dev/null 2>&1; systemctl restart nikatel-sink-@NAME@.service
 for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 0.5; if systemctl is-active --quiet nikatel-sink-@NAME@.service; then echo SINK_OK; exit 0; fi; done      # (up to 6 s: the owner, 2026-10-21: the new tunnel had no capacity - the check came after ONE second and called a slow start "down")
 echo "SINK_DOWN $(journalctl -u nikatel-sink-@NAME@.service -n 3 --no-pager -o cat 2>/dev/null | tr '\n' ' ' | cut -c1-110)"
