@@ -37,7 +37,8 @@ def test_the_plan_gives_every_link_its_own_network_and_port_and_says_why_it_leav
 
     q = linkprobe.plan(list(linkmodels.LINKS), facts(), facts("").copy() | {"mods": {"ip_gre", "fou"}, "wg_tool": False}, [], ("203.0.113.1", "198.51.100.2"))
     assert q["ipip"]["skip"]["ok"] is False and "ipip" in q["ipip"]["skip"]["error"] and q["ipsec"]["skip"]["ok"] is False and "xfrm_interface" in q["ipsec"]["skip"]["error"]
-    assert q["wg"]["skip"] == {"ok": None, "error": "wireguard-tools is not installed on a server (the probe never installs a package)"}                         # a missing package: unknown, not failed
+    assert q["wg"]["skip"]["ok"] is None and q["wg"]["skip"]["skipped"] == "tools" and q["wg"]["skip"]["tools"] == {"iran": True, "foreign": False}                    # a missing package: unknown, not failed
+    assert "MISSING on the foreign server" in q["wg"]["skip"]["error"] and "never installs a package" in q["wg"]["skip"]["error"]
     assert "net" in q["gre"] and "net" in q["fou"]
 
     held = facts("IPIP_PAIRS=198.51.100.2>203.0.113.1\n")

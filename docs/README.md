@@ -4,6 +4,7 @@
 |---|---|
 | know what the panel can do | [`features.md`](features.md) |
 | see every tunnel engine and transport it builds, tests and repairs | [`tunnels.md`](tunnels.md) |
+| install WireGuard, see what the Doctor knows about it and how its health is judged | [`wireguard.md`](wireguard.md) |
 | see how a link is carried inside another tunnel (WireGuard in Chisel, for a route that filters GRE, ESP and UDP) | [`carried-links.md`](carried-links.md) |
 | install, upgrade, back up, read logs, run the bot server | [`operations.md`](operations.md) |
 | understand the code and its rules | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |

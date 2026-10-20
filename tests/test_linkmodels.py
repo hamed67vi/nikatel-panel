@@ -71,7 +71,7 @@ def test_every_model_keeps_the_names_of_a_gre_link_so_that_nothing_else_had_to_c
     for link in linkmodels.LINKS:
         got = files(link)
         assert base <= set(got), link                                                                              # the check script, the units and the timer are those of every link
-        assert got["/usr/local/sbin/nikatel-gre-check-ca-ir1"] == files("gre")["/usr/local/sbin/nikatel-gre-check-ca-ir1"]
+        assert (got["/usr/local/sbin/nikatel-gre-check-ca-ir1"] == files("gre")["/usr/local/sbin/nikatel-gre-check-ca-ir1"]) == (link != "wg")      # (WireGuard's check also reads the age of the handshake: test_wireguard_complete.py)
         assert f"Nikatel {linkmodels.TITLE[link]} link" in got["/etc/systemd/system/nikatel-gre-ca-ir1.service"] or link == "gre"
 
     assert set(files("ipsec")) - base == {"/etc/nikatel/ipsec/ca-ir1.keys"} and set(files("wg")) == base == set(files("fou"))

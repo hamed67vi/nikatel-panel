@@ -585,7 +585,7 @@ def _probe_links(aid: int, snap: dict, kinds: list[str]) -> list[str]:
         return kinds
 
     _say(aid, "Link probe: " + linkprobe.summary(res))
-    keep = [k for k in kinds if (res.get(linkmodels.split_kind(k)[0] or "") or {}).get("ok") is not False]
+    keep = [k for k in kinds if (res.get(linkmodels.split_kind(k)[0] or "") or {}).get("ok") is not False and (res.get(linkmodels.split_kind(k)[0] or "") or {}).get("skipped") != "tools"]          # (a link the probe could not try because wireguard-tools is missing cannot be built either: not tried)
 
     if len(keep) < len(kinds):
         _say(aid, f"{len(kinds) - len(keep)} kind(s) left out: their link does not pass, so there is nothing to build: " + ", ".join(k for k in kinds if k not in keep))
@@ -652,7 +652,7 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
 
         try:
             q = _quality_of(snap["name"]) if ok else {}
-            result = {"kind": kind, "ok": int(q.get("score") or 0) >= 50, "works": True, **{k: q.get(k) for k in knowledge.NUMS}} if ok else {"kind": kind, "ok": False, "error": (out[-1] if out else "")[:140]}
+            result = {"kind": kind, "ok": int(q.get("score") or 0) >= 50, "works": True, **{k: q.get(k) for k in knowledge.NUMS}} if ok else {"kind": kind, "ok": False, "error": (out[-1] if out else "")[:140], **({"skipped": "tools"} if tunnel_test.tools_missing(out) else {})}
             knowledge.record(snap["iran_id"], snap["foreign_id"], result, "latency")
         except Exception:
             log.exception("what %s answered could not be kept", kind)

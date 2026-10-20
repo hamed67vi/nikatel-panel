@@ -252,6 +252,37 @@ WantedBy=timers.target
             f"/etc/systemd/system/nikatel-gre-check-{name}.service": check_unit, f"/etc/systemd/system/nikatel-gre-check-{name}.timer": timer}
 
 
+def wg_check_script(name: str, peer: str, stale: int = 300) -> str:
+    """The health-check script of a WireGuard link (plain or carried): the ping to the peer as in a GRE link's, and the age of the last handshake. Three missed checks in a row restart the link (as for GRE); when the last handshake is
+    older than `stale` seconds - the link has no session, waiting does not bring one - TWO are enough. The private key stays where it is: nothing here reads it."""
+    return f"""#!/bin/sh
+# nikatel-gre-check-script
+# Nikatel WireGuard link {name}: the ping to the peer, and the age of the last handshake (a link with no session is restarted one check sooner)
+NAME={name}
+PEER={peer}
+/usr/local/sbin/nikatel-gre-up-$NAME
+F=/run/nikatel-gre-fail-$NAME
+if ping -c 2 -W 1 -q "$PEER" >/dev/null 2>&1; then
+  rm -f "$F"
+  exit 0
+fi
+n=$(cat "$F" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo "$n" > "$F"
+H=$(wg show "$NAME" latest-handshakes 2>/dev/null | awk '{{print $2}}' | head -1)
+AGE=999999
+[ -n "$H" ] && [ "$H" -gt 0 ] && AGE=$(( $(date +%s) - H ))
+NEED=3
+[ "$AGE" -gt {int(stale)} ] && NEED=2
+if [ "$n" -ge "$NEED" ]; then
+  rm -f "$F"
+  logger -t nikatel-wg "$NAME: the peer did not answer $n times in a row (last handshake $AGE s ago), restarting the link"
+  systemctl restart nikatel-gre-$NAME.service
+fi
+exit 0
+"""
+
+
 # ------------------------------------------------------------------ the link under Backhaul: GRE, GRE inside UDP, WireGuard
 # Backhaul runs over the inner addresses of a point-to-point link between the two servers. The link is GRE (IP protocol 47) as always, or - where a route filters protocol 47, the commonest cut the Doctor meets - the same GRE
 # inside UDP ("fou": Foo-over-UDP, one symmetric UDP port) or a WireGuard link (UDP, encrypted, authenticated). Everything above the link (the units, the checks, the bandwidth, the Doctor) is the same: the link keeps the
@@ -353,6 +384,7 @@ def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_c
         m_in, m_out = linkmodels.carrier_fw_match(link, str(carrier["role"]), int(port))
         files.update(linkmodels.carrier_files(link, name, str(carrier["role"]), local, remote, addr_cidr, int(mtu), int(port), peer_pub, str(carrier["token"]), str(carrier.get("fp") or ""),
                                               _LINK_FW_UP.replace("@MATCH_IN@", m_in).replace("@MATCH_OUT@", m_out), _LINK_FW_DOWN, _LINK_SYSCTL))
+        files[f"/usr/local/sbin/nikatel-gre-check-{name}"] = wg_check_script(name, linkmodels.peer_of(addr_cidr))
         unit = f"/etc/systemd/system/nikatel-gre-{name}.service"
         files[unit] = files[unit].replace("Nikatel GRE tunnel", f"Nikatel {LINK_TITLE[link]} link")
         return files
@@ -384,6 +416,7 @@ def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_c
             return text
 
         files[up_path], files[down_path] = fill(_WG_UP, fw_up), fill(_WG_DOWN, fw_down)
+        files[f"/usr/local/sbin/nikatel-gre-check-{name}"] = wg_check_script(name, peer_ip)
     elif link in ("ipsec", "ipsecnat"):
         if not ipsec:
             raise ValueError("an IPsec link needs its keys and SPIs")
@@ -602,6 +635,16 @@ NEEDS_WG_TOOL = ("wg", *linkmodels.CARRIER_LINKS)          # the models that nee
 def next_link(tried: list[str], wg_ok: bool = False) -> str:
     """The next link model to try after the ones in `tried` (the order of FALLBACK_LINKS), or "" when none is left."""
     return next((k for k in FALLBACK_LINKS if k not in tried and k in linkmodels.ALL_LINKS and (k not in NEEDS_WG_TOOL or wg_ok)), "")
+
+
+def _wg_ready(b: Build) -> bool:
+    """Is WireGuard fully there on BOTH servers (the tool and the kernel module)? Then a link that does not pass may be followed by WireGuard without the owner having asked for an install: nothing is installed. A server that does not answer: no."""
+    try:
+        li, lf = _both(lambda: parse_link_facts(run_script(_node(b.iran), "link_facts", timeout=40)), lambda: parse_link_facts(run_script(_node(b.foreign), "link_facts", timeout=40)))
+    except (SSHError, ValueError, RuntimeError):
+        return False
+
+    return all(f["wg_tool"] and f["wg_mod"] for f in (li, lf))
 
 
 def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) -> None:
@@ -869,7 +912,7 @@ def _build_worker(b: Build, pair: str) -> None:
                 except LinkFailed as e:
                     cur = str(b.opts.get("link") or "gre")
                     b.link_tried.append(cur)
-                    nxt = next_link(b.link_tried, wg_ok=bool(b.opts.get("install_wg"))) if b.link_fallback and not b.standby_of else ""
+                    nxt = next_link(b.link_tried, wg_ok=bool(b.opts.get("install_wg")) or _wg_ready(b)) if b.link_fallback and not b.standby_of else ""
 
                     if not nxt:
                         if len(b.link_tried) > 1:
@@ -911,7 +954,7 @@ def _ensure_wg_tool(aid: int, node: Node, facts: dict, label: str, server: str, 
         return
 
     if not install:
-        raise RuntimeError(f"{label} server {server}: wireguard-tools is not installed (apt install wireguard-tools, or build a WireGuard tunnel once from Create tunnel: that installs it)")
+        raise RuntimeError(f"{label} server {server}: wireguard-tools is not installed (Servers -> its menu -> Install -> WireGuard tools, or build a WireGuard tunnel once from Create tunnel: that installs it)")
 
     _say(aid, f"{label} server {server}: wireguard-tools is not installed - installing it with apt (a minute at most)")
     out = run_action(node, "wg_install", timeout=330)
@@ -1092,8 +1135,8 @@ def _build(b: Build) -> None:
         mtu_i, mtu_f = _both(lambda: run_script(iran, "mtu_probe", {"PEER": fhost}, timeout=70), lambda: run_script(foreign, "mtu_probe", {"PEER": ihost}, timeout=70))
         a = int((re.search(r"MTU=(\d+)", mtu_i) or [0, "0"])[1])
         c = int((re.search(r"MTU=(\d+)", mtu_f) or [0, "0"])[1])
-        b.mtu = max(1200, min(a or 1400, c or 1400, 1360))
-        _say(aid, f"Path MTU measured: Iran side {a or '?'}, foreign side {c or '?'} → GRE MTU {b.mtu}")
+        b.mtu = linkmodels.inner_mtu(link, a, c)
+        _say(aid, f"Path MTU measured: Iran side {a or '?'}, foreign side {c or '?'} → {LINK_TITLE[link]} MTU {b.mtu}" + (f" (the link adds up to {linkmodels.OVERHEAD[link]} bytes)" if link in linkmodels.OVERHEAD else ""))
 
     def tune(label: str, node: Node) -> str:
         try:

@@ -29,3 +29,14 @@ def update(engine: str, missing: bool = False):
         raise HTTPException(409, str(e))
 
     return {"ok": not job.get("error"), **job}
+
+@router.post("/engines/wireguard/install", status_code=202)
+def install_wireguard(server_id: int | None = None):
+    """The owner's button: install wireguard-tools with apt on every server that lacks it (`server_id`: on that one only), four at a time, in the background; follow it with GET /engines (`wg_job`, then `wireguard`).
+    Nothing but this button (and a build the owner starts that asks for WireGuard) ever puts a package on a server."""
+    try:
+        started = engines.install_wireguard_start([server_id] if server_id else None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"ok": True, "started": started, **engines.last()}

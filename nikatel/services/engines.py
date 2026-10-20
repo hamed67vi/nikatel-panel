@@ -33,7 +33,7 @@ ENGINES = {
     "chisel": {"title": "Chisel", "repo": "jpillora/chisel", "asset": r"^chisel_.*_linux_amd64\.gz$", "member": "chisel", "bin": "/usr/local/bin/nikatel-chisel", "units": "chisel-*.service"},
     "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service"},
 }
-_STATE: dict = {"checked_at": 0, "result": None, "job": None, "checking": False}
+_STATE: dict = {"checked_at": 0, "result": None, "job": None, "checking": False, "wireguard": None, "wg_job": None}
 _CHECK_LOCK = threading.Lock()
 
 
@@ -49,6 +49,30 @@ def parse_versions(out: str) -> dict:
                 d[p[1]] = (("v" + m.group(0).lstrip("v")) if m else ("none" if "NONE" in p[2] else p[2].strip()[:20]))
 
     return d
+
+
+def parse_wg(out: str) -> dict:
+    """Pure: what a server says about WireGuard in the answer of `engine_versions`: {"tool": wireguard-tools is there, "module": the kernel can load WireGuard, "apt": apt-get is there (the only way the panel installs it)}."""
+    kv = {}
+
+    for line in str(out).splitlines():
+        p = line.split()
+
+        if len(p) == 2 and p[0] in ("WGTOOL", "WGMOD", "WGAPT"):
+            kv[p[0]] = p[1] == "1"
+
+    return {"tool": kv.get("WGTOOL", False), "module": kv.get("WGMOD", False), "apt": kv.get("WGAPT", False)}
+
+
+def wg_state(w: dict | None) -> str:
+    """Pure: one word for the WireGuard state of a server: "installed", "kernel" (the tools are there, the kernel cannot load the module), "missing" (not installed, apt can install it), "no apt" (not installed, and this server has no apt-get: by hand), "unreachable"."""
+    if w is None:
+        return "unreachable"
+
+    if w["tool"]:
+        return "installed" if w["module"] else "kernel"
+
+    return "missing" if w["apt"] else "no apt"
 
 
 def latest(engine: str) -> dict:
@@ -82,12 +106,16 @@ def check() -> dict:
         name, role, node = item
 
         try:
-            return name, role, parse_versions(run_script(node, "engine_versions", timeout=25))
+            raw = run_script(node, "engine_versions", timeout=25)
+            return name, role, parse_versions(raw), parse_wg(raw)
         except (SSHError, ValueError):
-            return name, role, None
+            return name, role, None, None
 
     with ThreadPoolExecutor(8) as ex:
-        rows = list(ex.map(one, nodes))
+        rows4 = list(ex.map(one, nodes))
+
+    rows = [(n, r, v) for n, r, v, _ in rows4]
+    _STATE["wireguard"] = wg_summary([(n, r, w) for n, r, _, w in rows4])
 
     for eng, info in result.items():
         for name, role, vers in rows:
@@ -101,6 +129,18 @@ def check() -> dict:
 
     _STATE["result"], _STATE["checked_at"] = result, int(time.time())
     return {"engines": result, "checked_at": _STATE["checked_at"]}
+
+
+def wg_summary(rows: list) -> dict:
+    """Pure: the WireGuard card of the cores box - {"title", "nodes": [{"name", "role", "state", "tool", "module", "apt"}], "installed": n, "missing": n (the servers where the owner can have it installed), "stuck": n (kernel / no apt: by hand)}."""
+    nodes = []
+
+    for name, role, w in rows:
+        s = wg_state(w)
+        nodes.append({"name": name, "role": role, "state": s, **(w or {"tool": False, "module": False, "apt": False})})
+
+    return {"title": "WireGuard tools", "nodes": nodes, "installed": sum(1 for n in nodes if n["state"] == "installed"), "missing": sum(1 for n in nodes if n["state"] == "missing"),
+            "stuck": sum(1 for n in nodes if n["state"] in ("kernel", "no apt"))}
 
 
 def check_start() -> bool:
@@ -124,7 +164,7 @@ def check_start() -> bool:
 
 
 def last() -> dict:
-    return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking"))}
+    return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking")), "wireguard": _STATE.get("wireguard"), "wg_job": _STATE.get("wg_job")}
 
 
 def _download(engine: str) -> tuple[str, bytes]:
@@ -332,3 +372,100 @@ def update(engine: str, only_missing: bool = False) -> dict:
         job["finished"] = int(time.time())
 
     return job
+
+# ------------------------------------------------------------------ WireGuard tools (the owner presses the button: the only way the panel puts a package on a server, apt only)
+def wg_install_result(out: str) -> tuple[bool, str]:
+    """Pure: (done, sentence) from the answer of the `wg_install` action: "WG_OK present" / "WG_OK installed (...)" or "WG_FAIL why" - an answer that is neither is a failure that says so."""
+    text = str(out)
+
+    if "WG_OK" in text:
+        return True, "already there" if "WG_OK present" in text else "installed"
+
+    m = text.split("WG_FAIL", 1)
+
+    return False, (m[1].strip()[:240] if len(m) > 1 and m[1].strip() else "no answer from the server (is it on?)")
+
+
+def install_wireguard_on(server_id: int) -> str:
+    """Put wireguard-tools on ONE server with apt (the action `wg_install`: apt only, nothing is copied from another machine) and check that its kernel can load the module. Returns "installed" or "already there";
+    RuntimeError with the sentence that says what to do when it cannot (no apt, apt fails, the kernel has no module). What the Doctor remembers as "not tested: tools missing" for this server is forgotten, so
+    the next survey tests WireGuard at once."""
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only")
+
+    with session() as db:
+        s = db.get(Server, server_id)
+
+        if s is None:
+            raise ValueError("server not found")
+
+        node, name = Node(s.host, s.ssh_user, s.ssh_port), s.name
+
+    ok, why = wg_install_result(run_action(node, "wg_install", timeout=330))
+
+    if not ok:
+        raise RuntimeError(f"{name}: {why}")
+
+    from . import knowledge
+
+    knowledge.forget_tool_skips(server_id)
+    return why
+
+
+def install_wireguard(server_ids: list[int] | None = None, _started: bool = False) -> dict:
+    """The owner's button: wireguard-tools on every server that lacks it (or on `server_ids`), four at a time. {"started", "items": [{"name", "state": "ok" | "failed", "detail"}], "done"}. Runs in the thread of the caller;
+    refused while another install runs."""
+    if not _started and _STATE["wg_job"] and not _STATE["wg_job"].get("done"):
+        raise RuntimeError("an install is already running")
+
+    job: dict = {"started": int(time.time()), "items": [], "done": False}
+    _STATE["wg_job"] = job
+
+    try:
+        with session() as db:
+            rows = [(s.id, s.name) for s in db.scalars(select(Server).where(Server.enabled.is_(True)))
+                    if server_ids is None or s.id in server_ids]
+
+        def one(item):
+            sid, name = item
+
+            try:
+                return {"name": name, "state": "ok", "detail": install_wireguard_on(sid)}
+            except (SSHError, ValueError, RuntimeError, OSError) as e:
+                return {"name": name, "state": "failed", "detail": str(e)[:240]}
+
+        with ThreadPoolExecutor(4) as ex:
+            job["items"] = list(ex.map(one, rows))
+
+        done = sum(1 for i in job["items"] if i["state"] == "ok")
+
+        with session() as db:
+            emit(db, "info" if done == len(rows) else "warn", "engines", f"WireGuard tools: ready on {done} of {len(rows)} servers.", "wireguard")
+    except (ValueError, RuntimeError, OSError) as e:
+        job["error"] = str(e)[:200]
+    finally:
+        job["done"] = True
+        job["finished"] = int(time.time())
+
+    return job
+
+
+def install_wireguard_start(server_ids: list[int] | None = None) -> bool:
+    """`install_wireguard` in the background (apt can take minutes); False when one is running."""
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only")
+
+    j = _STATE["wg_job"]
+
+    if j and not j.get("done"):
+        return False
+
+    def work() -> None:
+        try:
+            install_wireguard(server_ids, _started=True)
+        except Exception:
+            log.exception("wireguard install failed")
+
+    _STATE["wg_job"] = {"started": int(time.time()), "items": [], "done": False}       # (the page sees it at once)
+    threading.Thread(target=work, name="wg-install", daemon=True).start()
+    return True

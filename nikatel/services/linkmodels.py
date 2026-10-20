@@ -263,6 +263,14 @@ _NATT_SOCKET = """systemctl is-active --quiet "nikatel-ipsec-sock-$NAME.service"
 _NATT_STOP = """systemctl stop "nikatel-ipsec-sock-$NAME.service" 2>/dev/null || true"""
 
 
+def inner_mtu(link: str, payload_i: int, payload_f: int, cap: int = 1360) -> int:
+    """Pure: the MTU of the link inside. `payload_i` / `payload_f`: the largest ping payload that crossed from each end (the answer of `mtu_probe`, 0 = unknown): the path MTU is that + 28 (IP and ICMP headers); the link adds
+    its own header on top (OVERHEAD, the worst case: WireGuard 80 over IPv6), so the packet inside is the path MTU minus that - at most `cap`, at least 1200. (Until 1.69.44 the payload itself was taken as the MTU of the
+    link inside: right for a path of 1500 bytes - the cap decided - and 40-80 bytes too big on a path of 1400, where WireGuard packets were cut in two.)"""
+    path = min(payload_i or 1400, payload_f or 1400) + 28
+    return max(1200, min(path - OVERHEAD.get(link, 80), cap))
+
+
 def peer_of(addr_cidr: str) -> str:
     iface = ipaddress.ip_interface(addr_cidr)
     return next(str(h) for h in iface.network.hosts() if str(h) != str(iface.ip))

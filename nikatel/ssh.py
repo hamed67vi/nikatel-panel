@@ -135,6 +135,9 @@ echo "ENGINE xray $([ -x /opt/nikatel-xgw/xray ] && /opt/nikatel-xgw/xray versio
 echo "ENGINE backpack $([ -x /usr/local/bin/backpack ] && /usr/local/bin/backpack -v 2>&1 | head -1 || echo NONE)"
 echo "ENGINE paqet $([ -x /usr/local/bin/paqet ] && /usr/local/bin/paqet version 2>&1 | head -1 || echo NONE)"
 echo "ENGINE chisel $([ -x /usr/local/bin/nikatel-chisel ] && /usr/local/bin/nikatel-chisel --version 2>&1 | head -1 || echo NONE)"
+echo "WGTOOL $(command -v wg >/dev/null 2>&1 && echo 1 || echo 0)"
+modprobe wireguard 2>/dev/null; echo "WGMOD $( (lsmod | grep -q '^wireguard' || [ -d /sys/module/wireguard ]) && echo 1 || echo 0)"
+echo "WGAPT $(command -v apt-get >/dev/null 2>&1 && echo 1 || echo 0)"
 """, {}),
 
     # checksum of one core binary (is the same build installed as the one in the panel's cache?)
@@ -340,6 +343,8 @@ echo NO_CERT
     "tunnel_side": (r"""for u in @UNITS@; do echo "UNIT $u $(systemctl is-active "$u" 2>/dev/null || echo unknown)"; done
 if [ -n "@IFACE@" ]; then
   echo "IFACE @IFACE@ $(ip -o link show '@IFACE@' 2>/dev/null | grep -o 'state [A-Z]*' | head -1 | cut -d' ' -f2) $(cat /sys/class/net/@IFACE@/statistics/rx_bytes /sys/class/net/@IFACE@/statistics/tx_bytes 2>/dev/null | tr '\n' ' ')"
+  # a WireGuard link: how long ago the last handshake was (seconds; "never" = none yet) - a link whose handshake is old has no session, whatever the units say
+  if ip -d link show '@IFACE@' 2>/dev/null | grep -q wireguard; then H=$(wg show '@IFACE@' latest-handshakes 2>/dev/null | awk '{print $2}' | head -1); if [ -n "$H" ]; then if [ "$H" -gt 0 ]; then echo "WGHS $(( $(date +%s) - H ))"; else echo "WGHS never"; fi; fi; fi
 fi
 if [ "@QUICK@" = 1 ]; then echo "NOW $(date +%s)"; exit 0; fi
 # end to end: one request through the first forwarded port (Iran side only); any HTTP answer proves the data path, 000 = nothing came back
@@ -920,11 +925,14 @@ echo "STANDBY_OFF $n $LEFT"
     # WireGuard for a Backhaul link: install wireguard-tools when the server has none (apt only; nothing is copied from another machine - a binary of another release does not run), then make the key of one tunnel
     # on the server itself - the private key never leaves it and never appears in a command line or a log - and print the public key. "WG_OK ..." / "WG_FAIL <why>", "PUB=<key>"
     "wg_install": (r"""export DEBIAN_FRONTEND=noninteractive
-command -v wg >/dev/null 2>&1 && { echo "WG_OK present"; exit 0; }
+command -v wg >/dev/null 2>&1 && { modprobe wireguard 2>/dev/null; if lsmod | grep -q '^wireguard' || [ -d /sys/module/wireguard ]; then echo "WG_OK present"; else echo "WG_FAIL wireguard-tools is there but this kernel cannot load the wireguard module (it needs Linux 5.6 or newer, or the wireguard module package)"; fi; exit 0; }
 command -v apt-get >/dev/null 2>&1 || { echo "WG_FAIL this server has no apt-get: install wireguard-tools by hand"; exit 0; }
 L=/tmp/nikatel-wg-install.log
 timeout 150 apt-get install -y -qq wireguard-tools >"$L" 2>&1 || { timeout 90 apt-get update -qq >>"$L" 2>&1; timeout 150 apt-get install -y -qq wireguard-tools >>"$L" 2>&1; } || true
-if command -v wg >/dev/null 2>&1; then echo "WG_OK installed"; else echo "WG_FAIL apt could not install wireguard-tools: $(tail -n 2 "$L" | tr '\n' ' ' | cut -c1-200)"; fi
+if command -v wg >/dev/null 2>&1; then
+  modprobe wireguard 2>/dev/null
+  if lsmod | grep -q '^wireguard' || [ -d /sys/module/wireguard ]; then echo "WG_OK installed (the kernel module is loaded)"; else echo "WG_FAIL wireguard-tools is installed but this kernel cannot load the wireguard module (it needs Linux 5.6 or newer, or the wireguard module package)"; fi
+else echo "WG_FAIL apt could not install wireguard-tools: $(tail -n 2 "$L" | tr '\n' ' ' | cut -c1-200)"; fi
 rm -f "$L"
 """, {}),
     "wg_keygen": (r"""set -e; n='@NAME@'; d=/etc/nikatel/wg; umask 077; mkdir -p "$d"; chmod 700 "$d"

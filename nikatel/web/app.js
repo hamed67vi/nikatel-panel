@@ -1453,6 +1453,21 @@ window.restartTunnel = async (id, name) => { toast(`Restarting ${name}…`); try
 window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.bwMeasure = async id => { toast("Measuring the bandwidth… (a few seconds)"); try { const r = await api(`/api/tunnels/${id}/bandwidth`, {method: "POST"}); const s = await followAction(r.action_id, 1500, 120); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+const WG_STATE = {installed: ["gw-ok", "✓ installed"], missing: ["err", "✕ not installed"], kernel: ["err", "✕ the kernel cannot load the module"], "no apt": ["err", "✕ no apt-get: install it by hand"], unreachable: ["mut", "unreachable"]};
+function wgCard(d) {      // WireGuard tools: which server has them (installed / missing per server) and ONE button for the owner - nothing else installs a package (the probe, the survey and the Doctor only say "not tested: tools missing")
+  const w = d.wireguard; if (!w) return "";
+  const job = d.wg_job, running = job && !job.done, nodes = w.nodes || [];
+  const list = nodes.map(n => { const [c, t] = WG_STATE[n.state] || ["mut", n.state]; return `<span class="${c}" title="${esc(n.name + ": " + t)}">${esc(n.name)} ${t}</span>`; }).join(" · ");
+  const btn = w.missing ? `<button class="pri sm" ${running ? "disabled" : ""} onclick="engineWgInstall()" title="Install wireguard-tools with apt on the ${w.missing} server${w.missing > 1 ? "s" : ""} that lack${w.missing > 1 ? "" : "s"} it (a minute or two each)">⬇ Put on ${w.missing} server${w.missing > 1 ? "s" : ""}</button>` : "";
+  const items = (job && job.items) || [];
+  const res = job ? (job.done ? ` <small class="mut">last install: ${items.filter(i => i.state === "ok").length} of ${items.length} ready${items.filter(i => i.state !== "ok").map(i => ` · <span class="err" title="${esc(i.detail)}">${esc(i.name)}: ${esc(i.detail)}</span>`).join("")}</small>` : ' <small class="mut"><i class="spin"></i> installing…</small>') : "";
+  return `<div class="eng-wg" style="margin-top:8px"><div class="eng-row"><span class="eng-name"><b>WireGuard tools</b><small class="mut">${w.installed}/${nodes.length}</small></span><span class="eng-latest">${list}</span><span class="eng-st">${w.installed === nodes.length && nodes.length ? '<b class="gw-ok">✓ on every server</b>' : btn}${res}</span></div></div>`;
+}
+window.engineWgInstall = async () => {
+  if (!await gconfirm("Install wireguard-tools on every server that lacks it?\n\nIt is installed with apt (a minute or two per server) and the kernel is asked to load the WireGuard module. A server without apt-get says so and nothing is changed there. No tunnel is restarted. Only WireGuard links need it.")) return;
+  try { await api("/api/engines/wireguard/install", {method: "POST"}); toast("Installing WireGuard tools… (a minute or two per server)"); } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  for (let i = 0; i < 80; i++) { await new Promise(r => setTimeout(r, 5000)); if (!$("#eng-box")) return; const d = await api("/api/engines").catch(() => null); if (d && d.wg_job && d.wg_job.done) { api("/api/engines/check", {method: "POST"}).catch(() => {}).then(() => engineFollow()); enginesLoad(); return; } enginesLoad().catch(() => {}); }
+};
 async function enginesLoad() {
   const box = $("#eng-box"); if (!box) return;
   const d = await api("/api/engines");
@@ -1467,6 +1482,7 @@ async function enginesLoad() {
   };
   box.innerHTML = `<div class="eng-list"><div class="eng-head" title="${esc(d.checked_at ? "checked " + ago(d.checked_at) + " ago - the servers are asked by themselves; nothing updates by itself: Update asks you first" : "the servers are asked by themselves")}"><span>Core</span><span>Newest</span><span>Status${d.checking ? '<i class="spin" title="checking every server…"></i>' : ""}</span></div>
     ${Object.entries(eng).map(([k, e]) => row(k, e)).join("") || '<div class="empty">Comparing the cores on your servers with the newest releases - it happens by itself, in a moment.</div>'}</div>
+    ${wgCard(d)}
     ${d.job ? `<div class="mut" style="margin-top:6px">Last ${d.job.kind === "install" ? "install" : "update"}: <b>${esc(d.job.engine)} ${esc(d.job.version || "")}</b> ${d.job.done ? `— ${(d.job.items || []).filter(i => i.state === "ok").length} of ${(d.job.items || []).length} servers ${d.job.kind === "install" ? "got it" : "updated"}${(d.job.items || []).some(i => i.state !== "ok") ? ` <span class="err">(${(d.job.items || []).filter(i => i.state !== "ok").map(i => esc(i.name)).join(", ")} failed)</span>` : ""}` : "(running…)"}${d.job.error ? ` <span class="err">${esc(d.job.error)}</span>` : ""}</div>` : ""}`;
   if (d.checking) { if (!box._follow) { box._follow = true; engineFollow(); } }      // (the flag lives on the box: a GET cut by a navigation never resolves, so a flag on the function stayed on for ever - review 2026-10-16)
   else if (!d.checked_at || Date.now() / 1000 - d.checked_at > 600) { if (!enginesLoad.busy) { enginesLoad.busy = true; api("/api/engines/check", {method: "POST"}).catch(() => {}).finally(() => { enginesLoad.busy = false; }).then(() => engineFollow()); } }   // checked by itself when the last check is older than ten minutes (the owner, 2026-10-16: no Check now button); the page never waits for it

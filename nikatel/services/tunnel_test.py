@@ -509,6 +509,11 @@ def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign
         _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 
+def tools_missing(lines) -> bool:
+    """Pure: does the story of a build say it stopped because a server has no wireguard-tools? Such a kind was NOT TESTED - it says nothing about the route (the Doctor remembers it as "not tested: tools missing", never as "blocked")."""
+    return any("wireguard-tools is not installed" in str(ln) for ln in list(lines or [])[-6:])
+
+
 def explain_failure(kind: str, error: str) -> str:
     """Pure: a failed kind in plain words. What the real tests showed on Iranian routes: clear-text WebSocket and QUIC are filtered while their TLS / plain-UDP cousins pass."""
     e = str(error or "")
@@ -591,6 +596,10 @@ def _compare_worker(job: dict) -> None:
 
             r = dict(RESULTS.get(aid) or {})
             r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else explain_failure(kind, (story[-1] if story else "no result")[:160]))   # a failed build says why
+            if not ok and tools_missing(story):
+                r["skipped"] = "tools"
+                r["error"] = "not tested: wireguard-tools is not installed on a server (Servers -> the server's menu -> Install -> WireGuard tools)"
+
             job["results"].append(r)
 
             try:

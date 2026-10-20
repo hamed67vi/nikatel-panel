@@ -15,7 +15,8 @@ from . import engines, facts, nodes
 from .events import emit
 
 log = get_logger("onboard")
-STEPS = ("read", "gre", "cores")
+STEPS = ("read", "gre", "cores")                 # what a server gets after it is added
+ALL_STEPS = STEPS + ("wg",)                       # "wg" (wireguard-tools, with apt) only when the owner asks for it: the menu of a server, Install -> WireGuard tools
 _RUNNING: set[int] = set()
 _LOCK = threading.Lock()
 
@@ -33,7 +34,7 @@ def _state(server_id: int) -> dict | None:
 def run(server_id: int, steps=STEPS) -> dict:
     """The steps, one after the other, in this thread: {step: "ok" | "failed: why" | "skipped: why"}, and `cores_detail` (what happened to each core). A server that does not answer ends it after
     the first step: there is nothing to put on it."""
-    steps = [s for s in STEPS if s in steps]
+    steps = [s for s in ALL_STEPS if s in steps]
     out: dict = {}
     t0 = int(time.time())
 
@@ -69,6 +70,15 @@ def run(server_id: int, steps=STEPS) -> dict:
             except ValueError as e:
                 out["cores"] = "skipped: " + str(e)
 
+        if "wg" in steps:
+            _say(server_id, "Installing WireGuard tools")
+
+            try:
+                out["wg"] = "ok"
+                engines.install_wireguard_on(server_id)
+            except (SSHError, ValueError, RuntimeError) as e:
+                out["wg"] = "failed: " + str(e)[:200]
+
         return out
     except ValueError:
         return out
@@ -87,7 +97,7 @@ def _finish(server_id: int, out: dict, t0: int) -> None:
             s = db.get(Server, server_id)
 
             if s is not None and steps:
-                done = "read, GRE checked" + (", tunnel cores in place" if steps.get("cores") == "ok" else "")
+                done = "read, GRE checked" + (", tunnel cores in place" if steps.get("cores") == "ok" else "") + (", WireGuard tools ready" if steps.get("wg") == "ok" else "")
                 emit(db, "warn" if failed else "ok", "servers", f"Server {s.name} prepared" + (" - " + "; ".join(failed)[:200] if failed else ": " + done) + ".", s.name)
     except Exception:  # the outcome is a courtesy: it must never take the thread down
         log.exception("onboard: could not keep the outcome of server %s", server_id)

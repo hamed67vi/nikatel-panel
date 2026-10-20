@@ -272,24 +272,25 @@ def check_now(server_id: int):
 
 
 class OnboardIn(BaseModel):
-    steps: list[str] = Field(default_factory=lambda: ["read", "gre", "cores"], max_length=3)
+    steps: list[str] = Field(default_factory=lambda: ["read", "gre", "cores"], max_length=4)
 
 
+# (the extra step "wg" installs wireguard-tools with apt - only when asked: the menu of a server, Install -> WireGuard tools; adding a server never runs it)
 @router.post("/servers/{server_id}/onboard", status_code=202)
 def onboard_server(server_id: int, body: OnboardIn):
     """Prepare a server in the background and answer at once: read it now (so its row has numbers), check its GRE links, put the tunnel cores on it from the panel's cache. `steps` picks some of read, gre, cores; each step is written on the row of the server while it runs."""
     from ..services import onboard
 
-    bad = [s for s in body.steps if s not in onboard.STEPS]
+    bad = [s for s in body.steps if s not in onboard.ALL_STEPS]
 
     if bad:
-        raise HTTPException(400, f"the steps are {', '.join(onboard.STEPS)} (not {bad[0]})")
+        raise HTTPException(400, f"the steps are {', '.join(onboard.ALL_STEPS)} (not {bad[0]})")
 
     with session() as db:
         if db.get(Server, server_id) is None:
             raise HTTPException(404, "server not found")
 
-    return {"ok": True, "started": onboard.start(server_id, tuple(body.steps)), "steps": [s for s in onboard.STEPS if s in body.steps]}
+    return {"ok": True, "started": onboard.start(server_id, tuple(body.steps)), "steps": [s for s in onboard.ALL_STEPS if s in body.steps]}
 
 
 @router.post("/servers/{server_id}/forget-hostkey")

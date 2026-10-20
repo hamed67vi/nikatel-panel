@@ -33,6 +33,7 @@ log = get_logger("knowledge")
 FULL_FRESH = 30 * 86400         # a full measurement older than this is only a hint (the numbers of the day, not of the month)
 REFRESH = 7 * 86400             # a kind that worked is tested again after this
 FAIL_FRESH = 14 * 86400         # a kind that did not work is left alone this long (and the Doctor does not try it in the middle of an outage)
+TOOLS_RETRY = 86400             # a kind that was NOT TESTED because a server lacks wireguard-tools is asked again after this (at once when the owner installs the tools: `forget_tool_skips`)
 QUIET_MBPS = 150.0              # the tunnels of the two servers carry less than this together (the night survey only asks a few pings of a temporary tunnel, no speed test: a survey hardly touches the users)
 BUSY_CPU = 60.0                 # a server this busy is not surveyed
 LIMIT = 5                       # the kinds the Doctor tries live at most
@@ -68,6 +69,11 @@ def pair_key(iran_id: int, foreign_id: int) -> str:
 def merge(entry: dict | None, r: dict, measure: str, now: int) -> dict:
     """The entry of one kind after one test. `r` is a row of a pair test (kind, ok, score, latency_ms ..., error / verdict); `measure`: "full" (speed included) or "latency"."""
     e = dict(entry or {})
+
+    if r.get("skipped"):          # not tested at all (a server lacks wireguard-tools): that is NOT a failure of the route - it is never "blocked", it is asked again
+        e["last"] = {"ok": False, "measured": False, "skipped": str(r["skipped"]), "at": now, "measure": measure, "score": None, "error": str(r.get("error") or r.get("verdict") or "")[:140]}
+        return e
+
     ok, measured = bool(r.get("ok")), r.get("score") is not None or bool(r.get("works"))          # "works": it was built and carried data (a real build checks that) though nobody scored it
     e["last"] = {"ok": ok, "measured": measured, "at": now, "measure": measure, "score": r.get("score"), "error": "" if ok or measured else str(r.get("error") or r.get("verdict") or "")[:140]}
 
@@ -78,11 +84,14 @@ def merge(entry: dict | None, r: dict, measure: str, now: int) -> dict:
 
 
 def verdict(e: dict | None) -> str:
-    """"good" (the last test passed), "poor" (it carried data but scored under the line), "failed" (it did not work), "" (never tested)."""
+    """"good" (the last test passed), "poor" (it carried data but scored under the line), "failed" (it did not work), "untested" (it could not be tried: a server lacks wireguard-tools), "" (never tested)."""
     last = (e or {}).get("last")
 
     if not last:
         return ""
+
+    if last.get("skipped"):
+        return "untested"
 
     if last.get("ok"):
         return "good"
@@ -148,6 +157,34 @@ def blocked(pair: dict | None, now: int) -> list[str]:
     return sorted(k for k, e in ((pair or {}).get("kinds") or {}).items() if verdict(e) == "failed" and now - int(e["last"].get("at") or 0) < FAIL_FRESH)
 
 
+def untested(pair: dict | None) -> list[dict]:
+    """The kinds that were NOT tested on the pair because they could not be tried (a server lacks wireguard-tools) - [{"kind", "reason", "at"}]. They are neither good nor blocked: the page says "not tested", and they are
+    asked again (a day later, or at once when the owner installs the tools)."""
+    return [{"kind": k, "reason": "tools" if (e["last"].get("skipped") == "tools") else str(e["last"].get("skipped")), "error": e["last"].get("error") or "", "at": int(e["last"].get("at") or 0)}
+            for k, e in sorted(((pair or {}).get("kinds") or {}).items()) if verdict(e) == "untested"]
+
+
+def forget_tool_skips(server_id: int) -> None:
+    """The owner installed wireguard-tools on this server: every "not tested: tools missing" of a pair it belongs to is forgotten (the kind and the link), so that the next survey tests them at once."""
+    with _LOCK:
+        d = _doc()
+        changed = False
+
+        for key, p in d["pairs"].items():
+            if str(server_id) not in key.split(":"):
+                continue
+
+            kinds = {k: e for k, e in (p.get("kinds") or {}).items() if verdict(e) != "untested"}
+            links = {k: e for k, e in (p.get("links") or {}).items() if not e.get("skipped")}
+
+            if len(kinds) != len(p.get("kinds") or {}) or len(links) != len(p.get("links") or {}):
+                d["pairs"][key] = {**p, "kinds": kinds, "links": links}
+                changed = True
+
+        if changed:
+            st.put("knowledge", {"pairs": d["pairs"]})
+
+
 def poor(pair: dict | None, now: int) -> list[str]:
     """The kinds that carried data on the pair but scored under the line, tested less than FULL_FRESH ago."""
     return sorted(k for k, e in ((pair or {}).get("kinds") or {}).items() if verdict(e) == "poor" and now - int(e["last"].get("at") or 0) < FULL_FRESH)
@@ -161,7 +198,7 @@ def due_kinds(pair: dict | None, kinds: list[str], now: int, refresh: int = REFR
     for k in kinds:
         last = (have.get(k) or {}).get("last")
 
-        if not last or now - int(last.get("at") or 0) >= (FAIL_FRESH if verdict(have[k]) == "failed" else refresh):
+        if not last or now - int(last.get("at") or 0) >= (FAIL_FRESH if verdict(have[k]) == "failed" else TOOLS_RETRY if verdict(have[k]) == "untested" else refresh):
             out.append(k)
 
     return out
@@ -268,7 +305,10 @@ def record_link(iran_id: int, foreign_id: int, link: str, r: dict, now: int | No
         k = pair_key(iran_id, foreign_id)
         p = dict(d["pairs"].get(k) or {})
         links = dict(p.get("links") or {})
-        links[link] = {"ok": bool(r.get("ok")), "at": now, "rtt_ms": r.get("rtt_ms"), "loss_pct": r.get("loss_pct"), "error": "" if r.get("ok") else str(r.get("error") or "")[:140]}
+        if r.get("ok") is None and r.get("skipped"):          # the probe could not try it (wireguard-tools missing): said so, and not "does not pass"
+            links[link] = {"ok": None, "skipped": str(r["skipped"]), "at": now, "rtt_ms": None, "loss_pct": None, "error": str(r.get("error") or "")[:140]}
+        else:
+            links[link] = {"ok": bool(r.get("ok")), "at": now, "rtt_ms": r.get("rtt_ms"), "loss_pct": r.get("loss_pct"), "error": "" if r.get("ok") else str(r.get("error") or "")[:140]}
         d["pairs"][k] = {**p, "at": now, "links": links}
         st.put("knowledge", {"pairs": d["pairs"]})
 
@@ -276,7 +316,7 @@ def record_link(iran_id: int, foreign_id: int, link: str, r: dict, now: int | No
 def link_state(pair: dict | None, link: str, now: int, within: int = 6 * 3600) -> bool | None:
     """Did this link pass between the pair when the probe last asked (True / False), or has it not been asked within `within` seconds (None)?"""
     e = ((pair or {}).get("links") or {}).get(link)
-    return bool(e.get("ok")) if e and now - int(e.get("at") or 0) <= within else None
+    return bool(e.get("ok")) if e and e.get("ok") is not None and now - int(e.get("at") or 0) <= within else None
 
 
 def note_quality(tunnel_id: int, q: dict) -> None:
@@ -635,7 +675,8 @@ def state(now: int | None = None) -> dict:
         kinds = p.get("kinds") or {}
         rows.append({"iran_id": i, "foreign_id": f, "iran": names[i], "foreign": names[f], "tunnels": live.get((i, f), 0), "at": int(p.get("at") or 0), "tested": len(kinds),
                      "due": len(due_kinds(p, READY, now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
-                     "blocked": [{"kind": x, "error": kinds[x]["last"].get("error") or "", "at": int(kinds[x]["last"].get("at") or 0)} for x in blocked(p, now)]})
+                     "blocked": [{"kind": x, "error": kinds[x]["last"].get("error") or "", "at": int(kinds[x]["last"].get("at") or 0)} for x in blocked(p, now)],
+                     "untested": untested(p)})
 
     rows.sort(key=lambda r: (r["iran"].lower(), r["foreign"].lower()))
     return {"on": bool(d["on"]), "from_hour": int(d["from_hour"]), "to_hour": int(d["to_hour"]), "tz_minutes": tz, "window_open": in_window(now, tz, int(d["from_hour"]), int(d["to_hour"])),

@@ -139,6 +139,7 @@ class Side:
     data_ms: float | None = None  # how long that answer took (the latency of the users' path when the ping over the link is blocked)
     now: int = 0
     error: str = ""
+    wg_age: int | None = None    # a WireGuard link: seconds since the last handshake (-1 = none yet), None = not a WireGuard link / not asked
 
 
 def parse_side(out: str) -> Side:
@@ -158,6 +159,8 @@ def parse_side(out: str) -> Side:
 
             if len(nums) >= 2:
                 s.rx_bytes, s.tx_bytes = int(nums[0]), int(nums[1])
+        elif p[0] == "WGHS" and len(p) >= 2:
+            s.wg_age = -1 if p[1] == "never" else int(p[1]) if p[1].isdigit() else None
         elif p[0] == "PEER" and len(p) >= 2:
             # "PEER <ip> [<avg rtt>] [<loss %>]" - the rtt is missing when every ping was lost
             rest = p[2:]
@@ -183,6 +186,20 @@ def parse_side(out: str) -> Side:
             s.now = int(p[1])
 
     return s
+
+
+STALE_HANDSHAKE = 300         # a WireGuard link renews its handshake about every two minutes while it is used (and the keepalive every 25 s keeps it used): older than this, there is no session
+
+
+def wg_note(side: Side) -> str:
+    """Pure: the words about the handshake of a WireGuard link that has none or an old one ("" when it is fresh or the link is not WireGuard)."""
+    if side.wg_age is None:
+        return ""
+
+    if side.wg_age < 0:
+        return "; WireGuard has not shaken hands with the other end yet"
+
+    return f"; the last WireGuard handshake was {side.wg_age} s ago (the other end has not answered for that long)" if side.wg_age > STALE_HANDSHAKE else ""
 
 
 DATA_DOWN_AFTER = 4          # this many failed data probes in a row: the tunnel is down, not just degraded (a minute in the fast lane, which looks at such a tunnel every ~8 s; it was four minutes in the minute cycle)
@@ -237,7 +254,7 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
 
     if ext_ok or (local_ok and not ext_silent):
         if lossy:
-            return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
+            return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link{wg_note(iran)}"
 
         return ("degraded", stalled) if stalled else ("up", "")
 
@@ -246,10 +263,10 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
         return ("down" if ext_fails >= DATA_DOWN_AFTER else "degraded"), why
 
     if silent:
-        return "down", "no answer from the foreign end over the GRE link"
+        return "down", "no answer from the foreign end over the GRE link" + wg_note(iran)
 
     if lossy:
-        return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link"
+        return "degraded", f"{iran.loss_pct:.0f}% loss on the GRE link{wg_note(iran)}"
 
     closed = [p for p, ok in iran.listen.items() if not ok]
 

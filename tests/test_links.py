@@ -28,8 +28,9 @@ def test_a_gre_link_is_exactly_what_it_was_and_the_other_links_keep_its_names():
     assert gre == builder.gre_scripts("ca-ir1", "203.0.113.10", "198.51.100.20", 1234567, "10.9.8.1/30", 1360)
     wg, fou = files("wg"), files("fou", port=5510)
     assert set(wg) == set(gre) == set(fou)                                                                             # the same six files: the units, the timer and the check keep the names every other part of the panel knows
-    for link in (wg, fou):
-        assert link["/usr/local/sbin/nikatel-gre-check-ca-ir1"] == gre["/usr/local/sbin/nikatel-gre-check-ca-ir1"]      # (the check pings the inner peer and restarts the unit after three silences: the same for every link)
+    assert fou["/usr/local/sbin/nikatel-gre-check-ca-ir1"] == gre["/usr/local/sbin/nikatel-gre-check-ca-ir1"]      # (the check pings the inner peer and restarts the unit after three silences: the same for every link ...)
+    chk = wg["/usr/local/sbin/nikatel-gre-check-ca-ir1"]
+    assert chk != gre["/usr/local/sbin/nikatel-gre-check-ca-ir1"] and "PEER=10.9.8.2" in chk and "latest-handshakes" in chk      # ... but WireGuard's also reads the age of the handshake (1.69.44, test_wireguard_complete.py)
     assert "Nikatel WireGuard link" in wg["/etc/systemd/system/nikatel-gre-ca-ir1.service"] and "Nikatel GRE over UDP (FOU) link" in fou["/etc/systemd/system/nikatel-gre-ca-ir1.service"]
 
 

@@ -51,6 +51,12 @@ def received(out: str) -> tuple[int, float | None]:
     return (int(m.group(1)) if m else 0), (float(r.group(1)) if r else None)
 
 
+def tools_sentence(facts_i: dict, facts_f: dict) -> str:
+    """Pure: which server has wireguard-tools and which has not ("installed / missing" per server, not a bare unknown) and what to do - the probe never installs a package."""
+    i, f = ("installed" if facts_i["wg_tool"] else "MISSING"), ("installed" if facts_f["wg_tool"] else "MISSING")
+    return f"wireguard-tools: {i} on the Iran server, {f} on the foreign server (Servers -> the server's menu -> Install -> WireGuard tools; the probe never installs a package)"
+
+
 def plan(want: list[str], facts_i: dict, facts_f: dict, taken_nets: list[str], hosts: tuple[str, str]) -> dict[str, dict]:
     """Pure (apart from the choice of random names and keys): for every link wanted, either what to run - {"net": (network, iran_ip, foreign_ip), "port": udp port or 0} - or why it is not tried -
     {"skip": {"ok": None | False, "error": sentence}}. Different links never share a network or a UDP port."""
@@ -76,7 +82,7 @@ def plan(want: list[str], facts_i: dict, facts_f: dict, taken_nets: list[str], h
             continue
 
         if link in builder.NEEDS_WG_TOOL and not (facts_i["wg_tool"] and facts_f["wg_tool"]):
-            out[link] = {"skip": {"ok": None, "error": "wireguard-tools is not installed on a server (the probe never installs a package)"}}
+            out[link] = {"skip": {"ok": None, "skipped": "tools", "tools": {"iran": bool(facts_i["wg_tool"]), "foreign": bool(facts_f["wg_tool"])}, "error": tools_sentence(facts_i, facts_f), "rtt_ms": None, "loss_pct": None, "secs": 0.0}}
             continue
 
         if link in linkmodels.CARRIER_LINKS:
@@ -267,7 +273,7 @@ def probe(iran_id: int, foreign_id: int, links: list[str] | None = None, record:
         now = int(time.time())
 
         for link, r in out.items():
-            if r.get("ok") is not None:
+            if r.get("ok") is not None or r.get("skipped"):
                 knowledge.record_link(iran_id, foreign_id, link, r, now)
 
     return out
@@ -277,5 +283,5 @@ def summary(res: dict[str, dict]) -> str:
     """Pure: one sentence for the story of a repair - what passes (with its delay) and what does not."""
     ok = [f"{linkmodels.NAMES[k]} {round(r['rtt_ms'])} ms" if r.get("rtt_ms") is not None else linkmodels.NAMES[k] for k, r in res.items() if r.get("ok")]
     no = [linkmodels.NAMES[k] for k, r in res.items() if r.get("ok") is False]
-    unknown = [linkmodels.NAMES[k] for k, r in res.items() if r.get("ok") is None]
+    unknown = [linkmodels.NAMES[k] + (" (wireguard-tools missing)" if r.get("skipped") == "tools" else "") for k, r in res.items() if r.get("ok") is None]
     return "passes: " + (", ".join(ok) or "nothing") + "; does not pass: " + (", ".join(no) or "nothing") + ("; not known: " + ", ".join(unknown) if unknown else "")

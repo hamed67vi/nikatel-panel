@@ -36,6 +36,7 @@ def walk(monkeypatch):
         monkeypatch.setattr(builder, "_build", fake_build)
         monkeypatch.setattr(builder, "_say", lambda aid, line, done=None, ok=None: log["said"].append((line, done, ok)))
         monkeypatch.setattr(builder, "_rollback", lambda bb: log.__setitem__("rolled", log["rolled"] + 1))
+        monkeypatch.setattr(builder, "_wg_ready", lambda bb: False)                                               # (no server to ask: WireGuard is tried only where the owner allowed it; test_wireguard_complete.py has the other case)
         builder._BUILDING.add("pair-fb")
         builder._build_worker(b, "pair-fb")
         log["final"] = next((s for s in reversed(log["said"]) if s[1]), None)
