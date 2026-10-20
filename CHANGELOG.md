@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.46 - The log of the Create tunnel window is one row
+
+The owner (2026-10-20, in Persian, with a picture of the Create window whose log box of 150 px covered the form): "the log must not push things up - put one row inside the box and show the log."
+
+- **One row** (`app.css .bld-log`): the log under the Create form shows the LAST step on one line (cut with …) and a small spinner while it works - not a box of 150 px that covers the form. A **click** on the row opens the whole log (it grows and scrolls inside 40 % of the screen, so it never pushes the form out of the way by more than that); a second click folds it again. The tooltip says so. The Persian text is in `i18n.fa.ui2.js`.
+- It is only the look of the log: the steps, the follow of the build and the tests of the pair are unchanged (`followStory`, `storyHtml`).
+- **Proved**: `tests/test_build_log_row.py` (the rules of the one row, the spinner, the open state, the click handler). **Not proved**: how it looks in a browser (it was not opened) - the rules use `:has()`, which the owner's Chrome has.
 ## 1.69.45 - "Best of the day" on a pair where nothing scored well no longer picks the freshest weak type
 
 The owner (2026-10-20), after a tunnel built with the automatic best type came up as Paqet: "didn't you say Paqet is weak? and in the tests BackPack was the best - why did it choose Paqet?"

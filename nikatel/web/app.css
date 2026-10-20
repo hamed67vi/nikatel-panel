@@ -3633,10 +3633,19 @@ html:not([data-mode="light"]) body #modal button:not(.pri):not(.danger):not(.sm)
 html:not([data-mode="light"]) body button.danger { color: #ffb3bd; background: rgba(255,69,58,.16); border: 1px solid rgba(255,69,58,.45); border-radius: 999px; }
 
 /* the log of the Create tunnel window: ONE box of a fixed size at the bottom of the window, always there (it says what it is for while empty); the build and the test write into it */
-#modal .bld-log { position: sticky; bottom: 0; z-index: 3; box-sizing: border-box; height: 150px; margin: 12px 0 0; padding: 10px 14px; overflow: auto; border-radius: 16px; background: #0b1120; border: 1px solid rgba(255,255,255,.1); }
+#modal .bld-log { position: sticky; bottom: 0; z-index: 3; box-sizing: border-box; display: flex; align-items: center; gap: 10px; min-height: 40px; max-height: 40px; margin: 12px 0 0; padding: 6px 14px; overflow: hidden; cursor: pointer; border-radius: 16px; background: #0b1120; border: 1px solid rgba(255,255,255,.1); }
 #modal .bld-log:empty::before { content: "Messages and the progress of the build and the test show here."; color: var(--mut); font-size: 13px; }
-#modal .bld-log.hidden { display: block; }
-
+#modal .bld-log.hidden { display: flex; }
+/* 1.69.45 - the log of the Create window is ONE row: the last step (cut with …) and a small spinner while it works; a click opens the whole log (it grows, scrolls inside 40 % of the screen) and a second click closes it */
+#modal .bld-log .fx-line { display: none; }
+#modal .bld-log .fx-line:not(.run):not(:has(~ .fx-line:not(.run))) { display: flex; flex: 1 1 auto; min-width: 0; padding: 0; }
+#modal .bld-log .fx-line:not(.run):not(:has(~ .fx-line:not(.run))) span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#modal .bld-log .fx-line.run { display: flex; flex: none; padding: 0; font-size: 0; }
+#modal .bld-log .fx-line.run:only-child { font-size: 13px; }
+#modal .bld-log.open { display: block; max-height: 40vh; overflow: auto; }
+#modal .bld-log.open .fx-line { display: flex; }
+#modal .bld-log.open .fx-line.run { font-size: 12.5px; }
+#modal .bld-log.open .fx-line span { white-space: pre-wrap; overflow: visible; text-overflow: clip; }
 /* the end of a tunnel row (the owner, 2026-10-17): the soft "›" arrow is gone; the row ends with the "⋯" button of the server list (labKebab) - the same menu as in the tunnel window */
 .tun-tbl td:last-child { position: relative; overflow: visible; padding-right: 10px; }
 
