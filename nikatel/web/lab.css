@@ -1093,3 +1093,23 @@ html body #modal .kv2 > div > .tchip { flex: none; }
 .mv-plan .mv-choices button { height: auto; min-height: 40px; padding: 8px 14px; border-radius: 14px; line-height: 1.25; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .mv-plan .mv-choices button small { font-size: 11px; font-weight: 500; opacity: .75; }
 .mv-plan .mv-choices button.sm { min-height: 34px; }
+
+/* 1.69.39 - the question box looks like the alert of macOS (the owner, 2026-10-20: "make this one MacBook style" - the "Update the panel from GitHub now?" box): a rounded square icon on top, the words centred, and two buttons of the same width side by side - the quiet one on the left, the blue (red for a dangerous question) one on the right. The box with a plan inside (Move the tunnels) and the choice lists keep their own layout. */
+html body #ask .modal.ask-box:not(:has(.mv-plan)) { width: min(344px, calc(100vw - 40px)); padding: 26px 22px 18px; gap: 8px; border-radius: 16px; text-align: center; justify-items: center; box-shadow: 0 26px 70px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.08); }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-ic { justify-self: center; width: 58px; height: 58px; border-radius: 14px; font-size: 28px; font-weight: 700; margin-bottom: 4px; box-shadow: 0 8px 22px rgba(10,132,255,.35); background: linear-gradient(180deg, #4aa3ff, #0a6cf0); }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-ic.bad { background: linear-gradient(180deg, #ff7a70, #ff453a); box-shadow: 0 8px 22px rgba(255,69,58,.35); }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-text { font-size: 13.5px; line-height: 1.5; text-align: center; font-weight: 500; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) { display: flex; width: 100%; gap: 10px; justify-content: stretch; margin-top: 14px; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) button { flex: 1 1 0; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 0; font-size: 14px; font-weight: 600; box-shadow: none; filter: none; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) button::after { display: none; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no { background: rgba(255,255,255,.12); color: inherit; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no:hover { background: rgba(255,255,255,.18); }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes { background: #0a84ff; color: #fff; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes:hover { background: #2b95ff; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes.danger-fill { background: #ff453a; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes.danger-fill:hover { background: #ff5f55; }
+html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) { box-shadow: 0 26px 70px rgba(30,40,80,.28), inset 0 0 0 1px rgba(60,80,130,.12); }
+html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no { background: rgba(60,70,100,.09); color: #1c1f2a; }
+html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no:hover { background: rgba(60,70,100,.15); }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-field { width: 100%; text-align: left; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-hint, html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-check { text-align: left; }

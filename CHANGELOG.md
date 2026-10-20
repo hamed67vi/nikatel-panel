@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.39 - The question box (Update from GitHub?, Delete?, Reboot?) looks like the alert of macOS
+
+The owner (2026-10-20, with a picture of the "Update the panel from GitHub now?" box): "make this one MacBook style".
+
+- **What changed** (`lab.css`, only styles): the box is a narrow alert - a rounded-square icon on top (blue; red for a dangerous question such as Delete or Reboot), the words centred below it, and two buttons of the same width side by side: the quiet **Cancel** on the left, the blue **Update / OK** (red for a dangerous one) on the right, no glow. The same for the questions that ask for a text or a password. Light mode has its own colours. The box with the plan of "Move the tunnels" and the lists of choices keep their layout.
+- **Proved**: `tests/test_fluid_layout.py` pins the rules; on a private demo panel in the built-in browser the box of a question, a dangerous question, a text prompt, a password prompt and the light mode were measured: 340-344 px wide and centred in a 1024 px window, the two buttons 141-145 px each, nothing wider than the box, blue / red / grey colours as intended.
+- **Not proved**: a screenshot of it (the pane was hidden, so pictures came out blank - only measurements); a phone width (the old phone rules still give it the full width).
 ## 1.69.38 - The Bandwidth column of the Lab is the LINE of the server (not the traffic it carries); three pictures of the shop bot's Mini App are fixed
 
 The owner (2026-10-20): "the Bandwidth column does not show the overall bandwidth of the server - I do not want the used bandwidth, show only the live number of the server's overall bandwidth" and, asked what "overall" means, he chose **the port / line capacity of the server**. Then three pictures of the Mini App on a phone: "fix the size of the text here", "fix this too", "this text is garbled - remove it if it is extra".

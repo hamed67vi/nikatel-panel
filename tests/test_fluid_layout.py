@@ -222,3 +222,13 @@ def test_a_long_user_name_gets_its_dash_and_the_profile_suggestions_wrap_and_the
     assert ".usr-nm > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in app_css and "grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }" in app_css
     assert "html body .lab-np .lab-np-chips { flex-wrap: wrap; gap: 6px; min-width: 0; }" in (WEB / "lab.css").read_text(encoding="utf-8")
     assert 'html[data-mode="light"] body #page .ap-tasks .ap-row .work-chip { color: #3a4a6b;' in (WEB / "light.css").read_text(encoding="utf-8")
+
+def test_the_question_box_is_the_alert_of_macos_and_leaves_the_plan_box_and_the_choice_lists_alone():
+    """The owner, 2026-10-20: "make this one MacBook style" (the Update from GitHub question): a rounded-square icon, the words centred, two buttons of one width side by side."""
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    box = "html body #ask .modal.ask-box:not(:has(.mv-plan))"
+    assert box + " { width: min(344px" in css and "border-radius: 16px; text-align: center" in css
+    acts = box + " .ask-act:not(.ask-choices)"
+    assert acts + " { display: flex; width: 100%;" in css and acts + " button { flex: 1 1 0;" in css
+    assert acts + " .ask-yes { background: #0a84ff;" in css and acts + " .ask-yes.danger-fill { background: #ff453a; }" in css      # (blue, red for a dangerous question)
+    assert 'html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan))' in css                                                         # (the plan of "Move the tunnels" keeps its wide left-aligned box)
