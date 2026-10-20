@@ -1189,3 +1189,7 @@ html[data-fluid] body #page .lab-bar:has(.lab-kinds > button:nth-child(5)) .tabs
   .lab-bar:has(.lab-kinds > button:nth-child(5)) .lab-chip::before { content: attr(data-ic); font-size: 11px; color: var(--mut); }
   .lab-bar:has(.lab-kinds > button:nth-child(5)) .lab-chip { padding: 0 9px; gap: 4px; }
 }
+
+/* the meter of the list is drawn for EVERY tunnel that runs, the TOTAL on the left and what the users use beside it (the owner, 2026-10-21): a tunnel without a problem has no word */
+html body #page .tun-tbl .bwm-t small:empty { display: none; }
+html body #page .tun-tbl .bwm-t .bwm-u { font-size: 12px; font-weight: 600; color: var(--text); }

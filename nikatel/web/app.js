@@ -868,9 +868,13 @@ const linkTag = t => LINK_TAG[(t.record || {}).link] || "GRE";
 const bwFmt = v => v == null ? "—" : bwNum(v) + " Mb/s";      // (everything about a tunnel's bandwidth is in Mb/s, never Gb/s - the owner, 2026-10-17)
 const uxTip = t => { const u = t.ux || {}; return u.grade && u.grade !== "unknown" ? ` · Users: ${u.grade}${u.known ? " (" + u.known + " config" + (u.known === 1 ? "" : "s") + ")" : ""}` : ""; };      // what the users get through it (the probe's tests of the configs that ride the tunnel; services/userq.py)
 /* the bandwidth as a METER (the owner, 2026-10-20: "show the total bandwidth and what the user uses as a professional bar - not an unclear word"): the track is the capacity, the fill is what the users use now (the last
-   check: the list does not read live), the numbers are "use / capacity" and ONE word says what is wrong. The list draws it only for a tunnel that has a problem or is nearly full; the window of the tunnel draws a big one for every tunnel. */
-const bwMeter = (t, tone, word, tip) => { const cap = capOf(t), u = useOf(t), scale = Math.max(cap || 0, u ? u.down : 0, 0.1);
-  return `<span class="bwm ${tone}" title="${esc(tip || bwTip(t))}"><span class="bwm-bar"><u style="width:${u ? Math.min(100, Math.max(2, Math.round(u.down / scale * 100))) : 0}%"></u></span><span class="bwm-t"><b>${u ? bwNum(u.down) : "—"}</b><i>/</i><span>${cap != null ? bwNum(cap) : "—"}</span><small>${esc(word)}</small></span></span>`; };
+   check: the list does not read live), the numbers are "use / capacity" and ONE word says what is wrong. The list draws it for every tunnel that runs (a word only for a problem or a nearly full tunnel); the window of the tunnel draws a big one. */
+const bwMeter = (t, tone, word, tip) => { const cap = capOf(t), u = useOf(t), scale = Math.max(cap || 0, u ? u.down : 0, 0.1), k = [cap == null ? "" : bwNum(cap), u ? bwNum(u.down) : "", u ? Math.min(100, Math.max(2, Math.round(u.down / scale * 100))) : 0, tone, word].join("|");
+  return `<span class="bwm ${tone}" data-k="${esc(k)}" title="${esc(tip || bwTip(t))}"><span class="bwm-bar"><u style="width:${u ? Math.min(100, Math.max(2, Math.round(u.down / scale * 100))) : 0}%"></u></span><span class="bwm-t"><b>${cap != null ? bwNum(cap) : "—"}</b><i>|</i><span class="bwm-u">↓ ${u ? bwNum(u.down) : "—"}</span><small>${esc(word)}</small></span></span>`; };
+/* the meter of a tunnel that runs, as the list draws it (the owner, 2026-10-21: "show the bar for the others too", "the total bandwidth on the left", "the users' use must be there, it was to be live"): the TOTAL on the left, the users' use beside it
+   (live: the list asks the live reader every 4 s while it is open and paints the meters in place), a word and a colour only for a problem or a nearly full tunnel */
+const bwMeterFor = t => { const b = t.bw || {}, stall = b.down != null && b.down < BW_STALL, prob = stall || b.state === "drop" || b.state === "slow", full = !prob && t.cap && t.cap.state === "full";
+  return bwMeter(t, prob ? (stall || b.state === "drop" ? "drop" : "slow") : full ? "full" : "ok", prob ? (stall ? "no data" : b.state === "drop" ? "dropped" : "very slow") : full ? "nearly full" : "", prob || !full ? bwTip(t) : capTip(t)); };
 const bwTone = t => { const b = t.bw || {}, cap = capOf(t), u = useOf(t), util = cap > 0 && u ? u.down / cap : null; return b.state === "drop" || b.state === "slow" || (cap != null && cap < BW_STALL) ? "drop" : util != null && util >= 0.85 ? "full" : util != null && util >= 0.7 ? "warm" : "ok"; };
 const tunBwBoxInner = t => {      // the big meter of the tunnel window: capacity (the track), what the users use now (the fill, ↓ and ↑), their peak of the last 24 hours (the tick), and one sentence
   const b = t.bw || {}, cap = capOf(t), u = useOf(t), day = useDay(t);
@@ -920,15 +924,21 @@ const bwCap = t => {      // the capacity: the download speed the Doctor measure
 /* the numbers of what the users use change by themselves: while the Tunnels page is on screen they are asked every 4 s and the cells change in place (nothing is drawn again) */
 let tunLiveT = null;
 const tunUseHtml = t => useOf(t) ? `↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}${bwUtil(t) != null ? ` <small class="mut">${Math.round(bwUtil(t) * 100)} % of the capacity</small>` : ""}` : '<span class="mut">cannot be read for this tunnel</span>';      // (the "In use now" row of the tunnel window)
-const tunLivePaint = () => { const u = document.querySelector('[id^="tun-use-"]'); if (!u) return; const t = (state.tunnelsCache || []).find(x => x.id === +u.id.slice(8)); if (!t) return; u.innerHTML = tunUseHtml(t); const bx = document.getElementById("tun-bwbox-" + t.id); if (bx) { const h = tunBwBoxInner(t), w = bx.querySelector(".bwbig, .mut"); if (w) w.outerHTML = h; } };      // (the window of a tunnel: its numbers change in place while it is open)
+const tunLivePaint = () => {
+  document.querySelectorAll(".tun-tbl td.bwc[data-tid]").forEach(td => {      // (the meters of the list: only the ones whose numbers changed are replaced)
+    const t = (state.tunnelsCache || []).find(x => x.id === +td.dataset.tid), m = td.querySelector(".bwm"); if (!t || !m || !["up", "degraded"].includes(t.state)) return;
+    const tp = document.createElement("template"); tp.innerHTML = bwMeterFor(t); const nm = tp.content.firstElementChild; if (nm && nm.dataset.k !== m.dataset.k) m.replaceWith(nm);
+  });
+  const u = document.querySelector('[id^="tun-use-"]'); if (!u) return; const t = (state.tunnelsCache || []).find(x => x.id === +u.id.slice(8)); if (!t) return; u.innerHTML = tunUseHtml(t); const bx = document.getElementById("tun-bwbox-" + t.id); if (bx) { const h = tunBwBoxInner(t), w = bx.querySelector(".bwbig, .mut"); if (w) w.outerHTML = h; } };      // (the window of a tunnel: its numbers change in place while it is open)
 const tunLiveStop = () => { clearInterval(tunLiveT); tunLiveT = null; };
 const tunLiveTick = async () => {
-  if (state.page !== "tunnels" || document.hidden || !document.querySelector('[id^="tun-use-"]')) { tunLiveStop(); return; }      // (asked only while the window of a tunnel is open: the list no longer shows the live numbers)
+  if (state.page !== "tunnels" || document.hidden || !document.querySelector('[id^="tun-use-"], .tun-tbl')) { tunLiveStop(); return; }      // (asked while the list or the window of a tunnel is open: the meters of the list are live)
   let r; try { r = await api("/api/tunnels/live"); } catch (e) { return; }      // (a read that failed leaves what is shown: only the next number is late)
   state.live = r.live || {}; state.use24 = r.use24 || state.use24 || {}; state.liveAt = Date.now(); tunLivePaint();
 };
 const tunLiveStart = () => { if (!tunLiveT) { tunLiveT = setInterval(tunLiveTick, 4000); tunLiveTick(); } };
-document.addEventListener("visibilitychange", () => { if (!document.hidden && state.page === "tunnels" && document.querySelector('[id^="tun-use-"]')) tunLiveStart(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state.page === "tunnels" && document.querySelector('[id^="tun-use-"], .tun-tbl')) tunLiveStart(); });
+setInterval(() => { if (state.page === "tunnels" && !document.hidden && !tunLiveT && document.querySelector(".tun-tbl")) tunLiveStart(); }, 2000);      // (the list is on screen: the live reading starts by itself)
 /* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
 const srvBusy = s => { const b = (s.extra || {}).busy; return b && b.what && Date.now() / 1000 - b.at < 900 ? b : null; };
 const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
@@ -1570,7 +1580,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
     if (!["up", "degraded"].includes(t.state)) return `<span class="cut-tag ${t.state === "down" ? "" : "unk"}" title="${esc(t.last_error || stText(t))}">${esc(t.last_error && t.state !== "starting" ? cutTag(t) : stText(t).toLowerCase())}</span>`;
     const b = t.bw || {}, stall = b.down != null && b.down < BW_STALL, why = t.state === "degraded" && t.last_error && !stall ? `<small class="mut td-err" title="${esc(t.last_error)}">${esc(shortWhy(t))}</small>` : "";
     const prob = stall || b.state === "drop" || b.state === "slow";      // (the owner, 2026-10-20: "this column is too busy - show it only when the bandwidth drops or has a problem or the tunnel is cut; the bandwidth goes in the box of each tunnel": the numbers are in the tunnel window, Link -> Capacity and Status -> In use now)
-    return (prob ? bwMeter(t, stall || b.state === "drop" ? "drop" : "slow", stall ? "no data" : b.state === "drop" ? "dropped" : "very slow", bwTip(t)) : t.cap && t.cap.state === "full" ? bwMeter(t, "full", "nearly full", capTip(t)) : "") + why;
+    return bwMeterFor(t) + why;
   };
   /* the Ping / Loss cell after the owner's picture (2026-10-17): the ping above, an arrow at each end of a dotted line, the loss below; a cut link is red with a cross and says nothing above or below */
   const ARR_L = '<svg class="ah" viewBox="0 0 22 14" aria-hidden="true"><path d="M21 7H2M8 1L2 7l6 6"/></svg>', ARR_R = '<svg class="ah" viewBox="0 0 22 14" aria-hidden="true"><path d="M1 7h19M14 1l6 6-6 6"/></svg>';

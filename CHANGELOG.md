@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.56 - The bandwidth meter of the tunnel list is drawn for every tunnel, the total on the left, the users' use beside it, live
+
+> **به زبان ساده:** در لیست تانل‌ها نوار پهنا حالا برای همهٔ تانل‌هایی که کار می‌کنند هست. پهنای کل سمت چپ است و مصرف کاربرها کنارش، و عددها زنده‌اند (هر ۴ ثانیه). کلمه فقط برای افت، کندی یا تقریباً پُر بودن می‌آید.
+>
+> **In short:** the meter is drawn for every tunnel that runs: the total on the left, the users' use beside it, live every 4 s; a word only for a drop, a very slow or a nearly full tunnel.
+
+The owner (2026-10-21, a picture of the list where only the tunnels with a problem had the meter, and some of those showed a dash for the users): "show the bar for the others too"; "show the total bandwidth on the left"; "for some of them it does not show the users' use - it was to be instant".
+
+- **The meter for every tunnel that runs** (`app.js bwMeterFor`, used by `bwCell`): the 1.69.50 rule drew it only for a drop, a very slow or a nearly full tunnel; the others had an empty cell. Now a tunnel without a problem has the bar and the numbers and no word; a problem or a nearly full tunnel keeps its word and its colour; a cut tunnel keeps its tag; the short reason of a degraded tunnel stays under the meter.
+- **The total on the left** (`bwMeter`): "<total> | ↓ <users' use>" (it was "use / total"); the fill is still the part of the total that the users use.
+- **Live** (`tunLiveTick`, `tunLivePaint`): the list asked nothing live (the live reader was asked only while the window of a tunnel was open), so a tunnel with no number in the last check - every BackPack tunnel reads its users from their connections - showed a dash until the next full redraw. Now, while the tunnels list is on screen, the live reader is asked every 4 s and the meters are painted in place (only a meter whose numbers changed is replaced: no jump). Read on the live panel: all 18 tunnels had a live reading, 4 s old.
+- **Proved**: `tests/test_bw_bar_for_every_tunnel.py` (the cell for every tunnel that runs, the word only for a problem, the total before the users' use, the live ask while the list is open, the in-place paint, the CSS), `tests/test_web_menu.py` (the cell). **Not proved**: in the owner's browser (the numbers moving every 4 s was not watched); the cost of asking the live reader every 4 s for the whole list was not measured on a panel with many more tunnels (it was already asked at that pace while a window was open).
+
 ## 1.69.55 - The full audit: the UI walked again, the Persian texts, the Mini App and every API route with bad input
 
 The owner (2026-10-21): "start from the beginning, check everything, refresh everything, and solve any inconsistency or problem - and do it in parallel". Four audits ran side by side on private copies (the panel UI, the shop bot's Mini App, the Persian texts, the API and the data); this release is their four patches merged, with every fix pinned by a test that failed before it (the full reports are in the commit; the Mini App files were already put on the test bot as 3.0.3).

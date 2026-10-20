@@ -266,6 +266,6 @@ def test_the_api_the_suggestion_and_the_page_know_the_capacity(client):
 def test_the_list_shows_an_amber_chip_for_a_tunnel_that_is_nearly_full_and_the_window_says_why():
     app, css, fa = (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8")
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
-    assert 't.cap && t.cap.state === "full" ? bwMeter(t, "full", "nearly full", capTip(t))' in cell and "const bwMeter = (t, tone, word, tip) =>" in app
+    assert 'full = !prob && t.cap && t.cap.state === "full"' in app and 'full ? "nearly full" : ""' in app and "bwMeterFor(t) + why" in cell and "const bwMeter = (t, tone, word, tip) =>" in app      # (1.69.55: the meter is drawn for every tunnel; the nearly full one keeps its word)
     assert "const capTip = t =>" in app and "${t.cap && t.cap.state === \"full\" ? `<div class=\"bw-why\">${esc(capTip(t))}</div>` : \"\"}" in app and 's.kind === "capacity" ? "capacity"' in app
     assert ".bwm.full .bwm-bar u" in css and ".bwbox .bwbig-track" in css and '"nearly full": "' in fa
