@@ -1300,8 +1300,9 @@ NoNewPrivileges=yes
 [Install]
 WantedBy=multi-user.target
 __NK_UNIT__
-systemctl daemon-reload; systemctl enable nikatel-sink-@NAME@.service >/dev/null 2>&1; systemctl restart nikatel-sink-@NAME@.service; sleep 1
-systemctl is-active --quiet nikatel-sink-@NAME@.service && echo SINK_OK || echo SINK_DOWN
+systemctl daemon-reload; systemctl enable nikatel-sink-@NAME@.service >/dev/null 2>&1; systemctl restart nikatel-sink-@NAME@.service
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 0.5; if systemctl is-active --quiet nikatel-sink-@NAME@.service; then echo SINK_OK; exit 0; fi; done      # (up to 6 s: the owner, 2026-10-21: the new tunnel had no capacity - the check came after ONE second and called a slow start "down")
+echo "SINK_DOWN $(journalctl -u nikatel-sink-@NAME@.service -n 3 --no-pager -o cat 2>/dev/null | tr '\n' ' ' | cut -c1-110)"
 """, {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "KEY": r"^[a-z0-9]{8,32}$", "BIND": r"^(\d{1,3}(\.\d{1,3}){3})?$"}),      # BIND: empty = this server only; 0.0.0.0 = the L3 link of BackPack Direct; the inner address of a GRE link = the bandwidth sink of services/bandwidth.py (reachable only through that link)
 
     # the bandwidth sink of a GRE tunnel (services/bandwidth.py), removed with the tunnel: its unit and its script, nothing else

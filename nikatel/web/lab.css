@@ -1193,3 +1193,7 @@ html[data-fluid] body #page .lab-bar:has(.lab-kinds > button:nth-child(5)) .tabs
 /* the meter of the list is drawn for EVERY tunnel that runs, the TOTAL on the left and what the users use beside it (the owner, 2026-10-21): a tunnel without a problem has no word */
 html body #page .tun-tbl .bwm-t small:empty { display: none; }
 html body #page .tun-tbl .bwm-t .bwm-u { font-size: 12px; font-weight: 600; color: var(--text); }
+
+/* a tunnel with no capacity yet (a new one): an empty bar and one word */
+html body #page .tun-tbl .bwm.pend .bwm-bar u { background: transparent; }
+html body #page .tun-tbl .bwm.pend .bwm-t small { color: var(--mut); background: rgba(255, 255, 255, .07); }

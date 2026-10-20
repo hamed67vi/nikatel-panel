@@ -37,6 +37,7 @@ POOR_SCORE = 40             # a tunnel whose quality test scored under this is m
 POOR_AFTER = 10 * 60
 WATCH_AFTER = 20 * 60       # while a drop lasts the tunnel is measured this often (to see it end)
 RETRY_AFTER = 15 * 60        # a tunnel that could not be measured is left alone this long
+RETRY_FIRST = 90             # ... but a tunnel that has NO capacity yet (a new one) is tried again soon: its row shows a dash until the first test (the owner, 2026-10-21)
 REF_WINDOW = 7 * 86400       # the usual level is what the last week gave
 REF_MIN = 4                  # samples needed before anything is judged
 MIN_REF_MBPS = 20.0          # a tunnel whose usual level is under this is too slow to tell a drop from noise
@@ -503,7 +504,7 @@ def _failed(tunnel_id: int, why: str) -> None:
         if t is not None:
             rec = dict(t.record or {})
             bw = dict(rec.get("bw") or {})
-            bw["next_at"], bw["error"] = int(time.time()) + RETRY_AFTER, why[:120]
+            bw["next_at"], bw["error"] = int(time.time()) + (RETRY_AFTER if bw.get("down") is not None else RETRY_FIRST), why[:120]
             rec["bw"] = bw
             t.record = rec
 

@@ -869,8 +869,10 @@ const bwFmt = v => v == null ? "—" : bwNum(v) + " Mb/s";      // (everything a
 const uxTip = t => { const u = t.ux || {}; return u.grade && u.grade !== "unknown" ? ` · Users: ${u.grade}${u.known ? " (" + u.known + " config" + (u.known === 1 ? "" : "s") + ")" : ""}` : ""; };      // what the users get through it (the probe's tests of the configs that ride the tunnel; services/userq.py)
 /* the bandwidth as a METER (the owner, 2026-10-20: "show the total bandwidth and what the user uses as a professional bar - not an unclear word"): the track is the capacity, the fill is what the users use now (the last
    check: the list does not read live), the numbers are "use / capacity" and ONE word says what is wrong. The list draws it for every tunnel that runs (a word only for a problem or a nearly full tunnel); the window of the tunnel draws a big one. */
-const bwMeter = (t, tone, word, tip) => { const cap = capOf(t), u = useOf(t), scale = Math.max(cap || 0, u ? u.down : 0, 0.1), k = [cap == null ? "" : bwNum(cap), u ? bwNum(u.down) : "", u ? Math.min(100, Math.max(2, Math.round(u.down / scale * 100))) : 0, tone, word].join("|");
-  return `<span class="bwm ${tone}" data-k="${esc(k)}" title="${esc(tip || bwTip(t))}"><span class="bwm-bar"><u style="width:${u ? Math.min(100, Math.max(2, Math.round(u.down / scale * 100))) : 0}%"></u></span><span class="bwm-t"><b>${cap != null ? bwNum(cap) : "—"}</b><i>|</i><span class="bwm-u">↓ ${u ? bwNum(u.down) : "—"}</span><small>${esc(word)}</small></span></span>`; };
+const bwMeter = (t, tone, word, tip) => { const cap = capOf(t), u = useOf(t), none = cap == null, scale = Math.max(cap || 0, u ? u.down : 0, 0.1), pct = !none && u ? Math.min(100, Math.max(2, Math.round(u.down / scale * 100))) : 0;
+  if (none) { tone = "pend"; word = bwPending(t) && !(t.bw || {}).error ? "measuring" : "no test"; }      // (no total yet - a new tunnel: an EMPTY bar and a word; it was a full bar with a dash, the owner, 2026-10-21)
+  const k = [none ? "" : bwNum(cap), u ? bwNum(u.down) : "", pct, tone, word].join("|");
+  return `<span class="bwm ${tone}" data-k="${esc(k)}" title="${esc(tip || bwTip(t))}"><span class="bwm-bar"><u style="width:${pct}%"></u></span><span class="bwm-t"><b>${cap != null ? bwNum(cap) : "—"}</b><i>|</i><span class="bwm-u">↓ ${u ? bwNum(u.down) : "—"}</span><small>${esc(word)}</small></span></span>`; };
 /* the meter of a tunnel that runs, as the list draws it (the owner, 2026-10-21: "show the bar for the others too", "the total bandwidth on the left", "the users' use must be there, it was to be live"): the TOTAL on the left, the users' use beside it
    (live: the list asks the live reader every 4 s while it is open and paints the meters in place), a word and a colour only for a problem or a nearly full tunnel */
 const bwMeterFor = t => { const b = t.bw || {}, stall = b.down != null && b.down < BW_STALL, prob = stall || b.state === "drop" || b.state === "slow", full = !prob && t.cap && t.cap.state === "full";
@@ -1343,6 +1345,12 @@ window.editServer = id => { state.edit = id; state.open = id; state.wtab = "over
 window.cancelEdit = () => { state.edit = null; if (state.build) { closeModal(); return; } refresh(); };
 window.openBuild = async () => {      // the window opens ON the page that is there, with no redraw of the page behind it first (the owner, 2026-10-16: the page and its background jumped when Create tunnel was pressed); closing leaves the page as it is, too
   if (state.build && $("#modal .modal")) return;
+  if (bk.run && bk.run.type === "build" && state.page === "tunnels" && $("#page .tun-box")) {      // a build runs and its window was closed (the owner, 2026-10-21: "I closed the box while it built; Create tunnel then showed nothing, and later the tunnel appeared"): the window comes back WITH the story of that build, the form is held while it runs
+    state.open = null; state.build = true;
+    try { showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); } catch (e) { state.build = null; toast("✕ " + e.message, "bad"); return; }
+    const box = $("#build-story"), run = bk.run; if (box && run) { bkRun(run); followStory(run.id, box, 600).finally(() => bkRun(null)); }
+    return;
+  }
   if (Array.isArray(state.serversCache) && state.serversCache.length < 2) { toast("A tunnel is built between two servers: add an Iran server and a foreign server first", "bad"); return; }
   state.open = null;
   if (state.page === "tunnels" && $("#page .tun-box")) { state.build = true; try { showModal(`<b>＋ Create tunnel</b>`, await buildFormHtml(), "wide"); } catch (e) { state.build = null; toast("✕ " + e.message, "bad"); } return; }

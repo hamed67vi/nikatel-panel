@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.59 - A new tunnel gets its capacity soon and shows an empty bar until then; the Create window comes back with the build that runs
+
+> **به زبان ساده:** تانل تازه‌ساخته زودتر پهنای کل می‌گیرد؛ تا آن موقع نوار خالی است و «measuring» می‌نویسد. اگر پنجرهٔ ساخت را وسط ساخت ببندید، با زدن دوبارهٔ «Create tunnel» همان پنجره با گزارش ساخت برمی‌گردد.
+>
+> **In short:** a new tunnel gets its capacity sooner and shows an empty bar with "measuring" until then; a closed Create window comes back with the build that runs.
+
+The owner (2026-10-21), two pictures: a new tunnel built a few minutes earlier showed a FULL bar with a dash for the total ("— | ↓ 0.19"): "the tunnel I built does not show its total bandwidth - check this for all tunnels and fix it"; and "I closed the box while the tunnel was built; then I pressed Create tunnel and it showed nothing; later the tunnel appeared".
+
+- **All tunnels were looked at** (the live panel's data, read only): 18 of 19 tunnels had a capacity (the test of the last 90 minutes); only the NEW one had none, and the reason was "the bandwidth sink did not start on the foreign server: SINK_DOWN".
+- **Why the new tunnel had none** (`ssh.py sink_install`, `bandwidth._failed`): the script that starts the small test service on the foreign server asked "is it active?" ONE second after the restart, and a service that is still starting is not active yet - so a slow start was called "down", the tunnel was left alone for 15 minutes and its row showed a dash. Now the script waits up to 6 s for the unit, and when it is really down it says why (the last lines of its log are in the answer); a tunnel that has NO capacity yet is tried again after 90 s (`RETRY_FIRST`), one that has one after 15 minutes as before.
+- **The meter of a tunnel with no total** (`app.js bwMeter`, `lab.css .bwm.pend`): an EMPTY bar and one word ("measuring" while the Doctor has not tried or is trying, "no test" when the test failed; the tip holds the reason) - it was a full bar (the use was its own scale) with a dash.
+- **The Create window comes back with the build that runs** (`app.js openBuild`): closing the window did not stop the build (it runs on the server), but the poll of its story went on without a window, and the next Create tunnel opened a form with the Build button off and no story - "nothing". Now, while a build of this window runs, Create tunnel opens the window with the story of that build (the poll goes on in it) and the form held, as a click on a tunnel that is being built already did.
+- **Proved**: `tests/test_new_tunnel_capacity.py` (the script waits and says why; the retry after 90 s / 15 min; the empty meter; the window of a running build comes back), `tests/test_bandwidth.py` (the retry of a tunnel with no capacity). **Not proved**: why that foreign server's test service did not start within one second (the unit was not read); in the owner's browser (the window coming back with a story).
+
 ## 1.69.58 - The alert state of a server, tunnel, config or panel that is gone is cleared after a week
 
 The owner (2026-10-21), after the audit report said "the alert state of deleted servers and tunnels is never cleared": "fix it".

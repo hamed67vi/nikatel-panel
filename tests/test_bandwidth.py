@@ -286,7 +286,7 @@ def test_a_tunnel_that_could_not_be_measured_is_left_alone_for_a_while_and_a_dro
     with session() as db:
         bw = db.get(Tunnel, bad).record["bw"]
 
-    assert bw["next_at"] == NOW + bandwidth.RETRY_AFTER and "busy" in bw["error"]
+    assert bw["next_at"] == NOW + bandwidth.RETRY_FIRST and "busy" in bw["error"]          # (a tunnel with no capacity yet is tried again after 90 s; one that has one, after 15 minutes)
     assert bandwidth._due(NOW) == []                                                                       # (and it is not asked again at once)
     looked = []
     monkeypatch.setattr(bandwidth, "measure", lambda tid: ({"down": 90.0, "ref": 300.0, "state": "drop"}, "drop"))
