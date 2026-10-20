@@ -127,7 +127,7 @@ def test_a_server_that_is_being_rebooted_keeps_the_place_of_its_problems_in_the_
         pytest.skip("node is not installed here")
 
     lab = (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "lab.js").read_text(encoding="utf-8")
-    src = "\n".join(re.search(rf"^{re.escape(k)}.*$", lab, re.MULTILINE).group(0) for k in ("const labBusyOk", "const labRank"))
+    src = "\n".join(re.search(rf"^{re.escape(k)}.*$", lab, re.MULTILINE).group(0) for k in ("const labBusyOk", "const labRestartCut", "const labRankLast", "const labRank ="))
     code = (
         "const TONE = {1: 'busy', 2: 'busy', 3: 'busy', 4: 'ok', 5: 'bad'}, ISS = {1: ['Filtered', 'Bad route'], 2: ['Offline', 'SSH ✕'], 3: ['Offline', 'Filtered'], 4: [], 5: ['Offline']};\n"
         "const labTone = p => p.kind === 'node' ? 'busy' : TONE[p.id], labServer = p => ({id: p.id}), labIssues = s => ISS[s.id].map(txt => ({txt}));\n"

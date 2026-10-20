@@ -32,7 +32,8 @@ const MIN_TOPUP = 10000;
 const MAX_TOPUP = 50000000;
 const RECEIPT_MAX_BYTES = 6 * 1024 * 1024;
 
-function out(array $a): void { echo json_encode($a, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); exit; }
+/* a broken character in a text of the database (a plan description cut in the middle of a letter) must not turn the whole answer into an empty page */
+function out(array $a): void { echo json_encode($a, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) ?: '{"ok":false,"error":"پاسخ نامعتبر"}'; exit; }
 function fail(string $m, int $code = 400): void { http_response_code($code); out(['ok' => false, 'error' => $m]); }
 
 /* ---------------------------------------------------------------- database */
@@ -101,6 +102,7 @@ function bannerText($raw): string {
 }
 function safeHtml(string $s): string {
     $s = strip_tags($s, '<b><strong><i><em><code><u><s><br>');
+    $s = preg_replace('~<(/?)(b|strong|i|em|code|u|s|br)\b[^>]*?(/?)>~i', '<$1$2$3>', $s) ?? '';      // strip_tags keeps the attributes of the tags it allows: <b onmouseover=...> must not reach the page
     return nl2br($s, false);
 }
 
@@ -125,17 +127,18 @@ function userLink(int $uid, string $name): string { return "<a href=\"tg://user?
 function fa(int|float $n): string { return number_format((float) $n); }
 
 /* ---------------------------------------------------------------- Telegram WebApp initData */
-function tgVerify(string $initData, string $token): ?array {
+function tgVerify(string $initData, string $token, bool &$expired = false): ?array {
     if ($initData === '') return null;
     parse_str($initData, $d);
     if (empty($d['hash']) || !is_string($d['hash'])) return null;
     $hash = $d['hash'];
     unset($d['hash']);
     ksort($d);
-    $check = implode("\n", array_map(fn($k) => $k . '=' . $d[$k], array_keys($d)));
+    $check = implode("\n", array_map(fn($k) => $k . '=' . (is_string($d[$k]) ? $d[$k] : ''), array_keys($d)));
     $secret = hash_hmac('sha256', $token, 'WebAppData', true);
     if (!hash_equals(hash_hmac('sha256', $check, $secret), $hash)) return null;
-    if (!isset($d['auth_date']) || time() - (int) $d['auth_date'] > 86400) return null;
+    if (!isset($d['auth_date']) || time() - (int) $d['auth_date'] > 86400) { $expired = true; return null; }      // (a genuine signature that is a day old: the Mini App was left open, the customer only has to open it again)
+    if (!is_string($d['user'] ?? '{}')) return null;
     $user = json_decode($d['user'] ?? '{}', true);
     if (!is_array($user) || !isset($user['id'])) return null;
     $user['start_param'] = $d['start_param'] ?? '';
@@ -145,9 +148,11 @@ function tgVerify(string $initData, string $token): ?array {
 /* ---------------------------------------------------------------- request */
 $isMultipart = stripos($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data') !== false;
 $body = $isMultipart ? $_POST : (json_decode((string) file_get_contents('php://input'), true) ?: []);
-$action = (string) ($_GET['a'] ?? ($body['a'] ?? ''));
-$user = tgVerify((string) ($body['initData'] ?? ''), (string) $botToken);
-if (!$user) fail('این صفحه فقط از داخل تلگرام باز می‌شود.', 401);
+if (!is_array($body)) $body = [];      // (a body that is a bare number or string)
+$action = (string) (is_string($_GET['a'] ?? null) ? $_GET['a'] : ($body['a'] ?? ''));
+$expired = false;
+$user = tgVerify(is_string($body['initData'] ?? null) ? $body['initData'] : '', (string) $botToken, $expired);
+if (!$user) fail($expired ? 'نشست شما منقضی شده؛ مینی‌اپ را دوباره از داخل ربات باز کن.' : 'این صفحه فقط از داخل تلگرام باز می‌شود.', 401);
 $uid = (int) $user['id'];
 
 $botState = settingJson('BOT_STATES');
@@ -612,7 +617,8 @@ case 'receipt': {   // the receipt picture goes to the admins exactly like from 
     $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$mime];
 
     [$mainValues, $buttonValues] = botTexts();
-    $caption = str_replace(['PRICE', 'USERNAME', 'NAME', 'USER-ID'], [fa((int) $pay['price']), (string) $me['username'], (string) $me['name'], (string) $uid], (string) ($mainValues['increase_wallet_request_message'] ?? "💳 درخواست افزایش موجودی\n\n💰 مبلغ: PRICE تومان\n👤 NAME (@USERNAME)\n🆔 USER-ID"));
+    /* the caption is sent as HTML: a name like "A<B" made Telegram refuse the receipt */
+    $caption = str_replace(['PRICE', 'USERNAME', 'NAME', 'USER-ID'], [fa((int) $pay['price']), h((string) $me['username']), h((string) $me['name']), (string) $uid], (string) ($mainValues['increase_wallet_request_message'] ?? "💳 درخواست افزایش موجودی\n\n💰 مبلغ: PRICE تومان\n👤 NAME (@USERNAME)\n🆔 USER-ID"));
     $caption .= "\n\n📲 ارسال از مینی‌اپ";
     $approvedCount = (int) (row("SELECT COUNT(*) AS n FROM pays WHERE user_id = ? AND state = 'approved'", [$uid])['n'] ?? 0);
     $declinedCount = (int) (row("SELECT COUNT(*) AS n FROM pays WHERE user_id = ? AND state = 'declined'", [$uid])['n'] ?? 0);
@@ -655,15 +661,24 @@ case 'gift': {
     if (!on('giftState')) fail('کد هدیه فعال نیست.');
     $code = trim((string) ($body['code'] ?? ''));
     if ($code === '' || mb_strlen($code) > 64) fail('کد را وارد کن.');
-    $g = row("SELECT * FROM gift_codes WHERE code = ?", [$code]);
-    if (!$g) fail('این کد هدیه وجود ندارد.');
-    if ((int) $g['expires'] > 0 && (int) $g['expires'] < time()) fail('مهلت این کد تمام شده است.');
-    if ((int) $g['used'] >= (int) $g['max_uses']) fail('این کد قبلاً استفاده شده است.');
-    $by = json_decode((string) $g['used_by'], true) ?: [];
-    if (in_array((string) $uid, array_map('strval', $by), true)) fail('شما قبلاً این کد را استفاده کرده‌اید.');
+    // the panel's Gift codes page writes this table; the bot database may not have it yet (then every code is simply "unknown", not an internal error)
+    db()->query("CREATE TABLE IF NOT EXISTS gift_codes (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, code VARCHAR(64) NOT NULL, amount BIGINT NOT NULL DEFAULT 0, max_uses INT NOT NULL DEFAULT 1, used INT NOT NULL DEFAULT 0, used_by TEXT NULL, expires BIGINT NOT NULL DEFAULT 0, created BIGINT NOT NULL DEFAULT 0, note VARCHAR(255) NULL, UNIQUE KEY code (code)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // the code row is locked while it is checked and used: two taps (or two scripts) at the same moment cannot both pass the "unused" check and credit the wallet twice
+    db()->begin_transaction();
+    $g = row("SELECT * FROM gift_codes WHERE code = ? FOR UPDATE", [$code]);
+    $err = '';
+    if (!$g) $err = 'این کد هدیه وجود ندارد.';
+    elseif ((int) $g['expires'] > 0 && (int) $g['expires'] < time()) $err = 'مهلت این کد تمام شده است.';
+    elseif ((int) $g['used'] >= (int) $g['max_uses']) $err = 'این کد قبلاً استفاده شده است.';
+    else {
+        $by = json_decode((string) $g['used_by'], true); if (!is_array($by)) $by = [];
+        if (in_array((string) $uid, array_map('strval', $by), true)) $err = 'شما قبلاً این کد را استفاده کرده‌اید.';
+    }
+    if ($err !== '') { db()->rollback(); fail($err); }
     $by[] = (string) $uid;
     run("UPDATE gift_codes SET used = used + 1, used_by = ? WHERE id = ?", [json_encode($by), (int) $g['id']]);
     run("UPDATE users SET wallet = COALESCE(wallet, 0) + ? WHERE userid = ?", [(int) $g['amount'], $uid]);
+    db()->commit();
     out(['ok' => true, 'amount' => (int) $g['amount'], 'wallet' => wallet($uid)]);
 }
 
@@ -675,10 +690,16 @@ case 'wheel': {
     $left = $last + $hours * 3600 - time();
     $prizes = array_values(array_filter(array_map('intval', explode(',', (string) ($botState['wheelPrizes'] ?? '0,0,0,1000,2000,5000'))), fn($v) => $v >= 0)) ?: [0];
     if (!empty($body['check'])) out(['ok' => true, 'left' => max(0, $left), 'hours' => $hours, 'prizes' => $prizes]);
-    if ($left > 0) fail('گردونه بعدی ' . intdiv($left, 3600) . ' ساعت و ' . intdiv($left % 3600, 60) . ' دقیقه دیگر.');
+    // one spin at a time for this customer: the user row is locked, then the time of the last spin is read again (two requests at once could both see "ready" and both be paid)
+    db()->begin_transaction();
+    row("SELECT wallet FROM users WHERE userid = ? FOR UPDATE", [$uid]);
+    $last = (int) (row("SELECT at FROM wheel_log WHERE userid = ? ORDER BY id DESC LIMIT 1", [$uid])['at'] ?? 0);
+    $left = $last + $hours * 3600 - time();
+    if ($left > 0) { db()->rollback(); fail('گردونه بعدی ' . intdiv($left, 3600) . ' ساعت و ' . intdiv($left % 3600, 60) . ' دقیقه دیگر.'); }
     $i = random_int(0, count($prizes) - 1); $prize = $prizes[$i];
     run("INSERT INTO wheel_log (userid, prize, at) VALUES (?, ?, ?)", [$uid, $prize, time()]);
     if ($prize > 0) run("UPDATE users SET wallet = COALESCE(wallet, 0) + ? WHERE userid = ?", [$prize, $uid]);
+    db()->commit();
     out(['ok' => true, 'prize' => $prize, 'index' => $i, 'prizes' => $prizes, 'wallet' => wallet($uid), 'hours' => $hours]);
 }
 

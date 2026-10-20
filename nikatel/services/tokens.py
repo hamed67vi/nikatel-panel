@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
+import threading
 import time
 
 from sqlalchemy import select
@@ -22,6 +23,7 @@ ADMIN_PATHS = ("/api/auth", "/api/tokens", "/api/settings", "/api/license", "/ap
 ADMIN_RE = (re.compile(r"/api/servers/\d+/(console|connect|launcher)"),)      # (a root shell on a server, an SSH password, a launcher with the key: the signed-in admin only)
 ADMIN_WRITE_RE = (re.compile(r"/api/panels(/\d+(/forget-login)?)?"),)      # a panel is added, changed or removed (its API key, its login, its address) by the signed-in admin only; READING it and every action of its own stay open to `read` and `act` (review 2026-10-16)
 _LAST_USED: dict[int, float] = {}
+_CREATE_LOCK = threading.Lock()
 
 
 def allowed(scope: str, method: str, path: str) -> bool:
@@ -67,7 +69,7 @@ def create(name: str, scope: str, by: str = "admin") -> tuple[str, dict]:
 
     token = PREFIX + secrets.token_urlsafe(30)
 
-    with session() as db:
+    with _CREATE_LOCK, session() as db:          # (the name is looked up and then taken: two clicks at one moment must not both pass the look - there is no UNIQUE on the name, a revoked token keeps its)
         if db.scalar(select(ApiToken).where(ApiToken.name == name, ApiToken.revoked_at == 0)) is not None:
             raise ValueError("a token with this name exists; revoke it first or choose another name")
 

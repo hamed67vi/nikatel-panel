@@ -1,4 +1,5 @@
 """Telegram, alert rules, maintenance windows, daily report, backups."""
+import threading
 import time
 from pathlib import Path
 
@@ -86,9 +87,12 @@ def mute(ref: str, muted: bool = True):
 
 
 # ---- maintenance windows
+_MAINT_LOCK = threading.Lock()
+
+
 class MaintenanceIn(BaseModel):
-    start: int
-    end: int
+    start: int = Field(ge=0, le=4102444800)          # (seconds since 1970 - up to the year 2100)
+    end: int = Field(ge=0, le=4102444800)
     note: str = Field("", max_length=120)
 
 
@@ -111,7 +115,12 @@ def maintenance_add(body: MaintenanceIn):
     if body.end - body.start > 30 * 86400:
         raise HTTPException(400, "a window longer than 30 days is a mute, not maintenance")
 
-    with session() as db:
+    with _MAINT_LOCK, session() as db:          # (held until the commit, so that two clicks at one moment are one window)
+        same = db.scalar(select(Maintenance).where(Maintenance.start == body.start, Maintenance.end == body.end, Maintenance.note == body.note))
+
+        if same is not None:          # the same window sent twice (a double click, a retry) is one window
+            return {"ok": True, "id": same.id}
+
         m = Maintenance(start=body.start, end=body.end, note=body.note)
         db.add(m)
         db.flush()

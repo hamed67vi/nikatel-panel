@@ -545,8 +545,13 @@ def server_from_panel(panel_id: int, title: str = "", ucount: int = 1000) -> int
         if p is None:
             raise ValueError("panel not found")
 
+        password = str((p.secrets or {}).get("password") or "")          # (the panel keeps its login in `secrets`: it has no `password` column)
+
+        if not (p.username and password):
+            raise ValueError("this panel is connected with a token and has no saved login; the shop bot signs in with a user name and a password - save the login of the panel first (Panels)")
+
         info = {"title": title or p.name, "ucount": ucount, "active": 1, "state": 1}
-        conf = {"type": "pasarguard" if p.type == "pasarguard" else "marzban", "panel_url": p.url.rstrip("/"), "username": p.username, "password": p.password}
+        conf = {"type": "pasarguard" if p.type == "pasarguard" else "marzban", "panel_url": p.url.rstrip("/"), "username": p.username, "password": password}
 
     return server_save(None, info, conf)
 

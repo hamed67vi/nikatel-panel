@@ -51,6 +51,9 @@ def _req(method: str, path: str, body: dict | None = None, params: dict | None =
     if not k:
         raise RuntimeError("no ArvanCloud API key saved (Settings → Repairs & AI → ArvanCloud)")
 
+    if not k.isascii() or not k.isprintable():      # a key goes into an HTTP header: a hidden or Persian character from the copy would raise UnicodeEncodeError (a 500 on Save)
+        raise RuntimeError("the ArvanCloud key has a character that is not a letter, a digit or a sign (a hidden or non-English character from the copy?): copy it again from ArvanCloud")
+
     try:
         r = httpx.request(method, BASE + path, params=params, json=body, timeout=20, headers={"Authorization": "Apikey " + k, "Accept": "application/json"})
     except httpx.HTTPError as e:

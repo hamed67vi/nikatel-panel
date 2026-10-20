@@ -5,13 +5,15 @@
    A dictionary entry is "English text": "فارسی". An English text may contain {} for the parts that change (names,
    numbers, a nested message); the Persian text uses {} in the same order, or {1} {2} to reorder them. The parts are
    translated again by themselves, so "Config {} is not working: {}" also translates the error behind the colon.
+   {s} is a hole that is only a plural ending ("s", "es", "ies", "y" or nothing), for what the code writes as `${n} server${n > 1 ? "s" : ""}`: it counts as a
+   hole in the numbering ({1} {2}) but, unlike {}, it cannot swallow other text. {n} is a hole that is only a number ("3", "1.5", "2,500"), for the count in front of it. {w} is a hole that is a name: one word without a space that has a digit or one of - _ . @ / : in it (ir-north-1, t1, 8072), for "Open {w}": "Open the front door" is not a name.
    Texts with a leading symbol (✓ ✕ ⚠ 🔍 …) or a trailing "…" / ":" / "." are looked up without them.  */
 (() => {
   const exact = Object.create(null), tpl = [], cache = new Map(), explainers = [];
   let sorted = true;
   const I18N = window.I18N = {
     lang: (() => { try { return localStorage.getItem("nk.lang") === "fa" ? "fa" : "en"; } catch (e) { return "en"; } })(),
-    add(map) { for (const [k, v] of Object.entries(map)) { if (k.includes("{}")) { tpl.push({k, re: new RegExp("^" + k.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{\}/g, "(.+?)") + "$", "s"), to: v}); sorted = false; } else exact[k] = v; } cache.clear(); },
+    add(map) { for (const [k, v] of Object.entries(map)) { if (/\{[snw]?\}/.test(k)) { tpl.push({k, re: new RegExp("^" + k.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{s\}/g, "(s|es|ies|y|)(?![a-z])").replace(/\{n\}/g, "(\\d[\\d.,]*)").replace(/\{w\}/g, "((?=\\S*[\\d_.@/:-])\\S+)").replace(/\{\}/g, "(.+?)") + "$", "s"), to: v}); sorted = false; } else exact[k] = v; } cache.clear(); },
     /* functions (text) -> Persian or null, for families of messages a template cannot describe (curl codes, ssh errors …) */
     explain(fn) { explainers.push(fn); cache.clear(); },
   };
@@ -48,6 +50,8 @@
     }
     // "a · b · c" lists
     if (c.includes(" · ")) { const parts = c.split(" · "); let hit = 0; const out = parts.map(s => { const t = core(s, depth + 1); if (t != null) hit++; return t ?? s; }); if (hit) return out.join(" · "); }
+    // "name — note" (the options of a drop-down, a title and its remark): each side by itself
+    if (c.includes(" — ")) { const parts = c.split(" — "); let hit = 0; const out = parts.map(s => { const t = core(s, depth + 1); if (t != null) hit++; return t ?? s; }); if (hit) return out.join(" — "); }
     return null;
   }
   /* the translation of one text (whitespace around it is kept); the text itself when there is none */
@@ -56,7 +60,7 @@
     let v = cache.get(s);
     if (v === undefined) {
       const lead = /^\s*/.exec(s)[0], trail = /\s*$/.exec(s)[0], body = s.slice(lead.length, s.length - trail.length);
-      const r = body && /[A-Za-z]{2}/.test(body) ? core(body) : null;
+      const r = body && /[A-Za-z]{2}|\d ?[smhdw]\b/.test(body) ? core(body) : null;      // (a text of one letter after a number - the 5m / 3h / 2d of ago() - is a text too)
       v = r == null ? s : lead + r + trail;
       if (cache.size > 6000) cache.clear();
       cache.set(s, v);
@@ -69,6 +73,8 @@
   const SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE", "NOSCRIPT", "TITLE"]);
   const ATTRS = ["title", "placeholder", "aria-label"];
   const orig = new WeakMap(), done = new WeakMap(), aorig = new WeakMap();
+  /* the text of an element as the code wrote it (English), whatever the language is now: a script that reads a header to decide something - fluid.js, how important a column is - must not go blind in Persian */
+  I18N.source = el => { let s = ""; const text = n => { if (n.nodeType === 3) s += done.has(n) && n.nodeValue === done.get(n) && orig.has(n) ? orig.get(n) : n.nodeValue; else for (let c = n.firstChild; c; c = c.nextSibling) text(c); }; if (el) text(el); return s; };
   const skipped = n => { for (let e = n.nodeType === 1 ? n : n.parentElement; e; e = e.parentElement) if (SKIP.has(e.tagName) || e.hasAttribute && e.hasAttribute("data-notr")) return true; return false; };
   function textNode(n) {
     if (skipped(n)) return;

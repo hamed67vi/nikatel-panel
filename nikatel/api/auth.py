@@ -153,7 +153,8 @@ def logout_others(body: OthersIn, request: Request, response: Response, user: st
     return {"ok": True}
 
 
-# ------------------------------------------------------------------ forgotten password@router.get("/auth/recovery-options")
+# ------------------------------------------------------------------ forgotten password
+@router.get("/auth/recovery-options")
 def recovery_options():
     """What the login page may offer. Says nothing about the account itself."""
     t = st.get("telegram")

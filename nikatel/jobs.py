@@ -45,7 +45,7 @@ def run_once(name: str) -> None:
             db.add(job)
             job.running = True
             job.last_start = int(t0)
-            job.runs += 1
+            job.runs = int(job.runs or 0) + 1          # (a row that is made right here has no count yet: `nikatel run-job NAME` runs a job that has no row)
     except Exception:
         log.exception("job %s: could not mark the start", name)
 
@@ -68,7 +68,7 @@ def run_once(name: str) -> None:
                     job.last_duration_ms = int((time.time() - t0) * 1000)
 
                     if err:
-                        job.failures += 1
+                        job.failures = int(job.failures or 0) + 1
                         job.last_error = err
                         job.last_failure, job.last_failure_at = err, int(time.time())
                     else:

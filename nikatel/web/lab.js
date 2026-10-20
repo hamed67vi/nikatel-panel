@@ -26,13 +26,14 @@ const labCap = s => { const f = (s && s.facts) || {}, pk = (((s && s.extra) || {
 const labCapCell = (s, on) => { const c = on ? labCap(s) : null; return c ? `<td class="lab-trf lab-live" title="${esc(c.tip)}"><span class="trf"><span class="tv"><b>${c.ge ? "≥ " : ""}${labRate(c.v)}</b><small>Mb/s</small></span></span></td>` : '<td class="lab-trf lab-live"><span class="mut">—</span></td>'; };
 
 /* ---------------------------------------------------------------- what is wrong with a server, as a short list (the worst first) */
+const labPeerRebooting = (s, t) => { const o = (state.serversCache || []).find(x => x.name === (t.iran_name === s.name ? t.foreign_name : t.iran_name)), b = o && o.id !== s.id ? srvBusy(o) : null; return !!(b && b.what === "Rebooting"); };      // a tunnel that is down because the server at ITS OTHER END is being rebooted is no problem of this server: its row did not rise to the top and flash "1 tunnel down" for every restart of a neighbour
 function labIssues(s) {
   const f = s.facts || {}, x = s.extra || {}, out = [], add = (sev, txt, tip, gre, path) => out.push({sev, txt, tip: tip || txt, gre: !!gre, path: !!path});      // (path: a fault of the way TO the server - GRE, tunnels, the filter, the route - not of the server itself: the lamp ignores it)
   if (!s.enabled) return out;
   if (noLogin(s)) add("warn", "No login", s.last_error);
   else if (s.online === false) add("bad", "Offline", s.last_error || "The server does not answer");
   else if (s.online && /^SSH does not answer/.test(s.last_error || "")) add("warn", "SSH ✕", s.last_error);
-  const mine = (state.tunnelsCache || []).filter(t => t.iran_name === s.name || t.foreign_name === s.name), gre = mine.filter(t => (t.type === "backhaul" || t.type === "gre") && t.state === "down");
+  const mine = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && !labPeerRebooting(s, t)), gre = mine.filter(t => (t.type === "backhaul" || t.type === "gre") && t.state === "down");
   if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "), true, true);
   /* (a server that no tunnel uses has no GRE to lose: its GRE links not answering is no fault - the owner: such servers are green) */
   const down = mine.filter(t => t.state === "down" && !gre.includes(t));
@@ -53,7 +54,9 @@ function labNodeInfo(p) {      // a PasarGuard node profile: what the health job
 const labTone = p => p.kind === "node" ? labNodeInfo(p).tone : (s => s ? labSrvTone(s) : "bad")(labServer(p));
 /* The rank of a row in the list. A server that is being worked on (rebooting, installing) keeps the place of its problems: the owner, 2026-10-20, "a server had a problem, I rebooted it, and it went to the middle of the list" - the busy mark hid the problems it still has (Filtered, Bad route, a tunnel down ...). What a restart itself causes (it does not answer, SSH) is no problem of the server. */
 const labBusyOk = new Set(["Offline", "SSH ✕", "No login"]);
-const labRank = p => { const t = labTone(p), s = t === "busy" && p.kind !== "node" ? labServer(p) : null; return s && labIssues(s).some(i => !labBusyOk.has(i.txt)) ? 1 : ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[t]; };
+const labRestartCut = i => labBusyOk.has(i.txt) || i.gre || /^\d+ tunnels? down$/.test(i.txt);      // what a restart itself causes: the server does not answer, and the tunnels that END on it go down with it (a healthy server that was rebooted showed "GRE ✕" and jumped to the top - the owner's "no jump")
+const labRankLast = new Map();      // the rank every row had the last time it was NOT busy: a server that is being rebooted keeps it (it stays among the problems when it had some, among the healthy ones when it had none)
+const labRank = p => { const t = labTone(p), r = ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[t]; if (t !== "busy") { labRankLast.set(p.id, r); return r; } const s = p.kind !== "node" ? labServer(p) : null, own = s && labIssues(s).some(i => !labRestartCut(i)) ? 1 : r, last = labRankLast.get(p.id); return last == null ? own : Math.min(last, own); };
 const labBar = (v, warn, bad) => v == null ? '<span class="mut">—</span>' : `<span class="bar"><i class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}" style="width:${Math.min(100, v)}%"></i></span><b class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</b>`;
 const labNum = (v, warn, bad) => v == null ? "—" : `<span class="${v >= bad ? "bad" : v >= warn ? "warn" : ""}">${Math.round(v)}%</span>`;
 
@@ -79,7 +82,7 @@ const LAB_AD = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v8.5M
 const labUsed = (rx, tx) => { const one = b => { b = +b; if (!Number.isFinite(b) || b < 0) return '<span class="mut">—</span>'; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return `<b>${b >= 100 || i === 0 ? b.toFixed(0) : b.toFixed(1)}</b><small>${u[i]}</small>`; }; const hum = v => { let n = +v || 0, i = 0; const u = ["B", "KB", "MB", "GB", "TB"]; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return (n >= 100 || i === 0 ? n.toFixed(0) : n.toFixed(1)) + " " + u[i]; }, sum = (+rx || 0) + (+tx || 0); return `<span class="trf" title="Downloaded ${hum(rx)} + uploaded ${hum(tx)} since the server started"><span class="tv">${one(sum)}</span></span>`; };      // (the bytes a server or a node has carried: value over unit, the same two arrows as the speed)
 const LAB_ISS_IC = {bad: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>', warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.4"/></svg>'};
 const labIssueChips = s => {      // what is wrong with a server, as tags after its name (the owner, 2026-10-15: "GRE x, Filtered ..."): the worst first, three at most, the rest as +n
-  const list = labIssues(s), shown = list.slice(0, 3), more = list.length - shown.length;
+  const b = srvBusy(s), list = labIssues(s).filter(i => !(b && b.what === "Rebooting" && labRestartCut(i))), shown = list.slice(0, 3), more = list.length - shown.length;      // (a row that says Rebooting shows no red "Offline" / "GRE ✕" for what the restart itself causes)
   return shown.map(i => `<span class="pill lab-iss ${i.sev}" title="${esc(i.tip)}">${LAB_ISS_IC[i.sev] || ""}${esc(i.txt)}</span>`).join("") + (more > 0 ? `<span class="pill lab-iss more" title="${esc(list.slice(3).map(i => i.txt).join(", "))}">+${more}</span>` : "");
 };
 const LAB_GLB = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3.4 3.2 14.6 0 18M12 3c-3.2 3.4-3.2 14.6 0 18"/></svg>';      // (the globe before an address)
@@ -120,9 +123,10 @@ PAGES.lab = async () => {
   const openSrv = list.find(s => s.id === state.open);      // (any server: a shortcut of the dashboard or a diagnosis opens one that was taken off the page too)
   const showWin = () => { try { if (openSrv) srvModal(openSrv); else if (state.nodeWin && document.querySelector("#modal .modal")) { /* a window of the Lab or of a node is open: it stays */ } else hideModal(); } catch (e) { toast("✕ The window could not be drawn: " + e.message, "bad"); } };
   if (list.some(labWaiting)) labFollow(); else labSchedule();      // the page looks again by itself: closely (a quiet patch of the rows every second and a half) while a server is busy or has not been read yet, else a full look every 30 s (the owner, 2026-10-15: a new server stayed with dashes until the page was refreshed; 2026-10-16: the page jumped several times when a server was added)
+  const sl0 = ($(".lab-kinds") || {}).scrollLeft || 0;      // (a strip of tabs the owner scrolled keeps its place when the page is drawn again)
   pageTarget().innerHTML = LAB.profiles.length || labTags().length ? labPage() : labFirst();
   showWin();
-  applyQ();
+  applyQ(); const ks1 = $(".lab-kinds"); if (ks1 && sl0) ks1.scrollLeft = sl0; labTabsReveal();
   if (openSrv && state.edit !== openSrv.id) labAfter(openSrv);
   labLoadNodes();
   labNavSync();      // (the menu: the kinds that have a profile, and which one is open)
@@ -223,7 +227,8 @@ function labPage() {
   return `<div class="lab-root"><div class="lab-bar">${tabs}<span class="lab-stats">${labStatsHtml(shown)}</span><span class="lab-sp"></span>${searchSeg()}<button class="pri sm lab-add" onclick="labAdd()" title="Add a server: a name, a tag and its address" aria-label="Add server"><span class="lab-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="lab-lb">Add server</span></button></div>
     <div id="lab-list">${labBox(shown)}</div></div>`;
 }
-window.labKind = k => { LAB.kind = k; localStorage.setItem("nk.lab.k", k); const pg = $("#page"); if (pg && labOn()) { pageTarget().innerHTML = labPage(); applyQ(); } labNavSync(); };      // the tabs filter what is already read: no call, no wait (the menu marks the same kind)
+const labTabsReveal = () => { const ks = $(".lab-kinds"), on = ks && ks.querySelector("button.on"); if (!on || ks.scrollWidth <= ks.clientWidth + 1) return; const b = ks.getBoundingClientRect(), r = on.getBoundingClientRect(); if (r.left < b.left || r.right > b.right) ks.scrollLeft += r.left - b.left - Math.max(0, b.width - r.width) / 2; };      // (a tab wider than the strip starts at its left edge: its name is read from the first letter; the strip of the profile tabs scrolls when they do not fit: the open one is never out of sight)
+window.labKind = k => { LAB.kind = k; localStorage.setItem("nk.lab.k", k); const pg = $("#page"); if (pg && labOn()) { pageTarget().innerHTML = labPage(); applyQ(); labTabsReveal(); } labNavSync(); };      // the tabs filter what is already read: no call, no wait (the menu marks the same kind)
 async function labLoadNodes() {      // the panels of the node profiles are asked (what they report about each node: its load and speed), then the list is drawn again with it
   const pids = [...new Set(LAB.profiles.filter(p => p.kind === "node").map(p => p.panel_id))];
   if (!pids.length || typeof pgNodesLoad !== "function") return;

@@ -8,9 +8,12 @@
 <title>فروشگاه</title>
 <script src="https://telegram.org/js/telegram-web-app.js?58"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- the font never holds the first paint back: where Google is slow or filtered the page is drawn at once in the phone's own font, and Vazirmatn replaces it when (if) it arrives -->
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet"></noscript>
 <meta name="theme-color" content="#070a17">
-<link rel="stylesheet" href="app.css?v=3.0.2">
+<link rel="stylesheet" href="app.css?v=3.0.3">
 </head>
 <body>
 <header class="hdr" id="hdr">
@@ -32,6 +35,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
-<script src="app.js?v=3.0.2"></script>
+<script src="app.js?v=3.0.3"></script>
 </body>
 </html>

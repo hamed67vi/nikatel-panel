@@ -12,7 +12,7 @@ router = APIRouter(tags=["failover"], dependencies=[Depends(current_user)])
 
 
 class ArvanIn(BaseModel):
-    api_key: str = ""
+    api_key: str = Field("", max_length=512)
     mode: str = "off"
     confirm_minutes: int = 5
     domains: list[str] = []

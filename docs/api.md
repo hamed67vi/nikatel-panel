@@ -22,7 +22,7 @@ with the HTTP status that fits. `error` is for people, `code` is for programs:
 | 403 | `forbidden`, `read_only`, `read_only_demo` | the panel is read-only, or the demo |
 | 404 | `not_found` | no such thing (also every unknown path) |
 | 409 | `conflict` | it already exists, or something else is running on it |
-| 422 | `invalid` | the body or the query does not fit the model (`field: message; ...`) |
+| 422 | `invalid` | the body or the query does not fit the model (`field: message; ...`); also a number the database cannot hold (an id of more than 63 bits: `a number in the request is too big`) |
 | 429 | `too_many_requests` | wrong sign-ins, or the demo's rate limit |
 | 500 | `internal` | our bug; the answer and the log carry the same request id (`X-Request-Id`) |
 | 502 | `upstream_failed` | a server, a panel, the probe or a DNS account did not answer |

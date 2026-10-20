@@ -753,7 +753,15 @@ def check_unhealthy() -> None:
 
     if ids:
         with ThreadPoolExecutor(max(1, min(4, len(ids)))) as ex:
-            list(ex.map(lambda i: check_tunnel(i, fresh_ext=True), ids))
+            list(ex.map(lambda i: _check_safely(i, fresh_ext=True), ids))
+
+
+def _check_safely(tunnel_id: int, **kw) -> None:
+    """One tunnel must never stop the round of the others: whatever its check raises (an odd record, a damaged answer, a locked database) is logged and the next tunnel is checked."""
+    try:
+        check_tunnel(tunnel_id, **kw)
+    except Exception:  # the boundary of one item
+        log.exception("check of tunnel #%s crashed", tunnel_id)
 
 
 def check_of_servers(server_ids: list[int]) -> None:
@@ -766,7 +774,7 @@ def check_of_servers(server_ids: list[int]) -> None:
 
     if ids:
         with ThreadPoolExecutor(max(1, min(4, len(ids)))) as ex:
-            list(ex.map(lambda i: check_tunnel(i, fresh_ext=True), ids))
+            list(ex.map(lambda i: _check_safely(i, fresh_ext=True), ids))
 
 
 def check_all() -> None:
@@ -778,8 +786,9 @@ def check_all() -> None:
     except Exception:
         log.exception("external probe failed")
 
-    with ThreadPoolExecutor(max(1, get_settings().ssh_workers)) as ex:      # all the workers: with half of them one turn of 20 tunnels took ~95 s
-        list(ex.map(check_tunnel, ids))
-
-    with session() as db:
-        db.execute(delete(TunnelCheck).where(TunnelCheck.ts < int(time.time()) - KEEP_CHECKS_SECONDS))
+    try:
+        with ThreadPoolExecutor(max(1, get_settings().ssh_workers)) as ex:      # all the workers: with half of them one turn of 20 tunnels took ~95 s
+            list(ex.map(_check_safely, ids))
+    finally:          # (the old checks go even when the round broke: a table that is never trimmed grows for ever)
+        with session() as db:
+            db.execute(delete(TunnelCheck).where(TunnelCheck.ts < int(time.time()) - KEEP_CHECKS_SECONDS))

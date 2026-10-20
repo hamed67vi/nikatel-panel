@@ -143,7 +143,7 @@ def import_stage():
 class BotSettings(BaseModel):
     host: str
     ssh_user: str = Field("root", min_length=1, max_length=32, pattern=r"^[a-z_][a-z0-9_-]*$")
-    ssh_port: int = 22
+    ssh_port: int = Field(22, ge=1, le=65535)
     dir: str = "/var/www/nikabot"
     env: str = "/opt/nikabot/db.env"
     public_url: str = ""

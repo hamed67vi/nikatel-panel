@@ -1113,6 +1113,7 @@ html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:no
 html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no:hover { background: rgba(60,70,100,.15); }
 html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-field { width: 100%; text-align: left; }
 html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-hint, html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-check { text-align: left; }
+html body #ask .modal.ask-box:not(:has(.mv-plan)) :is(.ask-act.ask-choices, .ask-check) { width: 100%; box-sizing: border-box; }      /* (the box centres its rows: a list of choices was as wide as its widest word - 99 px buttons in a 344 px box - and the tick row 221 px; both fill the box like the buttons of a plain question) */
 /* the buttons of the alert are flat in every theme (the "calm" and "aurora" themes give a primary button a gradient, a glow, a gloss and a text shadow: the alert has none of them) */
 html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes, html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no { background-image: none !important; box-shadow: none !important; text-shadow: none !important; border: 0 !important; transform: none !important; }
 html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes::before, html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no::before, html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes::after, html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no::after { display: none !important; }
@@ -1162,3 +1163,29 @@ html body #page .tun-tbl .bwm.full .bwm-t small { color: var(--warn, #ffc44d); b
 /* the failed-update note of the About card is ONE row (the owner, 2026-10-20: "show the error briefly in one row, and if the update fixes it, say so"): it was a red paragraph in a box that scrolled */
 html body #about-box .abt-fail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 1.5; }
 html body #about-box .abt-fail b { font-weight: 700; color: var(--text); }
+
+/* A tall question (the plan of "Move the tunnels", a list of choices) in a short window: the box was centred and as tall as its content, so its top went above the window where no scroll can reach (a plan 615 px tall in a window of 480 px: the first 55 px cut;
+   12 choices: 183 px). The box is never taller than the window and scrolls inside itself. */
+html body #ask .modal.ask-box { max-height: 100%; overflow-y: auto; }
+/* The question box on a phone. The sheet rules for every window (mobile2.css: ".modal { height: 100%; min-height: 100% !important; border-radius: 0 !important }", ".ask-box { width: 100% !important }") made it a FULL-SCREEN sheet - 800 px of box, its rows stretched, Cancel and OK 239 px tall.
+   It is the same small alert as on a desktop; only its width follows the screen. */
+@media (max-width: 760px) and (pointer: coarse) {
+  html body #ask .overlay { align-items: center !important; justify-content: center !important; padding: 16px !important; }
+  html body #ask .modal.ask-box { width: min(344px, calc(100vw - 40px)) !important; height: auto !important; min-height: 0 !important; max-height: 100% !important; overflow-x: hidden !important; border-radius: 16px !important; }
+  html body #ask .modal.ask-box:has(.mv-plan) { width: min(420px, calc(100vw - 32px)) !important; }
+}
+/* The number cards of the server and tunnel windows ("Connections 3073 / peak 4268"): the old rule "span { max-width: 62% }" cut the note ("peak 4") in the middle of a digit and the card scrolled 12 px inside itself. The note takes what the caption leaves and ends with a dash (its tip tells it all). */
+html body #modal :is(.srvwin, .tunwin) .mtile { grid-template-columns: auto minmax(0, 1fr); }
+html body #modal :is(.srvwin, .tunwin) .mtile span { max-width: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* a question that was answered stays a moment as an invisible layer (askLeave in app.js): the second click of a double click lands on it, not on the page under the button */
+html body #ask.ask-out .overlay, html body #ask.ask-out .modal { animation: none !important; transition: none !important; opacity: 0 !important; }
+/* The tabs of the profiles (All | Iran | Foreign | PasarGuard ...): with five profiles at 1280 px every name had shrunk to 0 px beside its icon and count ("Iran" was a flag and a 6): a tab was allowed down to 46 px and its label gave way first.
+   A tab keeps its size (a name over 190 px ends with a dash); when the strip is still too narrow it scrolls sideways and the open tab is brought into view (labTabsReveal in lab.js).
+   With five tabs or more the chips lose their words earlier, so the tabs have the room (the chips are the least important part of the bar). */
+html[data-fluid] body #page .tabs.lab-kinds > button, html body #page .tabs.lab-kinds > button { flex: none; min-width: auto; overflow: visible; }      /* (the first selector beats the fluid rule "html[data-fluid] body #page .tabs > button { flex: 0 1 auto; min-width: 0; overflow: hidden }" of fluid.css, which is loaded after this sheet) */
+html[data-fluid] body #page .lab-bar:has(.lab-kinds > button:nth-child(5)) .tabs.lab-kinds > button { padding: 0 9px; gap: 5px; }      /* (five tabs or more: a little tighter) */
+@container labbar (max-width: 1000px) {
+  .lab-bar:has(.lab-kinds > button:nth-child(5)) .lab-chip > span { display: none; }
+  .lab-bar:has(.lab-kinds > button:nth-child(5)) .lab-chip::before { content: attr(data-ic); font-size: 11px; color: var(--mut); }
+  .lab-bar:has(.lab-kinds > button:nth-child(5)) .lab-chip { padding: 0 9px; gap: 4px; }
+}

@@ -1,7 +1,7 @@
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..services import ai
@@ -12,15 +12,15 @@ router = APIRouter(tags=["ai"], dependencies=[Depends(current_user)])
 
 class AiIn(BaseModel):
     enabled: bool = False
-    api_key: str = ""
+    api_key: str = Field("", max_length=512)          # (a key is a few dozen characters; 10 kB of text is a wrong paste, not a key)
     model: str = "claude-sonnet-5-5"
     actions: bool = True
 
 
 class AiProviderIn(BaseModel):
-    api_key: str = ""
-    model: str = ""
-    base_url: str = ""
+    api_key: str = Field("", max_length=512)
+    model: str = Field("", max_length=200)
+    base_url: str = Field("", max_length=400)
 
 
 class AiUseIn(BaseModel):

@@ -5,12 +5,15 @@ const tg = window.Telegram && window.Telegram.WebApp;
 const INIT = tg ? tg.initData : "";
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const js = v => esc(JSON.stringify(v));      // a value inside an inline handler: onclick="copy(${js(x)})" - the quotes of the JSON must not end the attribute
+const ltr = s => `<bdi dir="ltr">${esc(s)}</bdi>`;      // @username, a link: kept in one piece inside Persian text (a leading @ would jump to the other end)
 const T = n => Number(n || 0).toLocaleString("fa-IR");
-const GB = b => { const g = Number(b || 0) / 1073741824; return (g >= 100 ? g.toFixed(0) : g.toFixed(g >= 10 ? 1 : 2)).replace(/\.0+$/, ""); };
+const GB = b => { const g = Number(b || 0) / 1073741824; return Number(g.toFixed(g >= 100 ? 0 : g >= 10 ? 1 : 2)).toLocaleString("fa-IR"); };
 const day = ts => ts ? new Date(ts * 1000).toLocaleDateString("fa-IR") : "—";
 const when = ts => ts ? new Date(ts * 1000).toLocaleString("fa-IR", {dateStyle: "short", timeStyle: "short"}) : "—";
-const left = ts => { if (!ts) return "نامحدود"; const d = Math.ceil((ts * 1000 - Date.now()) / 86400000); return d < 0 ? "منقضی" : d === 0 ? "امروز" : T(d) + " روز"; };
-const vol = g => (Number(g) >= 1000 ? T(Number(g) / 1000) + " ترابایت" : T(g) + " گیگ");
+const left = ts => { if (!ts) return "نامحدود"; const ms = ts * 1000 - Date.now(); return ms <= 0 ? "منقضی" : T(Math.ceil(ms / 86400000)) + " روز"; };      // (rounding the days up made a service that ended hours ago read "today")
+const leftTx = (ts, hold) => !ts && hold ? "از اولین اتصال" : /روز$/.test(left(ts)) ? left(ts) + " مانده" : left(ts);
+const vol = g => (Number(g) <= 0 ? "نامحدود" : Number(g) >= 1000 ? T(Number(g) / 1000) + " ترابایت" : T(g) + " گیگ");      // (a plan with volume 0 is unlimited in the bot, not "0 GB")
 
 const S = {me: null, feat: {}, amounts: [], bot: "", support: "", stack: [{v: "home"}], plans: null, services: null, live: {}, tickets: null, topup: null, busy: false};
 try { S.topup = JSON.parse(localStorage.getItem("nk.topup") || "null"); if (S.topup && Date.now() - S.topup.at > 3600e3) S.topup = null; } catch (e) { S.topup = null; }
@@ -48,8 +51,8 @@ function setWallet(w) { if (S.me) S.me.wallet = w; $("wallet").textContent = T(w
 /* ---- navigation: a stack of views; the first entry is the tab */
 const ROOTS = ["home", "buy", "services", "wallet", "more"];
 function cur() { return S.stack[S.stack.length - 1]; }
-function setTab(t) { if (cur().v === t && S.stack.length === 1) { render(); return; } S.stack = [{v: t}]; hap(); render(); }
-function go(v, p) { S.stack.push({v, p: p || {}}); hap(); render(); }
+function setTab(t) { if (!S.me) { boot(); return; } if (cur().v === t && S.stack.length === 1) { render(); return; } S.stack = [{v: t}]; hap(); render(); }      // (before the first answer of the server every tab is the same retry)
+function go(v, p) { if (!S.me) { boot(); return; } S.stack.push({v, p: p || {}}); hap(); render(); }
 function back() { if (S.stack.length > 1) { S.stack.pop(); render(); } else if (cur().v !== "home") setTab("home"); }
 function replace(v, p) { S.stack[S.stack.length - 1] = {v, p: p || {}}; render(); }
 async function render() {
@@ -71,9 +74,9 @@ async function boot() {
   if (!INIT) { $("app").innerHTML = `<div class="card c"><div style="font-size:40px">🤖</div><h3 style="justify-content:center">این صفحه فقط از داخل تلگرام باز می‌شود</h3><div class="mut sm">مینی‌اپ را از دکمه‌ی داخل ربات باز کن.</div></div>`; $("sub").textContent = "خارج از تلگرام"; return; }
   const r = await api("me");
   if (!r.ok) { $("app").innerHTML = `<div class="card c"><div style="font-size:40px">⚠️</div><div class="mt">${esc(r.error)}</div><button class="btn mt" onclick="boot()">دوباره</button></div>`; $("sub").textContent = "خطا"; return; }
-  S.me = r.user; S.feat = r.features || {}; S.amounts = r.amounts || []; S.bot = r.bot || ""; S.support = r.support || "";
+  S.me = r.user; S.feat = r.features || {}; S.amounts = r.amounts || []; S.bot = r.bot || ""; S.support = r.support || ""; S.min_topup = r.min_topup || 10000;
   $("hello").textContent = "سلام " + (S.me.name || "") + " 👋";
-  $("ava").textContent = (S.me.name || "👤").trim().charAt(0).toUpperCase() || "👤";
+  $("ava").textContent = (Array.from((S.me.name || "").trim())[0] || "👤").toUpperCase();      // (charAt(0) cut an emoji at the start of a name in half)
   $("sub").textContent = S.me.agent ? "همکار فروش" : (S.me.services ? T(S.me.services) + " سرویس فعال" : "خوش آمدی");
   setWallet(S.me.wallet);
   $("walbtn").classList.toggle("hide", !S.feat.wallet);
@@ -113,7 +116,7 @@ VIEWS.home = async () => {
   return `${hero}
     <div class="card"><h3>سرویس‌های من <span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></h3><div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
     <div class="card"><h3>دسترسی سریع</h3><div class="qa" style="--cols:${qa.length <= 4 ? Math.max(qa.length, 1) : qa.length <= 6 ? 3 : 4}">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
-    ${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">@${esc(S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
+    ${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
 };
 AFTER.home = async () => {
   const r = await loadServices();
@@ -134,7 +137,7 @@ function svcRow(s) {
   const st = L ? (L.status === "active" ? "ok" : L.status === "on_hold" ? "info" : "bad") : (s.active ? "ok" : "bad");
   const stTxt = L ? (L.status_fa || L.status) : (s.active ? "فعال" : "غیرفعال");
   return `<div class="item" id="svc-${s.id}" onclick="go('service',{id:${s.id}})"><div class="tx"><div class="row"><b class="ell">${esc(s.remark)}</b><span class="pill ${st}">${esc(stTxt)}</span></div><small>${esc(s.server)}</small>
-    ${L ? `<div class="bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div><div class="row xs mut"><span>${GB(L.used)} از ${L.limit ? GB(L.limit) + " گیگ" : "نامحدود"}</span><span>${left(L.expire || s.expire)} مانده</span></div>`
+    ${L ? `<div class="bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div><div class="row xs mut"><span>${GB(L.used)} از ${L.limit ? GB(L.limit) + " گیگ" : "نامحدود"}</span><span>${leftTx(L.expire || s.expire, L.hold)}</span></div>`
       : (L === null ? `<div class="row xs mut"><span>انقضا: ${day(s.expire)}</span><span>${left(s.expire)}</span></div>` : `<div class="sk mt" style="height:7px"></div>`)}</div></div>`;
 }
 async function loadLive(ids) {   // the live numbers from the panels, three at a time
@@ -163,7 +166,7 @@ AFTER.service = async p => {
   const st = L ? (L.status === "active" ? "ok" : L.status === "on_hold" ? "info" : "bad") : (s.active ? "ok" : "bad");
   const F = S.feat;
   box.innerHTML = `
-    <div class="title"><span class="ell">${esc(s.remark)}</span><span class="pill ${st}">${esc(r.service.status_fa || (s.active ? "فعال" : "غیرفعال"))}</span></div>
+    <div class="title"><span class="ell2">${esc(s.remark)}</span><span class="pill ${st}">${esc(r.service.status_fa || (s.active ? "فعال" : "غیرفعال"))}</span></div>
     <div class="card">
       <div class="sm mut">${esc(s.server)}${s.plan ? "، " + esc(s.plan.title) : ""}</div>
       ${L ? `<div class="bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>` : ""}
@@ -173,21 +176,21 @@ AFTER.service = async p => {
       </div>
       ${L === null && s.active ? `<div class="note warn mt">ارتباط با پنل این سرور برقرار نشد؛ اعداد زنده فعلاً در دسترس نیست.</div>` : ""}
     </div>
-    ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${JSON.stringify(s.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${JSON.stringify(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${JSON.stringify(s.sub)})">▦ QR</button>${F.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
-    ${s.links && s.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>${s.links.slice(0, 12).map(l => `<div class="code mb" onclick="copy(${JSON.stringify(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}${s.links.length > 1 ? `<button class="btn w sm" onclick="copy(${JSON.stringify(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}</div>` : ""}
+    ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(s.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${js(s.sub)})">▦ QR</button>${F.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
+    ${s.links && s.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>${s.links.slice(0, 12).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}${s.links.length > 1 ? `<button class="btn w sm" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}</div>` : ""}
     <div class="card"><h3>مدیریت سرویس</h3><div class="grid">
       ${F.renew ? `<button class="btn" onclick="renewSheet(${s.id})">🔄 تمدید</button>` : ""}
       ${F.addvolume ? `<button class="btn" onclick="extraSheet(${s.id},'volume')">➕ حجم اضافه</button>` : ""}
       ${F.adddays ? `<button class="btn" onclick="extraSheet(${s.id},'days')">⏳ زمان اضافه</button>` : ""}
       ${F.report ? `<button class="btn" onclick="reportSheet(${s.id})">🛠 گزارش اختلال</button>` : ""}
-      <button class="btn" onclick="go('tickets',{svc:${JSON.stringify(s.remark)}})">🎫 پشتیبانی</button>
+      <button class="btn" onclick="go('tickets',{svc:${js(s.remark)}})">🎫 پشتیبانی</button>
     </div></div>`;
 };
 function showQr(text) {
   const box = $("qr"); if (!box) return;
   if (typeof qrcode !== "function") { toast("کتابخانه‌ی QR بارگذاری نشد", "bad"); return; }
   if (!box.classList.contains("hide")) { box.classList.add("hide"); return; }
-  try { const q = qrcode(0, "M"); q.addData(text); q.make(); box.innerHTML = `<img alt="QR" src="${q.createDataURL(5, 0)}">`; box.classList.remove("hide"); } catch (e) { toast("لینک برای QR خیلی بلند است", "bad"); }
+  try { const q = qrcode(0, "M"); q.addData(text); q.make(); const cell = Math.max(2, Math.floor(216 / q.getModuleCount())); box.innerHTML = `<img alt="QR" src="${q.createDataURL(cell, 0)}">`; box.classList.remove("hide"); } catch (e) { toast("لینک برای QR خیلی بلند است", "bad"); }      // (a whole number of pixels per square: the picture is shown as it is made, never shrunk to a size that blurs the squares)
 }
 async function renewSheet(id) {
   sheet(`<div class="loading"><i class="spin"></i>محاسبه‌ی قیمت…</div>`);
@@ -284,8 +287,8 @@ async function doBuy(id) {
 }
 VIEWS.bought = async r => `
   <div class="card c"><div style="font-size:44px">🎉</div><h3 style="justify-content:center">سرویس شما ساخته شد</h3><div class="sm mut">نام سرویس: <b>${esc(r.remark)}</b>${r.cashback ? `، کش‌بک ${T(r.cashback)} تومان به کیف پولت برگشت` : ""}</div></div>
-  ${r.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${JSON.stringify(r.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${JSON.stringify(r.sub)})">${esc(r.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${JSON.stringify(r.sub)})">▦ QR</button>${S.feat.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div><div class="note mt">لینک اشتراک را در برنامه‌ی اتصال (v2rayNG، Streisand، Hiddify…) وارد کن؛ کانفیگ‌ها خودکار می‌آیند. همین لینک در چت ربات هم برایت فرستاده شد.</div></div>` : ""}
-  ${r.links && r.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(r.links.length)}</span></h3>${r.links.slice(0, 8).map(l => `<div class="code mb" onclick="copy(${JSON.stringify(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}</div>` : ""}
+  ${r.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(r.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(r.sub)})">${esc(r.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${js(r.sub)})">▦ QR</button>${S.feat.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div><div class="note mt">لینک اشتراک را در برنامه‌ی اتصال (v2rayNG، Streisand، Hiddify…) وارد کن؛ کانفیگ‌ها خودکار می‌آیند. همین لینک در چت ربات هم برایت فرستاده شد.</div></div>` : ""}
+  ${r.links && r.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(r.links.length)}</span></h3>${r.links.slice(0, 8).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}</div>` : ""}
   <div class="btns"><button class="btn pri" onclick="S.stack=[{v:'services'},{v:'service',p:{id:${r.order_id}}}];render()">📦 جزئیات سرویس</button><button class="btn" onclick="setTab('home')">خانه</button></div>`;
 async function redeem() { const code = ($("gift").value || "").trim(); if (!code) return; const r = await api("gift", {code}); if (r.ok) { toast(T(r.amount) + " تومان به کیف پولت اضافه شد 🎁", "ok"); $("gift").value = ""; } else toast(r.error, "bad"); }
 
@@ -293,7 +296,7 @@ async function redeem() { const code = ($("gift").value || "").trim(); if (!code
 VIEWS.wallet = async () => {
   const F = S.feat, tp = S.topup;
   return `<div class="title">کیف پول</div>
-    <div class="card"><div class="row"><div><small class="mut">موجودی</small><div style="font-size:26px;font-weight:800">${T(S.me ? S.me.wallet : 0)} <small class="mut" style="font-size:12px">تومان</small></div></div><div class="c">${S.me && S.me.pending_topups ? `<span class="pill warn">${T(S.me.pending_topups)} رسید در انتظار تأیید</span>` : `<span class="pill ok">آماده</span>`}</div></div></div>
+    <div class="card"><div class="row wrap"><div><small class="mut">موجودی</small><div style="font-size:26px;font-weight:800;white-space:nowrap">${T(S.me ? S.me.wallet : 0)} <small class="mut" style="font-size:12px">تومان</small></div></div><div class="c">${S.me && S.me.pending_topups ? `<span class="pill warn">${T(S.me.pending_topups)} رسید در انتظار تأیید</span>` : `<span class="pill ok">آماده</span>`}</div></div></div>
     ${tp ? `<div class="card" id="tp-resume"><h3>شارژ ناتمام <span class="pill warn">${T(tp.amount)} تومان</span></h3><div class="sm mut">هنوز رسید این شارژ را نفرستاده‌ای.</div><div class="btns"><button class="btn pri" onclick="go('topup',{resume:1})">ادامه و ارسال رسید</button><button class="btn" onclick="topupCancel()">لغو</button></div></div>` : ""}
     ${F.wallet && F.card ? `<div class="card"><h3>شارژ کیف پول</h3><div class="amounts" id="amounts">${(S.amounts.length ? S.amounts : [100000, 200000, 500000]).map(a => `<button onclick="amountPick(${a},this)">${T(a)}<br><small class="mut xs">تومان</small></button>`).join("")}</div>
       <label class="lb">یا مبلغ دلخواه (تومان)</label><input class="input num" id="tp-amount" type="number" inputmode="numeric" min="${S.min_topup || 10000}" step="1000" placeholder="مثلاً 150000" oninput="document.querySelectorAll('#amounts button').forEach(b=>b.classList.remove('on'))">
@@ -306,8 +309,9 @@ AFTER.wallet = async () => {
   if (!r.ok) { box.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }
   const cls = s => ({approved: "ok", auto_cart_approved: "ok", paid: "ok", paid_with_wallet: "info", have_sent: "warn", pending: "warn", declined: "bad", low_wallet: "bad", expired_have_sent: "bad", expired_pending: "bad"}[s] || "");
   const rows = r.pays.filter(p => p.state !== "pending" || p.kind !== "INCREASE_WALLET");
-  box.innerHTML = rows.length ? rows.slice(0, 25).map(p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr">${p.kind === "INCREASE_WALLET" ? "+" : "−"}${T(p.price)}</b></div>`).join("")
-    + (r.cashback.length ? `<div class="sm mut mt">کش‌بک‌ها</div>` + r.cashback.slice(0, 5).map(c => `<div class="item static"><div class="ic">🎁</div><div class="tx"><b>کش‌بک خرید</b><small>${when(c.at)}، خرید ${T(c.order)} تومان</small></div><b class="ltr">+${T(c.back)}</b></div>`).join("") : "")
+  const done = s => s === "approved" || s === "auto_cart_approved" || s === "paid" || s === "paid_with_wallet";      // only a payment that went through moves the wallet: a refused or expired one shows its amount without a sign
+  box.innerHTML = rows.length ? rows.slice(0, 25).map(p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`).join("")
+    + (r.cashback.length ? `<div class="sm mut mt">کش‌بک‌ها</div>` + r.cashback.slice(0, 5).map(c => `<div class="item static"><div class="ic">🎁</div><div class="tx"><b>کش‌بک خرید</b><small>${when(c.at)}، خرید ${T(c.order)} تومان</small></div><b class="ltr amt">+${T(c.back)}</b></div>`).join("") : "")
     : `<div class="empty">هنوز تراکنشی نداری.</div>`;
 };
 async function topupStart(prefill) {
@@ -327,8 +331,8 @@ VIEWS.topup = async () => {
   return `<div class="title">پرداخت کارت‌به‌کارت</div><div class="steps"><i class="on"></i><i class="on"></i><i id="st3"></i></div>
     <div class="card"><h3>۱. مبلغ دقیق را واریز کن</h3>
       <div class="copyrow" onclick="copy('${t.exact}','مبلغ کپی شد ✓')"><div><small class="mut xs">مبلغ دقیق واریز (تومان)</small><br><b>${T(t.exact)}</b></div><span class="btn sm">📋 کپی</span></div>
-      ${detail ? `<div class="copyrow" onclick="copy(${JSON.stringify(t.card)},'شماره کارت کپی شد ✓')"><div><small class="mut xs">شماره کارت، ${esc(t.holder)}</small><br><b>${esc(t.card.replace(/(\d{4})(?=\d)/g, "$1 "))}</b></div><span class="btn sm">📋 کپی</span></div>` : ""}
-      ${t.usdt_wallet && !detail ? `<div class="copyrow" onclick="copy(${JSON.stringify(t.usdt_wallet)},'آدرس کپی شد ✓')"><div><small class="mut xs">USDT (TRC20)${t.usdt ? "، " + t.usdt + " USDT" : ""}</small><br><b style="font-size:12px">${esc(t.usdt_wallet)}</b></div><span class="btn sm">📋 کپی</span></div>` : ""}
+      ${detail ? `<div class="copyrow" onclick="copy(${js(t.card)},'شماره کارت کپی شد ✓')"><div><small class="mut xs">شماره کارت، ${esc(t.holder)}</small><br><b>${esc(t.card.replace(/(\d{4})(?=\d)/g, "$1 "))}</b></div><span class="btn sm">📋 کپی</span></div>` : ""}
+      ${t.usdt_wallet && !detail ? `<div class="copyrow" onclick="copy(${js(t.usdt_wallet)},'آدرس کپی شد ✓')"><div><small class="mut xs">USDT (TRC20)${t.usdt ? "، " + t.usdt + " USDT" : ""}</small><br><b style="font-size:12px">${esc(t.usdt_wallet)}</b></div><span class="btn sm">📋 کپی</span></div>` : ""}
       <div class="note mt">${t.text || "مبلغ را دقیقاً با همان رقم‌های آخر واریز کن تا تأیید سریع‌تر انجام شود."}</div>
       <div class="xs mut mt">⏱ این درخواست یک ساعت اعتبار دارد. مبلغ انتخابی: ${T(t.amount)} تومان؛ رقم‌های آخر برای شناسایی واریز اضافه شده‌اند و همان ${T(t.amount)} تومان شارژ می‌شود.</div>
     </div>
@@ -367,15 +371,15 @@ VIEWS.more = async () => {
     F.apps && ["📱", "اپلیکیشن‌های اتصال", "برنامه‌های پیشنهادی برای هر دستگاه", "go('apps')"],
     F.gift && ["🎁", "کد هدیه", "کد را وارد کن و کیف پولت را شارژ کن", "go('gift')"],
     F.wheel && ["🎡", "گردونه شانس", "هر روز یک شانس", "go('wheel')"],
-    S.support && ["💬", "ارتباط مستقیم با پشتیبان", "@" + S.support, `openLink('https://t.me/${esc(S.support)}')`],
+    S.support && ["💬", "ارتباط مستقیم با پشتیبان", ltr("@" + S.support), `openLink('https://t.me/${esc(S.support)}')`],
     ["🤖", "باز کردن ربات", "منوی کامل ربات", `openLink('https://t.me/${esc(S.bot)}')`],
   ].filter(Boolean);
-  return `<div class="title">بیشتر</div><div class="list">${rows.map(r => `<div class="item" onclick="${r[3]}"><div class="ic">${r[0]}</div><div class="tx"><b>${r[1]}</b><small>${esc(r[2])}</small></div><span class="chev">‹</span></div>`).join("")}</div>
+  return `<div class="title">بیشتر</div><div class="list">${rows.map(r => `<div class="item" onclick="${r[3]}"><div class="ic">${r[0]}</div><div class="tx"><b>${r[1]}</b><small>${r[2]}</small></div><span class="chev">‹</span></div>`).join("")}</div>
     <div class="card sm mut c">شناسه‌ی تو: <b class="ltr">${S.me ? S.me.id : ""}</b>${S.me && S.me.since ? "، عضو از " + day(S.me.since) : ""}</div>`;
 };
 VIEWS.gift = async () => `<div class="title">🎁 کد هدیه</div><div class="card"><div class="sm mut mb">کد هدیه را وارد کن؛ مبلغ آن بلافاصله به کیف پولت اضافه می‌شود.</div><div class="row"><input class="input grow" id="gift" placeholder="کد هدیه" autocomplete="off"><button class="btn pri" onclick="redeem()">اعمال</button></div></div>`;
 VIEWS.apps = async () => `<div class="title">📱 اپلیکیشن‌های اتصال</div><div id="apps" class="list"><div class="loading"><i class="spin"></i>…</div></div><div class="note">لینک اشتراک سرویس را کپی کن و در برنامه، گزینه‌ی «افزودن از کلیپ‌بورد / Import from clipboard» را بزن.</div>`;
-AFTER.apps = async () => { const r = await api("apps"); const box = $("apps"); if (!box) return; box.innerHTML = r.ok && r.apps.length ? r.apps.map(a => `<div class="item" onclick="openLink(${JSON.stringify(a.link)})"><div class="ic">⬇️</div><div class="tx"><b>${esc(a.title)}</b><small class="ell ltr">${esc(a.link)}</small></div><span class="chev">‹</span></div>`).join("") : `<div class="empty">${r.ok ? "برنامه‌ای ثبت نشده." : esc(r.error)}</div>`; };
+AFTER.apps = async () => { const r = await api("apps"); const box = $("apps"); if (!box) return; box.innerHTML = r.ok && r.apps.length ? r.apps.map(a => `<div class="item" onclick="openLink(${js(a.link)})"><div class="ic">⬇️</div><div class="tx"><b>${esc(a.title)}</b><small class="ell ltr">${esc(a.link)}</small></div><span class="chev">‹</span></div>`).join("") : `<div class="empty">${r.ok ? "برنامه‌ای ثبت نشده." : esc(r.error)}</div>`; };
 VIEWS.referral = async () => `<div class="title">👥 دعوت دوستان</div><div id="ref"><div class="loading"><i class="spin"></i>…</div></div>`;
 AFTER.referral = async () => {
   const r = await api("referral"); const box = $("ref"); if (!box) return;
@@ -383,8 +387,8 @@ AFTER.referral = async () => {
   const share = "https://t.me/share/url?url=" + encodeURIComponent(r.link) + "&text=" + encodeURIComponent("با این لینک عضو شو 👇");
   box.innerHTML = `<div class="card"><div class="grid"><div class="tile"><small>دعوت‌شده‌ها</small><b>${T(r.invited)}</b></div><div class="tile"><small>خریدار شده</small><b>${T(r.buyers)}</b></div></div>
     ${r.reward ? `<div class="note ok mt">🎁 برای هر خرید دوستانت (به‌جز پرداخت با کیف پول) ${T(r.reward)} تومان به کیف پولت اضافه می‌شود.</div>` : ""}${r.text ? `<div class="note mt">${r.text}</div>` : ""}
-    <label class="lb">لینک دعوت تو</label><div class="code" onclick="copy(${JSON.stringify(r.link)})">${esc(r.link)}<span class="cp">📋</span></div>
-    <div class="btns"><button class="btn pri" onclick="openLink(${JSON.stringify(share)})">📤 اشتراک‌گذاری</button><button class="btn" onclick="copy(${JSON.stringify(r.link)})">📋 کپی</button></div></div>`;
+    <label class="lb">لینک دعوت تو</label><div class="code" onclick="copy(${js(r.link)})">${esc(r.link)}<span class="cp">📋</span></div>
+    <div class="btns"><button class="btn pri" onclick="openLink(${js(share)})">📤 اشتراک‌گذاری</button><button class="btn" onclick="copy(${js(r.link)})">📋 کپی</button></div></div>`;
 };
 VIEWS.wheel = async () => `<div class="title">🎡 گردونه شانس <small id="wh-state"></small></div><div class="card"><div class="wheel" id="wheel"><b>🎰</b></div><button class="btn pri w" id="spin" disabled onclick="spin()">بچرخان</button><div class="sm mut c mt" id="wh-note">…</div></div>`;
 let rot = 0, spinning = false;
@@ -393,7 +397,7 @@ function paintWheel(prizes) {
   const n = prizes.length, seg = 360 / n, cols = ["#6366f1", "#22d3ee", "#a78bfa", "#34d399", "#f472b6", "#fbbf24", "#60a5fa", "#fb7185"];
   w.style.background = `conic-gradient(${prizes.map((p, i) => `${cols[i % cols.length]} ${i * seg}deg ${(i + 1) * seg}deg`).join(",")})`;
   w.querySelectorAll("span").forEach(s => s.remove());
-  prizes.forEach((p, i) => { const s = document.createElement("span"); s.textContent = p > 0 ? T(p) : "—"; const a = (i * seg + seg / 2) - 90; s.style.transform = `rotate(${a}deg) translate(70px) rotate(${-a}deg) translate(-50%,-50%)`; w.appendChild(s); });
+  prizes.forEach((p, i) => { const s = document.createElement("span"); s.textContent = p > 0 ? T(p) : "—"; const a = (i * seg + seg / 2) - 90; s.style.transform = n > 8 ? `rotate(${a}deg) translate(74px) translate(-50%,-50%)` : `rotate(${a}deg) translate(70px) rotate(${-a}deg) translate(-50%,-50%)`; w.appendChild(s); });      // (with more than 8 segments the amounts lie along their spoke: upright they ran into each other)
 }
 AFTER.wheel = async () => {
   const r = await api("wheel", {check: 1}); if (!$("spin")) return;
@@ -412,12 +416,12 @@ async function spin() {
 }
 
 /* ---- tickets */
-VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${JSON.stringify(p.svc || "")}})">+ تیکت جدید</button></div>${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">@${esc(S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
+VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button></div>${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
 AFTER.tickets = async () => {
   const r = await api("tickets"); const box = $("tk-list"); if (!box) return;
   if (!r.ok) { box.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }
   S.tcats = r.categories || [];
-  box.innerHTML = r.tickets.length ? r.tickets.map(t => `<div class="item" onclick="go('ticket',{id:${t.id},title:${JSON.stringify(t.title)}})"><div class="ic">${t.state == 2 ? "🔒" : t.state == 1 ? "💬" : "⏳"}</div><div class="tx"><div class="row"><b class="ell">${esc(t.title)}</b><span class="pill ${t.state == 2 ? "" : t.state == 1 ? "ok" : "warn"}">${t.state == 2 ? "بسته" : t.state == 1 ? "پاسخ داده شد" : "در انتظار"}</span></div><small class="ell">${t.last ? (t.last.from === "ADMIN" ? "پشتیبانی: " : "شما: ") + esc(t.last.text) : when(t.created)}</small></div></div>`).join("") : `<div class="empty">تیکتی نداری.</div>`;
+  box.innerHTML = r.tickets.length ? r.tickets.map(t => `<div class="item" onclick="go('ticket',{id:${t.id},title:${js(t.title)}})"><div class="ic">${t.state == 2 ? "🔒" : t.state == 1 ? "💬" : "⏳"}</div><div class="tx"><div class="row"><b class="ell">${esc(t.title)}</b><span class="pill ${t.state == 2 ? "" : t.state == 1 ? "ok" : "warn"}">${t.state == 2 ? "بسته" : t.state == 1 ? "پاسخ داده شد" : "در انتظار"}</span></div><small class="ell">${t.last ? (t.last.from === "ADMIN" ? "پشتیبانی: " : "شما: ") + esc(t.last.text) : when(t.created)}</small></div></div>`).join("") : `<div class="empty">تیکتی نداری.</div>`;
 };
 VIEWS.ticket_new = async p => `<div class="title">تیکت جدید</div><div class="card">${S.tcats && S.tcats.length ? `<label class="lb">موضوع</label><select class="input" id="tk-cat">${S.tcats.map(c => `<option>${esc(c)}</option>`).join("")}</select>` : ""}<label class="lb">عنوان</label><input class="input" id="tk-title" placeholder="مثلاً: سرویس وصل نمی‌شود" value="${p.svc ? "سرویس " + esc(p.svc) : ""}"><label class="lb">متن</label><textarea class="input" id="tk-text" placeholder="مشکل یا سؤال خود را کامل بنویس…"></textarea><div class="btns"><button class="btn pri" id="tk-send" onclick="sendTicket()">ارسال</button><button class="btn" onclick="back()">انصراف</button></div></div>`;
 async function sendTicket() {
@@ -426,7 +430,7 @@ async function sendTicket() {
   if (!r.ok) { toast(r.error, "bad"); b.disabled = false; return; }
   toast("تیکت ثبت شد ✓", "ok"); S.stack.pop(); go("ticket", {id: r.id, title: $("tk-title").value});
 }
-VIEWS.ticket = async p => `<div class="title ell">${esc(p.title || "تیکت")}</div><div class="card"><div class="msgs" id="tk-msgs"><div class="loading"><i class="spin"></i>…</div></div><div class="row mt" id="tk-reply-row"><input class="input grow" id="tk-reply" placeholder="پاسخ…" onkeydown="if(event.key==='Enter')replyTicket(${p.id})"><button class="btn pri" onclick="replyTicket(${p.id})">↩︎</button></div></div>`;
+VIEWS.ticket = async p => `<div class="title"><span class="ell2">${esc(p.title || "تیکت")}</span></div><div class="card"><div class="msgs" id="tk-msgs"><div class="loading"><i class="spin"></i>…</div></div><div class="row mt" id="tk-reply-row"><input class="input grow" id="tk-reply" placeholder="پاسخ…" onkeydown="if(event.key==='Enter')replyTicket(${p.id})"><button class="btn pri" aria-label="ارسال پاسخ" onclick="replyTicket(${p.id})">↩︎</button></div></div>`;
 AFTER.ticket = async p => {
   const r = await api("ticket_messages", {id: p.id}); const box = $("tk-msgs"); if (!box) return;
   box.innerHTML = r.ok ? (r.messages.length ? r.messages.map(m => `<div class="msg ${m.from === "ADMIN" ? "a" : "u"}">${esc(m.text)}<small>${m.from === "ADMIN" ? "پشتیبانی، " : ""}${when(m.at)}</small></div>`).join("") : `<div class="empty">پیامی نیست.</div>`) : `<div class="empty">${esc(r.error)}</div>`;

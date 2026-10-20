@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__, auth, jobs
@@ -83,8 +84,9 @@ def _index_html() -> str:
     return html
 
 
-# the public demo: what it never serves (a key pair is made on the first read, the API description and the log are for the operator, the rest reach out of the machine)
-_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher", "/api/backup/download", "/api/tokens", "/api/auth/security", "/api/servers/where", "/api/shopbot")
+# the public demo: what it never serves (a key pair is made on the first read, the API description and the log are for the operator, the rest reach out of the machine - the diagnose and the
+# PasarGuard certificate are GETs that open SSH sessions: a visitor must not be able to start those, one per request, toward the invented servers)
+_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher", "/api/backup/download", "/api/tokens", "/api/auth/security", "/api/servers/where", "/api/shopbot", "/api/autopilot/diagnose", "/pasarguard-cert")
 _DEMO_HITS: dict[str, list[float]] = {}
 _DEMO_LIMIT, _DEMO_WINDOW = 300, 60.0         # requests per client address per minute: a page load is a few dozen, a group of people looking is fine, a script hammering is not
 
@@ -235,7 +237,8 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app(run_jobs: bool = True) -> FastAPI:
-    app = FastAPI(title="Nikatel panel", version=__version__, lifespan=_lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
+    # (FastAPI's other two documentation pages - /redoc and /docs/oauth2-redirect - are switched off: they were answered to everyone, signed in or not, and nothing links to them)
+    app = FastAPI(title="Nikatel panel", version=__version__, lifespan=_lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None, swagger_ui_oauth2_redirect_url=None)
     app.state.run_jobs = run_jobs
     app.include_router(api_router)
     app.include_router(sub_api.router)                 # /sub/<token>: outside /api, public, signed
@@ -344,6 +347,31 @@ def create_app(run_jobs: bool = True) -> FastAPI:
                 logmod.request_id.reset(token)
 
         return error_json(500, "internal error (request id " + rid + ")", headers={"X-Request-Id": rid})
+
+    @app.exception_handler(OverflowError)
+    async def _too_big(request: Request, exc: OverflowError):
+        """An id, a port or a count beyond what the database holds (64 bits) is a wrong request, not a fault of the panel: every route that looks a row up by a number the caller typed would
+        otherwise answer 500 to `/api/servers/99999999999999999999`. Any other OverflowError is a real fault and goes the way of every unexpected error."""
+        if "SQLite" not in str(exc):
+            return await _any(request, exc)
+
+        return error_json(422, "a number in the request is too big", "invalid")
+
+    @app.exception_handler(IntegrityError)
+    async def _conflict(request: Request, exc: IntegrityError):
+        """Two requests that make the same thing at one moment both pass the "does it exist?" look; the database's UNIQUE (or a row that is gone for a FOREIGN KEY) refuses the second. That is a conflict
+        the caller can understand (409), not a fault of the panel. A NOT NULL or CHECK failure IS a fault and goes the way of every unexpected error."""
+        msg = str(getattr(exc, "orig", exc))
+
+        if "UNIQUE constraint failed" not in msg and "FOREIGN KEY constraint failed" not in msg:
+            return await _any(request, exc)
+
+        return error_json(409, "this already exists, or something it refers to is gone - another request changed it at the same moment; look at the list and try again", "conflict")
+
+    @app.exception_handler(autopilot.Busy)
+    async def _busy(request: Request, exc: autopilot.Busy):
+        """The same work is already running (a double click, a second tab): 409, as the routes that catch it themselves answer."""
+        return error_json(409, str(exc), "conflict")
 
     if WEB.exists():
         app.mount("/static", StaticFiles(directory=WEB), name="static")

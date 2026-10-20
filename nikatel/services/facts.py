@@ -2,6 +2,7 @@
 can be tested without a server."""
 from __future__ import annotations
 
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -34,7 +35,12 @@ def parse_facts(out: str) -> dict:
         if len(parts) < n:
             raise ValueError(f"no {key} in the answer")
 
-        return [float(x) for x in parts[:n]]
+        got = [float(x) for x in parts[:n]]
+
+        if not all(math.isfinite(x) for x in got):          # "inf" / "nan" parse as floats: a damaged answer is a failed sample, not a number that breaks the JSON of every page later
+            raise ValueError(f"{key} in the answer is not a number")
+
+        return got
 
     windows = []
 
@@ -55,15 +61,23 @@ def parse_facts(out: str) -> dict:
     dsk_total, dsk_used = nums("DISK", 2)
     l1, l5, l15, cores = nums("LOAD", 4)
     up = nums("UP", 1)[0]
-    conn = int(float(kv.get("CONN", "0").split()[0] or 0)) if kv.get("CONN", "").strip() else 0
+    try:
+        conn = int(float(kv.get("CONN", "0").split()[0] or 0)) if kv.get("CONN", "").strip() else 0
+    except (ValueError, OverflowError):
+        conn = 0
     host = kv.get("HOST", "").split()
     ram_used = max(0.0, mt - ma)
     top = kv.get("TOP", "").split()
     abuse = kv.get("ABUSE", "").strip()
 
     try:
+        busiest = f"{top[0]} {float(top[-1]):.0f}%" if len(top) >= 2 else ""
+    except (ValueError, OverflowError):          # (`ps` printed something else than "name cpu": a cosmetic field must not fail the whole sample)
+        busiest = ""
+
+    try:
         link = int(float(kv.get("LINK", "-1").split()[0]))          # the speed the network card reports, in Mbit/s; -1 when it does not say (most virtual servers)
-    except (ValueError, IndexError):
+    except (ValueError, IndexError, OverflowError):                 # ("Unknown!", an empty file, "inf")
         link = -1
 
     return {
@@ -88,7 +102,7 @@ def parse_facts(out: str) -> dict:
         "link_mbps": link if 0 < link <= 1_000_000 else None,           # the line of the server (the Bandwidth column of the Lab)
         "hostname": host[0] if host else "",
         "kernel": host[1] if len(host) > 1 else "",
-        "top": f"{top[0]} {float(top[-1]):.0f}%" if len(top) >= 2 else "",      # busiest process
+        "top": busiest,      # busiest process
         "abuse_rules": int(abuse) if abuse.isdigit() else 0,                   # Abuse-Defender DROP rules (0 = not installed)
     }
 
@@ -104,38 +118,63 @@ def _wake_tunnels() -> None:
 
 
 REBOOT_WAIT = 180          # seconds: a server that still answers with its old uptime this long after "Reboot" did not restart (the command failed): the mark goes
+REBOOT_GIVE_UP = 900       # seconds: a server that has not answered once this long after "Reboot" is not "rebooting" any more - it is down: the mark goes and the usual "does not answer" alarm is given
 
 
 PEAK_SECONDS = 7 * 86400          # the highest speed seen on a server is kept this long (the Bandwidth column shows it when the card does not report its speed)
 
 
-def _peak(srv, facts: dict) -> None:
-    """extra.peak = {"v": Mbit/s, "at": time}: the highest of the download and the upload seen at a sample, renewed when it is beaten or when it is a week old. Written only when it changes."""
-    cur = max(float(facts.get("rx_mbps") or 0), float(facts.get("tx_mbps") or 0))
-    p = (srv.extra or {}).get("peak") or {}
-    now = time.time()
+def _num(x, default: float = 0.0) -> float:
+    """A number out of a JSON field of `extra` (read back from the database, a restore, an older version): a string, null or a damaged value gives the default and never an exception that would end the sample."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return default
 
-    if cur > 0 and (cur >= float(p.get("v") or 0) or now - float(p.get("at") or 0) > PEAK_SECONDS):
+    return v if math.isfinite(v) else default
+
+
+def _peak(srv, facts: dict) -> None:
+    """extra.peak = {"v": Mbit/s, "at": time}: the highest of the download and the upload seen at a sample, renewed when it is beaten or when it is a week old (a week-old peak with nothing moving now is dropped:
+    it is no longer "the highest of the last week"). Written only when it changes."""
+    cur = max(_num(facts.get("rx_mbps")), _num(facts.get("tx_mbps")))
+    p = (srv.extra or {}).get("peak")
+    p = p if isinstance(p, dict) else {}
+    now = time.time()
+    old = bool(p) and now - _num(p.get("at")) > PEAK_SECONDS
+
+    if cur > 0 and (cur >= _num(p.get("v")) or old):
         ex = dict(srv.extra or {})
         ex["peak"] = {"v": round(cur, 1), "at": int(now)}
         srv.extra = ex
+    elif old:
+        ex = dict(srv.extra or {})
+        ex.pop("peak", None)
+        srv.extra = ex
+
+
+def _busy_of(srv) -> dict:
+    b = (srv.extra or {}).get("busy")
+    return b if isinstance(b, dict) else {}
 
 
 def _rebooting(srv) -> bool:
-    return (((srv.extra or {}).get("busy") or {}).get("what")) == "Rebooting"
+    return _busy_of(srv).get("what") == "Rebooting"
+
+
+def _since_reboot(srv) -> float:
+    return time.time() - _num(_busy_of(srv).get("at"))
 
 
 def _reboot_done(srv, facts: dict) -> None:
     """The "Rebooting" mark of a row goes when the server answers and its uptime is shorter than the time since the restart was asked (it has started again), or when it still answers with its old uptime
     long after (the command did not restart it). A server that answers in the first seconds, before it goes down, keeps the mark."""
-    b = ((srv.extra or {}).get("busy") or {})
-
-    if b.get("what") != "Rebooting":
+    if not _rebooting(srv):
         return
 
-    since = time.time() - (b.get("at") or 0)
+    since = _since_reboot(srv)
 
-    if since > REBOOT_WAIT or float(facts.get("uptime") or 0) < since + 30:
+    if since > REBOOT_WAIT or _num(facts.get("uptime")) < since + 30:
         ex = dict(srv.extra or {})
         ex.pop("busy", None)
         srv.extra = ex
@@ -187,7 +226,14 @@ def sample_server(server_id: int) -> None:
             srv.online = False
             srv.last_error = str(e)[:300]
 
-            if was_online and not _rebooting(srv):          # (a restart asked from the panel is no alarm: its row says "Rebooting")
+            if _rebooting(srv):          # (a restart asked from the panel is no alarm: its row says "Rebooting" - but only for so long)
+                if _since_reboot(srv) > REBOOT_GIVE_UP:
+                    ex = dict(srv.extra or {})
+                    ex.pop("busy", None)
+                    srv.extra = ex
+                    emit(db, "bad", "servers", f"Server {srv.name} did not come back {REBOOT_GIVE_UP // 60} minutes after the restart asked from the panel: {e}", srv.name)
+                    _wake_tunnels()
+            elif was_online:
                 emit(db, "bad", "servers", f"Server {srv.name} does not answer: {e}", srv.name)
                 _wake_tunnels()
 
@@ -209,12 +255,21 @@ def sample_server(server_id: int) -> None:
         log.info("sample ok name=%s cpu=%s ram=%s disk=%s", srv.name, facts["cpu"], facts["ram"], facts["disk"])
 
 
+def _sample_safely(server_id: int) -> None:
+    """One server must never stop the round: whatever it raises (a damaged answer, a locked database) is logged and the next server is sampled."""
+    try:
+        sample_server(server_id)
+    except Exception:  # the boundary of one item
+        log.exception("sample of server #%s crashed", server_id)
+
+
 def sample_all() -> None:
     with session() as db:
         ids = list(db.scalars(select(Server.id).where(Server.enabled.is_(True))))
 
-    with ThreadPoolExecutor(get_settings().ssh_workers) as ex:
-        list(ex.map(sample_server, ids))
-
-    with session() as db:
-        db.execute(delete(ServerSample).where(ServerSample.ts < int(time.time()) - KEEP_SAMPLES_SECONDS))
+    try:
+        with ThreadPoolExecutor(get_settings().ssh_workers) as ex:
+            list(ex.map(_sample_safely, ids))
+    finally:          # (the old samples go even when the round broke: a table that is never trimmed grows for ever)
+        with session() as db:
+            db.execute(delete(ServerSample).where(ServerSample.ts < int(time.time()) - KEEP_SAMPLES_SECONDS))

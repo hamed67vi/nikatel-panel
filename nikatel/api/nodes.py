@@ -80,10 +80,7 @@ def pasarguard_cert(server_id: int):
     """The public certificate of the PasarGuard node installed on this server (to set it in the PasarGuard panel)."""
     from ..services import extras
 
-    try:
-        return {"ok": True, **extras.pasarguard_cert(server_id)}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    return {"ok": True, **_wrap(extras.pasarguard_cert, server_id)}      # (a server that does not answer is a 502, not a 500)
 
 
 @router.post("/servers/{server_id}/install")

@@ -106,7 +106,12 @@ def console(server_id: int, command: str) -> dict:
 
 # ------------------------------------------------------------------ connect with a password
 def _pubkey() -> str:
-    return (get_settings().ssh_key.with_suffix(".pub") if get_settings().ssh_key.suffix else get_settings().ssh_key.parent / (get_settings().ssh_key.name + ".pub")).read_text().strip()
+    path = get_settings().ssh_key.with_suffix(".pub") if get_settings().ssh_key.suffix else get_settings().ssh_key.parent / (get_settings().ssh_key.name + ".pub")
+
+    try:
+        return path.read_text().strip()
+    except OSError:          # (no path in the sentence: it goes to the browser)
+        raise ValueError("the panel's SSH public key is missing or cannot be read - make the key pair first (Settings shows how); without it the panel cannot log in to a server") from None
 
 
 def connect(server_id: int, password: str) -> dict:

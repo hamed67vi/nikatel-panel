@@ -214,6 +214,9 @@ def ask(system: str, user: str, max_tokens: int = 700, timeout: float = 45, prov
     if not p["api_key"]:
         raise RuntimeError(f"no API key saved for {p['name']} (Settings → Api & Key)")
 
+    if not p["api_key"].isascii() or not p["api_key"].isprintable():      # a key goes into an HTTP header: a hidden or Persian character from the copy would raise UnicodeEncodeError (a 500 on Save)
+        raise RuntimeError(f"the {p['name']} key has a character that is not a letter, a digit or a sign (a hidden or non-English character from the copy?): copy it again")
+
     return (_ask_anthropic if p["kind"] == "anthropic" else _ask_openai)(p, system, user, max_tokens, timeout)
 
 

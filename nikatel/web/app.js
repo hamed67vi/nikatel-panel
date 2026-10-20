@@ -225,6 +225,8 @@ function renderSub() {
   const nop = k => k !== "settings" && state.page === "pgpanel" && window.labNoPanel && labNoPanel();      // (no panel yet: those tabs are dim and quiet)
   morphHtml(box, `<div class="tabs sub-tabs">${list.map(([k, label, , off]) => nop(k) ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true">${quiet(label)}</button>` : off === "off" ? `<button data-k="${k}" class="sub-off" disabled aria-disabled="true" title="Switched off for now: the important work comes first (roadmap #92)">${quiet(label)}</button>` : off === "act" ? `<button data-k="${k}" class="sub-act" onclick="subAct('${state.page}', '${k}')">${quiet(label)}</button>` : `<button data-k="${k}" class="${k === cur ? "on" : ""}" onclick="setSub('${state.page}', '${k}')">${quiet(label)}</button>`).join("")}</div>`);
   $("#subtitle").textContent = $("#subtitle").title = list.find(x => x[0] === cur)[2];
+  const bar = box.querySelector(".sub-tabs"), on = bar && bar.querySelector("button.on");      // a strip that scrolls sideways (a phone) brings the open tab into view - only when it is not fully there, so a strip the owner scrolled is not moved by the next redraw
+  if (on && bar.scrollWidth > bar.clientWidth + 1) { const b = bar.getBoundingClientRect(), r = on.getBoundingClientRect(); if (r.left < b.left || r.right > b.right) bar.scrollLeft += r.left - b.left - (b.width - r.width) / 2; }
 }
 function subSet(page, k) {      // what changes when a tab of a page is chosen (setSub = this and a redraw; the left menu calls it through go)
   if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = "";
@@ -617,15 +619,21 @@ document.addEventListener("mousedown", e => { const s = e.target.closest && e.ta
 document.addEventListener("keydown", e => { const s = e.target; if (!nkDdEl && s && s.matches && s.matches("select[data-dd]") && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); nkDdOpen(s); } }, true);
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
 const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
+/* The question goes at once but its invisible layer stays for a moment (.ask-out): the second click of a DOUBLE click on OK landed on the page under the button and opened the window of the row there (a server list
+   behind a "Remove ...?" box). The focus goes back to what had it, so the keyboard continues where it was. */
+function askLeave(el, opener) {
+  el.classList.add("ask-out"); clearTimeout(el.__t); el.__t = setTimeout(() => el.remove(), 450);
+  if (opener && opener !== document.body && document.body.contains(opener) && opener.focus) opener.focus({preventScroll: true});
+}
 function glassAsk(text, {input = false, value = "", danger, password = false, check = null, generate = true} = {}) {      // check = {label, note}: a tick under the text; the answer is then {checked} (or false on Cancel)
   return new Promise(resolve => {
     const old = $("#ask"); if (old) old.remove();
-    const el = document.createElement("div"); el.id = "ask";
+    const opener = document.activeElement, el = document.createElement("div"); el.id = "ask";
     const verb = (String(text).match(ASK_VERB) || [""])[0], bad = danger != null ? danger : /^(Remove|Delete|Reboot|Forget|Rebuild|Clear|Import)\b/i.test(text) || /cannot be undone|type [A-Z]+ to confirm/i.test(text);
     const label = input ? "OK" : verb ? verb[0].toUpperCase() + verb.slice(1).toLowerCase() : "OK";
     el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic ${bad ? "bad" : ""}">${input ? "✎" : bad ? "⚠" : /^(Update|Upgrade)$/i.test(verb) ? "🔄" : "?"}</div><div class="ask-text">${esc(text)}</div>${check ? `<label class="ask-check"><input type="checkbox" class="ask-cb"><span>${esc(check.label)}${check.note ? `<small>${esc(check.note)}</small>` : ""}</span></label>` : ""}${input ? `<div class="ask-field ${password ? "pw" : ""}">${password ? `<i class="ask-lk">${SI.lock(false)}</i>` : ""}<input class="ask-in" type="${password ? "password" : "text"}" value="${esc(value)}" autocomplete="${password ? "new-password" : "off"}" data-lpignore="true" data-1p-ignore spellcheck="false">${password ? `<button type="button" class="ask-eye" title="Show the password" aria-label="Show or hide the password"><svg viewBox="0 0 24 24"><path class="eye-o" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-o" cx="12" cy="12" r="3"/><path class="eye-x" d="M3 3l18 18"/></svg></button>${generate === false ? "" : '<button type="button" class="ask-gen" title="Make a strong password and show it">Generate</button>'}` : ""}</div>${password && generate !== false ? `<small class="ask-hint">At least 8 characters. Empty = the panel makes a strong one and shows it once.</small>` : ""}` : ""}<div class="ask-act"><button class="ask-no">Cancel</button><button class="ask-yes ${bad ? "danger-fill" : "pri"}">${esc(label)}</button></div></div></div>`;
     document.body.appendChild(el);
-    const inp = $(".ask-in", el), done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
+    const inp = $(".ask-in", el), done = v => { document.removeEventListener("keydown", key, true); askLeave(el, opener); resolve(v); };
     const cb = $(".ask-cb", el), yes = () => done(input ? inp.value : cb ? {checked: cb.checked} : true), no = () => done(input ? null : false);
     function key(e) { if (e.key === "Escape") { e.stopPropagation(); no(); } else if (e.key === "Enter" && (input || e.target.tagName !== "BUTTON")) { e.preventDefault(); e.stopPropagation(); yes(); } }
     document.addEventListener("keydown", key, true);
@@ -642,10 +650,10 @@ function glassAsk(text, {input = false, value = "", danger, password = false, ch
 function glassChoice(text, choices, o) {
   return new Promise(resolve => {
     const old = $("#ask"); if (old) old.remove();
-    const el = document.createElement("div"); el.id = "ask";
+    const opener = document.activeElement, el = document.createElement("div"); el.id = "ask";
     el.innerHTML = `<div class="overlay ask-ov"><div class="modal ask-box"><div class="ask-ic">?</div>${o && o.html ? `<div class="ask-text mv-plan">${o.html}</div>` : `<div class="ask-text">${esc(text)}</div>`}<div class="ask-act ask-choices">${choices.map((c, i) => `<button class="${c.cls || ""}" data-i="${i}">${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ""}</button>`).join("")}<button class="ask-no">Cancel</button></div></div></div>`;
     document.body.appendChild(el);
-    const done = v => { document.removeEventListener("keydown", key, true); el.remove(); resolve(v); };
+    const done = v => { document.removeEventListener("keydown", key, true); askLeave(el, opener); resolve(v); };
     function key(e) { if (e.key === "Escape") { e.stopPropagation(); done(null); } }
     document.addEventListener("keydown", key, true);
     el.querySelectorAll("button[data-i]").forEach(b => { b.onclick = () => done(choices[+b.dataset.i].v); });
@@ -2043,7 +2051,7 @@ const tkWorking = w => `<div class="tk run"><div class="tk-head"><span class="tk
 window.apTasksTab = k => { try { localStorage.setItem("nk.aptab", k); } catch (e) { /* private window */ } const card = $(".ap-tasks"); if (!card) return; card.querySelectorAll(".ap-ttabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k)); ["now", "done", "moves", "ana", "know"].forEach(p => { const el = $("#ap-t-" + p); if (el) el.classList.toggle("hidden", p !== k); }); const bd = $("#ap-t-" + k); if (bd) bd.scrollTop = 0; fxFit(); if (k === "ana") anaLoad(); if (k === "know") knLoad(); };
 /* ---- Tunnel Doctor → Best today (a tab of the Doctor's box): the tunnels ranked by how they behaved (a check every minute, the latency / jitter / loss measured again every half hour) ---- */
 state.bestHours = +localStorage.getItem("nk.best.h") || 24;
-window.bestRange = h => { state.bestHours = h; try { localStorage.setItem("nk.best.h", h); } catch (e) { /* private window */ } document.querySelectorAll(".bt-range button").forEach(b => b.classList.toggle("on", b.textContent.trim() === ({6: "6 hours", 24: "24 hours", 168: "7 days"})[h])); bestLoad(); };
+window.bestRange = h => { state.bestHours = h; try { localStorage.setItem("nk.best.h", h); } catch (e) { /* private window */ } document.querySelectorAll(".bt-range button").forEach(b => b.classList.toggle("on", +b.dataset.h === h)); bestLoad(); };      // (the lit button is found by its number, not by its words: in Persian no button said "6 hours" and none was lit)
 window.bestLoad = async () => {
   const box = $("#ana-best"); if (!box) return;
   const d = await api(`/api/besttoday?hours=${state.bestHours}`).catch(() => null); if (!d || !$("#ana-best")) return;

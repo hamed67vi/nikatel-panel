@@ -4,6 +4,7 @@ never returns them in clear."""
 from __future__ import annotations
 
 import copy
+import threading
 from typing import Any
 
 from ..db import session
@@ -100,12 +101,15 @@ def get(key: str) -> dict:
         return merged
 
 
+_PUT_LOCK = threading.Lock()          # put() reads the document, changes some fields and writes ALL of it back: two puts at the same moment (a job and a page) must not lose each other's fields
+
+
 def put(key: str, changes: dict) -> dict:
     """Merge `changes` into the stored document. An empty string for a secret field keeps the old value."""
     if key not in DEFAULTS:
         raise ValueError(f"unknown settings key {key!r}")
 
-    with session() as db:
+    with _PUT_LOCK, session() as db:
         row = db.get(Setting, key)
         current = copy.deepcopy(DEFAULTS[key])
 

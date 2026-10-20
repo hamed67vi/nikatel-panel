@@ -75,7 +75,7 @@
     var n = heads.length;
 
     return heads.map(function (th, i) {
-      var t = norm(th.textContent), car = cols[i] || th, w, kind, v, tool, act, d, dp;
+      var t = norm(window.I18N && window.I18N.source ? window.I18N.source(th) : th.textContent), car = cols[i] || th, w, kind, v, tool, act, d, dp;      // (the header as the code wrote it: in Persian its text has no a-z letters, so every column was "no title" - none ever dropped and the name column was squeezed to a lamp)
 
       if (car.__w0 === undefined) car.__w0 = car.style.width;
 

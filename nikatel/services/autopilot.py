@@ -458,6 +458,11 @@ def _wait(aid: int, limit: int = 900) -> tuple[bool, list[str]]:
     return False, ["timed out"]
 
 
+class Busy(ValueError):
+    """The same work is already running, so a second start is refused. A ValueError for the callers that turn those into a 400; a route that does not catch it
+    gets the app's own handler (main.py): 409, never a 500 for a double click."""
+
+
 def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manual", allow_read_only: bool = False) -> int:
     """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id. `source` says who started it (manual / auto).
     `allow_read_only`: work that only reads the servers (a health check, a measurement) may run while the panel is read-only."""
@@ -466,7 +471,7 @@ def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manu
 
     with _LOCK:
         if label in _BUSY:
-            raise ValueError("a smart repair of this tunnel is already running")
+            raise Busy("a smart repair of this tunnel is already running")
 
         with session() as db:
             entry = ActionLog(ref=label, action=action, source=source, story=["Starting…"])

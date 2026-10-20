@@ -226,9 +226,9 @@ def sub_delete(sid: int):
 # ---- probe settings
 class ProbeIn(BaseModel):
     api_url: str = ""
-    api_token: str = ""      # empty keeps the stored one
-    standby: list[dict] = []
-    server_id: int = 0
+    api_token: str = Field("", max_length=512)      # empty keeps the stored one
+    standby: list[dict] = Field([], max_length=10)
+    server_id: int = Field(0, ge=0, le=2 ** 31 - 1)
 
 
 @router.get("/settings/probe")

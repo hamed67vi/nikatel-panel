@@ -1,3 +1,5 @@
+import threading
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -9,6 +11,7 @@ from ..services import panels, uptime
 from ..services import profiles as svc
 
 router = APIRouter(tags=["profiles"], dependencies=[Depends(current_user)])
+_ADD_LOCK = threading.Lock()
 
 
 class ProfilesIn(BaseModel):
@@ -49,7 +52,7 @@ def add_profiles(body: ProfilesIn):
 
     added, skipped = [], []
 
-    with session() as db:
+    with _ADD_LOCK, session() as db:          # (held until the commit: a second click at the same moment sees the profile of the first and is skipped - there is no UNIQUE on a profile)
         for i in dict.fromkeys(ids):
             try:
                 p = svc.create(db, kind, server_id=None if kind == "node" else i, panel_id=body.panel_id, node_id=i if kind == "node" else None, tag=body.tag)
