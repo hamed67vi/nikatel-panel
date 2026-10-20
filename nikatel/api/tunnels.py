@@ -39,16 +39,20 @@ def build(body: BuildIn):
         transport = body.transport or ("tcpmux" if kind == "backhaul" else "")     # an empty transport means the default of the engine
         opts = dict(body.opts)
 
+        fallback: list[str] = []
+
         if kind == "auto":
             from ..services import knowledge, license, tunnel_test
 
             if body.iran_id == 0:
                 raise ValueError("Best of the day is chosen for a pair of servers: pick the Iran server first (the smart choice of the Iran server cannot know the pair yet)")
 
-            key, why = knowledge.best_kind(body.iran_id, body.foreign_id, allowed=license.tunnel_kind_allowed)
+            picks, why = knowledge.best_kinds(body.iran_id, body.foreign_id, allowed=license.tunnel_kind_allowed, limit=knowledge.AUTO_TRIES)
 
-            if not key:
+            if not picks:
                 raise ValueError(why)
+
+            (key, why), fallback = picks[0], [k for k, _ in picks[1:]]          # (a build that ends badly - a tunnel that carries nothing is refused - goes on to the next best type)
 
             kind, transport = tunnel_test.kind_parts(key)
 
@@ -82,11 +86,11 @@ def build(body: BuildIn):
         if any(len(n) > 253 or not re.fullmatch(r"[a-z0-9.*-]+", n) for n in names):
             raise ValueError("a DNS name may only have letters, digits, dots and dashes")
 
-        if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names:
+        if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names or fallback:
             from ..services import create
 
             aid = create.start(body.iran_id, body.foreign_id, body.ports, kind, transport, opts if kind == "backhaul" else other_opts,
-                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units)
+                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units, fallback_kinds=fallback)
         elif kind == "backhaul":
             aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=opts)
         else:

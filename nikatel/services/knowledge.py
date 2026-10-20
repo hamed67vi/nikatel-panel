@@ -117,34 +117,44 @@ def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict
     return sorted(out, key=lambda r: (r["measure"] != "full", -(r["score"] or 0), PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
 
 
-def best_kind(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int | None = None) -> tuple[str, str]:
-    """(the type, the sentence that says why) a NEW tunnel between this pair gets in the mode "Best of the day" (the owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it"): the first of `ranked` - the types
-    that connect on this pair, a fresh full measurement before a latency-only one, each by score - that the licence allows. Nothing measured on this pair yet: the Doctor's first choice for a new pair (never a WireGuard type: it
-    needs a package that nobody has put on the servers). ('', why) when no type may be built."""
+AUTO_TRIES = 3          # the types "Best of the day" tries one after the other when a build ends badly (the owner, 2026-10-20: a tunnel that carried nothing was called ready)
+
+
+def _why_good(r: dict, now: int) -> str:
+    when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
+    return f"{r['kind']}: the best that connects between these two servers - score {r['score'] if r['score'] is not None else '-'}{when}"
+
+
+def _why_weak(r: dict, now: int) -> str:
+    when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
+    down = f"{float(r['down_mbps']):g} Mb/s" if r.get("down_mbps") is not None else f"score {r['score'] if r['score'] is not None else '-'}"
+    return f"{r['kind']}: no type scored well between these two servers - this is the best of the weak ones ({down}{when})"
+
+
+def best_kinds(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int | None = None, limit: int = 1) -> tuple[list[tuple[str, str]], str]:
+    """([(type, the sentence that says why)] best first, the sentence when the list is empty): the types a NEW tunnel between this pair gets in the mode "Best of the day" (the owner, 2026-10-19: "a tunnel mode that
+    puts the best tunnel of the day on it"). First the types that connect on this pair - a fresh full measurement before a latency-only one, each by score - then the weak ones, by what they CARRIED (the owner,
+    2026-10-20: the automatic type chose a Paqet that had carried 4.9 Mb/s over types that had carried 66 and 76), what the licence allows. Nothing measured on this pair yet: the Doctor's first choice for a new pair
+    (never a WireGuard type: it needs a package that nobody has put on the servers). The build tries them one after the other (`create.start`, `fallback_kinds`)."""
     now = now or int(time.time())
     p = pair(iran_id, foreign_id)
+    picks = [(r["kind"], _why_good(r, now)) for r in ranked(p, now) if allowed(r["kind"])][:limit]
+    weak = sorted((r for r in ranked(p, now, include_poor=True) if allowed(r["kind"]) and r["kind"] not in {k for k, _ in picks}),
+                  key=lambda r: (r.get("down_mbps") is not None, float(r.get("down_mbps") or 0), r.get("score") or 0), reverse=True)
+    picks += [(r["kind"], _why_weak(r, now)) for r in weak][: max(0, limit - len(picks))]
 
-    for r in ranked(p, now):
-        if allowed(r["kind"]):
-            when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
-            return r["kind"], f"{r['kind']}: the best that connects between these two servers - score {r['score'] if r['score'] is not None else '-'}{when}"
-
-    weak = [r for r in ranked(p, now, include_poor=True) if allowed(r["kind"])]
-
-    if weak:          # (the owner, 2026-10-20: "I pressed the automatic best type and it chose Paqet - in the tests BackPack was the best, and you said Paqet is weak"): on a pair where NOTHING scored well every kind that carried
-        # data is "poor", and the freshest FULL measurement used to win - a Paqet that carried 4.9 Mb/s was chosen over a type that had carried 66 and 76. The best of the weak ones is the one that CARRIED the most.
-        r = max(weak, key=lambda r: (r.get("down_mbps") is not None, float(r.get("down_mbps") or 0), r.get("score") or 0))
-        when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
-        down = f"{float(r['down_mbps']):g} Mb/s" if r.get("down_mbps") is not None else f"score {r['score'] if r['score'] is not None else '-'}"
-        return r["kind"], f"{r['kind']}: no type scored well between these two servers - this is the best of the weak ones ({down}{when})"
+    if picks:
+        return picks, ""
 
     kinds, _ = plan_for(iran_id, foreign_id, "", False, False, now=now)
+    first = [(k, f"{k}: nothing is measured between these two servers yet - the Doctor's first choice for a new pair") for k in kinds if allowed(k) and linkmodels.split_kind(k)[0] != "wg"][:limit]
+    return first, ("" if first else "no tunnel type may be built here (the licence)")
 
-    for k in kinds:
-        if allowed(k) and linkmodels.split_kind(k)[0] != "wg":
-            return k, f"{k}: nothing is measured between these two servers yet - the Doctor's first choice for a new pair"
 
-    return "", "no tunnel type may be built here (the licence)"
+def best_kind(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int | None = None) -> tuple[str, str]:
+    """(the type, the sentence that says why) of the first of `best_kinds`; ('', why) when no type may be built."""
+    picks, why = best_kinds(iran_id, foreign_id, allowed, now, 1)
+    return picks[0] if picks else ("", why)
 
 
 FASTER_RATIO = 5.0              # a type counts as FASTER for a very slow tunnel when its download on this pair was this many times what the tunnel gives (its test, or what its users carry, whichever is more) ...
@@ -158,6 +168,28 @@ def faster_kinds(pair: dict | None, now: int, current: str, baseline: float, all
     that the licence allows - the fastest first (a tie by score). Empty when the memory knows none: nothing is guessed."""
     need = max(FASTER_MIN_MBPS, ratio * max(float(baseline or 0), 1.0))
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need and now - int(r.get("at") or 0) <= FASTER_FRESH and allowed(r["kind"])]
+    return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r["score"] or 0)))
+
+
+UPGRADE_RATIO = 3.0             # a type counts as a better one for a tunnel that WORKS when the pair test gave it this many times what the pair test gave the running type ...
+UPGRADE_MIN_GAIN = 100.0        # ... and at least this many Mb/s more (a few Mb/s of difference is no reason to touch a running tunnel)
+UPGRADE_MAX_LOSS = 1.0          # ... and it was stable in its test: at most this % of packets lost
+
+
+def upgrade_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[dict]:
+    """Pure: the types the Doctor's memory of the pair knows to be clearly better than the RUNNING type, for a tunnel that is not slow at all (the owner, 2026-10-20: "it set these types - are they the best? after it
+    sets them it must test whether a better and more stable one exists"). Both numbers are FULL pair tests of the same kind of measurement, fresh (FASTER_FRESH): the running type's own, and the other's; the other
+    carried at least UPGRADE_RATIO times as much and UPGRADE_MIN_GAIN Mb/s more, lost at most UPGRADE_MAX_LOSS % and scored at least as well; the licence allows it. The fastest first. Empty when the running type
+    has no fresh full test on this pair (nothing to compare with: nothing is guessed)."""
+    full = (((pair or {}).get("kinds") or {}).get(current) or {}).get("full") or {}
+
+    if full.get("down_mbps") is None or now - int(full.get("at") or 0) > FASTER_FRESH:
+        return []
+
+    base = float(full["down_mbps"])
+    need = max(base * UPGRADE_RATIO, base + UPGRADE_MIN_GAIN)
+    rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need
+            and now - int(r.get("at") or 0) <= FASTER_FRESH and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS and (r.get("score") or 0) >= (full.get("score") or 0) and allowed(r["kind"])]
     return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r["score"] or 0)))
 
 

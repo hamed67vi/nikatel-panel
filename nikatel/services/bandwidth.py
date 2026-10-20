@@ -537,6 +537,11 @@ def run() -> None:
                 _investigate_later(tid)
             elif bw.get("state") == "slow":
                 _retype_later(tid)                                  # a tunnel that is ALREADY very slow (judged before an update, or a change that could not start): tried again at every watch, until it is changed
+            elif bw.get("state") in ("ok", "learning", "low"):
+                try:
+                    _upgrade_check(tid)                             # (a tunnel that works: is there a better type known for its pair?)
+                except Exception:
+                    log.exception("the look for a better type of tunnel %s failed", tid)
         except (ValueError, RuntimeError, SSHError) as e:
             log.info("bandwidth of tunnel %s not measured: %s", tid, str(e)[:140])
             _failed(tid, str(e))
@@ -745,6 +750,39 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
 
     say(f"The Doctor does it by itself ({actions.doctor_mode()} mode): {cur} → {r['kind']}.")
     doctor._run_retype(aid, tunnel_id, r["kind"], cur, why, auto=True)
+
+
+UPGRADE_EVERY = 6 * 3600         # a tunnel is looked at for a better type this often (the look reads the Doctor's memory only: no server is asked)
+_UPGRADE_AT: dict[int, int] = {}
+
+
+def _upgrade_check(tunnel_id: int) -> None:
+    """After a measurement of a tunnel that is fine (the owner, 2026-10-20: "after it sets the types it must test whether a better and more stable one exists"): when the Doctor's memory of the pair knows a type that
+    carried clearly more in the same pair test, and was stable in it, the Doctor PUTS IT ON ITS PAGE as a suggestion (one click: Change type, the old type is put back when the new one does not build). It does not
+    change a running tunnel by itself. The memory is kept fresh by the night survey and by "Test this pair"."""
+    from . import actions, autopilot, doctor, knowledge, license
+
+    now = int(time.time())
+
+    if now - _UPGRADE_AT.get(tunnel_id, 0) < UPGRADE_EVERY or actions.doctor_mode() == "off":
+        return
+
+    _UPGRADE_AT[tunnel_id] = now
+    snap = autopilot._snapshot(tunnel_id)
+    cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+    p = knowledge.pair(snap["iran_id"], snap["foreign_id"])
+    rows = knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
+
+    if not rows or any(x.get("tunnel") == snap["name"] and x.get("kind") != "type" for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
+        return
+
+    r = rows[0]
+    base = float((((p or {}).get("kinds") or {}).get(cur) or {}).get("full", {}).get("down_mbps") or 0)
+    age = max(0, (now - int(r.get("at") or now)) // 3600)
+    why = (f"In the pair test of {snap['iran_name']} ⇄ {snap['foreign_name']} {cur} carried {base:.0f} Mb/s; {r['kind']} carried {float(r['down_mbps']):.0f} Mb/s, "
+           f"lost {float(r.get('loss_pct') or 0):g} % and scored {r['score']} ({age} h ago). Nothing is wrong with {cur}: this is a better type known for this pair.")
+    doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": base, "memory_mbps": r["down_mbps"], "upgrade": True})
+    log.info("a better type for tunnel %s: %s -> %s", tunnel_id, cur, r["kind"])
 
 
 def measure_start(tunnel_id: int) -> int:

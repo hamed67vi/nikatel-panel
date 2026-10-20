@@ -240,7 +240,7 @@ def smart_test(foreign_id: int, ports: str, kind: str) -> int:
 
 
 def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, opts: dict, replace_ids: list[int], dns_follow: bool,
-          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None, replace_units: list[str] | None = None) -> int:
+          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None, replace_units: list[str] | None = None, fallback_kinds: list[str] | None = None) -> int:
     _ports(ports)                                   # a sentence for a bad list, before anything starts
     replace_units = [u for u in (replace_units or []) if parse_backhaul_unit(u)]
     dns_names = [n.strip().lower() for n in (dns_names or []) if n.strip()] if failover.ENABLED else []
@@ -310,28 +310,34 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
             autopilot._say(aid, f"Removed {name}: " + "; ".join(res))
 
         chosen = 0
+        attempts = [(kind, transport, opts)] + [tunnel_test.build_args(k) for k in (fallback_kinds or [])]          # ("Best of the day": the next best types of the pair, when the first one does not work)
 
         for n, cand in enumerate(candidates):
             with session() as db:
                 srv = db.get(Server, cand)
                 iname = srv.name if srv is not None else str(cand)
 
-            autopilot._say(aid, f"{'Trying' if n else 'Building'} {kind} · {transport or 'default'} {iname} ⇄ {fname}, ports {ports}")
+            for k_n, (a_kind, a_transport, a_opts) in enumerate(attempts):
+                autopilot._say(aid, f"{'Trying' if n or k_n else 'Building'} {a_kind} · {a_transport or 'default'} {iname} ⇄ {fname}, ports {ports}")
 
-            try:
-                if kind == "backhaul":
-                    build_aid = builder.start_build(cand, foreign_id, ports, transport, mtu, keepalive, nodelay=nodelay, opts=opts)
-                else:
-                    build_aid = build_other.start_build(cand, foreign_id, ports, kind, transport, opts, measure=measure)
-            except ValueError as e:
-                autopilot._say(aid, f"{iname}: skipped - {str(e)[:140]}")
-                continue
+                try:
+                    if a_kind == "backhaul":
+                        build_aid = builder.start_build(cand, foreign_id, ports, a_transport, mtu, keepalive, nodelay=nodelay, opts=a_opts)
+                    else:
+                        build_aid = build_other.start_build(cand, foreign_id, ports, a_kind, a_transport, a_opts, measure=measure)
+                except ValueError as e:
+                    autopilot._say(aid, f"{iname}: skipped - {str(e)[:140]}")
+                    break
 
-            if _follow(aid, build_aid):
-                chosen = cand
+                if _follow(aid, build_aid):
+                    chosen = cand
+                    break
+
+                what = f" {a_kind} · {a_transport or 'default'}" if len(attempts) > 1 else ""
+                autopilot._say(aid, f"{iname}:{what} did not work" + (" - trying the next type" if k_n < len(attempts) - 1 else " - trying the next Iran server" if n < len(candidates) - 1 else ""))
+
+            if chosen:
                 break
-
-            autopilot._say(aid, f"{iname}: did not work" + (" - trying the next Iran server" if n < len(candidates) - 1 else ""))
 
         if not chosen:
             autopilot._say(aid, "The build did not succeed." + (" The removed tunnel(s) are not rebuilt: build again, or on another server." if replace else ""), done=True, ok=False)

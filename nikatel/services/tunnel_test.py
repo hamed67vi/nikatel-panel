@@ -414,6 +414,22 @@ def kind_link(kind: str) -> str:
     return link if link and link != "gre" else "gre"
 
 
+def build_args(key: str) -> tuple[str, str, dict]:
+    """A pair-test kind -> what a Create tunnel build takes: (the engine kind of the form, the transport, the options): "fou:tcpmux" -> ("backhaul", "tcpmux", {"link": "fou"}), "bp:wssmux" -> ("backpack", "wssmux", {}).
+    The same turn of a key into a build that the API makes for the automatic type (a WireGuard link: the owner asked, the tools may be installed)."""
+    kind, transport = kind_parts(key)
+    link = kind_link(key)
+    opts: dict = {}
+
+    if kind == "backhaul" and link != "gre":
+        opts["link"] = link
+
+        if link == "wg":
+            opts["install_wg"] = True
+
+    return kind, transport, opts
+
+
 def kind_parts(kind: str) -> tuple[str, str]:
     """A test kind -> (builder kind, transport). Backhaul transports keep their bare key; "wg:tcpmux", "fou:tcpmux", "ipsec:tcp" ... are Backhaul over another link (`kind_link`)."""
     if kind in ("tcpmux", "tcp", "wsmux", "wssmux"):

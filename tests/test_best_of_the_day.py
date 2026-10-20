@@ -37,23 +37,25 @@ def test_a_pair_that_nobody_measured_gets_the_first_choice_for_a_new_pair_and_ne
 
 
 def test_the_build_with_kind_auto_builds_the_type_that_was_chosen_and_says_which(client, monkeypatch):
+    from nikatel.services import create
+
     ir, fr = two_servers("bk3")
     calls = []
     monkeypatch.setattr(builder, "start_build", lambda *a, **k: calls.append(("builder", a, k)) or 11)
     monkeypatch.setattr(build_other, "start_build", lambda *a, **k: calls.append(("other", a, k)) or 12)
+    monkeypatch.setattr(create, "start", lambda *a, **k: calls.append(("create", a, k)) or 13)
     r = client.post("/api/tunnels", json={"iran_id": 0, "foreign_id": fr, "ports": "8443", "kind": "auto", "transport": "best"})
     assert r.status_code == 400 and "pick the Iran server" in r.json()["error"]                                            # (the pair must be known)
 
-    measured(ir, fr, "tcpmux", 60)
-    measured(ir, fr, "bp:wssmux", 90)
+    measured(ir, fr, "bp:wssmux", 90)                                                                                     # ONE type known: the build goes straight to it
     r = client.post("/api/tunnels", json={"iran_id": ir, "foreign_id": fr, "ports": "8443", "kind": "auto", "transport": "best", "opts": {"sni_domain": "x.example"}})
     assert r.status_code == 202 and r.json()["id"] == 12 and r.json()["kind"] == "backpack" and r.json()["transport"] == "wssmux" and "bp:wssmux" in r.json()["why"]
     assert calls[-1][0] == "other" and calls[-1][1][3:5] == ("backpack", "wssmux") and calls[-1][2]["measure"] == "full" and "sni_domain" not in calls[-1][1][5]      # (the options of the form are not the chosen type's: its defaults)
 
-    measured(ir, fr, "tcpmux", 99)
+    measured(ir, fr, "tcpmux", 99)                                                                                        # TWO: the first is built, the second stands behind it (a build that ends badly goes on to it)
     r = client.post("/api/tunnels", json={"iran_id": ir, "foreign_id": fr, "ports": "8443", "kind": "auto", "transport": "best"})
-    assert r.status_code == 202 and r.json()["id"] == 11 and r.json()["kind"] == "backhaul" and r.json()["transport"] == "tcpmux"
-    assert calls[-1][0] == "builder" and calls[-1][1][3] == "tcpmux"                                                    # (a Backhaul type goes the Backhaul way, over GRE)
+    assert r.status_code == 202 and r.json()["id"] == 13 and r.json()["kind"] == "backhaul" and r.json()["transport"] == "tcpmux"
+    assert calls[-1][0] == "create" and calls[-1][1][3:5] == ("backhaul", "tcpmux") and calls[-1][2]["fallback_kinds"] == ["bp:wssmux"]
 
     r = client.post("/api/tunnels", json={"iran_id": ir, "foreign_id": fr, "ports": "8443", "kind": "nonsense"})
     assert r.status_code == 422                                                                                          # (only the five engines and auto)

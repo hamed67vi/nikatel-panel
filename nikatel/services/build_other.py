@@ -108,6 +108,21 @@ def parse_probe(out: str) -> dict:
     raise RuntimeError("the test door did not answer: " + str(out)[-160:])
 
 
+DEAD_MBPS = 0.5          # a download under this moved NOTHING (the Doctor's own line, bandwidth.STALL_MBPS)
+
+
+def dead_download(q: dict) -> bool:
+    """Pure: did the measurement through the tunnel's test door carry NOTHING toward the customers - the eight connections and, when it was measured, the one connection, all under DEAD_MBPS (the owner,
+    2026-10-20: a Paqet that showed "one connection: down 0.0 up 99.0" was called ready)?"""
+    d = (q or {}).get("down_mbps")
+
+    if d is None or float(d) >= DEAD_MBPS:
+        return False
+
+    d1 = q.get("down1_mbps")
+    return d1 is None or float(d1) < DEAD_MBPS
+
+
 def quality_score(q: dict) -> int:
     """0-100: speed counts most, then latency, jitter and loss. The speed is what an Iranian CUSTOMER gets - the download (foreign -> Iran), eight connections together and one connection by itself - and the upload only up to the download
     (real tests, 2026-10-16: the "upload" of a reverse tunnel ran at 700 - 2700 Mb/s over a path that carries 100 and made BackPack look the best while a customer downloaded at 10 Mb/s per connection)."""
@@ -901,6 +916,10 @@ def _build(b: Build) -> None:
         direction, tlabel = ("forward" if fwd else "reverse"), "Chisel · " + ("forward " if fwd else "") + ("TLS WebSocket" if tls else "WebSocket")
 
     _measure(b, iran, key)
+
+    if b.measure == "full" and not is_temp(b.name) and not b.standby_of and dead_download(b.quality):          # (a pair test or a standby keeps its number: only the tunnel the owner asked for is refused)
+        raise RuntimeError("the tunnel is up but carries no download under load (the test door moved "
+                           f"{b.quality.get('down_mbps')} Mb/s with 8 connections and {b.quality.get('down1_mbps')} with one): it is not accepted - everything it made is removed")
 
     with session() as db:
         t = Tunnel(name=b.name, enabled=not is_temp(b.name) and not b.standby_of, type=eng, transport=b.transport if b.kind != "backpack_direct" else f"l3:{b.transport}", engine=eng,

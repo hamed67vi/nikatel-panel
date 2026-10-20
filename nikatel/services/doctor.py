@@ -108,6 +108,12 @@ def suggestion_valid(e: dict, tunnel: dict | None, saturated: set[int], now: int
     if e.get("kind") == "resources":
         return "" if int(e.get("from_id") or 0) in saturated else f"{e.get('from') or 'the server'} is no longer exhausted"
 
+    if e.get("kind") == "type" and e.get("upgrade"):             # (a better type known for a tunnel that WORKS: it stands while the tunnel runs the same type, a week - then the look asks again)
+        if tunnel.get("kind") and e.get("now_kind") and tunnel["kind"] != e["now_kind"]:
+            return f"{e.get('tunnel')} runs as {tunnel['kind']} now, not as {e['now_kind']}"
+
+        return "" if now - int(e.get("at") or now) < 7 * 86400 else "the suggestion is a week old: the Doctor looks again"
+
     if e.get("kind") == "type":                                  # (a very slow tunnel is UP and clean all the time: the rule below would withdraw it at once; this one stands until the speed is back or the type was changed)
         if tunnel.get("kind") and e.get("now_kind") and tunnel["kind"] != e["now_kind"]:
             return f"{e.get('tunnel')} runs as {tunnel['kind']} now, not as {e['now_kind']}"
