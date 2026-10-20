@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck, is_standby, is_temp
-from ..services import analyst, builder, livebw, standby
+from ..services import analyst, builder, linkmodels, livebw, standby
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -19,7 +19,7 @@ class BuildIn(BaseModel):
     foreign_id: int
     ports: str = Field(min_length=1, max_length=300)
     kind: str = Field("backhaul", pattern=r"^(auto|backhaul|backpack|backpack_direct|paqet|chisel)$")          # auto = "Best of the day": the panel picks the type that connects best between the two servers (knowledge.best_kind)
-    transport: str = Field("tcpmux", pattern=r"^[a-z0-9:]{0,16}$")
+    transport: str = Field("tcpmux", pattern=r"^[a-z0-9:]{0,24}$")
     mtu: int = Field(0, ge=0, le=1476)
     keepalive: int = Field(75, ge=10, le=600)
     nodelay: bool = True
@@ -60,12 +60,12 @@ def build(body: BuildIn):
         if kind == "backhaul" and ":" in transport:         # "wg:tcpmux" / "fou:tcpmux" / "ipsec:tcp" ...: Backhaul over another link (the kinds of the pair test)
             link, _, transport = transport.partition(":")
 
-            if link not in builder.LINKS or link == "gre":
-                raise ValueError("the link of a Backhaul tunnel is GRE (the default) or one of: " + ", ".join(k for k in builder.LINKS if k != "gre"))
+            if link not in linkmodels.ALL_LINKS or link == "gre":
+                raise ValueError("the link of a Backhaul tunnel is GRE (the default) or one of: " + ", ".join(k for k in linkmodels.ALL_LINKS if k != "gre"))
 
             opts["link"] = link
 
-            if link == "wg":
+            if link in builder.NEEDS_WG_TOOL:
                 opts["install_wg"] = True                        # the owner asked for it: wireguard-tools may be installed (apt) on a server that lacks it
 
         if kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
@@ -109,7 +109,7 @@ class PrecheckIn(BaseModel):
 class SmartTestIn(BaseModel):
     foreign_id: int
     ports: str = Field(min_length=1, max_length=300)
-    kind: str = Field("tcpmux", pattern=r"^[a-z0-9:]{1,16}$")
+    kind: str = Field("tcpmux", pattern=r"^[a-z0-9:]{1,24}$")
 
 
 @router.post("/tunnels/smart-test", status_code=202)
@@ -150,7 +150,9 @@ def tunnel_kinds():
                                                                      ("ipipfou:tcpmux", "TCP Mux · IPIP over UDP (FOU)", "IP-in-IP inside one UDP port, one per pair of servers, not encrypted"),
                                                                      ("ipipgue:tcpmux", "TCP Mux · IPIP over UDP (GUE)", "IP-in-IP inside one UDP port with the GUE header, one per pair of servers, not encrypted"),
                                                                      ("ipsec:tcpmux", "TCP Mux · IPsec (ESP)", "ESP (protocol 50) with AES-GCM, keys made by the panel"),
-                                                                     ("ipsecnat:tcpmux", "TCP Mux · IPsec in UDP (NAT-T)", "ESP inside one UDP port with AES-GCM, keys made by the panel"))]},
+                                                                     ("ipsecnat:tcpmux", "TCP Mux · IPsec in UDP (NAT-T)", "ESP inside one UDP port with AES-GCM, keys made by the panel"),
+                                                                     ("wgchisel:tcpmux", "TCP Mux · WireGuard in Chisel (foreign dials)", "WireGuard whose packets travel inside a Chisel TLS WebSocket on ONE TCP port: passes where GRE, ESP and UDP are all filtered; slower (a TCP stream carries the packets). Needs wireguard-tools: building it from here installs it"),
+                                                                     ("wgchiselfwd:tcpmux", "TCP Mux · WireGuard in Chisel (Iran dials)", "the same, but the Iran server opens the TCP connection (use it when the foreign address is not filtered from Iran)"))]},
         {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
         {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers", "direction": "direct",

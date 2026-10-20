@@ -85,8 +85,8 @@ def test_a_link_refuses_what_it_would_run_as_root_if_it_were_not_checked():
 # ------------------------------------------------------------------ what a server says, the port, the key
 def test_the_facts_of_a_server_are_read_and_the_port_is_one_nobody_holds():
     f = builder.parse_link_facts("WG_MOD=1\nWG_TOOL=0\nFOU_MOD=1\nUDP=53 51820 51821 \nFOU_PORTS=5500 \nAPT=1\nMODS=ip_gre fou ipip \nIPIP_PAIRS=203.0.113.1>198.51.100.2 \nnoise\n")
-    assert f == {"wg_mod": True, "wg_tool": False, "fou_mod": True, "udp": {53, 51820, 51821}, "fou_ports": {5500}, "apt": True, "mods": {"ip_gre", "fou", "ipip"}, "ipip_pairs": {("203.0.113.1", "198.51.100.2")}}
-    assert builder.parse_link_facts("") == {"wg_mod": False, "wg_tool": False, "fou_mod": False, "udp": set(), "fou_ports": set(), "apt": False, "mods": set(), "ipip_pairs": set()}
+    assert f == {"wg_mod": True, "wg_tool": False, "fou_mod": True, "udp": {53, 51820, 51821}, "fou_ports": {5500}, "apt": True, "mods": {"ip_gre", "fou", "ipip"}, "ipip_pairs": {("203.0.113.1", "198.51.100.2")}, "tcp": set(), "chisel": False}
+    assert builder.parse_link_facts("") == {"wg_mod": False, "wg_tool": False, "fou_mod": False, "udp": set(), "fou_ports": set(), "apt": False, "mods": set(), "ipip_pairs": set(), "tcp": set(), "chisel": False}
     assert builder.pick_link_port("wg", set()) == 51820 and builder.pick_link_port("wg", {51820, 51821}) == 51822 and builder.pick_link_port("fou", {5500}) == 5501
     assert builder.pick_link_port("wg", set(range(51820, 51920))) == 0                                              # a full range: none
     assert builder.parse_pub(f"PUB={PUB_I}\n") == PUB_I and builder.parse_pub("PUB=short") == "" and builder.parse_pub("") == ""

@@ -28,6 +28,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel, TunnelCheck, is_standby
 from ..ssh import Node, SSHError, run_script
+from . import linkmodels
 from .events import emit
 
 log = get_logger("tunnels")
@@ -104,8 +105,9 @@ def plan_for(t: Tunnel) -> Plan:
         return Plan([f"backhaul-iran-{tr}-{port}.service"], [f"backhaul-kharej-{tr}-{port}.service"], iface=iface, iran_peer=peer, ports=ports)
 
     if typ == "backhaul":
-        return Plan([f"backhaul-iran-{tr}-{port}.service", f"nikatel-gre-{name}.service"],
-                    [f"backhaul-kharej-{tr}-{port}.service", f"nikatel-gre-{name}.service"],
+        carrier = [f"nikatel-carrier-{name}.service"] if (t.record or {}).get("link") in linkmodels.CARRIER_LINKS else []          # (a link inside a Chisel carrier: the carrier is a unit of both ends, judged like the link unit)
+        return Plan([f"backhaul-iran-{tr}-{port}.service", f"nikatel-gre-{name}.service", *carrier],
+                    [f"backhaul-kharej-{tr}-{port}.service", f"nikatel-gre-{name}.service", *carrier],
                     iface=name, iran_peer=t.foreign_tunnel_ip or "", ports=ports)
 
     if typ == "gre":

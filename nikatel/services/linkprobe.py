@@ -55,18 +55,19 @@ def plan(want: list[str], facts_i: dict, facts_f: dict, taken_nets: list[str], h
     """Pure (apart from the choice of random names and keys): for every link wanted, either what to run - {"net": (network, iran_ip, foreign_ip), "port": udp port or 0} - or why it is not tried -
     {"skip": {"ok": None | False, "error": sentence}}. Different links never share a network or a UDP port."""
     out: dict[str, dict] = {}
-    nets, ports = list(taken_nets), set()
+    nets, ports, tcp_ports = list(taken_nets), set(), set()
 
     for f in (facts_i, facts_f):
         ports |= f["udp"] | f["fou_ports"]
+        tcp_ports |= f.get("tcp", set())
 
     for link in want:
-        miss = [m for m in linkmodels.KERNEL[link] if m not in ("fou", "wireguard") and facts_i["mods"] and (m not in facts_i["mods"] or m not in facts_f["mods"])]
+        miss = [m for m in linkmodels.kernel_of(link) if m not in ("fou", "wireguard") and facts_i["mods"] and (m not in facts_i["mods"] or m not in facts_f["mods"])]
 
         if link in ("fou", "gue", "ipipfou", "ipipgue") and not (facts_i["fou_mod"] and facts_f["fou_mod"]):
             miss.append("fou")
 
-        if link == "wg" and not (facts_i["wg_mod"] and facts_f["wg_mod"]):
+        if link in builder.NEEDS_WG_TOOL and not (facts_i["wg_mod"] and facts_f["wg_mod"]):
             out[link] = {"skip": {"ok": False, "error": "a server cannot load the wireguard kernel module"}}
             continue
 
@@ -74,8 +75,27 @@ def plan(want: list[str], facts_i: dict, facts_f: dict, taken_nets: list[str], h
             out[link] = {"skip": {"ok": False, "error": "a server cannot load the " + ", ".join(sorted(set(miss))) + " kernel module"}}
             continue
 
-        if link == "wg" and not (facts_i["wg_tool"] and facts_f["wg_tool"]):
+        if link in builder.NEEDS_WG_TOOL and not (facts_i["wg_tool"] and facts_f["wg_tool"]):
             out[link] = {"skip": {"ok": None, "error": "wireguard-tools is not installed on a server (the probe never installs a package)"}}
+            continue
+
+        if link in linkmodels.CARRIER_LINKS:
+            if not (facts_i.get("chisel", True) and facts_f.get("chisel", True)):
+                out[link] = {"skip": {"ok": None, "error": "the Chisel core is not installed on a server (a build installs it; the probe never does)"}}
+                continue
+
+            n = linkmodels.pick_carrier_port(ports, tcp_ports)
+
+            if not n:
+                out[link] = {"skip": {"ok": None, "error": "no free port number for a carried link"}}
+                continue
+
+            wg, door, tcp = linkmodels.carrier_ports(n)
+            ports |= {wg, door}
+            tcp_ports.add(tcp)
+            net = builder.allocate_network(nets)
+            nets.append(net[0])
+            out[link] = {"net": net, "port": n}
             continue
 
         if link in linkmodels.ONE_PER_PAIR and any(p in facts_i["ipip_pairs"] or p in facts_f["ipip_pairs"] for p in ((hosts[0], hosts[1]), (hosts[1], hosts[0]))):
@@ -112,7 +132,7 @@ def _probe_one(link: str, name: str, nodes: tuple[Node, Node], hosts: tuple[str,
     ips: dict[str, dict] = {}
 
     try:
-        if link == "wg":
+        if link in builder.NEEDS_WG_TOOL:
             oi, of = (run_action(n, "wg_keygen", {"NAME": name}, timeout=40) for n in (iran, foreign))
             pubs = {"iran": builder.parse_pub(oi), "foreign": builder.parse_pub(of)}
 
@@ -123,6 +143,20 @@ def _probe_one(link: str, name: str, nodes: tuple[Node, Node], hosts: tuple[str,
             a, b = secrets.token_hex(20), secrets.token_hex(20)
             sa, sb = random.SystemRandom().randint(256, 2**32 - 1), random.SystemRandom().randint(256, 2**32 - 1)
             ips = {"iran": {"spi_tx": sa, "spi_rx": sb, "key_tx": a, "key_rx": b}, "foreign": {"spi_tx": sb, "spi_rx": sa, "key_tx": b, "key_rx": a}}
+
+        def carrier_end(role: str, fp: str) -> None:
+            """One end of a carried link: its scripts, the unit of its carrier and the password file are written, the carrier starts, then the link comes up (the same files as a real build; nothing is enabled to start at boot)."""
+            node, local, remote, addr, peer_pub = ends[role]
+
+            for path, text in builder.link_scripts(link, name, local, remote, key, addr, linkmodels.CARRIER_MTU, port=port, peer_pub=peer_pub, carrier={"role": role, "token": token, "fp": fp}).items():
+                if path.startswith(("/usr/local/sbin/nikatel-gre-up-", "/usr/local/sbin/nikatel-gre-down-", "/etc/systemd/system/nikatel-carrier-", "/etc/nikatel-chisel/")):
+                    _put(node, path, text, builder._file_mode(path))
+
+            builder._unit(node, f"nikatel-carrier-{name}.service")
+            out = run_action(node, "link_probe_run", {"NAME": name, "MODE": "up"}, timeout=40)
+
+            if "rc=0" not in out:
+                raise RuntimeError(f"the link did not come up on {local}: {out.strip()[-120:]}")
 
         def end(node: Node, local: str, remote: str, addr: str, peer_pub: str, ipsec: dict | None) -> None:
             files = builder.link_scripts(link, name, local, remote, key, addr, 1360, port=port, peer_pub=peer_pub, ipsec=ipsec)
@@ -136,9 +170,22 @@ def _probe_one(link: str, name: str, nodes: tuple[Node, Node], hosts: tuple[str,
             if "rc=0" not in out:
                 raise RuntimeError(f"the link did not come up on {local}: {out.strip()[-120:]}")
 
-        builder._both(lambda: end(iran, ihost, fhost, f"{ip_i}/30", pubs.get("foreign", ""), ips.get("iran")), lambda: end(foreign, fhost, ihost, f"{ip_f}/30", pubs.get("iran", ""), ips.get("foreign")))
+        carried = link in linkmodels.CARRIER_LINKS
+
+        if carried:                 # the end that runs the Chisel server first (its key, its fingerprint), then the end that dials it
+            token = secrets.token_hex(24)
+            ends = {"iran": (iran, ihost, fhost, f"{ip_i}/30", pubs["foreign"]), "foreign": (foreign, fhost, ihost, f"{ip_f}/30", pubs["iran"])}
+            srv = linkmodels.carrier_server_role(link)
+            run_action(ends[srv][0], "chisel_prepare", {"NAME": name, "TLS": "1"}, timeout=60)
+            carrier_end(srv, "")
+            fp = (re.search(r"FP=(\S+)", run_script(ends[srv][0], "chisel_fp", {"NAME": name}, timeout=20)) or [None, ""])[1]
+            carrier_end("foreign" if srv == "iran" else "iran", fp)
+        else:
+            builder._both(lambda: end(iran, ihost, fhost, f"{ip_i}/30", pubs.get("foreign", ""), ips.get("iran")), lambda: end(foreign, fhost, ihost, f"{ip_f}/30", pubs.get("iran", ""), ips.get("foreign")))
+
         time.sleep(1.0)                                                           # (WireGuard and the SAs of IPsec need a moment)
-        (ri, rtt), (rf, _) = builder._both(lambda: received(run_script(iran, "link_probe_ping", {"IFACE": name, "PEER": ip_f}, timeout=60)), lambda: received(run_script(foreign, "link_probe_ping", {"IFACE": name, "PEER": ip_i}, timeout=60)))
+        ping = "carrier_probe_ping" if carried else "link_probe_ping"
+        (ri, rtt), (rf, _) = builder._both(lambda: received(run_script(iran, ping, {"IFACE": name, "PEER": ip_f}, timeout=60)), lambda: received(run_script(foreign, ping, {"IFACE": name, "PEER": ip_i}, timeout=60)))
         res.update(ok=verdict(ri, rf), rtt_ms=rtt, loss_pct=round(100.0 - min(ri, rf) * 10.0, 1))
 
         if not res["ok"]:
@@ -163,7 +210,7 @@ def probe(iran_id: int, foreign_id: int, links: list[str] | None = None, record:
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server")
 
-    want = [k for k in (links or linkmodels.LINKS) if k in linkmodels.LINKS]
+    want = [k for k in (links or linkmodels.LINKS) if k in linkmodels.ALL_LINKS]          # (the carried links are asked only when named: they need Chisel and a minute, the plain nine are the default)
 
     with session() as db:
         i, f = db.get(Server, iran_id), db.get(Server, foreign_id)
@@ -228,7 +275,7 @@ def probe(iran_id: int, foreign_id: int, links: list[str] | None = None, record:
 
 def summary(res: dict[str, dict]) -> str:
     """Pure: one sentence for the story of a repair - what passes (with its delay) and what does not."""
-    ok = [f"{linkmodels.TITLE[k]} {round(r['rtt_ms'])} ms" if r.get("rtt_ms") is not None else linkmodels.TITLE[k] for k, r in res.items() if r.get("ok")]
-    no = [linkmodels.TITLE[k] for k, r in res.items() if r.get("ok") is False]
-    unknown = [linkmodels.TITLE[k] for k, r in res.items() if r.get("ok") is None]
+    ok = [f"{linkmodels.NAMES[k]} {round(r['rtt_ms'])} ms" if r.get("rtt_ms") is not None else linkmodels.NAMES[k] for k, r in res.items() if r.get("ok")]
+    no = [linkmodels.NAMES[k] for k, r in res.items() if r.get("ok") is False]
+    unknown = [linkmodels.NAMES[k] for k, r in res.items() if r.get("ok") is None]
     return "passes: " + (", ".join(ok) or "nothing") + "; does not pass: " + (", ".join(no) or "nothing") + ("; not known: " + ", ".join(unknown) if unknown else "")

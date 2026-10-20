@@ -64,7 +64,7 @@ def kind_of(typ: str, transport: str, record: dict) -> str:
 
     if typ in ("backhaul", "gre", ""):
         link = (record or {}).get("link")           # Backhaul over another link (WireGuard, GRE / IPIP inside UDP, IPIP, IPsec) is its own kind ("wg:tcpmux", "ipsec:tcpmux" ...): a rebuild or a switch keeps the link
-        return f"{link}:{transport or 'tcpmux'}" if link in linkmodels.LINKS and link != "gre" else (transport or "tcpmux")
+        return f"{link}:{transport or 'tcpmux'}" if link in linkmodels.ALL_LINKS and link != "gre" else (transport or "tcpmux")
 
     if typ == "paqet":
         return "paqet"
@@ -100,9 +100,13 @@ def classify(d: dict) -> tuple[str, str]:
     link = d.get("link") or "gre"
     udp = linkmodels.is_udp(link)                  # the link under Backhaul is in a UDP port (WireGuard, GRE / IPIP inside UDP, IPsec in UDP): what is filtered is that port, not protocol 47 (the cause keeps the name "gre_blocked": the same ladder)
     raw = {"ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)"}.get(link, "")       # a raw-protocol link other than GRE: what is filtered is that protocol
-    title = linkmodels.TITLE.get(link, "GRE")
+    title = linkmodels.NAMES.get(link, "GRE")
+    carried = linkmodels.is_carrier(link)          # a WireGuard link inside a Chisel carrier: what is filtered is the one TCP port of the carrier (or the carrier is down)
 
     if d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50) and (loss_i or 0) < 10 and (loss_f or 0) < 10:
+        if carried:
+            return "gre_blocked", f"plain ping between the servers passes both ways ({loss_i}% / {loss_f}% loss) but the {title} link does not (inner link {d.get('gre_loss')}% loss): the TCP port of its carrier is filtered on this route, or the Chisel carrier is down"
+
         if udp:
             return "gre_blocked", f"plain ping between the servers passes both ways ({loss_i}% / {loss_f}% loss) but the {title} link does not (inner link {d.get('gre_loss')}% loss): the UDP port of the link is filtered on this route"
 
@@ -294,7 +298,7 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
             findings.append({"ok": v, "text": f"{label}: " + ("TCP connections open" if v else "TCP connections do NOT open (filtered)")})
 
     if gre:
-        findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": linkmodels.TITLE.get(facts["link"], "GRE") + " link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
+        findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": linkmodels.NAMES.get(facts["link"], "GRE") + " link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
 
     if facts["flap_n"]:
         findings.append({"ok": facts["flap_fails"] < 3, "text": f"Last {facts['flap_n']} checks: {facts['flap_n'] - facts['flap_fails']} passed, {facts['flap_fails']} failed" + (" - the link flaps" if facts["flap_fails"] >= 3 else "")})
@@ -572,7 +576,7 @@ def _probe_links(aid: int, snap: dict, kinds: list[str]) -> list[str]:
     if not links:
         return kinds
 
-    _say(aid, f"Link probe: asking which of the {len(links)} links pass between the two servers (all at once, a few seconds): " + ", ".join(linkmodels.TITLE[k] for k in links))
+    _say(aid, f"Link probe: asking which of the {len(links)} links pass between the two servers (all at once, a few seconds): " + ", ".join(linkmodels.NAMES[k] for k in links))
 
     try:
         res = linkprobe.probe(snap["iran_id"], snap["foreign_id"], links)
@@ -589,6 +593,35 @@ def _probe_links(aid: int, snap: dict, kinds: list[str]) -> list[str]:
     return keep
 
 
+def _carrier_last_resort(aid: int, snap: dict, tried: set[str]) -> list[str]:
+    """The kinds to try when every kind of the list failed: a WireGuard link carried inside Chisel (`knowledge.CARRIER_KINDS`) passes where raw GRE, ESP and every UDP port are filtered, because it needs one TCP port only.
+    They are not in the standard order (they are the slowest way: a TCP stream carries the UDP packets) and the Doctor never installs a package for them: the link probe tries each carrier for real (seconds), and only those that
+    PASSED are built. When wireguard-tools is not on the servers the story says what to do once (build a WireGuard tunnel from Create tunnel: that installs it)."""
+    from . import license
+
+    kinds = [k for k in knowledge.CARRIER_KINDS if k not in tried and license.tunnel_kind_allowed(k)]
+
+    if not kinds:
+        return []
+
+    links = [linkmodels.split_kind(k)[0] for k in kinds]
+    _say(aid, "Last resort: every plain link was tried. Asking whether a WireGuard link inside a Chisel carrier (one TCP port) passes between the two servers…")
+
+    try:
+        res = linkprobe.probe(snap["iran_id"], snap["foreign_id"], links)
+    except (ValueError, RuntimeError, SSHError) as e:
+        _say(aid, f"The carrier probe could not run ({str(e)[:120]}).")
+        return []
+
+    _say(aid, "Carrier probe: " + linkprobe.summary(res))
+    why = next((r.get("error") for r in res.values() if r.get("ok") is None and "wireguard-tools" in str(r.get("error"))), "")
+
+    if why:
+        _say(aid, "A carried link needs wireguard-tools on both servers and the Doctor never installs a package: build a WireGuard tunnel once from Create tunnel (that installs it), then this last resort works by itself.")
+
+    return [k for k, link in zip(kinds, links) if (res.get(link) or {}).get("ok")]
+
+
 def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     """Replace a tunnel that is CUT by the first type in `kinds` that connects: each one is built as the REAL tunnel (same name, same ports) and the build checks that data passes - there is nothing to
     test beside it and nothing to lose, the tunnel is cut - so the first that carries data is the repair (the owner, 2026-10-16: "go for the method that connects"). Every answer is kept for the next
@@ -599,9 +632,20 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     first = True
     allowed = _probe_links(aid, snap, [k for k in kinds if license.tunnel_kind_allowed(k)])
 
-    for n, kind in enumerate(allowed, 1):
+    queue, last_resort, n = list(allowed), False, 0
+
+    while True:
+        if not queue and not last_resort:
+            last_resort = True                                     # every kind in the list is tried: the last resort is a WireGuard link inside a Chisel carrier (one TCP port) - where the plain links are all filtered
+            queue = _carrier_last_resort(aid, snap, set(kinds))
+
+        if not queue:
+            break
+
+        kind = queue.pop(0)
+        n += 1
         knowledge.yield_slot()           # (a survey of the pair gives the place up)
-        _say(aid, f"Trying {kind} ({n} of {len(allowed)}): it is built as the real tunnel and checked for data.")
+        _say(aid, f"Trying {kind} ({n} of {len(allowed)}): it is built as the real tunnel and checked for data." if not last_resort else f"Trying {kind} (last resort): it is built as the real tunnel and checked for data.")
         out: list[str] = []
         ok = _replace(aid, snap["id"], snap["iran_id"], snap["foreign_id"], kind, "", snap=snap, first=first, restore=False, out=out)
         first = False
@@ -616,8 +660,8 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
         if ok:
             return kind
 
-    if allowed:
-        _say(aid, f"None of the {len(allowed)} tunnel types connected on this route. Putting the old {old_kind} tunnel back so it is not lost.")
+    if not first:
+        _say(aid, f"None of the {n} tunnel types connected on this route. Putting the old {old_kind} tunnel back so it is not lost.")
         ok2, _ = _wait(_build_kind(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts")))
         _say(aid, "The old tunnel is back." if ok2 else "The old tunnel could not be rebuilt either: it needs a human.")
 

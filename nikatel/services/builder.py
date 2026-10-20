@@ -258,7 +258,7 @@ WantedBy=timers.target
 # names a GRE link has (the interface is called like the tunnel, the units are `nikatel-gre-<name>` ...). Idea and design taken from simple-tun-link (github.com/ach1992/simple-tun-link): a kernel link, keys that never
 # leave their server, an owner tag on the interface, a firewall rule that names the exact peer and port.
 LINKS = linkmodels.LINKS                  # (1.69.0: nine models - GRE, GRE over FOU / GUE, IPIP, IPIP over FOU / GUE, WireGuard, IPsec ESP, IPsec in UDP; the scripts of the new ones are in services/linkmodels.py)
-LINK_TITLE = linkmodels.TITLE
+LINK_TITLE = linkmodels.NAMES                 # (a name for every model, the carried ones too)
 LINK_PORTS = linkmodels.PORTS             # the UDP port range of a link of that kind: ONE port, the same on both servers (the raw-protocol links - GRE, IPIP, ESP - have none)
 _PUB_RE = re.compile(r"[A-Za-z0-9+/]{43}=")
 _IPV4_RE = re.compile(r"(\d{1,3}\.){3}\d{1,3}")
@@ -276,10 +276,10 @@ fi
 """
 _LINK_FW_UP = """if command -v iptables >/dev/null 2>&1; then
   iptables() { command iptables -w 5 "$@"; }      # (wait up to 5 s for the xtables lock: two links made at the same moment on one server do not fail on it)
-  iptables -C INPUT  -s "$REMOTE" -d "$LOCAL" @MATCH@ -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
-    iptables -I INPUT 1  -s "$REMOTE" -d "$LOCAL" @MATCH@ -m comment --comment "$TAG" -j ACCEPT
-  iptables -C OUTPUT -s "$LOCAL" -d "$REMOTE" @MATCH@ -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
-    iptables -I OUTPUT 1 -s "$LOCAL" -d "$REMOTE" @MATCH@ -m comment --comment "$TAG" -j ACCEPT
+  iptables -C INPUT  -s "$REMOTE" -d "$LOCAL" @MATCH_IN@ -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I INPUT 1  -s "$REMOTE" -d "$LOCAL" @MATCH_IN@ -m comment --comment "$TAG" -j ACCEPT
+  iptables -C OUTPUT -s "$LOCAL" -d "$REMOTE" @MATCH_OUT@ -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
+    iptables -I OUTPUT 1 -s "$LOCAL" -d "$REMOTE" @MATCH_OUT@ -m comment --comment "$TAG" -j ACCEPT
   iptables -C INPUT -i "$NAME" -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
     iptables -I INPUT 1 -i "$NAME" -m comment --comment "$TAG" -j ACCEPT
   iptables -C OUTPUT -o "$NAME" -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || \\
@@ -330,12 +330,13 @@ ip link set "$NAME" down 2>/dev/null || true
 if ip -d link show "$NAME" 2>/dev/null | grep -q wireguard; then ip link del "$NAME" 2>/dev/null || true; fi
 @FIREWALL@exit 0
 """
-def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_cidr: str, mtu: int, port: int = 0, peer_pub: str = "", ttl: int = 255, ipsec: dict | None = None) -> dict[str, str]:
+def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_cidr: str, mtu: int, port: int = 0, peer_pub: str = "", ttl: int = 255, ipsec: dict | None = None, carrier: dict | None = None) -> dict[str, str]:
     """The files of the link of one end, byte-compatible in names with `gre_scripts` (the check script, the units and the timer ARE those of a GRE link): for "gre" exactly `gre_scripts`; for the others the up and
     down scripts differ - "wg" (WireGuard on `port`, the peer's public key `peer_pub`), "fou" / "gue" / "ipip" / "ipipfou" / "ipipgue" (GRE or IPIP, native or inside UDP: `port`), "ipsec" / "ipsecnat" (ESP, or ESP in UDP
-    on `port`; `ipsec`: {"spi_tx", "spi_rx", "key_tx", "key_rx"} of THIS end - the other end gets them swapped). Everything is checked first: the scripts run as root on a server."""
-    if link not in LINKS:
-        raise ValueError("the link is one of " + ", ".join(LINKS))
+    on `port`; `ipsec`: {"spi_tx", "spi_rx", "key_tx", "key_rx"} of THIS end - the other end gets them swapped), "wgchisel" / "wgchiselfwd" (WireGuard whose packets travel inside a Chisel carrier: `port` is the number of the
+    carrier, `carrier`: {"role": "iran" | "foreign" (this end), "token": the carrier's password, "fp": the pinned fingerprint or ""}). Everything is checked first: the scripts run as root on a server."""
+    if link not in linkmodels.ALL_LINKS:
+        raise ValueError("the link is one of " + ", ".join(linkmodels.ALL_LINKS))
 
     files = gre_scripts(name, local, remote, key, addr_cidr, mtu, ttl)
 
@@ -344,6 +345,17 @@ def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_c
 
     if not NAME_RE.fullmatch(name) or not _IPV4_RE.fullmatch(local) or not _IPV4_RE.fullmatch(remote):
         raise ValueError("a link needs a tunnel name and two IPv4 addresses")
+
+    if link in linkmodels.CARRIER_LINKS:
+        if not carrier or not _PUB_RE.fullmatch(peer_pub or ""):
+            raise ValueError("a carried WireGuard link needs the public key of the other end and its carrier (role, password)")
+
+        m_in, m_out = linkmodels.carrier_fw_match(link, str(carrier["role"]), int(port))
+        files.update(linkmodels.carrier_files(link, name, str(carrier["role"]), local, remote, addr_cidr, int(mtu), int(port), peer_pub, str(carrier["token"]), str(carrier.get("fp") or ""),
+                                              _LINK_FW_UP.replace("@MATCH_IN@", m_in).replace("@MATCH_OUT@", m_out), _LINK_FW_DOWN, _LINK_SYSCTL))
+        unit = f"/etc/systemd/system/nikatel-gre-{name}.service"
+        files[unit] = files[unit].replace("Nikatel GRE tunnel", f"Nikatel {LINK_TITLE[link]} link")
+        return files
 
     if link in LINK_PORTS:
         lo, hi = LINK_PORTS[link]
@@ -356,7 +368,8 @@ def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_c
 
     iface = ipaddress.ip_interface(addr_cidr)
     peer_ip = next(str(h) for h in iface.network.hosts() if str(h) != str(iface.ip))
-    fw_up, fw_down = _LINK_FW_UP.replace("@MATCH@", linkmodels.firewall_match(link, port)), _LINK_FW_DOWN
+    match = linkmodels.firewall_match(link, port)
+    fw_up, fw_down = _LINK_FW_UP.replace("@MATCH_IN@", match).replace("@MATCH_OUT@", match), _LINK_FW_DOWN
     up_path, down_path = f"/usr/local/sbin/nikatel-gre-up-{name}", f"/usr/local/sbin/nikatel-gre-down-{name}"
 
     if link == "wg":
@@ -398,7 +411,7 @@ def parse_link_facts(out: str) -> dict:
     pairs = {tuple(x.split(">", 1)) for x in kv.get("IPIP_PAIRS", "").split() if ">" in x}
 
     return {"wg_mod": kv.get("WG_MOD") == "1", "wg_tool": kv.get("WG_TOOL") == "1", "fou_mod": kv.get("FOU_MOD") == "1", "udp": ports(kv.get("UDP", "")), "fou_ports": ports(kv.get("FOU_PORTS", "")),
-            "apt": kv.get("APT") == "1", "mods": set(kv.get("MODS", "").split()), "ipip_pairs": pairs}
+            "apt": kv.get("APT") == "1", "mods": set(kv.get("MODS", "").split()), "ipip_pairs": pairs, "tcp": ports(kv.get("TCP", "")), "chisel": kv.get("CHISEL") == "1"}
 
 
 def pick_link_port(link: str, taken: set[int]) -> int:
@@ -459,9 +472,9 @@ def clean_bh_opts(o: dict | None) -> dict:
     if "install_wg" in o:                                         # the owner asked for this build (Create tunnel, a test he started): wireguard-tools may be installed with apt on a server that lacks it
         out["install_wg"] = bool(o["install_wg"])
 
-    if o.get("link") not in (None, "", "gre"):                  # what Backhaul runs over: GRE (the default, not written), GRE inside UDP, WireGuard
-        if o["link"] not in LINKS:
-            raise ValueError("link must be gre, fou or wg")
+    if o.get("link") not in (None, "", "gre"):                  # what Backhaul runs over: GRE (the default, not written), GRE inside UDP, WireGuard, ... or a WireGuard link inside a Chisel carrier
+        if o["link"] not in linkmodels.ALL_LINKS:
+            raise ValueError("link must be one of: " + ", ".join(linkmodels.ALL_LINKS))
 
         out["link"] = o["link"]
 
@@ -582,12 +595,13 @@ class LinkFailed(RuntimeError):
 
 # The models tried after the one the owner chose, when it does not pass (the owner, 2026-10-20: "there are several GRE models - when the build finds that one does not answer it must test the others"). The ones in UDP come first (a route that
 # filters IP protocol 47 passes UDP most of the time), then the ones in raw IP protocols. WireGuard is last and only where `wg` is on the servers already: a build never installs a package by itself for a fall-back.
-FALLBACK_LINKS = ("gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "wg")
+FALLBACK_LINKS = ("gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "wg", "wgchisel", "wgchiselfwd")
+NEEDS_WG_TOOL = ("wg", *linkmodels.CARRIER_LINKS)          # the models that need wireguard-tools on both servers (installed only when the owner asked: `install_wg`)
 
 
 def next_link(tried: list[str], wg_ok: bool = False) -> str:
     """The next link model to try after the ones in `tried` (the order of FALLBACK_LINKS), or "" when none is left."""
-    return next((k for k in FALLBACK_LINKS if k not in tried and k in LINKS and (k != "wg" or wg_ok)), "")
+    return next((k for k in FALLBACK_LINKS if k not in tried and k in linkmodels.ALL_LINKS and (k not in NEEDS_WG_TOOL or wg_ok)), "")
 
 
 def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) -> None:
@@ -710,6 +724,11 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
     return {"ports": [p.listen for p in ports], "mapping": ",".join(p.spec() for p in ports)}
 
 
+def mtu_limit(opts: dict | None) -> int:
+    """Pure: the highest MTU a build may be asked for. The path between the servers holds a GRE / UDP link to 1476; a link inside a Chisel carrier travels in a TCP stream and is held only by what Chisel carries."""
+    return linkmodels.CARRIER_MTU if (opts or {}).get("link") in linkmodels.CARRIER_LINKS else 1476
+
+
 def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True, opts: dict | None = None,
                 standby_of: str = "") -> int:
     """Validate, create the action_log entry, run the build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of."""
@@ -728,8 +747,9 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
     opts = clean_bh_opts(opts)
     fallback = bool(opts.pop("link_fallback", False))
 
-    if mtu and not 1200 <= mtu <= 1476:
-        raise ValueError("MTU must be between 1200 and 1476 (0 = measure)")
+    top = mtu_limit(opts)
+    if mtu and not 1200 <= mtu <= top:
+        raise ValueError(f"MTU must be between 1200 and {top} (0 = measure)")
 
     with session() as db:
         iran, foreign = db.get(Server, iran_id), db.get(Server, foreign_id)
@@ -908,13 +928,13 @@ def _prepare_link(b: Build, iran: Node, foreign: Node, link: str) -> tuple[int, 
     li, lf = parse_link_facts(raw_i), parse_link_facts(raw_f)
 
     for label, f, srv in (("Iran", li, b.iran), ("Foreign", lf, b.foreign)):
-        if link == "wg" and not f["wg_mod"]:
+        if link in NEEDS_WG_TOOL and not f["wg_mod"]:
             raise RuntimeError(f"{label} server {srv.name} cannot load the WireGuard kernel module (it needs Linux 5.6 or newer, or the wireguard module)")
 
-        if "fou" in linkmodels.KERNEL[link] and not f["fou_mod"]:
+        if "fou" in linkmodels.kernel_of(link) and not f["fou_mod"]:
             raise RuntimeError(f"{label} server {srv.name} cannot load the FOU kernel module (GRE / IPIP over UDP)")
 
-        missing = [m for m in linkmodels.KERNEL[link] if m not in ("fou", "wireguard") and m not in f["mods"]] if f["mods"] else []          # (a server always says which modules it has: an answer without the list is checked by the fou / wireguard flags only)
+        missing = [m for m in linkmodels.kernel_of(link) if m not in ("fou", "wireguard") and m not in f["mods"]] if f["mods"] else []          # (a server always says which modules it has: an answer without the list is checked by the fou / wireguard flags only)
 
         if missing:
             raise RuntimeError(f"{label} server {srv.name} cannot load the {', '.join(missing)} kernel module ({LINK_TITLE[link]})")
@@ -922,24 +942,42 @@ def _prepare_link(b: Build, iran: Node, foreign: Node, link: str) -> tuple[int, 
     if link in linkmodels.ONE_PER_PAIR and ((b.foreign.host, b.iran.host) in li["ipip_pairs"] or (b.iran.host, b.foreign.host) in lf["ipip_pairs"]):
         raise RuntimeError(f"an IPIP tunnel between {b.iran.name} and {b.foreign.name} exists already (a tunnel of this pair, or the warm standby of one, runs over IPIP): IPIP has no key, the kernel holds ONE per pair of addresses (use GRE, GRE over UDP or WireGuard for another tunnel between them)")
 
-    if link == "wg":
+    if link in NEEDS_WG_TOOL:
         install = bool(b.opts.get("install_wg"))
         _both(lambda: _ensure_wg_tool(aid, iran, li, "Iran", b.iran.name, install), lambda: _ensure_wg_tool(aid, foreign, lf, "Foreign", b.foreign.name, install))
+
+    carried = link in linkmodels.CARRIER_LINKS
+
+    if carried:                  # the carrier is Chisel: a core the panel installs (the same copy from its cache that a Chisel tunnel gets)
+        from . import engines
+
+        for label, node, srv in (("Iran", iran, b.iran), ("Foreign", foreign, b.foreign)):
+            if engines.ensure_on_node(node, "chisel", only_missing=True):
+                _say(aid, f"Chisel installed on the {label.lower()} server {srv.name} (it carries the WireGuard packets)")
 
     with session() as db:
         used = {int((t.record or {}).get("link_port") or 0) for t in db.scalars(select(Tunnel))}
 
-    port = pick_link_port(link, li["udp"] | lf["udp"] | li["fou_ports"] | lf["fou_ports"] | used) if link in LINK_PORTS else 0
+    if carried:                  # one number gives three ports: the WireGuard port, the loopback door of the Iran side, the TCP port of the Chisel server
+        lo, hi = linkmodels.CARRIER_RANGE
+        held = [u for u in used if lo <= u <= hi]
+        taken_udp = li["udp"] | lf["udp"] | li["fou_ports"] | lf["fou_ports"] | {p for u in held for p in linkmodels.carrier_ports(u)[:2]}
+        port = linkmodels.pick_carrier_port(taken_udp, li["tcp"] | lf["tcp"] | {linkmodels.carrier_ports(u)[2] for u in held})
 
-    if link in LINK_PORTS and not port:
-        raise RuntimeError(f"no free UDP port for the {LINK_TITLE[link]} link ({LINK_PORTS[link][0]}-{LINK_PORTS[link][1]}) on the two servers")
+        if not port:
+            raise RuntimeError(f"no free port for the {LINK_TITLE[link]} link on the two servers (the numbers {lo}-{hi} give its UDP and TCP ports)")
+    else:
+        port = pick_link_port(link, li["udp"] | lf["udp"] | li["fou_ports"] | lf["fou_ports"] | used) if link in LINK_PORTS else 0
+
+        if link in LINK_PORTS and not port:
+            raise RuntimeError(f"no free UDP port for the {LINK_TITLE[link]} link ({LINK_PORTS[link][0]}-{LINK_PORTS[link][1]}) on the two servers")
 
     pubs: dict[str, str] = {}
 
     if link in ("ipsec", "ipsecnat"):          # no IKE daemon: the panel makes the keys and the SPIs of the two directions (random, 20 bytes = a 128-bit AES-GCM key and its salt) and writes them into a file of 0600 on each server
         pubs = {"key_a": secrets.token_hex(20), "key_b": secrets.token_hex(20), "spi_a": str(random.randint(256, 2**32 - 1)), "spi_b": str(random.randint(256, 2**32 - 1))}
 
-    if link == "wg":
+    if link in NEEDS_WG_TOOL:
         b.created.append(("wg", iran))
         b.created.append(("wg", foreign))
         out_i, out_f = _both(lambda: run_action(iran, "wg_keygen", {"NAME": b.name}, timeout=40), lambda: run_action(foreign, "wg_keygen", {"NAME": b.name}, timeout=40))
@@ -948,9 +986,56 @@ def _prepare_link(b: Build, iran: Node, foreign: Node, link: str) -> tuple[int, 
         if not pubs["iran"] or not pubs["foreign"]:
             raise RuntimeError("a server did not make its WireGuard key")
 
-    carrier = f"UDP port {port}" if port else {"ipip": "IP protocol 4", "ipsec": "IP protocol 50 (ESP)"}[link]
-    _say(aid, f"{LINK_TITLE[link]} link: {carrier} on both servers" + (", each server made its own key (the private key stays on it)" if link == "wg" else ", keys made for the two directions (a file of 0600 on each server)" if link in ("ipsec", "ipsecnat") else ""))
+    if carried:
+        pubs["token"] = secrets.token_hex(24)          # the password of the carrier: in a file of 0600 on each server
+
+    wg_port, door, tcp = linkmodels.carrier_ports(port) if carried else (0, 0, 0)
+    dials = "the foreign server dials the Iran server" if carried and linkmodels.CARRIER_DIAL[link] == "foreign" else "the Iran server dials the foreign server"
+    carrier = (f"TCP port {tcp} (Chisel, TLS WebSocket; {dials}), WireGuard on UDP {wg_port} inside it, door 127.0.0.1:{door}" if carried else
+               f"UDP port {port}" if port else {"ipip": "IP protocol 4", "ipsec": "IP protocol 50 (ESP)"}[link])
+    _say(aid, f"{LINK_TITLE[link]} link: {carrier} on both servers" + (", each server made its own key (the private key stays on it)" if link in NEEDS_WG_TOOL else ", keys made for the two directions (a file of 0600 on each server)" if link in ("ipsec", "ipsecnat") else ""))
     return port, pubs
+
+
+def _file_mode(path: str) -> str:
+    return "0700" if "/sbin/" in path else "0600" if path.endswith((".keys", ".env")) else "0644"
+
+
+def carrier_record(link: str, n: int, fp: str) -> dict:
+    """What the tunnel record keeps of a carried link (no secret: the password stays in the files of the two servers)."""
+    wg, door, tcp = linkmodels.carrier_ports(n)
+    return {"kind": "chisel", "dial": linkmodels.CARRIER_DIAL[link], "tcp_port": tcp, "wg_port": wg, "door": door, "pinned": bool(fp)}
+
+
+def carrier_ends(b: Build, link: str, iran: Node, foreign: Node, ihost: str, fhost: str, iran_addr: str, foreign_addr: str, n: int, pubs: dict, key: int) -> None:
+    """Make the two ends of a WireGuard link carried inside Chisel. The end that runs the Chisel server comes FIRST (its key and certificate are made, its unit starts, its fingerprint is read); the other end then dials it
+    with that fingerprint pinned. Each end is one link unit (`nikatel-gre-<name>`) that starts and stops the carrier unit beside it. Everything made is noted in `b.created` before it exists, so a failure removes it all."""
+    title = LINK_TITLE[link]
+    srv_role = linkmodels.carrier_server_role(link)
+    ends = {"iran": (iran, ihost, fhost, iran_addr, pubs["foreign"], "Iran"), "foreign": (foreign, fhost, ihost, foreign_addr, pubs["iran"], "foreign")}
+
+    def make(role: str, fp: str) -> None:
+        node, local, remote, addr, peer_pub, label = ends[role]
+        b.created.append(("gre", node))
+
+        for path, text in link_scripts(link, b.name, local, remote, key, addr, b.mtu, port=n, peer_pub=peer_pub, carrier={"role": role, "token": pubs["token"], "fp": fp}).items():
+            _put(node, path, text, _file_mode(path))
+
+        st = _unit(node, f"nikatel-gre-{b.name}.service")
+        _unit(node, f"nikatel-gre-check-{b.name}.timer")
+
+        if st != "active":
+            logs = "".join(run_script(node, "unit_log", {"UNIT": u}, timeout=20) for u in (f"nikatel-gre-{b.name}.service", f"nikatel-carrier-{b.name}.service"))
+            raise LinkFailed(f"the {title} unit on the {label} server ended {st}" + (f": {logs.strip()[-300:]}" if logs.strip() else ""))
+
+    srv_node = ends[srv_role][0]
+    b.created.append(("gre", srv_node))
+    run_action(srv_node, "chisel_prepare", {"NAME": b.name, "TLS": "1"}, timeout=60)
+    make(srv_role, "")
+    fp = (re.search(r"FP=(\S+)", run_script(srv_node, "chisel_fp", {"NAME": b.name}, timeout=20)) or [None, ""])[1]
+    pubs["fp"] = fp
+    _say(b.aid, f"The Chisel server of the carrier runs on the {ends[srv_role][5]} server" + (", its key is pinned on the other end" if fp else " (its key could not be read: the other end does not pin it)"))
+    make("foreign" if srv_role == "iran" else "iran", fp)
 
 
 def _build(b: Build) -> None:
@@ -1000,7 +1085,10 @@ def _build(b: Build) -> None:
     _say(aid, f"Control port {port}")
 
     # 2. mtu + tuning
-    if not b.mtu:
+    if link in linkmodels.CARRIER_LINKS:
+        b.mtu = b.mtu or linkmodels.CARRIER_MTU
+        _say(aid, f"MTU {b.mtu} for the {LINK_TITLE[link]} link: its packets travel in a TCP stream, so the path between the servers does not limit them (Chisel carries up to {linkmodels.CARRIER_MAX_PACKET} bytes, WireGuard adds {linkmodels.CARRIER_OVERHEAD})")
+    elif not b.mtu:
         mtu_i, mtu_f = _both(lambda: run_script(iran, "mtu_probe", {"PEER": fhost}, timeout=70), lambda: run_script(foreign, "mtu_probe", {"PEER": ihost}, timeout=70))
         a = int((re.search(r"MTU=(\d+)", mtu_i) or [0, "0"])[1])
         c = int((re.search(r"MTU=(\d+)", mtu_f) or [0, "0"])[1])
@@ -1033,7 +1121,9 @@ def _build(b: Build) -> None:
     except RuntimeError as e:
         raise LinkFailed(str(e)) from e
     title = LINK_TITLE[link]
-    filtered = (f"UDP port {link_port} is probably filtered between these two servers" if link_port else
+    carried = link in linkmodels.CARRIER_LINKS
+    filtered = (f"TCP port {linkmodels.carrier_ports(link_port)[2]} (the carrier) is probably filtered between these two servers, or Chisel does not run on one of them" if carried else
+                f"UDP port {link_port} is probably filtered between these two servers" if link_port else
                 {"gre": "GRE (protocol 47)", "ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)"}[link] + " is probably filtered between these two servers")
 
     # 4. the link on both sides (GRE, GRE / IPIP inside UDP, WireGuard or IPsec)
@@ -1052,11 +1142,14 @@ def _build(b: Build) -> None:
 
     ips = ({"iran": {"spi_tx": pubs["spi_a"], "spi_rx": pubs["spi_b"], "key_tx": pubs["key_a"], "key_rx": pubs["key_b"]},
             "foreign": {"spi_tx": pubs["spi_b"], "spi_rx": pubs["spi_a"], "key_tx": pubs["key_b"], "key_rx": pubs["key_a"]}} if link in ("ipsec", "ipsecnat") else {})      # (the Iran end sends with A and receives with B; the foreign end the other way round)
-    _both(lambda: link_side("Iran", iran, ihost, fhost, f"{iran_ip}/30", pubs.get("foreign", ""), ips.get("iran")), lambda: link_side("foreign", foreign, fhost, ihost, f"{foreign_ip}/30", pubs.get("iran", ""), ips.get("foreign")))      # (an end does not wait for the other: both are made at once)
+    if carried:
+        carrier_ends(b, link, iran, foreign, ihost, fhost, f"{iran_ip}/30", f"{foreign_ip}/30", link_port, pubs, key)
+    else:
+        _both(lambda: link_side("Iran", iran, ihost, fhost, f"{iran_ip}/30", pubs.get("foreign", ""), ips.get("iran")), lambda: link_side("foreign", foreign, fhost, ihost, f"{foreign_ip}/30", pubs.get("iran", ""), ips.get("foreign")))      # (an end does not wait for the other: both are made at once)
     _say(aid, "GRE: interfaces up on both servers" if link == "gre" else f"{title}: link up on both servers")
     time.sleep(1 if link == "gre" else 2)                  # (a WireGuard end shakes hands with the other first)
 
-    verify = "gre_verify" if link == "gre" else "link_probe_ping"          # (a link in UDP loses the first packets of a new flow for a few seconds on some routes - up to eight single pings first, then the ten that count; 1.69.3)
+    verify = "gre_verify" if link == "gre" else "carrier_probe_ping" if carried else "link_probe_ping"          # (a link in UDP loses the first packets of a new flow for a few seconds on some routes - up to eight single pings first, then the ten that count; 1.69.3)
     ver_i, ver_f = _both(lambda: ping_stats(run_script(iran, verify, {"IFACE": b.name, "PEER": foreign_ip}, timeout=60)), lambda: ping_stats(run_script(foreign, verify, {"IFACE": b.name, "PEER": iran_ip}, timeout=60)))
     (_, ga), rtt = ver_i
     (_, gb), _ = ver_f
@@ -1070,7 +1163,7 @@ def _build(b: Build) -> None:
     (sh, gh), _ = ping_stats(run_script(iran, "gre_hold", {"IFACE": b.name, "PEER": foreign_ip}, timeout=45))
 
     if not sh or gh < int(sh * 0.85):
-        raise LinkFailed(f"the {title} link answered at first but then lost its packets ({gh}/{sh} after {GRE_HOLD_WAIT} s): the path filters {'GRE' if link == 'gre' else 'this UDP port' if link_port else 'this IP protocol'} a few seconds into a flow. Another Iran server is needed for this foreign server.")
+        raise LinkFailed(f"the {title} link answered at first but then lost its packets ({gh}/{sh} after {GRE_HOLD_WAIT} s): the path filters {'GRE' if link == 'gre' else 'the TCP port of the carrier' if carried else 'this UDP port' if link_port else 'this IP protocol'} a few seconds into a flow. Another Iran server is needed for this foreign server.")
 
     _say(aid, f"{title} holds: {gh}/{sh} pings answered after {GRE_HOLD_WAIT} s")
 
@@ -1143,7 +1236,7 @@ def _build(b: Build) -> None:
                    record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel",
                            **({"standby_of": b.standby_of} if b.standby_of else {}),
-                           **({"link": link, "link_port": link_port, **({"wg": {"iran_pub": pubs["iran"], "foreign_pub": pubs["foreign"]}} if link == "wg" else {})} if link != "gre" else {})},        # (public keys only: the private ones never left their servers)
+                           **({"link": link, "link_port": link_port, **({"wg": {"iran_pub": pubs["iran"], "foreign_pub": pubs["foreign"]}} if link in NEEDS_WG_TOOL else {}), **({"carrier": carrier_record(link, link_port, pubs.get("fp", ""))} if carried else {})} if link != "gre" else {})},        # (public keys only: the private ones never left their servers)
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
         db.flush()

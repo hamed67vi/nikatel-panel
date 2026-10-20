@@ -162,7 +162,7 @@ echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
 """, {}),
 
     # the fingerprint the Chisel server printed when it started (the client pins it); the server is the unit of the Iran server (reverse) or the -kharej unit of the foreign one (forward): the other unit is a client and prints none
-    "chisel_fp": (r"""echo "FP=$(journalctl -u 'chisel-@NAME@.service' -u 'chisel-@NAME@-kharej.service' -n 60 --no-pager 2>/dev/null | grep -o 'Fingerprint [A-Za-z0-9+/=]*' | tail -1 | cut -d' ' -f2)"
+    "chisel_fp": (r"""echo "FP=$(journalctl -u 'chisel-@NAME@.service' -u 'chisel-@NAME@-kharej.service' -u 'nikatel-carrier-@NAME@.service' -n 60 --no-pager 2>/dev/null | grep -o 'Fingerprint [A-Za-z0-9+/=]*' | tail -1 | cut -d' ' -f2)"
 """, {"NAME": r"^[a-z0-9][a-z0-9-]{0,14}$"}),
 
     # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door
@@ -513,11 +513,19 @@ echo "APT=$(command -v apt-get >/dev/null 2>&1 && echo 1 || echo 0)"
 for m in ipip xfrm_interface esp4; do modprobe "$m" 2>/dev/null; done
 echo "MODS=$(for m in ip_gre ipip fou xfrm_interface esp4 wireguard; do if lsmod | grep -q "^$m " || [ -d "/sys/module/$m" ]; then printf '%s ' "$m"; fi; done)"
 echo "IPIP_PAIRS=$(ip -d -o link show type ipip 2>/dev/null | grep -oE 'remote [0-9.]+ local [0-9.]+' | sed -E 's/remote ([0-9.]+) local ([0-9.]+)/\1>\2/' | tr '\n' ' ')"
+echo "TCP=$(ss -ltnH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
+echo "CHISEL=$([ -x /usr/local/bin/nikatel-chisel ] && echo 1 || echo 0)"
 """, {}),
 
     # largest ICMP payload that crosses to the peer with DF set (GRE inner MTU)
     "mtu_probe": (r"""best=0; for s in 1472 1464 1452 1440 1420 1400 1380 1350 1300 1250 1200; do ping -c 2 -W 1 -M do -s $s '@PEER@' >/dev/null 2>&1 && { best=$s; break; }; done; echo "MTU=$best"
 """, {"PEER": _IPV4}),
+
+    # the same for a link inside a Chisel carrier (services/builder.py `carrier_ends`): the carrier connects and WireGuard shakes hands only after the first packets, which the carrier may lose while it opens its UDP flow - WireGuard
+    # repeats a lost handshake after 5 s - so up to fourteen single pings first (about 14 s when nothing answers, one ping when it does), then the ten that count
+    "carrier_probe_ping": (r"""for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do ping -c 1 -W 1 -I '@IFACE@' '@PEER@' >/dev/null 2>&1 && break; done
+ping -c 10 -i 0.3 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | tail -3
+""", {"IFACE": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,14}$", "PEER": _IPV4}),
 
     # 10 pings over the GRE interface to the other end
     "gre_verify": (r"""ping -c 10 -i 0.3 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | tail -3
@@ -822,6 +830,8 @@ rm -f "/etc/systemd/system/nikatel-gre-$n.service" "/etc/systemd/system/nikatel-
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/usr/local/sbin/nikatel-gre-check-$n"
 systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true
 systemctl disable --now "nikatel-ipsec-sock-$n.service" >/dev/null 2>&1 || true
+systemctl disable --now "nikatel-carrier-$n.service" >/dev/null 2>&1 || true
+rm -f "/etc/systemd/system/nikatel-carrier-$n.service" "/etc/nikatel-chisel/$n.key" "/etc/nikatel-chisel/$n.crt" "/etc/nikatel-chisel/$n.tls.key" "/etc/nikatel-chisel/$n.srv.env" "/etc/nikatel-chisel/$n.cli.env"; systemctl daemon-reload
 if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre |ipip|xfrm'; then ip link del "$n" 2>/dev/null || true; fi
 rm -f "/etc/nikatel/wg/$n.key" "/etc/nikatel/ipsec/$n.keys"; echo "REMOVED $n"
 """, {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "TRANSPORT": r"^(tcp|tcpmux|wsmux|wssmux)$"}),
@@ -986,16 +996,18 @@ echo "PROBE_DOWN $n"
     # the LINK PROBE (services/linkprobe.py): the up or down script of a temporary link "lp-<model>" that the probe has just written (nikatel-gre-up-lp-fou ...) is run; nothing but those two scripts is ever run
     "link_probe_run": (r"""n='@NAME@'; f="/usr/local/sbin/nikatel-gre-@MODE@-$n"
 if [ -x "$f" ]; then "$f"; echo "LINK_PROBE @MODE@ $n rc=$?"; else echo "LINK_PROBE @MODE@ $n missing rc=1"; fi
-""", {"NAME": r"^lp-[a-z]{2,9}$", "MODE": r"^(up|down)$"}),
+""", {"NAME": r"^lp-[a-z]{2,11}$", "MODE": r"^(up|down)$"}),
 
     # the LINK PROBE, last step (on BOTH servers, always run): the temporary link comes down, its scripts, its key file and its tagged firewall rules are removed
     "link_probe_clean": (r"""n='@NAME@'
 [ -x "/usr/local/sbin/nikatel-gre-down-$n" ] && "/usr/local/sbin/nikatel-gre-down-$n" >/dev/null 2>&1
 systemctl stop "nikatel-ipsec-sock-$n.service" >/dev/null 2>&1 || true
+systemctl stop "nikatel-carrier-$n.service" >/dev/null 2>&1 || true
 ip link set "$n" down 2>/dev/null || true; ip link del "$n" 2>/dev/null || true
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/etc/nikatel/ipsec/$n.keys" "/etc/nikatel/wg/$n.key"
+rm -f "/etc/systemd/system/nikatel-carrier-$n.service" /etc/nikatel-chisel/$n.key /etc/nikatel-chisel/$n.crt /etc/nikatel-chisel/$n.tls.key /etc/nikatel-chisel/$n.srv.env /etc/nikatel-chisel/$n.cli.env; systemctl daemon-reload 2>/dev/null || true
 echo "LINK_PROBE_CLEAN $n"
-""", {"NAME": r"^lp-[a-z]{2,9}$"}),
+""", {"NAME": r"^lp-[a-z]{2,11}$"}),
 
     # SPOOF TEST, before it: what a server needs for its part is installed when it is missing (the owner started the test; 1.69.13: a new Debian 12 server has no iptables, no ping, no tcpdump and the test stopped with "iptables is not installed on the
     # sending server"). ROLE send needs iptables and ping, ROLE listen needs tcpdump. Done BEFORE the listener starts, so a slow apt does not eat its listening time. "TRIED <packages>" says what was missing and tried, then READY or what is still missing.
@@ -1236,7 +1248,7 @@ chmod 600 $B/@NAME@.*; echo PREPARED
     # a tunnel TEST that was cut short (a restart of the panel in the middle of it) leaves its temporary units behind: the test-* units of every engine, the sink,
     # the GRE link, and a backhaul unit whose config forwards the reserved test port. Removing them is safe: no real tunnel is named test-* or forwards that port.
     "purge_test_leftovers": (r"""tp='@TESTPORT@'; n=0
-for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'nikatel-sink-test-*' 2>/dev/null | awk '{print $1}'); do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; n=$((n+1)); done
+for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-carrier-test-*' 'nikatel-carrier-lp-*' 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'nikatel-sink-test-*' 2>/dev/null | awk '{print $1}'); do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; n=$((n+1)); done
 for f in $(grep -lE "\"$tp(=|\")|\"$tp:" /etc/backhaul/*.toml 2>/dev/null); do b=$(basename "$f" .toml); systemctl disable --now "backhaul-$b.service" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/backhaul-$b.service" "$f"; n=$((n+1)); done
 for s in /usr/local/sbin/nikatel-gre-up-test-* /usr/local/sbin/nikatel-gre-down-test-* /usr/local/sbin/nikatel-gre-check-test-* /usr/local/sbin/nikatel-bpfw-test-* /usr/local/sbin/nikatel-paqet-fw-test-* /usr/local/sbin/nikatel-sink-test-*; do [ -e "$s" ] && rm -f "$s"; done
 rm -f /etc/backpack/test-*.toml /etc/backpack/test-*.metrics.json /etc/paqet/test-*.yaml /etc/nikatel-chisel/test-*.key /etc/nikatel-chisel/test-*.crt /etc/nikatel-chisel/test-*.env 2>/dev/null
@@ -1246,7 +1258,7 @@ for i in $(ip -o link show type ipip 2>/dev/null | awk -F': ' '{print $2}' | cut
 for i in $(ip -o link show type xfrm 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
 for s in /usr/local/sbin/nikatel-gre-up-lp-* /usr/local/sbin/nikatel-gre-down-lp-*; do [ -e "$s" ] && rm -f "$s"; done; rm -f /etc/nikatel/ipsec/lp-*.keys /etc/nikatel/wg/lp-*.key 2>/dev/null
 for u in $(systemctl list-units --all --no-legend --plain 'nikatel-ipsec-sock-test-*' 2>/dev/null | awk '{print $1}'); do systemctl stop "$u" >/dev/null 2>&1 || true; done
-rm -f /etc/nikatel/wg/test-*.key /etc/nikatel/ipsec/test-*.keys 2>/dev/null
+rm -f /etc/nikatel/wg/test-*.key /etc/nikatel/ipsec/test-*.keys /etc/systemd/system/nikatel-carrier-test-*.service /etc/systemd/system/nikatel-carrier-lp-*.service /etc/nikatel-chisel/lp-* 2>/dev/null
 systemctl daemon-reload; echo "PURGED $n"
 """, {"TESTPORT": r"^\d{4,5}$"}),
 

@@ -40,11 +40,93 @@ _NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,14}")
 _HEX20 = re.compile(r"[0-9a-f]{40}")
 
 
+# ------------------------------------------------------------------ a link CARRIED inside another tunnel (1.69.41)
+# Where the route between two servers drops GRE, ESP and every UDP port, a WireGuard link still passes when its UDP packets travel INSIDE a tunnel that the route lets through. The carrier is Chisel (a core the panel installs
+# already): a TLS WebSocket on ONE TCP port, with one UDP flow in it (Chisel forwards UDP over the same connection). Backhaul then runs over the 10.x addresses of the WireGuard link, as it does over any link.
+#
+#     Iran server                                                                           foreign server
+#   wg (initiates) --UDP--> 127.0.0.1:Q  [chisel]  ===== TLS WebSocket, TCP port C =====  [chisel] --UDP--> 127.0.0.1:P  wg (answers)
+#
+# `wgchisel`: the FOREIGN server dials the Iran server (Chisel reverse - the way that works when the foreign address is filtered from Iran); `wgchiselfwd`: the IRAN server dials the foreign one (forward - a customer's download
+# is faster when the Iran side dials). In both the Iran WireGuard end starts the talk (endpoint 127.0.0.1:Q) and the foreign end answers whoever it hears from (roaming): ONE UDP flow carries both directions.
+# One number N (52000-52099) gives the three ports: P = N (WireGuard, both servers), Q = N + 100 (the loopback door of the dialling-in side, Iran), C = 9400 + (N - 52000) (the TCP port of the Chisel server).
+CARRIER_LINKS = ("wgchisel", "wgchiselfwd")
+ALL_LINKS = LINKS + CARRIER_LINKS
+CARRIER_TITLE = {"wgchisel": "WireGuard in Chisel (foreign dials)", "wgchiselfwd": "WireGuard in Chisel (Iran dials)"}
+NAMES = {**TITLE, **CARRIER_TITLE}                                  # a name for every model, plain or carried
+CARRIER_DIAL = {"wgchisel": "foreign", "wgchiselfwd": "iran"}       # who opens the TCP connection of the carrier (the other side runs the Chisel server)
+CARRIER_RANGE = (52000, 52099)
+CARRIER_TCP_BASE = 9400
+CARRIER_OVERHEAD = 60               # WireGuard over IPv4: 20 + 8 + 32 - what its packet is bigger than the packet inside it
+CARRIER_MAX_PACKET = 9012           # Chisel carries a datagram of at most this size
+# The carrier is a TCP stream: the path between the servers does not limit the packet inside (real drill in two namespaces, 2026-10-20: 1380 -> 120 Mb/s, 4000 -> 170 - 190, 8800 -> 235 - 245 Mb/s - fewer, bigger packets cost the
+# userspace relay less). 8000 + 60 is far under what Chisel carries.
+CARRIER_MTU = 8000
+_TOKEN = re.compile(r"[0-9a-f]{32,64}")
+_FP = re.compile(r"[A-Za-z0-9+/=]{0,64}")
+
+
+def is_carrier(link: str) -> bool:
+    return link in CARRIER_LINKS
+
+
+def kernel_of(link: str) -> tuple[str, ...]:
+    """The kernel modules a link needs (a carried WireGuard link: WireGuard; the carrier itself is a program)."""
+    return ("wireguard",) if link in CARRIER_LINKS else KERNEL[link]
+
+
+def title(link: str) -> str:
+    return NAMES.get(link, link)
+
+
+def carrier_ports(n: int) -> tuple[int, int, int]:
+    """(the WireGuard UDP port - both servers, the loopback UDP door of the Iran side, the TCP port of the Chisel server) of the carrier numbered `n`."""
+    lo, hi = CARRIER_RANGE
+
+    if not lo <= int(n) <= hi:
+        raise ValueError(f"the number of a carried link is {lo}-{hi}")
+
+    return int(n), int(n) + 100, CARRIER_TCP_BASE + int(n) - lo
+
+
+def pick_carrier_port(taken_udp: set[int], taken_tcp: set[int]) -> int:
+    """Pure: the first number of the range whose three ports nobody holds (0 when the range is full). `taken_udp` / `taken_tcp`: what listens on either server, and what other tunnels were given."""
+    lo, hi = CARRIER_RANGE
+
+    for n in range(lo, hi + 1):
+        wg, door, tcp = carrier_ports(n)
+
+        if wg not in taken_udp and door not in taken_udp and tcp not in taken_tcp:
+            return n
+
+    return 0
+
+
+def carrier_server_role(link: str) -> str:
+    """"iran" or "foreign": the side that runs the Chisel server (the other side dials it)."""
+    return "iran" if CARRIER_DIAL[link] == "foreign" else "foreign"
+
+
+def carrier_remote(link: str, n: int) -> str:
+    """The one remote the dialling side gives Chisel: the UDP door on the Iran side (127.0.0.1:Q) to the WireGuard port of the foreign side. Reverse (the foreign server dials): `R:` - the Iran server listens at the door;
+    forward (the Iran server dials): the Iran client listens at the door itself."""
+    wg, door, _ = carrier_ports(n)
+    return ("R:" if CARRIER_DIAL[link] == "foreign" else "") + f"127.0.0.1:{door}:127.0.0.1:{wg}/udp"
+
+
+def carrier_fw_match(link: str, role: str, n: int) -> tuple[str, str]:
+    """(the match of what comes IN from the other server, the match of what goes OUT to it) for the firewall rules that name the exact peer: the TCP port of the carrier - as the destination on the side that
+    dials, as the source on the side that listens."""
+    tcp = carrier_ports(n)[2]
+    to_server, from_server = f"-p tcp --dport {tcp}", f"-p tcp --sport {tcp}"
+    return (to_server, from_server) if role == carrier_server_role(link) else (from_server, to_server)
+
+
 def split_kind(kind: str) -> tuple[str, str]:
     """A kind of the pair test -> (link, transport): "fou:tcpmux" -> ("fou", "tcpmux"), "tcpmux" -> ("gre", "tcpmux"). A kind of another engine ("bp:wss") is ("", "")."""
     head, sep, tail = str(kind).partition(":")
 
-    if sep and head in LINKS and head != "gre" and tail in TRANSPORTS:
+    if sep and head in ALL_LINKS and head != "gre" and tail in TRANSPORTS:
         return head, tail
 
     return ("gre", kind) if kind in TRANSPORTS else ("", "")
@@ -60,8 +142,8 @@ def all_kinds(transport: str = "tcpmux") -> list[str]:
 
 
 def needs(link: str) -> str:
-    """What must pass between the two servers for this link: "gre", "ipip", "esp" (raw IP protocols) or "udp"."""
-    return NEEDS.get(link, "udp")
+    """What must pass between the two servers for this link: "gre", "ipip", "esp" (raw IP protocols), "udp", or "tcp" (a carried link: the one TCP port of its carrier)."""
+    return "tcp" if link in CARRIER_LINKS else NEEDS.get(link, "udp")
 
 
 def is_udp(link: str) -> bool:
@@ -253,3 +335,114 @@ def ipsec_files(link: str, name: str, local: str, remote: str, ifid: int, addr_c
 
     keys = f"KEY_TX={key_tx}\nKEY_RX={key_rx}\n"
     return {f"/usr/local/sbin/nikatel-gre-up-{name}": fill(up, fw_up, True), f"/usr/local/sbin/nikatel-gre-down-{name}": fill(down, fw_down, False), f"/etc/nikatel/ipsec/{name}.keys": keys}
+
+
+# ------------------------------------------------------------------ a WireGuard link inside a Chisel carrier
+_CARRIER_UP = """#!/bin/sh
+# Nikatel @TITLE@ link @NAME@  (idempotent: also used by the health-check timer). WireGuard whose UDP packets travel inside the Chisel carrier unit (nikatel-carrier-@NAME@): this end @ROLE_LINE@.
+# The private key is in KEY, made on this server, and is never in a command line.
+NAME=@NAME@
+LOCAL=@LOCAL@
+REMOTE=@REMOTE@
+PORT=@WGPORT@
+DOOR=@DOOR@
+ADDR=@ADDR@
+MTU=@MTU@
+PEER_IP=@PEER_IP@
+PEER_PUB=@PEER_PUB@
+KEY=/etc/nikatel/wg/@NAME@.key
+CARRIER=nikatel-carrier-@NAME@.service
+TAG="nikatel-gre-$NAME"
+
+modprobe wireguard 2>/dev/null || true
+[ -s "$KEY" ] || { logger -t nikatel-wg "$NAME: the key file $KEY is missing"; exit 1; }
+@FIREWALL@
+if command -v iptables >/dev/null 2>&1; then
+  iptables() { command iptables -w 5 "$@"; }
+  iptables -C INPUT -i lo -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -i lo -m comment --comment "$TAG" -j ACCEPT
+  iptables -C OUTPUT -o lo -m comment --comment "$TAG" -j ACCEPT 2>/dev/null || iptables -I OUTPUT 1 -o lo -m comment --comment "$TAG" -j ACCEPT
+fi
+systemctl is-active --quiet "$CARRIER" || systemctl start "$CARRIER" || { logger -t nikatel-wg "$NAME: the carrier $CARRIER did not start"; exit 1; }
+if ! ip link show "$NAME" >/dev/null 2>&1; then
+  ip link add "$NAME" type wireguard || exit 1
+fi
+ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
+wg set "$NAME" listen-port "$PORT" private-key "$KEY" peer "$PEER_PUB" @ENDPOINT@allowed-ips "$PEER_IP/32" persistent-keepalive 25 || exit 1
+ip addr show dev "$NAME" | grep -q "inet ${ADDR%/*}/" || ip addr add "$ADDR" dev "$NAME"
+ip link set "$NAME" mtu "$MTU" up
+@SYSCTL@"""
+_CARRIER_DOWN = """#!/bin/sh
+NAME=@NAME@
+TAG="nikatel-gre-$NAME"
+ip link set "$NAME" down 2>/dev/null || true
+if ip -d link show "$NAME" 2>/dev/null | grep -q wireguard; then ip link del "$NAME" 2>/dev/null || true; fi
+systemctl stop "nikatel-carrier-$NAME.service" 2>/dev/null || true
+@FIREWALL@exit 0
+"""
+
+
+def carrier_unit(link: str, name: str, role: str, local: str, remote: str, n: int, fingerprint: str = "") -> str:
+    """The unit of the Chisel carrier on one end. The end that runs the server listens on the TCP port (TLS, the key of the server kept in a file, the password in an environment file of 0600); the other end dials
+    `remote` with the one UDP remote of the link. No [Install]: the link unit (nikatel-gre-<name>) starts and stops it, so there is one owner."""
+    base, bin_ = "/etc/nikatel-chisel", "/usr/local/bin/nikatel-chisel"
+    _, _, tcp = carrier_ports(n)
+
+    if role == carrier_server_role(link):
+        reverse = " --reverse" if CARRIER_DIAL[link] == "foreign" else ""
+        exec_line = f"{bin_} server --host 0.0.0.0 --port {tcp}{reverse} --keyfile {base}/{name}.key --keepalive 25s --tls-key {base}/{name}.tls.key --tls-cert {base}/{name}.crt"
+        env = f"{base}/{name}.srv.env"
+    else:
+        fp = f" --fingerprint {fingerprint}" if fingerprint else ""
+        exec_line = f"{bin_} client --keepalive 25s --max-retry-interval 5s{fp} --tls-skip-verify https://{remote}:{tcp} '{carrier_remote(link, n)}'"
+        env = f"{base}/{name}.cli.env"
+
+    return f"""[Unit]
+Description=Nikatel Chisel carrier of the {NAMES[link]} link {name} ({role})
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile={env}
+ExecStart={exec_line}
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+"""
+
+
+def carrier_files(link: str, name: str, role: str, local: str, remote: str, addr_cidr: str, mtu: int, n: int, peer_pub: str, token: str, fingerprint: str, fw_up: str, fw_down: str, sysctl: str) -> dict[str, str]:
+    """The files of ONE end of a WireGuard link carried inside Chisel - {path: text}: the up and down scripts, the unit of the carrier and the environment file with its password. `role`: "iran" or "foreign" (this end);
+    `n`: the number of the carrier (its ports); `fingerprint`: the key of the Chisel server the dialling end pins ('' = not pinned). The firewall texts (`fw_up`, `fw_down`) are the tagged rules of the link."""
+    if link not in CARRIER_LINKS:
+        raise ValueError("this is not a carried link")
+
+    if role not in ("iran", "foreign"):
+        raise ValueError("the end of a link is the Iran side or the foreign side")
+
+    if not _NAME.fullmatch(name) or not _IPV4.fullmatch(local) or not _IPV4.fullmatch(remote) or not 1200 <= int(mtu) <= CARRIER_MAX_PACKET - CARRIER_OVERHEAD:
+        raise ValueError("a carried link needs a tunnel name, two IPv4 addresses and an MTU Chisel can carry")
+
+    if not _TOKEN.fullmatch(token or "") or not _FP.fullmatch(fingerprint or ""):
+        raise ValueError("a carried link needs the password of its carrier (hex) and, when pinned, the fingerprint of its server key")
+
+    wg, door, _ = carrier_ports(n)
+    iface = ipaddress.ip_interface(addr_cidr)
+    peer_ip = next(str(h) for h in iface.network.hosts() if str(h) != str(iface.ip))
+    starts = role == "iran"                      # the Iran WireGuard end starts the talk through the door; the foreign end answers whoever it hears from
+    put = {"@NAME@": name, "@LOCAL@": local, "@REMOTE@": remote, "@WGPORT@": str(wg), "@DOOR@": str(door), "@ADDR@": addr_cidr, "@MTU@": str(int(mtu)), "@PEER_IP@": peer_ip, "@PEER_PUB@": peer_pub, "@TITLE@": NAMES[link],
+           "@ROLE_LINE@": "starts the talk through the door 127.0.0.1:" + str(door) if starts else "answers whoever the carrier brings", "@ENDPOINT@": 'endpoint "127.0.0.1:$DOOR" ' if starts else ""}
+
+    def fill(text: str, firewall: str, with_sysctl: bool) -> str:
+        text = text.replace("@FIREWALL@", firewall).replace("@SYSCTL@", sysctl if with_sysctl else "")
+
+        for k, v in put.items():
+            text = text.replace(k, v)
+
+        return text
+
+    srv = role == carrier_server_role(link)
+    return {f"/usr/local/sbin/nikatel-gre-up-{name}": fill(_CARRIER_UP, fw_up, True), f"/usr/local/sbin/nikatel-gre-down-{name}": fill(_CARRIER_DOWN, fw_down, False),
+            f"/etc/systemd/system/nikatel-carrier-{name}.service": carrier_unit(link, name, role, local, remote, n, fingerprint),
+            f"/etc/nikatel-chisel/{name}.{'srv' if srv else 'cli'}.env": f"AUTH=nikatel:{token}\n"}

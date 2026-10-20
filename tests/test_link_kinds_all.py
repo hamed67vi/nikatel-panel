@@ -25,7 +25,7 @@ def test_every_kind_of_the_grid_is_read_back_as_its_link_and_its_transport():
 
 def test_the_new_kinds_are_in_the_group_of_the_other_links_and_are_not_a_default():
     old = {"wg:tcpmux", "wg:tcp", "fou:tcpmux", "gue:tcpmux", "ipip:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsec:tcpmux", "ipsecnat:tcpmux"}
-    new = [k for k in tt.KINDS if k[3] == "Backhaul over another link" and k[0] not in old]
+    new = [k for k in tt.KINDS if k[3] == "Backhaul over another link" and k[0] not in old and not k[0].startswith("wgchisel")]          # (the 8 kinds of the two carried links are tested in test_carrier_link.py)
     assert len(new) == 8 * 4 - len(old)
     assert all(k[4] is False and "Backhaul" in k[1] and linkmodels.TITLE[k[0].split(":")[0]] in k[1] for k in new)
     assert {k[3] for k in tt.KINDS} == {"Backhaul over GRE", "Backhaul over another link", "BackPack", "BackPack Direct", "Paqet", "Chisel"}
@@ -36,8 +36,8 @@ def test_the_night_survey_keeps_its_own_short_list():
 
 
 def test_the_kinds_only_the_grid_adds_are_not_in_the_standard_order_of_a_repair():
-    assert len(tt.GRID_ONLY) == 23 and tt.GRID_ONLY <= tt.KIND_KEYS
-    assert not set(knowledge.PRIOR) & tt.GRID_ONLY and set(knowledge.PRIOR) == tt.KIND_KEYS - tt.GRID_ONLY      # (a cut tunnel is never repaired by walking 23 more kinds)
+    assert len(tt.GRID_ONLY) == 23 + 8 and tt.GRID_ONLY <= tt.KIND_KEYS          # (the grid, and the 2 carried links x 4 transports)
+    assert not set(knowledge.PRIOR) & tt.GRID_ONLY and set(knowledge.PRIOR) == tt.KIND_KEYS - tt.GRID_ONLY      # (a cut tunnel is never repaired by walking 31 more kinds)
 
 
 def test_the_message_about_ipip_says_the_standby_may_hold_it():

@@ -51,6 +51,9 @@ UDP_LINK_KINDS = tuple(k for k in LINK_KINDS if linkmodels.is_udp(linkmodels.spl
 # the owner asks (Doctor page, Knowledge) or by a repair that needs them.
 READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bp:wss", "chisel:fwdtls", "bp:tcp", "bpd:udp", "wg:tcpmux", "fou:tcpmux",
          "gue:tcpmux", "ipip:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsec:tcpmux", "ipsecnat:tcpmux"]      # (a link of the other models too: where protocol 47 is filtered they are the first thing to try, and which of them passes differs from pair to pair - a survey never installs a package, wireguard-tools included)
+# Backhaul over a WireGuard link CARRIED inside Chisel (one TCP port; services/linkmodels.py): not in PRIOR / READY / CUT_LINKS - the Doctor does not walk them in its standard order and the night survey does not build them. They are the
+# LAST RESORT of a cut (`autopilot._carrier_last_resort`): after every kind failed, when the link probe SEES one pass. The owner can test them in Compare (the grid has them) and build them from Create tunnel.
+CARRIER_KINDS = tuple(f"{k}:tcpmux" for k in linkmodels.CARRIER_LINKS)
 NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", "down1_mbps", "up1_mbps")
 INCIDENTS = 200             # the cuts that are kept (the newest)
 PLAYBOOK_DAYS = 90          # what healed a pair this long ago is still the first thing tried
@@ -255,7 +258,7 @@ def record(iran_id: int, foreign_id: int, r: dict, measure: str, now: int | None
 def record_link(iran_id: int, foreign_id: int, link: str, r: dict, now: int | None = None) -> None:
     """Keep what the link probe found for one link of one pair (services/linkprobe.py): did it pass, its delay and loss, why not, when. These are answers about the CARRIER (a protocol or a UDP port between the two
     servers), not about an engine: they are cheap to ask again, so unlike a kind that failed they never lock anything out for weeks - the next cut simply asks again."""
-    if link not in linkmodels.LINKS:
+    if link not in linkmodels.ALL_LINKS:
         return
 
     now = now or int(time.time())

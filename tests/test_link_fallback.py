@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nikatel.services import builder
+from nikatel.services import builder, linkmodels
 from nikatel.services.builder import LinkFailed
 
 
@@ -52,7 +52,7 @@ def test_the_models_come_in_one_order_and_wireguard_only_where_it_is_allowed():
         tried.append(k)
     assert order == ["gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec"]                  # (the ones in UDP first; no wg: a build never installs a package for a fall-back)
     assert builder.next_link(order) == "" and builder.next_link(order, wg_ok=True) == "wg"
-    assert set(builder.FALLBACK_LINKS) == set(builder.LINKS)                                                  # (no model is forgotten, none is made up)
+    assert set(builder.FALLBACK_LINKS) == set(linkmodels.ALL_LINKS)                                                  # (no model is forgotten, none is made up)
 
 
 def test_a_link_that_does_not_pass_is_followed_by_the_next_model_until_one_passes(walk):
@@ -75,7 +75,7 @@ def test_a_build_that_is_not_the_owners_does_not_walk_the_models(walk):
 
 def test_when_no_model_passes_the_story_says_which_were_tried(walk):
     b = make_build(link_fallback=True)
-    log = walk(b, bad=set(builder.LINKS))
+    log = walk(b, bad=set(linkmodels.ALL_LINKS))
     assert log["built"] == ["gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec"]
     assert any("None of the link models passed" in s[0] and "tried: GRE," in s[0] and "IPsec (ESP)" in s[0] for s in log["said"])
     assert log["final"][2] is False and "Stopped:" in log["final"][0]
@@ -83,8 +83,8 @@ def test_when_no_model_passes_the_story_says_which_were_tried(walk):
 
 def test_wireguard_is_tried_last_only_when_the_owner_allowed_its_tool(walk):
     b = make_build(link_fallback=True, opts={"install_wg": True})
-    log = walk(b, bad={k for k in builder.LINKS if k != "wg"})
-    assert log["built"][-1] == "wg" and len(log["built"]) == len(builder.LINKS)
+    log = walk(b, bad={k for k in linkmodels.ALL_LINKS if k != "wgchiselfwd"})
+    assert log["built"][-1] == "wgchiselfwd" and len(log["built"]) == len(linkmodels.ALL_LINKS)          # (WireGuard in Chisel is the very last resort: after WireGuard itself)
 
 
 def test_an_error_that_is_not_about_the_link_is_never_retried(walk):

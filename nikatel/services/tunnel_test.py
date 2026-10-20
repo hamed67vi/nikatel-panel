@@ -213,7 +213,7 @@ def start(iran_id: int, foreign_id: int, transport: str = "tcpmux", link: str = 
         n += 1
 
     name = f"test-{n}"
-    build_aid = builder.start_build(iran_id, foreign_id, str(TEST_PORT), transport, forced_name=name, opts={"link": link, **({"install_wg": True} if install_wg and link == "wg" else {})} if link != "gre" else None)
+    build_aid = builder.start_build(iran_id, foreign_id, str(TEST_PORT), transport, forced_name=name, opts={"link": link, **({"install_wg": True} if install_wg and link in builder.NEEDS_WG_TOOL else {})} if link != "gre" else None)          # (a WireGuard link, carried or not: wireguard-tools may be installed when the OWNER started the test)
 
     with session() as db:
         entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {transport if link == 'gre' else link + ':' + transport} tunnel {name} is being built (build #{build_aid})…"])
@@ -393,6 +393,16 @@ for _link in linkmodels.LINKS:
         if f"{_link}:{_tr}" not in _HAVE:
             GRID_ONLY.add(f"{_link}:{_tr}")
             KINDS.append((f"{_link}:{_tr}", f"Backhaul · {_label} over {linkmodels.TITLE[_link]}", _note, "Backhaul over another link", False))
+
+# The WireGuard links CARRIED inside Chisel (1.69.41): for the pair where raw GRE, ESP and every UDP port are filtered. Never in the Doctor's standard order (the slowest way); the owner tests them here and builds them from Create tunnel,
+# and the Doctor tries them as the last resort of a cut when the link probe sees one pass (`autopilot._carrier_last_resort`).
+_CARRIER_NOTE = {"wgchisel": "WireGuard inside a Chisel TLS WebSocket (one TCP port, the foreign server dials), for a route that filters GRE, ESP and UDP", "wgchiselfwd": "WireGuard inside a Chisel TLS WebSocket (one TCP port, the Iran server dials), for a route that filters GRE, ESP and UDP"}
+_TRANSPORT_LABEL_ALL = {"tcpmux": ("TCP Mux", ""), **{k: (v[0], v[1]) for k, v in _TRANSPORT_LABEL.items()}}
+
+for _link in linkmodels.CARRIER_LINKS:
+    for _tr, (_label, _note) in _TRANSPORT_LABEL_ALL.items():
+        GRID_ONLY.add(f"{_link}:{_tr}")
+        KINDS.append((f"{_link}:{_tr}", f"Backhaul · {_label} over {linkmodels.NAMES[_link]}", _CARRIER_NOTE[_link] + (f"; {_note}" if _note else ""), "Backhaul over another link", False))
 
 KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}

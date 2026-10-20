@@ -14,6 +14,7 @@ from nikatel.services import (
     actions,
     analyst,
     bandwidth,
+    builder,
     failover,
     knowledge,
     tunnel_test,
@@ -484,3 +485,30 @@ def test_the_dial_test_asks_the_other_server_over_tcp(monkeypatch):
     assert ap._dial(node, "198.51.100.5", 22) is True and ap._dial(node, "198.51.100.5", 2222) is False and calls[0] == ("tcp_probe", {"HOST": "198.51.100.5", "PORT": "22"})
     monkeypatch.setattr(ap, "run_script", lambda *a, **k: (_ for _ in ()).throw(ap.SSHError("timeout")))
     assert ap._dial(node, "198.51.100.5", 22) is None
+
+def test_when_every_kind_failed_a_carried_wireguard_link_is_the_last_resort_if_the_probe_sees_one_pass(monkeypatch):
+    tid, _, _ = world("lr-ir1")
+    said, attempts = fake_repair(monkeypatch, {**GRE_CUT, "cause": "route_cut", "dial_i": False, "dial_f": False}, works={"wgchiselfwd:tcpmux"})
+    asked = []
+    monkeypatch.setattr(ap, "_carrier_last_resort", lambda aid, snap, tried: asked.append(set(tried)) or ["wgchiselfwd:tcpmux"])
+    assert ap.smart_fix(9, tid, "switch", "auto") is True
+    assert len(attempts) == len(knowledge.PRIOR) - 4 + 1 and attempts[-1][0] == "wgchiselfwd:tcpmux" and attempts[-1][1] is False         # after every kind of the list; the tunnel was removed once, by the first attempt
+    assert len(asked) == 1 and "bp:wssmux" in asked[0] and not any(k.startswith("wgchisel") for k in asked[0])                          # (asked once, when the list is done)
+    assert any(ln == "Trying wgchiselfwd:tcpmux (last resort): it is built as the real tunnel and checked for data." for ln in said)
+    assert not any(ln.startswith("None of the") and "connected on this route" in ln for ln in said)
+
+
+def test_a_last_resort_that_finds_nothing_leaves_the_story_as_it_was_and_the_old_tunnel_is_put_back(monkeypatch):
+    tid, _, _ = world("lr-ir2")
+    said, attempts = fake_repair(monkeypatch, {**GRE_CUT, "cause": "route_cut", "dial_i": False, "dial_f": False})
+    monkeypatch.setattr(ap, "_carrier_last_resort", lambda aid, snap, tried: [])
+    assert ap.smart_fix(9, tid, "switch", "auto") is False and len(attempts) == len(knowledge.PRIOR) - 4
+    assert any(ln.startswith(f"None of the {len(knowledge.PRIOR) - 4} tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
+
+
+def test_the_doctor_builds_a_carried_kind_over_its_link_and_never_asks_for_a_package(monkeypatch):
+    seen = []
+    monkeypatch.setattr(builder, "start_build", lambda iran_id, foreign_id, ports, transport, mtu=0, keepalive=75, forced_name="", nodelay=True, opts=None: seen.append((transport, forced_name, dict(opts or {}))) or 5)
+    snap = {"ports": "8075", "name": "pl-ir9"}
+    assert ap._build_kind(snap, 1, 2, "wgchisel:tcpmux", {"link": "gue", "heartbeat": 10}) == 5
+    assert seen == [("tcpmux", "pl-ir9", {"heartbeat": 10, "link": "wgchisel"})]                                                    # (the link belongs to the KIND; no install_wg: the Doctor installs nothing)
