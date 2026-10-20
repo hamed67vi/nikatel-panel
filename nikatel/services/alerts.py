@@ -299,11 +299,62 @@ def _say(level: str, text: str) -> None:
 WORDS = {"tunnel": "down", "server": "unreachable", "config": "down", "panel": "down", "node": "disconnected"}
 
 
+ORPHAN_SECONDS = 7 * 86400          # the state of a thing that is gone is kept this long after the sweep first saw it missing
+PRUNE_EVERY = 600                   # the sweep looks every ten minutes (run() looks every 5 seconds)
+_PRUNED = {"at": 0}
+
+
+def prune_orphans(now: int | None = None) -> int:
+    """The alert state (`alert_states`) of a tunnel, server, config, panel or node that no longer exists is dropped - after ORPHAN_SECONDS, not at once: a tunnel that a repair rebuilds is deleted and made again under the same
+    name ON PURPOSE and its "UP again" message needs the state to survive, and a name used again much later must not inherit `alerted` / `fails` of a thing that is long gone (the audit of 2026-10-21; the owner: "fix it").
+    The clock starts at the first sweep that saw the thing missing (kept in the settings document `alert_orphans`); a thing that is back is forgotten. Returns how many states were dropped."""
+    now = int(time.time() if now is None else now)
+
+    with session() as db:
+        known = {"tunnel": set(db.scalars(select(Tunnel.name))), "server": set(db.scalars(select(Server.name))),
+                 "config": set(db.scalars(select(Config.name))), "panel": set(db.scalars(select(Panel.name)))}
+
+        def alive(a: AlertState) -> bool:
+            if a.kind == "node":
+                return a.ref.split("/", 1)[0] in known["panel"]          # (the nodes of a panel come and go with its reading: only a panel that is gone takes its nodes)
+
+            return a.kind not in known or a.ref in known[a.kind]          # (a kind this sweep does not know is never dropped)
+
+        missing = {f"{a.kind}|{a.ref}": a for a in db.scalars(select(AlertState)) if not alive(a)}
+        seen = {k: int(v) for k, v in (st.get("alert_orphans").get("since") or {}).items() if isinstance(v, (int, float))}
+        since = {k: seen.get(k, now) for k in missing}
+        dropped = 0
+
+        for k, at in since.items():
+            if now - at >= ORPHAN_SECONDS:
+                db.delete(missing[k])
+                dropped += 1
+
+        since = {k: v for k, v in since.items() if now - v < ORPHAN_SECONDS}
+
+    if since != seen:
+        st.put("alert_orphans", {"since": since})
+
+    if dropped:
+        log.info("alert states of %d things that are gone for good were dropped", dropped)
+
+    return dropped
+
+
 def run(now: int | None = None) -> None:
     flush()           # whatever Telegram did not take at the last look goes first
 
     conf = st.get("alerts")
     now = int(time.time() if now is None else now)
+
+    if now - _PRUNED["at"] >= PRUNE_EVERY:
+        _PRUNED["at"] = now
+
+        try:
+            prune_orphans(now)
+        except Exception:
+            log.exception("the sweep of the alert states of things that are gone failed")
+
     muted = set(conf.get("muted") or [])
     rules = rules_from(conf)
     downs: dict[str, list[tuple[str, str, str]]] = {}          # kind -> [(name, label, why)]
