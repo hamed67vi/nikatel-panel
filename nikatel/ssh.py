@@ -373,6 +373,16 @@ echo "NOW $(date +%s)"
 echo "NOW $(date +%s)"
 """, {}),
 
+    # the LANES (services/lanes.py), read-only: "LANE <standby name> <tcp|udp> <users' port> <shifted port> <share> <shadowed>" for every statistic redirect tagged "nikatel-lane-<name>" (`share`: the kernel's
+    # number, 0.39999999991 for 40 %; `shadowed`: parked RETURN rules of a standby's way back that stand ABOVE it for the same port - they make it dead until they are taken off) and "PARKED <name> <proto> <users' port>"
+    # for a lane that was ended the careful way (a RETURN is all that is left of it).
+    "lane_list": (r"""iptables -t nat -S PREROUTING 2>/dev/null | awk '/^-A PREROUTING / { p = ""; d = ""; c = ""; j = ""; to = ""; pr = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1); if ($i == "--comment") { c = $(i + 1); gsub(/"/, "", c) } if ($i == "-j") j = $(i + 1); if ($i == "--to-ports") to = $(i + 1); if ($i == "--probability") pr = $(i + 1) }
+  key = p " " d
+  if (c ~ /^nikatel-lane-/) { name = c; sub(/^nikatel-lane-/, "", name); if (j == "REDIRECT" && to != "" && d != "" && pr != "") print "LANE", name, p, d, to, pr, sh[key] + 0; else if (j == "RETURN" && d != "") print "PARKED", name, p, d }
+  else if (c ~ /^nikatel-standby-/ && j == "RETURN") sh[key]++ }'
+echo "NOW $(date +%s)"
+""", {}),
+
     # read-only: the byte counters of some network cards, the byte counters of the TCP connections of some tunnels, and the uptime, in one go - the live numbers of the tunnels (services/livebw.py):
     #   "IF <card> <rx_bytes> <tx_bytes>" for every card that exists;
     #   "SOCK <spec> <local> <remote> <bytes_acked> <bytes_received>" for every established connection of a tunnel that has no card of its own (a reverse proxy: BackPack, Chisel): spec "s8072" = the connections that
@@ -921,6 +931,64 @@ systemctl daemon-reload
 if [ "$park" = 1 ]; then LEFT=$(iptables -t nat -S PREROUTING 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? .*-j REDIRECT"); else LEFT=$( (iptables -t nat -S PREROUTING; iptables -t filter -S INPUT) 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? "); fi
 echo "STANDBY_OFF $n $LEFT"
 """, {"NAME": _TNAME, "PARK": r"^[01]$"}),
+
+    # a LANE (services/lanes.py): the warm standby of a tunnel put to work BESIDE it. On the Iran server a NAT rule per users' port sends a RANDOM share of the NEW connections to the shifted port of the standby
+    # (`-m statistic --mode random --probability <share> -j REDIRECT --to-ports <shifted>`), the others go on to the tunnel; a connection that is open is never touched (the NAT table only sees the first packet of a
+    # flow, and conntrack keeps what it decided). Tagged "nikatel-lane-<standby name>" - another tag than the standby's handover, which is a full redirect put ABOVE it. Idempotent; a changed share REPLACES the rule in
+    # place (-R: never a gap); a lane rule that sits under a parked RETURN of the standby's way back (that RETURN would shadow it) is freed by taking that RETURN off - the lane rule keeps the chain from being empty.
+    # No boot unit: after a reboot the rules are gone = everything goes to the tunnel (the safe state); the panel puts the lane again. PROB: "0.40000000" (the share of the new connections that go to the standby).
+    # "LANE_ON <name> <rules>" / "LANE_FAIL <why>". MAP: "<users' port>:<shifted port>,...".
+    "lane_on": (r"""n='@NAME@'; prob='@PROB@'; tag="nikatel-lane-$n"
+command -v iptables >/dev/null 2>&1 || { echo "LANE_FAIL this server has no iptables"; exit 0; }
+W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
+ipt() { iptables $W "$@"; }
+idx() { ipt -t nat -S PREROUTING 2>/dev/null | awk -v tag="$tag" -v pr="$1" -v dp="$2" -v tgt="$3" '/^-A PREROUTING / { n++; p = ""; d = ""; c = ""; j = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1); if ($i == "--comment") { c = $(i + 1); gsub(/"/, "", c) } if ($i == "-j") j = $(i + 1) } if (c == tag && p == pr && d == dp && j == tgt) { print n; exit } }'; }
+put() {
+  spec="-p $1 --dport $2 -m statistic --mode random --probability $prob -m comment --comment $tag -j REDIRECT --to-ports $3"
+  if ! ipt -t nat -C PREROUTING $spec 2>/dev/null; then
+    i=$(idx "$1" "$2" REDIRECT)
+    if [ -n "$i" ]; then ipt -t nat -R PREROUTING "$i" $spec; else ipt -t nat -I PREROUTING 1 $spec; fi
+  fi
+  ipt -t nat -C PREROUTING $spec 2>/dev/null || return 1
+  while ipt -t nat -C PREROUTING -p "$1" --dport "$2" -m comment --comment "$tag" -j RETURN 2>/dev/null; do ipt -t nat -D PREROUTING -p "$1" --dport "$2" -m comment --comment "$tag" -j RETURN; done
+  ipt -t nat -S PREROUTING 2>/dev/null | grep -- '--comment "\?nikatel-standby-' | grep -- "-p $1 " | grep -- "--dport $2 " | grep -- '-j RETURN' | sed 's/^-A /-D /' | tr -d '"' | while read -r r; do ipt -t nat $r; done
+  ipt -C INPUT -p "$1" --dport "$3" -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$1" --dport "$3" -m comment --comment "$tag" -j ACCEPT
+  while ipt -C INPUT -p "$1" --dport "$3" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null; do ipt -D INPUT -p "$1" --dport "$3" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT; done
+}
+for pair in $(echo '@MAP@' | tr ',' ' '); do p=${pair%%:*}; s=${pair##*:}; for proto in @PROTOS@; do
+  put "$proto" "$p" "$s" || { echo "LANE_FAIL the kernel did not take the rule for port $p: $(iptables $W -t nat -S PREROUTING 2>&1 | tail -n 1 | cut -c1-120)"; exit 0; }
+done; done
+echo "LANE_ON $n $(ipt -t nat -S PREROUTING 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | grep -c -- '-j REDIRECT')"
+""", {"NAME": _TNAME, "PROB": r"^0\.\d{8}$", "MAP": r"^\d{1,5}:\d{1,5}(,\d{1,5}:\d{1,5}){0,199}$", "PROTOS": r"^(tcp|udp|tcp udp)$"}),
+
+    # the way a lane ends. PARK=1: new connections stop going to the standby and the open ones STAY (the same lesson as the standby's way back: deleting the LAST rule of the NAT chain makes the kernel reset every
+    # connection it translated, so a tagged RETURN is put at the top first and the redirect is deleted after it; INPUT keeps an accept of the established connections). PARK=2: the parked rules are taken off - but
+    # ONLY when no connection to the shifted ports is left (ss), so nothing is reset; otherwise they stay and the panel asks again later. PARK=0: every rule of the tag goes (the standby is being removed).
+    # "LANE_OFF <name> <redirects left> <rules of the tag left> <connections to the shifted ports>".
+    "lane_off": (r"""n='@NAME@'; park='@PARK@'; tag="nikatel-lane-$n"; conns=0
+if command -v iptables >/dev/null 2>&1; then
+  W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
+  ipt() { iptables $W "$@"; }
+  mine() { ipt -t "$1" -S "$2" 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | tr -d '"'; }
+  pd() { awk '{ p = ""; d = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1) } if (p != "" && d != "") print p, d }' | sort -u; }
+  for sp in $(mine filter INPUT | pd | awk '{ print $2 }' | sort -u); do c=$(ss -Htn state established "( sport = :$sp )" 2>/dev/null | wc -l); conns=$((conns + c)); done
+  parkit() {
+    mine nat PREROUTING | grep -- '-j REDIRECT' | pd | while read -r p d; do
+      ipt -t nat -C PREROUTING -p "$p" --dport "$d" -m comment --comment "$tag" -j RETURN 2>/dev/null || ipt -t nat -I PREROUTING 1 -p "$p" --dport "$d" -m comment --comment "$tag" -j RETURN
+    done
+    mine nat PREROUTING | grep -- '-j REDIRECT' | sed 's/^-A /-D /' | while read -r r; do ipt -t nat $r; done
+    mine filter INPUT | grep -v conntrack | pd | while read -r p d; do
+      ipt -C INPUT -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT
+      while ipt -C INPUT -p "$p" --dport "$d" -m comment --comment "$tag" -j ACCEPT 2>/dev/null; do ipt -D INPUT -p "$p" --dport "$d" -m comment --comment "$tag" -j ACCEPT; done
+    done
+  }
+  dropall() { for spec in "nat PREROUTING" "filter INPUT"; do set -- $spec; mine "$1" "$2" | sed 's/^-A /-D /' | while read -r r; do ipt -t "$1" $r; done; done; }
+  if [ "$park" = 0 ]; then dropall
+  elif [ "$park" = 2 ] && [ "$conns" = 0 ]; then dropall
+  else parkit; fi
+fi
+echo "LANE_OFF $n $(iptables -t nat -S PREROUTING 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | grep -c -- '-j REDIRECT') $( (iptables -t nat -S PREROUTING; iptables -t filter -S INPUT) 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? ") $conns"
+""", {"NAME": _TNAME, "PARK": r"^[012]$"}),
 
     # WireGuard for a Backhaul link: install wireguard-tools when the server has none (apt only; nothing is copied from another machine - a binary of another release does not run), then make the key of one tunnel
     # on the server itself - the private key never leaves it and never appears in a command line or a log - and print the public key. "WG_OK ..." / "WG_FAIL <why>", "PUB=<key>"

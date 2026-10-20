@@ -64,6 +64,7 @@ html[data-mode="light"] body #page .ap-tasks .ap-ttabs > button.on { background:
 html body #page .dr-top { box-sizing: border-box; margin: 0 0 12px; padding: 12px 14px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 16px; background: linear-gradient(rgba(255, 255, 255, .043), rgba(255, 255, 255, .024)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -1px 0 rgba(255, 255, 255, .04); }
 html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }
 html body #page .dr-top .dr-modes { margin: 0; }
+html body #page .dr-top .dr-lanes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 0; font-size: 12.5px; }
 html body #page .dr-top .storm-banner, html body #page .dr-top .ap-alert { margin-bottom: 12px; }
 html[data-mode="light"] body #page .dr-top { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: none; }
 

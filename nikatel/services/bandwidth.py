@@ -23,7 +23,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ServerSample, Tunnel, TunnelCheck, is_temp
+from ..models import ServerSample, Tunnel, TunnelCheck, is_standby, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import livebw
 from .events import emit
@@ -277,6 +277,9 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
         rec["bw"] = bw
         t.record = rec
         name, label = t.name, f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
+
+        if is_standby(t):
+            change = ""                      # (a warm standby is measured for its lane: nobody is told about a tunnel that is not in the list)
 
         if change == "drop":
             emit(db, "warn", "tunnels", f"Tunnel {label}: the bandwidth dropped to {bw['down']} Mb/s (usually {bw['drop']['from']}). The Doctor is looking at why.", name)

@@ -185,4 +185,29 @@ I18N.add({
 "Standby of {}: the {} standby could not be built ({}); it is tried again with another type, the wait grows from {} minutes.": "تانل رزرو {}: تانل رزرو {} ساخته نشد ({})؛ با نوع دیگری دوباره امتحان می‌شود، فاصله از {} دقیقه شروع می‌شود و بیشتر می‌شود."
 });
 
+/* ---- the lanes: a tunnel that is nearly full shares its NEW connections with its second tunnel (services/lanes.py) */
+I18N.add({
+"Lane · Sharing {} % + {} %": "مسیر دوم · تقسیم {} ٪ + {} ٪", "Lane · Paused": "مسیر دوم · متوقف", "Lane · Nearly full": "مسیر دوم · ظرفیت تقریباً پر",
+"{} % to this tunnel · {} % to {} · by capacity {} + {} Mb/s · users now {} + {} Mb/s · since {}": "{1} ٪ به این تانل · {2} ٪ به {3} · بر اساس ظرفیت {4} + {5} مگابیت · کاربران الان {6} + {7} مگابیت · از ساعت {8}",
+"{} % to this tunnel · {} % to {} · by capacity {} + {} Mb/s · since {}": "{1} ٪ به این تانل · {2} ٪ به {3} · بر اساس ظرفیت {4} + {5} مگابیت · از ساعت {6}",
+"{} of {} Mb/s are used ({} % of the capacity)": "{1} از {2} مگابیت مصرف می‌شود ({3} ٪ ظرفیت)",
+"The lane is paused: every new connection goes to the tunnel": "مسیر دوم متوقف است: همه‌ی اتصال‌های تازه به خود تانل می‌روند",
+"Share now": "همین حالا تقسیم کن",
+"Split the new connections of this tunnel with its second tunnel now, by the two capacities; nobody is cut": "اتصال‌های تازه‌ی این تانل را همین حالا بین آن و تانل دومش به نسبت ظرفیت‌ها تقسیم کن؛ کسی قطع نمی‌شود",
+"New connections go to the tunnel again; the ones open on the second tunnel finish there": "اتصال‌های تازه دوباره به تانل می‌روند؛ اتصال‌های باز روی تانل دوم همان‌جا تمام می‌شوند",
+"The lane: this tunnel and its second tunnel share the NEW connections by capacity; open connections are never touched": "مسیر دوم: این تانل و تانل دومش اتصال‌های «تازه» را به نسبت ظرفیت بین خود تقسیم می‌کنند؛ اتصال‌های باز هرگز دست نمی‌خورند",
+"Share the new connections of this tunnel with its second tunnel now? They are split by the two capacities; the connections that are open are not touched, nobody is cut. It stays until you press Stop.": "اتصال‌های تازه‌ی این تانل همین حالا با تانل دومش تقسیم شود؟ به نسبت دو ظرفیت تقسیم می‌شوند؛ اتصال‌های باز دست نمی‌خورند و کسی قطع نمی‌شود. تا «توقف» را نزنید می‌ماند.",
+"✓ The new connections are shared: {} % + {} %": "✓ اتصال‌های تازه تقسیم شد: {} ٪ + {} ٪", "✓ The new connections go to the tunnel again; the ones open on the second tunnel finish there": "✓ اتصال‌های تازه دوباره به تانل می‌روند؛ اتصال‌های باز روی تانل دوم همان‌جا تمام می‌شوند",
+"Add capacity by itself": "افزایش خودکار ظرفیت", "A tunnel that is nearly full shares its new connections with its second tunnel. Open connections are never touched.": "تانلی که ظرفیتش تقریباً پر شده اتصال‌های تازه‌اش را با تانل دومش تقسیم می‌کند. اتصال‌های باز هرگز دست نمی‌خورند.",
+"When a tunnel is nearly full (its users use 85 % of its capacity or more for most of ten minutes) its warm standby is put to work beside it: the new connections are split between the two by capacity. Nobody is cut.": "وقتی تانلی تقریباً پر شود (کاربرانش بیشتر ده دقیقه ۸۵ ٪ ظرفیت یا بیشتر مصرف کنند) تانل رزرو آماده‌باشش کنارش به کار گرفته می‌شود: اتصال‌های تازه به نسبت ظرفیت بین این دو تقسیم می‌شود. کسی قطع نمی‌شود.",
+"✓ A tunnel that is nearly full will share its new connections with its second tunnel": "✓ تانلی که تقریباً پر شود اتصال‌های تازه‌اش را با تانل دومش تقسیم می‌کند", "✓ Lanes are off: the lanes that were put by themselves end the careful way": "✓ تقسیم خودکار خاموش شد: مسیرهایی که خودکار گذاشته شده بودند با روش محتاطانه تمام می‌شوند",
+"Lane: {} shares its new connections with its second tunnel ({}): {} % + {} % (capacity {} + {} Mb/s). Open connections are not touched.": "مسیر دوم: {1} اتصال‌های تازه‌اش را با تانل دومش ({2}) تقسیم می‌کند: {3} ٪ + {4} ٪ (ظرفیت {5} + {6} مگابیت). اتصال‌های باز دست نمی‌خورند.",
+"Lane of {} ended. New connections go to the tunnel; the ones open on the second tunnel finish there.": "مسیر دوم {} تمام شد. اتصال‌های تازه به تانل می‌روند؛ اتصال‌های باز روی تانل دوم همان‌جا تمام می‌شوند.",
+"the second tunnel is not up: every new connection goes to the tunnel until it is": "تانل دوم بالا نیست: تا بالا بیاید همه‌ی اتصال‌های تازه به تانل می‌روند",
+"{n} lane rule(s) are still on the server": "{1} قانون مسیر دوم هنوز روی سرور مانده است", "the second tunnel carried nothing in its test": "تانل دوم در آزمایش خود هیچ داده‌ای نبرد", "the second tunnel could not be measured: {}": "تانل دوم اندازه‌گیری نشد: {1}",
+"the lane could not be put: {}": "مسیر دوم گذاشته نشد: {1}", "this tunnel has no standby: a lane needs a ready second tunnel": "این تانل رزرو ندارد: مسیر دوم به یک تانل دوم آماده نیاز دارد", "the tunnel is {}: a lane is put when it is up": "تانل {1} است: مسیر دوم وقتی گذاشته می‌شود که تانل بالا باشد", "this tunnel forwards no port": "این تانل هیچ پورتی را هدایت نمی‌کند",
+"the lane waits until both tunnels have been up for a minute": "مسیر دوم صبر می‌کند تا هر دو تانل یک دقیقه بالا بمانند",
+"the tunnel is cut: its standby carries everything (the lane waits)": "تانل قطع است: تانل رزرو همه چیز را می‌برد (مسیر دوم صبر می‌کند)",
+});
+
 I18N.add({"foreign server off": "سرور خارج خاموش", "Iran server off": "سرور ایران خاموش", "both servers off": "هر دو سرور خاموش", "GRE link cut": "لینک GRE قطع", "GRE interface missing": "اینترفیس GRE نیست", "service stopped": "سرویس متوقف", "no data passes": "داده عبور نمی‌کند", "no answer": "بی‌پاسخ"});

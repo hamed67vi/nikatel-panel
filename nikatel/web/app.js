@@ -965,7 +965,7 @@ function tunModal(t) {
 function tunWinHtml(t) {
   const sec = state.tsec === "monitor" ? "monitor" : "overview", c = (state.chartCache || {})["t" + t.id + ":" + state.mrange];
   const bar = `<div class="tabs lab-sec">${TUN_SECS.map(([k, l]) => `<button class="${k === sec ? "on" : ""}" onclick="tunWtab('${k}')">${l}</button>`).join("")}</div>`;
-  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunGrid(t) + `<div class="sgrid">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`;
+  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class="sgrid">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`;
   return bar + `<div class="lab-body" data-sec="${sec}">${body}</div><div id="fix-${t.id}" class="fix hidden"></div>`;
 }
 /* the warm standby (the owner, 2026-10-17: "bring the delay down to the minimum"; services/standby.py): a second tunnel of another type between the same two servers, built BEFORE a cut and kept idle on shifted ports; when this tunnel is cut
@@ -984,6 +984,22 @@ function tunStandby(t) {
     : st === "ready" ? b("Switch now", `tunStandbyNow(${id})`, false, "Hand the users' ports to the standby now (a drill; they stay there until Back now)") + b("Turn off", `tunStandbySet(${id}, false)`, false, "Remove the standby")
     : st === "removing" ? "" : b("Turn off", `tunStandbySet(${id}, false)`, false, "Remove the standby");
   return `<div class="lab-ban ${tone}" data-b="standby" title="The warm standby: another tunnel type between the same two servers, on shifted ports, built before a cut"><i class="lb-i">${st === "in_use" ? "⇆" : "⧉"}</i><div class="lb-t"><b>Standby · ${SB_WORD[st] || st}</b><span class="lb-m" title="${esc(s.why || "")}">${meta}</span></div><div class="lb-a">${acts}</div></div>`;
+}
+/* the lane (the owner, 2026-10-20: "when the capacity of a tunnel is nearly full, the Doctor must add capacity without cutting any customer"; services/lanes.py): the warm standby put to work BESIDE this tunnel - the Iran server sends a
+   share of the NEW connections to it, by the two capacities; the connections that are open are never touched. The bar shows only while it works, while it is paused, and (with a button) when the tunnel is at 70 % of its capacity or more
+   and lanes are switched on. t.lane = {on, state, why, pct, kind, manual, since, cap_p, cap_s, use_p, use_s} */
+function tunLane(t) {
+  const l = t.lane || {}, st = l.state || "off", id = t.id, pct = Math.round(l.pct || 0), r1 = x => Math.round(x * 10) / 10, clock = ts => ts ? new Date(ts * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "";
+  const near = st === "idle" && l.cap_p && l.use_p != null && l.use_p >= 0.7 * l.cap_p;
+  if (st === "off" || st === "waiting" || (st === "idle" && !near)) return "";
+  const b = (label, click, pri, tip) => `<button class="sm ${pri ? "pri" : ""}" onclick="${click}" ${tip ? `title="${esc(tip)}"` : ""}>${label}</button>`;
+  const meta = st === "sharing" ? (l.use_p != null && l.use_s != null ? `${100 - pct} % to this tunnel · ${pct} % to ${esc(l.kind)} · by capacity ${r1(l.cap_p)} + ${r1(l.cap_s)} Mb/s · users now ${Math.round(l.use_p)} + ${Math.round(l.use_s)} Mb/s · since ${clock(l.since)}` :
+      `${100 - pct} % to this tunnel · ${pct} % to ${esc(l.kind)} · by capacity ${r1(l.cap_p)} + ${r1(l.cap_s)} Mb/s · since ${clock(l.since)}`) :
+    st === "paused" ? esc(l.why || "The lane is paused: every new connection goes to the tunnel") :
+    `${r1(l.use_p)} of ${r1(l.cap_p)} Mb/s are used (${Math.round(100 * l.use_p / l.cap_p)} % of the capacity)`;
+  const acts = st === "idle" ? b("Share now", `tunLaneStart(${id})`, true, "Split the new connections of this tunnel with its second tunnel now, by the two capacities; nobody is cut")
+    : b("Stop", `tunLaneStop(${id})`, false, "New connections go to the tunnel again; the ones open on the second tunnel finish there");
+  return `<div class="lab-ban ${st === "sharing" ? "ok" : "warn"}" data-b="lane" title="The lane: this tunnel and its second tunnel share the NEW connections by capacity; open connections are never touched"><i class="lb-i">⇉</i><div class="lb-t"><b>${st === "sharing" ? `Lane · Sharing ${100 - pct} % + ${pct} %` : st === "paused" ? "Lane · Paused" : "Lane · Nearly full"}</b><span class="lb-m" title="${esc(l.why || "")}">${meta}</span></div><div class="lb-a">${acts}</div></div>`;
 }
 function tunBanner(t) {      // one box that says how the tunnel is, in plain words, with the buttons that fix it
   const offs = tunOffServers(t), d = t.detail || {}, up = t.state === "up";
@@ -1473,6 +1489,15 @@ window.tunStandbyNow = async id => {
 window.tunStandbyBack = async id => {
   try { await api(`/api/tunnels/${id}/standby/back`, {method: "POST"}); toast("✓ The users' ports are on the tunnel again; open connections end on the standby by themselves", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
   await tunRedraw(id); refresh();
+};
+window.tunLaneStart = async id => {
+  if (!await gconfirm("Share the new connections of this tunnel with its second tunnel now? They are split by the two capacities; the connections that are open are not touched, nobody is cut. It stays until you press Stop.")) return;
+  try { const r = await api(`/api/tunnels/${id}/lane/start`, {method: "POST"}); toast(`✓ The new connections are shared: ${100 - r.pct} % + ${r.pct} %`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id);
+};
+window.tunLaneStop = async id => {
+  try { await api(`/api/tunnels/${id}/lane/stop`, {method: "POST"}); toast("✓ The new connections go to the tunnel again; the ones open on the second tunnel finish there", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id);
 };
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.checkAll = async () => {      // Check all: it works right there on the button (no window); the answer is one line in the status bar and the list is drawn again
@@ -2089,7 +2114,7 @@ window.apStep = (btn, dir) => { const inp = btn.closest(".dr-num").querySelector
 PAGES.actions = async () => {
   // Tunnel Doctor is about tunnels only: configs and servers have their own places (the dashboard's Problems box, Panels, Servers)
   const outage = await api("/api/autopilot/outage").catch(() => null), nw = await api("/api/netwatch").catch(() => null);
-  const [d, tl, srvs, rp, dc] = await Promise.all([api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse,move,speed"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), api("/api/doctor").catch(() => null)]);
+  const [d, tl, srvs, rp, dc, ln] = await Promise.all([api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse,move,speed"), api("/api/tunnels"), api("/api/servers").catch(() => []), api("/api/settings/repair").catch(() => ({})), api("/api/doctor").catch(() => null), api("/api/lanes/settings").catch(() => ({on: false}))]);
   state.tunnelsCache = tl;
   const mode = rp.mode || (rp.auto ? "fix" : "off"), on = mode !== "off", lic = dc ? dc.licensed !== false : rp.licensed_move !== false, ro = !!d.read_only;
   const bad = tl.filter(t => t.state !== "up"), lossy = tl.filter(t => t.state === "up" && (tunLoss(t).v || 0) >= SHOW_LOSS), slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && !lossy.includes(t)), users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade) && !lossy.includes(t) && !slow.includes(t));      // slow: the bandwidth dropped (the Doctor measures it and looks at why by itself); users: the probe says the configs that ride the tunnel do badly
@@ -2116,6 +2141,8 @@ PAGES.actions = async () => {
       ${mcard("off", "bars", "Doctor Mode", "Only monitors and reports. You diagnose and fix manually, or let AI suggest solutions.", "")}
       ${mcard("fix", "wrench", "Auto Fix Tunnels", "Automatically restarts, rebuilds and changes GRE links or tunnel type if needed.", `<div class="dr-nf" onclick="event.stopPropagation()"><span>The moment a tunnel is down the Doctor starts - no waiting time.</span></div>`)}
       ${mcard("move", "server", "Auto Move to Iran Server", "If the main Iran server is down, move tunnels and DNS to another Iran server automatically.", cfg("server_minutes", "If an Iran server is down for", "minutes, move to another.", rp.server_minutes || 10, 2, 60, 1), !lic)}</div>`;
+  /* the lanes (services/lanes.py), the owner's switch: OFF until he turns it on */
+  const lanesRow = `<div class="dr-lanes"><label class="srv-sw ${ln.on ? "on" : ""}" title="When a tunnel is nearly full (its users use 85 % of its capacity or more for most of ten minutes) its warm standby is put to work beside it: the new connections are split between the two by capacity. Nobody is cut."><input type="checkbox" ${ln.on ? "checked" : ""} ${ro ? "disabled" : ""} onchange="apLanes(this.checked)" aria-label="Add capacity by itself"><i></i><b>Add capacity by itself</b></label><span class="mut">A tunnel that is nearly full shares its new connections with its second tunnel. Open connections are never touched.</span></div>`;
   const drEmpty = (title, text) => `<div class="dr-empty"><i>${apIc("inbox")}</i><b>${title}</b><p>${text}</p></div>`;
   const tabBtn = (k, ic, label, cnt, tip) => `<button type="button" data-k="${k}" class="${apTab === k ? "on" : ""}" onclick="apTasksTab('${k}')"${tip ? ` title="${tip}"` : ""}>${apIc(ic)}<span>${label}</span>${cnt ? `<i class="cnt">${cnt}</i>` : ""}</button>`;
   const acts = `<span class="dr-tr">${bad.length && !on ? `<button type="button" class="dr-pill pri" onclick="apFixAll()" title="Diagnose and repair every tunnel that is down or degraded, one after the other">${apIc("spark")}<span>Fix all (${bad.length})</span></button>` : ""}<button type="button" class="dr-pill" onclick="apExplain()" title="The AI reads what the panel knows and says what to do first (needs the key in Settings)">${apIc("chat")}<span>Explain</span></button><span class="dr-pill dr-state ${n ? "err" : "ok"}">${n ? n + " to look at" : "all up"}</span></span>`;
@@ -2134,7 +2161,7 @@ PAGES.actions = async () => {
     <div class="mv-list">${mv.map(mvRow).join("") || drEmpty("No moves yet", "When the Doctor moves the tunnels of an Iran server (or you do, from a tunnel window), it is written here with a way back.")}</div>`;
 
   const shown = $(".ap-tasks .ap-tbody:not(.hidden)"), keep = shown && shown.id === "ap-t-" + apTab ? shown.scrollTop : -1;          // the same tab is drawn again (the ticker, every 15 s): its scroll is kept and its fade-in is not played again - the page used to jump to the top and flash
-  $("#page").innerHTML = `<div class="dr-top">${storm}${disturb}${modes}</div>
+  $("#page").innerHTML = `<div class="dr-top">${storm}${disturb}${modes}${lanesRow}</div>
     <div class="card ap-tasks fx-box">
       <div class="ap-thead"><div class="ap-ttabs">${tabBtn("now", "wrench", "Active Tasks", nowN, "")}${tabBtn("done", "check", "Completed", doneN, "")}${tabBtn("moves", "sync", "Auto Moves", openN, "Every move of tunnels between Iran servers, with Return and DNS back")}${tabBtn("ana", "bars", "Analytics", 0, "What the history says about the tunnels and the servers, and the CPU cores")}${tabBtn("know", "spark", "Knowledge", 0, "What the Doctor already knows about every pair of servers - which tunnel types connect - and why tunnels were cut before")}</div>${acts}</div>
       <div class="ap-tbody ${apTab === "now" ? "" : "hidden"}" id="ap-t-now">${sugBox}<div class="ap-att">${workingRows}${bad.map(t => row(t, "bad")).join("")}${lossy.map(t => row(t, "lossy")).join("")}${slow.map(t => row(t, "slow")).join("")}${users.map(t => row(t, "users")).join("")}
@@ -2153,6 +2180,10 @@ PAGES.actions = async () => {
 };
 /* the mode cards: a click on a card chooses the mode; a change of the number inside a card saves it at once (with the mode as it is) */
 const apNum = (nm, dflt) => { const el = document.querySelector(`.dr-modes [name=${nm}]`); return el && +el.value ? +el.value : dflt; };
+window.apLanes = async on => {
+  try { await api("/api/lanes/settings", {method: "PUT", body: JSON.stringify({on})}); toast(on ? "✓ A tunnel that is nearly full will share its new connections with its second tunnel" : "✓ Lanes are off: the lanes that were put by themselves end the careful way", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  if (state.page === "tunnels") PAGES.actions();
+};
 window.apMode = async k => {
   const box = $(".dr-modes"), was = box && box.dataset.mode; if (box && was === k) return;
   if (box) apModeDraw(box, k);      // the card is lit at once and nothing is redrawn (the owner, 2026-10-16: the page jumped when a mode was chosen); the server is told in the background

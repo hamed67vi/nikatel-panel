@@ -58,6 +58,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the warm standby of a tunnel (services/standby.py): the tunnels the owner marked (by name: a rebuild or a repair gives a tunnel a new row but keeps its name), what went wrong with the build of a standby, and
     # how long a tunnel is down before the users' ports are handed to its standby
     "standby": {"marked": {}, "failed": {}, "after_seconds": 5, "touched": [], "optout": {}},         # touched: the Iran servers a handover was ever put on (read now and then for rules nobody asked for)
+    # the lanes (services/lanes.py): the warm standby put to work beside its tunnel when the tunnel is nearly full. on: the owner's switch (OFF by default); tunnels: the wish of each tunnel by NAME (want, manual,
+    # the share, both capacities, when the last one ended); touched: the Iran servers a lane was ever put on (their rules are read now and then)
+    "lanes": {"on": False, "tunnels": {}, "touched": []},
     # what the Doctor knows about every pair of servers (services/knowledge.py): the night survey (on, the local hours it may run in) and the tests kept per pair and tunnel kind
     "knowledge": {"on": True, "from_hour": 2, "to_hour": 6, "pairs": {}, "incidents": []},      # the night survey (temporary tunnels, tested one pair at a time, only at night, only on quiet servers) and what the Doctor remembers of every cut
     # the way back to the better tunnel type (services/comeback.py): a cut tunnel swapped to an emergency type is tested again for its old type, with growing waits, and swapped back when it is clearly better

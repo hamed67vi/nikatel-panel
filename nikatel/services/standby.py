@@ -390,6 +390,10 @@ def renamed(old: str, new: str) -> None:
     if old in _BUILDS:
         _BUILDS[new] = _BUILDS.pop(old)
 
+    from . import lanes
+
+    lanes.renamed(old, new)
+
     if old in tunnels.HANDED:
         tunnels.HANDED.discard(old)
         tunnels.HANDED.add(new)
@@ -435,7 +439,7 @@ def _sview(t: Tunnel, p: dict | None) -> dict:
     return {"id": t.id, "name": t.name, "state": t.state, "state_since": int(t.state_since or 0), "last_check_at": int(t.last_check_at or 0), "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id,
             "kind": autopilot.kind_of(t.type, t.transport, rec), "ports": [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()], "use": rec.get("use") or None, "stale": _stale(t, p),
             "udp": bool((rec.get("opts") or {}).get("accept_udp")), "last_error": t.last_error or "", "iran": (t.iran.host, t.iran.ssh_user, t.iran.ssh_port), "created_at": int(t.created_at or 0),
-            "iran_off": t.iran.enabled is not False and t.iran.online is False, "parked": bool(rec.get("parked")), "parked_at": int(rec.get("parked_at") or 0)}
+            "iran_off": t.iran.enabled is not False and t.iran.online is False, "parked": bool(rec.get("parked")), "parked_at": int(rec.get("parked_at") or 0), "lane": rec.get("lane") or None}
 
 
 def standby_row(db, name: str) -> Tunnel | None:
@@ -614,6 +618,10 @@ def give_back(name: str, why: str = "") -> dict:
         emit(db, "ok", "tunnels", f"Standby: the users' ports of {p['label'] if p else name} are on the tunnel again after {held} s on its standby.", name)
 
     log.info("standby: %s taken back after %s s (%s)", name, held, why or "by hand")
+
+    from . import lanes
+
+    lanes.refresh(name)                    # (the way back parks a RETURN above a lane's rule: the lane is freed at once)
     return {"ok": True, "held": held}
 
 
@@ -788,6 +796,10 @@ def remove_standby(name: str) -> list[str]:
         if s is None:
             return []
 
+        from . import lanes
+
+        lanes.release(name, s)              # (a lane sends new connections to the standby's ports: its rules go first - the standby is KEPT when the Iran server does not take them off)
+
         if s["use"]:
             give_back(name, "the standby is being removed")
 
@@ -899,6 +911,10 @@ def _auto_mark() -> None:
 
 def forget(name: str) -> None:
     """The owner removed the tunnel: its mark and its standby go with it (in the background; a tunnel that is rebuilt by a repair keeps both - this is only called for a removal the owner asked for)."""
+    from . import lanes
+
+    lanes.forget(name)
+
     if name in _marks() or _view(name)["s"] is not None:
         _mark(name, False)
         threading.Thread(target=_safe_cleanup, args=(name,), name=f"standby-forget-{name}", daemon=True).start()

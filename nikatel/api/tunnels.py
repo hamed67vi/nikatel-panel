@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck, is_standby, is_temp
-from ..services import analyst, builder, capacity, linkmodels, livebw, standby
+from ..services import analyst, builder, capacity, lanes, linkmodels, livebw, standby
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -520,6 +520,62 @@ def standby_back(tunnel_id: int):
     return {"ok": True, **standby.status(name)}
 
 
+class LanesIn(BaseModel):
+    on: bool
+
+
+@router.get("/lanes/settings")
+def lanes_settings():
+    """The owner's switch for lanes (a tunnel that is nearly full shares its new connections with its warm standby): off by default."""
+    return {"ok": True, "on": lanes.enabled()}
+
+
+@router.put("/lanes/settings")
+def lanes_settings_put(body: LanesIn):
+    """Switch the automatic lanes on or off. Off: the lanes that were put by themselves are ended the careful way (a lane started by hand stays until Stop)."""
+    return {"ok": True, **lanes.set_enabled(body.on)}
+
+
+@router.get("/tunnels/{tunnel_id}/lane")
+def lane_get(tunnel_id: int):
+    """The lane of a tunnel: off · idle · waiting · sharing · paused, why, the share of the new connections that goes to its second tunnel, both capacities and the users' rate on both."""
+    return {"ok": True, **lanes.status(_standby_name(tunnel_id))}
+
+
+@router.post("/tunnels/{tunnel_id}/lane/start")
+def lane_start(tunnel_id: int):
+    """Share now (by hand): the new connections of this tunnel are split between it and its warm standby by the two capacities. Nobody is cut: connections that are open stay where they are. Stays until Stop."""
+    from ..ssh import SSHError
+
+    name = _standby_name(tunnel_id)
+
+    try:
+        lanes.start(name, manual=True)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (RuntimeError, SSHError) as e:
+        raise HTTPException(502, str(e))
+
+    return {"ok": True, **lanes.status(name)}
+
+
+@router.post("/tunnels/{tunnel_id}/lane/stop")
+def lane_stop(tunnel_id: int):
+    """Stop sharing: new connections go to the tunnel again; the ones that are open on the second tunnel finish there (the rules are removed when none is left)."""
+    from ..ssh import SSHError
+
+    name = _standby_name(tunnel_id)
+
+    try:
+        lanes.stop(name, "stopped by you")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except (RuntimeError, SSHError) as e:
+        raise HTTPException(502, str(e))
+
+    return {"ok": True, **lanes.status(name)}
+
+
 @router.post("/tunnels/{tunnel_id}/rebuild", status_code=202)
 def rebuild(tunnel_id: int):
     """Rebuild a tunnel as an action (the old one comes back when the new build fails)."""
@@ -560,9 +616,10 @@ class TunnelOut(BaseModel):
     record: dict = {}       # port mapping, direction, test door, engine options - never secrets
     cap: dict = {}          # the capacity that is filling (services/capacity.py): {state: warm | full, util, cap, since}; {} while it is fine or unknown
     standby: dict = {}      # the warm standby of the tunnel (services/standby.py): on, state, type, since, why, the shifted ports
+    lane: dict = {}         # its lane (services/lanes.py): state (off · idle · waiting · sharing · paused), why, the share to the second tunnel, both capacities, the users' rate on both
 
 
-def _out(t: Tunnel, sb: dict | None = None) -> TunnelOut:
+def _out(t: Tunnel, sb: dict | None = None, lane: dict | None = None) -> TunnelOut:
     plan = plan_for(t)
     return TunnelOut(id=t.id, name=t.name, type=t.type, transport=t.transport, engine=t.engine,
                      iran_name=t.iran.name, iran_host=t.iran.host, foreign_name=t.foreign.name, foreign_host=t.foreign.host,
@@ -573,7 +630,7 @@ def _out(t: Tunnel, sb: dict | None = None) -> TunnelOut:
                      bw={k: v for k, v in ((t.record or {}).get("bw") or {}).items() if k != "hist"},
                      ux={k: v for k, v in ((t.record or {}).get("ux") or {}).items() if k != "pend"},
                      record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw", "ux")},
-                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, cap=capacity.view(t.name), standby=sb or {})
+                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, cap=capacity.view(t.name), standby=sb or {}, lane=lane or {})
 
 
 def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], known: set[str], now: int) -> list[TunnelOut]:
@@ -607,7 +664,8 @@ def list_tunnels():
     with session() as db:
         shown = [t for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name) and not is_standby(t)]      # a temporary test tunnel and a warm standby are not part of the list
         sbs = standby.summaries([t.name for t in shown])
-        rows = [_out(t, sbs.get(t.name)) for t in shown]
+        lns = lanes.summaries([t.name for t in shown])
+        rows = [_out(t, sbs.get(t.name), lns.get(t.name)) for t in shown]
         pending = st.get("pending_builds").get("items", [])
 
         if pending:
@@ -626,7 +684,7 @@ def get_tunnel(tunnel_id: int):
         if t is None or is_standby(t):          # (a standby is shown inside the window of its tunnel only)
             raise HTTPException(404, "tunnel not found")
 
-        return _out(t, standby.status(t.name))
+        return _out(t, standby.status(t.name), lanes.status(t.name))
 
 
 @router.get("/tunnels/{tunnel_id}/stability")

@@ -97,3 +97,7 @@ tunnel is not the traffic of its users until they are back.
   The failures around a way back onto a **BackPack Direct PCK** tunnel are that tunnel's own (measured alone, nothing else going on: 26 of 150 requests took over 1 s and 3 failed at 5 s, median 0.32 s). One request of 252 (1 s timeout) failed 8 s after the first way back, onto a
   Backhaul tunnel; it was not explained and did not come back in the other ways back.
   The standby stays **off by default**: mark only the tunnels whose users cannot wait a minute.
+
+## Lanes (1.69.52)
+
+When a tunnel is nearly full its standby can be put to work beside it - a NAT rule sends a share of the NEW connections to it, nobody is cut ([lanes.md](lanes.md)). The handover above is unchanged and stays on top: its full redirect is put above a lane's rule, its way back leaves a parked `RETURN` that `lane_on` takes off for the same port, and removing the standby takes its lane rules off first.

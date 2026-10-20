@@ -31,7 +31,7 @@ from sqlalchemy import select
 from .. import jobs
 from ..db import session
 from ..log import get_logger
-from ..models import Tunnel, is_temp
+from ..models import Tunnel, is_standby, is_temp
 from ..ssh import Node, SSHError, run_light
 from .tunnels import plan_for
 
@@ -187,7 +187,10 @@ def targets() -> list[dict]:
     out: dict[int, dict] = {}
 
     with session() as db:
-        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
+        for t in db.scalars(select(Tunnel)):
+            if not t.enabled and not (is_standby(t) and (t.record or {}).get("lane")):          # (a warm standby is read too while a lane is on: its rate is the lane's)
+                continue
+
             if is_temp(t.name) or t.iran is None or not t.iran.enabled or t.iran.online is False:
                 continue
 

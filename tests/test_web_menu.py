@@ -826,7 +826,7 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
     app, lab, css, dr, index, main = _web("app.js"), _web("lab.js"), _web("lab.css"), _web("doctor.css"), INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
     assert '<link rel="stylesheet" href="/static/doctor.css">' in index and '"doctor.css"' in main
     assert 'mcard("off", "bars", "Doctor Mode", "Only monitors and reports.' in app and 'mcard("fix", "wrench", "Auto Fix Tunnels"' in app and 'mcard("move", "server", "Auto Move to Iran Server"' in app and "window.apHow" not in app and "apNodePick" not in app and "dr-node" not in app and 'window.apStep = (btn, dir) =>' in app
-    assert "`<div class=\"dr-top\">${storm}${disturb}${modes}</div>" in app and ".dr-head, .dr-top, .set-top" in app and 'if (pg0 && pg0.querySelector(".fx-box")) fxFit();' in app
+    assert "`<div class=\"dr-top\">${storm}${disturb}${modes}${lanesRow}</div>" in app and ".dr-head, .dr-top, .set-top" in app and 'if (pg0 && pg0.querySelector(".fx-box")) fxFit();' in app
     assert "navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(\".main\"); if (m) m.scrollTop = 0; }\n  subSet(page, k); refresh();" in app
     assert "html body .main { scrollbar-gutter: stable; }" in css and "html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }" in dr and "html body #page .dr-card.on {" in dr and "html body #page .dr-empty {" in dr
     assert "const apModeDraw = (box, k) =>" in app and 'const bd = $("#ap-t-" + k); if (bd) bd.scrollTop = 0; fxFit();' in app and "html body #page .ap-tasks.fx-box { flex: none; overflow: hidden; }" in dr
@@ -1506,7 +1506,7 @@ def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stabi
     """The owner, 2026-10-17: "show the stability and the quality of the users' internet inside their own box, not in the cards - I do not want the cards to be crowded". Row one: Servers | Status | Link; row two: Users' internet | Stability | Last results."""
     app, css = _web("app.js"), _web("lab.css")
     body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
-    assert "tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
+    assert "tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
     assert 'data-b="users"' in app and 'data-b="stability"' in app and 'data-b="results"' in app and "<i>${SI.users}</i>Users' internet" in app and "<i>${SI.pulse}</i>Stability" in app
     users = app.split("const tunUsersBox = t => {", 1)[1].split("const tunUpBox = t =>", 1)[0]
     assert all(f'kv("{w}", ' in users for w in ("Quality", "Problems")) and "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two rows, two lines of the problems, two of the Doctor's sentence: the row of boxes stays as tall as the Stability box)
