@@ -79,7 +79,7 @@ def plan(want: list[str], facts_i: dict, facts_f: dict, taken_nets: list[str], h
             continue
 
         if link in linkmodels.ONE_PER_PAIR and any(p in facts_i["ipip_pairs"] or p in facts_f["ipip_pairs"] for p in ((hosts[0], hosts[1]), (hosts[1], hosts[0]))):
-            out[link] = {"skip": {"ok": None, "error": "an IPIP tunnel between these two servers exists already (IPIP has no key: one per pair)"}}
+            out[link] = {"skip": {"ok": None, "error": "an IPIP link between these two servers exists already - a tunnel of this pair or the warm standby of one runs over it (IPIP has no key: one per pair)"}}
             continue
 
         port = builder.pick_link_port(link, ports) if link in linkmodels.PORTS else 0

@@ -25,8 +25,8 @@ NOW = 1_800_000_000
 
 # ------------------------------------------------------------------ the order of the replacements
 def test_a_cut_tunnel_tries_the_kinds_by_who_can_still_dial_whom():
-    assert set(knowledge.PRIOR) == tunnel_test.KIND_KEYS and len(knowledge.PRIOR) == len(set(knowledge.PRIOR))          # the standard order names every kind of the tunnel test, once
-    assert set(knowledge.CUT_REVERSE) | set(knowledge.CUT_FORWARD) | set(knowledge.CUT_GRE) | set(knowledge.CUT_LINKS) == tunnel_test.KIND_KEYS
+    assert set(knowledge.PRIOR) == tunnel_test.KIND_KEYS - tunnel_test.GRID_ONLY and len(knowledge.PRIOR) == len(set(knowledge.PRIOR))          # the standard order names every kind of the tunnel test, once
+    assert set(knowledge.CUT_REVERSE) | set(knowledge.CUT_FORWARD) | set(knowledge.CUT_GRE) | set(knowledge.CUT_LINKS) == tunnel_test.KIND_KEYS - tunnel_test.GRID_ONLY
     assert set(knowledge.READY) <= tunnel_test.KIND_KEYS and len(knowledge.READY) == len(set(knowledge.READY)) and "bp:wssmux" in knowledge.READY
     assert knowledge.REVERSE_KINDS == set(knowledge.CUT_REVERSE) and knowledge.FORWARD_KINDS == set(knowledge.CUT_FORWARD)
     filtered = knowledge.cut_order(False, True, True)                                                                  # the foreign address is filtered from Iran: only the foreign server can dial

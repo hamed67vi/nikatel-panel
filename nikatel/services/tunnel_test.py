@@ -379,6 +379,21 @@ KINDS = [
     ("chisel:fwd", "Chisel · forward WebSocket", "the Iran server dials: a customer's download is fast", "Chisel", True),
     ("chisel:fwdtls", "Chisel · forward TLS WebSocket", "the Iran server dials, TLS", "Chisel", False),
 ]
+# Every Backhaul transport over every link model (the owner, 2026-10-20: "test the kinds of GRE with the Backhaul tunnel"): the list above has the models with TCP Mux (the one the Doctor uses) and WireGuard with TCP; the rest of the
+# 9 x 4 grid is made here, so that the pair test (Compare, the API) can build and measure any of them. The night survey keeps its own short list (knowledge.READY): these kinds are tested when the owner asks.
+_TRANSPORT_LABEL = {"tcp": ("TCP", "plain TCP, one connection per user"), "wsmux": ("WS Mux", "clear-text WebSocket, many users over few connections"), "wssmux": ("WSS Mux", "TLS WebSocket, many users over few connections")}
+_HAVE = {k[0] for k in KINDS}
+GRID_ONLY: set[str] = set()          # the kinds only the grid adds: the Doctor's standard order (knowledge.PRIOR) does not name them, a repair of a cut tunnel never walks the whole grid
+
+for _link in linkmodels.LINKS:
+    if _link == "gre":
+        continue
+
+    for _tr, (_label, _note) in _TRANSPORT_LABEL.items():
+        if f"{_link}:{_tr}" not in _HAVE:
+            GRID_ONLY.add(f"{_link}:{_tr}")
+            KINDS.append((f"{_link}:{_tr}", f"Backhaul · {_label} over {linkmodels.TITLE[_link]}", _note, "Backhaul over another link", False))
+
 KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}
 

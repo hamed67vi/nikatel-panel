@@ -920,7 +920,7 @@ def _prepare_link(b: Build, iran: Node, foreign: Node, link: str) -> tuple[int, 
             raise RuntimeError(f"{label} server {srv.name} cannot load the {', '.join(missing)} kernel module ({LINK_TITLE[link]})")
 
     if link in linkmodels.ONE_PER_PAIR and ((b.foreign.host, b.iran.host) in li["ipip_pairs"] or (b.iran.host, b.foreign.host) in lf["ipip_pairs"]):
-        raise RuntimeError(f"an IPIP tunnel between {b.iran.name} and {b.foreign.name} exists already: IPIP has no key, the kernel holds ONE per pair of addresses (use GRE, GRE over UDP or WireGuard for another tunnel between them)")
+        raise RuntimeError(f"an IPIP tunnel between {b.iran.name} and {b.foreign.name} exists already (a tunnel of this pair, or the warm standby of one, runs over IPIP): IPIP has no key, the kernel holds ONE per pair of addresses (use GRE, GRE over UDP or WireGuard for another tunnel between them)")
 
     if link == "wg":
         install = bool(b.opts.get("install_wg"))

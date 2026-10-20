@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.40 - Every Backhaul transport over every link model can be tested; the IPIP "exists already" message says why
+
+The owner (2026-10-20): "test the kinds of GRE with the Backhaul tunnel - completely", and "is the 'an IPIP tunnel exists between these servers' answer a wrong detection? check it fully".
+
+- **The pair test (Compare, `POST /api/tunnel-test/compare`) can build every Backhaul transport over every link model** (`tunnel_test.KINDS`): the grid is 9 links x 4 transports (TCP Mux, TCP, WS Mux, WSS Mux) = 36 kinds; until now only TCP Mux was there for the links (and TCP for WireGuard). The 23 new kinds sit in the group "Backhaul over another link", none is a default, and the night survey keeps its own short list (`knowledge.READY`): these are tested when the owner asks, and the Doctor's standard order for a cut tunnel (`knowledge.PRIOR`) does not name them (`tunnel_test.GRID_ONLY`): a repair never walks the whole grid. A build over a link already accepted these transports (`fou:tcp`, `ipsec:wssmux`...); only the test list lacked them.
+- **"An IPIP tunnel exists already" was RIGHT, not a wrong detection**: on the owner's pair the interface is the IPIP link of the pair's WARM STANDBY (the standby takes another link model than the main tunnel; the kernel holds one IPIP tunnel per pair of addresses). The check was read on the owner's servers (the script `link_facts` and the names of the links of both servers) and in a throw-away network namespace: `ip -d link show type ipip` lists only IPIP devices, never a GRE over FOU/GUE. The messages (the probe and the build) now say that a tunnel of the pair or its warm standby may hold the IPIP link, instead of leaving the owner to look for a tunnel that is not there. The IPIP-family kinds of such a pair cannot be tested while its standby uses IPIP: by design.
+- **Proved**: `tests/test_link_kinds_all.py` (the whole grid is in the list once each, every key is read back as its link and transport, the group and the defaults, the survey list is not widened, the messages). **Not proved**: a build of the new kinds on real servers (the kinds the pair test already had were built on them; a new one goes through the same code, `builder.start_build` with `link:transport`).
+
 ## 1.69.39 - The question box (Update from GitHub?, Delete?, Reboot?) looks like the alert of macOS
 
 The owner (2026-10-20, with a picture of the "Update the panel from GitHub now?" box): "make this one MacBook style".
