@@ -1120,3 +1120,10 @@ html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .as
 html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes.danger-fill { background-color: #ff453a !important; } html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-yes.danger-fill:hover { background-color: #ff5f55 !important; }
 html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no { background-color: rgba(255,255,255,.12) !important; } html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no:hover { background-color: rgba(255,255,255,.18) !important; }
 html[data-mode="light"] body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices) .ask-no { background-color: rgba(60,70,100,.09) !important; }
+/* 1.69.47 - "Real use by the users" in the Monitor tab of a tunnel: the 24 hours of the day as bars (light = the busiest minute, dark = the average) */
+.mcard.pk .pk-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; height: 70px; margin-top: 8px; }
+.mcard.pk .pk-bars i { position: relative; display: block; min-height: 0; border-radius: 3px 3px 0 0; background: rgba(110, 160, 255, .32); }
+.mcard.pk .pk-bars i u { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 3px 3px 0 0; background: var(--acc-2, #38d9f5); }
+.mcard.pk .pk-bars i.on { box-shadow: 0 0 0 1px var(--warn, #ffc44d); }
+.mcard.pk .pk-x { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; color: var(--mut); }
+.mcard.pk .pk-n { margin-top: 4px; font-size: 10.5px; line-height: 1.4; }

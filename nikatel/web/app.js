@@ -1591,7 +1591,27 @@ function tunGrid(t) {
 const outWhen = ts => { const d = new Date(ts * 1000); return d.toLocaleDateString(undefined, {month: "short", day: "numeric"}) + ", " + d.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit", hour12: false}); };
 const OUT_WHY = [[/both servers do not answer/i, "Both servers did not answer"], [/foreign server does not answer/i, "The foreign server did not answer"], [/iran server does not answer/i, "The Iran server did not answer"], [/GRE/i, "The link between the servers was cut"], [/loss/i, "Many packets were lost"], [/not active|inactive|failed/i, "The tunnel service had stopped"], [/no data passes|no answer|timeout|timed out/i, "No data passed through the tunnel"]];
 const outWhy = e => { e = String(e || ""); for (const [re, s] of OUT_WHY) if (re.test(e)) return s; return e ? e.slice(0, 60) : "No answer from the tunnel"; };
-async function loadTunnelCharts(id) {
+/* what the users REALLY used of a tunnel (the owner, 2026-10-20: "the real bandwidth the user uses - the peak times - how much a tunnel really uses"): from the checks the Monitor tab already reads - the Iran end's counters, one reading a minute, each the AVERAGE of
+   that minute, so a "peak" is the busiest minute and not a spike of a second. Pure: the peak and when and the average of each direction, and the 24 hours of the day (your local time): the busiest minute and the average of each, the busiest hour by its average. */
+function tunPeak(ts, rx, tx) {
+  const side = v => { const pts = []; v.forEach((x, i) => { if (x != null) pts.push([ts[i], x]); }); if (!pts.length) return null; let mx = pts[0]; for (const p of pts) if (p[1] > mx[1]) mx = p; const s = pts.map(p => p[1]).sort((a, b) => a - b); return {peak: mx[1], at: mx[0], avg: avgOf(s), n: s.length}; };
+  const hours = Array.from({length: 24}, (_, h) => ({h, n: 0, peak: 0, sum: 0, avg: null}));
+  ts.forEach((t, i) => { if (rx[i] == null) return; const b = hours[new Date(t * 1000).getHours()]; b.n++; b.sum += rx[i]; if (rx[i] > b.peak) b.peak = rx[i]; });
+  hours.forEach(b => { b.avg = b.n ? b.sum / b.n : null; });
+  const busy = hours.filter(b => b.n >= 5).reduce((m, b) => !m || b.avg > m.avg ? b : m, null);
+  return {down: side(rx), up: side(tx), hours, busy, span: ts.length > 1 ? ts[ts.length - 1] - ts[0] : 0};
+}
+function tunPeakHtml(u, cap) {      // the card of the Monitor tab: four tiles, and - from 12 hours of readings on - the 24 hours of the day as bars (light = the busiest minute of that hour, dark = the average)
+  const head = `<h6>Real use by the users`;
+  if (!u.down || u.down.n < 10) return `<div class="mcard mwide pk">${head}</h6><div class="mut chart-empty">not enough readings yet (one a minute)</div></div>`;
+  const f = v => v == null ? "—" : v >= 10 ? String(Math.round(v)) : String(Math.round(v * 10) / 10), pad = h => String(h).padStart(2, "0"), d = u.down, up = u.up, pct = cap > 0 ? d.peak / cap : null, busy = u.busy;
+  const tiles = mtile("Peak ↓", f(d.peak) + " Mb/s", outWhen(d.at)) + mtile("Peak ↑", up ? f(up.peak) + " Mb/s" : "—", up ? outWhen(up.at) : "") + mtile("Busiest hour", busy ? pad(busy.h) + ":00" : "—", busy ? "↓ " + f(busy.avg) + " Mb/s on average" : "needs 12 hours or more")
+    + mtile("Of its capacity", pct == null ? "—" : Math.round(pct * 100) + " %", pct == null ? "no capacity test yet" : "at the peak, of " + f(cap) + " Mb/s", pct != null && pct >= 0.85 ? "warn" : "");
+  const mx = Math.max(...u.hours.map(b => b.peak), 0.1);
+  const bars = u.span >= 12 * 3600 ? `<div class="pk-bars">${u.hours.map(b => `<i class="${busy && busy.h === b.h ? "on" : ""}" style="height:${b.n ? Math.max(3, Math.round(b.peak / mx * 100)) : 0}%" title="${pad(b.h)}:00 - ${pad(b.h)}:59 · ${b.n ? "busiest minute ↓ " + f(b.peak) + " Mb/s, average ↓ " + f(b.avg) + " Mb/s (" + b.n + " readings)" : "no readings"}"><u style="height:${b.n && b.peak ? Math.round(b.avg / b.peak * 100) : 0}%"></u></i>`).join("")}</div><div class="pk-x"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+    <div class="mut pk-n">Each bar is an hour of the day (your local time) over the range chosen above: the light part is the busiest minute of that hour, the dark part the average. A reading is the average of one minute at the Iran end of the tunnel - what the users really moved.</div>` : `<div class="mut pk-n">Choose 24 h or 7 days to see the busy hours of the day.</div>`;
+  return `<div class="mcard mwide pk">${head}<span class="mval ${pct != null && pct >= 0.85 ? "warn" : ""}">↓ ${f(d.peak)} Mb/s at the peak</span></h6><div class="mtiles">${tiles}</div>${bars}</div>`;
+}async function loadTunnelCharts(id) {
   const box = document.getElementById("tun-charts-" + id);
   if (!box) return;
   const d = await api(`/api/tunnels/${id}/checks?hours=${state.mrange}`);
@@ -1606,6 +1626,7 @@ async function loadTunnelCharts(id) {
   box.className = "mon";
   const chartsHtml = `<div class="mhead">${rangeTabs()}<small class="mut">${rows.length} checks · one every minute · hover a chart for exact values</small></div>
     <div class="mtiles">${mtile("Uptime", upPct == null ? "—" : f1(upPct) + "%", `${up} of ${rows.length}`, upPct != null && upPct < 95 ? "bad" : upPct != null && upPct < 99.5 ? "warn" : "ok")}${mtile("Outages", out.length, out.length ? "down " + durText(down) : "none", out.length ? "warn" : "ok")}${mtile("Latency", rtt.length ? Math.round(avgOf(rtt)) + " ms" : "—", rtt.length ? "best " + Math.round(Math.min(...rtt)) : "")}${mtile("Traffic", "↓" + f1(avgOf(rx)) + " ↑" + f1(avgOf(tx)), "Mb/s avg")}</div>
+    ${tunPeakHtml(tunPeak(ts, col("rx_mbps"), col("tx_mbps")), (() => { const tn = (state.tunnelsCache || []).find(x => x.id === id); return tn ? capOf(tn) : null; })())}
     <div class="mcard mwide"><h6>Up / down timeline</h6>${strip(oks)}</div>
     <div class="mgrid">${chartCard("Latency (RTT)", series("rtt_ms"), {col: "blue", ic: SI.pulse, unit: " ms", warn: 150, bad: 300, fmt: v => Math.round(v)})}${chartCard("Download ↓", series("rx_mbps"), {col: "green", ic: SI.down, unit: " Mb/s"})}${chartCard("Upload ↑", series("tx_mbps"), {col: "orange", ic: SI.arrowUp, unit: " Mb/s"})}
       <div class="mcard mout"><h6>Times the tunnel was down <span class="mval">${out.length === 1 ? "1 time" : out.length + " times"}</span></h6>${out.length ? `<div class="mout-h"><span>When</span><span>How long</span><span>Why</span></div><div class="mout-list">` + out.slice(-30).reverse().map(o => `<div class="mout-r${o.open ? " now" : ""}" title="${esc(o.err || "")}"><time>${outWhen(o.from)}</time><b>${o.open ? "still down" : durText(o.to - o.from)}</b><span>${esc(outWhy(o.err))}</span></div>`).join("") + "</div>" : '<div class="mut chart-empty">The tunnel did not go down in this time range.</div>'}</div></div>`;
