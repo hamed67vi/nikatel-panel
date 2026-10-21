@@ -462,7 +462,7 @@ def overview(days: int = 7) -> dict:
     profiles, risks, all_outs = [], [], {}
 
     for t in trows:
-        ck = sorted(checks.get(t["id"], []))
+        ck = sorted(checks.get(t["id"], []), key=lambda c: (c[0], c[1]))          # (by the time only: two checks in the same second - one has a ping, one has None - made the tuples unorderable: "internal error" on the Analytics page)
         p = tunnel_profile(ck, now, days)
         all_outs[t["name"]] = find_outages([(c0[0], c0[1]) for c0 in ck], now)
         profiles.append({**t, **p})

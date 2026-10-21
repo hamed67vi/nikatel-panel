@@ -166,3 +166,23 @@ def test_overview_and_the_smart_repair_record(client):
     assert r["repairs"]["by_step"]["rebuild"]["healed"] == 1 and {s["name"] for s in r["servers"]} == {"ir1", "fi1"}
     keep, notes = an.hints_for("t1", "unknown", ["restart", "rebuild"])
     assert keep == ["restart", "rebuild"] and notes == []
+
+
+def test_two_checks_of_the_same_second_with_and_without_a_ping_do_not_break_the_overview(client):
+    """The owner, 2026-10-21 (Tunnel Doctor, Analytics: "internal error"): the page of a server that goes off or comes back looks at its tunnels at once, so two checks of one tunnel can carry the same second - one with
+    a ping, one with none - and sorting their tuples compared None with a number."""
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel, TunnelCheck
+
+    with session() as db:
+        i, f = Server(name="ir-an1", host="203.0.113.201", role="iran", online=True), Server(name="fo-an1", host="198.51.100.201", role="foreign", online=True)
+        db.add_all([i, f])
+        db.flush()
+        t = Tunnel(name="t-an1", type="backhaul", transport="tcpmux", iran_server_id=i.id, foreign_server_id=f.id, state="up", enabled=True, forwarded_ports=[8075])
+        db.add(t)
+        db.flush()
+        ts = int(time.time()) - 600
+        db.add_all([TunnelCheck(tunnel_id=t.id, ts=ts, ok=True, rtt_ms=41.0), TunnelCheck(tunnel_id=t.id, ts=ts, ok=True, rtt_ms=None), TunnelCheck(tunnel_id=t.id, ts=ts + 60, ok=True, rtt_ms=40.0)])
+
+    r = client.get("/api/analyst")
+    assert r.status_code == 200 and r.json()["ok"] is True and any(p["name"] == "t-an1" for p in r.json()["tunnels"])

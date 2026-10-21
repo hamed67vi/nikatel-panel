@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.67 - The Analytics page of the Tunnel Doctor no longer ends in "internal error"
+
+> **به زبان ساده:** صفحهٔ Analytics خطای «internal error» می‌داد؛ علتش دو بررسی هم‌ثانیه با پینگ و بدون پینگ بود. درست شد.
+>
+> **In short:** the Analytics page failed when two checks of a tunnel carried the same second; fixed.
+
+The owner (2026-10-21, a picture of Tunnel Doctor, Analytics): "internal error (request id 1bd6f2)".
+
+- **Cause** (read in the live journal, `GET /api/analyst`): `analyst.overview` sorted the checks of a tunnel as tuples (time, ok, ping, error); two checks with the SAME second and the same `ok` - one with a ping, one with none - made Python compare `None` with a number: `TypeError`. Two checks in one second became common since 1.69.49: a server that goes off or comes back makes its tunnels be looked at at once (`tunnels.check_of_servers`) beside the normal and the fast lane.
+- **Fix** (`services/analyst.py`): the checks are sorted by the time (and `ok`) only. The other sorts of check pairs in the module hold two comparable values and were not the problem.
+- **Proved**: `tests/test_analyst.py` - a tunnel with two checks of the same second (a ping and none) answers `GET /api/analyst` (the test fails with the very `TypeError` before the fix). **Not proved**: in the owner's browser (the page shows after the update).
+
 ## 1.69.66 - A repair never leaves a tunnel out of the list: the tunnel that "was deleted by itself" was taken off by the smart repair and nothing could be built; found in the log and fixed
 
 > **به زبان ساده:** تانل UA خودبه‌خود پاک نشد؛ «تعمیر هوشمند» آن را (وقتی مسیر به سرور خارج قطع بود) از هر دو سرور برداشت تا نوع دیگری بسازد، ولی هر ۲۰ نوع به یک دلیل ساخته نشدند (روی سرور خارج python3 نیست) و نوع قدیمی هم ساخته نشد چون مسیر بسته‌هایش را از دست می‌داد. تانل بدون هیچ نسخه‌ای از فهرست رفت. حالا: نوع‌هایی که سرور اصلاً نمی‌تواند اجرا کند پیش از برداشتن تانل کنار گذاشته می‌شوند (و اگر چیزی نماند، تانل دست نمی‌خورد)، برداشتن همیشه نسخه نگه می‌دارد و اگر پنل وسط کار ری‌استارت شود دوباره می‌سازد، و اگر هیچ چیز ساخته نشد تانل با وضعیت «قطع» در فهرست برمی‌گردد تا بررسی‌ها و تعمیر ادامه بدهند.
