@@ -3616,6 +3616,7 @@ I18N.add({
 "Checking the GRE links": "در حال بررسی لینک‌های GRE",
 "Installing the tunnel cores": "در حال نصب هسته‌های تانل",
 "Installing WireGuard tools": "در حال نصب ابزارهای WireGuard",
+"It keeps working: its chip is at the bottom of the page": "کارش ادامه دارد: چیپ آن پایین صفحه است",
 "Server {} prepared{}.": "سرور {} آماده شد{}.",
 "Tunnel cores on {}: {} · {} of {}": "هسته‌های تانل روی {}: {} · {} از {}",
 "Tunnel cores on {}: {}": "هسته‌های تانل روی {}: {}",

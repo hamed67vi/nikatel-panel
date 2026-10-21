@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.74 - The Persian text of the message of 1.69.73
+
+> **به زبان ساده:** فقط ترجمهٔ فارسی یک پیام که در نسخهٔ قبل جا مانده بود.
+>
+> **In short:** the Persian text of the message "It keeps working: its chip is at the bottom of the page" that 1.69.73 missed.
+
+`tests/test_persian_audit.py::test_every_toast_and_question_written_in_the_pages_has_persian` failed in CI of 1.69.73 on the new toast of `closeOrDock`; `i18n.fa.ui2.js` has its text now. The affected test files I ran before 1.69.73 did not include that audit; this time every test file that reads the web files (`grep` for WEB / app.js / lab.css / i18n / toast) was run before shipping.
+
 ## 1.69.73 - Renaming a server no longer locks the database; a window's errors stay in the window; the tunnel search, the Abuse-Defender install and the windows that still work
 
 > **به زبان ساده:** تغییر نام سرور (وقتی تانلش بی‌صدا شده بود) با «internal error» شکست می‌خورد؛ درست شد. خطای پنجره فقط در پنجره دیده می‌شود. جست‌وجوی «tr» نام شرکت را نمی‌خواند، نصب Abuse-Defender زمان مراحل را می‌نویسد، و بستن پنجره‌ای که هنوز کار می‌کند آن را به نوار پایین می‌برد.
