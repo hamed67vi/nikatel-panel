@@ -1238,7 +1238,7 @@ html[data-mode="light"] .lbox thead th { background: #e9edf6; }
 .modal .mcard svg.lc { max-height: 64px; width: 100%; } .modal .mcard h6 { margin-bottom: 0; } .modal .mcard h6 .mval { font-size: 14px; } .modal .mstat { font-size: 9.5px; margin-top: 0; }
 @media (max-width: 900px) { .modal .mgrid { grid-template-columns: 1fr 1fr; } }
 /* a page with a list box has ONE scrollbar - the list's; the page itself does not scroll (the box is sized to end at the bottom of the window) */
-@media (min-width: 761px), (pointer: fine) { .main:has(.lbox) { overflow-y: hidden; } }
+@media (min-width: 761px), (pointer: fine) { .main:has(.lbox) { overflow-y: hidden; overflow: clip; min-height: 0; } }      /* (clip on BOTH axes - with one axis hidden the other clip turns into hidden: a page that locks its scroll cannot be scrolled by anything, a focus or a scroll into view, so the header never goes off the top, 2026-10-21; min-height 0: a box that is no scroll container any more must not grow to its content; hidden stays for a browser that does not know clip) */
 /* "Open in..." is a select that looks like the other buttons */
 select.abtn-open { appearance: none; -webkit-appearance: none; cursor: pointer; text-align: center; text-align-last: center; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); color: inherit; font-weight: 700; } select.abtn-open option { background: #151a30; color: #eef1ff; }
 /* the three boxes: the labels are short and on one line; the tunnel chips share the row */

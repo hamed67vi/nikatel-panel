@@ -241,3 +241,14 @@ def test_the_update_question_has_the_update_emoji_and_its_buttons_are_flat_in_ev
     acts = "html body #ask .modal.ask-box:not(:has(.mv-plan)) .ask-act:not(.ask-choices)"
     assert acts + " .ask-yes, " + acts + " .ask-no { background-image: none !important; box-shadow: none !important; text-shadow: none !important; border: 0 !important;" in css
     assert acts + " .ask-yes::before, " in css and acts + " .ask-yes { background-color: #0a84ff !important;" in css
+
+def test_the_page_with_a_list_box_cannot_be_scrolled_and_its_box_ends_where_the_page_area_ends():
+    """The owner, 2026-10-21 (a picture of the Servers page): after switching, the page was cut at the top - the title and the status line were gone and the toolbar was at the top of the window. The box of the list ended
+    at the bottom of the WINDOW, 24 px under the end of the page area (which keeps 30 px of padding), so the page area (a box with its scroll locked) was a little taller than itself; when the bar above it grew (a status
+    line, a wrapped title) it was a lot taller, and a focus on a row at the bottom (the page redraws and puts the keyboard focus back) scrolled the locked area up: the header went off the top. Measured in the browser
+    with the status line made 116 px taller: the focus moved the area by 117 px before, by 0 now."""
+    css = (WEB / "app.css").read_text(encoding="utf-8")
+    assert ".main:has(.lbox) { overflow-y: hidden; overflow: clip; min-height: 0; }" in css      # (clip on both axes: with one axis hidden the other clip turns into hidden and the area is still scrollable by a focus; min-height 0: no scroll container any more must not grow to its content)
+    assert 'const mn = pg.closest(".main"), room = mn ? Math.min(window.innerHeight - 24, mn.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(mn).paddingBottom) || 0)) : window.innerHeight - 24;' in APP
+    assert "const mh = Math.max(150, Math.floor(room - b.getBoundingClientRect().top));" in APP
+    assert 'new ResizeObserver(() => requestAnimationFrame(fit))' in APP and '[".main > .head", "#statusbar", "#subnav"]' in APP      # (the bar above the page changes height: the box follows at once)
