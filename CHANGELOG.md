@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.84 - The tunnel list in groups by tunnel type
+
+> **به زبان ساده:** فهرست تانل‌ها بر اساس نوع دسته‌بندی شد؛ هر دسته ردیف عنوان دارد (تعداد، تعداد مشکل‌دارها) و با کلیک جمع می‌شود.
+>
+> **In short:** the tunnel list is grouped by type, a head row per group (count, how many have a problem), a click folds a group.
+
+The owner (2026-10-22, a picture of the list): "group these by the type of the tunnel".
+
+- **Groups** (`app.js tunGroups`): the key is what the Type column says (`BACKHAUL · tcpmux`, `BACKPACK · wssmux`; `l3:` is not shown). The groups come in this order: the one that holds a cut, then one with another problem (the colours of `tunSev`), then the others - the biggest first, then by name. Inside a group the order of 1.69.62 stays: a problem first, then the location of the foreign server, then the name.
+- **A head row in the SAME table** (one cell over the 8 columns, so the columns stay lined up; the earlier rule "one table for every type" stays): the type tag, "N tunnels" and, in red, "N with a problem". A click folds the group (`tunGroupToggle`; the folded types are kept in this browser, `nk.tgoff`); the live updates of the meters are not touched (they find the cell of a tunnel by its id).
+- **Search**: a head row goes when none of its tunnels matches; while searching, a folded group shows what matches (`applyQ`, `.q-on`).
+- **Proved**: `tests/test_tunnel_groups.py` (a node run of the real grouping on the key, the order and the counts; the head row has a cell over the 8 columns; the fold and the search rules; the stylesheet) and the test files that read the tunnel page. **Not proved**: in the owner's browser (how the head row looks beside his data), and the page's own redraw while a group is folded was not walked.
+
 ## 1.69.83 - The Doctor's own change of a tunnel's type no longer cuts the users: the new type is built beside the old one, the users go over, the old one is removed last
 
 > **به زبان ساده:** وقتی دکتر خودش نوع یک تانل را عوض می‌کند (بعد از «افت» پهنا، یا برای تانل خیلی کند)، دیگر تانل را پاک نمی‌کند و از نو نمی‌سازد. نوع تازه کنار تانل قدیمی ساخته می‌شود (همان رزرو/standby)، با تست سرعت از خودش سنجیده می‌شود، اتصال‌های تازهٔ کاربران به آن داده می‌شود، و فقط وقتی اتصال‌های باز روی تانل قدیمی تمام شد، آن را برمی‌دارد. اگر تانل تازه بدتر بود، اتصال‌های تازه برمی‌گردند و تانل قدیمی هیچ‌وقت دست نخورده بود. اگر ساخت کنار تانل ممکن نباشد (پورتی برای تحویل نیست، سرور شلوغ است…) دکتر خودش قطع نمی‌کند و فقط در صفحهٔ دکتر پیشنهاد می‌دهد. قیدها همان‌اند: روزی یک بار برای هر تانل، فقط نوعی که پایداری‌اش ثابت شده.

@@ -871,6 +871,24 @@ const tunKeyRow = t => t.id < 0 && state.tunRowCache && state.tunRowCache.get(t.
 const tunLoc = t => { const s = (state.serversCache || []).find(x => x.name === t.foreign_name), c = s && /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toUpperCase() : ""; if (!c) return "zzzz"; try { return new Intl.DisplayNames(["en"], {type: "region"}).of(c) || c; } catch (e) { return c; } };
 const tunSevRank = t => { const s = tunSev(t); return s === "sev-red" ? 0 : s ? 1 : 2; };
 const tunCmp = (x, y) => { const a = tunKeyRow(x), b = tunKeyRow(y); return tunSevRank(a) - tunSevRank(b) || tunLoc(a).localeCompare(tunLoc(b), undefined, {sensitivity: "base"}) || String(a.name).localeCompare(String(b.name), undefined, {sensitivity: "base"}); };
+/* the list in GROUPS by tunnel type (the owner, 2026-10-22: "group them by the type of the tunnel"): one head row for every type - what the Type column says, "BACKHAUL · tcpmux" - then its tunnels in the order above (a problem first,
+   then by location, then by name). The groups: the one that holds a cut first, then the one that holds another problem, then the others - the biggest first, then by name. A head row is in the SAME table (the columns stay lined up)
+   and a click on it folds the group (the folded ones are kept in this browser). */
+const tunKind = t => { const k = tunKeyRow(t); return String(k.type || "").toUpperCase() + (k.transport ? " · " + String(k.transport).replace("l3:", "") : ""); };
+const tunGroups = rows => {
+  const g = new Map();
+  [...rows].sort(tunCmp).forEach(t => { const k = tunKind(t); if (!g.has(k)) g.set(k, []); g.get(k).push(t); });
+  return [...g].map(([k, a]) => ({k, a, bad: a.filter(t => tunSevRank(tunKeyRow(t)) < 2).length, rank: Math.min(...a.map(t => tunSevRank(tunKeyRow(t))))}))
+    .sort((x, y) => x.rank - y.rank || y.a.length - x.a.length || x.k.localeCompare(y.k, undefined, {sensitivity: "base"}));
+};
+const tunOff = () => { try { return new Set(JSON.parse(localStorage.getItem("nk.tgoff") || "[]")); } catch (e) { return new Set(); } };
+const tunGroupHead = (g, off) => `<tr class="tun-ghead${off ? " off" : ""}" data-gk="${esc(g.k)}" onclick="tunGroupToggle(this.dataset.gk)" title="Click to fold or unfold this type"><td colspan="8"><div class="gh"><i class="gh-ar">▾</i><span class="td-type ty-${esc(tunType(g.a[0]))}">${esc(g.k)}</span><b class="gh-n">${g.a.length} tunnel${g.a.length === 1 ? "" : "s"}</b>${g.bad ? `<span class="gh-bad">${g.bad} with a problem</span>` : ""}</div></td></tr>`;
+window.tunGroupToggle = k => {
+  const s = tunOff(); if (s.has(k)) s.delete(k); else s.add(k);
+  try { localStorage.setItem("nk.tgoff", JSON.stringify([...s])); } catch (e) { /* private mode */ }
+  document.querySelectorAll("#page tr.tun-ghead").forEach(h => h.classList.toggle("off", s.has(h.dataset.gk)));
+  document.querySelectorAll("#page .tun-tbl tr[data-g]").forEach(r => r.classList.toggle("g-off", s.has(r.dataset.g)));
+};
 /* the bandwidth of a tunnel (what the Doctor keeps: services/bandwidth.py): the download it can carry, in the plainest words - a number, a bar against its usual level, and "▼ usual" while it is dropped */
 const LINK_TAG = {wg: "WireGuard", fou: "GRE/UDP", gue: "GRE/GUE", ipip: "IPIP", ipipfou: "IPIP/UDP", ipipgue: "IPIP/GUE", ipsec: "IPsec", ipsecnat: "IPsec/UDP", wgchisel: "WG in Chisel", wgchiselfwd: "WG in Chisel (Iran dials)"};      // what a Backhaul tunnel runs over besides GRE (record.link: services/builder.py `link_scripts`)
 const linkTag = t => LINK_TAG[(t.record || {}).link] || "GRE";
@@ -1331,6 +1349,8 @@ function applyQ() {
   document.querySelectorAll("#page .nk-ghead").forEach(h => { const tb = h.nextElementSibling; if (tb && tb.matches("table")) h.classList.toggle("q-hide", !!q && !tb.querySelector("tr[data-q]:not(.q-hide)")); });
   document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
   document.querySelectorAll("#page .dr-g").forEach(g => { const any = !!g.querySelector(".dr-rec:not(.q-hide)"); g.classList.toggle("q-hide", !any); g.classList.toggle("q-open", !!q && any); });      // a search opens the groups that have a match
+  document.querySelectorAll("#page tr.tun-ghead").forEach(h => { let n = h.nextElementSibling, any = false; while (n && !n.classList.contains("tun-ghead")) { if (!n.classList.contains("q-hide")) any = true; n = n.nextElementSibling; } h.classList.toggle("q-hide", !any); });      // (a type none of whose tunnels matches is not shown)
+  document.querySelectorAll("#page .tun-tbl").forEach(tb => tb.classList.toggle("q-on", !!q));      // (while searching, a folded group shows what matches)
   const sb = $(".searchbar"); if (sb) sb.dataset.n = q ? shown + " / " + total : "";
 }
 const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
@@ -1649,7 +1669,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
     ${tmode === "problems" && !rows.length ? '<div class="empty">No tunnel has a problem - every one is up with little packet loss.</div>' : ""}
     ${rows.length ? `<table class="tbl lift tun-tbl"><colgroup><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%"><col style="width:8%"><col style="width:56px"></colgroup>
       <thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Shown only when there is something to see: a capacity that dropped, stalled or is very slow (red), a cut, or a repair in progress. The numbers - the capacity, what the users use now, the peak of the day - are in the window of the tunnel (click the row). The lamp before the name is the state of the tunnel."><span class="bwh-in">Bandwidth<em>Mb/s</em></span></th><th class="r" data-fit="190">Iran node</th><th class="c" title="Round-trip time / packets lost on the link">ping/loss%</th><th data-fit="190">Foreign node</th><th>Ports</th><th></th></tr></thead>
-      <tbody>${[...rows].sort(tunCmp).map(row).join("")}</tbody></table>` : '<div class="empty">No tunnel.</div>'}</div>`;      // ONE table for every tunnel of every type: a new type only brings its own tag (no header, no table of its own)
+      <tbody>${(off => tunGroups(rows).map(g => tunGroupHead(g, off.has(g.k)) + g.a.map(t => row(t).replace('<tr class="', `<tr data-g="${esc(g.k)}" class="${off.has(g.k) ? "g-off " : ""}`)).join("")).join(""))(tunOff())}</tbody></table>` : '<div class="empty">No tunnel.</div>'}</div>`;      // ONE table for every tunnel of every type: a new type only brings its own tag (no header, no table of its own)
   applyQ(); fxFit();
   const openT = list.find(t => t.id === state.open);
   if (openT) tunModal(openT);

@@ -49,5 +49,5 @@ def test_a_tunnel_that_is_being_built_again_keeps_the_place_of_the_row_it_replac
     assert _order(rows, SERVERS) == ["ca-a", "de2-a", "us-a"]                                # with no cached row it is ordered by what it shows
 
 
-def test_the_list_uses_the_order_and_the_type_grouping_is_gone():
-    assert "[...rows].sort(tunCmp).map(row)" in APP and "TUN_TYPES.indexOf(sortType" not in APP and "const sortType =" not in APP
+def test_the_list_is_drawn_in_groups_by_type_each_group_in_the_order():          # (1.69.62 took the grouping away, the owner asked for it again on 2026-10-22: tests/test_tunnel_groups.py)
+    assert "tunGroups(rows).map(g => tunGroupHead(g" in APP and "[...rows].sort(tunCmp).forEach(t =>" in APP and "TUN_TYPES.indexOf(sortType" not in APP and "const sortType =" not in APP
