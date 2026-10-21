@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.70 - A cut is called ~10 s after the first failed check, not after two turns of the slow cycle
+
+> **به زبان ساده:** تانلی که ناگهان دیتا رد نمی‌کند حالا حدود ۱۰ ثانیه بعد از اولین بررسی خراب «قطع» اعلام می‌شود، نه بعد از دو دقیقه.
+>
+> **In short:** a tunnel that stops carrying data is confirmed about 8 s after its first failed check (the fast lane), not a whole minute later.
+
+The owner (2026-10-21): "the US tunnel is cut - why has the panel not detected it yet?". The panel's own log of that tunnel: last good check, then a failed one 54 s later (the slow cycle), the second failed check 80 s after that, `degraded` 7 s later, `down` and the repair a few seconds after. The cause is not a broken check: `settle` asks for CONFIRM_CHECKS (2) agreeing checks before "up" becomes "degraded", and the fast lane (`check_unhealthy`, every 8 s) only looked at tunnels that were NOT up, so the second check of an up tunnel waited for the slow cycle (60 s).
+
+- **`tunnels.suspected(now)`** (new): the enabled tunnels that are "up" in the list whose newest check (within 150 s) failed and were last checked 6 s ago or more. `check_unhealthy` looks at them again with a fresh look from another Iran server, like the ones that are down. Second failed check ~8 s later: `degraded` (the reasons "no data comes back", "blocked", "not listening" stay in the fast lane up to `down` as before).
+- **What it does not change**: the first failed check still comes with the slow cycle (up to 60 s after the cut), a tunnel whose newest check passed is not looked at again, a standby keeps no check history and is not in it. So the time from the cut to the word is at most about 70 s, was about 130 s.
+- **Proved**: `tests/test_suspect_fast_lane.py` (the selection: failed newest check, passed newest check, a check 2 s ago, a failure 400 s ago, disabled, no checks; a tunnel that is already down is looked at once). **Not proved**: on the real servers (the live US tunnel was only read).
+
 ## 1.69.69 - The Doctor chooses a tunnel type that stays good: speed, ping, jitter AND steadiness
 
 > **به زبان ساده:** دکتر حالا برای انتخاب نوع تانل پایداری را هم می‌سنجد: نتیجهٔ ۱۲ تست آخر هر نوع نگه داشته می‌شود، نوعی که افت کرده یا شکست خورده عقب می‌رود، نوعی که کم تست شده «ثابت‌نشده» است، و تانلی که روزی ۳ بار قطع شود نوع پایدارتر پیشنهاد می‌گیرد.

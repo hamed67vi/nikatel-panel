@@ -741,15 +741,38 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
 FAST_DEGRADED = ("no data comes back", "blocked in front of the server", "is not listening on the Iran server")
 
 
+SUSPECT_WITHIN = 150          # a tunnel that is still "up" but whose last check FAILED this recently is checked again in the fast lane (CONFIRM_CHECKS agreeing checks are needed to call it degraded)
+
+
+def suspected(now: int) -> list[int]:
+    """The ids of the tunnels that are "up" in the list but whose newest check failed (within SUSPECT_WITHIN): the first failed check of a tunnel that was fine is not yet a verdict (CONFIRM_CHECKS), and the second
+    one used to wait for the next turn of the slow cycle - a whole minute (the owner, 2026-10-21: the tunnel to the US was cut and the panel did not say so for two minutes). They are looked at again after ~8 s instead."""
+    with session() as db:
+        up = {t.id: int(t.last_check_at or 0) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "up"))}
+
+        if not up:
+            return []
+
+        newest: dict[int, bool] = {}
+
+        for tid, ok in db.execute(select(TunnelCheck.tunnel_id, TunnelCheck.ok).where(TunnelCheck.tunnel_id.in_(list(up)), TunnelCheck.ts >= now - SUSPECT_WITHIN).order_by(TunnelCheck.id.desc())):
+            newest.setdefault(int(tid), bool(ok))
+
+    return [tid for tid, ok in newest.items() if not ok and now - up[tid] >= 6]
+
+
 def check_unhealthy() -> None:
     """The fast lane (every ~8 s): the tunnels that are not up - down, unknown (a server did not answer), starting - are looked at again at once, each with a fresh
     look from another Iran server, so a tunnel that came back (or a server that came back) is seen in seconds, not at the next turn of the slow cycle. A tunnel that
-    is only degraded stays in the slow cycle (its hysteresis counts minutes)."""
+    is only degraded stays in the slow cycle (its hysteresis counts minutes) unless nothing passes or a port is shut. A tunnel that is "up" but failed its last check is
+    confirmed here too (`suspected`): a cut is called after ~10 s from the first failed check, not after two turns of the slow cycle."""
     now = int(time.time())
 
     with session() as db:
         ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "unknown", "starting", "degraded"))))
                if (t.state != "degraded" or any(w in (t.last_error or "") for w in FAST_DEGRADED)) and now - int(t.last_check_at or 0) >= 6]
+
+    ids += [i for i in suspected(now) if i not in ids]
 
     if ids:
         with ThreadPoolExecutor(max(1, min(4, len(ids)))) as ex:
