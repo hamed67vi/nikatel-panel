@@ -441,34 +441,4 @@ def test_the_doctor_changes_the_type_by_itself_once_in_a_day_and_never_when_it_i
     assert "t1" in doctor._state()["retype_done"]
 
 
-def test_an_automatic_change_waits_for_a_quiet_moment_keeps_what_it_measured_and_goes_back_when_it_is_worse(monkeypatch):
-    from nikatel.models import Event
-    from nikatel.services import bandwidth, knowledge
-
-    ids, _e, said, replaced = _retype_world(monkeypatch)
-    quiet = [False]
-    monkeypatch.setattr(autopilot, "_wait_quiet", lambda aid, tid, limit=1800: quiet[0])
-    doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
-    assert len(replaced) == 1 and any("still active after 5 minutes: the change goes on anyway" in s[0] for s in said)    # no quiet moment came (the users carry 5 - 10 Mb/s all day): it goes on, the users are cut for a minute or two
-    assert "t2" in doctor._state()["retype_done"]                                                                           # (counted when it really starts)
-    replaced.clear()
-    quiet[0] = True
-    kept = []
-    monkeypatch.setattr(knowledge, "record", lambda i, f, result, measure: kept.append((result, measure)))
-    doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
-    assert replaced == [(ids["t2"], "tcp", "The Doctor changed it by itself: the tunnel was very slow.")] and kept == [({"kind": "tcp", "ok": True, "works": True, "down_mbps": 118.0}, "full")]
-    assert said[-1][0].startswith("t2 runs as tcp now.")
-
-    with session() as db:
-        assert any("changed by the Doctor itself (the tunnel was very slow)" in x.text for x in db.scalars(select(Event).where(Event.domain == "tunnels")))
-
-    replaced.clear()
-    said.clear()
-    monkeypatch.setattr(bandwidth, "measure", lambda tid: ({"down": 0.3}, ""))                                              # the new type is clearly WORSE than the 0.8 it replaced
-    doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcp", "again", extra={"now_kind": "tcpmux", "to_kind": "tcp"})
-    doctor._run_retype(1, ids["t2"], "tcp", "tcpmux", "why", auto=True)
-    assert [r[1] for r in replaced] == ["tcp", "tcpmux"] and replaced[1][2] == "It was slower than the old type."
-    assert any("gave 0.3 Mb/s, less than tcpmux (0.8): the old type is put back." in s[0] for s in said) and said[-1][0] == "t2 runs as tcpmux again."
-
-    with session() as db:
-        assert any("went back to tcpmux" in x.text for x in db.scalars(select(Event).where(Event.domain == "tunnels")))
+# (the Doctor's own change of the type never cuts the users since 1.69.78: it is built beside the old type - tests/test_swap_beside.py)

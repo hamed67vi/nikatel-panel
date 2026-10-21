@@ -878,14 +878,15 @@ def quiet_ok(rx: float | None, tx: float | None, loss: float | None) -> bool:
     return (rx or 0) + (tx or 0) < QUIET_MBPS
 
 
-def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800) -> bool:
-    """Wait (up to `limit` s) for a quiet moment before the swap, so that customers are not cut while they use the tunnel."""
+def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800, loss_counts: bool = True) -> bool:
+    """Wait (up to `limit` s) for a quiet moment before the swap, so that customers are not cut while they use the tunnel. `loss_counts` False: a tunnel that loses many packets is NOT called quiet for that
+    (the swap beside the tunnel waits for the open connections to end, however bad the old tunnel is: nobody is cut)."""
     end, said = time.time() + limit, False
 
     while True:
         with session() as db:
             t = db.get(Tunnel, tunnel_id)
-            rx, tx, loss = (t.rx_mbps, t.tx_mbps, (t.detail or {}).get("loss_pct")) if t is not None else (None, None, None)
+            rx, tx, loss = (t.rx_mbps, t.tx_mbps, (t.detail or {}).get("loss_pct") if loss_counts else None) if t is not None else (None, None, None)
 
         if quiet_ok(rx, tx, loss):
             return True

@@ -754,8 +754,8 @@ def drop_pick(results: list[dict], steady: dict, now_mbps: float, rtt: float | N
 def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
     """A tunnel dropped and the look found no outside cause (the owner, 2026-10-21: "when we have a drop the Doctor must test the other types - the problem may not exist on them - and it can change the type; I said
     the tunnel must be steady"). The Doctor TESTS the other types the memory of the pair knows to be steady (or has not tried enough yet), with a real speed test, one after the other, and changes the tunnel to
-    the one that gives clearly more and was clean in its test (`drop_pick`) - with the rails of every automatic change: once in 24 hours per tunnel, at a quiet moment, the old type put back when the new one does
-    not build or gives clearly less. Nothing when the Doctor is off; when no type is clearly better the tunnel stays as it is and keeps being measured."""
+    the one that gives clearly more and was clean in its test (`drop_pick`) - with the rails of every automatic change: once in 24 hours per tunnel, and (1.69.78) WITHOUT A CUT: the new type is built beside
+    the old one, the users' new connections go over to it, the old tunnel is removed last (services/swap.py; when that cannot be done the change is only a suggestion). Nothing when the Doctor is off; when no type is clearly better the tunnel stays as it is and keeps being measured."""
     from . import actions, autopilot, doctor, knowledge, license
 
     if not DROP_SWAP:

@@ -101,3 +101,7 @@ tunnel is not the traffic of its users until they are back.
 ## Lanes (1.69.52)
 
 When a tunnel is nearly full its standby can be put to work beside it - a NAT rule sends a share of the NEW connections to it, nobody is cut ([lanes.md](lanes.md)). The handover above is unchanged and stays on top: its full redirect is put above a lane's rule, its way back leaves a parked `RETURN` that `lane_on` takes off for the same port, and removing the standby takes its lane rules off first.
+
+## The swap beside the tunnel (1.69.78)
+
+When the Doctor itself changes the type of a dropped or very slow tunnel, it no longer removes and rebuilds the tunnel (a cut of a minute or two). The new type is built **as the standby** (`standby.build(name, kind, by_swap=True)`; `standby.want` makes the standby job build the same type), measured by a speed test through itself, given the users' new connections with a manual handover, watched for 90 s, and only when the open connections of the old tunnel have ended is the old tunnel removed and built again as the new type - the users stand on the standby meanwhile - and the new connections go back. A new type that is worse sends the users back and the old tunnel was never touched. When the swap cannot be made beside the tunnel the change is only a suggestion on the Doctor page. Code and the full order: `nikatel/services/swap.py`; tests: `tests/test_swap_beside.py`.

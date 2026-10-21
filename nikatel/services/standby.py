@@ -76,6 +76,8 @@ _TOLD: set[str] = set()               # standbys whose "ready" has been told
 _NOTE: dict[str, str] = {}            # tunnel name -> why nothing is built now (shown in the tunnel window)
 _BETTER: dict[tuple, tuple[int, str]] = {}      # (tunnel name, its type, its standby's type) -> (when asked, the type that should replace a standby on the carrier of its tunnel)
 _STATE = {"init": False, "reconciled": 0.0}
+WANT_FOR = 1200                       # a type asked for by the swap (`want`) is built for this long, whoever starts the build
+_WANT: dict[str, tuple[str, int]] = {}      # tunnel name -> (the type its next standby must be, until when): the swap beside the tunnel (services/swap.py)
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
@@ -658,8 +660,46 @@ def _busy_reason(*server_ids: int) -> str:
     return ""
 
 
-def build_plan(name: str) -> dict:
-    """What a standby of this tunnel would be: its name, type and ports - or ValueError with the reason there is none (nothing is built)."""
+def want(name: str, kind: str) -> None:
+    """The next standby of tunnel `name` must be `kind` (the swap beside the tunnel asks for it; the standby job, which may start the build first, obeys too)."""
+    with _LOCK:
+        _WANT[name] = (kind, int(time.time()) + WANT_FOR)
+
+
+def unwant(name: str) -> None:
+    with _LOCK:
+        _WANT.pop(name, None)
+
+
+def _wanted(name: str) -> str:
+    with _LOCK:
+        kind, until = _WANT.get(name, ("", 0))
+
+    return kind if kind and time.time() < until else ""
+
+
+def borrow_mark(name: str) -> dict:
+    """The swap needs the standby job to look after the tunnel while it runs: the tunnel is marked if it was not. Returns what `return_mark` needs."""
+    d = st.get("standby")
+    was = {"marked": name in (d.get("marked") or {}), "optout": name in (d.get("optout") or {})}
+
+    if not was["marked"]:
+        _mark(name, True)
+
+    return was
+
+
+def return_mark(name: str, was: dict) -> None:
+    """The mark goes back as it was: a tunnel the owner had switched the standby off for loses the borrowed standby again (the removal ends the connections that stayed on it - the caller waited for them first)."""
+    if was.get("marked") or not was.get("optout"):
+        return
+
+    _mark(name, False, manual=True)
+    threading.Thread(target=_safe_cleanup, args=(name,), name=f"standby-off-{name}", daemon=True).start()
+
+
+def build_plan(name: str, kind: str = "") -> dict:
+    """What a standby of this tunnel would be: its name, type and ports - or ValueError with the reason there is none (nothing is built). `kind`: the type is asked for (the swap beside the tunnel; also `want`)."""
     v = _view(name)
     p = v["p"]
 
@@ -676,13 +716,24 @@ def build_plan(name: str) -> dict:
 
     now = int(time.time())
     ports_text, mapping = shift_mapping(p["mapping"], _taken_ports(p["iran_id"], ""))
-    pair = knowledge.pair(p["iran_id"], p["foreign_id"])
-    kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
-    skip = {k for k, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
-    kind, note = choose_kind(kinds, p["kind"], pair, now, allowed=license.tunnel_kind_allowed, skip=skip)
+    asked = kind or _wanted(name)
 
-    if not kind:
-        raise ValueError(note)
+    if asked:
+        if asked == p["kind"]:
+            raise ValueError("a standby of the tunnel's own type is no spare")
+
+        if not license.tunnel_kind_allowed(asked):
+            raise ValueError(f"{asked} is not allowed here (the licence)")
+
+        kind, note = asked, f"{asked}: asked for by the swap of the tunnel's type (built beside the running type, then it takes the users)"
+    else:
+        pair = knowledge.pair(p["iran_id"], p["foreign_id"])
+        kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
+        skip = {k for k, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
+        kind, note = choose_kind(kinds, p["kind"], pair, now, allowed=license.tunnel_kind_allowed, skip=skip)
+
+        if not kind:
+            raise ValueError(note)
 
     with session() as db:
         taken = {t.name for t in db.scalars(select(Tunnel))}
@@ -710,8 +761,9 @@ def _better_kind(p: dict, s: dict, name: str) -> str:
     return res
 
 
-def build(name: str) -> int:
-    """Start the build of the standby of tunnel `name`: a real tunnel of the chosen type on the shifted ports, as a build action (its id). ValueError with the reason when it must not be built now."""
+def build(name: str, kind: str = "", by_swap: bool = False) -> int:
+    """Start the build of the standby of tunnel `name`: a real tunnel of the chosen type on the shifted ports, as a build action (its id). ValueError with the reason when it must not be built now.
+    `kind`: the type is asked for. `by_swap`: the call comes from the swap beside the tunnel, which is itself the action that works on the tunnel (its story is not "a repair")."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only: nothing is built")
 
@@ -730,13 +782,13 @@ def build(name: str) -> int:
     if p["state"] != "up":
         raise ValueError(f"the tunnel is {p['state']}: a standby is built when it is up")
 
-    if name in autopilot.repairing_names():
+    if name in autopilot.repairing_names() and not by_swap:
         raise ValueError("a repair works on this tunnel: the standby is built after it")
 
     if autopilot.storm_now():
         raise ValueError("several servers are off or many tunnels are down: nothing is built now")
 
-    plan = build_plan(name)
+    plan = build_plan(name, kind)
     k, tr = tunnel_test.kind_parts(plan["kind"])
     iran_id, foreign_id = p["iran_id"], p["foreign_id"]
 

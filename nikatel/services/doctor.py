@@ -72,7 +72,6 @@ def _save(s: dict) -> None:
     st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"], "retype_done": s["retype_done"]})
 
 
-QUIET_WAIT = 300            # an automatic change of type waits this long for a quiet moment, then goes on
 RETYPE_GAP = 24 * 3600     # the Doctor changes the TYPE of a very slow tunnel by itself at most once in this time (1.69.17)
 
 
@@ -364,19 +363,20 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
         raise ValueError(f"{snap['name']} runs as {cur} now, not as {was}: the suggestion is out of date")
 
     before = float(((snap["record"].get("bw") or {}).get("down")) or 0)
+
+    if auto:                                                                  # (1.69.78: the Doctor's own change never cuts the users - the new type is built BESIDE the old one, the users go over, the old one is removed last: services/swap.py)
+        from . import swap
+
+        swap.beside(aid, snap, kind, why, before)
+        return
+
     say(f"{snap['name']}: changing the type {cur} → {kind}. {why}")
 
     if not autopilot._probe_links(aid, snap, [kind]):
         say(f"The link of {kind} does not pass between {snap['iran_name']} and {snap['foreign_name']}: nothing is built, {snap['name']} is not touched.", done=True, ok=False)
         return
 
-    if auto:
-        if not autopilot._wait_quiet(aid, tunnel_id, limit=QUIET_WAIT):      # (1.69.21: it gave up after 15 minutes and never came back - the users of the owner's tunnel carry 5 - 10 Mb/s all day, "quiet" never came, and nothing was changed)
-            say(f"The users are still active after {QUIET_WAIT // 60} minutes: the change goes on anyway - the tunnel is very slow, the users are cut for a minute or two.")
-
-        mark_retyped(snap["name"], int(time.time()))                          # (counted when it really starts: a change that did not start is not "once in 24 hours")
-
-    if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor changed it by itself: the tunnel was very slow." if auto else "The Doctor suggested it and you asked for it.", snap=snap):
+    if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor suggested it and you asked for it.", snap=snap):
         say(f"The build of {kind} failed; {cur} was put back.", done=True, ok=False)
         return
 
@@ -395,20 +395,7 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
         except Exception:
             log.exception("the speed of %s could not be kept", kind)
 
-    if auto and down is not None and before and down < 0.8 * before:      # clearly WORSE than before: the old type goes back (one more cut, but the users are not left on something slower)
-        say(f"{kind} gave {down:g} Mb/s, less than {cur} ({before:g}): the old type is put back.")
-
-        with session() as db:
-            new_id = db.scalar(select(Tunnel.id).where(Tunnel.name == snap["name"]))
-
-        if new_id is not None and autopilot._replace(aid, new_id, snap["iran_id"], snap["foreign_id"], cur, "It was slower than the old type."):
-            with session() as db:
-                emit(db, "warn", "tunnels", f"Tunnel {snap['name']}: the Doctor tried {kind} ({down:g} Mb/s) and went back to {cur} ({before:g} Mb/s).", snap["name"])
-
-            say(f"{snap['name']} runs as {cur} again.", done=True, ok=True)
-            return
-
-    who = "by the Doctor itself (the tunnel was very slow)" if auto else "by your click on the Doctor's suggestion"
+    who = "by your click on the Doctor's suggestion"
 
     with session() as db:
         emit(db, "ok", "tunnels", f"Tunnel {snap['name']} is now {kind} (it was {cur}): changed {who}.{after}", snap["name"])
