@@ -1217,3 +1217,6 @@ html body #page .tun-tbl .bwm.ok .bwm-t small:not(:empty) { color: var(--mut); b
 
 /* the Link box of the tunnel window: a value that is longer than its row wraps instead of being cut at the left ("ually 1328 Mb/s") */
 html body #modal .tunwin .sbox[data-b="link"] .kv2 > div { flex-wrap: wrap; white-space: normal; row-gap: 2px; overflow: visible; }
+
+/* a window is open: what the status bar behind it said before (an old error) is not shown - what happens in a window is told in the window */
+html body:has(#modal .modal) #statusbar .sb-text, html body:has(#modal .modal) #statusbar .sb-time, html body:has(#modal .modal) #statusbar .sb-undo { visibility: hidden; }

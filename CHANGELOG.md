@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.73 - Renaming a server no longer locks the database; a window's errors stay in the window; the tunnel search, the Abuse-Defender install and the windows that still work
+
+> **به زبان ساده:** تغییر نام سرور (وقتی تانلش بی‌صدا شده بود) با «internal error» شکست می‌خورد؛ درست شد. خطای پنجره فقط در پنجره دیده می‌شود. جست‌وجوی «tr» نام شرکت را نمی‌خواند، نصب Abuse-Defender زمان مراحل را می‌نویسد، و بستن پنجره‌ای که هنوز کار می‌کند آن را به نوار پایین می‌برد.
+>
+> **In short:** a server rename no longer fails with "database is locked" when its tunnel is in the alert mutes; an error of a window shows in the window only; the tunnel search does not read provider names for short words; the Abuse-Defender install reports the seconds of each step; Close on a window that still works puts it in the bar.
+
+The owner (2026-10-21), four pictures and messages:
+
+- **Rename of a server** ("I wanted to rename this server, it gave an error"; the window stayed on "Saving…"): the live log shows three `PUT /api/servers/<id>` ending in `sqlite3.OperationalError: database is locked` after 30 s. The PUT changes the name, then `follow_server_rename` renames the tunnels that carry the name the panel made; `_rename_row` wrote the alert-mute list with `settings.put` - a SECOND connection that waits for the write lock the first one already holds. Now the list is written through the same session (`builder._rename_row`; `rename_tunnel` had the same fault). Only a server whose tunnel is muted was hit.
+- **An error of a window is told in the window** ("no error that happens in a box may show outside it"): `toast` already shows a message in the window when one is open. An error with an Undo no longer goes to the status bar, and the status bar's old line is hidden while a window is open (`lab.css`). What the owner saw behind the window could not be reproduced from the code: it was the status bar's last message.
+- **Tunnel search**: in the tunnel list "tr" also found a tunnel whose Iran server's company is "... Data Transmission ...". The row keeps provider, domain and country in `data-qx`; `nkHit(hay, q, extra)` finds a word of 3 letters or more in it as part of a word, a shorter one only as a whole word (the country code). Names, addresses, ports, type and state match as before.
+- **Abuse-Defender install** took 78 s on a server added 17 s earlier (10-16 s on the others): every STEP line now ends with the seconds the step took and the package list is refreshed once (`upd`). What took the 78 s is NOT known (the script printed no times; its lines reach the page only when it ends): most likely the first apt install on a new server.
+- **A window that still works is not lost** (`closeOrDock`): the owner installed a Marzban node on a new server, the box went and nothing said what state it was in (it had ended well: 112 s, "Marzban node: running ... API port 62051"). Close and Esc on a window with a running step put it in the bar (`minModal`), whose chip shows the last line and turns green or red; `followStory` keeps writing into a window that is in the bar. The install after "Add server" opens its steps window instead of only a toast.
+- **Proved**: `tests/test_server_rename_and_window_errors.py` (the rename with a muted tunnel does not lock - for a server and for a tunnel -, the other alert fields stay, the toast and CSS rules) and `tests/test_search_words_and_abuse_laps.py` (a node run of the real search function, the lap lines of the install script, the close/dock and add-flow rules), 13 test files in all. **Not proved**: in the owner's browser; that the install is faster (it only says where the time goes); the cause of the error showing behind the window.
+
 ## 1.69.72 - A tunnel of a server that is off is down at once
 
 > **به زبان ساده:** سرور خاموش شده بود و تلگرام خبر داد، ولی تانلش «متصل» می‌ماند. حالا تانل همان لحظه «قطع» نشان داده می‌شود.

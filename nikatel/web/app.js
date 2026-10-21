@@ -55,7 +55,7 @@ function toast(text, cls, undo) {      // undo: a function; the status bar then 
   const bar = $("#statusbar"); if (!bar) return;
   MSGS.unshift({t: Date.now(), text: String(text), cls: cls || ""}); MSGS.length = Math.min(MSGS.length, 40);      // the log keeps every message
   const hm0 = $("#modal .modal > .hmsg");      // a window is open: the message shows in the window ONLY; the status bar behind it stays still (a message there changed its height and made the page behind jump)
-  if (!hm0 || undo) {
+  if (!hm0 || (undo && cls !== "bad")) {
   bar.querySelectorAll(".sb-undo").forEach(b => b.remove());
   bar.className = "statusbar live " + (cls || "");
   $(".sb-text", bar).textContent = String(text); $(".sb-time", bar).textContent = new Date().toLocaleTimeString(undefined, {hour12: false});
@@ -514,7 +514,7 @@ function morphNode(a, b) {
 function morphHtml(el, html) { const t = document.createElement("div"); t.innerHTML = html; if (!el.firstChild) { el.innerHTML = html; return; } const ak = [...el.childNodes], bk = [...t.childNodes], n = Math.min(ak.length, bk.length); for (let i = 0; i < n; i++) if (!morphNode(ak[i], bk[i])) el.replaceChild(bk[i].cloneNode(true), ak[i]); for (let i = n; i < bk.length; i++) el.appendChild(bk[i].cloneNode(true)); while (el.childNodes.length > bk.length) el.removeChild(el.lastChild); }
 function showModal(title, body, cls = "", acts = "") {
   let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); }
-  const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeModal()" aria-label="Close">✕<span class="bt"> Close</span></button>`;
+  const head = `${title}<span class="sp"></span>${acts}<button class="sm min-btn" onclick="minModal()" title="Minimise: it keeps running; click its chip at the bottom to come back">—</button><button class="sm" onclick="closeOrDock()" aria-label="Close">✕<span class="bt"> Close</span></button>`;
   const cur = m.querySelector(".modal"), mb = cur && cur.querySelector(".modal-body");
   if (cur && mb && cur.className.replace(/\s*\bediting\b/, "").trim() === ("modal " + cls).trim()) {      // the same window: only what is inside changes - it does not fly in again and it does not shrink (a tab of the window no longer makes the page jump)
     const keep = mb.scrollTop, msg = mb.querySelector(".modal-msg-wrap"); cur.style.minHeight = cur.offsetHeight + "px";
@@ -671,7 +671,8 @@ window.closeModal = () => {
   hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
   if (state.pageStale) { state.pageStale = false; setTimeout(() => { if (state.open == null && !state.build) refresh(); }, 280); }      // what was held back while the window was open
 };
-document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML && !$("#modal .modal.keep")) closeModal(); /* a form marked keep (Add account, the record form) stays until it is saved or its Close button is pressed */ });
+window.closeOrDock = () => { const m = $("#modal"), ov = m && m.firstElementChild; if (ov && ov.querySelector(".fx-line.run")) { minModal(); toast("It keeps working: its chip is at the bottom of the page"); return; } closeModal(); };      // (Close and Esc on a window that is still working put it in the bar; a click on the chip brings it back)
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML && !$("#modal .modal.keep")) closeOrDock(); /* a form marked keep (Add account, the record form) stays until it is saved or its Close button is pressed */ });
 
 /* ---- dashboard */
 /* the small search of the dashboard: a few letters, and the servers / tunnels / configs whose name (or a part of it) starts with them are listed; a click opens it */
@@ -1316,13 +1317,13 @@ function CH_reset() { for (const k of Object.keys(CH)) delete CH[k]; }
 let qT;
 /* ONE rule for every search box: each word of what you type may sit anywhere in the text (the middle of a name too), several words must all be found, and the separators do not matter (a dash, a dot, a space and nothing are the same) */
 const nkCompact = s => String(s).replace(/[\s._\-:\/@]+/g, "");
-const nkHit = (hay, q) => { const h = String(hay || "").toLowerCase(), words = String(q || "").toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return true; const hc = nkCompact(h); return words.every(w => h.includes(w) || hc.includes(nkCompact(w))); };
+const nkHit = (hay, q, extra) => { const h = String(hay || "").toLowerCase(), words = String(q || "").toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return true; const hc = nkCompact(h), xs = String(extra || "").toLowerCase(), xt = xs.split(/\s+/); return words.every(w => h.includes(w) || hc.includes(nkCompact(w)) || (xs && ((w.length >= 3 && xs.includes(w)) || xt.includes(w)))); };      // (`extra`: the provider, domain and country - "tr" must not find "Data Transmission"; a whole word like the country code "tr" does match)
 /* the search box of Nodes and Tunnels sits in its own bar and hides rows at once: nothing is redrawn, so nothing around it moves */
 const searchSeg = () => `<span class="tb-search"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="if(document.activeElement===this)setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></span>`;
 const searchBar = () => `<div class="searchbar"><input id="q" type="search" placeholder="Search…" value="${esc(state.q)}" oninput="if(document.activeElement===this)setQ(this.value)" autocomplete="off" name="nk-find" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore spellcheck="false"></div>`;
 function applyQ() {
   const q = ((state.page === "configs" ? cf.q : state.q) || "").trim(); let shown = 0, total = 0;
-  document.querySelectorAll("#page [data-q]").forEach(tr => { const hit = nkHit(tr.dataset.q, q); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });      // every word may sit anywhere in the name, the address, the provider ...
+  document.querySelectorAll("#page [data-q]").forEach(tr => { const hit = nkHit(tr.dataset.q, q, tr.dataset.qx); tr.classList.toggle("q-hide", !hit); total++; if (hit) shown++; });      // every word may sit anywhere in the name, the address, the provider ...
   document.querySelectorAll("#page .nk-ghead").forEach(h => { const tb = h.nextElementSibling; if (tb && tb.matches("table")) h.classList.toggle("q-hide", !!q && !tb.querySelector("tr[data-q]:not(.q-hide)")); });
   document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
   document.querySelectorAll("#page .dr-g").forEach(g => { const any = !!g.querySelector(".dr-rec:not(.q-hide)"); g.classList.toggle("q-hide", !any); g.classList.toggle("q-open", !!q && any); });      // a search opens the groups that have a match
@@ -1416,8 +1417,8 @@ window.saveServer = async (e, id) => {
     else if (pgNode) toast("The server is added, but it does not log in yet, so the node is not made: fix the login, then use Install → PasarGuard node in the window of the server", "bad");
     if (items.length && connected) {   // then the extras (the torrent block applies thousands of rules: minutes); the row says "installing"
       const r = await api(`/api/servers/${saved.id}/install`, {method: "POST", body: JSON.stringify({items, cert})});
-      toast(`Installing on ${body.name}: the steps show on its row`); refresh();
-      const fin = await followStory(r.id, document.createElement("div"), 1800), lastLine = fin && fin.story ? [...fin.story].reverse().find(l => l && l.trim() && !/^Done/.test(l.trim())) : "";
+      refresh(); showModal(`<b>⬇ Extras on ${esc(body.name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
+      const fin = await followStory(r.id, $("#ap-story") || document.createElement("div"), 1800), lastLine = fin && fin.story ? [...fin.story].reverse().find(l => l && l.trim() && !/^Done/.test(l.trim())) : "";
       toast(fin && fin.ok ? `✓ Installed on ${body.name}` : "✕ " + String(lastLine || "Not finished").trim().slice(0, 200), fin && fin.ok ? "ok" : "bad"); refresh();
     } else if (items.length) toast("Not installed: the server does not log in yet - fix that, then add the server again or use its console", "bad");
     if (later && cores && connected) await prep(["cores"]);
@@ -1629,7 +1630,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
     const cut = t.state === "down" || (!["up", "degraded", "starting"].includes(t.state) && !!t.last_error), l = tunLoss(t);
     return `<div class="tlink ${t.state}${cut ? " cut" : ""}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><b class="ms ${cut ? "" : t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${cut ? "" : t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="wire">${ARR_L}<u class="dots"></u>${ARR_R}${cut ? '<em class="xx">✕</em>' : ""}</i><small class="loss ${cut ? "" : l.v >= SHOW_LOSS ? "hi" : l.blocked ? "blk" : "ok"}" title="${esc(lossTip(t))}">${cut ? "" : l.v != null ? l.v + "%" : l.blocked ? "no ping" : "—"}</small></div>`;
   };
-  const row = t => { const gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}${t.id < 0 ? "" : " clk"}" ${t.id < 0 ? "" : `onclick="toggleDetail(${t.id})" title="Click for the details"`} data-q="${esc([t.name, t.iran_name, t.foreign_name, t.type, t.transport, t.state, (t.iran_host || ""), (t.foreign_host || ""), (t.forwarded_ports || []).join(" "), ...[t.iran_name, t.foreign_name].map(n => { const sv = (state.serversCache || []).find(x => x.name === n) || {}; return [sv.provider, ((sv.extra || {}).geo || {}).provider, ((sv.extra || {}).geo || {}).domain, sv.country].filter(Boolean).join(" "); })].filter(Boolean).join(" ").toLowerCase())}">
+  const row = t => { const gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}${t.id < 0 ? "" : " clk"}" ${t.id < 0 ? "" : `onclick="toggleDetail(${t.id})" title="Click for the details"`} data-q="${esc([t.name, t.iran_name, t.foreign_name, t.type, t.transport, t.state, (t.iran_host || ""), (t.foreign_host || ""), (t.forwarded_ports || []).join(" ")].filter(Boolean).join(" ").toLowerCase())}" data-qx="${esc([t.iran_name, t.foreign_name].map(n => { const sv = (state.serversCache || []).find(x => x.name === n) || {}; return [sv.provider, ((sv.extra || {}).geo || {}).provider, ((sv.extra || {}).geo || {}).domain, sv.country].filter(Boolean).join(" "); }).join(" ").toLowerCase())}">
       <td class="name"><i class="tun-lamp ${esc(t.state)}" title="${esc(stText(t) + (t.last_error && t.state !== "up" ? " - " + t.last_error : ""))}"></i>${esc(t.name)}${wrench(t)}${newest.has(t.id) ? '<span class="newtag" title="One of the two newest tunnels, built in the last 30 minutes">new</span>' : ""}</td>
       <td class="td-ty2"><span class="td-type ty-${esc(tunType(t))}">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut">${gre ? linkTag(t) : ["direct", "forward"].includes((t.record || {}).direction) ? (t.record || {}).direction : "public"}</small></td>
       <td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>
@@ -1957,10 +1958,10 @@ async function followStory(aid, box, maxPolls) {
   const f = {box};
   f.p = (async () => { try {
     for (let i = 0; i < maxPolls; i++) {
-      const b0 = f.box, on = !!(b0 && b0.isConnected);
+      const b0 = f.box, on = !!(b0 && (b0.isConnected || b0.closest(".docked")));
       await new Promise(res => setTimeout(res, on ? 1500 : 6000));
       const s = await api(`/api/actions/${aid}`), b = f.box;
-      if (b && b.isConnected) { const atEnd = b.scrollTop + b.clientHeight >= b.scrollHeight - 12; b.innerHTML = storyHtml(s); if (atEnd) b.scrollTop = b.scrollHeight; }      // a fixed box that follows the end of the log, unless you scrolled up to read
+      if (b && (b.isConnected || b.closest(".docked"))) { const atEnd = b.scrollTop + b.clientHeight >= b.scrollHeight - 12; b.innerHTML = storyHtml(s); if (atEnd) b.scrollTop = b.scrollHeight; }      // a fixed box that follows the end of the log, unless you scrolled up to read
       if (s.done) return s;
     }
   } finally { FOLLOWING.delete(aid); } })();

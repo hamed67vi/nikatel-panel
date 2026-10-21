@@ -1512,10 +1512,13 @@ def _rename_row(db, t: Tunnel, new: str, custom: bool) -> None:
     for c in db.scalars(select(Config).where(Config.tunnel == old)):
         c.tunnel = new
 
-    muted = list(st.get("alerts").get("muted") or [])
+    from ..models import Setting
+
+    row = db.get(Setting, "alerts")          # (THIS session: settings.put opens another connection, which waits for the write lock this one holds - "database is locked" after 30 s)
+    muted = list(row.value.get("muted") or []) if row is not None and isinstance(row.value, dict) else []
 
     if old in muted:
-        st.put("alerts", {"muted": sorted({new if m == old else m for m in muted})})
+        row.value = {**row.value, "muted": sorted({new if m == old else m for m in muted})}
 
     from . import standby  # (it imports this module: so it is imported here)
 
