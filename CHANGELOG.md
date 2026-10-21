@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.79 - The Persian language is switched off for now
+
+> **به زبان ساده:** فارسی فعلاً غیرفعال شد (آخر سر انجام می‌شود): دکمهٔ «فا» برداشته می‌شود و پنل انگلیسی است. با یک پرچم برمی‌گردد.
+>
+> **In short:** Persian is off for now: the language button is gone and the panel is English; one flag brings it back.
+
+The owner (2026-10-21), for every session: "do not concentrate on the Persian language for now, we do it at the very end; switch the Persian language off for now".
+
+- **`PERSIAN_ON = false`** (`i18n.js`): at page load the language buttons are removed (also the one of the sign-in page), a panel that was in Persian goes to English (`nk.lang` is written back as en) BEFORE the page is drawn, and `html[data-persian="off"] .lang-btn` hides the button in `lab.css` before the script ran.
+- **Not touched**: the dictionaries (`i18n.fa.*.js`), the translation engine, the demo's own English-only rule, the Persian texts of the Telegram bot and the alerts (they are not the panel's language switch).
+- **Tests**: `test_persian_audit.py` and the three Persian tests of `test_ui_walk3.py` ask that every new English text has a Persian one; they are skipped while `PERSIAN_ON` is false (a new text no longer fails CI for a missing translation) and run again when it is true. `tests/test_persian_switch.py` pins the flag, the page's reaction, the stylesheet rule and the skips.
+- **To bring Persian back**: set `PERSIAN_ON = true` in `nikatel/web/i18n.js`, run the audit, add the missing texts to `i18n.fa.ui2.js`.
+- **Proved**: the tests above and the files that use the translation layer (`grep` i18n / I18N / lang-btn). **Not proved**: in the owner's browser (the button gone, English after a reload).
+
 ## 1.69.78 - Settings → About & update: the first two boxes are compact and look like the System Settings of macOS
 
 The owner (2026-10-21, with a picture of the "About & Update" and "License" boxes): "make these two boxes tighter and MacBook style".

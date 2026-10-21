@@ -16,7 +16,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "nikatel" / "web"
 NODE = shutil.which("node")
-SKIP_NODE = pytest.mark.skipif(NODE is None, reason="node is not installed")
+PERSIAN_ON = "const PERSIAN_ON = true;" in (WEB / "i18n.js").read_text(encoding="utf-8")
+SKIP_NODE = pytest.mark.skipif(NODE is None or not PERSIAN_ON, reason="node is not installed, or Persian is switched off for now (PERSIAN_ON in i18n.js; the owner, 2026-10-21: Persian at the very end)")
 
 DICTS = ["i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"]
 

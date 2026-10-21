@@ -14,6 +14,8 @@ APP = (WEB / "app.js").read_text(encoding="utf-8")
 FLUID_CSS = (WEB / "fluid.css").read_text(encoding="utf-8")
 I18N = (WEB / "i18n.js").read_text(encoding="utf-8")
 NODE = shutil.which("node")
+PERSIAN_ON = "const PERSIAN_ON = true;" in I18N
+SKIP_PERSIAN = pytest.mark.skipif(NODE is None or not PERSIAN_ON, reason="node is not installed, or Persian is switched off for now (PERSIAN_ON in i18n.js; the owner, 2026-10-21: Persian at the very end)")
 
 # node: the translation layer with the dictionaries, a stand-in for the page; reads the strings to look up from stdin
 LAYER = r"""
@@ -83,7 +85,7 @@ def test_the_shop_bot_head_does_not_squeeze_its_counters():
     assert "${errs ? errs + (errs === 1 ? \" error\" : \" errors\") : \"No errors logged\"}" in APP      # ("1 errors")
 
 
-@pytest.mark.skipif(NODE is None, reason="node is not installed")
+@SKIP_PERSIAN
 def test_a_text_box_gets_its_tip_and_hint_in_persian():
     """i18n.js skipped a TEXTAREA with everything inside it (right: its text is the user's), and with its attributes too (wrong: the title and the placeholder are texts of the panel)."""
     assert 'if (root.nodeType === 1 && root.tagName === "TEXTAREA") attrs(root);' in I18N
@@ -91,7 +93,7 @@ def test_a_text_box_gets_its_tip_and_hint_in_persian():
     assert 'b.setAttribute("aria-label", fa ? "زبان" : "Language")' in I18N
 
 
-@pytest.mark.skipif(NODE is None, reason="node is not installed")
+@SKIP_PERSIAN
 def test_the_tooltips_that_stayed_english_are_translated():
     shown = ["Look at this server's own network now (about ten seconds; read only)", "Choose a domain: its records are listed below", "Actions of ir-north-1", "Enable or disable ir-north-1",
              "What the server gives out right now: 55.6 Mb/s (what it takes in: 90.8 Mb/s)", "DOWN - the foreign side does not answer", "UNSTABLE - 18 of 100 pings lost",
@@ -111,7 +113,7 @@ def test_the_tooltips_that_stayed_english_are_translated():
     assert plain == ["Demo panel", "My account", "Connection error", "Open the front door", "Tick every row", "Remove everything"], plain
 
 
-@pytest.mark.skipif(NODE is None, reason="node is not installed")
+@SKIP_PERSIAN
 def test_no_tooltip_written_in_the_code_is_left_without_persian():
     """Every title / placeholder / aria-label that is written as a sentence in the pages' source has a Persian text (a new one without it fails here: add it to i18n.fa.ui2.js).
     What is not looked at: the ones that are built from a condition (they are found by looking at the page) and the single technical words and examples (a host name, a path, a model name)."""

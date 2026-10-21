@@ -1259,3 +1259,6 @@ html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-row, html[data
 html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-row:hover:not(:disabled) { background: rgba(60, 70, 100, .12); border: 0; }
 html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-row .abt-ti.sm { background: rgba(60, 70, 100, .1); color: #2b3550; }
 html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-iid code { background: rgba(60, 70, 100, .08); color: #14213d; }
+
+/* Persian is switched off for now (PERSIAN_ON in i18n.js): the language button is not shown, also before the script has removed it */
+html[data-persian="off"] .lang-btn { display: none !important; }

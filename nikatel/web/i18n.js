@@ -9,6 +9,7 @@
    hole in the numbering ({1} {2}) but, unlike {}, it cannot swallow other text. {n} is a hole that is only a number ("3", "1.5", "2,500"), for the count in front of it. {w} is a hole that is a name: one word without a space that has a digit or one of - _ . @ / : in it (ir-north-1, t1, 8072), for "Open {w}": "Open the front door" is not a name.
    Texts with a leading symbol (✓ ✕ ⚠ 🔍 …) or a trailing "…" / ":" / "." are looked up without them.  */
 (() => {
+  const PERSIAN_ON = false;      // the owner, 2026-10-21: "Persian later, at the very end - switch the Persian language off for now". False: no switch button, the panel is English even where Persian was chosen before; the dictionaries and the engine stay as they are, and the Persian audit tests are skipped. Change to true to bring it back.
   const exact = Object.create(null), tpl = [], cache = new Map(), explainers = [];
   let sorted = true;
   const I18N = window.I18N = {
@@ -134,5 +135,9 @@
   I18N.apply = () => { chrome(); obs.disconnect(); walk(document.body); watch(); };
   I18N.set = lang => { I18N.lang = lang === "fa" ? "fa" : "en"; try { localStorage.setItem("nk.lang", I18N.lang); } catch (e) { /* private mode */ } cache.clear(); I18N.apply(); if (window.onLangChange) window.onLangChange(I18N.lang); };
   window.toggleLang = () => I18N.set(I18N.lang === "fa" ? "en" : "fa");
-  document.addEventListener("DOMContentLoaded", () => { chrome(); if (I18N.lang === "fa") walk(document.body); watch(); });
+  document.addEventListener("DOMContentLoaded", () => {
+    document.documentElement.dataset.persian = PERSIAN_ON ? "on" : "off";
+    if (!PERSIAN_ON) { document.querySelectorAll(".lang-btn").forEach(b => b.remove()); if (I18N.lang === "fa") { I18N.lang = "en"; try { localStorage.setItem("nk.lang", "en"); } catch (e) { /* private mode */ } } }      // (Persian is off: the switch goes, and a panel that was in Persian is in English)
+    chrome(); if (I18N.lang === "fa") walk(document.body); watch();
+  });
 })();
