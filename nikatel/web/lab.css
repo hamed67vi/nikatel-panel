@@ -1214,3 +1214,6 @@ html body #page .tun-tbl .bwm.pend .bwm-t small { color: var(--mut); background:
 
 /* "no users": nobody used the tunnel for minutes and the Doctor checked it fully and found nothing wrong */
 html body #page .tun-tbl .bwm.ok .bwm-t small:not(:empty) { color: var(--mut); background: rgba(255, 255, 255, .07); }
+
+/* the Link box of the tunnel window: a value that is longer than its row wraps instead of being cut at the left ("ually 1328 Mb/s") */
+html body #modal .tunwin .sbox[data-b="link"] .kv2 > div { flex-wrap: wrap; white-space: normal; row-gap: 2px; overflow: visible; }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.68 - The tunnel window: the bandwidth box once, the Capacity row whole, and no "Healthy" over a red box
+
+> **به زبان ساده:** پنجرهٔ تانل مرتب شد: جعبهٔ پهنا دوبار نمی‌آید، ردیف Capacity بریده نمی‌شود، نوار خالی است وقتی تست صفر برده، و تانلِ up که داده نمی‌برد «Healthy» نمی‌نویسد.
+>
+> **In short:** the tunnel window is tidied: no doubled bandwidth box, no cut Capacity row, an empty bar when the test carried nothing, no "Healthy" for a tunnel that carries no data.
+
+The owner (2026-10-21, a picture of the window of a BackPack tunnel): "fix these errors in the box too, it is very messy".
+
+- **The bandwidth box showed twice** (`app.js tunLivePaint`): every 4 s the live paint replaced "the first `.bwbig` or `.mut`" of the box - and the first `.mut` is the little "Mb/s" in the HEADING, so the whole block was put into the heading while the real block below stayed (and was never updated). Now only a child block of the box is replaced.
+- **"ually 1328 Mb/s"**: the reason sentences ("No data moves through this tunnel ...", "nearly full ...") were blocks put INSIDE the one-line value of the Capacity row, which is a right-aligned flex row that cuts its left side. They stand under the row now, and the Link box wraps a value that is longer than its row (`lab.css`).
+- **A full red bar of nothing**: when the Doctor's test carried 0 Mb/s the users' use was drawn against its own scale - a full red bar; now the bar is empty (there is no capacity to measure the users against).
+- **"Healthy - nothing needs attention" over a red bandwidth box** (`tunBanner`): a tunnel that is up but whose test carried nothing, or whose capacity dropped, or that is very slow, now says "Up, but it carries no data under load" / "very slow" / "what it can carry dropped" with the Doctor's sentence and the Health check button, in the amber of a warning.
+- **Proved**: `tests/test_tunnel_window_boxes.py` (the paint selects only a child block - also a node run of the two selectors on a small tree; the reason sentences are outside the value; the empty bar; the banner; the CSS). **Not proved**: in the owner's browser. What the window says about THAT tunnel (a test of 0 Mb/s, 35/100, 14 cuts in a day) is real data, not a drawing fault: the Doctor looks at it as before.
+
 ## 1.69.67 - The Analytics page of the Tunnel Doctor no longer ends in "internal error"
 
 > **به زبان ساده:** صفحهٔ Analytics خطای «internal error» می‌داد؛ علتش دو بررسی هم‌ثانیه با پینگ و بدون پینگ بود. درست شد.
