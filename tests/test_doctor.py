@@ -296,20 +296,16 @@ def test_the_page_and_the_job_withdraw_a_suggestion_whose_tunnel_is_healthy_agai
 
 
 # ------------------------------------------------------------------ a suggestion to change the TYPE of a very slow tunnel (1.69.14)
-def test_a_type_suggestion_stands_while_the_tunnel_is_slow_even_when_it_is_up_and_clean():
-    """The "move" rule withdraws a suggestion when the tunnel has been up without loss for ten minutes; a very slow tunnel is up and clean all the time - that is what is wrong with it."""
+def test_a_type_suggestion_of_an_older_version_is_withdrawn_at_once():
+    """1.69.83 (the owner, 2026-10-22: "no more suggestions - when it sees a steady, better type it does it by itself"): the Doctor never suggests a type now; one that an older version stored is withdrawn whatever the tunnel does."""
     now = 1_000_000
     sug = {"id": "s-9", "kind": "type", "tunnel": "t1", "now_kind": "tcpmux", "to_kind": "tcp"}
     slow_up = {"state": "up", "state_since": now - 7200, "loss": 0.0, "kind": "tcpmux", "bw_state": "slow"}
-    assert doctor.suggestion_valid(sug, slow_up, set(), now) == ""
-    assert doctor.suggestion_valid(sug, {**slow_up, "bw_state": "drop"}, set(), now) == ""                                  # (a stall is the worse word for the same fault)
-    assert "no longer very slow" in doctor.suggestion_valid(sug, {**slow_up, "bw_state": "ok"}, set(), now) and "no longer very slow" in doctor.suggestion_valid(sug, {**slow_up, "bw_state": None}, set(), now)
-    assert "runs as paqet now, not as tcpmux" in doctor.suggestion_valid(sug, {**slow_up, "kind": "paqet"}, set(), now)      # somebody changed the type already
+    assert "no longer suggests" in doctor.suggestion_valid(sug, slow_up, set(), now) and "no longer suggests" in doctor.suggestion_valid({**sug, "upgrade": True}, slow_up, set(), now)
     assert "not in the list" in doctor.suggestion_valid(sug, None, set(), now)
-    assert doctor.suggestion_valid({**sug, "now_kind": None}, {**slow_up, "kind": "paqet"}, set(), now) == ""               # (an old entry that does not say its type is judged by the speed alone)
 
 
-def test_the_page_withdraws_a_type_suggestion_when_the_tunnel_is_no_longer_slow(monkeypatch):
+def test_the_page_does_not_show_a_type_suggestion_and_says_why_it_was_withdrawn(monkeypatch):
     from nikatel.models import Event
 
     ids = _servers_and_tunnels()
@@ -322,18 +318,12 @@ def test_the_page_withdraws_a_type_suggestion_when_the_tunnel_is_no_longer_slow(
     monkeypatch.setattr(doctor, "saturated_servers", lambda now=None: [])
     e = doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcp", "tcpmux gives 0.8 Mb/s; tcp 119", extra={"now_kind": "tcpmux", "to_kind": "tcp", "now_mbps": 0.8, "memory_mbps": 119.0})
     assert e["kind"] == "type" and e["to_kind"] == "tcp" and e["memory_mbps"] == 119.0 and e["from"] == "tcpmux" and e["to"] == "tcp" and e["to_id"] is None
-    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t2"]                                                   # up and clean for three hours: still there
-
-    with session() as db:
-        t = db.get(Tunnel, ids["t2"])
-        t.record = {"bw": {"down": 40.0, "state": "ok"}}
-
-    assert doctor.state()["suggestions"] == []
+    assert doctor.state()["suggestions"] == []                                                                               # (never shown: the Doctor changes a proven steady type by itself, 1.69.83)
 
     with session() as db:
         said = [x.text for x in db.scalars(select(Event).where(Event.domain == "actions"))]
 
-    assert any("suggestion was withdrawn" in m and "t2" in m and "no longer very slow" in m for m in said)
+    assert any("suggestion was withdrawn" in m and "t2" in m and "no longer suggests" in m for m in said)
 
 
 def _retype_world(monkeypatch, replaced_ok=True, links=True):
@@ -376,12 +366,12 @@ def test_a_type_that_does_not_build_or_whose_link_does_not_pass_leaves_the_tunne
     _ids, e, said, replaced = _retype_world(monkeypatch, replaced_ok=False)
     doctor.apply_suggestion(e["id"])
     assert replaced and said[-1] == ("The build of tcp failed; tcpmux was put back.", True, False)                      # (the swap itself puts the old type back)
-    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t2"]                                                   # it stands: the owner may try again or dismiss it
+    assert [x["tunnel"] for x in doctor._state()["suggestions"]] == ["t2"]                                                  # it stands: the owner may try again or dismiss it
     replaced.clear()
     monkeypatch.setattr(autopilot, "_probe_links", lambda aid, snap, kinds: [])                                          # the link of the new type does not pass between the two servers
     doctor.apply_suggestion(e["id"])
     assert replaced == [] and said[-1][1:] == (True, False) and "link of tcp does not pass between ir1 and fi1: nothing is built, t2 is not touched" in said[-1][0]
-    assert [x["tunnel"] for x in doctor.state()["suggestions"]] == ["t2"]
+    assert [x["tunnel"] for x in doctor._state()["suggestions"]] == ["t2"]
 
 
 def test_a_type_suggestion_that_is_out_of_date_or_not_allowed_changes_nothing(monkeypatch):
@@ -405,7 +395,7 @@ def test_a_type_suggestion_that_is_out_of_date_or_not_allowed_changes_nothing(mo
 
     monkeypatch.setattr(doctor.license, "tunnel_kind_allowed", lambda kind: True)
     doctor.suggest("type", ids["t2"], "t2", ids["ir1"], "tcpmux", None, "tcpmux", "same", extra={"now_kind": "tcpmux", "to_kind": "tcpmux"})
-    doctor.apply_suggestion(next(x["id"] for x in doctor.state()["suggestions"]))
+    doctor.apply_suggestion(next(x["id"] for x in doctor._state()["suggestions"]))
     assert replaced == [] and said[-1][0] == "t2 runs as tcpmux already: nothing to change."                               # (the type it should become is the type it is)
 
     with pytest.raises(ValueError, match="gone"):

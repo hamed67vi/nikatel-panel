@@ -103,31 +103,35 @@ def test_a_tunnel_that_carries_no_download_is_not_ready():
     assert "dead_download(b.quality)" in src and "not is_temp(b.name) and not b.standby_of" in src            # (a pair test or a standby keeps its number)
 
 
-def test_a_suggestion_of_a_better_type_stands_while_the_tunnel_runs_the_same_type_for_a_week():
+def test_a_suggestion_of_a_better_type_of_an_older_version_is_withdrawn():
     e = {"kind": "type", "upgrade": True, "tunnel": "t1", "now_kind": "tcpmux", "at": NOW}
-    assert doctor.suggestion_valid(e, {"kind": "tcpmux", "bw_state": "ok"}, set(), NOW + 3600) == ""
-    assert "runs as tcp now" in doctor.suggestion_valid(e, {"kind": "tcp", "bw_state": "ok"}, set(), NOW + 3600)
-    assert "a week old" in doctor.suggestion_valid(e, {"kind": "tcpmux", "bw_state": "ok"}, set(), NOW + 8 * 86400)
-    assert doctor.suggestion_valid({**e, "upgrade": False}, {"kind": "tcpmux", "bw_state": "ok"}, set(), NOW + 3600) != ""      # (the old rule of a very slow tunnel is as it was)
+    assert "no longer suggests" in doctor.suggestion_valid(e, {"kind": "tcpmux", "bw_state": "ok"}, set(), NOW + 3600)          # (1.69.84: the Doctor changes a proven steady type by itself and suggests nothing)
 
-
-def test_the_look_for_a_better_type_writes_one_suggestion_and_never_changes_a_tunnel(monkeypatch):
+def test_the_look_for_a_better_type_changes_a_proven_steady_one_by_itself_and_suggests_nothing(monkeypatch):
+    from nikatel.config import get_settings
     from nikatel.services import actions, autopilot, bandwidth
 
+    monkeypatch.setattr(get_settings(), "read_only", False)
     monkeypatch.setattr(actions, "doctor_mode", lambda: "fix")
     monkeypatch.setattr(autopilot, "_snapshot", lambda tid: {"type": "backhaul", "transport": "tcpmux", "record": {}, "iran_id": 1, "foreign_id": 2, "iran_name": "ir", "foreign_name": "fr", "name": "fr-ir"})
-    monkeypatch.setattr(knowledge, "pair", lambda i, f: _pair({"tcpmux": (160, 0, 62), "bp:tcpmux": (1293, 0, 95)}, now=int(time.time())))
+    p = _pair({"tcpmux": (160, 0, 62), "bp:tcpmux": (1293, 0, 95)}, now=int(time.time()))
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: p)
     monkeypatch.setattr(license, "tunnel_kind_allowed", lambda k: True)
-    got, retyped = [], []
+    got, started = [], []
     monkeypatch.setattr(doctor, "suggest", lambda *a, **k: got.append((a, k)) or {})
-    monkeypatch.setattr(doctor, "_run_retype", lambda *a, **k: retyped.append(a))
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: started.append((label, fn, a, k)) or 1)
+    bandwidth._UPGRADE_AT.clear()
+    bandwidth._upgrade_check(7)
+    assert started == [] and got == []                                              # (one test of the better type: its steadiness is not proven - nothing is changed and nothing is suggested)
+    now = int(time.time())
+    p["kinds"]["bp:tcpmux"]["hist"] = [{"at": now - 86400 + i, "ok": True, "down": 1293, "loss": 0.0} for i in range(3)]
     bandwidth._UPGRADE_AT.clear()
     bandwidth._upgrade_check(7)
     bandwidth._upgrade_check(7)                                                     # (the same tunnel again at once: not looked at twice)
-    assert len(got) == 1 and retyped == []
-    a, k = got[0]
-    assert a[0] == "type" and a[6] == "bp:tcpmux" and k["extra"]["upgrade"] is True and k["extra"]["now_kind"] == "tcpmux" and "1293 Mb/s" in a[7] and "160 Mb/s" in a[7]
+    assert len(started) == 1 and got == []
+    label, fn, a, k = started[0]
+    assert label == "fr-ir" and fn is doctor._run_retype and a[:3] == (7, "bp:tcpmux", "tcpmux") and a[4] is True and "1293 Mb/s" in a[3] and "160 Mb/s" in a[3] and k["source"] == "auto"
     monkeypatch.setattr(actions, "doctor_mode", lambda: "off")
     bandwidth._UPGRADE_AT.clear()
     bandwidth._upgrade_check(7)
-    assert len(got) == 1                                                            # (the Doctor is off: nothing)
+    assert len(started) == 1                                                        # (the Doctor is off: nothing)

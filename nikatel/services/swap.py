@@ -165,12 +165,11 @@ def _wait_standby_quiet(name: str) -> None:
 
 
 def _suggest(aid: int, snap: dict, cur: str, kind: str, why: str, reason: str, before: float) -> None:
-    """The swap cannot be made beside the tunnel: the change is a suggestion (one click; that way cuts the users for a minute or two, so the Doctor never does it by itself)."""
-    from . import autopilot, doctor
+    """The swap cannot be made beside the tunnel: it is NOT done and NOT suggested (the owner, 2026-10-22: "no more suggestions - when it sees a steady tunnel with better quality it does it by itself"). A change the old way would
+    cut the users, so the Doctor leaves the tunnel as it is and looks again at its next round. (The name is old: nothing is suggested now.)"""
+    from . import autopilot
 
-    doctor.suggest("type", snap["id"], snap["name"], snap["iran_id"], cur, None, kind, why, extra={"now_kind": cur, "to_kind": kind, "now_mbps": before})
-    autopilot._say(aid, f"{snap['name']} is NOT changed to {kind} by itself: {reason}. A change would cut the users, so it is suggested on the Doctor page - one click, a cut of a minute or two.", done=True, ok=True)
-
+    autopilot._say(aid, f"{snap['name']} is NOT changed to {kind} by itself: {reason}. A change would cut the users, so the Doctor leaves it as it is and looks again later; it suggests nothing.", done=True, ok=True)
 
 # ------------------------------------------------------------------ the story
 def beside(aid: int, snap: dict, kind: str, why: str, before: float) -> None:

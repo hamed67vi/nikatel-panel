@@ -104,6 +104,9 @@ def suggestion_valid(e: dict, tunnel: dict | None, saturated: set[int], now: int
     if tunnel is None:
         return "the tunnel is not in the list any more"
 
+    if e.get("kind") == "type":                                  # (1.69.83, the owner, 2026-10-22: "no more suggestions - when it sees a steady, better tunnel it does it by itself": a type suggestion of an older version is withdrawn)
+        return "the Doctor changes a type by itself when it is proven steady; it no longer suggests one"
+
     if e.get("kind") == "resources":
         return "" if int(e.get("from_id") or 0) in saturated else f"{e.get('from') or 'the server'} is no longer exhausted"
 

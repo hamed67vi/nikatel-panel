@@ -105,14 +105,13 @@ def test_nothing_is_changed_when_no_tested_type_is_clearly_better_or_the_doctor_
     assert not tested and not calls
 
 
-def test_a_type_that_is_not_proven_steady_is_only_suggested_never_taken_by_itself(monkeypatch):
+def test_a_type_that_is_not_proven_steady_is_never_taken_by_itself_and_never_suggested(monkeypatch):
     tid = _world(monkeypatch)
     said, tested, calls = _spy(monkeypatch, [_row("tcp", 10.0), _row("paqet", 200.0)])                 # (tcp, the proven one, gave little now; paqet has one test only)
     bandwidth.investigate(7, tid)
     assert tested and not calls
-    sug = doctor.state()["suggestions"]
-    assert len(sug) == 1 and sug[0]["kind"] == "type" and sug[0]["to"] == "paqet" and sug[0]["from"] == "tcpmux"
-    assert any("It is not changed by itself: its steadiness is not proven yet" in s for s in said)
+    assert doctor.state()["suggestions"] == []                                                                  # (no suggestion any more, 1.69.83)
+    assert any("paqet gave 200 Mb/s in the test, but its steadiness is not proven yet" in s and "dr-a stays tcpmux" in s for s in said)
 
 
 def test_with_no_memory_of_the_pair_the_doctors_own_order_is_tested(monkeypatch):
@@ -121,7 +120,7 @@ def test_with_no_memory_of_the_pair_the_doctors_own_order_is_tested(monkeypatch)
     _said, tested, calls = _spy(monkeypatch, [_row("bp:wss", 80.0)])
     bandwidth.investigate(7, tid)
     assert tested == [(["tcp", "bp:wss", "paqet"], "full")] and not calls                                # (at most three; the running type is not tried; nothing is known of it: a suggestion only)
-    assert doctor.state()["suggestions"][-1]["to"] == "bp:wss"
+    assert doctor.state()["suggestions"] == []
 
 
 @pytest.mark.parametrize("code_case", ["a"])

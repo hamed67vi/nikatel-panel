@@ -819,11 +819,9 @@ def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
     why = (f"{cur} dropped to {float(f.get('now') or 0):.0f} Mb/s (usually {float(f.get('ref') or 0):.0f}); {best['kind']} gave {float(best['down_mbps']):.0f} Mb/s in the speed test just now, lost {float(best.get('loss_pct') or 0):g} % "
            f"and answered in {float(best.get('latency_ms') or 0):.0f} ms; {note}.")
 
-    if st_ is None:                                              # (a type that was not proven steady is never taken by itself: the owner decides with one click)
-        doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, best["kind"], why, extra={"now_kind": cur, "to_kind": best["kind"], "now_mbps": f.get("now"), "memory_mbps": best["down_mbps"]})
-        say(f"Suggested on the Doctor page: {cur} → {best['kind']}. {why} It is not changed by itself: its steadiness is not proven yet (it needs {knowledge.STEADY_MIN_TESTS} tests; each test of the pair counts).")
+    if st_ is None:                                              # (a type that was not proven steady is never taken by itself, and no suggestion is made: the owner, 2026-10-22)
+        say(f"{best['kind']} gave {float(best['down_mbps']):.0f} Mb/s in the test, but its steadiness is not proven yet (it needs {knowledge.STEADY_MIN_TESTS} tests, 75 % or more): {snap['name']} stays {cur}; each test of the pair counts.")
         return
-
     say(f"The Doctor changes the type by itself ({actions.doctor_mode()} mode): {cur} → {best['kind']}.")
     doctor._run_retype(aid, tunnel_id, best["kind"], cur, why, auto=True)
 
@@ -844,37 +842,41 @@ def _investigate_slow(aid: int, tunnel_id: int, f: dict, say, finish: bool) -> N
         autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)
 
 
+def _faster_row(snap: dict, cur: str, f: dict, now: int) -> tuple[dict | None, list[dict]]:
+    """(the row of the type to change to, all the faster rows the memory knows): the row is the fastest type that gave clearly more on this pair AND whose steadiness is PROVEN (3 tests, 75 % or more); None when there is none."""
+    from . import knowledge, license
+
+    live = float(f.get("live") or 0)
+    rows = knowledge.faster_kinds(knowledge.pair(snap["iran_id"], snap["foreign_id"]), now, cur, max(float(f.get("now") or 0), live), license.tunnel_kind_allowed)
+    return next((r for r in rows if r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK), None), rows
+
+
 def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
-    """From the Doctor's memory of the pair: a type that gave clearly more here becomes a SUGGESTION on the Doctor page (1.69.14). Since 1.69.17 the Doctor DOES it by itself in the modes fix and move (the owner,
-    2026-10-19: "when the Doctor sees it is slow, let it do the other types it tested before - what is it waiting for?"), under rails: once in 24 hours per tunnel, at a quiet moment, the link probed first, the old
-    type put back when the new one does not build or is clearly worse. Nothing when the Doctor is off."""
-    from . import actions, autopilot, doctor, knowledge, license
+    """From the Doctor's memory of the pair: a type that gave clearly more here and is PROVEN steady is taken by the Doctor itself in the modes fix and move (the owner, 2026-10-19: "when the Doctor sees it is slow, let it do
+    the other types it tested before"; 2026-10-22: "no more suggestions - when it sees a steady tunnel with better quality it does it by itself"), under rails: once in 24 hours per tunnel, at a quiet moment, the link probed first,
+    the old type put back when the new one does not build or is clearly worse. A type that is not proven steady is never taken and never suggested. Nothing when the Doctor is off. (The name is old: it suggests nothing now.)"""
+    from . import actions, autopilot, doctor, knowledge
 
     if actions.doctor_mode() == "off":
-        say("The Doctor is off: it tells, it does not suggest a change.")
+        say("The Doctor is off: it does not change the type.")
         return
 
     snap = autopilot._snapshot(tunnel_id)
     cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
     now = int(time.time())
     live = float(f.get("live") or 0)
-    rows = knowledge.faster_kinds(knowledge.pair(snap["iran_id"], snap["foreign_id"]), now, cur, max(float(f.get("now") or 0), live), license.tunnel_kind_allowed)
+    r, rows = _faster_row(snap, cur, f, now)
 
     if not rows:
         say(f"The Doctor's memory of {snap['iran_name']} ⇄ {snap['foreign_name']} knows no other type that gave clearly more than {cur} here. To find one: Doctor → Knowledge → test this pair.")
         return
 
-    rows = [r for r in rows if r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK]          # (a type that fell or failed in some of its tests is not offered)
-
-    if not rows:
-        say(f"The Doctor's memory knows a faster type for {snap['iran_name']} ⇄ {snap['foreign_name']}, but it was not steady in its tests: nothing is offered.")
+    if r is None:
+        say(f"The Doctor's memory knows a faster type for {snap['iran_name']} ⇄ {snap['foreign_name']}, but its steadiness is not proven yet (it needs {knowledge.STEADY_MIN_TESTS} tests, 75 % or more): {snap['name']} stays {cur}.")
         return
 
-    r = next((x for x in rows if x.get("steady") is not None), rows[0])          # (a type with a proven steadiness first)
     age = max(0, (now - int(r.get("at") or now)) // 3600)
-    why = (f"{cur} gives {f['now']} Mb/s in the test" + (f" (the users carry {live:.0f} Mb/s through it now)" if live else "") + f"; the Doctor's memory has {r['kind']} at {float(r['down_mbps']):.0f} Mb/s on this pair, measured {age} h ago.")
-    doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": f.get("now"), "memory_mbps": r["down_mbps"]})
-    say(f"Suggested on the Doctor page: change the type from {cur} to {r['kind']} - one click, the old type is put back if the new one does not build. {why}")
+    why = (f"{cur} gives {f['now']} Mb/s in the test" + (f" (the users carry {live:.0f} Mb/s through it now)" if live else "") + f"; the Doctor's memory has {r['kind']} at {float(r['down_mbps']):.0f} Mb/s on this pair, measured {age} h ago; {knowledge.steady_note(r)}.")
     block = doctor.may_retype(snap["name"], doctor._state().get("retype_done") or {}, now)
 
     if block:
@@ -884,13 +886,8 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
     if get_settings().read_only:
         return
 
-    if r.get("steady") is None:                                  # (not proven steady: the owner decides with one click, the Doctor does not change a running tunnel to it)
-        say(f"Not done by itself: the steadiness of {r['kind']} is not proven yet ({knowledge.steady_note(r)}).")
-        return
-
     say(f"The Doctor does it by itself ({actions.doctor_mode()} mode): {cur} → {r['kind']}.")
     doctor._run_retype(aid, tunnel_id, r["kind"], cur, why, auto=True)
-
 
 def _cuts_lately(tunnel_id: int, now: int, hours: int = 24) -> int:
     """How many times the tunnel was cut in the last `hours` (runs of failed checks, `analyst.find_outages`): a type that keeps dropping is unsteady, whatever its test said."""
@@ -907,14 +904,15 @@ _UPGRADE_AT: dict[int, int] = {}
 
 
 def _upgrade_check(tunnel_id: int) -> None:
-    """After a measurement of a tunnel that is fine (the owner, 2026-10-20: "after it sets the types it must test whether a better and more stable one exists"): when the Doctor's memory of the pair knows a type that
-    carried clearly more in the same pair test, and was stable in it, the Doctor PUTS IT ON ITS PAGE as a suggestion (one click: Change type, the old type is put back when the new one does not build). It does not
-    change a running tunnel by itself. The memory is kept fresh by the night survey and by "Test this pair"."""
+    """After a measurement of a tunnel that is fine (the owner, 2026-10-20: "after it sets the types it must test whether a better and more stable one exists"; 2026-10-22: "no more suggestions - when it sees a steady
+    tunnel with better quality it does it by itself"): when the Doctor's memory of the pair knows a type that carried clearly more in the same pair test, was clean and is PROVEN steady, the Doctor changes the tunnel to it
+    by itself (modes fix and move; once in 24 hours per tunnel, at a quiet moment, the old type put back when the new one does not build or gives less). A type that is not proven steady is left alone - nothing is put on
+    the Doctor's page. The memory is kept fresh by the night survey and by "Test this pair"."""
     from . import actions, autopilot, doctor, knowledge, license
 
     now = int(time.time())
 
-    if now - _UPGRADE_AT.get(tunnel_id, 0) < UPGRADE_EVERY or actions.doctor_mode() == "off":
+    if now - _UPGRADE_AT.get(tunnel_id, 0) < UPGRADE_EVERY or actions.doctor_mode() == "off" or get_settings().read_only:
         return
 
     _UPGRADE_AT[tunnel_id] = now
@@ -925,26 +923,31 @@ def _upgrade_check(tunnel_id: int) -> None:
     steadier = cuts >= knowledge.STEADY_CUTS
     rows = knowledge.steadier_kinds(p, now, cur, license.tunnel_kind_allowed) if steadier else []
     rows = rows or knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
+    rows = [r for r in rows if r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK]          # (not proven steady: not by itself, and nothing is suggested)
 
-    if not rows or any(x.get("tunnel") == snap["name"] and x.get("kind") != "type" for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
+    if not rows or any(x.get("tunnel") == snap["name"] for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
+        return
+
+    if doctor.may_retype(snap["name"], doctor._state().get("retype_done") or {}, now):
         return
 
     r = rows[0]
 
-    if steadier and r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK:
+    if steadier:
         why = (f"{snap['name']} was cut {cuts} times in the last day. In the tests of {snap['iran_name']} ⇄ {snap['foreign_name']} {r['kind']} was steady: {r['passed']} of {r['tests']} tests passed, stability "
                f"{r['steady']} %, {float(r['down_mbps']):.0f} Mb/s, {float(r.get('latency_ms') or 0):.0f} ms. Many users need a type that does not drop.")
-        doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "memory_mbps": r["down_mbps"], "upgrade": True, "steadier": True})
-        log.info("a steadier type for tunnel %s: %s -> %s (%s cuts in a day)", tunnel_id, cur, r["kind"], cuts)
-        return
+    else:
+        base = float((((p or {}).get("kinds") or {}).get(cur) or {}).get("full", {}).get("down_mbps") or 0)
+        age = max(0, (now - int(r.get("at") or now)) // 3600)
+        why = (f"In the pair test of {snap['iran_name']} ⇄ {snap['foreign_name']} {cur} carried {base:.0f} Mb/s; {r['kind']} carried {float(r['down_mbps']):.0f} Mb/s, "
+               f"lost {float(r.get('loss_pct') or 0):g} % and scored {r['score']} ({age} h ago; {knowledge.steady_note(r)}). Nothing is wrong with {cur}: this is a better, steady type known for this pair.")
 
-    base = float((((p or {}).get("kinds") or {}).get(cur) or {}).get("full", {}).get("down_mbps") or 0)
-    age = max(0, (now - int(r.get("at") or now)) // 3600)
-    why = (f"In the pair test of {snap['iran_name']} ⇄ {snap['foreign_name']} {cur} carried {base:.0f} Mb/s; {r['kind']} carried {float(r['down_mbps']):.0f} Mb/s, "
-           f"lost {float(r.get('loss_pct') or 0):g} % and scored {r['score']} ({age} h ago; {knowledge.steady_note(r)}). Nothing is wrong with {cur}: this is a better type known for this pair.")
-    doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": base, "memory_mbps": r["down_mbps"], "upgrade": True})
-    log.info("a better type for tunnel %s: %s -> %s", tunnel_id, cur, r["kind"])
+    log.info("a better steady type for tunnel %s: %s -> %s (changed by itself)", tunnel_id, cur, r["kind"])
 
+    try:
+        autopilot._start(snap["name"], doctor._run_retype, tunnel_id, r["kind"], cur, why, True, action="autopilot", source="auto")
+    except ValueError as e:
+        log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
 
 # ------------------------------------------------------------------ a tunnel that nobody uses
 ZERO_MBPS = 0.05          # what the users use under this: nobody uses the tunnel
@@ -1167,30 +1170,32 @@ def measure_start(tunnel_id: int) -> int:
 
 
 def _retype_later(tunnel_id: int) -> None:
-    """A very slow tunnel whose type suggestion stands (the Doctor page) and that the Doctor has not changed in the last 24 hours: the change is done now, as its own story (modes fix and move). Nothing when no suggestion
-    stands (nothing faster is known), when the Doctor is off, or the panel is read-only."""
+    """A very slow tunnel for which the Doctor's memory knows a faster type that is PROVEN steady, and that the Doctor has not changed in the last 24 hours: the change is done now, as its own story (modes fix and move).
+    Nothing when no such type is known, when the Doctor is off, or the panel is read-only."""
     from . import actions, autopilot, doctor
 
     if get_settings().read_only or actions.doctor_mode() == "off":
         return
 
-    with session() as db:
-        t = db.get(Tunnel, tunnel_id)
-        name = t.name if t is not None else ""
-
-    if not name:
-        return
-
-    sug = next((x for x in doctor.state()["suggestions"] if x.get("tunnel_id") == tunnel_id and x.get("kind") == "type" and x.get("to_kind")), None)
-
-    if sug is None or doctor.may_retype(name, doctor._state()["retype_done"], int(time.time())):
-        return
+    now = int(time.time())
 
     try:
-        autopilot._start(name, doctor._run_retype, tunnel_id, sug["to_kind"], sug.get("now_kind") or "", sug.get("why") or "", True, action="autopilot", source="auto")
+        snap = autopilot._snapshot(tunnel_id)
+        cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+        f = _facts(tunnel_id)
+        r, _rows = _faster_row(snap, cur, f, now)
+    except ValueError:
+        return
+
+    if r is None or doctor.may_retype(snap["name"], doctor._state()["retype_done"], now):
+        return
+
+    why = f"{cur} is very slow ({f.get('now')} Mb/s); {r['kind']} gave {float(r['down_mbps']):.0f} Mb/s on this pair and is steady."
+
+    try:
+        autopilot._start(snap["name"], doctor._run_retype, tunnel_id, r["kind"], cur, why, True, action="autopilot", source="auto")
     except ValueError as e:
         log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
-
 
 def _investigate_later(tunnel_id: int) -> None:
     """Start the look at a confirmed drop as a story of the Doctor (not twice at once, never for a tunnel whose repair is running)."""

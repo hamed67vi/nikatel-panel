@@ -92,3 +92,19 @@ html body #page .ap-tasks .ap-row button svg { width: 17px; height: 17px; fill: 
 html[data-mode="light"] body #page .ap-tasks .ap-row { background: #fff; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .ap-tasks .ap-row button:not(.pri), html[data-mode="light"] body #page .ap-tasks .ap-row a.ap-detail { background: #f3f6fc; color: #1b2540; }
 /* the page is drawn again every 15 s: a tab that was open and is drawn again does not fade in again (it flashed) */
 html body #page .ap-tasks .ap-tbody.still { animation: none !important; }
+
+/* 1.69.83 - Active Tasks, calmer (the owner, 2026-10-22: "declutter this, make it MacBook-like"): one quiet line per tunnel - a small dot, the name (the route and the type are its tooltip), the reason in grey, "Detail" as a text link, "Live" as a quiet pill; no "watching" chip, no red sentence, hairlines instead of cards */
+html body #page .ap-tasks .ap-att { gap: 0; }
+html body #page .ap-tasks .ap-att .ap-row { min-height: 46px; padding: 10px 8px; gap: 12px; border: 0; border-bottom: 1px solid rgba(255, 255, 255, .06); border-radius: 0; background: none; font-size: 13px; }
+html body #page .ap-tasks .ap-att .ap-row:last-child { border-bottom: 0; }
+html body #page .ap-tasks .ap-att .ap-row:hover { background: rgba(255, 255, 255, .03); }
+html body #page .ap-tasks .ap-att .ap-row .st { font-size: 0; gap: 0; }
+html body #page .ap-tasks .ap-att .ap-row .st::before { width: 9px; height: 9px; box-shadow: none; }
+html body #page .ap-tasks .ap-att .ap-row b { font-size: 14px; font-weight: 600; letter-spacing: -.1px; }
+html body #page .ap-tasks .ap-att .ap-row .work-chip.quiet, html body #page .ap-tasks .ap-att .ap-row > .mut:not(.work-chip):not(.ap-why) { display: none; }
+html body #page .ap-tasks .ap-att .ap-row .ap-why { color: var(--mut); font-size: 12.5px; }
+html body #page .ap-tasks .ap-att .ap-row button, html body #page .ap-tasks .ap-att .ap-row a.ap-detail { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; font-size: 12.5px; font-weight: 500; background: rgba(255, 255, 255, .07); color: var(--text); }
+html body #page .ap-tasks .ap-att .ap-row a.ap-detail { background: none; color: var(--mut); padding: 0 8px; }
+html body #page .ap-tasks .ap-att .ap-row button svg { display: none; }
+html[data-mode="light"] body #page .ap-tasks .ap-att .ap-row { background: none; border-bottom-color: rgba(30, 50, 100, .1); }
+html[data-mode="light"] body #page .ap-tasks .ap-att .ap-row button { background: rgba(30, 50, 100, .07); color: #1b2540; }

@@ -82,12 +82,13 @@ def test_steadier_kinds_wants_a_steady_type_that_keeps_most_of_the_users_speed()
     assert [r["kind"] for r in got] == ["tcp"] and kn.steadier_kinds(p, NOW, "tcpmux", allowed=lambda k: k != "tcp") == [] and kn.steadier_kinds(None, NOW, "tcpmux") == []
 
 
-def test_a_tunnel_cut_three_times_in_a_day_is_offered_the_steady_type(monkeypatch):
+def test_a_tunnel_cut_three_times_in_a_day_is_changed_to_the_steady_type_by_itself(monkeypatch):
     from nikatel.services import bandwidth, doctor
 
     p = _pair({"tcpmux": [(True, 500, 40)] * 4, "tcp": [(True, 450, 41)] * 4})
     seen = []
     snap = {"type": "backhaul", "transport": "tcpmux", "record": {}, "iran_id": 1, "foreign_id": 2, "name": "T1", "iran_name": "I", "foreign_name": "F"}
+    from nikatel.config import get_settings
     from nikatel.services import actions, autopilot, license
 
     monkeypatch.setattr(actions, "doctor_mode", lambda: "fix")
@@ -96,7 +97,8 @@ def test_a_tunnel_cut_three_times_in_a_day_is_offered_the_steady_type(monkeypatc
     monkeypatch.setattr(kn, "pair", lambda i, f: p)
     monkeypatch.setattr(license, "tunnel_kind_allowed", lambda k: True)
     monkeypatch.setattr(doctor, "_state", lambda: {"suggestions": []})
-    monkeypatch.setattr(doctor, "suggest", lambda *a, **k: seen.append((a, k)))
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: seen.append((label, fn, a, k)) or 1)
+    monkeypatch.setattr(get_settings(), "read_only", False)
     monkeypatch.setattr(bandwidth.time, "time", lambda: NOW)
     bandwidth._UPGRADE_AT.clear()
     monkeypatch.setattr(bandwidth, "_cuts_lately", lambda tid, now, hours=24: 0)
@@ -105,8 +107,8 @@ def test_a_tunnel_cut_three_times_in_a_day_is_offered_the_steady_type(monkeypatc
     bandwidth._UPGRADE_AT.clear()
     monkeypatch.setattr(bandwidth, "_cuts_lately", lambda tid, now, hours=24: 3)
     bandwidth._upgrade_check(7)
-    (args, kwargs), = seen
-    assert args[6] == "tcp" and kwargs["extra"]["steadier"] and "cut 3 times" in args[7] and "4 of 4 tests passed" in args[7]
+    (_label, fn, args, kwargs), = seen
+    assert fn is doctor._run_retype and args[1] == "tcp" and args[4] is True and "cut 3 times" in args[3] and "4 of 4 tests passed" in args[3] and kwargs["source"] == "auto"
 
 
 def test_cuts_lately_counts_the_runs_of_failed_checks_of_the_last_day(monkeypatch):

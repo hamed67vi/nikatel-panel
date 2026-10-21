@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.86 - No more type suggestions: a steady, better type is taken by the Doctor itself; Active Tasks is calm
+
+The owner (2026-10-22, on the Doctor page: three "speed" suggestions with "Change type" buttons, red sentences and "watching" chips on every tunnel): "declutter this, make it MacBook-like - and no more suggestions: when it sees a steady tunnel with better quality, do it by itself".
+
+- **No more type suggestions**: the Doctor never puts "Change type" on its page now. A type suggestion that an older version stored is withdrawn at once (`doctor.suggestion_valid`).
+- **By itself, when proven**: after a measurement of a tunnel that works (`_upgrade_check`), for a very slow tunnel (`_suggest_faster`, `_retype_later`) and after a drop (`_swap_after_drop`), the Doctor changes the type itself - only to a type that carried clearly more in the pair tests, was clean, and whose steadiness is PROVEN (at least 3 tests, 75 % or more). A type not proven yet is left alone: nothing is changed and nothing is suggested (each test of the pair counts toward the 3). Rails as before: modes fix and move, once in 24 hours per tunnel, the change of 1.69.83 (the new type is built beside the old one, the users are not cut).
+- **A swap that cannot be made beside the tunnel** (1.69.83: no standby, the tunnel is not up, ...) is left as it is: no suggestion, no cut; the Doctor looks again later.
+- **A nearly full tunnel** whose standby is not the better type: nothing is suggested and nothing is cut; the Doctor looks for a lighter Iran server.
+- **Active Tasks, calmer**: one quiet line per tunnel - a small dot, the name (the route and the type are its tooltip), the reason in grey, "Detail" as a text link, "Live" as a quiet pill; hairlines instead of cards; no "watching" chip, no red sentence. A dropped capacity the users do not feel (1.69.82) is not an active task. The counter "to look at" follows.
+- **Not changed**: the suggestions of kinds other than type (a move to another Iran server, a route), the Doctor's rules for what is a drop.
+- **Proved**: `tests/test_doctor_calm.py` (a proven type is started by itself, an unproven one and the modes off / read-only / once a day change nothing, no suggestion; the page code and css), and the tests of the old suggestion paths changed to the new rule.
+- **Not proved**: how the page looks in a browser (the css was not walked); a real change of type by itself on a real tunnel; the three suggestions of the owner's page are withdrawn only when the panel runs this version.
 ## 1.69.85 - The tunnels of a type sit together, with no head rows
 
 > **به زبان ساده:** عنوان‌ها و جمع‌شدن دسته‌ها برداشته شد؛ فهرست عین قبل است و فقط تانل‌های هم‌نوع پشت سر هم می‌آیند.

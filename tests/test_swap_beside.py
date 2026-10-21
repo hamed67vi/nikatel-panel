@@ -183,7 +183,7 @@ def test_whatever_ends_the_story_the_new_connections_are_given_back(monkeypatch)
     assert "give_back" in s.names() and s.names()[-1] == "unwant"
 
 
-def test_a_swap_that_cannot_start_is_a_suggestion_and_never_a_cut(monkeypatch):
+def test_a_swap_that_cannot_start_is_left_alone_with_no_suggestion_and_never_a_cut(monkeypatch):
     for kw in ({"plan_error": "this tunnel forwards no port, so there is nothing to hand over"}, {"p_state": "down"}, {"standby_kind": "chisel:fwd", "in_use": True}, {"plan_error": "server ir-sw is busy (CPU 91 %)"}):
         st.put("doctor", {"suggestions": []})
         swap._TRIED.clear()
@@ -191,8 +191,7 @@ def test_a_swap_that_cannot_start_is_a_suggestion_and_never_a_cut(monkeypatch):
         s = Stage(monkeypatch, tid, **kw)
         s.run()
         assert s.names() == [] and "NOT changed to bp:wssmux by itself" in s.said[-1][0] and s.said[-1][1:] == (True, True)
-        sug = doctor.state()["suggestions"]
-        assert len(sug) == 1 and sug[0]["kind"] == "type" and sug[0]["to"] == KIND                  # one click = the old way, with its cut
+        assert doctor.state()["suggestions"] == []                                                    # (no suggestion any more, 1.69.84: the Doctor looks again later)
 
 
 def test_the_link_that_does_not_pass_builds_nothing_and_a_swap_is_not_tried_again_within_hours(monkeypatch):

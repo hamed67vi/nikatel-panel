@@ -640,7 +640,7 @@ def test_the_look_at_a_slow_tunnel_suggests_the_type_the_doctors_memory_knows_to
     assert lines[0].startswith("sl-a: the bandwidth is very low - 0.8 Mb/s in the last two tests. It did not drop: this tunnel never gave more")
     assert any(ln.startswith("✓ The iran server ir-sl-a: CPU 8 %") for ln in lines) and any("Users are carrying 4 Mb/s" in ln for ln in lines)
     assert any(ln.startswith("Where the problem is: Only this tunnel is that slow (0.8 Mb/s in the test, the users carry 4 Mb/s through it now)") for ln in lines)
-    assert any(ln.startswith("Suggested on the Doctor page: change the type from tcpmux to tcp - one click") and "tcp at 119 Mb/s on this pair, measured 1 h ago" in ln for ln in lines) and said[-1][1:] == (True, True)
+    assert any("Not done by itself now: sl-a was changed by the Doctor" in ln for ln in lines) and said[-1][1:] == (True, True) and not any(ln.startswith("Suggested") for ln in lines)          # (no suggestion is made any more, 1.69.83: the Doctor changes a proven steady type by itself or does nothing)
     assert not any("engine" in ln for ln in lines)                                                           # (a restart of the engine is for a drop; a tunnel that was never fast has nothing to come back to)
 
     with session() as db:
@@ -648,9 +648,7 @@ def test_the_look_at_a_slow_tunnel_suggests_the_type_the_doctors_memory_knows_to
         said_events = [e.text for e in db.scalars(select(Event).where(Event.ref == "sl-a"))]
 
     assert bw["why"]["code"] == "slow_type" and any("the bandwidth is very low - Only this tunnel is that slow" in m for m in said_events)
-    sug = doctor.state()["suggestions"]
-    assert len(sug) == 1 and sug[0]["kind"] == "type" and sug[0]["tunnel"] == "sl-a" and sug[0]["tunnel_id"] == tid and sug[0]["from"] == "tcpmux" and sug[0]["to"] == "tcp"
-    assert sug[0]["now_kind"] == "tcpmux" and sug[0]["to_kind"] == "tcp" and sug[0]["now_mbps"] == 0.8 and sug[0]["memory_mbps"] == 119.0 and "tcp at 119 Mb/s" in sug[0]["why"]
+    assert doctor.state()["suggestions"] == []
     _ = ir
 
 
@@ -665,7 +663,7 @@ def test_the_slow_look_suggests_nothing_when_the_memory_knows_nothing_better_or_
     said.clear()
     tid, _, _ = _slow_world(monkeypatch, "sl-c", mode="off")
     bandwidth.investigate(7, tid)
-    assert any("The Doctor is off: it tells, it does not suggest a change." in ln for ln in said) and doctor.state()["suggestions"] == []
+    assert any("The Doctor is off: it does not change the type." in ln for ln in said) and doctor.state()["suggestions"] == []
     said.clear()
     tid, ir, _ = _slow_world(monkeypatch, "sl-d")
 
@@ -779,17 +777,16 @@ def test_a_tunnel_that_is_already_slow_gets_its_change_at_the_next_watch(monkeyp
     from nikatel.services import doctor
 
     monkeypatch.setattr(get_settings(), "read_only", False)
-    tid, ir, _ = _slow_world(monkeypatch, "al-a")
-    doctor.suggest("type", tid, "al-a", ir, "tcpmux", None, "tcp", "why", extra={"now_kind": "tcpmux", "to_kind": "tcp"})
+    tid, _ir, _ = _slow_world(monkeypatch, "al-a")
     started = []
     monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: started.append((label, fn, a, k)) or 1)
     bandwidth._retype_later(tid)
-    assert len(started) == 1 and started[0][0] == "al-a" and started[0][1] is doctor._run_retype and started[0][2] == (tid, "tcp", "tcpmux", "why", True) and started[0][3]["source"] == "auto"
+    assert len(started) == 1 and started[0][0] == "al-a" and started[0][1] is doctor._run_retype and started[0][2] == (tid, "tcp", "tcpmux", "tcpmux is very slow (0.8 Mb/s); tcp gave 119 Mb/s on this pair and is steady.", True) and started[0][3]["source"] == "auto"
     started.clear()
     doctor.mark_retyped("al-a", int(time.time()))
     bandwidth._retype_later(tid)
     assert started == []                                                                                      # once in 24 hours
-    other, _, _ = _slow_world(monkeypatch, "al-b")
+    other, _, _ = _slow_world(monkeypatch, "al-b", memory=False)
     bandwidth._retype_later(other)
     assert started == []                                                                                      # no suggestion stands (nothing faster is known): nothing is done
     looked = []

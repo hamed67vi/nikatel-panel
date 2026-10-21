@@ -252,7 +252,7 @@ def _lane(info: dict, now: int) -> tuple[dict | None, list[dict]]:
 
 def _story(aid: int, tunnel_id: int) -> None:
     """The look at a tunnel whose capacity is filling (see the module's text)."""
-    from . import actions, doctor
+    from . import actions
 
     now = int(time.time())
     info = next((x for x in snapshot(now) if x["id"] == tunnel_id), None)
@@ -272,10 +272,7 @@ def _story(aid: int, tunnel_id: int) -> None:
 
     if rows:
         r = rows[0]
-        why = f"{info['name']} fills its {info['cap']:.0f} Mb/s; in the pair tests {r['kind']} carried {float(r['down_mbps']):.0f} Mb/s (lost {float(r.get('loss_pct') or 0):g} %, score {r['score']}) - more than {info['kind']}"
-        doctor.suggest("type", tunnel_id, info["name"], info["iran_id"], info["kind"], None, r["kind"], why, extra={"now_kind": info["kind"], "to_kind": r["kind"], "now_mbps": info["cap"], "memory_mbps": r["down_mbps"], "upgrade": True})
-        _say(aid, f"A better type is known ({r['kind']}), but the standby of this tunnel is not that type or not ready: it is suggested on the Doctor page (one click - that change cuts the users for a minute or two, so the Doctor never does it by itself).")
-
+        _say(aid, f"A better steady type is known ({r['kind']}), but the standby of this tunnel is not that type or not ready: the Doctor does not cut the users of a nearly full tunnel for it, and it suggests nothing (the owner, 2026-10-22: no more suggestions) - it looks for a lighter Iran server.")
     _try_move(aid, tunnel_id, info, snap_all=snapshot(now), mode=m)
 
 

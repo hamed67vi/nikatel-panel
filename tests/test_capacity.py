@@ -207,7 +207,7 @@ def test_when_the_new_type_does_not_build_the_old_one_is_back_and_the_users_go_b
     assert events[-2:] == [("replace", "bp:wssmux"), ("give_back", "t1")] and said[-1][1:] == (True, False) and "Nobody was cut" in said[-1][0]
 
 
-def test_a_standby_that_is_not_the_better_type_or_not_ready_is_only_suggested_and_never_swapped(monkeypatch):
+def test_a_standby_that_is_not_the_better_type_or_not_ready_is_never_swapped_and_nothing_is_suggested(monkeypatch):
     for view in ({"kind": "chisel:fwd", "state": "up", "stale": "", "use": None}, {"kind": "bp:wssmux", "state": "building", "stale": "", "use": None}, {"kind": "bp:wssmux", "state": "up", "stale": "", "use": {"since": 1}}, None):
         capacity._VIEW.update(at=0, tunnels={})
         st.put("doctor", {"suggestions": []})
@@ -215,8 +215,8 @@ def test_a_standby_that_is_not_the_better_type_or_not_ready_is_only_suggested_an
         monkeypatch.setattr(failover, "move_plan", lambda *a, **k: {"candidates": [], "problems": ["nobody has room"]})
         capacity._story(1, w["t1"])
         assert not any(e[0] in ("handover", "replace") for e in events)
-        sug = doctor.state()["suggestions"]
-        assert sug and sug[0]["kind"] == "type" and sug[0]["to"] == "bp:wssmux" and sug[0]["upgrade"] is True            # one click, because that change cuts the users for a minute or two
+        assert not [x for x in doctor.state()["suggestions"] if x["kind"] == "type"]                                      # (no suggestion any more, 1.69.83)
+        assert any("the Doctor does not cut the users of a nearly full tunnel" in str(ln) for ln in _said)          # (it changes nothing by itself either: that change would cut the users; it looks for a lighter Iran server)
         with session() as db:
             for t in list(db.query(Tunnel)):
                 db.delete(t)
