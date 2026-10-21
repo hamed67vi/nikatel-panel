@@ -761,6 +761,16 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
     doctor._run_retype(aid, tunnel_id, r["kind"], cur, why, auto=True)
 
 
+def _cuts_lately(tunnel_id: int, now: int, hours: int = 24) -> int:
+    """How many times the tunnel was cut in the last `hours` (runs of failed checks, `analyst.find_outages`): a type that keeps dropping is unsteady, whatever its test said."""
+    from . import analyst
+
+    with session() as db:
+        rows = [(int(r[0]), bool(r[1])) for r in db.execute(select(TunnelCheck.ts, TunnelCheck.ok).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - hours * 3600))]
+
+    return len(analyst.find_outages(rows, now))
+
+
 UPGRADE_EVERY = 6 * 3600         # a tunnel is looked at for a better type this often (the look reads the Doctor's memory only: no server is asked)
 _UPGRADE_AT: dict[int, int] = {}
 
@@ -780,16 +790,27 @@ def _upgrade_check(tunnel_id: int) -> None:
     snap = autopilot._snapshot(tunnel_id)
     cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
     p = knowledge.pair(snap["iran_id"], snap["foreign_id"])
-    rows = knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
+    cuts = _cuts_lately(tunnel_id, now)
+    steadier = cuts >= knowledge.STEADY_CUTS
+    rows = knowledge.steadier_kinds(p, now, cur, license.tunnel_kind_allowed) if steadier else []
+    rows = rows or knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
 
     if not rows or any(x.get("tunnel") == snap["name"] and x.get("kind") != "type" for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
         return
 
     r = rows[0]
+
+    if steadier and r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK:
+        why = (f"{snap['name']} was cut {cuts} times in the last day. In the tests of {snap['iran_name']} ⇄ {snap['foreign_name']} {r['kind']} was steady: {r['passed']} of {r['tests']} tests passed, stability "
+               f"{r['steady']} %, {float(r['down_mbps']):.0f} Mb/s, {float(r.get('latency_ms') or 0):.0f} ms. Many users need a type that does not drop.")
+        doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "memory_mbps": r["down_mbps"], "upgrade": True, "steadier": True})
+        log.info("a steadier type for tunnel %s: %s -> %s (%s cuts in a day)", tunnel_id, cur, r["kind"], cuts)
+        return
+
     base = float((((p or {}).get("kinds") or {}).get(cur) or {}).get("full", {}).get("down_mbps") or 0)
     age = max(0, (now - int(r.get("at") or now)) // 3600)
     why = (f"In the pair test of {snap['iran_name']} ⇄ {snap['foreign_name']} {cur} carried {base:.0f} Mb/s; {r['kind']} carried {float(r['down_mbps']):.0f} Mb/s, "
-           f"lost {float(r.get('loss_pct') or 0):g} % and scored {r['score']} ({age} h ago). Nothing is wrong with {cur}: this is a better type known for this pair.")
+           f"lost {float(r.get('loss_pct') or 0):g} % and scored {r['score']} ({age} h ago; {knowledge.steady_note(r)}). Nothing is wrong with {cur}: this is a better type known for this pair.")
     doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": base, "memory_mbps": r["down_mbps"], "upgrade": True})
     log.info("a better type for tunnel %s: %s -> %s", tunnel_id, cur, r["kind"])
 

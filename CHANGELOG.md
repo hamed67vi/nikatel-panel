@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.69 - The Doctor chooses a tunnel type that stays good: speed, ping, jitter AND steadiness
+
+> **به زبان ساده:** دکتر حالا برای انتخاب نوع تانل پایداری را هم می‌سنجد: نتیجهٔ ۱۲ تست آخر هر نوع نگه داشته می‌شود، نوعی که افت کرده یا شکست خورده عقب می‌رود، نوعی که کم تست شده «ثابت‌نشده» است، و تانلی که روزی ۳ بار قطع شود نوع پایدارتر پیشنهاد می‌گیرد.
+>
+> **In short:** the Doctor ranks types by what users get times how steady the type was across its last 12 tests; unsteady types go behind, a type with fewer than 3 tests is "not proven yet", and a tunnel cut 3 times a day is offered a steadier type.
+
+The owner (2026-10-21, many users): "the type we choose must be steady, give good speed, ping and jitter - not one that works at first and later shows low bandwidth or problems; one that really passed all the tests".
+
+- **The memory keeps tests, not only the last one** (`knowledge.merge`): each kind keeps its last 12 tests (`hist`: passed or not, download, one-connection download, ping, loss). A test that was not made (no tools) is not a test.
+- **`stability`** (pure): share of tests that passed x (0.4 + 0.6 x lowest download / highest download), x 0.8 when any test lost more than 2 %. Under 3 tests in the last 30 days: unknown (None) - one good day proves nothing.
+- **`ranked`** now sorts by `rank` = what the user gets (the user score: speed 45, ping 30, loss 15, jitter 10) x a factor: 1.0 for a steady type (stability 75 or more), 0.85 for one that is not proven yet, 0.7 x its stability for an unsteady one. So a type with a 600 Mb/s best test that fell to 80 in others goes behind a type that gave 400 every time. The Doctor's switch ladder, "Best of the day" use this order.
+- **Reasons say it**: "...; steady: 4 of 4 tests passed, stability 100 %" / "UNSTEADY ..." / "stability not proven yet (1 test kept, 3 needed)".
+- **A better-type suggestion** (`upgrade_kinds`) skips an unsteady type and puts the ones that passed all their tests first; **`steadier_kinds`** (new) finds a steady type that keeps at least 80 % of the running type's user score at about the same ping. `bandwidth._upgrade_check`: a tunnel cut 3 times in the last day (`_cuts_lately`, the Stability box's own outage count) gets a steadier type as a suggestion (one click, the old type is put back if the new one does not build).
+- **Proved**: `tests/test_type_stability.py` (history kept and cut at 12, a skipped test is not kept, None under 3 tests, a fall and a failure lower it, a month-old test is not counted, steady before fast-but-falling, unproven slightly behind steady, no upgrade to an unsteady type, `steadier_kinds`, the suggestion for a tunnel cut 3 times, the cut count). **Not proved**: on real servers - the weights (0.85, 0.7, 75 %, 3 tests) are a choice, not measured; for a pair with no history yet every type is "not proven" and the order is the old one until the weekly refresh and the night survey collect 3 tests per type (about 3 weeks at the weekly refresh; faster if the night survey is on).
+
 ## 1.69.68 - The tunnel window: the bandwidth box once, the Capacity row whole, and no "Healthy" over a red box
 
 > **به زبان ساده:** پنجرهٔ تانل مرتب شد: جعبهٔ پهنا دوبار نمی‌آید، ردیف Capacity بریده نمی‌شود، نوار خالی است وقتی تست صفر برده، و تانلِ up که داده نمی‌برد «Healthy» نمی‌نویسد.

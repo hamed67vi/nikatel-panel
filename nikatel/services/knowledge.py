@@ -57,6 +57,11 @@ READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet
 # LAST RESORT of a cut (`autopilot._carrier_last_resort`): after every kind failed, when the link probe SEES one pass. The owner can test them in Compare (the grid has them) and build them from Create tunnel.
 CARRIER_KINDS = tuple(f"{k}:tcpmux" for k in linkmodels.CARRIER_LINKS)
 NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", "down1_mbps", "up1_mbps")
+HIST = 12                   # the tests of one kind that are kept (the newest): what a type did over time, not only what it did once
+STEADY_MIN_TESTS = 3        # fewer tests than this: the stability of a type is NOT KNOWN (never "steady" on one good day)
+STEADY_OK = 75              # a type whose stability is under this (percent) is unsteady: it is put behind the steady ones
+STEADY_UNKNOWN = 0.85       # ... a type tested too few times counts this much of its user score; a steady one counts all of it, an unsteady one counts 0.7 x its stability
+STEADY_CUTS = 3             # a running tunnel that was cut this many times in a day is unsteady, whatever its test said (see bandwidth._upgrade_check)
 INCIDENTS = 200             # the cuts that are kept (the newest)
 PLAYBOOK_DAYS = 90          # what healed a pair this long ago is still the first thing tried
 _LOCK = threading.Lock()
@@ -81,7 +86,43 @@ def merge(entry: dict | None, r: dict, measure: str, now: int) -> dict:
     if measured:
         e["full" if measure == "full" else "lat"] = {**{k: r.get(k) for k in NUMS}, "at": now}
 
+    item = {"at": now, "ok": ok, "m": measure}               # (one line per test: a type that passed once and failed the next time must not look the same as one that passed every time)
+
+    for key, name in (("down", "down_mbps"), ("down1", "down1_mbps"), ("lat", "latency_ms"), ("loss", "loss_pct")):
+        if measured and r.get(name) is not None:
+            item[key] = r.get(name)
+
+    e["hist"] = (list(e.get("hist") or []) + [item])[-HIST:]
     return e
+
+
+def stability(e: dict | None, now: int) -> dict | None:
+    """Pure: how steady one kind has been, from its kept tests of the last FULL_FRESH days: {"n": tests, "passed": how many passed, "swing": the lowest download / the highest (1 = always the same), "pct": 0-100}.
+    None when fewer than STEADY_MIN_TESTS tests are kept: one good day proves nothing (the owner, 2026-10-21: "a type that works at first and later shows low bandwidth or problems must not be chosen").
+    pct = share of the tests that passed x (0.4 + 0.6 x swing), x 0.8 when any test lost more than 2 % of the packets."""
+    h = [x for x in ((e or {}).get("hist") or []) if now - int(x.get("at") or 0) <= FULL_FRESH]
+
+    if len(h) < STEADY_MIN_TESTS:
+        return None
+
+    passed = sum(1 for x in h if x.get("ok"))
+    downs = [float(x["down"]) for x in h if x.get("down") is not None]
+    swing = (min(downs) / max(downs) if max(downs) > 0 else 0.0) if len(downs) >= 2 else 1.0
+    pct = 100.0 * (passed / len(h)) * (0.4 + 0.6 * swing)
+
+    if any(float(x.get("loss") or 0) > 2.0 for x in h):
+        pct *= 0.8
+
+    return {"n": len(h), "passed": passed, "swing": round(swing, 2), "pct": round(pct)}
+
+
+def steady_note(r: dict) -> str:
+    """Pure: the stability of one ranked row in words (for the reason sentences)."""
+    if r.get("steady") is None:
+        return f"stability not proven yet ({r.get('tests') or 0} test{'' if r.get('tests') == 1 else 's'} kept, {STEADY_MIN_TESTS} needed)"
+
+    word = "steady" if r["steady"] >= STEADY_OK else "UNSTEADY"
+    return f"{word}: {r['passed']} of {r['tests']} tests passed, stability {r['steady']} %"
 
 
 def verdict(e: dict | None) -> str:
@@ -101,7 +142,8 @@ def verdict(e: dict | None) -> str:
 
 
 def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict]:
-    """The kinds that work on the pair, best first: those with a fresh FULL measurement before those known by latency only, each by score (a tie by the standard order).
+    """The kinds that work on the pair, best first: those with a fresh FULL measurement before those known by latency only, each by what the user gets (speed, ping, jitter, loss) times how steady the type was in its
+    kept tests (`stability`: a type that failed or fell in some tests goes behind one that passed all of them; one tested too few times counts a little less) - a tie by the standard order.
     `include_poor`: the kinds that carried data but scored under the line count too (for a tunnel that is CUT, any tunnel that connects is better than none)."""
     out = []
 
@@ -115,9 +157,15 @@ def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict
         row = {"kind": kind, "score": src.get("score"), "measure": "full" if fresh else "latency", "at": int(src.get("at") or 0), "down_mbps": src.get("down_mbps"), "down1_mbps": src.get("down1_mbps"),
                "latency_ms": src.get("latency_ms"), "jitter_ms": src.get("jitter_ms"), "loss_pct": src.get("loss_pct")}
         row["user"] = user_score(row) if has_speed(row) and row["latency_ms"] is not None else row["score"]          # (what the USER gets, counted again from the numbers: a score written down by an older rule does not decide)
+        st_ = stability(e, now)
+        row["steady"] = None if st_ is None else st_["pct"]
+        row["tests"] = len([x for x in (e.get("hist") or []) if now - int(x.get("at") or 0) <= FULL_FRESH])
+        row["passed"] = None if st_ is None else st_["passed"]
+        factor = STEADY_UNKNOWN if st_ is None else (1.0 if st_["pct"] >= STEADY_OK else 0.7 * st_["pct"] / 100.0)
+        row["rank"] = float(row["user"] or 0) * factor          # (what the user gets, times how far the type can be trusted to give it again)
         out.append(row)
 
-    return sorted(out, key=lambda r: (r["measure"] != "full", -(r["user"] or 0), PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
+    return sorted(out, key=lambda r: (r["measure"] != "full", -r["rank"], PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
 
 
 AUTO_TRIES = 3          # the types "Best of the day" tries one after the other when a build ends badly (the owner, 2026-10-20: a tunnel that carried nothing was called ready)
@@ -127,7 +175,7 @@ def _why_good(r: dict, now: int) -> str:
     when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
     shown = r["user"] if r.get("user") is not None else r["score"]
     users = f" ({float(r['down1_mbps'] if r.get('down1_mbps') is not None else r['down_mbps']):.0f} Mb/s for a user, {float(r['latency_ms']):.0f} ms)" if has_speed(r) and r.get("latency_ms") is not None else ""
-    return f"{r['kind']}: the best that connects between these two servers - score {shown if shown is not None else '-'}{users}{when}"
+    return f"{r['kind']}: the best that connects between these two servers - score {shown if shown is not None else '-'}{users}{when}; {steady_note(r)}"
 
 
 def _why_weak(r: dict, now: int) -> str:
@@ -205,8 +253,22 @@ def upgrade_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: T
     need = max(base * UPGRADE_RATIO, base + UPGRADE_MIN_GAIN)
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need
             and now - int(r.get("at") or 0) <= FASTER_FRESH and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS and allowed(r["kind"]) and _ping_ok(r, full)
+            and (r.get("steady") is None or r["steady"] >= STEADY_OK)          # (a type that fell or failed in some of its tests is no upgrade, however fast its best test was)
             and (r.get("user") or 0) >= (user_score(full) if has_speed(full) else (full.get("score") or 0))]
-    return sorted(rows, key=lambda r: (-(r.get("user") or 0), -float(r["down_mbps"])))
+    return sorted(rows, key=lambda r: (r.get("steady") is None, -(r.get("user") or 0), -float(r["down_mbps"])))          # (the ones that passed all their tests first)
+
+
+STEADIER_KEEP = 0.8             # a steadier type must give the user at least this much of what the running type gave in its test (steadiness is not bought with a slow tunnel)
+
+
+def steadier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[dict]:
+    """Pure: the types the memory of the pair knows to be STEADY (stability STEADY_OK or more over at least STEADY_MIN_TESTS tests) for a tunnel that keeps being cut: not the running type, a fresh full test, the
+    user score at least STEADIER_KEEP of the running type's, a ping about the same (`_ping_ok`), the licence allows it. The steadiest first (a tie: the one that gives the user more). Empty when none is known."""
+    cur = (((pair or {}).get("kinds") or {}).get(current) or {}).get("full") or {}
+    base = (user_score(cur) if has_speed(cur) else (cur.get("score") or 0)) or 0
+    rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("steady") is not None and r["steady"] >= STEADY_OK and allowed(r["kind"])
+            and now - int(r.get("at") or 0) <= FASTER_FRESH and (r.get("user") or 0) >= STEADIER_KEEP * base and _ping_ok(r, cur)]
+    return sorted(rows, key=lambda r: (-r["steady"], -(r.get("user") or 0)))
 
 
 def blocked(pair: dict | None, now: int) -> list[str]:
