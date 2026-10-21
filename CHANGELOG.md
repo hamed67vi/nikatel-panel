@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.80 - The License box of Settings → About & update is hidden
+
+The owner (2026-10-21): "disable my license section for now and do not show it".
+
+- **What changed** (`app.js`, `lab.css`): a switch `LICENSE_UI = false` (the same kind as `SHOPBOT_UI`, `OUTBOUND_UI`, `CONFIGS_UI`) hides the License box: it is not drawn and `/api/license` is not asked while the Settings → About & update page is open. The license itself, its routes and what it allows are as they were - only the box is gone; `true` brings it back. The page subtitle no longer says "its license" (with its Persian). With the box gone, the About box is ONE strip over the full width (the title and the status on the left, the update row on the right) and the cores and the PasarGuard boxes stay under it side by side; on a phone the three boxes are one column. The compact rules of 1.69.78 now belong to the class `.abt-top` instead of "the first two children", so they follow the About box whatever stands beside it.
+- **Proved**: `tests/test_fluid_layout.py` pins the flag, the three places it guards and the layout rules; `tests/test_persian_audit.py` (the new subtitle has a Persian text); measured on a private demo panel in the built-in browser: no License box and no request for `/api/license` at 1500 px; the About box is 856 x 80 px with the update-available pill and with the failed-update note, in the dark and the light mode, nothing runs out of it; at 390 px one column (342 px wide boxes), the page not wider than the window.
+- **Not proved**: a picture of it (the pane is small and was hidden: measurements and one reduced screenshot); the PasarGuard box with a real panel connected; the install ids and license tokens of the owner's panel - nothing was read or changed there.
 ## 1.69.79 - The Persian language is switched off for now
 
 > **به زبان ساده:** فارسی فعلاً غیرفعال شد (آخر سر انجام می‌شود): دکمهٔ «فا» برداشته می‌شود و پنل انگلیسی است. با یک پرچم برمی‌گردد.

@@ -253,16 +253,23 @@ def test_the_page_with_a_list_box_cannot_be_scrolled_and_its_box_ends_where_the_
     assert "const mh = Math.max(150, Math.floor(room - b.getBoundingClientRect().top));" in APP
     assert 'new ResizeObserver(() => requestAnimationFrame(fit))' in APP and '[".main > .head", "#statusbar", "#subnav"]' in APP      # (the bar above the page changes height: the box follows at once)
 
-def test_the_about_and_license_boxes_are_compact_and_macos_like_and_the_row_under_them_is_as_tall_as_its_content():
-    """The owner, 2026-10-21, with a picture of Settings -> About & update: "make these two boxes tighter and MacBook style". The first row of the grid was a fixed 156 px with an empty area under the Update
-    row; it is as tall as its content now (measured: 135 px, the boxes 30 px icon + 13.5 px title + 34 px / 32 px inset rows); the rows under it keep 316 px."""
+def test_the_about_box_is_compact_and_macos_like_and_the_license_box_is_hidden_behind_a_flag():
+    """The owner, 2026-10-21: "make these two boxes tighter and MacBook style", then "disable the license section for now and do not show it". The top boxes of Settings -> About & update (`.abt-top`) are compact
+    and look like the System Settings of macOS; with `LICENSE_UI = false` there is no License box and no call of /api/license, and the About box is ONE strip over the full width."""
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     assert "html body #page .abt-grid { grid-template-rows: auto 316px; align-content: start; }" in css
-    assert "html body #page .abt-grid > .abt-card:nth-child(n+3) { align-self: stretch; }" in css      # (the cores and the PasarGuard box keep their height)
-    first = "html body #page .abt-grid > .abt-card:nth-child(-n+2) {"
+    assert "html body #page .abt-grid > .abt-card:not(.abt-top) { align-self: stretch; }" in css      # (the cores and the PasarGuard box keep their height)
+    first = "html body #page .abt-grid > .abt-top {"
     assert first in css and "border-radius: 12px" in css.split(first, 1)[1].split("}", 1)[0]
-    assert "html body #page .abt-card:nth-child(-n+2) .abt-ti { width: 30px; height: 30px; border-radius: 8px;" in css
-    assert "html body #page .abt-card:nth-child(-n+2) .abt-t1 b { font-size: 13.5px; font-weight: 600;" in css
-    assert "html body #page .abt-card:nth-child(-n+2) .abt-row { gap: 9px; height: 34px;" in css and "html body #page .abt-card:nth-child(-n+2) .abt-pill { height: 22px;" in css
-    assert 'html[data-mode="light"] body #page .abt-grid > .abt-card:nth-child(-n+2)' in css      # (and a light colour set)
-    assert "@media (max-width: 1000px) { html body #page .abt-grid { grid-template-rows: none; grid-auto-rows: auto; }" in css      # (a phone: one column, each box as tall as its content, the cores and PasarGuard boxes at least 232 px)
+    assert "html body #page .abt-top .abt-ti { width: 30px; height: 30px; border-radius: 8px;" in css
+    assert "html body #page .abt-top .abt-t1 b { font-size: 13.5px; font-weight: 600;" in css
+    assert "html body #page .abt-top .abt-row { gap: 9px; height: 34px;" in css and "html body #page .abt-top .abt-pill { height: 22px;" in css
+    assert 'html[data-mode="light"] body #page .abt-grid > .abt-top' in css      # (and a light colour set)
+    assert "@media (max-width: 1000px) { html body #page .abt-grid { grid-template-rows: none; grid-auto-rows: auto; }" in css      # (a phone: one column, each box as tall as its content)
+    assert "html body #page .abt-grid.abt-nolic > #about-hero { grid-column: 1 / -1; flex-direction: row;" in css and ":nth-child(-n+2)" not in css.split("/* 1.69.78", 1)[1]
+    # the flag
+    assert "const LICENSE_UI = false;" in APP
+    assert '(!LICENSE_UI ? "" : `<div class="abt-card abt-top"><div class="abt-ch"><i class="abt-ti">${SI.shield(false)}' in APP
+    assert "aboutLoad(); enginesLoad(); if (LICENSE_UI) licLoad();" in APP      # (no call of /api/license while the box is hidden)
+    assert '<div class="abt-grid${LICENSE_UI ? "" : " abt-nolic"}">' in APP and '<div class="abt-card abt-top" id="about-hero">' in APP
+    assert 'LICENSE_UI ? "This panel, its license, the tunnel cores on your servers' in APP and "This panel, the tunnel cores on your servers, the PasarGuard panels and their nodes, and what the service runs with." in (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8")

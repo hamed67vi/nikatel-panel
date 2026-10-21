@@ -823,6 +823,7 @@ I18N.add({
 "the new look: slate boxes, soft blue tiles, flat quiet buttons, compact and aligned": "ظاهر تازه: کادرهای سنگی، کاشی‌های آبی نرم، دکمه‌های تخت و آرام، فشرده و هم‌تراز",
 "clean white, raised glossy buttons": "سفید تمیز، دکمه‌های برجسته و براق",
 "Calm: nothing moves by itself": "آرام: هیچ‌چیز خودش حرکت نمی‌کند",
+"This panel, the tunnel cores on your servers, the PasarGuard panels and their nodes, and what the service runs with.": "این پنل، هسته‌های تانل روی سرورهایتان، پنل‌های پاسارگارد و نودهایشان، و تنظیماتی که سرویس با آن‌ها اجرا می‌شود.",
 "This panel, its license, the tunnel cores on your servers, the PasarGuard panels and their nodes, and what the service runs with.": "این پنل، لایسنس آن، هسته‌های تانل روی سرورهایتان، پنل‌های پاسارگارد و نودهایشان، و تنظیماتی که سرویس با آن‌ها اجرا می‌شود.",
 "Turn two-step sign-in on": "روشن کردن ورود دو مرحله‌ای",
 "your own path (8-64 letters, digits, - _)": "مسیر دلخواه شما (۸ تا ۶۴ حرف، رقم، - _)",
