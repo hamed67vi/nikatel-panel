@@ -261,6 +261,10 @@ def delete_server(server_id: int, tunnels: bool = False):
             except ValueError:
                 pass
 
+    from ..services import cfgmeter
+
+    cfgmeter.drop_server(server_id)                  # (the counting table of the config meter is taken off it when it answers, and its hours go: the one thing of ours that may be on a server we forget)
+
     with session() as db:
         s = db.get(Server, server_id)
 

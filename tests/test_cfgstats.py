@@ -7,13 +7,14 @@ import json
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
 from nikatel.config import get_settings
 from nikatel.db import session
-from nikatel.models import CfgBucket, CfgMeter, Panel, Server
+from nikatel.models import CfgBucket, CfgMeter, Event, Panel, Server
 from nikatel.services import (
     arvan,
     cfgcdn,
@@ -118,6 +119,12 @@ def test_step_counter_reset_and_reboot_count_what_is_there():
     _, d, _ = cfgmeter.step(last, {8072: [1000, 2000]}, "b", 1300)
     assert d == {}                                                         # nothing moved
 
+
+def test_step_with_a_clock_set_back_never_puts_bytes_into_a_future_hour():
+    """Found by the fuzz run: the last read stamped LATER than now (the clock of the panel was stepped back) made the bytes begin in the future."""
+    _, d, since = cfgmeter.step({"boot": "b", "ts": 5000, "c": {"1": [0, 0]}}, {1: [10, 20]}, "b", 1000)
+    assert d == {1: (10, 20)} and since == 1000
+    assert cfgmeter.spread(30, since, 1000) == [(0, 30)]
 
 def test_step_gap_is_capped():
     _, _d, since = cfgmeter.step({"boot": "b", "ts": 10, "c": {}}, {1: [1, 1]}, "b", 10 + 10 * DAY)
@@ -267,6 +274,27 @@ def test_a_server_that_refuses_is_not_recorded_as_on(monkeypatch):
         cfgmeter.apply(sid, [])
 
 
+def test_an_idle_port_with_no_connection_numbers_still_has_its_hour(monkeypatch):
+    """Found on a real test server: a port that moved nothing, on a machine that cannot say anything about conntrack, had NO row at all, so its host stayed "counting has just begun" for ever."""
+    sid = mk_server("fr-9", "203.0.113.19")
+    box = FakeBox(monkeypatch)
+    cfgmeter.apply(sid, [18072], NOW)
+    box.reads.append(answer("b1", {18072: (0, 0)}, ct=False))
+    cfgmeter.tick(sid, [18072], NOW + 300)
+    m = cfgmeter.stats([f"p:{sid}:18072"], NOW + 300)[f"p:{sid}:18072"]
+    assert m["bytes"]["24h"] == 0 and m["samples"]["24h"] == 0 and m["peak"]["24h"] == 0 and cfgmeter.coverage_days(m["first"], NOW + 300) > 0
+
+
+def test_a_quiet_port_shows_zero_bytes_and_no_connection_number(world, monkeypatch):
+    w = world
+    box = FakeBox(monkeypatch)
+    cfgmeter.apply(w["f"], [443, 2087, 8072, 8075], NOW)
+    box.reads.append(answer("b1", {443: (0, 0), 2087: (0, 0), 8072: (0, 0), 8075: (0, 0)}, ct=False))
+    cfgmeter.tick(w["f"], [443, 2087, 8072, 8075], NOW + 300)
+    cfgstats.forget()
+    r = cfgstats.snapshot(w["pid"], None, False, NOW + 300)["hosts"][0]
+    assert r["state"] == "ok" and r["view"]["has"] and r["view"]["bytes"]["24h"] == 0 and r["view"]["peak"]["24h"] is None          # zero, and "no number" for the connections - not "just begun"
+
 def test_tick_never_raises_for_a_server_that_does_not_answer(monkeypatch):
     sid = mk_server("fr-3", "203.0.113.12")
     FakeBox(monkeypatch)
@@ -280,6 +308,216 @@ def test_tick_never_raises_for_a_server_that_does_not_answer(monkeypatch):
     assert r["ok"] is False and "ssh connection lost" in r["error"] and "ssh connection lost" in cfgmeter.get(sid)["last_error"]
     assert cfgmeter.tick(9999, None, NOW)["action"] == "skipped"            # a server with no meter is left alone
 
+
+# ------------------------------------------------------------------ how it lives with the rest of the panel
+def events_of(ref):
+    with session() as db:
+        return [(e.level, e.domain, e.text) for e in db.query(Event).filter(Event.ref == ref).order_by(Event.id)]
+
+
+def test_a_server_that_is_switched_off_is_left_alone_and_one_the_pulse_calls_off_is_not_asked(monkeypatch):
+    sid = mk_server("fr-5", "203.0.113.15")
+    box = FakeBox(monkeypatch)
+    cfgmeter.apply(sid, [8072], NOW)
+    box.reads.append(answer("b1", {8072: (5, 6)}, listen=[8072]))
+    with session() as db:
+        db.get(Server, sid).enabled = False
+
+    assert cfgmeter.tick(sid, [8072], NOW + 300) == {"ok": True, "action": "skipped", "error": ""} and len(box.reads) == 1      # not asked, no error
+    with session() as db:
+        s = db.get(Server, sid)
+        s.enabled, s.online = True, False
+
+    r = cfgmeter.tick(sid, [8072], NOW + 600)
+    assert r["ok"] is False and "server is off" in r["error"] and len(box.reads) == 1                                              # the pulse says off: no ssh, the reason is kept
+    assert "server is off" in cfgmeter.get(sid)["last_error"]
+
+
+def test_the_event_log_hears_what_was_done_to_a_server_and_each_failure_once(monkeypatch):
+    sid = mk_server("fr-6", "203.0.113.16")
+    box = FakeBox(monkeypatch)
+    cfgmeter.apply(sid, [8072], NOW)
+    assert events_of("fr-6")[-1][:2] == ("ok", "actions") and "config meter on - counting 1 port " in events_of("fr-6")[-1][2]
+    box.reads.append(answer("b1", table=False))
+    assert cfgmeter.tick(sid, [8072], NOW + 300)["action"] == "applied"
+    assert "was gone" in events_of("fr-6")[-1][2] and events_of("fr-6")[-1][0] == "info"
+
+    def boom(*a, **k):
+        raise SSHError("ssh connection lost (network)")
+
+    monkeypatch.setattr(cfgmeter, "run_script", boom)
+    cfgmeter.tick(sid, [8072], NOW + 600)
+    cfgmeter.tick(sid, [8072], NOW + 900)                                                                                           # the same failure again: no second line
+    warns = [e for e in events_of("fr-6") if e[0] == "warn"]
+    assert len(warns) == 1 and "could not be read" in warns[0][2]
+    monkeypatch.setattr(cfgmeter, "run_script", box.script)
+    box.reads.append(answer("b1", {8072: (1, 1)}, listen=[8072]))
+    cfgmeter.tick(sid, [8072], NOW + 1200)
+    assert "is read again" in events_of("fr-6")[-1][2]
+    cfgmeter.remove(sid, NOW + 1500)
+    assert "config meter off" in events_of("fr-6")[-1][2]
+
+
+def test_a_server_that_leaves_the_panel_takes_its_table_and_its_hours_with_it(client, monkeypatch):
+    sid, other = mk_server("fr-7", "203.0.113.17"), mk_server("fr-8", "203.0.113.18")
+    box = FakeBox(monkeypatch)
+    cfgmeter.apply(sid, [8072], NOW)
+    cfgmeter.apply(other, [8072], NOW)
+    fill(f"p:{sid}:8072", 3, lambda d: GB)
+    fill(f"p:{other}:8072", 3, lambda d: GB)
+    r = client.delete(f"/api/servers/{sid}")
+    assert r.status_code == 200
+    assert [n for n, _ in box.actions].count("meter_remove") == 1                                                                  # its table was taken off
+    assert cfgmeter.stats([f"p:{sid}:8072"], NOW) == {} and cfgmeter.get(sid)["enabled"] is False
+    assert cfgmeter.stats([f"p:{other}:8072"], NOW)[f"p:{other}:8072"]["bytes"]["24h"] > 0 and cfgmeter.get(other)["enabled"]       # another server is not touched
+    with session() as db:
+        assert db.query(CfgMeter).filter(CfgMeter.server_id == sid).count() == 0
+    # a server that is off is not asked at all, and nothing stops its deletion
+    with session() as db:
+        db.get(Server, other).online = False
+
+    box.actions.clear()
+    assert client.delete(f"/api/servers/{other}").status_code == 200 and box.actions == []
+
+
+def test_the_last_pasarguard_panel_leaving_takes_every_table_off(client, world, monkeypatch):
+    w = world
+    box = FakeBox(monkeypatch)
+    cfgmeter.apply(w["f"], [443], NOW)
+    box.actions.clear()
+    with session() as db:
+        db.add(Panel(name="pg-two", type="pasarguard", url="https://panel-pg2.example.test", username="a", secrets={"password": "x"}, status="up"))
+        db.flush()
+        second = db.query(Panel).filter(Panel.name == "pg-two").one().id
+
+    assert client.delete(f"/api/panels/{second}").status_code == 200
+    assert box.actions == [] and cfgmeter.get(w["f"])["enabled"]                                                                   # another PasarGuard panel is still there: the meters stay
+    assert client.delete(f"/api/panels/{w['pid']}").status_code == 200
+    assert [n for n, _ in box.actions] == ["meter_remove"] and not cfgmeter.get(w["f"])["enabled"]                                   # no panel left to switch them off on: they are taken off
+    with session() as db:
+        db.add(Panel(name="mz-one", type="marzban", url="https://panel-mz1.example.test", username="a", secrets={"password": "x"}, status="up"))
+        db.flush()
+        mz = db.query(Panel).filter(Panel.name == "mz-one").one().id
+
+    cfgmeter.apply(w["f"], [443], NOW)
+    box.actions.clear()
+    assert client.delete(f"/api/panels/{mz}").status_code == 200 and box.actions == []                                              # a Marzban panel has nothing to do with it
+
+
+def test_a_panel_that_stops_answering_leaves_the_last_map_and_says_so(world, monkeypatch):
+    w = world
+    meter_row(w["f"], [443, 2087, 8072, 8075])
+    first = cfgstats.snapshot(w["pid"], None, False, NOW)
+    assert first["panel_error"] == "" and first["read_at"] > 0
+
+    def down(c, method, path, **kw):
+        raise panels.PanelError("no answer from the panel (ConnectError)")
+
+    monkeypatch.setattr(panels, "call", down)
+    cfgstats.forget()                                                                                                               # (a meter change forgets the fresh map, never the last good one)
+    again = cfgstats.snapshot(w["pid"], None, False, NOW)
+    assert [h["remark"] for h in again["hosts"]] == [h["remark"] for h in first["hosts"]] and "no answer from the panel" in again["panel_error"]
+    cfgstats.run()                                                                                                                  # the job goes on with it too (it must not die when the panel restarts)
+    monkeypatch.setattr(panels, "call", w["fake"])
+    cfgstats.forget()
+    assert cfgstats.snapshot(w["pid"], None, False, NOW)["panel_error"] == ""
+
+
+def test_a_panel_that_never_answered_is_a_clear_error_not_a_made_up_page(client, world, monkeypatch):
+    def down(c, method, path, **kw):
+        raise panels.PanelError("no answer from the panel (ConnectError)")
+
+    monkeypatch.setattr(panels, "call", down)
+    cfgstats._LAST.clear()
+    cfgstats.forget()
+    r = client.get(f"/api/panels/{world['pid']}/pg/configs")
+    assert r.status_code == 502 and "no answer from the panel" in r.json()["error"]
+
+
+def test_a_read_token_may_look_but_not_switch_a_server(client, world):
+    PW = "test-password-1"
+    tok = client.post("/api/tokens", json={"name": "bot", "scope": "read", "password": PW}).json()["token"]
+    act = client.post("/api/tokens", json={"name": "doctor", "scope": "act", "password": PW}).json()["token"]
+    from fastapi.testclient import TestClient
+
+    m = TestClient(client.app)
+    base = f"/api/panels/{world['pid']}/pg/configs"
+    assert m.get(base, headers={"Authorization": "Bearer " + tok}).status_code == 200
+    r = m.post(base + "/meter", headers={"Authorization": "Bearer " + tok}, json={"on": False})
+    assert r.status_code == 403 and r.json()["code"] == "token_scope"
+    assert m.post(base + "/cdn", headers={"Authorization": "Bearer " + tok}, json={"on": False}).status_code == 403
+    assert m.post(base + "/cdn", headers={"Authorization": "Bearer " + act}, json={"on": True}).status_code == 200
+
+
+def test_the_old_hours_go_once_a_day_even_when_no_meter_is_on(world):
+    fill("p:1:1", 70, lambda d: GB, now=int(time.time()) // HOUR * HOUR)
+    cfgstats._PRUNED[0] = 0
+    cfgstats.run()
+    with session() as db:
+        oldest = min(r.hour for r in db.query(CfgBucket).all())
+
+    assert oldest >= int(time.time()) // HOUR * HOUR - cfgmeter.KEEP_DAYS * DAY - HOUR
+    before = len(cfgmeter.stats(["p:1:1"], int(time.time()))["p:1:1"]["days"])
+    cfgstats.run()                                                                                                                  # not again within the day
+    assert cfgstats._PRUNED[0] > 0 and before == 30
+
+def test_a_read_and_the_loading_of_the_table_cannot_interleave(monkeypatch):
+    """Found by reading: a read taken before Turn on / a change of ports and added to the hours after it counted the old table's bytes twice."""
+    import threading
+
+    sid = mk_server("fr-10", "203.0.113.30")
+    FakeBox(monkeypatch)
+    cfgmeter.apply(sid, [8072], NOW)
+    gate, entered = threading.Event(), threading.Event()
+
+    def slow(node, name, params=None, timeout=40):
+        entered.set()
+        gate.wait(5)
+        return answer("b1", {8072: (1000, 2000)}, listen=[8072])
+
+    monkeypatch.setattr(cfgmeter, "run_script", slow)
+    t1 = threading.Thread(target=lambda: cfgmeter.tick(sid, [8072], NOW + 300))
+    t1.start()
+    assert entered.wait(5)
+    done: list[int] = []
+    t2 = threading.Thread(target=lambda: (cfgmeter.apply(sid, [8072, 443], NOW + 301), done.append(1)))
+    t2.start()
+    time.sleep(0.4)
+    assert not done                                                                                                                 # the new table waits until the read is in the hours
+    gate.set()
+    t1.join(5)
+    t2.join(5)
+    assert done and cfgmeter.stats([f"p:{sid}:8072"], NOW + 400)[f"p:{sid}:8072"]["bytes"]["24h"] == 3000
+
+
+def test_two_pasarguard_panels_on_one_server_do_not_take_each_others_ports(world, monkeypatch):
+    w = world
+    meter_row(w["f"], [443, 2087, 8072, 8075], enabled=False)
+    with session() as db:
+        db.add(Panel(name="pg-two", type="pasarguard", url="https://panel-pg2.example.test", username="a", secrets={"password": "x"}, status="up"))
+        db.flush()
+        second = db.query(Panel).filter(Panel.name == "pg-two").one().id
+
+    class Two(FakePanel):
+        def __call__(self, c, method, path, **kw):
+            if c["id"] == second and path == "/api/hosts":
+                return [host(50, F_IP, "VLESS WS 2053", 31000)]
+
+            return super().__call__(c, method, path, **kw)
+
+    two = Two()
+    monkeypatch.setattr(panels, "call", two)
+    cfgstats.forget()
+    cfgstats._LAST.clear()
+    cfgstats.snapshot(w["pid"], None, False, NOW)
+    s2 = cfgstats.snapshot(second, None, False, NOW)
+    assert 31000 in cfgstats.wanted(w["f"]) and 8072 in cfgstats.wanted(w["f"])                                                      # one table per server: the ports of both panels
+    assert s2["servers"][0]["plan_ports"] == len(cfgstats.wanted(w["f"]))
+    box = FakeBox(monkeypatch)
+    out = cfgstats.meter_on(w["pid"], w["f"])
+    assert 31000 in out["ports"] and 8072 in out["ports"]
+    assert "chain p31000" in __import__("base64").b64decode(box.actions[0][1]["B64"]).decode()
+    assert not cfgstats.snapshot(second, None, True, NOW)["servers"][0]["differs"] and not cfgstats.snapshot(w["pid"], None, True, NOW)["servers"][0]["differs"]
 
 # ------------------------------------------------------------------ the map: hosts on counters
 def core(inbounds):
@@ -439,6 +677,8 @@ def world(monkeypatch):
     monkeypatch.setattr(dnscache, "CACHE", {"at": 1.0, "rows": [], "accounts": [], "refreshing": False})
     monkeypatch.setattr(dnsprov, "accounts", list)
     cfgstats.forget()
+    cfgstats._LAST.clear()                                                   # (the last good map of a panel lives in the process: a test starts without the last one of another test)
+    cfgstats._PRUNED[0] = int(time.time())                                   # (the daily prune has its own test)
     return {"pid": pid, "fake": fake, "f": f, "i": i}
 
 
@@ -903,6 +1143,42 @@ def test_js_draws_the_real_answer_into_one_chart_with_marks_counters_and_apps(se
     assert day.index("config-E") < day.index("config-A") and 'class="on" onclick="pgCfgWin(\'24h\')"' in day                         # the least used first, in the 24 hours
     assert "Usage of the inbounds" in inb and inb.count('class="pg-cfg-r ') == 7 and "pg-cfg-chips" not in inb
 
+
+@needs_node
+def test_js_a_switched_off_host_is_not_on_the_chart(seeded, tmp_path):
+    _w, snap, _apps = seeded
+    snap["hosts"][4]["disabled"] = True                                                                                  # config-E
+    got = run_cfg_js("""(c, els, run, d) => { run("Object.assign(pgUsageState, {id: 1, type: 'pasarguard', apps: null})"); run("Object.assign(pgCfgState, {id: 1, d: " + JSON.stringify(d) + "})"); return [c.pgCfgSecHtml(), c.pgCfgRc(d)]; }""", snap, tmp_path)
+    assert got[0].count('class="pg-cfg-r ') == 8 and "config-E" not in got[0] and "All <b>8</b>" in got[0] and "8 configs" in got[0] and "config-E" not in got[1]
+
+
+@needs_node
+def test_js_a_read_only_panel_shuts_the_buttons_and_a_silent_panel_is_told(seeded, tmp_path):
+    _w, snap, _apps = seeded
+    snap["read_only"] = True
+    snap["panel_error"] = "no answer from the panel (ConnectError)"
+    got = run_cfg_js("""(c, els, run, d) => { run("Object.assign(pgUsageState, {id: 1, type: 'pasarguard', apps: null})"); run("Object.assign(pgCfgState, {id: 1, d: " + JSON.stringify(d) + "})"); const ro = c.pgCfgSecHtml(); run("pgCfgState.d.read_only = false; pgCfgState.d.panel_error = ''"); return [ro, c.pgCfgSecHtml()]; }""", snap, tmp_path)
+    ro, rw = got
+    assert ro.count(" disabled ") >= 2 and "needs NIKATEL_READ_ONLY=false on the panel server" in ro and "The panel did not answer (no answer from the panel (ConnectError)): the numbers are those of the last reading" in ro
+    assert " disabled" not in rw and "The panel did not answer" not in rw and "Delete the counting table from this server" in rw
+
+
+@needs_node
+def test_js_empty_fresh_and_switched_panel_states(seeded, tmp_path):
+    _w, snap, _apps = seeded
+    empty = {**snap, "hosts": [], "inbounds": [], "servers": [], "cdn": [], "total": {"has": False}, "since": 0, "summary": {**snap["summary"], "hosts": 0, "measured": 0}}
+    fresh = {**snap, "since": 0, "total": {"has": False}, "servers": [{**snap["servers"][0], "enabled": False, "ports": 0}], "hosts": [{**h, "state": "off", "view": {"has": False}, "badges": ["nodata"]} for h in snap["hosts"]]}
+    got = run_cfg_js("""(c, els, run, d, toasts, calls) => { const j = x => JSON.stringify(x); run("Object.assign(pgUsageState, {id: 1, type: 'pasarguard', apps: null})");
+      run("Object.assign(pgCfgState, {id: 1, d: " + j(d.empty) + "})"); const e = c.pgCfgSecHtml(), ec = c.pgCfgRc(d.empty);
+      run("Object.assign(pgCfgState, {id: 1, d: " + j(d.fresh) + "})"); const f = c.pgCfgSecHtml(), fc = c.pgCfgRc(d.fresh);
+      run("Object.assign(pgUsageState, {id: 2})"); c.pgCfgDraw(); const other = run("pgCfgState.d"); const waits = els["#pg-usage-configs"].innerHTML;
+      return [e, ec, f, fc, other, waits]; }""", {"empty": empty, "fresh": fresh}, tmp_path)
+    e, ec, f, fc, other, waits = got
+    assert "No config matches" in e and "No server of ours carries a node" in e and "undefined" not in e and "NaN" not in e and "0 configs" in e
+    assert "Turn on the meters to see the usage" in ec and "<h3>Configs</h3>" in ec
+    assert f.index("Counters") < f.index("Usage of the configs") and "Turn on all" in f and "Remove all meters" not in f and "NaN" not in f                # nothing counted yet: the counters come first
+    assert "Turn on the meters to see the usage" in fc
+    assert other is None and "Reading the configs" in waits                                                                                       # another panel starts from nothing
 
 @needs_node
 def test_js_the_apps_card_and_the_overview_card(seeded, tmp_path):

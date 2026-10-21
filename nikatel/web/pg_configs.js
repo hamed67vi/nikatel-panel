@@ -95,11 +95,12 @@ function pgCfgChartHtml(d) {
 }
 
 /* ---- the counters (meters) and the client apps: small */
+const PGC_RO = "Turning a meter on or off needs NIKATEL_READ_ONLY=false on the panel server";
 function pgCfgMetersHtml(d) {
-  const now = d.now, rows = d.servers.map(s => {
+  const now = d.now, ro = d.read_only ? ` disabled` : "", rows = d.servers.map(s => {
     const st = s.enabled ? (s.last_error ? "bad" : s.stale || s.differs ? "wait" : "ok") : "off";
     const tip = s.enabled ? (s.last_error || `counting ${s.ports} port${s.ports === 1 ? "" : "s"} · last read ${pgCfgAgo(s.last_ok, now)}${s.differs ? " · The ports to count changed: the next turn (within five minutes) loads the new list" : ""}`) : `${s.plan_ports} port${s.plan_ports === 1 ? "" : "s"} to count`;
-    const btn = s.enabled ? `<button type="button" class="sm" onclick="pgCfgMeter(${s.id}, false)" title="Delete the counting table from this server (the numbers already collected stay)">Remove</button>` : `<button type="button" class="pri sm" onclick="pgCfgMeter(${s.id}, true)" title="Put the counting table on this server: it only counts bytes">Turn on</button>`;
+    const btn = s.enabled ? `<button type="button" class="sm"${ro} onclick="pgCfgMeter(${s.id}, false)" title="${d.read_only ? PGC_RO : "Delete the counting table from this server (the numbers already collected stay)"}">Remove</button>` : `<button type="button" class="pri sm"${ro} onclick="pgCfgMeter(${s.id}, true)" title="${d.read_only ? PGC_RO : "Put the counting table on this server: it only counts bytes"}">Turn on</button>`;
     return `<li class="pg-cfg-srv" title="${esc(tip)}"><i class="pg-cfg-dot ${st}"></i><b class="ell">${esc(s.name)}</b>${btn}</li>`;
   }).join("");
   const cdn = d.cdn.map(a => {
@@ -107,7 +108,7 @@ function pgCfgMetersHtml(d) {
     return `<li class="pg-cfg-srv" title="${esc(tip)}"><i class="pg-cfg-dot ${st}"></i><b class="ell">${esc(a.name)}</b><button type="button" class="sm" data-a="${esc(a.id)}" data-f="${esc(a.sample)}" onclick="pgCfgCdnTest(this.dataset.a, this.dataset.f)" title="Read the report of one name now and say what the CDN answered">Test</button></li>`;
   }).join("");
   const any = d.servers.some(s => s.enabled), all = d.servers.length && d.servers.every(s => s.enabled);
-  const bar = d.servers.length ? `<div class="pg-cfg-mbar">${all ? "" : '<button type="button" class="pri sm" onclick="pgCfgMeterAll(true)" title="Put the counting table on every server of the list">Turn on all</button>'}${any ? '<button type="button" class="sm" onclick="pgCfgMeterAll(false)" title="Delete the counting table from every server where it is on">Remove all meters</button>' : ""}</div>` : "";
+  const bar = d.servers.length ? `<div class="pg-cfg-mbar">${all ? "" : `<button type="button" class="pri sm"${ro} onclick="pgCfgMeterAll(true)" title="${d.read_only ? PGC_RO : "Put the counting table on every server of the list"}">Turn on all</button>`}${any ? `<button type="button" class="sm"${ro} onclick="pgCfgMeterAll(false)" title="${d.read_only ? PGC_RO : "Delete the counting table from every server where it is on"}">Remove all meters</button>` : ""}</div>` : "";
   const list = rows ? `<ul class="pg-cfg-sl">${rows}</ul>` : '<div class="mut pg-usage-hint">No server of ours carries a node of this panel or a host address, so there is nothing to count on a server</div>';
   const cdnBox = cdn ? `<div class="pg-usage-sub">CDN reports <label class="pg-cfg-sw" title="Read the traffic report of each CDN domain of the DNS accounts once an hour (read only)"><input type="checkbox" ${d.cdn_on ? "checked" : ""} onchange="pgCfgCdnSet(this.checked)"><span>read them</span></label></div><ul class="pg-cfg-sl">${cdn}</ul>` : "";
   return pgUsageCard("Counters", `${d.servers.filter(s => s.enabled).length} of ${d.servers.length} servers`, `${bar}${list}${cdnBox}`, false, "pg-cfg-card");
@@ -128,7 +129,8 @@ function pgCfgSecHtml() {
   const s = pgCfgState, d = s.d;
   if (!d) return s.err ? `<div class="err">${esc(s.err)}</div>` : pgUsageWait("Reading the configs…");
   const fresh = !d.since && !d.servers.some(x => x.enabled);          // nothing is counted yet: the counters come first (that is the one thing to do), else the chart and, under it, the counters and the apps
-  return `${s.err ? `<div class="err">${esc(s.err)}</div>` : ""}<div class="pg-cfg-stack">${fresh ? pgCfgMetersHtml(d) : ""}${pgCfgChartHtml(d)}<div class="pg-cfg-below">${fresh ? "" : pgCfgMetersHtml(d)}${pgCfgAppsHtml()}</div></div>`;
+  const stale = d.panel_error ? `<div class="err">The panel did not answer (${esc(d.panel_error)}): the numbers are those of the last reading</div>` : "";
+  return `${s.err ? `<div class="err">${esc(s.err)}</div>` : ""}${stale}<div class="pg-cfg-stack">${fresh ? pgCfgMetersHtml(d) : ""}${pgCfgChartHtml(d)}<div class="pg-cfg-below">${fresh ? "" : pgCfgMetersHtml(d)}${pgCfgAppsHtml()}</div></div>`;
 }
 /* the card of the overview: the counts and the first few configs that need a look */
 function pgCfgRc(d) {

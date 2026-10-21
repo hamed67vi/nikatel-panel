@@ -33,7 +33,9 @@ FLAT = 0.15                             # a change under this is "flat"
 DAY = cfgmeter.DAY
 _LOCK = threading.Lock()
 _PLANS: dict[int, tuple[float, dict]] = {}
+_LAST: dict[int, dict] = {}              # the last map that was read for each panel (kept when the panel stops answering)
 _IDLE = [0.0]                           # when the job last looked while no meter was on
+_PRUNED = [0]                           # when the old hours were last deleted
 
 
 # ------------------------------------------------------------------ the map of a panel
@@ -102,18 +104,63 @@ def plan_for(c: dict, force: bool = False, block: bool = False) -> dict:
         if hit and not force and time.time() - hit[0] < PLAN_TTL:
             return hit[1]
 
-    plan = read_plan(c, block)
+    try:
+        plan = read_plan(c, block)
+    except (panels.PanelError, ValueError, RuntimeError) as e:
+        with _LOCK:
+            last = _LAST.get(pid)
+
+        if last is None:
+            raise
+
+        return {**last, "error": str(e)[:200], "read_at": last.get("read_at", 0)}        # the panel does not answer: the page and the job go on with the map they had (a meter must go on counting while the panel restarts)
+
+    plan["read_at"] = int(time.time())
+    plan["error"] = ""
 
     with _LOCK:
         _PLANS[pid] = (time.time(), plan)
+        _LAST[pid] = plan
 
     return plan
+
+
+def wanted(sid: int, own: dict | None = None) -> list[int]:
+    """The ports every PasarGuard panel of this panel wants counted on a server: the meter is ONE table per server, so two panels that use the same server must not take each other's ports away."""
+    with _LOCK:
+        plans = list(_LAST.values())
+
+    if own is not None:
+        plans.append(own)
+
+    return sorted({p for plan in plans for p in (plan.get("servers") or {}).get(sid, {}).get("ports", [])})
 
 
 def forget() -> None:
     with _LOCK:
         _PLANS.clear()
         _IDLE[0] = 0.0
+
+
+def panel_removed(panel_id: int) -> None:
+    """A PasarGuard panel left the list: its map goes; when it was the last one nothing needs a meter any more, so every table is taken off (best effort) - the owner has no page left to do it on."""
+    with _LOCK:
+        _PLANS.pop(int(panel_id), None)
+        _LAST.pop(int(panel_id), None)
+
+    try:
+        with session() as db:
+            left = db.scalar(select(Panel.id).where(Panel.type == "pasarguard").limit(1))
+
+        if left is None:
+            for sid, m in cfgmeter.all_meters().items():
+                if m["enabled"]:
+                    try:
+                        cfgmeter.remove(sid)
+                    except (RuntimeError, ValueError) as e:
+                        log.info("cfgstats: the meter of server %s was not taken off: %s", sid, str(e)[:100])
+    except Exception:                                            # (removing a panel must never fail because of this)
+        log.exception("cfgstats: the meters were not taken off")
 
 
 # ------------------------------------------------------------------ pure: numbers into judgements
@@ -308,9 +355,9 @@ def snapshot(panel_id: int, c: dict | None = None, force: bool = False, now: int
     for sid, sp in plan["servers"].items():
         m = meters.get(sid) or {"enabled": False, "ports": [], "last_ok": 0, "last_error": "", "since": 0}
         s = sv.get(sid, {})
-        servers.append({"id": sid, "name": sp["name"], "role": sp["role"], "enabled": bool(m["enabled"]), "plan_ports": len(sp["ports"]), "ports": len(m["ports"] or []), "since": m["since"], "last_ok": m["last_ok"],
+        servers.append({"id": sid, "name": sp["name"], "role": sp["role"], "enabled": bool(m["enabled"]), "plan_ports": len(wanted(sid, plan)), "ports": len(m["ports"] or []), "since": m["since"], "last_ok": m["last_ok"],
                         "last_error": m["last_error"], "stale": bool(m["enabled"] and m["last_ok"] and now - m["last_ok"] > 1200), "reachable": s.get("online") is not False and s.get("enabled", True),
-                        "differs": bool(m["enabled"] and sorted(m["ports"] or []) != sp["ports"])})
+                        "differs": bool(m["enabled"] and sorted(m["ports"] or []) != wanted(sid, plan))})
 
     accounts = {a.id: a for a in _accounts()}
     cdn_groups: dict[str, dict] = {}
@@ -330,7 +377,7 @@ def snapshot(panel_id: int, c: dict | None = None, force: bool = False, now: int
             "total": _view(tot, now) if tot else {"has": False}, "since": min(firsts) if firsts else 0, "cov": round(cfgmeter.coverage_days(min(firsts), now), 1) if firsts else 0.0,
             "rules": {"little_factor": LITTLE_FACTOR, "little_threshold_bytes_per_day": None if thr is None else int(thr), "min_measured": MIN_MEASURED, "fall_drop": FALL_DROP,
                       "fall_min_day_bytes": FALL_MIN_DAY_BYTES, "trend_need_days": TREND_NEED},
-            "read_only": _read_only()}
+            "read_only": _read_only(), "panel_error": plan.get("error", ""), "read_at": plan.get("read_at", 0)}
 
 
 def _accounts():
@@ -356,7 +403,7 @@ def meter_on(panel_id: int, server_id: int) -> dict:
     if not sp or not sp["ports"]:
         raise ValueError("no host or inbound of this panel needs a counter on that server")
 
-    out = cfgmeter.apply(int(server_id), sp["ports"])
+    out = cfgmeter.apply(int(server_id), wanted(int(server_id), plan))
     forget()
     return out
 
@@ -379,7 +426,7 @@ def meters_all(panel_id: int, on: bool) -> dict:
 
         try:
             if on:
-                cfgmeter.apply(sid, plan["servers"][sid]["ports"])
+                cfgmeter.apply(sid, wanted(sid, plan))
             else:
                 cfgmeter.remove(sid)
 
@@ -396,6 +443,10 @@ def run() -> None:
     """Every five minutes: for each PasarGuard panel read the map, give every server whose meter is on its turn (read, or load again), and read the CDN reports when they are due. Does nothing while no meter is
     on and no CDN domain is used."""
     now = int(time.time())
+
+    if now - _PRUNED[0] > 86400:                                 # the old hours go once a day, whatever the meters do
+        _PRUNED[0] = now
+        cfgmeter.prune(now)
 
     with session() as db:
         pids = [p.id for p in db.scalars(select(Panel).where(Panel.type == "pasarguard", Panel.enabled.is_(True)))]
@@ -423,7 +474,7 @@ def run() -> None:
 
         for sid in list(meters):
             if sid in plan["servers"]:
-                cfgmeter.tick(sid, plan["servers"][sid]["ports"], now)
+                cfgmeter.tick(sid, wanted(sid, plan), now)
                 meters.pop(sid, None)
 
         cfgcdn.collect(plan["cdn"], lambda src, hour, rx, tx: cfgmeter.add(acc, src, hour, rx, tx), now)
@@ -432,6 +483,3 @@ def run() -> None:
         cfgmeter.tick(sid, None, now)
 
     cfgmeter.flush(acc)
-
-    if now % 86400 < 300:
-        cfgmeter.prune(now)

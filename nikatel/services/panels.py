@@ -878,16 +878,24 @@ def forget_login(panel_id: int, force: bool = False) -> dict:
 
 
 def remove(panel_id: int) -> None:
+    typ = ""
+
     with session() as db:
         p = db.get(Panel, panel_id)
 
         if p is not None:
+            typ = p.type
             emit(db, "info", "panels", f"Panel {p.name} removed from the list.", p.name)
             profiles.drop_panel(db, panel_id)          # (the profiles of its nodes on the Lab page go with it)
             db.delete(p)
 
     _TOKENS.pop(panel_id, None)
     _ALERTED.pop(panel_id, None)
+
+    if typ == "pasarguard":
+        from . import cfgstats
+
+        cfgstats.panel_removed(panel_id)               # (a config meter has no page to be switched off on without a PasarGuard panel: the last panel leaving takes the tables off)
 
 
 def bootstrap() -> None:

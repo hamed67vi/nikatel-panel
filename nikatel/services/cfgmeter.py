@@ -27,6 +27,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import CfgMeter, Server
 from ..ssh import Node, run_action, run_script
+from .events import emit
 
 log = get_logger("cfgmeter")
 TABLE = "nikatel_meter"
@@ -169,7 +170,7 @@ def step(last: dict | None, counters: dict[int, list[int]], boot: str, now: int)
         if d[0] or d[1]:
             out[p] = d
 
-    since = int(now) if rebooted else max(int(last.get("ts") or now), int(now) - MAX_SPREAD)
+    since = int(now) if rebooted else min(max(int(last.get("ts") or now), int(now) - MAX_SPREAD), int(now))          # (a clock that was set back must not put bytes into an hour that has not come)
     return new, out, since
 
 
@@ -308,7 +309,16 @@ def _server(server_id: int) -> dict:
         if s is None:
             raise ValueError("server not found")
 
-        return {"id": s.id, "name": s.name, "host": s.host, "user": s.ssh_user, "port": s.ssh_port, "role": s.role, "enabled": bool(s.enabled)}
+        return {"id": s.id, "name": s.name, "host": s.host, "user": s.ssh_user, "port": s.ssh_port, "role": s.role, "enabled": bool(s.enabled), "online": s.online}
+
+
+def _event(level: str, text: str, ref: str) -> None:
+    """One line in the event log for what was done to a server (who changed what is worth knowing later); never a reason to fail."""
+    try:
+        with session() as db:
+            emit(db, level, "actions", text, ref)
+    except Exception:                                            # noqa: BLE001 - the log line is a courtesy
+        log.info("meter: the event could not be written")
 
 
 def _node(s: dict) -> Node:
@@ -357,6 +367,9 @@ def _ingest(server_id: int, counters: dict[int, list[int]], boot: str, conns: di
         for h in sorted(set(rx_parts) | set(tx_parts)):
             add(acc, src_of(server_id, p), h, rx_parts.get(h, 0), tx_parts.get(h, 0))
 
+    for p in state["c"]:                                         # a port that moved nothing still has its hour: "counted, 0 bytes" - not "nothing on record" (found on a real server: an idle port with no conntrack stayed "just begun" for ever)
+        add(acc, src_of(server_id, p), now // HOUR * HOUR)
+
     for p, n in (conns or {}).items():
         add(acc, src_of(server_id, p), now // HOUR * HOUR, 0, 0, n)
 
@@ -365,7 +378,7 @@ def _ingest(server_id: int, counters: dict[int, list[int]], boot: str, conns: di
     return {"deltas": deltas, "hours": len(acc)}
 
 
-def apply(server_id: int, ports: Iterable[int], now: int | None = None) -> dict:
+def apply(server_id: int, ports: Iterable[int], now: int | None = None, event: bool = True) -> dict:
     """Put the table on the server for these ports (or change the ports it counts). What the old table had counted is added to the hours first. Switches the meter ON in the record. RuntimeError with the
     reason when the server refuses or does not answer: then nothing is recorded as on."""
     ps = clean_ports(ports)[:MAX_PORTS]
@@ -390,6 +403,10 @@ def apply(server_id: int, ports: Iterable[int], now: int | None = None) -> dict:
         _save(server_id, enabled=True, ports=ps, since=m["since"] or now, applied_at=now, last_error="", state={"boot": out["boot"], "ts": now, "c": {}})
 
     log.info("meter on %s: %d port%s", s["name"], len(ps), "" if len(ps) == 1 else "s")
+
+    if event:
+        _event("ok", f"{s['name']}: config meter on - counting {len(ps)} port{'' if len(ps) == 1 else 's'} (a table that only counts; Remove deletes it).", s["name"])
+
     return {"server": s["name"], "ports": ps}
 
 
@@ -411,12 +428,14 @@ def remove(server_id: int, now: int | None = None) -> dict:
         _save(server_id, enabled=False, ports=[], last_error="", state={})
 
     log.info("meter off %s", s["name"])
+    _event("ok", f"{s['name']}: config meter off - the counting table was removed.", s["name"])
     return {"server": s["name"]}
 
 
 def tick(server_id: int, want: Iterable[int] | None = None, now: int | None = None) -> dict:
     """One turn for a server whose meter is on: read it; when its table is gone (a reboot) or the ports it should count changed, load it again; else add the difference to the hours.
-    Returns {"ok", "action": read | applied | skipped, "error"}. Never raises for a server that does not answer: the record keeps the reason."""
+    A server that is switched off in the panel is left alone; one the pulse calls off is not asked (the reason is kept). Returns {"ok", "action": read | applied | skipped, "error"}.
+    Never raises for a server that does not answer: the record keeps the reason, and the event log hears about it once (and once when it is read again)."""
     m = get(server_id)
 
     if not m["enabled"]:
@@ -425,26 +444,38 @@ def tick(server_id: int, want: Iterable[int] | None = None, now: int | None = No
     now = int(now or time.time())
     stored = clean_ports(m["ports"])
     ports = clean_ports(want) if want is not None else stored
+    name = str(server_id)
 
     try:
         s = _server(server_id)
+        name = s["name"]
 
-        with _lock(server_id):
+        if not s["enabled"]:
+            return {"ok": True, "action": "skipped", "error": ""}
+
+        if s["online"] is False:
+            raise RuntimeError("the server is off (the panel's own check says so)")
+
+        with _lock(server_id):                                       # the read and what it adds to the hours are ONE step: an older read must never be added after a newer one (or after the table was loaded again) - that counted the same bytes twice
             rd = parse_answer(run_script(_node(s), "meter_read", {"PORTS": " ".join(str(p) for p in stored)}, timeout=READ_TIMEOUT))
 
-        if not rd["done"] and not rd["boot"]:
-            raise RuntimeError("the meter script gave no answer")
+            if not rd["done"] and not rd["boot"]:
+                raise RuntimeError("the meter script gave no answer")
+
+            if rd["table"]:
+                _ingest(server_id, rd["c"], rd["boot"], conns_of(rd, stored), now)
+                _save(server_id, last_ok=now, last_error="")
 
         if not rd["table"]:
-            apply(server_id, ports or stored, now)
+            apply(server_id, ports or stored, now, event=False)
+            _event("info", f"{name}: the config meter table was gone (the server restarted?) - loaded again.", name)
             return {"ok": True, "action": "applied", "error": ""}
 
-        with _lock(server_id):
-            _ingest(server_id, rd["c"], rd["boot"], conns_of(rd, stored), now)
-            _save(server_id, last_ok=now, last_error="")
+        if m["last_error"]:
+            _event("ok", f"{name}: the config meter is read again.", name)
 
         if ports and ports != stored:
-            apply(server_id, ports, now)
+            apply(server_id, ports, now, event=False)
             return {"ok": True, "action": "applied", "error": ""}
 
         return {"ok": True, "action": "read", "error": ""}
@@ -452,4 +483,29 @@ def tick(server_id: int, want: Iterable[int] | None = None, now: int | None = No
         msg = str(e)[:300] or e.__class__.__name__
         _save(server_id, last_error=msg)
         log.info("meter turn of server %s: %s", server_id, msg[:120])
+
+        if msg != m["last_error"]:
+            _event("warn", f"{name}: the config meter could not be read: {msg[:160]}", name)
+
         return {"ok": False, "action": "read", "error": msg}
+
+
+def drop_server(server_id: int) -> None:
+    """A server leaves the panel: its counting table is taken off it when the server answers (best effort, a short try) and its hours go. Nothing here may stop the deletion of the server."""
+    try:
+        m = get(server_id)
+
+        if m["enabled"]:
+            s = _server(server_id)
+
+            if s["online"] is not False:
+                run_action(_node(s), "meter_remove", {}, timeout=15)
+    except Exception as e:                                           # noqa: BLE001 - a dead server cannot be asked; the table on it counts for nothing and is harmless
+        log.info("meter: the table of server %s was not taken off: %s", server_id, str(e)[:100])
+
+    try:
+        with session() as db:
+            db.execute(text("DELETE FROM cfg_buckets WHERE src LIKE :p"), {"p": f"p:{int(server_id)}:%"})
+            db.execute(text("DELETE FROM cfg_meters WHERE server_id = :s"), {"s": int(server_id)})
+    except Exception:
+        log.exception("meter: the hours of server %s could not be deleted", server_id)

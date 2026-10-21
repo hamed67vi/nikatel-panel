@@ -5378,7 +5378,7 @@ I18N.add({
 
 
 /* the overview card */
-"Most used first": "پرمصرف‌ترین اول", "Least used first": "کم‌مصرف‌ترین اول", "Sort": "مرتب‌سازی", "On record since {}": "ثبت از {}", "Open Configs": "باز کردن کانفیگ‌ها", "Nothing little used or falling": "چیزی کم‌مصرف یا رو به کاهش نیست", "Turn on the meters to see the usage": "برای دیدن مصرف، شمارنده‌ها را روشن کنید",
+"Most used first": "پرمصرف‌ترین اول", "Least used first": "کم‌مصرف‌ترین اول", "Sort": "مرتب‌سازی", "On record since {}": "ثبت از {}", "Turning a meter on or off needs NIKATEL_READ_ONLY=false on the panel server": "روشن یا خاموش کردن شمارنده روی سرور پنل به NIKATEL_READ_ONLY=false نیاز دارد", "The panel did not answer ({}): the numbers are those of the last reading": "پنل جواب نداد ({}): عددها مربوط به آخرین خواندن است", "the server is off (the panel's own check says so)": "سرور خاموش است (بررسی خود پنل همین را می‌گوید)", "Open Configs": "باز کردن کانفیگ‌ها", "Nothing little used or falling": "چیزی کم‌مصرف یا رو به کاهش نیست", "Turn on the meters to see the usage": "برای دیدن مصرف، شمارنده‌ها را روشن کنید",
 /* asking and answering */
 "Put": "بگذار",
 "Put the counting table on {}? It only counts the bytes and connections of its {} ports: nothing is stopped, redirected or restarted, and Remove deletes it.": "روی {1} جدول شمارش گذاشته شود؟ فقط بایت‌ها و اتصال‌های {2} پورتش را می‌شمارد: چیزی متوقف، منحرف یا ری‌استارت نمی‌شود و «حذف» آن را برمی‌دارد.",

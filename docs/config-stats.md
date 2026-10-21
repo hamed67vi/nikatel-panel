@@ -66,6 +66,25 @@ a trend arrow and, only when it is true, a small mark. The three windows, the pe
 * **No history before the collection began.** That cannot be recovered: PasarGuard keeps no such numbers.
 * **The apps**: the share of each app (V2Box, v2rayNG, Hiddify, Happ ...) among the fetches of the subscription link, for the range chosen at the top, from `GET /api/users/sub_update/chart` (the panel already had it). PasarGuard records which app fetched a user's
   subscription, **not which config the user then picked**: the apps cannot be split per config. A config on a newer transport (xHTTP, HTTPUpgrade, ...) carries a ◆ in the chart: an old version of an app may not open it.
+## How it lives with the rest of the panel
+
+* **The event log** (domain `actions`, the server as the reference): *config meter on - counting N ports*, *config meter off*, *the table was gone (the server restarted?) - loaded again*, *the config meter could not be read: ...* (once per reason, not at every turn) and *is read again*.
+* **Read-only mode** (`NIKATEL_READ_ONLY`): the page shows, but Turn on / Remove are shut with a tip that says why; the routes answer with the panel's usual read-only sentence.
+* **API tokens**: a `read` token may GET the page; switching a server (`POST`) needs `act` or `admin` - the same scopes as every other action on a server.
+* **A server that leaves the panel** (Servers → Delete): its counting table is taken off it when it answers (a short try; a server that is off is not asked) and its hours go. **The last PasarGuard panel leaving** takes every table off, because there is no page left to do it on.
+* **A server that is switched off in the panel** is not read; one the pulse calls off is not asked over SSH (the reason is kept and shown on the Counters card).
+* **Two PasarGuard panels on one server**: the meter is ONE table per server, so it counts the union of the ports both panels want (neither takes the other's away).
+* **The panel does not answer**: the page and the job go on with the last map they read and say so in one line; a meter keeps counting while the panel restarts.
+* **A read and what it adds to the hours are one locked step** with the loading of the table: an older read can never be added after a newer one (that counted bytes twice).
+* **Housekeeping**: the old hours (older than 65 days) are deleted once a day by the job, whether or not a meter is on. Backup / restore, the update's migration check and the jobs page need nothing of their own (the new tables and the job are generic).
+
+## Proved on a real server (2026-10-21)
+
+The throw-away Iran test server (Ubuntu 22.04, kernel 5.15, nftables 1.0.2, iptables-nft with its own tables, no conntrack tool) was metered through a private copy of the panel over the panel's REAL SSH path (`real_meter_check.py`, 25 checks): the ruleset is accepted
+by that kernel and nft (dry run, then for real); the rest of the firewall is byte-for-byte the same (counters aside) while the meter is on and after Remove; real ssh transfers on port 22 are counted as sent (2 MB up -> 2.08 MB, 3 MB down -> 3.09 MB: +3 % of headers);
+a second read adds only the new megabyte; deleting the table by hand (what a reboot does) is noticed and the table is loaded again without a jump; adding a port keeps every byte; Remove leaves no table; a port that moved nothing shows "0 B", not "just begun".
+The page was walked in a real browser against the same server (Turn on asked first, the job read the counters every minute, the numbers grew, Remove). Also: 25 000 random inputs per pure function (`fuzz_check.py`: counters, gaps, parsers, the map with odd hosts) and the owner's size
+(114 hosts, 28 inbounds, 3 nodes, 15 CDN names, 65 days of hours for every counter: 154 000 rows, a 15 MB database; the page's answer takes about 0.3 s, is 207 KB, and the daily delete of old hours 0.07 s).
 ## What the owner does
 
 1. *Counters → Turn on all* (or one server at a time). It asks first and says what it does. Without it nothing is counted on a server.
