@@ -609,7 +609,12 @@ def _slow_world(monkeypatch, name="sl-a", mode="fix", memory=True):
         t.rx_mbps, t.rtt_ms, t.detail = 4.0, 164.0, {"loss_pct": 0.0}
 
     st.put("repair", {"mode": mode})
-    kinds = {"tcp": knowledge.merge(None, {"kind": "tcp", "ok": True, "score": 50, "down_mbps": 119.0, "latency_ms": 167.0, "loss_pct": 0.0}, "full", now - 3600),
+    tcp = None
+
+    for i in range(3):                                                                                       # (three passed tests: its steadiness is proven - the Doctor changes to a type only when it is, 1.69.73)
+        tcp = knowledge.merge(tcp, {"kind": "tcp", "ok": True, "score": 50, "down_mbps": 119.0, "latency_ms": 167.0, "loss_pct": 0.0}, "full", now - 3600 - 60 * (2 - i))
+
+    kinds = {"tcp": tcp,
              "paqet": knowledge.merge(None, {"kind": "paqet", "ok": True, "score": 40, "down_mbps": 9.0, "latency_ms": 190.0, "loss_pct": 0.0}, "full", now - 3600),             # (9 is not five times the 4 the users carry)
              "bp:tcp": knowledge.merge(None, {"kind": "bp:tcp", "ok": False, "error": "no data passes"}, "latency", now - 3600)}
     monkeypatch.setattr(knowledge, "pair", lambda i, f: {"kinds": kinds} if memory else {})

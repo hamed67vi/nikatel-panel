@@ -745,8 +745,13 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
         if t is None:
             raise ValueError("tunnel not found")
 
+        if (t.type or "").lower() in ("backpack", "paqet", "chisel"):
+            from . import build_other
+
+            return build_other.set_ports(tunnel_id, ports_text)
+
         if (t.type or "").lower() != "backhaul":
-            raise ValueError("only backhaul tunnels can change their ports here")
+            raise ValueError("only backhaul, BackPack, Paqet and Chisel tunnels can change their ports here")
 
         node, name, cfg = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name, f"iran-{t.transport or 'tcpmux'}-{int(t.port)}"
 

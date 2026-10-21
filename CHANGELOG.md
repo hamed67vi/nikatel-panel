@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.69.77 - A drop: the Doctor tests the other types (speed included) and changes to a steady better one; "Ports..." for every kind of tunnel; "Move to a better server" archived
+
+> **به زبان ساده:** وقتی پهنای یک تانل «افت» می‌کند و علتش بیرون از خود تانل نیست، دکتر حالا نوع‌های دیگر همان جفت سرور را با تست سرعت واقعی امتحان می‌کند (شاید مشکل روی آن‌ها نباشد) و اگر نوعی واضح بیشتر بدهد و تمیز و پایدار باشد، نوع تانل را عوض می‌کند. گزینهٔ «Ports…» هم برای تانل‌های Backpack، Paqet و Chisel اضافه شد. گزینهٔ «انتقال به سرور بهتر» فعلاً از منو برداشته شد (آرشیو).
+>
+> **In short:** a dropped tunnel whose cause is not outside it gets the other types of its pair tested with a real speed test, and the Doctor changes it to a clean, steady one that gives clearly more; "Ports..." is in the menu of BackPack, Paqet and Chisel tunnels too; "Move to a better server..." is out of the menu for now.
+
+**1. The drop (the owner, 2026-10-21: "when we have a drop the Doctor must test the other types - the problem may not exist on them - and it can change the type; I said the tunnel must be steady")**
+
+- **A carrier that drops on many tunnels** (the owner, 2026-10-21: the dropped tunnels all ran on wssmux): when at least two tunnels that run on the same carrier (wssmux, tcpmux ... - p:wssmux and wssmux are one) dropped together, at least 60 % of them, while the tunnels of the other carriers are fine, the look says so (code kind_wide: 	his tunnel type is disturbed on the routes now), does not restart the engine, and tests only types of OTHER carriers.
+- **When**: the look at a drop finds no outside cause (not a busy server, not the whole server dropping, not "full of users": the codes `this_only`, `stalled`, `loss`, `latency`) and - for `this_only` - the restart of the engine did not bring the speed back. (Before: only the restart, then nothing.)
+- **What it tests**: up to 3 types of the pair that are steady in the Doctor's memory or not tried enough yet (never one that is UNSTEADY, never the running one); with no memory of the pair, the Doctor's own order for it. Each gets a real speed test (`measure="full"`), one after the other.
+- **What it picks** (`bandwidth.drop_pick`): a type that connected, lost at most 1 % of the packets, gave at least twice what the dropped tunnel gives now (and at least 20 Mb/s) and answers about as fast as the running type; a type with a known stability goes before one that is not proven yet, then the faster (an unproven one only becomes a suggestion, see below).
+- **Only to a type that is PROVEN steady** (the owner, 2026-10-21: if there is no stability, do not go to that type by itself): the Doctor changes a tunnel by itself only to a type whose steadiness the memory knows (at least 3 tests, stability 75 % or more); a type that was not proven yet is only put on the Doctor page as a suggestion (one click), and a type the memory knows to be unsteady is never picked. The same rule now holds for the other automatic changes of a running tunnel: the very slow tunnel (_suggest_faster: it offers only steady types, and changes by itself only to a proven one) and the lane swap of a tunnel that is filling its capacity (capacity.better_kinds). Each test of the pair counts toward the 3 tests.
+- **How it changes**: the usual automatic swap (`doctor._run_retype`, auto): once in 24 hours per tunnel, at a quiet moment, the old type put back when the new one does not build or gives clearly less. Nothing when the Doctor is off or the panel is read-only; when no type is clearly better the tunnel stays and is measured again.
+- **Proved**: `tests/test_drop_swap.py` (the pick: steady before faster, an unsteady type never, loss, ping, the lowest line; an unproven type is only suggested; a drop the restart does not cure tests tcp and paqet with speed and changes to tcp, once in 24 hours; nothing when no type is clearly better, when the Doctor is off, when the Iran server is busy; no memory = the Doctor's own order, at most three).
+- **Not proved**: a real swap on a real dropped tunnel (the test of the types and the swap are replaced by stand-ins here; each is tested in its own file); it adds a speed test of up to 3 types (some minutes, about 100 MB each) the first time a tunnel drops in 24 hours.
+
+**2. "Ports..." for every kind that has ports**: the menu of a BackPack (reverse and direct), Paqet and Chisel tunnel has "Ports..." now; before, only Backhaul tunnels had it.
+
+- **BackPack**: the Iran toml gets the new `ports = [...]` list (the test door of the tunnel stays in it), the service is restarted, every port must listen within 10 s - otherwise the old file is put back (the rails Backhaul has).
+- **Paqet**: the `forward:` block of the Iran yaml is replaced the same way.
+- **Chisel**: the remotes end the ExecStart line of the unit of the side that dials (the foreign server of a reverse tunnel, the Iran server of a forward one); after the restart the Iran server must listen on every port, otherwise the old unit is put back.
+- **After it** the record (`port_mapping`) and the port list of the tunnel follow, so rebuild, move and standby see the new ports.
+- **Proved**: `tests/test_backpack_ports.py` (the right server, file and unit for each kind and direction, the test door is kept, a failed listen is a 502 and changes nothing in the record, Chisel's old unit is restored, other kinds are refused, the file/unit names are guarded, the menu shows the item; the python of each shell action is run on the real file text of a build).
+- **Not proved**: the real rewrite on a real BackPack / Paqet / Chisel server (the shell actions are not run on a server).
+
+**3. Archived for now** (the owner, 2026-10-21): "Move to a better server..." is no longer in the menu of a tunnel (`TUN_MOVE_IN_MENU = false` in `lab.js`; set it to true to bring it back). Its window, its routes and what the Doctor does by itself stay as they were.
 ## 1.69.75 - Switching to the Servers page no longer cuts its top: the list box ends where the page area ends
 
 The owner (2026-10-21, with a picture of the Servers page): "I switched to this page - the page is cut and the header is not shown". In the picture the title and the status line are gone and the toolbar sits at the very top of the window.

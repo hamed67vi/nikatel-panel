@@ -434,6 +434,7 @@ def test_a_moved_tunnel_is_built_as_the_best_type_of_the_new_pair_without_the_op
 def test_the_menu_item_the_plan_box_and_the_words_are_in_the_page():
     lab, app, fa, css = (WEB / "lab.js").read_text(encoding="utf-8"), (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
     assert lab.count('labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name)') == 1 and "srvMoveAway" not in lab and "Move the tunnels…" not in lab      # in the menu of a TUNNEL, no longer in the menu of a server
+    assert 'const TUN_MOVE_IN_MENU = false;' in lab and '...(TUN_MOVE_IN_MENU ? [labSep, labIt("Move to a better server…"' in lab      # archived for now (the owner, 2026-10-21): the item is not shown, everything behind it stays
     assert "window.tunMoveAway = async (id, name) =>" in lab and "/api/failover/tunnel-move-plan/${id}" in lab and "/api/failover/move-tunnel/${m.id}" in lab and "tunnels: m.p.move" in lab
     assert "window.tunMoveProgress = (aid, name, to) =>" in lab and 'followStory(aid, $("#mv-story"), 2400)' in lab and '"keep");' in lab and "tunMoveProgress(r.action_id, m.name, to)" in lab       # the box that follows the move and does not close by itself
     assert "else if (!state.keepWin) hideModal();" in app and "state.keepWin = null; state.open = null;" in app and 's.action === "move" ? "Move"' in app           # the page drawn again behind it does not take it away; only Close does

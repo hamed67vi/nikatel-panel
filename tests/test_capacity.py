@@ -36,9 +36,19 @@ def test_saturation_is_full_when_most_minutes_use_85_percent_of_the_capacity_and
     assert s["state"] == "full" and s["n"] == 7 and 0.85 < s["util"] < 1.0
 
 
+def _tests(k, v, now, n=3):
+    """n FULL tests (the last one now) of one kind: three passed tests make its steadiness known (knowledge.STEADY_MIN_TESTS)."""
+    e = None
+
+    for i in range(n):
+        e = knowledge.merge(e, {"kind": k, "ok": True, "score": v[0], "down_mbps": v[1], "loss_pct": v[2]}, "full", now - 60 * (n - 1 - i))
+
+    return e
+
+
 def _pair(now, **kinds):
-    """The Doctor's memory of a pair: {kind: (score, down_mbps, loss_pct)} as FULL tests made now."""
-    return {"kinds": {k: knowledge.merge(None, {"kind": k, "ok": True, "score": v[0], "down_mbps": v[1], "loss_pct": v[2]}, "full", now) for k, v in kinds.items()}}
+    """The Doctor's memory of a pair: {kind: (score, down_mbps, loss_pct)} as FULL tests made now (three each: steady)."""
+    return {"kinds": {k: _tests(k, v, now) for k, v in kinds.items()}}
 
 
 def test_a_better_type_is_one_that_succeeded_in_a_fresh_full_test_and_carried_clearly_more_with_little_loss():
@@ -50,6 +60,10 @@ def test_a_better_type_is_one_that_succeeded_in_a_fresh_full_test_and_carried_cl
     assert capacity.better_kinds(_pair(now, **{"bp:wssmux": (70, 200, 0.2)}), now, "tcpmux") == []      # the running type has no full test: nothing to compare with, nothing is guessed
     old = {"kinds": {**p["kinds"], "bp:wssmux": knowledge.merge(None, {"ok": True, "score": 70, "down_mbps": 200, "loss_pct": 0.2}, "full", now - 30 * 86400)}}
     assert capacity.better_kinds(old, now, "tcpmux") == []                                    # a month old is no news
+    one = {"kinds": {**p["kinds"], "bp:wssmux": _tests("bp:wssmux", (70, 200, 0.2), now, n=1)}}
+    assert capacity.better_kinds(one, now, "tcpmux") == []                                    # one good test proves no steadiness: not by itself (the owner, 2026-10-21)
+    shaky = {"kinds": {**p["kinds"], "bp:wssmux": knowledge.merge(_tests("bp:wssmux", (70, 200, 0.2), now, n=2), {"kind": "bp:wssmux", "ok": False, "error": "no data"}, "full", now)}}
+    assert capacity.better_kinds(shaky, now, "tcpmux") == []                                  # a type that failed in one of its tests is not steady
 
 
 def test_a_lighter_iran_server_uses_a_smaller_share_of_what_its_tunnels_can_carry():

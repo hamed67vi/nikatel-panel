@@ -1218,6 +1218,67 @@ if [ $ok = 1 ]; then echo "PORTS_OK"; exit 0; fi
 cp "$CFG.bak-ports" "$CFG"; systemctl restart "$SVC"; echo "NOTLISTEN"; exit 4
 """, {"CFG": r"^iran-(tcp|tcpmux|wsmux|wssmux)-\d{1,5}$", "B64": _B64, "CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
 
+    # the same for a BackPack tunnel (reverse or direct): its Iran toml has the same `ports = [...]` list; the old file is put back when a port does not listen
+    "set_ports_bp": (r"""set -e; CFG='/etc/backpack/@CFG@.toml'; SVC='backpack-@CFG@.service'
+[ -f "$CFG" ] || { echo "NOCFG"; exit 2; }
+cp "$CFG" "$CFG.bak-ports"
+echo '@B64@' | base64 -d > /tmp/.nikatel-ports.txt
+python3 - "$CFG" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read(); new = open("/tmp/.nikatel-ports.txt").read()
+s2, n = re.subn(r"(?m)^ports\s*=\s*\[.*?\]", lambda m: "ports = [\n" + new + "\n]", s, count=1, flags=re.S)
+sys.exit(3) if n != 1 else open(p, "w").write(s2)
+PY
+rm -f /tmp/.nikatel-ports.txt
+systemctl restart "$SVC"
+ok=0; for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; ok=1; for P in @CHECK@; do ss -ltn "( sport = :$P )" 2>/dev/null | grep -q LISTEN || ok=0; done; [ $ok = 1 ] && break; done
+if [ $ok = 1 ]; then echo "PORTS_OK"; exit 0; fi
+cp "$CFG.bak-ports" "$CFG"; systemctl restart "$SVC"; echo "NOTLISTEN"; exit 4
+""", {"CFG": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$", "B64": _B64, "CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
+
+    # the same for a Paqet tunnel: the `forward:` block of the Iran yaml is replaced (up to the next top-level key)
+    "set_ports_paqet": (r"""set -e; CFG='/etc/paqet/@CFG@.yaml'; SVC='paqet-@CFG@.service'
+[ -f "$CFG" ] || { echo "NOCFG"; exit 2; }
+cp "$CFG" "$CFG.bak-ports"
+echo '@B64@' | base64 -d > /tmp/.nikatel-ports.txt
+python3 - "$CFG" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read(); new = open("/tmp/.nikatel-ports.txt").read()
+s2, n = re.subn(r"(?ms)^forward:\n.*?(?=^\S)", lambda m: "forward:\n" + new + "\n", s, count=1)
+sys.exit(3) if n != 1 else open(p, "w").write(s2)
+PY
+rm -f /tmp/.nikatel-ports.txt
+systemctl restart "$SVC"
+ok=0; for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; ok=1; for P in @CHECK@; do ss -ltn "( sport = :$P )" 2>/dev/null | grep -q LISTEN || ok=0; done; [ $ok = 1 ] && break; done
+if [ $ok = 1 ]; then echo "PORTS_OK"; exit 0; fi
+cp "$CFG.bak-ports" "$CFG"; systemctl restart "$SVC"; echo "NOTLISTEN"; exit 4
+""", {"CFG": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$", "B64": _B64, "CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
+
+    # a Chisel tunnel: the remotes ('R:0.0.0.0:443:127.0.0.1:443' ...) end the ExecStart line of the CLIENT unit (the foreign server of a reverse tunnel, the Iran server of a forward one); the old unit is kept for `unit_restore`
+    "set_ports_chisel": (r"""set -e; U='/etc/systemd/system/@UNIT@'
+[ -f "$U" ] || { echo "NOUNIT"; exit 2; }
+cp "$U" "$U.bak-ports"
+echo '@B64@' | base64 -d > /tmp/.nikatel-ports.txt
+python3 - "$U" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read(); new = open("/tmp/.nikatel-ports.txt").read().strip()
+s2, n = re.subn(r"(?m)^(ExecStart=.*?://\S+) '.*$", lambda m: m.group(1) + " " + new, s, count=1)
+sys.exit(3) if n != 1 else open(p, "w").write(s2)
+PY
+rm -f /tmp/.nikatel-ports.txt
+systemctl daemon-reload; systemctl restart '@UNIT@'; echo "EDITED"
+""", {"UNIT": r"^chisel-[A-Za-z0-9][A-Za-z0-9._-]{0,60}\.service$", "B64": _B64}),
+
+    "unit_restore": (r"""U='/etc/systemd/system/@UNIT@'
+[ -f "$U.bak-ports" ] || { echo "NOBACKUP"; exit 2; }
+cp "$U.bak-ports" "$U"; systemctl daemon-reload; systemctl restart '@UNIT@'; echo "RESTORED"
+""", {"UNIT": r"^chisel-[A-Za-z0-9][A-Za-z0-9._-]{0,60}\.service$"}),
+
+    # every port listens (up to 20 s)
+    "ports_wait": (r"""ok=0; for i in $(seq 1 20); do sleep 1; ok=1; for P in @CHECK@; do ss -ltn "( sport = :$P )" 2>/dev/null | grep -q LISTEN || ok=0; done; [ $ok = 1 ] && break; done
+if [ $ok = 1 ]; then echo "LISTENING"; else echo "NOTLISTEN"; fi
+""", {"CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
+
     # swap a core binary that put_file left next to it (checksum verified there), restart its tunnel units
     "engine_swap": (r"""set -e; NEW='@BIN@.nikatel.new'; [ -f "$NEW" ] || { echo NO_FILE; exit 2; }
 S=$(sha256sum "$NEW" | awk '{print $1}'); [ "$S" = '@SHA@' ] || { rm -f "$NEW"; echo BAD_SHA; exit 3; }

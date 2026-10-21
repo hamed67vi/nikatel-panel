@@ -173,6 +173,12 @@ def explain(f: dict) -> tuple[str, str]:
         if (s.get("cpu") or 0) >= BUSY_CPU:
             return f"{side}_busy", f"The {label} server {s.get('name', '')} is busy (CPU {s['cpu']:.0f} %): everything on it is slow, not only this tunnel."
 
+    fam = f.get("same_kind") or {}
+
+    if fam.get("total", 0) >= 2 and fam.get("dropped", 0) >= max(2, 0.6 * fam["total"]) and fam.get("others_dropped", 0) <= 0.3 * fam.get("others_total", 0):
+        return "kind_wide", (f"{fam['dropped']} of the {fam['total']} tunnels that run on {fam['family']} dropped together while the tunnels of the other types are fine: this tunnel type is disturbed on the routes now "
+                             "(its carrier may be throttled) - other servers do not matter, another type does.")
+
     same = f.get("same_iran") or {}
 
     if same.get("total", 0) >= 2 and same.get("dropped", 0) >= max(2, 0.6 * same["total"]):
@@ -582,12 +588,23 @@ def _facts(tunnel_id: int) -> dict:
             s = db.scalar(select(ServerSample).where(ServerSample.server_id == srv.id, ServerSample.ts >= now - 600).order_by(ServerSample.ts.desc()).limit(1))
             sides[side] = {"name": srv.name, "cpu": float(s.cpu or 0) if s is not None else None}
 
+        def family_of(x: Tunnel) -> str:
+            from . import autopilot
+
+            return autopilot.kind_of(x.type, x.transport, x.record).rsplit(":", 1)[-1]          # (the carrier: wssmux, tcpmux, wss ... - "bp:wssmux" and "wssmux" are one family)
+
+        mine = family_of(t)
+        fam = [x for x in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if not is_temp(x.name) and not is_standby(x) and family_of(x) == mine]
+        same_kind = {"family": mine, "total": len(fam), "dropped": sum(1 for x in fam if ((x.record or {}).get("bw") or {}).get("state") in ("drop", "slow"))}
+        others = [x for x in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if not is_temp(x.name) and not is_standby(x) and family_of(x) != mine]
+        same_kind["others_total"], same_kind["others_dropped"] = len(others), sum(1 for x in others if ((x.record or {}).get("bw") or {}).get("state") in ("drop", "slow"))
+
         def share(col, sid: int) -> dict:
             rows = [x for x in db.scalars(select(Tunnel).where(col == sid, Tunnel.enabled.is_(True))) if not is_temp(x.name)]
             return {"total": len(rows), "dropped": sum(1 for x in rows if ((x.record or {}).get("bw") or {}).get("state") in ("drop", "slow"))}
 
         return {"name": t.name, "state": bw.get("state"), "now": bw.get("down"), "ref": (bw.get("drop") or {}).get("from") or bw.get("ref"), "loss": loss, "live": live, "iran": sides["iran"], "foreign": sides["foreign"],
-                "rtt": t.rtt_ms, "rtt_ref": rtts[len(rtts) // 2] if len(rtts) >= 20 else None, "same_iran": share(Tunnel.iran_server_id, t.iran_server_id), "same_foreign": share(Tunnel.foreign_server_id, t.foreign_server_id)}
+                "rtt": t.rtt_ms, "rtt_ref": rtts[len(rtts) // 2] if len(rtts) >= 20 else None, "same_iran": share(Tunnel.iran_server_id, t.iran_server_id), "same_foreign": share(Tunnel.foreign_server_id, t.foreign_server_id), "same_kind": same_kind}
 
 
 def _engine_fix(tunnel_id: int, say) -> None:
@@ -649,6 +666,9 @@ def _engine_fix(tunnel_id: int, say) -> None:
     except Exception:
         log.exception("the slow tunnel %s could not be kept in the Doctor's memory", name)
 
+    return fixed
+
+
 def _say_checks(say, f: dict) -> None:
     """The checks of a look at a drop or at a very slow tunnel, one line each: the two servers, the other tunnels of the same servers, the loss, the delay, the users."""
     for side in ("iran", "foreign"):
@@ -699,12 +719,113 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
     _keep_why(tunnel_id, code, sentence, "dropped")
     say("Where the problem is: " + sentence)
 
+    fixed = None
+
     if code == "this_only":
-        _engine_fix(tunnel_id, say)
+        fixed = _engine_fix(tunnel_id, say)
+
+    if code in DROP_SWAP_CODES and fixed is not True:
+        _swap_after_drop(aid, tunnel_id, say)
 
     if finish:
         autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)
 
+
+DROP_SWAP = True                          # (the tests of the other files turn it off: a swap tests types on the real servers)
+DROP_SWAP_CODES = ("kind_wide", "this_only", "stalled", "loss", "latency")          # a busy server, a whole server dropping or "full of users" is not cured by another type of this tunnel
+DROP_TRIES = 3                            # types tested (speed included) for a tunnel that dropped
+DROP_GAIN = 2.0                           # a type must give at least this many times what the dropped tunnel gives now ...
+DROP_LOSS = 1.0                           # ... lose at most this % of the packets in its test (steady) ...
+DROP_PING_SLACK, DROP_PING_MS = 1.3, 15.0 # ... and answer about as fast as the running type (the ping is what the user feels first)
+
+
+def drop_pick(results: list[dict], steady: dict, now_mbps: float, rtt: float | None) -> dict | None:
+    """Pure: the tested type to change a dropped tunnel to, or None. A candidate must have CONNECTED in its own test, lost at most DROP_LOSS %, given at least DROP_GAIN times what the dropped tunnel gives now (and
+    knowledge.FASTER_MIN_MBPS), and not answer much slower than the running type; a type the memory knows to be UNSTEADY is never picked. `steady`: {kind: stability %} from the Doctor's memory - a type whose
+    stability is PROVEN (known, STEADY_OK or more) goes before one that is not proven yet, then the faster. The caller changes the tunnel by itself only to a proven one (the owner, 2026-10-21: "if there is no stability, do not go to that type by itself")."""
+    from . import knowledge
+
+    need = max(knowledge.FASTER_MIN_MBPS, DROP_GAIN * float(now_mbps or 0))
+    ok = [r for r in results if (steady.get(r["kind"]) is None or steady[r["kind"]] >= knowledge.STEADY_OK) and r.get("score") is not None and float(r.get("loss_pct") or 0) <= DROP_LOSS and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need
+          and (rtt is None or r.get("latency_ms") is None or float(r["latency_ms"]) <= DROP_PING_SLACK * float(rtt) + DROP_PING_MS)]
+    return min(ok, key=lambda r: (steady.get(r["kind"]) is None, -float(r["down_mbps"]))) if ok else None
+
+
+def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
+    """A tunnel dropped and the look found no outside cause (the owner, 2026-10-21: "when we have a drop the Doctor must test the other types - the problem may not exist on them - and it can change the type; I said
+    the tunnel must be steady"). The Doctor TESTS the other types the memory of the pair knows to be steady (or has not tried enough yet), with a real speed test, one after the other, and changes the tunnel to
+    the one that gives clearly more and was clean in its test (`drop_pick`) - with the rails of every automatic change: once in 24 hours per tunnel, at a quiet moment, the old type put back when the new one does
+    not build or gives clearly less. Nothing when the Doctor is off; when no type is clearly better the tunnel stays as it is and keeps being measured."""
+    from . import actions, autopilot, doctor, knowledge, license
+
+    if not DROP_SWAP:
+        return
+
+    if actions.doctor_mode() == "off" or get_settings().read_only:
+        say("The Doctor is off (or the panel is read-only): it does not test other types.")
+        return
+
+    f = _facts(tunnel_id)
+
+    if f.get("state") not in ("drop", "slow"):
+        return                                                   # (the restart brought it back)
+
+    fam = f.get("same_kind") or {}
+    bad_family = fam.get("family") if explain(f)[0] == "kind_wide" else None          # (the carrier is disturbed on many tunnels: no type that runs on it is tried)
+
+    snap = autopilot._snapshot(tunnel_id)
+    cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+    now = int(time.time())
+    block = doctor.may_retype(snap["name"], doctor._state().get("retype_done") or {}, now)
+
+    if block:
+        say(f"The Doctor does not change the type now: {block}.")
+        return
+
+    p = knowledge.pair(snap["iran_id"], snap["foreign_id"])
+    rows = [r for r in knowledge.ranked(p, now) if r["kind"] != cur and license.tunnel_kind_allowed(r["kind"]) and (r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK)
+            and r["kind"].rsplit(":", 1)[-1] != bad_family]
+    kinds = [r["kind"] for r in rows]
+
+    if not kinds:                                                # (nothing known about the pair: the Doctor's own order for it)
+        plan, _ = knowledge.plan_for(snap["iran_id"], snap["foreign_id"], cur, False, True)
+        kinds = [k for k in plan if k != cur and license.tunnel_kind_allowed(k) and k not in knowledge.blocked(p, now) and k.rsplit(":", 1)[-1] != bad_family]
+
+    kinds = kinds[:DROP_TRIES]
+
+    if not kinds:
+        say(f"No other tunnel type can be tried between {snap['iran_name']} and {snap['foreign_name']} (none is steady in the Doctor's memory, or the licence allows none).")
+        return
+
+    say(f"{snap['name']} ({cur}) dropped and nothing outside it explains it - the problem may not be on the other types. The Doctor tests {', '.join(kinds)} between {snap['iran_name']} and {snap['foreign_name']} now, speed included.")
+
+    try:
+        results = autopilot._recommend_now(aid, snap["iran_id"], snap["foreign_id"], kinds, measure="full")
+    except (ValueError, RuntimeError, SSHError) as e:
+        say(f"The test could not run ({str(e)[:120]}): the tunnel stays {cur}; the Doctor keeps measuring.")
+        return
+
+    shown = ", ".join(f"{r['kind']} {float(r['down_mbps']):.0f} Mb/s" for r in results if r.get("down_mbps") is not None) or "none carried data"
+    say(f"Tested: {shown}.")
+    steady = {r["kind"]: r.get("steady") for r in knowledge.ranked(knowledge.pair(snap["iran_id"], snap["foreign_id"]), int(time.time()), include_poor=True)}          # (the tests just made are in the memory now: the stability counts them)
+    best = drop_pick(results, steady, float(f.get("now") or 0), f.get("rtt"))
+
+    if best is None:
+        say(f"No tested type gives clearly more than {float(f.get('now') or 0):.0f} Mb/s with a clean line and a steady record: {snap['name']} stays {cur}, and the Doctor keeps measuring it.")
+        return
+
+    st_ = steady.get(best["kind"])
+    note = f"stability in the Doctor's memory {st_} %" if st_ is not None else "not enough earlier tests to call it steady"
+    why = (f"{cur} dropped to {float(f.get('now') or 0):.0f} Mb/s (usually {float(f.get('ref') or 0):.0f}); {best['kind']} gave {float(best['down_mbps']):.0f} Mb/s in the speed test just now, lost {float(best.get('loss_pct') or 0):g} % "
+           f"and answered in {float(best.get('latency_ms') or 0):.0f} ms; {note}.")
+
+    if st_ is None:                                              # (a type that was not proven steady is never taken by itself: the owner decides with one click)
+        doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, best["kind"], why, extra={"now_kind": cur, "to_kind": best["kind"], "now_mbps": f.get("now"), "memory_mbps": best["down_mbps"]})
+        say(f"Suggested on the Doctor page: {cur} → {best['kind']}. {why} It is not changed by itself: its steadiness is not proven yet (it needs {knowledge.STEADY_MIN_TESTS} tests; each test of the pair counts).")
+        return
+
+    say(f"The Doctor changes the type by itself ({actions.doctor_mode()} mode): {cur} → {best['kind']}.")
+    doctor._run_retype(aid, tunnel_id, best["kind"], cur, why, auto=True)
 
 def _investigate_slow(aid: int, tunnel_id: int, f: dict, say, finish: bool) -> None:
     """A tunnel that was never fast (two tests in a row under SLOW_MBPS, no usual level to drop from): the same checks, the sentence, and - from what the Doctor KNOWS of the pair - a type that gave clearly more (a suggestion)."""
@@ -743,7 +864,13 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
         say(f"The Doctor's memory of {snap['iran_name']} ⇄ {snap['foreign_name']} knows no other type that gave clearly more than {cur} here. To find one: Doctor → Knowledge → test this pair.")
         return
 
-    r = rows[0]
+    rows = [r for r in rows if r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK]          # (a type that fell or failed in some of its tests is not offered)
+
+    if not rows:
+        say(f"The Doctor's memory knows a faster type for {snap['iran_name']} ⇄ {snap['foreign_name']}, but it was not steady in its tests: nothing is offered.")
+        return
+
+    r = next((x for x in rows if x.get("steady") is not None), rows[0])          # (a type with a proven steadiness first)
     age = max(0, (now - int(r.get("at") or now)) // 3600)
     why = (f"{cur} gives {f['now']} Mb/s in the test" + (f" (the users carry {live:.0f} Mb/s through it now)" if live else "") + f"; the Doctor's memory has {r['kind']} at {float(r['down_mbps']):.0f} Mb/s on this pair, measured {age} h ago.")
     doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": f.get("now"), "memory_mbps": r["down_mbps"]})
@@ -755,6 +882,10 @@ def _suggest_faster(aid: int, tunnel_id: int, f: dict, say) -> None:
         return
 
     if get_settings().read_only:
+        return
+
+    if r.get("steady") is None:                                  # (not proven steady: the owner decides with one click, the Doctor does not change a running tunnel to it)
+        say(f"Not done by itself: the steadiness of {r['kind']} is not proven yet ({knowledge.steady_note(r)}).")
         return
 
     say(f"The Doctor does it by itself ({actions.doctor_mode()} mode): {cur} → {r['kind']}.")

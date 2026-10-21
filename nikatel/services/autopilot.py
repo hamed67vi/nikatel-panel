@@ -793,7 +793,7 @@ def connected(r: dict) -> bool:
     return r.get("score") is not None and (r.get("loss_pct") or 0) < CONNECTED_LOSS
 
 
-def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], patience: int = 1200, first_ok: bool = False) -> list[dict]:
+def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], patience: int = 1200, first_ok: bool = False, measure: str = "latency") -> list[dict]:
     """Test the candidate types, in the order given. Only one tunnel test runs at a time on the panel, so when another repair is testing, wait for its turn (a night survey gives its place up at once).
     With `first_ok` the tests stop at the first candidate that works: the order is the Doctor's knowledge of this pair (best first), so the first one that passes is the one to build."""
     from . import license
@@ -810,7 +810,7 @@ def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], pa
         knowledge.yield_slot()               # (a survey of the pair gives the place up: the repair is more urgent than knowing)
 
         try:
-            jid = tunnel_test.compare_start(iran_id, foreign_id, kinds, measure="latency")
+            jid = tunnel_test.compare_start(iran_id, foreign_id, kinds, measure=measure)
             break
         except (ValueError, RuntimeError) as e:
             if "still running" not in str(e) or time.time() > end_wait:
@@ -822,8 +822,8 @@ def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], pa
 
             time.sleep(20)
 
-    _say(aid, f"Testing up to {len(kinds)} tunnel types between the two servers (delay and loss only, about a minute each): " + ", ".join(kinds) + (" - it stops at the first that connects." if first_ok else "."))
-    end = time.time() + max(1500, 150 * len(kinds))
+    _say(aid, f"Testing up to {len(kinds)} tunnel types between the two servers ({'delay, loss and speed, a few minutes each' if measure == 'full' else 'delay and loss only, about a minute each'}): " + ", ".join(kinds) + (" - it stops at the first that connects." if first_ok else "."))
+    end = time.time() + max(1500, (400 if measure == "full" else 150) * len(kinds))
     stopped = False
 
     while time.time() < end:

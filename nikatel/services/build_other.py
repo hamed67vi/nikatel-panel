@@ -948,6 +948,62 @@ def _build(b: Build) -> None:
     _say(aid, f"Tunnel {b.name} is ready.", done=True, ok=True)
 
 
+# ------------------------------------------------------------------ ports of an existing tunnel
+def set_ports(tunnel_id: int, ports_text: str) -> dict:
+    """Change the forwarded ports of a BackPack (reverse or direct), Paqet or Chisel tunnel: the file that holds the list is rewritten (the Iran toml / yaml; the client unit of Chisel), the service restarted, every port
+    must listen, otherwise the server puts the old file back. The record follows. (The owner, 2026-10-21: the menu of a BackPack direct tunnel had no "Ports…" - "for every tunnel that needs it".)"""
+    import base64
+
+    ports = parse_ports(ports_text)
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        rec = t.record or {}
+        kind = rec.get("kind")
+
+        if kind not in ("backpack", "backpack_direct", "paqet", "chisel"):
+            raise ValueError("the ports of this kind of tunnel cannot be changed here")
+
+        iran, foreign, name, test_port = _node(t.iran), _node(t.foreign), sname(t), int(rec.get("test_port") or 0)
+        udp, forward = bool((rec.get("opts") or {}).get("accept_udp")), rec.get("direction") == "forward"
+
+    b64 = lambda text: base64.b64encode(text.encode()).decode()
+    check = " ".join(str(p.listen) for p in ports)
+
+    if kind == "paqet":
+        body = "\n".join(f'  - listen: "{ls}"\n    target: "{tg}"\n    protocol: "{pr}"' for ls, tg, pr in forward_rows(ports, test_port, udp))
+        out = run_action(iran, "set_ports_paqet", {"CFG": name, "B64": b64(body), "CHECK": check}, timeout=60)
+        done = "PORTS_OK" in out
+    elif kind == "chisel":
+        client, unit = (iran, f"chisel-{name}.service") if forward else (foreign, f"chisel-{name}-kharej.service")          # (the side that dials holds the remotes)
+        out = run_action(client, "set_ports_chisel", {"UNIT": unit, "B64": b64(" ".join(f"'{r}'" for r in chisel_remotes(ports, test_port, udp, forward)))}, timeout=60)
+        done = "EDITED" in out and "LISTENING" in run_action(iran, "ports_wait", {"CHECK": check}, timeout=40)
+
+        if not done and "EDITED" in out:
+            run_action(client, "unit_restore", {"UNIT": unit}, timeout=60)
+    else:
+        body = "\n".join(f'    "{e}",' for e in _entries(ports, test_port))
+        out = run_action(iran, "set_ports_bp", {"CFG": name, "B64": b64(body), "CHECK": check}, timeout=60)
+        done = "PORTS_OK" in out
+
+    if not done:
+        raise RuntimeError("the ports were not changed (the old file was put back): " + out.strip()[-160:])
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        t.forwarded_ports = [p.listen for p in ports]
+        rec = dict(t.record or {})
+        rec["port_mapping"] = ",".join(p.spec() for p in ports)
+        t.record = rec
+        emit(db, "info", "tunnels", f"Ports of tunnel {name} changed to {', '.join(p.spec() for p in ports)}.", name)
+
+    return {"ports": [p.listen for p in ports], "mapping": ",".join(p.spec() for p in ports)}
+
+
 # ------------------------------------------------------------------ remove / quality of an existing tunnel
 def remove_args(t: Tunnel) -> tuple[dict, list]:
     """What removing a BackPack / Paqet / Chisel tunnel needs - the parameters of the action and the two servers - read while the row is loaded, so that the asking (`remove_on`) can happen with no database session open."""

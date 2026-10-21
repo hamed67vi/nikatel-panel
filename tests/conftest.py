@@ -45,6 +45,16 @@ def _no_type_test_in_moves(monkeypatch):
     from nikatel.services import failover
 
     monkeypatch.setattr(failover, "PICK_BEST", False)
+
+
+@pytest.fixture(autouse=True)
+def _no_type_test_after_a_drop(monkeypatch):
+    """After a drop the Doctor tests other types between the pair's servers (bandwidth._swap_after_drop): that needs SSH and minutes - only the tests that are about it turn it on."""
+    from nikatel.services import bandwidth
+
+    monkeypatch.setattr(bandwidth, "DROP_SWAP", False)
+
+
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient

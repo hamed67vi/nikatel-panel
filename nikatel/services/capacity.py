@@ -68,7 +68,7 @@ def saturation(rx: list[float | None], cap: float | None, peak24: float | None =
 def better_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[dict]:
     """Pure: the types the Doctor's memory of the pair knows to carry CLEARLY more than the running type: both numbers are FULL pair tests of the same kind of measurement and fresh; the other type carried at least
     LANE_RATIO times as much and LANE_GAIN Mb/s more, lost at most LANE_MAX_LOSS % and scored at least as well; the licence allows it. The fastest first. Empty when the running type has no fresh full test on the pair
-    (nothing to compare with: nothing is guessed). Only a type that SUCCEEDED in a test is ever chosen."""
+    (nothing to compare with: nothing is guessed). Only a type that SUCCEEDED in a test AND whose steadiness is PROVEN (`knowledge.stability`: at least STEADY_MIN_TESTS tests, STEADY_OK or more) is ever chosen."""
     from . import knowledge
 
     full = (((pair or {}).get("kinds") or {}).get(current) or {}).get("full") or {}
@@ -79,7 +79,8 @@ def better_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: Tr
     base = float(full["down_mbps"])
     need = max(base * LANE_RATIO, base + LANE_GAIN)
     rows = [r for r in knowledge.ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need
-            and now - int(r.get("at") or 0) <= knowledge.FASTER_FRESH and float(r.get("loss_pct") or 0) <= LANE_MAX_LOSS and (r.get("score") or 0) >= (full.get("score") or 0) and allowed(r["kind"])]
+            and now - int(r.get("at") or 0) <= knowledge.FASTER_FRESH and float(r.get("loss_pct") or 0) <= LANE_MAX_LOSS and (r.get("score") or 0) >= (full.get("score") or 0) and allowed(r["kind"])
+            and r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK]          # (STEADY: it passed its tests - the owner, 2026-10-21: "if there is no stability, do not go to that type by itself")
     return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r["score"] or 0)))
 
 
