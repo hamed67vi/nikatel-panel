@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.63 - The tunnel list: a tunnel with a problem first, then every location together in alphabetical order
+
+> **به زبان ساده:** در لیست تانل‌ها هر تانلی که مشکل دارد بالای لیست می‌آید (اول قطع‌ها، بعد بقیهٔ مشکل‌دارها). بعد از آن هر لوکیشن (کشورِ سرور خارج) کنار هم می‌نشیند و لوکیشن‌ها به ترتیب الفبای انگلیسی‌اند؛ تانل‌های یک لوکیشن هم به ترتیب نام. سرورهایی که کشورشان معلوم نیست آخر لیست‌اند.
+>
+> **In short:** problem tunnels first (the cut ones, then the others), then every location together (the country of the foreign server) alphabetically, the tunnels of a location by name; unknown locations last. The grouping by type is gone.
+
+The owner (2026-10-21, a picture of the list): "every tunnel that has a problem comes to the top; every location next to each other, then in alphabetical order."
+
+- **The order** (`app.js tunCmp`, the same rule as the server list's order): 1) a tunnel with a problem - the ones `tunSev` calls red (cut) first, then the yellow ones (unknown / starting, loss, a dropped or very slow capacity); 2) the tunnels without a problem, every LOCATION together - the country of the foreign server by its English name - the locations in alphabetical order (a tunnel of `DE2` and `DE3` stand together under Germany); 3) the tunnels of one location by name, the case ignored; a server with no known country last. It replaces the old grouping by tunnel type (Backhaul, BackPack, ...), which the type column still shows.
+- **No jump**: a placeholder of a tunnel that is being built again takes the place of the row it replaces (a problem row stays at the top while the Doctor works on it).
+- **Proved**: `tests/test_tunnel_order.py` - the comparison runs through node: the cut first, then the yellow ones, then Canada, Finland, Germany (DE2 and DE3 together), the United Kingdom, the United States, an unknown country last; the tunnels of a location by name with the case ignored; a placeholder keeps the cached row's place; the list uses it and the type grouping is gone. **Not proved**: the look in a browser; the countries come from the `country` of the foreign server in the panel - a server without one is last until it is set.
 ## 1.69.62 - The usage of the configs of a PasarGuard panel: which are little used, which are falling (a counting table on the servers, the CDN reports, the client apps beside it)
 
 > **به زبان ساده:** در صفحهٔ «Panel ← General ← Usage» بخش تازهٔ «Configs» آمد: برای هر کانفیگ (هاست) و هر اینباند پنل پاسارگاد مصرف ۲۴ ساعت، ۷ روز و ۳۰ روز، اوج اتصال هم‌زمان، پیکان روند و برچسب‌های «کم‌مصرف» و «رو به کاهش» با نمودار کوچک نشان داده می‌شود؛ کنارش آمار برنامه‌های کاربران (V2Box، v2rayNG، Hiddify، Happ …). پاسارگاد خودش مصرف هر کانفیگ را نگه نمی‌دارد، پس پنل خودش می‌شمارد: یک جدول nftables که فقط می‌شمارد (چیزی را قطع، منحرف یا ری‌استارت نمی‌کند، با «Remove» برداشته می‌شود) روی سرورهایی که شما روشن می‌کنید، و گزارش مصرفِ خودِ CDN (آروان/کلودفلر) برای هاست‌های پشت CDN. تاریخچه از لحظهٔ روشن‌شدن شمارنده شروع می‌شود.
