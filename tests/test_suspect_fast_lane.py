@@ -1,15 +1,19 @@
 """A tunnel that is "up" but failed its newest check is confirmed after ~8 s, not at the next turn of the slow cycle (the owner, 2026-10-21: the tunnel to the US was cut and the panel did not call it cut for about
 two minutes: the slow cycle found the first failed check, then waited a whole minute for the second one that CONFIRM_CHECKS asks for)."""
+import itertools
 import time
 
 from nikatel.db import session
 from nikatel.models import Server, Tunnel, TunnelCheck
 from nikatel.services import tunnels
 
+HOSTS = itertools.count(100)
+
 
 def _tunnel(tag, state="up", last_check_ago=30, enabled=True):
     with session() as db:
-        ir, fo = Server(name=f"ir-{tag}", host="203.0.113.91", role="iran", online=True), Server(name=f"fo-{tag}", host="198.51.100.91", role="foreign", online=True)
+        n = next(HOSTS)
+        ir, fo = Server(name=f"ir-{tag}", host=f"203.0.113.{n}", role="iran", online=True), Server(name=f"fo-{tag}", host=f"198.51.100.{n}", role="foreign", online=True)
         db.add_all([ir, fo])
         db.flush()
         t = Tunnel(name=f"t-{tag}", type="backhaul", transport="tcpmux", iran_server_id=ir.id, foreign_server_id=fo.id, state=state, enabled=enabled, forwarded_ports=[8075],

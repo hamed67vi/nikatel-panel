@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.71 - Fix of the test of 1.69.70
+
+> **به زبان ساده:** فقط اصلاح یک تست از نسخهٔ قبل؛ کد برنامه تغییری نکرده است.
+>
+> **In short:** only the test of 1.69.70 is fixed; the program code is unchanged.
+
+`tests/test_suspect_fast_lane.py` of 1.69.70 built several servers with the same address (`servers.host` is unique) and failed in the whole suite; it uses a different address for each tunnel now. 1.69.70 was shipped with that test failing - the script that ran the affected tests did not stop on a failure. Nothing in `nikatel/` changed.
+
 ## 1.69.70 - A cut is called ~10 s after the first failed check, not after two turns of the slow cycle
 
 > **به زبان ساده:** تانلی که ناگهان دیتا رد نمی‌کند حالا حدود ۱۰ ثانیه بعد از اولین بررسی خراب «قطع» اعلام می‌شود، نه بعد از دو دقیقه.
