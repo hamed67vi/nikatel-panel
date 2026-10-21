@@ -1268,14 +1268,3 @@ html body #page .abt-grid.abt-nolic > #about-hero .abt-cb { flex: 0 1 380px; min
 
 /* Persian is switched off for now (PERSIAN_ON in i18n.js): the language button is not shown, also before the script has removed it */
 html[data-persian="off"] .lang-btn { display: none !important; }
-
-/* the tunnel list in groups by type: a head row in the same table (a folded group hides its rows; a search opens them) */
-html body #page .tun-tbl tr.tun-ghead td { padding: 16px 8px 6px; background: none !important; border: 0; box-shadow: none; cursor: pointer; }
-html body #page .tun-tbl tr.tun-ghead:first-child td { padding-top: 6px; }
-html body #page .tun-tbl .gh { display: flex; align-items: center; gap: 10px; }
-html body #page .tun-tbl .gh-n { font-size: 12px; opacity: .7; font-weight: 700; }
-html body #page .tun-tbl .gh-bad { font-size: 12px; font-weight: 800; color: var(--bad, #ff5d73); }
-html body #page .tun-tbl .gh-ar { display: inline-block; font-style: normal; opacity: .7; transition: transform .15s; }
-html body #page .tun-tbl tr.tun-ghead.off .gh-ar { transform: rotate(-90deg); }
-html body #page .tun-tbl tr.g-off { display: none; }
-html body #page .tun-tbl.q-on tr.g-off:not(.q-hide) { display: table-row; }

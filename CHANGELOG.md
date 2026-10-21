@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.85 - The tunnels of a type sit together, with no head rows
+
+> **به زبان ساده:** عنوان‌ها و جمع‌شدن دسته‌ها برداشته شد؛ فهرست عین قبل است و فقط تانل‌های هم‌نوع پشت سر هم می‌آیند.
+>
+> **In short:** no head rows or folding any more; the list is as before and the tunnels of one type follow each other.
+
+The owner (2026-10-22), after seeing 1.69.84 (a head row per type, with a fold): "do not separate them like this - the same as before, only fix how they are placed".
+
+- **Removed**: the head rows, the fold (`tunGroupToggle`, `nk.tgoff`), `data-g`, the search rules for them and their CSS.
+- **Kept**: the placement (`tunGroups` only gives the ORDER now): the tunnels of one type (what the Type column says) follow each other; the type that holds a cut first, then one with another problem, then the others - the biggest first, then by name; inside a type a problem first, then the location, then the name (the order of 1.69.62). The table is one table with 8 columns as before.
+- **Proved**: `tests/test_tunnel_groups.py` (a node run of the real order; no head rows are left in the source or the stylesheet) and the tests that read the tunnel page. **Not proved**: in the owner's browser.
+
 ## 1.69.84 - The tunnel list in groups by tunnel type
 
 > **به زبان ساده:** فهرست تانل‌ها بر اساس نوع دسته‌بندی شد؛ هر دسته ردیف عنوان دارد (تعداد، تعداد مشکل‌دارها) و با کلیک جمع می‌شود.

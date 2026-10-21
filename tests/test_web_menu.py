@@ -1325,7 +1325,7 @@ def test_a_tunnel_a_repair_has_just_removed_keeps_its_row_so_the_page_does_not_j
     assert res["deleted"] == "0/false/0"                                                                       # a tunnel that is gone and not being repaired is forgotten for good (a later repair of that name finds no old row)
     page = app[app.index("PAGES.tunnelsList = async"): app.index("function tunGrid(t)")]
     assert "const all = list.concat(tunGhosts(" in page and "const rows = all.filter(" in page and "nProblems = all.filter(tunSev).length" in page and 'All <i class="cnt">${all.length}</i>' in page
-    assert "tunGroups(rows).map(g => tunGroupHead(g" in page and "state.tunRowCache.get(t.name)" in app                                                                    # (a placeholder of a tunnel built again takes the place of the row it replaces; the order itself is tests/test_tunnel_order.py)
+    assert "tunGroups(rows).flatMap(g => g.a).map(row)" in page and "state.tunRowCache.get(t.name)" in app                                                                    # (a placeholder of a tunnel built again takes the place of the row it replaces; the order itself is tests/test_tunnel_order.py)
 
 
 def test_a_standby_that_is_ready_and_idle_shows_no_bar():
