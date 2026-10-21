@@ -1,5 +1,5 @@
 """The word "dropped" stays on a tunnel whose capacity fell, but the colour is red only when the users feel it (the owner, 2026-10-21: "write dropped, but red only when the users' bandwidth is reduced"): the users use at least half of
-the dropped capacity (or nothing moves at all); otherwise it is amber ("dip"). The rule runs through node."""
+the dropped capacity (or nothing moves at all); otherwise it is a quiet grey-blue ("dip") and the tunnel stays where it is in the list. The rule runs through node."""
 import json
 import shutil
 import subprocess
@@ -24,9 +24,11 @@ def test_a_dropped_capacity_is_red_only_when_the_users_use_a_big_part_of_it():
     assert json.loads(out.stdout) == [False, False, True, True, True, True, False, False]          # (the list of the owner's screenshot: 9.8 of 575, 4.6 of 75 - not red; half of the capacity or more - red; no data - red; no reading of the users - not red)
 
 
-def test_the_word_stays_and_the_colour_is_amber_in_the_list_and_the_window():
+def test_the_word_stays_in_a_quiet_grey_blue_and_only_a_drop_the_users_feel_is_red_and_lifts_the_row():
     fn = APP.split("const bwMeterFor = t => {", 1)[1].split("const bwTone", 1)[0]
     assert 'hurt = prob && bwHurts(t)' in fn and 'prob ? (!hurt ? "dip" : stall || b.state === "drop" ? "drop" : "slow") : full ? "full" : "ok"' in fn
     assert 'prob ? (stall ? "no data" : b.state === "drop" ? "dropped" : "very slow")' in fn          # the word is the same, red or not
     assert '? (bwHurts(t) ? "drop" : "dip")' in APP and 'tone === "dip" ? bwWhy(t) +' in APP and "so they do not feel the drop" in APP
-    assert ".bwm.dip .bwm-bar u" in CSS and ".bwm.dip .bwm-t small" in CSS and ".bwbig.dip .bwbig-track u" in CSS
+    assert ".bwm.dip .bwm-t small { color: var(--mut);" in CSS and ".bwm.dip .bwm-bar u" not in CSS and ".bwbig.dip" not in CSS          # one quiet colour, no amber for a dip (the owner, 2026-10-22)
+    sev = APP.split("const tunSev = t =>", 1)[1].split("\n", 1)[0]
+    assert '(["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t)) ? "sev-yellow"' in sev          # a drop the users do not feel does not lift the row (the order, the Problems filter and its counter follow tunSev)

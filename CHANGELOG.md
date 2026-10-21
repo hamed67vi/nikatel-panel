@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.82 - A dropped capacity the users do not feel: one quiet colour, and the tunnel stays where it is
+
+The owner (2026-10-22, on the list of 1.69.81 where the "dropped" words were amber): "if the users' bandwidth fell it should come up, otherwise stay in its place; the orange ones - one colour, the panel's grey-blue; only the red stays".
+
+- **Colour**: the word "dropped" (or "very slow") of a tunnel whose users do not feel it is the panel's own grey-blue chip, its bar the usual blue - no amber. Only a drop the users feel (no data, or the users use half of the capacity or more) is red. "Nearly full" keeps its amber (it is a different warning).
+- **Place**: `tunSev` counts a dropped or very slow capacity only when the users feel it, so a drop they do not feel no longer lifts the tunnel to the top of the list, no longer fills the Problems filter and its counter, and no longer tints the row. A tunnel that is cut, unstable (loss) or whose users feel the drop is first, as before.
+- **Proved**: `tests/test_dropped_amber.py` (the rule on the numbers of the owner's list; `tunSev` uses it; the css has no amber for the quiet state).
+- **Not proved**: how the list looks in a browser with the new colour; the Problems counter on a real list.
 ## 1.69.81 - "dropped" stays, but it is red only when the users feel it
 
 The owner (2026-10-21, a list where 10 of 19 tunnels said "dropped" in red while their users used 5 - 15 Mb/s of 75 - 575): "write dropped, but make it red only when the users' bandwidth is reduced".

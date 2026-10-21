@@ -1276,7 +1276,7 @@ def test_the_page_paints_red_only_where_the_doctor_sees_a_stall_and_a_very_slow_
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
     assert 'b.state === "slow" ? "slow" : "ok"' in capcell and "html body #page .tun-tbl .bwcap.drop b, html body #page .tun-tbl .bwcap.slow b" in css
     assert 'if (b.state === "slow") parts.push("VERY SLOW' in app and 'state === "slow" ? `Very slow:' in app
-    assert '["drop", "slow"].includes((t.bw || {}).state) ? "sev-yellow"' in app and 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state)' in app        # the row is looked at, and the Doctor page lists it under "to look at"
+    assert '(["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t)) ? "sev-yellow"' in app and 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state)' in app        # the row is looked at, and the Doctor page lists it under "to look at"
 
 
 def test_the_capacity_and_the_use_are_written_inside_one_bar():
