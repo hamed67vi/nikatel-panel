@@ -18,12 +18,12 @@ NOW = 1_800_000_000
 
 
 def _pair(kinds, now=NOW):
-    """A memory of a pair: {kind: (down_mbps, loss, score)} as FULL measurements made a day before `now`."""
-    return {"kinds": {k: {"full": {"score": s, "down_mbps": d, "loss_pct": loss, "latency_ms": 80.0, "at": now - 86400}, "last": {"ok": True, "at": now - 86400}} for k, (d, loss, s) in kinds.items()}}
+    """A memory of a pair: {kind: (down_mbps, loss, score[, ping ms])} as FULL measurements made a day before `now`."""
+    return {"kinds": {k: {"full": {"score": v[2], "down_mbps": v[0], "loss_pct": v[1], "latency_ms": v[3] if len(v) > 3 else 80.0, "at": now - 86400}, "last": {"ok": True, "at": now - 86400}} for k, v in kinds.items()}}
 
 
 def test_a_better_type_is_one_that_carried_three_times_as_much_and_100_mbps_more_and_was_stable():
-    p = _pair({"tcpmux": (160, 0, 62), "bp:tcpmux": (1293, 0, 95), "tcp": (2218, 0, 94), "bp:wssmux": (1059, 4, 94), "wsmux": (300, 0, 60), "chisel:tls": (700, 0, 50)})
+    p = _pair({"tcpmux": (160, 0, 62), "bp:tcpmux": (1293, 0, 95), "tcp": (2218, 0, 94), "bp:wssmux": (1059, 4, 94), "wsmux": (300, 0, 60), "chisel:tls": (700, 0, 50, 230)})
     rows = knowledge.upgrade_kinds(p, NOW, "tcpmux")
     assert [r["kind"] for r in rows] == ["tcp", "bp:tcpmux"]                      # (the fastest first; 1059 lost 4 %: not stable; 300 is not 3 times; chisel scored worse than the running type)
     assert knowledge.upgrade_kinds(p, NOW, "tcpmux", allowed=lambda k: k != "tcp")[0]["kind"] == "bp:tcpmux"

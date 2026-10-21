@@ -82,7 +82,7 @@ def test_parsers_and_score():
         bo.parse_net("IF=eth0\nIP=\n")
 
     q = bo.parse_probe("noise\nNKPROBE " + json.dumps({"latency_ms": 60, "jitter_ms": 2, "loss_pct": 0, "down_mbps": 400, "up_mbps": 200}))
-    assert 65 <= bo.quality_score(q) <= 85 and bo.quality_score({"error": "x"}) == 0
+    assert 85 <= bo.quality_score(q) <= 100 and bo.quality_score({"error": "x"}) == 0          # (1.69.63: speed and ping first; 400 Mb/s and 60 ms is a good tunnel for a user)
     assert bo.quality_score({"latency_ms": 20, "jitter_ms": 0, "loss_pct": 0, "down_mbps": 900, "up_mbps": 900}) == 100
 
     with pytest.raises(RuntimeError):

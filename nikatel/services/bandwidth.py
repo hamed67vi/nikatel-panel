@@ -518,6 +518,11 @@ def run() -> None:
         if _RUNNING:
             return
 
+    try:
+        _zero_watch()
+    except Exception:
+        log.exception("the watch of the tunnels that nobody uses failed")
+
     now = int(time.time())
     ids = _due(now)
 
@@ -787,6 +792,196 @@ def _upgrade_check(tunnel_id: int) -> None:
            f"lost {float(r.get('loss_pct') or 0):g} % and scored {r['score']} ({age} h ago). Nothing is wrong with {cur}: this is a better type known for this pair.")
     doctor.suggest("type", tunnel_id, snap["name"], snap["iran_id"], cur, None, r["kind"], why, extra={"now_kind": cur, "to_kind": r["kind"], "now_mbps": base, "memory_mbps": r["down_mbps"], "upgrade": True})
     log.info("a better type for tunnel %s: %s -> %s", tunnel_id, cur, r["kind"])
+
+
+# ------------------------------------------------------------------ a tunnel that nobody uses
+ZERO_MBPS = 0.05          # what the users use under this: nobody uses the tunnel
+ZERO_AFTER = 5 * 60       # ... for this long (the live reader reads every 30 s even when nobody looks at the page)
+ZERO_GAP = 3 * 3600       # a silent tunnel is looked into again at most this often (a test carries up to 120 MB: an idle tunnel must not be tested all day)
+LOSS_BAD = 5.0            # packets lost (%): a problem
+PING_HIGH_RATIO, PING_HIGH_EXTRA_MS = 2.0, 60.0          # the ping is a problem when it is this many times its usual AND this much more
+_ZERO: dict[int, dict] = {}
+
+
+def zero_step(entry: dict | None, now: int, use: float | None, up: bool) -> tuple[dict | None, bool]:
+    """Pure: one turn of the watch for one tunnel - (its new state, look now?). The state is None while the tunnel is down, has no reading, or its users use something (the silence starts again); otherwise
+    {"since": when the silence began, "looked": when the Doctor last looked into it}. Look when the silence has lasted ZERO_AFTER and the last look is older than ZERO_GAP."""
+    if not up or use is None or use >= ZERO_MBPS:
+        return None, False
+
+    e = dict(entry or {})
+    e.setdefault("since", now)
+    look = now - int(e["since"]) >= ZERO_AFTER and ("looked" not in e or now - int(e["looked"]) >= ZERO_GAP)
+
+    if look:
+        e["looked"] = now
+
+    return e, look
+
+
+def silent_problems(f: dict) -> list[str]:
+    """Pure: what is WRONG with a tunnel nobody uses, from what the full look found - `f`: state, last_error, data_fails, ext_code, loss, ping, usual_ping, bw_state, carries. An empty list: nothing is wrong, the
+    users are simply quiet (or their trouble is beyond the tunnel)."""
+    out = []
+
+    if f.get("state") not in (None, "up"):
+        out.append(f"the tunnel is {f['state']}" + (f" ({str(f['last_error'])[:80]})" if f.get("last_error") else ""))
+
+    if f.get("data_fails"):
+        out.append("the test through its port failed")
+
+    if str(f.get("ext_code") or "") in ("000", "0"):
+        out.append("a test from another Iran server through its port got no answer")
+
+    if f.get("loss") is not None and float(f["loss"]) >= LOSS_BAD:
+        out.append(f"{float(f['loss']):g} % of the packets are lost")
+
+    if f.get("bw_state") in ("drop", "slow") or (f.get("carries") is not None and float(f["carries"]) < STALL_MBPS):
+        out.append("it carries almost nothing under load" if (f.get("carries") is not None and float(f["carries"]) < STALL_MBPS) else "what it can carry dropped")
+
+    p, u = f.get("ping"), f.get("usual_ping")
+
+    if p is not None and u is not None and float(p) >= float(u) * PING_HIGH_RATIO and float(p) >= float(u) + PING_HIGH_EXTRA_MS:
+        out.append(f"the ping is {float(p):.0f} ms, usually {float(u):.0f} ms")
+
+    return out
+
+
+def _silent_set(tunnel_id: int, rec: dict | None) -> None:
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is not None:
+            r = dict(t.record or {})
+
+            if rec:
+                r["silent"] = rec
+            else:
+                r.pop("silent", None)
+
+            t.record = r
+
+
+def _usual_ping(tunnel_id: int) -> float | None:
+    """The usual ping of a tunnel: the middle of its good checks of the last 7 days (None under 20 of them)."""
+    now = int(time.time())
+
+    with session() as db:
+        rtts = sorted(c.rtt_ms for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if c.rtt_ms is not None)
+
+    return rtts[len(rtts) // 2] if len(rtts) >= 20 else None
+
+
+def _zero_look(tunnel_id: int, name: str, silent_for: int) -> None:
+    """The Doctor looks FULLY into a tunnel that is up but that nobody uses (the owner, 2026-10-21: "a tunnel nobody uses may be at an hour when the users are truly not there - check and test it completely, and if it
+    really has a problem, fix it"; a config was cut and its tunnel said connected): a fresh look at the tunnel with the test of another Iran server through its port, the pings (latency, jitter, loss) and, where the
+    tunnel has a test door, the speed a user gets, what it can carry now, and the ping against its usual. Something wrong: the Doctor fixes it now (restart, rebuild, another type - the best for the USER first, see
+    `userscore`) - nobody is on it to be cut. Nothing wrong: it says so, with the numbers, and that the users are quiet or their trouble is beyond the tunnel."""
+    from . import autopilot, tunnel_test, userscore
+    from .tunnels import check_tunnel
+
+    with _LOCK:
+        if tunnel_id in _RUNNING:
+            return
+
+        _RUNNING.add(tunnel_id)
+
+    try:
+        check_tunnel(tunnel_id, fresh_ext=True)
+
+        with session() as db:
+            t = db.get(Tunnel, tunnel_id)
+            state, err, rtt, d = (t.state, t.last_error, t.rtt_ms, dict(t.detail or {})) if t is not None else ("", "", None, {})
+
+        try:
+            q = tunnel_test.quality(tunnel_id)
+        except (ValueError, RuntimeError, SSHError) as e:
+            log.info("the pings of the silent tunnel %s: %s", tunnel_id, str(e)[:120])
+            q = {}
+
+        bw, change = measure(tunnel_id)
+        ping = q.get("latency_ms") if q.get("latency_ms") is not None else rtt
+        loss = q.get("loss_pct") if q.get("loss_pct") is not None else d.get("loss_pct")
+        carries = bw.get("down")
+        f = {"state": state, "last_error": err, "data_fails": d.get("data_fails"), "ext_code": (d.get("ext") or {}).get("code"), "loss": loss, "ping": ping, "usual_ping": _usual_ping(tunnel_id),
+             "bw_state": bw.get("state") if change != "slow" else "slow", "carries": carries}
+        problems = silent_problems(f)
+        user = userscore.user_score({"latency_ms": ping, "jitter_ms": q.get("jitter_ms"), "loss_pct": loss, "down_mbps": q.get("down_mbps") if q.get("down_mbps") is not None else carries, "down1_mbps": q.get("down1_mbps")})
+        mins = max(1, int(silent_for) // 60)
+        said = f"ping {_mbps_text(ping)} ms, {_mbps_text(loss) if loss is not None else '?'} % lost, it carries {_mbps_text(carries)} Mb/s, what a user gets {user}/100"
+        fixing = False
+
+        if problems:
+            if actions_mode_allows_fix():
+                try:
+                    autopilot.smart_fix_start(tunnel_id, "switch", source="doctor")
+                    fixing = True
+                except (ValueError, RuntimeError) as e:
+                    log.info("the fix of the silent tunnel %s did not start: %s", tunnel_id, str(e)[:120])
+
+            note = f"Nobody has used it for {mins} minutes (it may be a quiet hour). The Doctor checked it fully ({said}) and found: " + "; ".join(problems) + (". It is fixing it now." if fixing else ".")
+        else:
+            note = (f"Nobody has used it for {mins} minutes (it may be a quiet hour). The Doctor checked it fully ({said}): nothing is wrong with the tunnel. If the users say it does not work, the problem is "
+                    "beyond it (their configs, the CDN in front of the Iran server, the foreign server's internet) - look at the configs that use this tunnel.")
+
+        now = int(time.time())
+        _silent_set(tunnel_id, {"since": now - int(silent_for), "looked_at": now, "carries": carries, "ping": ping, "loss": loss, "user": user, "bad": bool(problems), "problems": problems, "fixing": fixing, "note": note})
+
+        with session() as db:
+            emit(db, "warn" if problems else "info", "tunnels", f"Tunnel {name}: {note}", name)
+    except (ValueError, RuntimeError, SSHError) as e:
+        log.info("the look into the silent tunnel %s failed: %s", tunnel_id, str(e)[:140])
+    finally:
+        with _LOCK:
+            _RUNNING.discard(tunnel_id)
+
+
+def actions_mode_allows_fix() -> bool:
+    """May the Doctor fix by itself? In the modes fix and move (not off, not a read-only panel)."""
+    from . import actions
+
+    return actions.doctor_mode() in ("fix", "move") and not get_settings().read_only
+
+
+def _mbps_text(v) -> str:
+    return "?" if v is None else f"{float(v):.0f}" if float(v) >= 10 else f"{float(v):.1f}"
+
+
+def _zero_watch() -> None:
+    """Every minute: the tunnels that are up are read in the live reader's numbers; one that nobody uses for ZERO_AFTER is looked into (see `_zero_look`). Nothing when the Doctor is off."""
+    from ..models import is_standby
+    from . import actions
+
+    if actions.doctor_mode() == "off":
+        return
+
+    now = int(time.time())
+    view = livebw.view()
+
+    with session() as db:
+        rows = [(t.id, t.name, bool((t.record or {}).get("silent"))) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "up")) if not is_standby(t) and not is_temp(t.name)]
+
+    seen = set()
+
+    for tid, name, marked in rows:
+        seen.add(tid)
+        r = view.get(str(tid))
+        use = max(float(r.get("down") or 0), float(r.get("up") or 0)) if r and float(r.get("age") or 999) <= 120 else None
+        entry, look = zero_step(_ZERO.get(tid), now, use, True)
+
+        if entry is None:
+            _ZERO.pop(tid, None)
+
+            if marked and use is not None:
+                _silent_set(tid, None)          # (the users are back: the mark goes)
+        else:
+            _ZERO[tid] = entry
+
+        if look:
+            _zero_look(tid, name, now - int(entry["since"]))
+
+    for gone in set(_ZERO) - seen:
+        _ZERO.pop(gone, None)
 
 
 def measure_start(tunnel_id: int) -> int:

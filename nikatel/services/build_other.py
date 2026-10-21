@@ -124,18 +124,11 @@ def dead_download(q: dict) -> bool:
 
 
 def quality_score(q: dict) -> int:
-    """0-100: speed counts most, then latency, jitter and loss. The speed is what an Iranian CUSTOMER gets - the download (foreign -> Iran), eight connections together and one connection by itself - and the upload only up to the download
-    (real tests, 2026-10-16: the "upload" of a reverse tunnel ran at 700 - 2700 Mb/s over a path that carries 100 and made BackPack look the best while a customer downloaded at 10 Mb/s per connection)."""
-    if not q or q.get("error") or q.get("latency_ms") is None:
-        return 0
+    """0-100, what the USER gets: the speed of one connection and of eight (what an Iranian CUSTOMER downloads, foreign -> Iran) and the ping come first, then loss and jitter - see `userscore` (the owner, 2026-10-21).
+    The upload only up to the download (real tests, 2026-10-16: the "upload" of a reverse tunnel ran at 700 - 2700 Mb/s over a path that carries 100 and made BackPack look the best while a customer downloaded at 10 Mb/s)."""
+    from .userscore import user_score
 
-    d8, d1, up = q.get("down_mbps") or 0, q.get("down1_mbps"), q.get("up_mbps") or 0
-    down = d8 if d1 is None else (d8 + d1) / 2
-    speed = min(100.0, (down * 0.85 + min(up, down) * 0.15) / 6.0)
-    lat = max(0.0, 100.0 - max(0.0, q["latency_ms"] - 40) / 2.0)
-    jit = max(0.0, 100.0 - (q.get("jitter_ms") or 0) * 5)
-    loss = max(0.0, 100.0 - (q.get("loss_pct") or 0) * 10)
-    return round(speed * 0.40 + lat * 0.25 + jit * 0.10 + loss * 0.25)
+    return user_score(q)
 
 
 def _entries(ports: list[PortMap], test_port: int) -> list[str]:

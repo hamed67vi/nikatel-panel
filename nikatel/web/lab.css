@@ -1211,3 +1211,6 @@ html body #page .tun-tbl .bwm-t .bwm-u { font-size: 12px; font-weight: 600; colo
 /* a tunnel with no capacity yet (a new one): an empty bar and one word */
 html body #page .tun-tbl .bwm.pend .bwm-bar u { background: transparent; }
 html body #page .tun-tbl .bwm.pend .bwm-t small { color: var(--mut); background: rgba(255, 255, 255, .07); }
+
+/* "no users": nobody used the tunnel for minutes and the Doctor checked it fully and found nothing wrong */
+html body #page .tun-tbl .bwm.ok .bwm-t small:not(:empty) { color: var(--mut); background: rgba(255, 255, 255, .07); }

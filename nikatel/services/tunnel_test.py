@@ -35,15 +35,10 @@ def jitter_from_pings(out: str) -> tuple[float | None, float | None, float | Non
 
 
 def score(avg: float | None, jitter: float | None, loss: float | None, mbps: float | None) -> int:
-    """0-100: speed counts most, then latency, loss and jitter."""
-    if avg is None:
-        return 0
+    """0-100, what the USER gets: speed and ping first, then loss and jitter (`userscore`)."""
+    from .userscore import user_score
 
-    sp = min(100.0, (mbps or 0) / 8.0)                 # 800 Mbps = full marks
-    lat = max(0.0, 100.0 - max(0.0, avg - 40) / 2.0)
-    jit = max(0.0, 100.0 - (jitter or 0) * 5)
-    lo = max(0.0, 100.0 - (loss or 0) * 10)
-    return round(sp * 0.40 + lat * 0.25 + jit * 0.10 + lo * 0.25)
+    return user_score({"latency_ms": avg, "jitter_ms": jitter, "loss_pct": loss, "down_mbps": mbps})
 
 
 def quality(tunnel_id: int) -> dict:

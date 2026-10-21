@@ -28,6 +28,7 @@ from ..models import Server, ServerSample, Tunnel, is_temp
 from . import linkmodels
 from . import settings as st
 from .events import emit
+from .userscore import has_speed, user_score
 
 log = get_logger("knowledge")
 FULL_FRESH = 30 * 86400         # a full measurement older than this is only a hint (the numbers of the day, not of the month)
@@ -111,10 +112,12 @@ def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict
         full = e.get("full") or {}
         fresh = full.get("score") is not None and now - int(full.get("at") or 0) < FULL_FRESH
         src = full if fresh else (e.get("lat") or full)
-        out.append({"kind": kind, "score": src.get("score"), "measure": "full" if fresh else "latency", "at": int(src.get("at") or 0), "down_mbps": src.get("down_mbps"),
-                    "latency_ms": src.get("latency_ms"), "loss_pct": src.get("loss_pct")})
+        row = {"kind": kind, "score": src.get("score"), "measure": "full" if fresh else "latency", "at": int(src.get("at") or 0), "down_mbps": src.get("down_mbps"), "down1_mbps": src.get("down1_mbps"),
+               "latency_ms": src.get("latency_ms"), "jitter_ms": src.get("jitter_ms"), "loss_pct": src.get("loss_pct")}
+        row["user"] = user_score(row) if has_speed(row) and row["latency_ms"] is not None else row["score"]          # (what the USER gets, counted again from the numbers: a score written down by an older rule does not decide)
+        out.append(row)
 
-    return sorted(out, key=lambda r: (r["measure"] != "full", -(r["score"] or 0), PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
+    return sorted(out, key=lambda r: (r["measure"] != "full", -(r["user"] or 0), PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
 
 
 AUTO_TRIES = 3          # the types "Best of the day" tries one after the other when a build ends badly (the owner, 2026-10-20: a tunnel that carried nothing was called ready)
@@ -122,7 +125,9 @@ AUTO_TRIES = 3          # the types "Best of the day" tries one after the other 
 
 def _why_good(r: dict, now: int) -> str:
     when = f", measured {max(0, (now - r['at']) // 3600)} h ago" if r.get("at") else ""
-    return f"{r['kind']}: the best that connects between these two servers - score {r['score'] if r['score'] is not None else '-'}{when}"
+    shown = r["user"] if r.get("user") is not None else r["score"]
+    users = f" ({float(r['down1_mbps'] if r.get('down1_mbps') is not None else r['down_mbps']):.0f} Mb/s for a user, {float(r['latency_ms']):.0f} ms)" if has_speed(r) and r.get("latency_ms") is not None else ""
+    return f"{r['kind']}: the best that connects between these two servers - score {shown if shown is not None else '-'}{users}{when}"
 
 
 def _why_weak(r: dict, now: int) -> str:
@@ -162,15 +167,25 @@ FASTER_MIN_MBPS = 20.0          # ... and at least this much
 FASTER_FRESH = 14 * 86400       # ... measured within this long ago (a number of last month says little about today's route)
 
 
+def _ping_ok(r: dict, base: dict | None) -> bool:
+    """Pure: does the type `r` answer about as fast as the running one (`base`: its test)? True when one of them has no ping."""
+    lat, cur = r.get("latency_ms"), (base or {}).get("latency_ms")
+    return lat is None or cur is None or float(lat) <= float(cur) * PING_SLACK + PING_SLACK_MS
+
+
 def faster_kinds(pair: dict | None, now: int, current: str, baseline: float, allowed=lambda k: True, ratio: float = FASTER_RATIO) -> list[dict]:
     """Pure: the types the Doctor's memory of the pair knows to have given clearly more than a very slow tunnel gives (the owner, 2026-10-19: a tunnel that tested 0.8 Mb/s on a pair where another type had measured 119):
     kinds that connected on the pair (never the running one, never one that failed or only scored poor), whose download is at least FASTER_RATIO times `baseline` (and FASTER_MIN_MBPS), measured less than FASTER_FRESH ago,
     that the licence allows - the fastest first (a tie by score). Empty when the memory knows none: nothing is guessed."""
     need = max(FASTER_MIN_MBPS, ratio * max(float(baseline or 0), 1.0))
-    rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need and now - int(r.get("at") or 0) <= FASTER_FRESH and allowed(r["kind"])]
-    return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r["score"] or 0)))
+    cur = (((pair or {}).get("kinds") or {}).get(current) or {}).get("full") or {}
+    rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need and now - int(r.get("at") or 0) <= FASTER_FRESH and allowed(r["kind"])
+            and _ping_ok(r, cur)]
+    return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r.get("user") or 0)))
 
 
+PING_SLACK = 1.3                # a better type may answer this much slower than the running one (times) ...
+PING_SLACK_MS = 15.0            # ... plus this many ms: the ping is what the user feels first (the owner, 2026-10-21)
 UPGRADE_RATIO = 3.0             # a type counts as a better one for a tunnel that WORKS when the pair test gave it this many times what the pair test gave the running type ...
 UPGRADE_MIN_GAIN = 100.0        # ... and at least this many Mb/s more (a few Mb/s of difference is no reason to touch a running tunnel)
 UPGRADE_MAX_LOSS = 1.0          # ... and it was stable in its test: at most this % of packets lost
@@ -189,8 +204,9 @@ def upgrade_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: T
     base = float(full["down_mbps"])
     need = max(base * UPGRADE_RATIO, base + UPGRADE_MIN_GAIN)
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need
-            and now - int(r.get("at") or 0) <= FASTER_FRESH and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS and (r.get("score") or 0) >= (full.get("score") or 0) and allowed(r["kind"])]
-    return sorted(rows, key=lambda r: (-float(r["down_mbps"]), -(r["score"] or 0)))
+            and now - int(r.get("at") or 0) <= FASTER_FRESH and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS and allowed(r["kind"]) and _ping_ok(r, full)
+            and (r.get("user") or 0) >= (user_score(full) if has_speed(full) else (full.get("score") or 0))]
+    return sorted(rows, key=lambda r: (-(r.get("user") or 0), -float(r["down_mbps"])))
 
 
 def blocked(pair: dict | None, now: int) -> list[str]:

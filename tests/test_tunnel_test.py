@@ -17,8 +17,8 @@ def test_jitter_and_loss():
 
 def test_score_shape():
     assert score(None, None, None, None) == 0
-    assert score(40, 0, 0, 800) == 100
-    assert score(40, 0, 0, 0) == 60
+    assert score(30, 0, 0, 800) == 100                                     # (1.69.63: what the user gets - 300 Mb/s and 30 ms are full marks)
+    assert score(40, 0, 0, 0) == 53 and score(40, 0, 0, 300) == 91 and score(160, 0, 0, 300) < score(40, 0, 0, 300) - 20
     assert score(300, 20, 50, 10) < 30
 
 
