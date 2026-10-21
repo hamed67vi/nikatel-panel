@@ -1220,3 +1220,42 @@ html body #modal .tunwin .sbox[data-b="link"] .kv2 > div { flex-wrap: wrap; whit
 
 /* a window is open: what the status bar behind it said before (an old error) is not shown - what happens in a window is told in the window */
 html body:has(#modal .modal) #statusbar .sb-text, html body:has(#modal .modal) #statusbar .sb-time, html body:has(#modal .modal) #statusbar .sb-undo { visibility: hidden; }
+
+
+/* 1.69.78 - the first two boxes of Settings → About & update (this panel and its license) are compact and look like the System Settings of macOS (the owner, 2026-10-21: "make these two boxes tighter and MacBook style"): a small rounded icon, the title in 13.5 px, the version as quiet grey text, a small status capsule, and the rows as inset grey strips with no border. The first row of the grid is as tall as its content (it was a fixed 156 px with an empty area under the Update row); the rows under it keep their fixed size. */
+html body #page .abt-grid { grid-template-rows: auto 316px; align-content: start; }
+html body #page .abt-grid > .abt-card:nth-child(n+3) { align-self: stretch; }
+@media (max-width: 1000px) { html body #page .abt-grid { grid-template-rows: none; grid-auto-rows: auto; } html body #page .abt-grid > .abt-card:nth-child(n+3) { min-height: 232px; } }
+html body #page .abt-grid > .abt-card:nth-child(-n+2) { padding: 10px 12px 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, .08); background: rgba(255, 255, 255, .035); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04); }
+html body #page .abt-card:nth-child(-n+2) .abt-ch { align-items: center; gap: 10px; }
+html body #page .abt-card:nth-child(-n+2) .abt-ti { width: 30px; height: 30px; border-radius: 8px; border: 0; color: #fff; background: linear-gradient(180deg, #4aa3ff, #0a6cf0); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25), 0 1px 3px rgba(0, 0, 0, .35); }
+html body #page .abt-card:nth-child(-n+2) .abt-ti.ok { color: #fff; background: linear-gradient(180deg, #4ade80, #1fa85c); }
+html body #page .abt-card:nth-child(-n+2) .abt-ti svg { width: 17px; height: 17px; stroke-width: 1.9; }
+html body #page .abt-card:nth-child(-n+2) .abt-t1 { min-height: 0; gap: 2px 8px; }
+html body #page .abt-card:nth-child(-n+2) .abt-t1 b { font-size: 13.5px; font-weight: 600; letter-spacing: -.1px; }
+html body #page .abt-card:nth-child(-n+2) .abt-t1 .pill { height: auto; padding: 0; border: 0; background: none; box-shadow: none; font-size: 11.5px; font-weight: 500; color: var(--mut); }
+html body #page .abt-card:nth-child(-n+2) .abt-ct small { margin-top: 1px; font-size: 11.5px; line-height: 1.35; }
+html body #page .abt-card:nth-child(-n+2) .abt-pill { height: 22px; padding: 0 9px; gap: 5px; border-radius: 11px; font-size: 11.5px; font-weight: 600; }
+html body #page .abt-card:nth-child(-n+2) .abt-pill::before { width: 6px; height: 6px; }
+html body #page .abt-card:nth-child(-n+2) .abt-cb { margin-top: 8px; }
+html body #page .abt-card:nth-child(-n+2) .abt-line { margin: 0 0 6px 2px; font-size: 12px; }
+html body #page .abt-card:nth-child(-n+2) .abt-row { gap: 9px; height: 34px; padding: 0 10px 0 5px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .055); font-size: 13px; font-weight: 500; }
+html body #page .abt-card:nth-child(-n+2) .abt-row b { font-weight: 500; }
+html body #page .abt-card:nth-child(-n+2) .abt-row:hover:not(:disabled) { background: rgba(255, 255, 255, .09); }
+html body #page .abt-card:nth-child(-n+2) .abt-row .abt-ti.sm { width: 24px; height: 24px; border-radius: 6px; background: rgba(255, 255, 255, .1); box-shadow: none; color: var(--text); }
+html body #page .abt-card:nth-child(-n+2) .abt-row .abt-ti.sm svg { width: 15px; height: 15px; }
+html body #page .abt-card:nth-child(-n+2) .abt-chev svg { width: 14px; height: 14px; }
+html body #page .abt-card:nth-child(-n+2) .lic-feats { gap: 5px; margin: 0 0 7px; }
+html body #page .abt-card:nth-child(-n+2) .lic-feats .pill { height: 22px; padding: 0 9px; font-size: 11.5px; }
+html body #page .abt-card:nth-child(-n+2) .abt-iid { gap: 8px; padding: 3px 4px 3px 10px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .055); font-size: 12px; }
+html body #page .abt-card:nth-child(-n+2) .abt-iid code { padding: 3px 8px; border-radius: 6px; background: rgba(0, 0, 0, .22); font-size: 12px; }
+html body #page .abt-card:nth-child(-n+2) .abt-copy { width: 26px; height: 26px; border-radius: 7px; }
+html body #page .abt-card:nth-child(-n+2) .abt-copy svg { width: 15px; height: 15px; }
+html body #page .abt-card:nth-child(-n+2) .abt-note { margin-top: 6px; font-size: 11.5px; }
+html[data-mode="light"] body #page .abt-grid > .abt-card:nth-child(-n+2) { border-color: rgba(0, 0, 0, .09); background: rgba(255, 255, 255, .7); box-shadow: 0 1px 2px rgba(30, 40, 80, .06); }
+html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-ti { color: #fff; }
+html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-ti.ok { color: #fff; }
+html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-row, html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-iid { background: rgba(60, 70, 100, .07); }
+html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-row:hover:not(:disabled) { background: rgba(60, 70, 100, .12); border: 0; }
+html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-row .abt-ti.sm { background: rgba(60, 70, 100, .1); color: #2b3550; }
+html[data-mode="light"] body #page .abt-card:nth-child(-n+2) .abt-iid code { background: rgba(60, 70, 100, .08); color: #14213d; }

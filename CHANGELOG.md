@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.78 - Settings → About & update: the first two boxes are compact and look like the System Settings of macOS
+
+The owner (2026-10-21, with a picture of the "About & Update" and "License" boxes): "make these two boxes tighter and MacBook style".
+
+- **What changed** (`lab.css`, styles only): the first row of the grid was a fixed 156 px with an empty area under the Update row; it is as tall as its content now (135 px). In the two boxes: a small rounded icon (30 px, a green gradient for About, blue for License, white strokes), the title in 13.5 px, the version as quiet grey text instead of a pill, a small status capsule (22 px), and the rows - "Update from GitHub", the feature chips, the Install id - as inset strips with no border (34 px / 22 px / 32 px) in the soft grey of macOS, with a lighter set of colours for the light mode. The two boxes under them (the tunnel cores and PasarGuard) keep their size; on a phone the boxes are one column and each as tall as its content.
+- **Proved**: `tests/test_fluid_layout.py` pins the rules; measured on a private demo panel in the built-in browser: at 1500 px the first row is 135 px (before: 156 px with an empty area), nothing runs out of a box in the dark and the light mode, with the update-available pill and with the failed-update note; at 390 px one column, no box wider than the screen and the page not wider than the window (390).
+- **Not proved**: a picture of it (the pane is small and was hidden: the shapes were read by their measurements and one reduced screenshot); the PasarGuard box with a real panel connected; a window narrower than 1000 px but not a phone (it uses the same one-column rule).
 ## 1.69.77 - A drop: the Doctor tests the other types (speed included) and changes to a steady better one; "Ports..." for every kind of tunnel; "Move to a better server" archived
 
 > **به زبان ساده:** وقتی پهنای یک تانل «افت» می‌کند و علتش بیرون از خود تانل نیست، دکتر حالا نوع‌های دیگر همان جفت سرور را با تست سرعت واقعی امتحان می‌کند (شاید مشکل روی آن‌ها نباشد) و اگر نوعی واضح بیشتر بدهد و تمیز و پایدار باشد، نوع تانل را عوض می‌کند. گزینهٔ «Ports…» هم برای تانل‌های Backpack، Paqet و Chisel اضافه شد. گزینهٔ «انتقال به سرور بهتر» فعلاً از منو برداشته شد (آرشیو).

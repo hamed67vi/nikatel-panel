@@ -252,3 +252,17 @@ def test_the_page_with_a_list_box_cannot_be_scrolled_and_its_box_ends_where_the_
     assert 'const mn = pg.closest(".main"), room = mn ? Math.min(window.innerHeight - 24, mn.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(mn).paddingBottom) || 0)) : window.innerHeight - 24;' in APP
     assert "const mh = Math.max(150, Math.floor(room - b.getBoundingClientRect().top));" in APP
     assert 'new ResizeObserver(() => requestAnimationFrame(fit))' in APP and '[".main > .head", "#statusbar", "#subnav"]' in APP      # (the bar above the page changes height: the box follows at once)
+
+def test_the_about_and_license_boxes_are_compact_and_macos_like_and_the_row_under_them_is_as_tall_as_its_content():
+    """The owner, 2026-10-21, with a picture of Settings -> About & update: "make these two boxes tighter and MacBook style". The first row of the grid was a fixed 156 px with an empty area under the Update
+    row; it is as tall as its content now (measured: 135 px, the boxes 30 px icon + 13.5 px title + 34 px / 32 px inset rows); the rows under it keep 316 px."""
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert "html body #page .abt-grid { grid-template-rows: auto 316px; align-content: start; }" in css
+    assert "html body #page .abt-grid > .abt-card:nth-child(n+3) { align-self: stretch; }" in css      # (the cores and the PasarGuard box keep their height)
+    first = "html body #page .abt-grid > .abt-card:nth-child(-n+2) {"
+    assert first in css and "border-radius: 12px" in css.split(first, 1)[1].split("}", 1)[0]
+    assert "html body #page .abt-card:nth-child(-n+2) .abt-ti { width: 30px; height: 30px; border-radius: 8px;" in css
+    assert "html body #page .abt-card:nth-child(-n+2) .abt-t1 b { font-size: 13.5px; font-weight: 600;" in css
+    assert "html body #page .abt-card:nth-child(-n+2) .abt-row { gap: 9px; height: 34px;" in css and "html body #page .abt-card:nth-child(-n+2) .abt-pill { height: 22px;" in css
+    assert 'html[data-mode="light"] body #page .abt-grid > .abt-card:nth-child(-n+2)' in css      # (and a light colour set)
+    assert "@media (max-width: 1000px) { html body #page .abt-grid { grid-template-rows: none; grid-auto-rows: auto; }" in css      # (a phone: one column, each box as tall as its content, the cores and PasarGuard boxes at least 232 px)
