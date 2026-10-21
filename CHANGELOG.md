@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.81 - "dropped" stays, but it is red only when the users feel it
+
+The owner (2026-10-21, a list where 10 of 19 tunnels said "dropped" in red while their users used 5 - 15 Mb/s of 75 - 575): "write dropped, but make it red only when the users' bandwidth is reduced".
+
+- **The word**: unchanged ("dropped", "very slow", "no data").
+- **The colour**: red (`drop`) only when the users feel the drop - no data moves at all, or the users use at least half (`BW_HURT` = 0.5) of the capacity the Doctor's test reads now. Otherwise the bar, the word and the number are amber (`dip`). When the users' use cannot be read, amber.
+- **The window of the tunnel** says it too: "The users use only N % of it now, so they do not feel the drop."
+- **Not changed**: what counts as a drop (the Doctor's rule), the Problems filter, the order of the list, the Doctor's work on the tunnel.
+- **Proved**: `tests/test_dropped_amber.py` (the rule runs through node on the numbers of the owner's list: 9.8 of 575 and 4.6 of 75 are amber, 50 of 100 and no data are red; the three places and the css are there).
+- **Not proved**: how the amber looks on the real list (not walked in a browser).
 ## 1.69.80 - The License box of Settings → About & update is hidden
 
 The owner (2026-10-21): "disable my license section for now and do not show it".

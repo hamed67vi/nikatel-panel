@@ -1144,20 +1144,20 @@ html body #page .tun-tbl .bwm-t i { font-style: normal; opacity: .6; }
 html body #page .tun-tbl .bwm-t small { margin-left: 4px; padding: 0 7px; border-radius: 9px; font-size: 10.5px; font-weight: 700; }
 html body #page .tun-tbl .bwm.drop .bwm-bar u, html body #page .tun-tbl .bwm.slow .bwm-bar u { background: var(--bad, #ff6b8b); }
 html body #page .tun-tbl .bwm.drop .bwm-t small, html body #page .tun-tbl .bwm.slow .bwm-t small { color: var(--bad, #ff6b8b); background: rgba(255, 107, 139, .14); }
-html body #page .tun-tbl .bwm.full .bwm-bar u { background: var(--warn, #ffc44d); }
-html body #page .tun-tbl .bwm.full .bwm-t small { color: var(--warn, #ffc44d); background: rgba(255, 196, 77, .14); }
+html body #page .tun-tbl .bwm.full .bwm-bar u, html body #page .tun-tbl .bwm.dip .bwm-bar u { background: var(--warn, #ffc44d); }
+html body #page .tun-tbl .bwm.full .bwm-t small, html body #page .tun-tbl .bwm.dip .bwm-t small { color: var(--warn, #ffc44d); background: rgba(255, 196, 77, .14); }      /* (dip: a dropped / very slow capacity the users do not feel yet - amber, the word stays "dropped") */
 /* the big meter of the tunnel window */
 .bwbox .bwbig-track { position: relative; height: 14px; border-radius: 8px; background: rgba(255, 255, 255, .1); overflow: visible; margin: 6px 0 8px; }
 .bwbox .bwbig-track u { display: block; height: 100%; border-radius: 8px; background: var(--acc-2, #6ea8ff); transition: width .6s ease; }
 .bwbox .bwbig-track i.pk { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text, #e7ecf8); opacity: .75; }
-.bwbox .bwbig.warm .bwbig-track u { background: var(--warn, #ffc44d); }
+.bwbox .bwbig.warm .bwbig-track u, .bwbox .bwbig.dip .bwbig-track u { background: var(--warn, #ffc44d); }
 .bwbox .bwbig.full .bwbig-track u { background: linear-gradient(90deg, var(--warn, #ffc44d), #ff9a4d); }
 .bwbox .bwbig.drop .bwbig-track u { background: var(--bad, #ff6b8b); }
 .bwbox .bwbig-n { display: flex; flex-wrap: wrap; gap: 4px 22px; align-items: baseline; }
 .bwbox .bwbig-n span b { font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
 .bwbox .bwbig-n small { font-size: 10.5px; color: var(--mut); text-transform: uppercase; letter-spacing: .6px; font-weight: 700; }
 .bwbox .bwbig-w { margin-top: 6px; font-size: 12px; color: var(--mut); }
-.bwbox .bwbig.drop .bwbig-w { color: var(--bad, #ff6b8b); } .bwbox .bwbig.full .bwbig-w, .bwbox .bwbig.warm .bwbig-w { color: var(--warn, #ffc44d); }
+.bwbox .bwbig.drop .bwbig-w { color: var(--bad, #ff6b8b); } .bwbox .bwbig.full .bwbig-w, .bwbox .bwbig.warm .bwbig-w, .bwbox .bwbig.dip .bwbig-w { color: var(--warn, #ffc44d); }
 .bwbox { margin-bottom: 10px; }
 
 /* the failed-update note of the About card is ONE row (the owner, 2026-10-20: "show the error briefly in one row, and if the update fixes it, say so"): it was a red paragraph in a box that scrolled */
