@@ -205,6 +205,9 @@ def wg_note(side: Side) -> str:
 DATA_DOWN_AFTER = 4          # this many failed data probes in a row: the tunnel is down, not just degraded (a minute in the fast lane, which looks at such a tunnel every ~8 s; it was four minutes in the minute cycle)
 
 
+OFF_ERROR = "the server is off or does not answer"          # what a side says when the pulse already knows its server is off (the pulse needs two misses in a row: ~6 s)
+
+
 def hard_fault(plan: Plan, iran: Side, foreign: Side) -> str:
     """Pure: the sentence when a unit of either end is not active or the GRE card is not up - a fault that needs no ping, no request through the forwarded port and no look from another server
     to be called down - else "". (Both sides must have answered: the caller has checked `error`.)"""
@@ -228,6 +231,11 @@ def judge(plan: Plan, iran: Side, foreign: Side, data_seen: bool = False, data_f
     `ext`: (http code, ms, vantage name) of the same request made from ANOTHER Iran server - the path the users take; `ext_seen` /
     `ext_fails` like data_seen / data_fails for it. `stalled`: the sentence of a CONFIRMED stall (the last tests of the bandwidth carried no data, services/bandwidth.py): a tunnel that answers every
     check and moves nothing under load is degraded, not up."""
+    off = [w for w, side in (("Iran", iran), ("foreign", foreign)) if side.error == OFF_ERROR]
+
+    if off:          # a server that is OFF carries nothing: its tunnel is down at once (it was "unknown", which must repeat twice before it replaces "up" - the tunnel stayed "connected" while Telegram said the server was down)
+        return "down", f"the {' and '.join(off)} server is off or does not answer"
+
     if iran.error and foreign.error:
         return "unknown", f"both servers do not answer ({iran.error})"
 
@@ -601,7 +609,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
     def ask(node, is_iran, off, quick_read=False):
         if off:                  # the pulse already knows the server is off: asking it over SSH would only wait for a time-out (10-15 s each, for every tunnel of that server)
             s = Side()
-            s.error = "the server is off or does not answer"
+            s.error = OFF_ERROR
             return s
 
         return _query(node, plan, is_iran, True) if quick_read else _query(node, plan, is_iran)

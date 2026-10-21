@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.72 - A tunnel of a server that is off is down at once
+
+> **به زبان ساده:** سرور خاموش شده بود و تلگرام خبر داد، ولی تانلش «متصل» می‌ماند. حالا تانل همان لحظه «قطع» نشان داده می‌شود.
+>
+> **In short:** a tunnel whose server is off is shown down in its first check, not "connected" until a second check confirms.
+
+The owner (2026-10-21): the Telegram message said the server was down, but the panel showed its tunnel as connected. The pulse (every 3 s, two misses in a row) marks the server off and wakes the check of its tunnels (1.69.24); that check judged the side "unknown" (`judge`), and `settle` keeps "up" until CONFIRM_CHECKS (2) checks agree on a soft state, so the first check changed nothing and the second waited for the next round.
+
+- **`tunnels.OFF_ERROR`**: the sentence a side gets when the pulse already knows its server is off. `judge` now returns `down` ("the foreign server is off or does not answer") for it, before the "unknown" rules; `settle` applies down at once. A server that is up but whose SSH login failed (not off by the pulse) stays "unknown".
+- **What reacts to it**: nothing new. Every repair, the Doctor and the standby already check `servers_off` and do nothing to a tunnel whose server is off; the alert for a down tunnel (Telegram) now also comes for such a tunnel, together with the one for the server.
+- **Proved**: `tests/test_server_off_tunnel_down.py` (off Iran side, off foreign side, both; a failed SSH login stays unknown; `settle` takes down at once and holds unknown; the off error is set where a known-off server is not asked). **Not proved**: with a real server switched off (none was touched).
+
 ## 1.69.71 - Fix of the test of 1.69.70
 
 > **به زبان ساده:** فقط اصلاح یک تست از نسخهٔ قبل؛ کد برنامه تغییری نکرده است.
