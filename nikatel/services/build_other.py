@@ -606,6 +606,20 @@ def _clear_leftovers(b: Build, iran: Node, foreign: Node, fi: dict, ff: dict) ->
     return fi, ff
 
 
+def unfit_reason(f: dict) -> str:
+    """Pure: why a server (its `simple_facts`) cannot run BackPack, Paqet or Chisel at all - "" when it can. The same three conditions `_preflight` stops a build for, asked BEFORE a repair removes a tunnel."""
+    if not f.get("root"):
+        return "has an SSH user that is not root"
+
+    if not f.get("python"):
+        return "has no python3 (needed for the test door)"
+
+    if f.get("arch") not in ("x86_64", "amd64"):
+        return f"has architecture {f.get('arch')} (x86_64 only)"
+
+    return ""
+
+
 def _preflight(b: Build, iran: Node, foreign: Node) -> tuple[dict, dict]:
     fi, ff = parse_simple_facts(run_script(iran, "simple_facts", timeout=45)), parse_simple_facts(run_script(foreign, "simple_facts", timeout=45))
     fi, ff = _clear_leftovers(b, iran, foreign, fi, ff)

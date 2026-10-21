@@ -838,6 +838,46 @@ def pending_drop(name: str) -> None:
         st.put("pending_builds", {"items": [i for i in st.get("pending_builds").get("items", []) if i.get("name") != name]})
 
 
+def pending_item(name: str, iran_id: int, foreign_id: int, typ: str, transport: str, rec: dict, ports_text: str, opts: dict | None = None) -> dict:
+    """Pure: what `resume_pending` needs to build a tunnel again, from the record it had (a rebuild, or a repair that removes the tunnel before it builds another one)."""
+    other = typ in ("backpack", "paqet", "chisel")
+    transport = transport or "tcpmux"
+    kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
+    return {"name": name, "kind": "other" if other else "backhaul",
+            "args": {"iran_id": iran_id, "foreign_id": foreign_id, "ports_text": ports_text, "transport": transport.replace("l3:", "") if other else transport, "kind": kind, "mtu": int(rec.get("mtu") or 0),
+                     "keepalive": int(rec.get("keepalive") or 75), "nodelay": bool(rec.get("nodelay", True)), "opts": dict(rec.get("opts") or {}) if opts is None else opts}}
+
+
+def put_back_down(row: dict, why: str) -> bool:
+    """A repair removed a tunnel to build another type and nothing could be built - not even the old type (the route is cut, a server cannot run the type): the tunnel must not vanish from the list with its
+    users' ports and nobody to retry it. Its row is put back as it was (`row`: every column, taken before the removal), DOWN, with the reason; the checks and the repair go on with it (the copy in
+    'Recently removed' hides itself while the tunnel is in the list). False when a tunnel of this name exists again (built by hand meanwhile) or one of its servers is gone."""
+    row = dict(row)
+    name = str(row.get("name") or "")
+
+    try:
+        with session() as db:
+            if not name or db.scalar(select(Tunnel).where(Tunnel.name == name)) is not None:
+                return False
+
+            if db.get(Server, row.get("iran_server_id")) is None or db.get(Server, row.get("foreign_server_id")) is None:
+                return False
+
+            row.update(state="down", state_since=int(time.time()), last_check_at=0, last_error=("Taken off by a repair that could not build it again: " + str(why))[:300], detail={}, rtt_ms=None, rx_mbps=None, tx_mbps=None)
+
+            if row.get("id") is None or db.get(Tunnel, row["id"]) is not None:
+                row.pop("id", None)
+
+            t = Tunnel(**row)
+            db.add(t)
+            db.flush()
+            emit(db, "bad", "tunnels", f"Tunnel {name} ({t.iran.name} ⇄ {t.foreign.name}) could not be built again ({str(why)[:140]}): it stays in the list as down and the repair tries it again.", name)
+
+        return True
+    finally:
+        pending_drop(name)
+
+
 def resume_pending() -> int:
     """At start: build again every rebuild that a restart interrupted (its tunnel does not exist, the old one was already removed)."""
     started = 0
@@ -1393,9 +1433,7 @@ def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
     if fresh_link and not other and rec.get("network"):
         opts["avoid_net"] = rec["network"]
 
-    pending_put({"name": name, "kind": "other" if other else "backhaul",
-                 "args": {"iran_id": iran_id, "foreign_id": foreign_id, "ports_text": ports_text, "transport": transport.replace("l3:", "") if other else transport, "kind": kind, "mtu": mtu,
-                          "keepalive": keepalive, "nodelay": bool(rec.get("nodelay", True)), "opts": opts}})
+    pending_put(pending_item(name, iran_id, foreign_id, typ, transport, rec, ports_text, opts))
     delete_tunnel(tunnel_id, trash=True)          # a copy is kept: a rebuild whose build fails can be restored from 'Recently removed'
 
     if other:

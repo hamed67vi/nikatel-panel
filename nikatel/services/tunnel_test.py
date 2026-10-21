@@ -525,6 +525,15 @@ def tools_missing(lines) -> bool:
     return any("wireguard-tools is not installed" in str(ln) for ln in list(lines or [])[-6:])
 
 
+UNFIT_MARKS = ("has no python3", "the SSH user is not root", "(x86_64 only)")
+
+
+def server_unfit(lines) -> bool:
+    """Pure: does the story of a build say it stopped because a SERVER cannot run the type at all - no python3 for the test door, not root, not x86_64 (BackPack, Paqet, Chisel)? Every type of that engine fails the same way
+    on that server, so such a kind was NOT TESTED: it says nothing about the route (the Doctor remembers it as "could not be tried", never as "blocked")."""
+    return any(m in str(ln) for ln in list(lines or [])[-6:] for m in UNFIT_MARKS)
+
+
 def explain_failure(kind: str, error: str) -> str:
     """Pure: a failed kind in plain words. What the real tests showed on Iranian routes: clear-text WebSocket and QUIC are filtered while their TLS / plain-UDP cousins pass."""
     e = str(error or "")
@@ -610,6 +619,8 @@ def _compare_worker(job: dict) -> None:
             if not ok and tools_missing(story):
                 r["skipped"] = "tools"
                 r["error"] = "not tested: wireguard-tools is not installed on a server (Servers -> the server's menu -> Install -> WireGuard tools)"
+            elif not ok and server_unfit(story):
+                r["skipped"] = "server"                      # (a server that cannot run the engine: every type of it fails the same way - not tested, not blocked)
 
             job["results"].append(r)
 

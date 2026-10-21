@@ -19,6 +19,7 @@ per tunnel at a time; the automatic escalation (Settings -> Repairs) only after 
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 import threading
@@ -509,7 +510,35 @@ def _snapshot(tunnel_id: int) -> dict:
 
         rec = dict(t.record or {})
         return {"id": t.id, "name": t.name, "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id, "iran_name": t.iran.name, "foreign_name": t.foreign.name, "type": t.type, "transport": t.transport, "record": rec,
-                "ports": rec.get("port_mapping") or ",".join(str(p) for p in (t.forwarded_ports or [])), "label": f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"}
+                "ports": rec.get("port_mapping") or ",".join(str(p) for p in (t.forwarded_ports or [])), "label": f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})",
+                "row": {c.name: copy.deepcopy(getattr(t, c.name)) for c in Tunnel.__table__.columns}}          # (every column: a repair that cannot build anything puts the row back as it was - builder.put_back_down)
+
+
+def _try_build(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict | None = None) -> tuple[bool, list[str]]:
+    """Start a build of `kind` and wait for it. A build the code refuses to start (a port that is busy, a license, a server that is gone) is a build that FAILED, with the reason as its story: the repairs
+    that removed the tunnel first go on to put the old one back instead of ending here with nothing."""
+    try:
+        return _wait(_build_kind(snap, iran_id, foreign_id, kind, opts))
+    except (ValueError, RuntimeError, SSHError) as e:
+        return False, [f"Stopped: {str(e)[:160]}"]
+
+
+def _keep_down(aid: int, snap: dict, why: str) -> None:
+    """Nothing could be built - not the new type, not the old one: the tunnel is NOT left out of the list (it would have no row for a retry, no mark, and the owner would find it gone). Its row goes back, down, with
+    the reason; the checks see it and the repair climbs again at its own pace (1, 2, 5, then every 10 minutes). When the row cannot be put back (a tunnel of this name was built meanwhile, a server is gone)
+    the copy taken at the removal is what is left: 'Recently removed'."""
+    if builder.put_back_down(snap.get("row") or {}, why):
+        _say(aid, f"{snap['name']} is put back in the list as DOWN: the checks watch it and the repair tries it again at its own pace.")
+    else:
+        builder.pending_drop(snap["name"])
+        _say(aid, f"{snap['name']}: its copy is in 'Recently removed' on the Tunnels page; Restore builds it when the cause is gone.")
+
+
+def _remember_rebuild(snap: dict, iran_id: int, foreign_id: int) -> None:
+    """Before a repair removes a tunnel IN PLACE (the same pair): the panel writes down how to build it again, so that a restart of the panel in the middle (the build takes minutes) builds it again at the start
+    (`builder.resume_pending`) - the same safety `rebuild_tunnel` has. A move to another server is not written down: the old pair is what is broken."""
+    if (iran_id, foreign_id) == (snap["iran_id"], snap["foreign_id"]) and snap["ports"]:
+        builder.pending_put(builder.pending_item(snap["name"], iran_id, foreign_id, (snap["type"] or "").lower(), snap["transport"] or "tcpmux", snap["record"], snap["ports"]))
 
 
 def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict | None = None) -> int:
@@ -529,7 +558,8 @@ def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict
 def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str, why: str, skip_offline: bool = False, snap: dict | None = None, first: bool = True, restore: bool = True,
              out: list | None = None) -> bool:
     """Remove the tunnel and build it again as `kind` between iran_id and foreign_id (same name, same ports).
-    When the new build fails the old kind is built again, so the operator is never left with nothing.
+    When the new build fails the old kind is built again, and when even that fails the tunnel is put back in the list as down (`_keep_down`), so the operator is never left with nothing:
+    the removal keeps a copy ('Recently removed') and, for a repair in place, writes down how to build it again should the panel restart in the middle.
     `skip_offline`: a side whose server is off is not asked over SSH (its files are purged later, by the Doctor, when it is back).
     A run of attempts (`_switch_cut`) takes the copy of the tunnel once (`snap`: the later attempts have no tunnel row any more), removes the tunnel only in the first (`first`), builds the old
     kind again only after the last (`restore`) and reads the last line of every build (`out`)."""
@@ -538,10 +568,11 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
     _say(aid, f"{why} Replacing {snap['label']}: {old_kind} → {kind}" if first else f"{why} Building {kind} as {snap['label']}")
 
     if first:
-        res = builder.delete_tunnel(tunnel_id, skip_offline=skip_offline)
+        _remember_rebuild(snap, iran_id, foreign_id)
+        res = builder.delete_tunnel(tunnel_id, trash=True, skip_offline=skip_offline)
         _say(aid, "Old tunnel removed: " + "; ".join(res))
 
-    ok, story = _wait(_build_kind(snap, iran_id, foreign_id, kind))
+    ok, story = _try_build(snap, iran_id, foreign_id, kind)
 
     if out is not None:
         out.append(story[-1] if story else "")
@@ -553,8 +584,11 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
     _say(aid, f"The {kind} build failed ({story[-1] if story else '?'})." + (f" Putting the old {old_kind} tunnel back." if restore else ""))
 
     if restore:
-        ok2, _ = _wait(_build_kind(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts")))
-        _say(aid, "The old tunnel is back." if ok2 else "The old tunnel could not be rebuilt either: it needs a human.")
+        ok2, story2 = _try_build(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts"))
+        _say(aid, "The old tunnel is back." if ok2 else f"The old tunnel could not be rebuilt either ({story2[-1][:120] if story2 else '?'}).")
+
+        if not ok2:
+            _keep_down(aid, snap, story2[-1] if story2 else "the old tunnel could not be rebuilt")
 
     return False
 
@@ -598,6 +632,27 @@ def _probe_links(aid: int, snap: dict, kinds: list[str]) -> list[str]:
     return keep
 
 
+def _unfit_servers(snap: dict) -> dict[str, str]:
+    """{server name: why} for each server of the pair that cannot run the types with a test door (BackPack, Paqet, Chisel): no python3, not root, not x86_64. Read only - the look every such build takes first,
+    asked here BEFORE the tunnel is removed, so that twenty builds that cannot work are not tried one after the other over a tunnel that is already gone. A server that does not answer is not judged."""
+    with session() as db:
+        servers = [db.get(Server, snap["iran_id"]), db.get(Server, snap["foreign_id"])]
+        nodes = [(s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in servers if s is not None]
+
+    def look(item: tuple[str, Node]) -> tuple[str, str]:
+        name, node = item
+
+        try:
+            out = run_script(node, "simple_facts", timeout=45)
+        except (SSHError, ValueError, RuntimeError):
+            return name, ""
+
+        return name, build_other.unfit_reason(build_other.parse_simple_facts(out)) if "PY=" in out and "ID=" in out else ""          # (no facts back: not judged)
+
+    with ThreadPoolExecutor(2) as ex:
+        return {name: why for name, why in ex.map(look, nodes) if why}
+
+
 def _carrier_last_resort(aid: int, snap: dict, tried: set[str]) -> list[str]:
     """The kinds to try when every kind of the list failed: a WireGuard link carried inside Chisel (`knowledge.CARRIER_KINDS`) passes where raw GRE, ESP and every UDP port are filtered, because it needs one TCP port only.
     They are not in the standard order (they are the slowest way: a TCP stream carries the UDP packets) and the Doctor never installs a package for them: the link probe tries each carrier for real (seconds), and only those that
@@ -630,12 +685,22 @@ def _carrier_last_resort(aid: int, snap: dict, tried: set[str]) -> list[str]:
 def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     """Replace a tunnel that is CUT by the first type in `kinds` that connects: each one is built as the REAL tunnel (same name, same ports) and the build checks that data passes - there is nothing to
     test beside it and nothing to lose, the tunnel is cut - so the first that carries data is the repair (the owner, 2026-10-16: "go for the method that connects"). Every answer is kept for the next
-    time: a type that did not connect here is not tried again for two weeks, one that did goes first. Returns the type that connected, "" when none did (the old type is built again then)."""
+    time: a type that did not connect here is not tried again for two weeks, one that did goes first. Returns the type that connected, "" when none did (the old type is built again then, and when even that
+    cannot be built the tunnel is put back in the list as down). A type that a server cannot run at all (no python3 for the test door ...) is left out BEFORE the tunnel is removed, and when that leaves
+    nothing to build the tunnel is not touched - the owner, 2026-10-21: "the UA tunnel was deleted by itself": twenty types failed on the same missing python3 and nothing was left to retry."""
     from . import license
 
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
     first = True
     allowed = _probe_links(aid, snap, [k for k in kinds if license.tunnel_kind_allowed(k)])
+    door = [k for k in allowed if tunnel_test.kind_parts(k)[0] != "backhaul"]          # (BackPack, Paqet, Chisel: the types with a test door)
+
+    if door:
+        unfit = _unfit_servers(snap)
+
+        if unfit:
+            allowed = [k for k in allowed if k not in door]
+            _say(aid, f"{len(door)} kind(s) left out, nothing was removed for them: " + "; ".join(f"{name} {why}" for name, why in unfit.items()) + " - none of the types with a test door can run on it. " + ", ".join(door))
 
     queue, last_resort, n = list(allowed), False, 0
 
@@ -655,9 +720,12 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
         ok = _replace(aid, snap["id"], snap["iran_id"], snap["foreign_id"], kind, "", snap=snap, first=first, restore=False, out=out)
         first = False
 
+        unfit_now = not ok and tunnel_test.server_unfit(out)          # (a server that cannot run the engine: not a verdict on the route)
+
         try:
             q = _quality_of(snap["name"]) if ok else {}
-            result = {"kind": kind, "ok": int(q.get("score") or 0) >= 50, "works": True, **{k: q.get(k) for k in knowledge.NUMS}} if ok else {"kind": kind, "ok": False, "error": (out[-1] if out else "")[:140], **({"skipped": "tools"} if tunnel_test.tools_missing(out) else {})}
+            result = {"kind": kind, "ok": int(q.get("score") or 0) >= 50, "works": True, **{k: q.get(k) for k in knowledge.NUMS}} if ok else {"kind": kind, "ok": False, "error": (out[-1] if out else "")[:140],
+                                                                                                                                                      **({"skipped": "tools"} if tunnel_test.tools_missing(out) else {"skipped": "server"} if unfit_now else {})}
             knowledge.record(snap["iran_id"], snap["foreign_id"], result, "latency")
         except Exception:
             log.exception("what %s answered could not be kept", kind)
@@ -665,10 +733,22 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
         if ok:
             return kind
 
-    if not first:
+        if unfit_now:                                              # every other type of that engine fails the same way: not tried one after the other
+            left = [k for k in queue if tunnel_test.kind_parts(k)[0] != "backhaul"]
+
+            if left:
+                queue = [k for k in queue if k not in left]
+                _say(aid, f"{len(left)} more kind(s) left out: the server cannot run them (see above). " + ", ".join(left))
+
+    if first:
+        _say(aid, "Nothing could be built on this route, so nothing was removed: the tunnel stays as it is.")
+    else:
         _say(aid, f"None of the {n} tunnel types connected on this route. Putting the old {old_kind} tunnel back so it is not lost.")
-        ok2, _ = _wait(_build_kind(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts")))
-        _say(aid, "The old tunnel is back." if ok2 else "The old tunnel could not be rebuilt either: it needs a human.")
+        ok2, story2 = _try_build(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts"))
+        _say(aid, "The old tunnel is back." if ok2 else f"The old tunnel could not be rebuilt either ({story2[-1][:120] if story2 else '?'}).")
+
+        if not ok2:
+            _keep_down(aid, snap, story2[-1] if story2 else "the old tunnel could not be rebuilt")
 
     return ""
 
@@ -678,14 +758,28 @@ def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False) -> tuple[b
     the old tunnel is built again from the copy taken before it was removed (and stays in 'Recently removed' if even that fails)."""
     snap = _snapshot(tunnel_id)
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
-    ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=fresh_link))
+
+    try:
+        ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=fresh_link))
+    except (ValueError, RuntimeError, SSHError) as e:
+        with session() as db:
+            still_there = db.get(Tunnel, tunnel_id) is not None
+
+        if still_there:                  # refused before anything was removed (read-only, no ports saved): nothing to put back
+            raise
+
+        ok, story = False, [f"Stopped: {str(e)[:160]}"]          # the build could not even start after the removal: a failed build, the old tunnel is put back below
 
     if ok:
         return True, story
 
     _say(aid, f"The new build failed ({story[-1][:160] if story else '?'}). Putting the old {old_kind} tunnel back so it is not lost.")
-    ok2, _ = _wait(_build_kind(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts")))
-    _say(aid, "The old tunnel is back." if ok2 else "The old tunnel could not be built again either (the cause is still there). Its copy is in 'Recently removed' on the Tunnels page: Restore builds it when the cause is gone.")
+    ok2, story2 = _try_build(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts"))
+    _say(aid, "The old tunnel is back." if ok2 else f"The old tunnel could not be built again either ({story2[-1][:120] if story2 else '?'}; the cause is still there).")
+
+    if not ok2:
+        _keep_down(aid, snap, story2[-1] if story2 else "the old tunnel could not be built again")
+
     return False, story
 
 
