@@ -49,6 +49,15 @@ that then could not be saved is deleted again, a panel change is put back); a re
 plans start at the first connection; a new user without payment history sees the gift-card / USDT
 text instead of the card number; three receipts waiting = no new top-up.
 
+## In the menu of the bot
+
+Telegram's Menu button is either the command list or ONE Mini App, never both. To keep the Menu and still offer the Mini App the bot gets a `/shop` command:
+`bash scripts/install-shop-command.sh /var/www/<bot>` puts one block into the bot's `bot.php` (after its ban and spam checks, between `// [shop-command]` markers;
+`--dry-run` checks `php -l` first, `--uninstall` takes the block out byte for byte, the old file is kept in `$BACKUP_DIR`), and `shop` is in the command list
+(the panel's Shop bot page sets it with the others). `/shop` answers with a message and a button that opens `<botUrl>app/`.
+To make the Mini App the Menu button instead: BotFather > Bot Settings > Menu Button > the URL `<botUrl>app/` (this replaces the command list).
+A bot without `extras.php` works too; its web server must let `app/api.php` run (nginx: add `app/api\.php` to the list of allowed php files).
+
 ## Security
 
 * Only requests with a valid, fresh (< 24 h) `initData` signature are answered; the user id comes

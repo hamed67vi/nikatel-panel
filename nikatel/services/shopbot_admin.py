@@ -1036,7 +1036,7 @@ def miniapp_deploy() -> dict:
 
 
 COMMANDS = [{"command": "start", "description": "منوی اصلی"}, {"command": "buy", "description": "خرید اشتراک"}, {"command": "mysubs", "description": "اشتراک‌های من"},
-            {"command": "wallet", "description": "کیف پول"}, {"command": "support", "description": "پشتیبانی"}, {"command": "help", "description": "راهنما"}]
+            {"command": "wallet", "description": "کیف پول"}, {"command": "support", "description": "پشتیبانی"}, {"command": "help", "description": "راهنما"}, {"command": "shop", "description": "فروشگاه"}]
 
 
 def set_commands() -> dict:

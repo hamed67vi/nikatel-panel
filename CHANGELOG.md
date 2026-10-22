@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.110 - /shop opens the Mini App from the command list
+
+> **In short:** Telegram's Menu button is either the command list or one Mini App, never both. So the Mini App became a command of the list: `/shop` answers with a message and a button that opens it, and the Menu button stays the normal Menu. `scripts/install-shop-command.sh <bot dir>` adds one block to the bot's `bot.php` (backup, `php -l` before replacing, `--uninstall` takes it out byte for byte); the panel's command list has `shop` too.
+
+The owner (2026-10-23, translated from Persian, after the Mini App was put on the Menu button of `@nikatelshopbot` for his own chat): "can't the normal Menu button come, and this be one of its options?"
+
+- **The block** (`// [shop-command]` ... `// [/shop-command]`, inserted before `// Pre Pay Check By ACh`, i.e. after the bot's own ban and spam checks): for a text message `/shop` or `/shop@<bot>` in a PRIVATE chat, when `$botUrl` is set, `sendMessage` a line and an inline `web_app` button to `<botUrl>app/`, then `exit()`. Every other update goes on as before: `/shopping`, `/shop now`, a group, a callback button on a message that reads `/shop`, a banned user (the ban check runs first), no `$botUrl`. It reads `$update->message->text` (not `$text`, which is the text of the message a callback button sits on).
+- **The installer**: idempotent ("already installed" / "no change"), keeps Windows line ends, refuses a `bot.php` without exactly one anchor, writes the new file beside the old one, runs `php -l` on it, keeps the old file in `$BACKUP_DIR` (default `/root/backups`) and only then replaces it with the same owner and mode; `--dry-run` stops before the replace.
+- **The command list**: `COMMANDS` of the panel (`shopbot_admin.py`) has `{"command": "shop", "description": "فروشگاه"}`. The live bot's list was extended with `setMyCommands` (the other three commands untouched).
+- **Done on the main bot with the owner's yes (2026-10-23)**: the Mini App files in `/var/www/bot/app/`, the nginx location of the bot got `|app/api\.php` (vhost backed up, `nginx -t`, reload), the block in `bot.php` (the old file kept in the root backups folder of that server), `/shop` added to the command list, the Menu button of the owner's chat back to the normal Menu (it had been the Mini App for a few minutes; every other chat never had anything else). Read-only smoke test of the Mini App as the owner's account through the real web path (me, services, plans, history, referral, apps, tickets): all answer, nothing in the error log; the bot answered 200 and Telegram's last webhook error is the 09:03 UTC one of the morning.
+- **Proved**: `tests/test_miniapp_shop_command.py` (6 tests: dry run / install / again / uninstall byte for byte, CRLF, wrong anchor, a file that does not parse is never put in place; the block under php with the bot's functions stubbed: `/shop`, `/SHOP`, ` /shop `, `/shop@bot` answer with the button and stop, ten other updates continue, a banned user never reaches it). **Not proved**: a real `/shop` tap in the owner's Telegram (the owner does it), the Mini App button on every Telegram client.
+
 ## 1.69.109 - Telegram gets only outages: no more DNS edit messages
 
 > **به زبان ساده:** پیام‌های تغییر DNS و جابه‌جایی رکوردها دیگر به تلگرام نمی‌روند؛ فقط قطعی‌ها.
