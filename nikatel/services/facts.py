@@ -69,6 +69,7 @@ def parse_facts(out: str) -> dict:
     ram_used = max(0.0, mt - ma)
     top = kv.get("TOP", "").split()
     abuse = kv.get("ABUSE", "").strip()
+    mz = kv.get("MZNODE", "").strip()
 
     try:
         busiest = f"{top[0]} {float(top[-1]):.0f}%" if len(top) >= 2 else ""
@@ -104,6 +105,7 @@ def parse_facts(out: str) -> dict:
         "kernel": host[1] if len(host) > 1 else "",
         "top": busiest,      # busiest process
         "abuse_rules": int(abuse) if abuse.isdigit() else 0,                   # Abuse-Defender DROP rules (0 = not installed)
+        "mz_node": int(mz) if mz.isdigit() else (0 if "MZNODE" in kv else None),      # Marzban node containers that are up (0 = none / no docker; None = this reading did not say)
     }
 
 

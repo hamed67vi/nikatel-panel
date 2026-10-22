@@ -1280,3 +1280,6 @@ html body #page .tun-tbl tr.clk:focus-visible { outline: 2px solid rgba(120, 160
 html body #page .tun-tbl td.td-node > b { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 html body #page .tun-tbl td.td-node > b > .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 html body #page .tun-tbl td.td-node > b > :not(.nm) { flex: none; }
+
+/* the Marzban node card of a server: "Node installed" is a quiet green button that does nothing */
+html body #modal .ins-btn.ok, html body #modal .ins-btn.ok:disabled { color: var(--ok, #38d996) !important; border-color: color-mix(in srgb, var(--ok, #38d996) 45%, transparent) !important; background: color-mix(in srgb, var(--ok, #38d996) 12%, transparent) !important; opacity: 1; cursor: default; box-shadow: none; }

@@ -1213,13 +1213,14 @@ const INS_IC = {
 const insIc = k => `<svg class="ins-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${INS_IC[k]}</svg>`;
 function installHtml(s) {
   const ab = ((s.extra || {}).abuse || {}), abuseOn = ab.installed || ((s.facts || {}).abuse_rules || 0) > 0;
+  const mzf = (s.facts || {}).mz_node, mzOn = mzf != null ? mzf > 0 : !!((s.extra || {}).mznode || {}).installed;      // (the owner, 2026-10-22: when the node is installed the button says "Node installed"; the server's own reading wins over what the panel wrote down)
   const btn = (ic, label, click, cls = "", off = false) => `<button type="button" class="ins-btn ${cls}" ${off ? "disabled" : `onclick="${click}"`}>${insIc(ic)}${label}</button>`;
   const row = (ic, title, chip, btns, tip) => `<div class="ins-row" title="${esc(tip)}"><span class="ins-ico">${insIc(ic)}</span><b>${title}</b>${chip}<span class="sp"></span>${btns}</div>`;
   return `<div class="ins3">
     <div class="ins-two">
-      <div class="ins-node"><div class="ins-h"><span class="ins-sq mz"></span><b>Marzban node</b></div>
+      <div class="ins-node"><div class="ins-h"><span class="ins-sq mz"></span><b>Marzban node</b>${mzOn ? '<span class="pill ins-chip ok"><i></i>Installed</span>' : ""}</div>
         <div class="ins-field"><textarea id="ins-cert-${s.id}" rows="3" spellcheck="false" placeholder="Certificate from the Marzban panel (Nodes → Add node), from BEGIN to END">${esc(window.NODE_CERT || "")}</textarea><button type="button" class="ins-mini" title="Paste the certificate from the clipboard" onclick="insPaste(${s.id})">${insIc("doc")}</button></div>
-        <div class="ins-act">${btn("copy", "Copy", `insCopy(${s.id})`)}<span class="sp"></span>${btn("dl", "Install node", `srvInstall(${s.id}, 'marzban_node')`, "pri")}</div></div>
+        <div class="ins-act">${btn("copy", "Copy", `insCopy(${s.id})`)}<span class="sp"></span>${mzOn ? '<button type="button" class="ins-btn ok" disabled title="A Marzban node is running on this server">✓ Node installed</button>' : btn("dl", "Install node", `srvInstall(${s.id}, 'marzban_node')`, "pri")}</div></div>
       ${window.pgSrvCard ? pgSrvCard(s) : ""}
     </div>
     <div class="ins-rows">

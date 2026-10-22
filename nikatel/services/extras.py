@@ -182,6 +182,9 @@ def _work(aid: int, server_id: int, items: list[str], cert: str, resume: bool = 
             nodes.set_busy(server_id, "installing", BUSY_TEXT.get(item, LABEL[item]), unless="node")
             results[item] = _run_item(aid, node, ip, item, cert, resume)
             resume = False
+
+            if item == "marzban_node" and results[item]:
+                nodes._set_extra(server_id, mznode={"installed": True, "at": int(time.time())})          # (the card of the server says "Node installed" at once; the reading of the server decides from then on)
     except Exception as e:
         log.exception("install on %s crashed", name)
         autopilot._say(aid, f"Stopped: {str(e)[:200]}", done=True, ok=False)

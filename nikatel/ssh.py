@@ -134,6 +134,7 @@ echo "CONN=$(ss -tan state established 2>/dev/null | tail -n +2 | wc -l)"
 echo "HOST=$(hostname) $(uname -r)"
 echo "TOP=$(ps -eo comm=,pcpu= --sort=-pcpu 2>/dev/null | head -1)"
 echo "ABUSE=$(iptables -S abuse-defender 2>/dev/null | grep -c DROP)"
+echo "MZNODE=$(command -v docker >/dev/null 2>&1 && timeout 3 docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -ci 'marzban-node.* Up')"
 """, {}),
 
     # what tunnels already exist on this server (backhaul tomls + our GRE links), without any secret

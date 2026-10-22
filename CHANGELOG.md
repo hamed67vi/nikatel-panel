@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.102 - The Marzban node card says "Node installed" when a node runs
+
+> **به زبان ساده:** کارت «Marzban node» در Install سرور، وقتی نود نصب است «✓ Node installed» می‌نویسد، نه «Install node».
+>
+> **In short:** the Marzban node card of a server says "Installed" / "✓ Node installed" when the node runs, not "Install node".
+
+The owner (2026-10-22, a picture of the card of a foreign server): "when the node is installed, it should say Node installed".
+
+- **Where the card learns it**: the server read script prints `MZNODE=<number of marzban-node containers that are up>` (read-only: `command -v docker` then `timeout 3 docker ps`; no docker = nothing); `facts.parse_facts` keeps it as `mz_node` (None when a reading did not say). `extras._work` also writes `extra.mznode` the moment a panel install ends well, so the card is right before the next reading. The reading of the server wins when it has one.
+- **The card** (`app.js installHtml`): a green "Installed" chip beside the title and a disabled green "✓ Node installed" button in place of "Install node"; a server without a node keeps its Install button.
+- **Proved**: `tests/test_marzban_node_installed.py` (the facts with MZNODE 1 / 0 / empty / missing, the script line is read-only and valid shell, a finished install is written down and a failed one is not, the card source and the CSS). **Not proved**: with a real node on a real server (only the script text and the parsing were tested), and how the green button looks in the owner's browser.
+
 ## 1.69.101 - The standby of a removed tunnel goes, the stories a restart left open are closed, the engine's rules checked with odd inputs
 
 > **به زبان ساده:** وقتی تانلی را با «جایگزین کردن» در ساخت تانل عوض می‌کردید، استندبای تانل قدیمی روی سرورها می‌ماند (در پنل زنده ۹ ساعت ماند، چون شمارندهٔ پاک‌سازی با هر ری‌استارت از نو شروع می‌شد). حالا استندبای آن هم مثل دکمهٔ حذف پاک می‌شود و شمارنده در تنظیمات ذخیره است. ۷۵ گزارش نیمه‌کارهٔ قدیمی که ری‌استارت باز گذاشته بود بسته می‌شوند، نمرهٔ کاربر همیشه بین ۰ و ۱۰۰ است، و قانون‌های موتور تانل با ورودی‌های عجیب آزمایش شدند.
