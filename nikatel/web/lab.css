@@ -1274,3 +1274,9 @@ html body #modal .tunwin .fix[id^="fix-"]:not(.hidden) { height: auto; min-heigh
 html body #modal .tunwin .fix[id^="fix-"]:not(.hidden):not(:has(.fx-line.run, .loading))::after { content: "✕"; position: absolute; top: 8px; right: 14px; font-size: 13px; opacity: .55; pointer-events: none; }
 /* a search with no hit: one quiet line in the middle of the box */
 html body #page .lbox > .q-none { padding: 34px 16px; text-align: center; font-size: 13.5px; color: var(--mut, #8b93a7); }
+/* a row of the tunnel list reached with the keyboard shows where it is */
+html body #page .tun-tbl tr.clk:focus-visible { outline: 2px solid rgba(120, 160, 255, .85); outline-offset: -2px; }
+/* a long server name in the tunnel list ends in an ellipsis (it was cut by the cell with nothing to show it) and the whole name is in its tooltip */
+html body #page .tun-tbl td.td-node > b { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+html body #page .tun-tbl td.td-node > b > .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+html body #page .tun-tbl td.td-node > b > :not(.nm) { flex: none; }

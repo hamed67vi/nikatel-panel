@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.95 - the tunnel list by keyboard, and a long server name ends in an ellipsis
+
+> **به زبان ساده:** ردیف‌های لیست تانل فقط با ماوس باز می‌شدند (در منوی «⋯» هم «باز کردن» نبود). حالا با Tab می‌رسی به ردیف، با Enter یا Space پنجرهٔ تانل باز می‌شود، و با Esc که ببندی فوکوس به همان ردیف برمی‌گردد. اسم بلند سرور در ستون «Iran node / Foreign node» دیگر بدون هیچ نشانه بریده نمی‌شود: با «…» تمام می‌شود، اسم کامل در tooltip است و نشان «⚠ ×2» سالم کنارش می‌ماند.
+>
+> **In short:** a row of the tunnel list is reached with Tab and opened with Enter or Space (it was mouse-only: the menu of a tunnel has no "Open"), and Esc brings the focus back to the row. A long server name in the Iran / Foreign node columns ends in an ellipsis with the whole name in its tooltip, and the "⚠ ×2" mark stays whole beside it.
+
+- **Keyboard** (`app.js` row of `PAGES.tunnelsList`, a delegated `keydown`; `lab.css`): `tabindex="0"` on a clickable row, Enter / Space opens its window, a focus ring on the row. Measured in the browser: focus the second row, Enter opens its window, Esc closes it and the focus is on the same row.
+- **Long server names** (`app.js` row template, `lab.css`): the name of a server was cut by the cell with no ellipsis and no tooltip (a 56-character name: 162 px of 370 shown, nothing said). The name is in its own `<span class="nm">` that ends in "…", the `<b>` carries the whole name as its tooltip, and the "⚠ ×N" mark of the foreign cell is `flex: none` beside it.
+- **Proved**: `tests/test_qa_tunnel_pages.py` (2 more tests on the source); the walk in the browser above, on a private panel (a 56-character Iran name and a 57-character foreign name; `scrollWidth` of the page stays at the window's width).
+- **Open (the owner's call)**: the box "Recently removed" shows only the newest removed tunnel for 10 minutes while the texts say a copy is kept for 30 days: after 10 minutes the UI has no way to restore a tunnel (only the API).
+
 ## 1.69.94 - "Remove the TLS copies" never removes a host you made by hand
 
 > **به زبان ساده:** دکمه‌ی «حذف کپی‌های TLS» در تب Hosts همه‌ی هاست‌هایی را که اسمشان با «TLS» تمام می‌شد و امنیتشان tls بود پاک می‌کرد؛ این شامل هاست‌هایی هم می‌شد که خودِ شما دستی ساخته‌اید و اسمشان اتفاقاً با «TLS» تمام می‌شود. حالا فقط کپی‌ای پاک می‌شود که هاست ساده‌ی اصلی‌اش (همان اسم بدون «TLS»، روی همان inbound) هنوز کنارش هست؛ بقیه دست‌نخورده می‌مانند و پیام می‌گوید چند تا نگه داشته شد. قبل از هر حذف از هاست‌ها نسخه‌ی پشتیبان ذخیره می‌شود (مثل قبل).

@@ -51,5 +51,19 @@ def test_check_all_counts_the_tunnels_whose_servers_did_not_answer():
     assert '${r.unknown ? " · " + r.unknown + " not answering" : ""}' in fn and "r.down || r.unknown || r.high_loss ? \"bad\" : \"ok\"" in fn
 
 
+def test_a_row_of_the_tunnel_list_opens_with_the_keyboard():
+    assert 'title="Click for the details" tabindex="0"' in APP
+    key = APP.split('document.addEventListener("keydown", e => {      // a row of the tunnel list can be reached', 1)[1].split("\n});", 1)[0]
+    assert '#page .tun-tbl tr.clk[tabindex]' in key and 'e.key === "Enter" || e.key === " "' in key and "r.click()" in key
+    assert "html body #page .tun-tbl tr.clk:focus-visible" in CSS
+
+
+def test_a_long_server_name_in_the_tunnel_list_ends_in_an_ellipsis_and_has_its_tooltip():
+    assert '<td class="td-node ir"><b title="${esc(t.iran_name)}"><span class="nm">${esc(t.iran_name)}</span></b>' in APP
+    assert '<td class="td-node"><b title="${esc(t.foreign_name)}"><span class="nm">${esc(t.foreign_name)}</span>${dupMark(t)}</b>' in APP          # (the "⚠ ×2" mark stays whole beside the cut name)
+    assert "html body #page .tun-tbl td.td-node > b > .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }" in CSS
+    assert "html body #page .tun-tbl td.td-node > b > :not(.nm) { flex: none; }" in CSS
+
+
 def test_the_build_form_starts_on_a_foreign_server_that_answers():
     assert "const firstOn = role =>" in APP and re.search(r'role === "foreign" && \(v\[name\] == null \|\| v\[name\] === ""\) && s\.id === firstOn\(role\)', APP)
