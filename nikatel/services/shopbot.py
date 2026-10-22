@@ -272,6 +272,19 @@ def partners(q: str = "", page: int = 0, sort: str = "recent", limit: int = 0) -
     return {"total": int(tot["n"]), "wallet": int(float(tot["wallet"] or 0)), "orders": int(allo["n"]), "page": page, "per": per, "rows": rows}
 
 
+def _amount(value) -> int:
+    """A wallet amount in Toman: a whole number inside what the bot's column holds; "inf", "nan" or a text is a sentence (400), not an OverflowError (500)."""
+    try:
+        v = int(float(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("the amount must be a number") from None
+
+    if abs(v) > 10 ** 12:
+        raise ValueError("the amount is too big")
+
+    return v
+
+
 def user_action(action: str, userid: str, value=None) -> dict:
     uid = str(userid or "").strip()
 
@@ -289,7 +302,7 @@ def user_action(action: str, userid: str, value=None) -> dict:
     elif action == "agent_off":
         write(f"UPDATE users SET is_agent = 0 WHERE userid = \"{uid}\"")
     elif action == "discount":
-        v = int(float(value or 0))
+        v = _amount(value)
 
         if not 0 <= v <= 100:
             raise ValueError("discount is a percent between 0 and 100")
@@ -309,9 +322,9 @@ def user_action(action: str, userid: str, value=None) -> dict:
         cur["normal"] = v
         write(f'UPDATE users SET discount_percent = FROM_BASE64("{base64.b64encode(json.dumps(cur).encode()).decode()}") WHERE userid = "{uid}"')
     elif action == "wallet":
-        write(f"UPDATE users SET wallet = GREATEST(0, COALESCE(wallet, 0) + {int(float(value or 0))}) WHERE userid = \"{uid}\"")
+        write(f"UPDATE users SET wallet = GREATEST(0, COALESCE(wallet, 0) + {_amount(value)}) WHERE userid = \"{uid}\"")
     elif action == "wallet_set":
-        write(f"UPDATE users SET wallet = {max(0, int(float(value or 0)))} WHERE userid = \"{uid}\"")
+        write(f"UPDATE users SET wallet = {max(0, _amount(value))} WHERE userid = \"{uid}\"")
     elif action == "ban":
         write(f"UPDATE users SET step = \"banned\" WHERE userid = \"{uid}\"")
     elif action == "unban":

@@ -2292,9 +2292,11 @@ window.foPoint = async () => {
   if (!await gconfirm(`Point ${names.join(", ")} at ${sel.options[sel.selectedIndex].textContent} now? Every change is listed below with a Restore.`, {danger: true})) return;
   try { const r = await api("/api/failover/point", {method: "POST", body: JSON.stringify({names, iran_id: +sel.value})}); showModal("<b>🌐 DNS</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>'); followStory(r.action_id, $("#ap-story"), 120).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-window.foRestore = async id => {
-  if (!await gconfirm("Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.", {danger: true})) return;
-  try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + r.fqdn + " points at " + r.old + " again", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+window.foRestore = async (id, op) => {
+  const ask = {create: "Delete this record again? It was made by hand.", delete: "Make this deleted record again, as it was?", edit: "Put this record back as it was before the change?"}[op]
+    || "Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.";
+  if (!await gconfirm(ask, {danger: true})) return;
+  try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + (op === "create" ? r.fqdn + " deleted again" : op === "delete" ? r.fqdn + " made again" : op === "edit" ? r.fqdn + " is back as it was" : r.fqdn + " points at " + r.old + " again"), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.apDetail = id => {
   const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return;
@@ -2679,7 +2681,7 @@ PAGES.panels = async () => {
   if (pn.id === "*") pn.id = "";
   const sel = list.find(p => String(p.id) === pn.id) || list[0];
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
-  const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
+  const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms != null ? p.latency_ms + " ms" : "answers"}</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
   if (!list.length) { $("#page").innerHTML = manage ? pnBar([], "", "") + pnFirstCard() : pnEmptyPage(); if (!manage) pnFuse(); if (typeof fxFit === "function") fxFit(); return; }      // (no panel: the boxes of the tab stay, empty, with the way to add one - the owner, 2026-10-15)
   const p = sel, s = p.stats || {};
   const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
@@ -5030,7 +5032,7 @@ function dnsChanges(log, accounts) {
   const an = id => (accounts.find(a => a.id === (id || "arvan")) || {}).name || "ArvanCloud", opName = {create: "made", edit: "changed", delete: "deleted"};
   const row = e => `<tr class="${e.restored ? "" : "up"}"><td class="mut" title="${when(e.at)}">${ago(e.at)} ago</td><td class="name" dir="ltr" title="${esc(e.fqdn)}">${esc(e.fqdn)}</td><td class="mono dns-who" title="${esc(e.op ? (e.old || "—") + " → " + (e.new || "—") : e.old + " → " + e.new)}">${e.op ? esc((e.old || "—") + " → " + (e.new || "—")) : esc(e.old) + " → " + esc(e.new)}</td><td class="dns-who" title="${esc(e.op ? an(e.account) + " · by hand · " + opName[e.op] : e.server + (e.target && e.target !== e.server ? " → " + e.target : ""))}">${e.op ? esc(an(e.account)) + " · by hand · " + opName[e.op] : esc(e.server) + (e.target && e.target !== e.server ? " → " + esc(e.target) : "")}</td>
     <td>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : '<span class="pill ok">active</span>'}</td>
-    <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}')" title="Put this change back">↩ Restore</button>`}</td></tr>`;
+    <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}', '${esc(e.op || "")}')" title="Put this change back">↩ Restore</button>`}</td></tr>`;
   return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:10%"><col style="width:22%"><col style="width:22%"><col style="width:26%"><col style="width:9%"><col style="width:11%"></colgroup>
     <thead><tr><th>When</th><th data-fit="200">Name</th><th data-min="150">Address</th><th data-min="150">Who</th><th>State</th><th></th></tr></thead>
     <tbody>${log.map(row).join("") || '<tr><td colspan="6" class="empty">No record has been changed yet. Every record you make, change or delete (or the failover re-points) is listed here and can be put back with one click.</td></tr>'}</tbody></table>`;

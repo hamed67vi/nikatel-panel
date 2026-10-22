@@ -15,6 +15,7 @@ import base64
 import calendar
 import datetime
 import json
+import math
 import re
 import time
 import uuid
@@ -1104,6 +1105,19 @@ def user_update(c: dict, username: str, ch: dict) -> dict:
     return user_get(c, username)
 
 
+def _number(value, what: str, kind):
+    """`value` of an action as an int / float; a missing, odd or infinite one is a sentence (400), not a TypeError / OverflowError (500)."""
+    try:
+        v = kind(value)
+
+        if isinstance(v, float) and not math.isfinite(v):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{what}: a number is needed") from None
+
+    return v
+
+
 def user_action(c: dict, username: str, action: str, value=None) -> None:
     path = _upath(username)
 
@@ -1113,7 +1127,7 @@ def user_action(c: dict, username: str, action: str, value=None) -> None:
     elif action == "reset":
         call(c, "POST", path + "/reset", body={})
     elif action == "renew":
-        days = int(value)
+        days = _number(value, "days", int)
 
         if not 1 <= days <= 3650:
             raise ValueError("days must be between 1 and 3650")
@@ -1125,7 +1139,7 @@ def user_action(c: dict, username: str, action: str, value=None) -> None:
     elif action == "delete":
         call(c, "DELETE", path)
     elif action == "limit":
-        gb = float(value)
+        gb = _number(value, "the limit", float)
 
         if not 0 <= gb <= 100000:
             raise ValueError("the limit must be between 0 and 100000 GB (0 = unlimited)")
@@ -1364,11 +1378,21 @@ def hosts(c: dict) -> tuple[list[dict], object]:
     return hosts_rows(raw, _inbound_ports(c)), raw
 
 
+def _marz_key(key: str) -> tuple[str, str]:
+    """A Marzban host key is 'inbound tag#index'; anything else is "not found" (a sentence), not an unpacking error."""
+    tag, sep, idx = str(key).rpartition("#")
+
+    if not sep:
+        raise ValueError("host not found")
+
+    return tag, idx
+
+
 def _host_find(c: dict, key: str):
     raw = call(c, "GET", "/api/hosts")
 
     if isinstance(raw, dict):
-        tag, idx = str(key).rsplit("#", 1)
+        tag, idx = _marz_key(key)
 
         try:
             return raw, raw[tag][int(idx)], True
@@ -1473,7 +1497,7 @@ def host_clone(c: dict, key: str) -> None:
     cp.pop("id", None)
 
     if marz:
-        raw[str(key).rsplit("#", 1)[0]].append(cp)
+        raw[_marz_key(key)[0]].append(cp)
         call(c, "PUT", "/api/hosts", body=raw)
     else:
         call(c, "POST", "/api/host/", body=host_input(cp))                  # (with the slash: without it the panel only redirects)
@@ -1483,7 +1507,7 @@ def host_delete(c: dict, key: str) -> None:
     raw, _h, marz = _host_find(c, key)
 
     if marz:
-        tag, idx = str(key).rsplit("#", 1)
+        tag, idx = _marz_key(key)
         del raw[tag][int(idx)]
         call(c, "PUT", "/api/hosts", body=raw)
     else:

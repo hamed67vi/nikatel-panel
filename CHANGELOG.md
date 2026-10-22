@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.88 - DNS Restore says what it does; the shop bot approves a payment once and never breaks a message; odd numbers are sentences
+
+> **به زبان ساده:** «برگرداندن» یک تغییر دستی در صفحه‌ی CDN حالا می‌گوید دقیقاً چه می‌کند (رکورد را دوباره حذف می‌کند، رکورد حذف‌شده را دوباره می‌سازد، یا مقدار قبلی را برمی‌گرداند). در ربات فروش، دوبار کلیک روی «تایید پرداخت» دیگر کیف پول را دوبار شارژ نمی‌کند و متنی که مشتری در تیکت نوشته (مثلاً «<») پیام تلگرام را خراب نمی‌کند. عدد نامعتبر (خالی، متن، بی‌نهایت) در عمل‌های کاربر پنل به‌جای خطای ۵۰۰ یک جمله می‌دهد.
+>
+> **In short:** Restore of a DNS change by hand says what it does. Shop bot: a double click on Approve no longer credits the wallet twice, and a "<" in a ticket or a decline reason no longer makes Telegram refuse the message. A missing / text / infinite number in a panel user action is a 400 sentence, not a 500.
+
+- **DNS Changes**: Restore asks and tells per kind of change ("Delete this record again?", "Make this deleted record again", "Put this record back as it was") instead of "Point this DNS record back at its previous address" for every change. A panel without a latency shows "answers", not "null ms".
+- **Panels**: renew / limit with no number, text, NaN or infinity is a 400 sentence (it was a TypeError / OverflowError = 500, and a bulk call stopped half way); a Marzban host key without "#" is "host not found".
+- **Shop bot**: Approve / Decline of one payment run one at a time (a second click gets "being handled": two clicks at once read "have_sent" twice and credited the wallet twice); the text of a ticket reply, the ticket title and a decline reason are HTML-escaped (the message goes out as HTML); a plan's `custom_sni` (JSON, up to 20000 characters) is checked and never cut at 2000 characters; wallet / discount / top-up numbers that are NaN or infinite are sentences.
+- **Proved**: `tests/test_qa_cfg_round.py` (the tests run as one file with the shop bot and panel tests). **Not proved**: the shop bot against a real bot database and Telegram.
+
 ## 1.69.87 - Servers check: the page fits a 1200-1536 px window; a renamed server keeps its mute; no role change under a tunnel; no key put on a server in read-only
 
 > کنترل کامل بخش سرورها: صفحه‌ی سرورها در پنجره‌های ۱۲۰۰ تا ۱۵۳۶ پیکسل دیگر از سمت راست بریده نمی‌شد (دکمه‌ی Add server دیده نمی‌شد)؛ سرور تغییرنام‌داده mute و وضعیت هشدارش را نگه می‌دارد؛ نقش سرور زیر تانل عوض نمی‌شود؛ Connect با رمز در حالت فقط‌خواندنی کلید نمی‌گذارد.

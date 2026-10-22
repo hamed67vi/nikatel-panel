@@ -7,9 +7,13 @@ go through the bot's own token on the bot server (the panel never holds it)."""
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
+import html
 import json
+import math
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -71,8 +75,8 @@ def lit(v) -> str:
 def num(v, default: int = 0) -> int:
     try:
         return int(float(str(v).strip() or default))
-    except ValueError:
-        raise ValueError(f"{v!r} is not a number")
+    except (ValueError, OverflowError):
+        raise ValueError(f"{v!r} is not a number") from None
 
 
 def ident(name: str) -> str:
@@ -161,8 +165,32 @@ def _admin_keys_done(p: dict, label: str) -> None:
         _tg("editMessageReplyMarkup", {"chat_id": chat, "message_id": mid, "reply_markup": keys})
 
 
+_PAY_BUSY: set[int] = set()          # payments that are being approved or declined right now (a double click is two requests: both would read "have_sent" and the wallet would be credited twice)
+_PAY_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _one_at_a_time(pay_id: int):
+    with _PAY_LOCK:
+        if int(pay_id) in _PAY_BUSY:
+            raise ValueError("this payment is being handled right now")
+
+        _PAY_BUSY.add(int(pay_id))
+
+    try:
+        yield
+    finally:
+        with _PAY_LOCK:
+            _PAY_BUSY.discard(int(pay_id))
+
+
 def pay_approve(pay_id: int, admin_id: int = 0) -> dict:
     """What the bot does when an admin presses ✅: state approved, the amount added to the user's wallet, both sides told."""
+    with _one_at_a_time(pay_id):
+        return _pay_approve(pay_id, admin_id)
+
+
+def _pay_approve(pay_id: int, admin_id: int) -> dict:
     p = _pay(pay_id)
 
     if p.get("state") in ("approved", "declined"):
@@ -185,6 +213,11 @@ def pay_approve(pay_id: int, admin_id: int = 0) -> dict:
 
 
 def pay_decline(pay_id: int, reason: str = "") -> dict:
+    with _one_at_a_time(pay_id):
+        return _pay_decline(pay_id, reason)
+
+
+def _pay_decline(pay_id: int, reason: str) -> dict:
     p = _pay(pay_id)
 
     if p.get("state") in ("approved", "declined"):
@@ -195,7 +228,7 @@ def pay_decline(pay_id: int, reason: str = "") -> dict:
     _admin_keys_done(p, "❌ رد شد (پنل)")
 
     if re.fullmatch(r"-?\d{1,20}", uid):
-        why = (reason or "").strip()
+        why = html.escape((reason or "").strip(), quote=False)          # (the message goes out as HTML: a "<" or "&" in the reason would make Telegram refuse the whole message)
         _tg("sendMessage", {"chat_id": uid, "parse_mode": "HTML", "text": "❌ درخواست افزایش موجودی شما تایید نشد." + (f"\n\n📝 دلیل: {why}" if why else "") + "\n\nدر صورت اشتباه با پشتیبانی در تماس باشید."})
 
     _event("warn", f"Bot payment #{pay_id} declined from the panel" + (f": {reason[:80]}" if reason else "."), uid)
@@ -264,6 +297,9 @@ def plans() -> list[dict]:
                 "(SELECT COUNT(*) FROM orders_list o WHERE o.fileid = p.id) AS sold FROM server_plans p LEFT JOIN server_categories c ON c.id = p.catid LEFT JOIN server_info s ON s.id = p.server_id ORDER BY p.catid, p.price, p.id")
 
 
+LONG_TEXT = {"custom_sni": 20000, "descr": 4000}          # fields that may hold more than 2000 characters; the plan's custom_sni is JSON (the inbounds of the plan) that must never be cut in the middle
+
+
 def _clean(fields: dict, allowed: dict) -> dict:
     out = {}
 
@@ -276,9 +312,31 @@ def _clean(fields: dict, allowed: dict) -> dict:
         if kind is int:
             out[k] = num(v)
         elif kind is float:
-            out[k] = float(str(v).strip() or 0)
+            f = float(str(v).strip() or 0)
+
+            if not math.isfinite(f):
+                raise ValueError(f"{k}: a number is needed")
+
+            out[k] = f
         else:
-            out[k] = str(v if v is not None else "")[:2000]
+            s, cap = str(v if v is not None else ""), LONG_TEXT.get(k, 2000)
+
+            if len(s) > cap:
+                if k == "custom_sni":
+                    raise ValueError(f"the inbounds of a plan are longer than {cap} characters: they would be cut in the middle")
+
+                s = s[:cap]
+
+            if k == "custom_sni" and s.strip():
+                try:
+                    ok = isinstance(json.loads(s), dict)
+                except ValueError:
+                    ok = False
+
+                if not ok:
+                    raise ValueError("the inbounds of a plan (custom_sni) must be a JSON object, as the bot keeps it")
+
+            out[k] = s
 
     return out
 
@@ -678,7 +736,7 @@ def ticket_reply(chat_id: int, text: str) -> dict:
 
     uid = str(rows[0]["user_id"])
     write(f"INSERT INTO chats_info (chat_id, sent_date, msg_type, text) VALUES ({int(chat_id)}, {int(time.time())}, \"ADMIN\", {lit(text)})")
-    r = _tg("sendMessage", {"chat_id": uid, "parse_mode": "HTML", "text": f"💬 پاسخ پشتیبانی به تیکت «{rows[0].get('title', '')}»:\n\n{text}"})
+    r = _tg("sendMessage", {"chat_id": uid, "parse_mode": "HTML", "text": f"💬 پاسخ پشتیبانی به تیکت «{html.escape(str(rows[0].get('title', '')), quote=False)}»:\n\n{html.escape(text, quote=False)}"})          # (HTML mode: the ticket title is the customer's own text)
     _event("info", f"Ticket #{chat_id} answered from the panel.", uid)
     return {"sent": bool(r.get("ok")), "telegram": r.get("description", "")}
 
@@ -848,7 +906,7 @@ def topups() -> dict:
 def topup_save(kind: str, price: int, amount: float) -> int:
     table = {"volume": "increase_plan", "days": "increase_day"}.get(kind)
 
-    if not table or num(price) <= 0 or float(amount) <= 0:
+    if not table or num(price) <= 0 or not 0 < float(amount) < 1e9:          # (not "<= 0": a NaN passes that and reaches the SQL as the word nan)
         raise ValueError("kind is volume or days; price and amount are above zero")
 
     write(f"INSERT INTO {table} (price, volume) VALUES ({num(price)}, {float(amount)})")
