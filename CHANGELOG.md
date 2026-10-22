@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.109 - Telegram gets only outages: no more DNS edit messages
+
+> **به زبان ساده:** پیام‌های تغییر DNS و جابه‌جایی رکوردها دیگر به تلگرام نمی‌روند؛ فقط قطعی‌ها.
+>
+> **In short:** DNS change messages and the outbound-pool switch messages are no longer sent to Telegram; only outages are.
+
+The owner (2026-10-23, a picture of the chat with sixteen "DNS ...: edit by hand (a → b)" messages after he moved the records of a domain by hand): "no extra notifications - only the outages".
+
+- **Not sent any more** (`failover._quiet`, `outbound._quiet`: logged only): a DNS record made / edited / deleted by hand, a record put back, "N record(s) now point at the new address" after a move, and "records now go through the outbound pool / go back to the tunnel". They are still in the DNS log (with Restore) and the Events page.
+- **Still sent**: every alert of `alerts.py` (DOWN, UP again, STILL DOWN, FLAPPING), the Iran server that is off and the move the Doctor made because of it (or that none could be made), the state of the outbound relay (down / degraded / ok), the daily report if it is switched on, the backup file, the sign-in reset code. If the owner wants the Doctor's move messages quiet too, it is the same one-line change.
+- **Proved**: `tests/test_telegram_only_outages.py` (the quiet functions send nothing; no DNS / pool message goes through a Telegram sender in the source; the outage messages are still there) and the failover / outbound / DNS test files. **Not proved**: with the real Telegram.
+
 ## 1.69.108 - The Mini App starts on a bot without extras.php
 
 > **In short:** `bot/miniapp/api.php` required `../extras.php` (the extras layer of the test bot) and died with a fatal on the very first request on a bot that has none, like the main bot. The two helpers it uses (`exEmojiStrip`, `exOnHoldDays`) are built in now and extras.php is used when it exists.

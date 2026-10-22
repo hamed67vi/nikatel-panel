@@ -953,7 +953,7 @@ def auto_users() -> None:
         _save(s)
 
         if keys:
-            _tell(f"↩ Tunnel(s) {', '.join(home)} healthy for {u['back_minutes']} min: {len(keys)} record(s) go back to the tunnel.")
+            _quiet(f"↩ Tunnel(s) {', '.join(home)} healthy for {u['back_minutes']} min: {len(keys)} record(s) go back to the tunnel.")
             disconnect(keys)
 
         return
@@ -969,8 +969,14 @@ def auto_users() -> None:
             u["auto"][name] = now
 
     _save(s)
-    _tell(f"🌉 Tunnel(s) {', '.join(go)} down for {u['after_minutes']} min: {len(keys)} record(s) now go through the outbound pool.")
+    _quiet(f"🌉 Tunnel(s) {', '.join(go)} down for {u['after_minutes']} min: {len(keys)} record(s) now go through the outbound pool.")
     connect(keys)
+
+
+def _quiet(text: str) -> None:
+    """The records that go through the outbound pool, or back to the tunnel, are in the Events page and the DNS log, not in Telegram: only outages go there (the owner, 2026-10-23). The state of the outbound relay itself
+    (down / degraded / ok) is still told by `_tell`."""
+    log.info("outbound switch (not sent to Telegram): %s", text[:200])
 
 
 def _tell(text: str) -> None:

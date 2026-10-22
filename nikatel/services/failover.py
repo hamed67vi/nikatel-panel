@@ -113,7 +113,7 @@ def follow_ip_change(aid: int, old_ip: str, new_ip: str, server_name: str) -> li
 
     if done:
         _save(s_)
-        _notice(f"🌐 DNS: {len(done)} record(s) of {server_name} now point at its new address {new_ip}.")
+        _quiet(f"🌐 DNS: {len(done)} record(s) of {server_name} now point at its new address {new_ip}.")
 
     return done
 
@@ -488,6 +488,12 @@ def _notice(text: str) -> None:
         telegram.send_text(text)
     except Exception:   # a Telegram problem must never stop a failover
         log.warning("failover notice not sent", exc_info=True)
+
+
+def _quiet(text: str) -> None:
+    """What was done with DNS records - by hand in the panel, put back, or moved after an outage - is kept in the DNS log and the Events page, and NOT sent to Telegram: only outages go there (the owner, 2026-10-23:
+    sixteen "edit by hand" messages in a row after he moved the records of a domain to a new address)."""
+    log.info("DNS change (not sent to Telegram): %s", text[:200])
 
 
 def _describe(p: dict) -> str:
@@ -975,7 +981,7 @@ def point_names(aid: int, names: list[str], iran_id: int, tag: str = "create") -
         with session() as db:
             emit(db, "ok", "actions", f"DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}): {', '.join(sorted(set(fq_done)))}.", target["name"])
 
-        _notice(f"🌐 DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}).")
+        _quiet(f"🌐 DNS: {len(done)} record(s) now point at {target['name']} ({target['ip']}).")
 
     return done
 
@@ -1017,7 +1023,7 @@ def log_manual(op: str, domain: str, fqdn: str, record_id: str, old: str, new: s
          "account": account, "domain": domain, "record_id": str(record_id), "fqdn": fqdn, "old": old, "new": new, "before": before, "configs": [], "restored": False, "restored_at": None}
     s["dns_log"].append(e)
     _save(s)
-    _notice(f"🌐 DNS {fqdn}: {op} by hand ({old or '-'} → {new or '-'}).")
+    _quiet(f"🌐 DNS {fqdn}: {op} by hand ({old or '-'} → {new or '-'}).")
     return e
 
 
@@ -1068,7 +1074,7 @@ def restore(log_id: str) -> dict:
         with session() as db:
             emit(db, "warn", "actions", f"DNS {e['fqdn']}: " + ("the switch to the outbound forward" if op == "bridge" else f"the change by hand ({op})") + " was put back.", e["fqdn"])
 
-        _notice(f"↩ DNS {e['fqdn']}: " + ("the switch to the outbound forward" if op == "bridge" else f"the change by hand ({op})") + " was put back.")
+        _quiet(f"↩ DNS {e['fqdn']}: " + ("the switch to the outbound forward" if op == "bridge" else f"the change by hand ({op})") + " was put back.")
         return dict(e)
 
     if not any(x["plan_id"] == e["plan_id"] and not x.get("restored") for x in s["dns_log"]):
@@ -1081,7 +1087,7 @@ def restore(log_id: str) -> dict:
     with session() as db:
         emit(db, "warn", "actions", f"DNS {e['fqdn']} points at {e['old']} ({e['server']}) again; the tunnels stay on {e['target']}.", e["server"])
 
-    _notice(f"↩ DNS {e['fqdn']} points at {e['old']} ({e['server']}) again. The tunnels stay on {e['target']}.")
+    _quiet(f"↩ DNS {e['fqdn']} points at {e['old']} ({e['server']}) again. The tunnels stay on {e['target']}.")
     return dict(e)
 
 

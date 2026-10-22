@@ -541,7 +541,7 @@ def test_auto_users_connects_a_tunnel_that_stays_down_and_puts_it_back(monkeypat
     started, told = [], []
     monkeypatch.setattr(outbound, "connect", lambda keys: started.append(("connect", keys)) or 1)
     monkeypatch.setattr(outbound, "disconnect", lambda keys: started.append(("disconnect", keys)) or 1)
-    monkeypatch.setattr(outbound, "_tell", lambda text: told.append(text))
+    monkeypatch.setattr(outbound, "_quiet", lambda text: told.append(text))          # (the switch is told in the log now, not to Telegram: 2026-10-23, only outages go there)
     sid = ids["i1"]
     with session() as db:
         db.add(Gateway(server_id=sid, installed=True, applied_at=5))
